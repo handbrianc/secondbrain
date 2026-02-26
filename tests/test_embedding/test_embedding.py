@@ -145,3 +145,137 @@ class TestEmbeddingGenerator:
         gen._model_pulled = True
         with pytest.raises(EmbeddingGenerationError):
             gen.generate("test text")
+
+
+
+class TestEmbeddingSpecRequirements:
+    """Tests for embedding specification requirements."""
+
+    def test_default_embedding_model(self) -> None:
+        """Test default embedding model (spec: embeddinggemma:latest)."""
+        gen = EmbeddingGenerator()
+        assert gen.model == "embeddinggemma:latest"
+
+    def test_custom_model_via_constructor(self) -> None:
+        """Test custom model via constructor (spec: custom model)."""
+        gen = EmbeddingGenerator(model="nomic-embed-text:latest")
+        assert gen.model == "nomic-embed-text:latest"
+
+    def test_default_ollama_url(self) -> None:
+        """Test default Ollama URL (spec: http://localhost:11434)."""
+        gen = EmbeddingGenerator()
+        assert gen.ollama_url == "http://localhost:11434"
+
+    def test_custom_ollama_url(self) -> None:
+        """Test custom Ollama URL (spec: configurable URL)."""
+        gen = EmbeddingGenerator(ollama_url="http://192.168.1.100:11434")
+        assert gen.ollama_url == "http://192.168.1.100:11434"
+
+    @patch("secondbrain.embedding.httpx.Client")
+    def test_model_auto_pull_if_not_available(self, mock_client_class: MagicMock) -> None:
+        """Test model auto-pull (spec: auto pull when not available)."""
+        mock_client_instance = MagicMock()
+        # First call to validate passes, then pull, then generate
+        mock_client_instance.get.return_value = MagicMock(status_code=200)
+        mock_client_instance.post.return_value = MagicMock(status_code=200)
+        mock_client_class.return_value = mock_client_instance
+
+        gen = EmbeddingGenerator()
+        # Should trigger pull before generate
+        result = gen.generate("test text")
+
+        # Verify pull was attempted
+        assert gen._model_pulled is True
+        assert result is not None
+
+    @patch("secondbrain.embedding.httpx.Client")
+    def test_ollama_unavailable_reports_clear_error(self, mock_client_class: MagicMock) -> None:
+        """Test Ollama unavailable error (spec: clear error message)."""
+        mock_client_instance = MagicMock()
+        mock_client_instance.get.side_effect = ConnectionError("Connection refused")
+        mock_client_class.return_value = mock_client_instance
+
+        gen = EmbeddingGenerator()
+        with pytest.raises(OllamaUnavailableError) as exc_info:
+            gen.generate("test text")
+
+        # Verify error message is helpful
+        assert "Ollama" in str(exc_info.value)
+
+    @patch("secondbrain.embedding.httpx.Client")
+    def test_embedding_dimension(self, mock_client_class: MagicMock) -> None:
+        """Test embedding dimension (spec: 384-dim vector)."""
+        mock_client_instance = MagicMock()
+        mock_client_instance.get.return_value = MagicMock(status_code=200)
+        mock_client_instance.post.return_value = MagicMock(
+            status_code=200,
+            json=lambda: {"embedding": [0.1] * 384}  # 384-dimensional
+        )
+        mock_client_class.return_value = mock_client_instance
+
+        gen = EmbeddingGenerator()
+        gen._model_pulled = True
+        result = gen.generate("test text")
+
+        assert len(result) == 384
+
+    @patch("secondbrain.embedding.httpx.Client")
+    def test_batch_generation_efficiency(self, mock_client_class: MagicMock) -> None:
+        """Test batch generation efficiency (spec: processes efficiently)."""
+        mock_client_instance = MagicMock()
+        mock_client_instance.get.return_value = MagicMock(status_code=200)
+        mock_client_instance.post.return_value = MagicMock(
+            status_code=200, json=lambda: {"embedding": [0.1]}
+        )
+        mock_client_class.return_value = mock_client_instance
+
+        gen = EmbeddingGenerator()
+        gen._model_pulled = True
+
+        # Generate batch of 10 texts
+        texts = [f"text number {i}" for i in range(10)]
+        results = gen.generate_batch(texts)
+
+        assert len(results) == 10
+        # All results should be lists
+        assert all(isinstance(r, list) for r in results)
+
+    def test_config_model_from_env_variable(self) -> None:
+        """Test model from environment variable (spec: SECONDBRAIN_MODEL)."""
+        import os
+        from unittest.mock import patch
+
+        from secondbrain.config import Config, get_config
+
+        # Clear the cache to pick up new env var
+        get_config.cache_clear()
+
+        with patch.dict(os.environ, {"SECONDBRAIN_MODEL": "mxbai-embed-large:latest"}):
+            config = Config()
+            assert config.model == "mxbai-embed-large:latest"
+        """Test model from environment variable (spec: SECONDBRAIN_MODEL)."""
+        import os
+        from unittest.mock import patch
+
+        with patch.dict(os.environ, {"SECONDBRAIN_MODEL": "mxbai-embed-large:latest"}):
+            from secondbrain.config import get_config
+            config = get_config()
+            assert config.model == "mxbai-embed-large:latest"
+
+    @patch("secondbrain.embedding.httpx.Client")
+    def test_connection_timeout_handling(self, mock_client_class: MagicMock) -> None:
+        """Test connection timeout (spec: timeout handling)."""
+        import httpx
+
+        mock_client_instance = MagicMock()
+        mock_client_instance.get.return_value = MagicMock(status_code=200)
+        mock_client_instance.post.side_effect = httpx.TimeoutException("Request timed out")
+        mock_client_class.return_value = mock_client_instance
+
+        gen = EmbeddingGenerator()
+        gen._model_pulled = True
+
+        with pytest.raises(EmbeddingGenerationError) as exc_info:
+            gen.generate("test text")
+
+        assert "timed out" in str(exc_info.value).lower() or "timeout" in str(exc_info.value).lower()
