@@ -1,0 +1,68 @@
+# Python
+venv/
+.venv/
+env/
+*.pyc
+__pycache__/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+
+# OpenCode
+.opencode/
+venv/
+.venv/
+env/
+*.pyc
+__pycache__/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+htmlcov/
+.tox/
+.hypothesis/
+
+# Local config
+config.yaml
+config.yml
+!config.example.yaml
+venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+
+# IDE
+.idea/
+.vscode/
+
+# Environment
+.env
