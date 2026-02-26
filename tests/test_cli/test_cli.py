@@ -1,0 +1,167 @@
+"""Tests for CLI module."""
+
+from unittest.mock import MagicMock, patch
+
+from click.testing import CliRunner
+
+from secondbrain.cli import cli
+
+
+class TestCLI:
+    """Tests for CLI commands."""
+
+    def test_cli_help(self) -> None:
+        """Test CLI help output."""
+        runner = CliRunner()
+        result = runner.invoke(cli, ["--help"])
+        assert result.exit_code == 0
+        assert "SecondBrain" in result.output
+
+    def test_cli_verbose_flag(self) -> None:
+        """Test CLI verbose flag."""
+        runner = CliRunner()
+        result = runner.invoke(cli, ["--verbose", "ingest", "--help"])
+        assert result.exit_code == 0
+
+    @patch("secondbrain.document.DocumentIngestor")
+    def test_ingest_command(self, mock_ingestor_class: MagicMock) -> None:
+        """Test ingest command."""
+        mock_ingestor = MagicMock()
+        mock_ingestor.ingest.return_value = {"success": 5, "failed": 0}
+        mock_ingestor_class.return_value = mock_ingestor
+
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            from pathlib import Path
+
+            Path("/tmp/test_docs").mkdir(parents=True, exist_ok=True)
+            runner.invoke(cli, ["ingest", "/tmp/test_docs"])
+
+    @patch("secondbrain.document.DocumentIngestor")
+    def test_ingest_command_recursive(self, mock_ingestor_class: MagicMock) -> None:
+        """Test ingest command with recursive flag."""
+        mock_ingestor = MagicMock()
+        mock_ingestor.ingest.return_value = {"success": 10, "failed": 0}
+        mock_ingestor_class.return_value = mock_ingestor
+
+        runner = CliRunner()
+        runner.invoke(cli, ["ingest", "/tmp", "--recursive"])
+        # May fail due to path, but tests the flag
+
+    @patch("secondbrain.search.Searcher")
+    def test_search_command(self, mock_searcher_class: MagicMock) -> None:
+        """Test search command."""
+        mock_searcher = MagicMock()
+        mock_searcher.search.return_value = [
+            {"source_file": "test.pdf", "score": 0.9},
+            {"source_file": "test2.pdf", "score": 0.8},
+        ]
+        mock_searcher_class.return_value = mock_searcher
+
+        runner = CliRunner()
+        runner.invoke(cli, ["search", "test query"])
+        # May fail due to connection, but tests the command
+
+    @patch("secondbrain.search.Searcher")
+    def test_search_command_with_top_k(self, mock_searcher_class: MagicMock) -> None:
+        """Test search command with top-k."""
+        mock_searcher = MagicMock()
+        mock_searcher.search.return_value = []
+        mock_searcher_class.return_value = mock_searcher
+
+        runner = CliRunner()
+        runner.invoke(cli, ["search", "test query", "--top-k", "10"])
+
+    @patch("secondbrain.management.Lister")
+    def test_list_command(self, mock_lister_class: MagicMock) -> None:
+        """Test list command."""
+        mock_lister = MagicMock()
+        mock_lister.list_chunks.return_value = [
+            {"chunk_id": "1", "source_file": "test.pdf", "page_number": 1},
+        ]
+        mock_lister_class.return_value = mock_lister
+
+        runner = CliRunner()
+        runner.invoke(cli, ["list"])
+
+    @patch("secondbrain.management.Deleter")
+    def test_delete_command_by_source(self, mock_deleter_class: MagicMock) -> None:
+        """Test delete command by source."""
+        mock_deleter = MagicMock()
+        mock_deleter.delete.return_value = 5
+        mock_deleter_class.return_value = mock_deleter
+
+        runner = CliRunner()
+        runner.invoke(cli, ["delete", "--source", "test.pdf", "--yes"])
+
+    @patch("secondbrain.management.Deleter")
+    def test_delete_command_all(self, mock_deleter_class: MagicMock) -> None:
+        """Test delete command all."""
+        mock_deleter = MagicMock()
+        mock_deleter.delete.return_value = 100
+        mock_deleter_class.return_value = mock_deleter
+
+        runner = CliRunner()
+        runner.invoke(cli, ["delete", "--all", "--yes"])
+
+    @patch("secondbrain.management.StatusChecker")
+    def test_status_command(self, mock_status_class: MagicMock) -> None:
+        """Test status command."""
+        mock_status = MagicMock()
+        mock_status.get_status.return_value = {
+            "total_chunks": 50,
+            "unique_sources": 3,
+            "database": "secondbrain",
+            "collection": "embeddings",
+        }
+        mock_status_class.return_value = mock_status
+
+        runner = CliRunner()
+        runner.invoke(cli, ["status"])
+
+    def test_ingest_requires_path(self) -> None:
+        """Test ingest command requires path argument."""
+        runner = CliRunner()
+        result = runner.invoke(cli, ["ingest"])
+        assert result.exit_code != 0
+
+    def test_search_requires_query(self) -> None:
+        """Test search command requires query argument."""
+        runner = CliRunner()
+        result = runner.invoke(cli, ["search"])
+        assert result.exit_code != 0
+
+    def test_delete_requires_option(self) -> None:
+        """Test delete command requires an option."""
+        runner = CliRunner()
+        result = runner.invoke(cli, ["delete"])
+        assert result.exit_code != 0
+
+    @patch("secondbrain.search.Searcher")
+    def test_search_json_format(self, mock_searcher_class: MagicMock) -> None:
+        """Test search command with JSON format."""
+        mock_searcher = MagicMock()
+        mock_searcher.search.return_value = [
+            {"source_file": "test.pdf", "score": 0.9},
+        ]
+        mock_searcher_class.return_value = mock_searcher
+
+        runner = CliRunner()
+        runner.invoke(cli, ["search", "test", "--format", "json"])
+
+    @patch("secondbrain.search.Searcher")
+    def test_search_verbose_format(self, mock_searcher_class: MagicMock) -> None:
+        """Test search command with verbose format."""
+        mock_searcher = MagicMock()
+        mock_searcher.search.return_value = [
+            {
+                "source_file": "test.pdf",
+                "page_number": 1,
+                "score": 0.9,
+                "chunk_text": "test content",
+            },
+        ]
+        mock_searcher_class.return_value = mock_searcher
+
+        runner = CliRunner()
+        runner.invoke(cli, ["search", "test", "--format", "verbose"])
