@@ -20,7 +20,8 @@ classifiers = [
 
 dependencies = [
     "click>=8.1.0",
-    "docling>=2.0.0",
+    "docling>=2.74.0",
+    "docling-core>=2.48.4",
     "pymongo>=4.6.0",
     "httpx>=0.27.0",
     "pydantic>=2.0.0",

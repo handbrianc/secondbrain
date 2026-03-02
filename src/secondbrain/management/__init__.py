@@ -1,6 +1,15 @@
-from typing import Any
+"""Management module for document operations.
 
-from secondbrain.storage import ChunkInfo, StorageConnectionError, VectorStorage
+This module provides classes for listing, deleting, and checking status
+of documents stored in the vector database.
+"""
+
+from secondbrain.storage import (
+    ChunkInfo,
+    DatabaseStats,
+    StorageConnectionError,
+    VectorStorage,
+)
 from secondbrain.utils.connections import ServiceUnavailableError
 
 
@@ -110,7 +119,7 @@ class StatusChecker:
         self.verbose = verbose
         self.storage = VectorStorage()
 
-    def get_status(self) -> dict[str, Any]:
+    def get_status(self) -> DatabaseStats:
         """Get database statistics.
 
         Returns:

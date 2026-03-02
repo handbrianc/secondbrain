@@ -12,6 +12,7 @@ from pymongo.database import Database
 from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError
 
 from secondbrain.config import Config, get_config
+from secondbrain.utils.connections import ValidatableService
 
 logger = logging.getLogger(__name__)
 
@@ -37,8 +38,20 @@ class ChunkInfo(TypedDict):
     chunk_text: str
 
 
-class VectorStorage:
-    """Handles vector storage in MongoDB."""
+class DatabaseStats(TypedDict):
+    """Typed dictionary for database statistics."""
+
+    total_chunks: int
+    unique_sources: int
+    database: str
+    collection: str
+
+
+class VectorStorage(ValidatableService):
+    """Handles vector storage in MongoDB.
+
+    Uses ValidatableService base class for connection validation with caching.
+    """
 
     def __init__(
         self,
@@ -61,7 +74,8 @@ class VectorStorage:
         self._client: MongoClient[Any] | None = None
         self._db: Database[Any] | None = None
         self._collection: Collection[Any] | None = None
-        self._index_created = False
+        self._index_created: bool = False
+        super().__init__(cache_ttl=60.0)
 
     @property
     def client(self) -> MongoClient[Any]:
@@ -86,12 +100,8 @@ class VectorStorage:
             self._collection = self.db[self.collection_name]
         return self._collection
 
-    def validate_connection(self) -> bool:
-        """Validate connection to MongoDB.
-
-        Returns:
-            bool: True if connection is valid
-        """
+    def _do_validate(self) -> bool:
+        """Validate MongoDB connection via ping command."""
         try:
             _ = self.client.admin.command("ping")
             return True
@@ -346,11 +356,11 @@ class VectorStorage:
         result = self.collection.delete_many({})
         return result.deleted_count
 
-    def get_stats(self) -> dict[str, Any]:
+    def get_stats(self) -> DatabaseStats:
         """Get database statistics.
 
         Returns:
-            dict: Statistics
+            DatabaseStats: Statistics dictionary
         """
         if not self.validate_connection():
             raise StorageConnectionError(

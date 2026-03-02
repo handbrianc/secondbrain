@@ -321,22 +321,43 @@ docker build -t secondbrain:latest .
 pyinstaller --onefile src/secondbrain/cli/__init__.py
 ```
 
+## Data Flow
+
+```
+┌──────────────┐     ┌──────────────────┐     ┌──────────────────┐     ┌──────────────────┐
+│   User CLI   │────▶│   Document Ingest│────▶│   Embedding Gen  │────▶│   MongoDB Store  │
+│  (firstbrain)│     │    (docling)     │     │  (ollama API)    │     │(vector search)   │
+└──────────────┘     └──────────────────┘     └──────────────────┘     └──────────────────┘
+          │                                                                   │
+          │                                                                   ▼
+          │                                                          ┌──────────────────┐
+          │                                                          │   User Query     │
+          │                                                          │   (semantic)     │
+          │                                                                   │
+          │                                                                   ▼
+          │                                                          ┌──────────────────┐
+          │                                                          │   Searcher       │
+          │                                                          │   (cosine sim)   │
+          └───────────────────────────────────────────────────────────────────────┘
+```
+
 ## Architecture
 
 ```
 ┌─────────────────┐     ┌─────────────────┐
-│   secondbrain  │     │     MongoDB    │
-│   CLI Tool      │────▶│  (vector store)│
+│   secondbrain   │     │     MongoDB     │
+│   CLI Tool      │────▶│  (vector store) │
 │                 │     │                 │
 └─────────────────┘     └─────────────────┘
         │
         ▼
 ┌─────────────────┐
 │     Ollama      │
-│ (embeddinggemma) │
+│ (embeddinggemma)│
 └─────────────────┘
 ```
 
 ## License
 
 MIT
+

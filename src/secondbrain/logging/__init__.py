@@ -3,10 +3,30 @@ import logging
 import time
 import uuid
 from contextvars import ContextVar
-from typing import Any
+from typing import TypedDict
 
 from rich.console import Console
 from rich.logging import RichHandler
+
+
+class HealthStatus(TypedDict):
+    """Typed dictionary for health status response."""
+
+    status: str
+    timestamp: str
+    uptime: float | None
+    services: dict[str, bool]
+    check_duration_seconds: float
+
+
+class DatabaseStats(TypedDict):
+    """Typed dictionary for database statistics."""
+
+    total_chunks: int
+    unique_sources: int
+    database: str
+    collection: str
+
 
 _request_id: ContextVar[str] = ContextVar("request_id", default="")
 
@@ -83,7 +103,7 @@ def check_services() -> dict[str, bool]:
     }
 
 
-def get_health_status() -> dict[str, Any]:
+def get_health_status() -> HealthStatus:
     """Get health status of all services.
 
     Returns:

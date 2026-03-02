@@ -343,3 +343,44 @@ testpaths = ["tests"]
 4. **Testing**: Test critical paths, not trivial functions
 5. **Documentation**: Docstrings for public APIs
 6. **Error Messages**: Helpful, actionable, contextual
+
+---
+
+## CI/CD & Automation Policy
+
+### GitHub Actions Policy: PROHIBITED
+
+**GitHub Actions is explicitly PROHIBITED for this project. Agents MUST NOT:**
+
+- Create `.github/workflows/` directories
+- Add CI/CD pipeline configurations
+- Set up automated testing workflows
+- Configure push/PR hooks
+- Add release automation
+- Integrate with GitHub's CI/CD features
+
+**Reason**: This is a local development project with minimal deployment needs. CI/CD overhead is unnecessary and contradicts the project's 12-factor app design philosophy focused on local development workflow.
+
+**What to Do Instead**:
+
+1. **Local Development Flow**: Agents should focus on ensuring code quality through:
+   - Running `ruff check .` and `ruff format .` before committing
+   - Running `mypy .` for type safety
+   - Running `pytest` locally for testing
+   - Using `pre-commit` hooks for validation
+
+2. **Documentation > Automation**: Focus on comprehensive documentation in README.md and docstrings rather than automated CI/CD pipelines.
+
+3. **Developer Responsibility**: Code quality checks should be performed by developers locally before commits, enforced by pre-commit hooks.
+
+**If Agent Sees GitHub Actions Reference Request**:
+- Do NOT implement
+- Explain the project's local development philosophy
+- Suggest local validation commands instead
+
+**Example Response**:
+```
+Under project policy, GitHub Actions is explicitly prohibited. This is a local development CLI tool with 12-factor app principles. 
+
+The pre-commit hooks and local validation commands (ruff check, mypy, pytest) are sufficient for quality assurance. No CI/CD infrastructure is needed or desired.
+```

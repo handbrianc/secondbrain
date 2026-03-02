@@ -16,6 +16,14 @@ class Segment(TypedDict):
     page: int
 
 
+class DocumentExtractionError(Exception):
+    pass
+
+
+class UnsupportedFileError(Exception):
+    pass
+
+
 SUPPORTED_EXTENSIONS = {
     ".pdf",
     ".docx",
@@ -157,8 +165,11 @@ class DocumentIngestor:
             try:
                 segments: list[Segment] = self._extract_text(file_path)
                 file_data.append((file_path, segments, [s["text"] for s in segments]))
-            except Exception:
-                logger.error(f"Failed to extract text from {file_path}")
+            except (OSError, DocumentExtractionError) as e:
+                logger.error(f"Failed to extract text from {file_path}: {e}")
+                failed_files += 1
+            except Exception as e:
+                logger.error(f"Unexpected error extracting text from {file_path}: {e}")
                 failed_files += 1
 
         all_chunks: list[dict[str, Any]] = []
@@ -186,6 +197,11 @@ class DocumentIngestor:
 
         from concurrent.futures import ThreadPoolExecutor, as_completed
 
+        from secondbrain.embedding import (
+            EmbeddingGenerationError,
+            OllamaUnavailableError,
+        )
+
         chunk_to_embedding: dict[int, list[float]] = {}
         with ThreadPoolExecutor(max_workers=10) as executor:
             futures = {
@@ -198,8 +214,12 @@ class DocumentIngestor:
                 try:
                     embedding = future.result()
                     chunk_to_embedding[chunk_dict["text_hash"]] = embedding
-                except Exception:
-                    logger.error("Failed to generate embedding for chunk")
+                except (OllamaUnavailableError, EmbeddingGenerationError) as e:
+                    logger.error(f"Failed to generate embedding for chunk: {e}")
+                except Exception as e:
+                    logger.error(
+                        f"Unexpected error generating embedding for chunk: {e}"
+                    )
 
         all_docs: list[dict[str, Any]] = []
         seen_doc_keys = set()
@@ -267,9 +287,14 @@ class DocumentIngestor:
 
             return segments
 
-        except Exception:
-            logger.error(f"Error extracting text from {file_path}")
-            raise
+        except OSError as e:
+            logger.error(f"Error reading file {file_path}: {e}")
+            raise DocumentExtractionError(f"Failed to read file {file_path}") from e
+        except Exception as e:
+            logger.error(f"Error extracting text from {file_path}: {e}")
+            raise DocumentExtractionError(
+                f"Failed to extract text from {file_path}"
+            ) from e
 
     def _chunk_text(self, segments: list[Segment]) -> list[Segment]:
         chunks: list[Segment] = []

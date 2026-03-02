@@ -8,7 +8,11 @@ import httpx
 from typing_extensions import TypedDict
 
 from secondbrain.config import get_config
-from secondbrain.utils.connections import ServiceUnavailableError, ServiceValidator
+from secondbrain.utils.connections import (
+    ServiceUnavailableError,
+    ServiceValidator,
+    ValidatableService,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -40,13 +44,6 @@ class RateLimiter:
             self._requests.append(current_time)
 
 
-_RATE_LIMITER = RateLimiter(max_requests=10, window_seconds=1.0)
-
-
-def _check_rate_limit() -> None:
-    _RATE_LIMITER.acquire()
-
-
 class EmbeddingGenerationError(Exception):
     pass
 
@@ -59,15 +56,25 @@ class EmbeddingResult(TypedDict):
     embedding: list[float]
 
 
-class EmbeddingGenerator:
-    """Generates embeddings using Ollama API."""
+class EmbeddingGenerator(ValidatableService):
+    """Generates embeddings using Ollama API.
 
-    def __init__(self, model: str | None = None, ollama_url: str | None = None) -> None:
+    Uses ValidatableService base class for thread-safe connection validation
+    with TTL caching.
+    """
+
+    def __init__(
+        self,
+        model: str | None = None,
+        ollama_url: str | None = None,
+        rate_limiter: RateLimiter | None = None,
+    ) -> None:
         """Initialize the embedding generator.
 
         Args:
             model: Model name to use. If None, uses config default.
             ollama_url: Ollama API URL. If None, uses config default.
+            rate_limiter: Optional RateLimiter instance. If None, creates new one.
         """
         config = get_config()
         self.model = model or config.model
@@ -75,9 +82,10 @@ class EmbeddingGenerator:
         self._client: httpx.Client | None = None
         self._async_client: httpx.AsyncClient | None = None
         self._model_pulled = False
-        self._connection_valid: bool | None = None
-        self._connection_checked_at = 0.0
-        self._connection_cache_ttl = 60.0
+        self._rate_limiter = rate_limiter or RateLimiter(
+            max_requests=10, window_seconds=1.0
+        )
+        super().__init__(cache_ttl=60.0)
 
     @property
     def client(self) -> httpx.Client:
@@ -93,6 +101,10 @@ class EmbeddingGenerator:
             self._async_client = httpx.AsyncClient(timeout=60.0)
         return self._async_client
 
+    def _check_rate_limit(self) -> None:
+        """Acquire rate limit token, blocking if necessary."""
+        self._rate_limiter.acquire()
+
     def _request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
         """Make a synchronous HTTP request."""
         return self.client.request(method, url, **kwargs)
@@ -103,32 +115,13 @@ class EmbeddingGenerator:
         """Make an asynchronous HTTP request."""
         return await self.async_client.request(method, url, **kwargs)
 
-    def validate_connection(self, force: bool = False) -> bool:
-        """Check if Ollama service is available.
-
-        Args:
-            force: If True, bypass cache and check connection.
-
-        Returns:
-            True if connection is valid, False otherwise.
-        """
-        current_time = time.monotonic()
-
-        if (
-            not force
-            and self._connection_valid is not None
-            and current_time - self._connection_checked_at < self._connection_cache_ttl
-        ):
-            return self._connection_valid
-
+    def _do_validate(self) -> bool:
+        """Validate Ollama connection by checking /api/tags endpoint."""
         try:
             response = self._request("GET", f"{self.ollama_url}/api/tags")
-            self._connection_valid = response.status_code == 200
+            return response.status_code == 200
         except Exception:
-            self._connection_valid = False
-
-        self._connection_checked_at = current_time
-        return self._connection_valid
+            return False
 
     async def validate_connection_async(self, force: bool = False) -> bool:
         """Check if Ollama service is available asynchronously.
@@ -157,14 +150,9 @@ class EmbeddingGenerator:
         self._connection_checked_at = current_time
         return self._connection_valid
 
-    def invalidate_connection_cache(self) -> None:
-        """Clear cached connection state."""
-        self._connection_valid = None
-        self._connection_checked_at = 0.0
-
     def on_service_recovery(self) -> None:
         """Handle service recovery - clear cached connection state."""
-        self.invalidate_connection_cache()
+        super().on_service_recovery()
 
     async def on_service_recovery_async(self) -> None:
         """Handle service recovery asynchronously."""
@@ -228,7 +216,7 @@ class EmbeddingGenerator:
             OllamaUnavailableError: If Ollama service is unavailable.
             EmbeddingGenerationError: If embedding generation fails.
         """
-        _check_rate_limit()
+        self._check_rate_limit()
 
         if not self.validate_connection():
             raise OllamaUnavailableError(
@@ -243,6 +231,7 @@ class EmbeddingGenerator:
                 "POST",
                 f"{self.ollama_url}/api/embeddings",
                 json={"model": self.model, "prompt": text},
+                timeout=30.0,
             )
 
             if response.status_code != 200:
@@ -258,6 +247,8 @@ class EmbeddingGenerator:
             raise OllamaUnavailableError(
                 f"Cannot connect to Ollama at {self.ollama_url}"
             ) from e
+        except httpx.TimeoutException as e:
+            raise EmbeddingGenerationError(f"Timeout generating embedding: {e}") from e
         except Exception as e:
             raise EmbeddingGenerationError(f"Error generating embedding: {e}") from e
 
@@ -274,7 +265,7 @@ class EmbeddingGenerator:
             OllamaUnavailableError: If Ollama service is unavailable.
             EmbeddingGenerationError: If embedding generation fails.
         """
-        _check_rate_limit()
+        self._check_rate_limit()
 
         if not await self.validate_connection_async():
             raise OllamaUnavailableError(
@@ -289,6 +280,7 @@ class EmbeddingGenerator:
                 "POST",
                 f"{self.ollama_url}/api/embeddings",
                 json={"model": self.model, "prompt": text},
+                timeout=30.0,
             )
 
             if response.status_code != 200:
@@ -304,6 +296,8 @@ class EmbeddingGenerator:
             raise OllamaUnavailableError(
                 f"Cannot connect to Ollama at {self.ollama_url}"
             ) from e
+        except httpx.TimeoutException as e:
+            raise EmbeddingGenerationError(f"Timeout generating embedding: {e}") from e
         except Exception as e:
             raise EmbeddingGenerationError(f"Error generating embedding: {e}") from e
 

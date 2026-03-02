@@ -46,6 +46,7 @@ docling==2.75.0
     # via secondbrain (pyproject.toml)
 docling-core==2.66.0
     # via
+    #   secondbrain (pyproject.toml)
     #   docling
     #   docling-ibm-models
     #   docling-parse

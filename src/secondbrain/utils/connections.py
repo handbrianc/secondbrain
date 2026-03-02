@@ -1,7 +1,8 @@
 """Connection utilities for service availability checks."""
 
+import threading
 from collections.abc import Callable
-from time import time
+from time import monotonic, time
 
 
 class ServiceUnavailableError(Exception):
@@ -24,6 +25,87 @@ def ensure_service_available(service_name: str, validator: Callable[[], bool]) -
     """
     if not validator():
         raise ServiceUnavailableError(service_name)
+
+
+class ValidatableService:
+    """Base class for services requiring connection validation with caching.
+
+    This class provides thread-safe connection validation with TTL-based caching
+    to reduce repeated network calls. Subclasses must implement _do_validate()
+    to perform the actual service-specific validation.
+
+    Example:
+        ```python
+        class MyService(ValidatableService):
+            def __init__(self, url: str, cache_ttl: float = 60.0) -> None:
+                super().__init__(cache_ttl)
+                self.url = url
+
+            def _do_validate(self) -> bool:
+                # Perform actual validation
+                response = requests.get(self.url, timeout=5)
+                return response.status_code == 200
+        ```
+    """
+
+    def __init__(self, cache_ttl: float = 60.0) -> None:
+        """Initialize the validatable service.
+
+        Args:
+            cache_ttl: Time-to-live for connection cache in seconds.
+        """
+        self._connection_cache_ttl = cache_ttl
+        self._connection_valid: bool | None = None
+        self._connection_checked_at = 0.0
+        self._lock = threading.Lock()
+
+    def validate_connection(self, force: bool = False) -> bool:
+        """Check if service is available with caching.
+
+        Args:
+            force: If True, bypass cache and check connection.
+
+        Returns:
+            True if service is available, False otherwise.
+        """
+        current_time = monotonic()
+
+        with self._lock:
+            if (
+                not force
+                and self._connection_valid is not None
+                and current_time - self._connection_checked_at
+                < self._connection_cache_ttl
+            ):
+                return self._connection_valid
+
+        try:
+            self._connection_valid = self._do_validate()
+        except Exception:
+            self._connection_valid = False
+
+        with self._lock:
+            self._connection_checked_at = current_time
+
+        return self._connection_valid
+
+    def invalidate_connection_cache(self) -> None:
+        """Clear cached connection state."""
+        with self._lock:
+            self._connection_valid = None
+            self._connection_checked_at = 0.0
+
+    def on_service_recovery(self) -> None:
+        """Handle service recovery - clear cached connection state."""
+        self.invalidate_connection_cache()
+
+    def _do_validate(self) -> bool:
+        """Override in subclass to perform actual validation.
+
+        Returns:
+            True if service is available.
+        """
+        raise NotImplementedError
 
 
 class ServiceValidator:

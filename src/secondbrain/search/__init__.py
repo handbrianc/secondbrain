@@ -1,4 +1,8 @@
-"""Search module for semantic search."""
+"""Search module for semantic search functionality.
+
+This module provides the Searcher class for performing semantic searches
+against the stored embeddings using vector similarity matching.
+"""
 
 import logging
 from collections.abc import Sequence

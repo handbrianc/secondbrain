@@ -3,20 +3,24 @@
 import sys
 from collections.abc import Callable, Sequence
 from functools import wraps
-from typing import Any
+from typing import Any, TypeVar
 
 import click
 from rich.console import Console
 
 from secondbrain.config import get_config
-from secondbrain.logging import get_health_status, setup_logging
+from secondbrain.logging import HealthStatus, get_health_status, setup_logging
+from secondbrain.storage import ChunkInfo, DatabaseStats
 
 console = Console()
 
 MAX_LIST_LIMIT = 100000
 
 
-def handle_cli_errors(func: Callable[..., Any]) -> Callable[..., Any]:
+T = TypeVar("T", bound=Callable[..., Any])
+
+
+def handle_cli_errors(func: T) -> T:
     @wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         try:
@@ -25,7 +29,7 @@ def handle_cli_errors(func: Callable[..., Any]) -> Callable[..., Any]:
             console.print(f"[red]Error: {e}[/red]")
             sys.exit(1)
 
-    return wrapper
+    return wrapper  # type: ignore[return-value]
 
 
 @click.group()
@@ -261,13 +265,13 @@ def list_cmd(
         sys.exit(1)
 
 
-def _display_list_results(results: Sequence[Any]) -> None:
+def _display_list_results(results: Sequence[ChunkInfo]) -> None:
     """Display list results."""
     for chunk_info in results:
         console.print(
-            f"{chunk_info.get('chunk_id', 'N/A')}: "
-            f"{chunk_info.get('source_file', 'N/A')} "
-            f"(page {chunk_info.get('page_number', 'N/A')})"
+            f"{chunk_info['chunk_id']}: "
+            f"{chunk_info['source_file']} "
+            f"(page {chunk_info['page_number']})"
         )
 
 
@@ -357,13 +361,13 @@ def status(ctx: click.Context) -> None:
         sys.exit(1)
 
 
-def _display_status(stats: dict[str, Any]) -> None:
+def _display_status(stats: DatabaseStats) -> None:
     """Display status statistics."""
     console.print("[bold]Database Status[/bold]")
-    console.print(f"  Total chunks: {stats.get('total_chunks', 0)}")
-    console.print(f"  Unique sources: {stats.get('unique_sources', 0)}")
-    console.print(f"  Database: {stats.get('database', 'N/A')}")
-    console.print(f"  Collection: {stats.get('collection', 'N/A')}")
+    console.print(f"  Total chunks: {stats['total_chunks']}")
+    console.print(f"  Unique sources: {stats['unique_sources']}")
+    console.print(f"  Database: {stats['database']}")
+    console.print(f"  Collection: {stats['collection']}")
 
 
 @cli.command()
@@ -386,7 +390,7 @@ def health(ctx: click.Context, output: str) -> None:
         sys.exit(1)
 
 
-def _display_health_text(status: dict[str, Any]) -> None:
+def _display_health_text(status: HealthStatus) -> None:
     """Display health status in text format."""
     status_color = "green" if status["status"] == "healthy" else "yellow"
     console.print(
