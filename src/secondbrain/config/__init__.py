@@ -46,11 +46,11 @@ class Config(BaseSettings):
 
     # Chunking settings
     chunk_size: int = Field(
-        default=512,
+        default=4096,
         description="Chunk size for document splitting",
     )
     chunk_overlap: int = Field(
-        default=50,
+        default=200,
         description="Chunk overlap for splitting",
     )
 
@@ -58,6 +58,12 @@ class Config(BaseSettings):
     default_top_k: int = Field(
         default=5,
         description="Default number of search results",
+    )
+
+    # Embedding settings
+    embedding_dimensions: int = Field(
+        default=768,
+        description="Dimensionality of embedding vectors (must match model)",
     )
 
 

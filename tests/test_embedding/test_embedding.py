@@ -147,7 +147,6 @@ class TestEmbeddingGenerator:
             gen.generate("test text")
 
 
-
 class TestEmbeddingSpecRequirements:
     """Tests for embedding specification requirements."""
 
@@ -172,7 +171,9 @@ class TestEmbeddingSpecRequirements:
         assert gen.ollama_url == "http://192.168.1.100:11434"
 
     @patch("secondbrain.embedding.httpx.Client")
-    def test_model_auto_pull_if_not_available(self, mock_client_class: MagicMock) -> None:
+    def test_model_auto_pull_if_not_available(
+        self, mock_client_class: MagicMock
+    ) -> None:
         """Test model auto-pull (spec: auto pull when not available)."""
         mock_client_instance = MagicMock()
         # First call to validate passes, then pull, then generate
@@ -189,7 +190,9 @@ class TestEmbeddingSpecRequirements:
         assert result is not None
 
     @patch("secondbrain.embedding.httpx.Client")
-    def test_ollama_unavailable_reports_clear_error(self, mock_client_class: MagicMock) -> None:
+    def test_ollama_unavailable_reports_clear_error(
+        self, mock_client_class: MagicMock
+    ) -> None:
         """Test Ollama unavailable error (spec: clear error message)."""
         mock_client_instance = MagicMock()
         mock_client_instance.get.side_effect = ConnectionError("Connection refused")
@@ -209,7 +212,7 @@ class TestEmbeddingSpecRequirements:
         mock_client_instance.get.return_value = MagicMock(status_code=200)
         mock_client_instance.post.return_value = MagicMock(
             status_code=200,
-            json=lambda: {"embedding": [0.1] * 384}  # 384-dimensional
+            json=lambda: {"embedding": [0.1] * 384},  # 384-dimensional
         )
         mock_client_class.return_value = mock_client_instance
 
@@ -245,22 +248,13 @@ class TestEmbeddingSpecRequirements:
         import os
         from unittest.mock import patch
 
-        from secondbrain.config import Config, get_config
+        from secondbrain.config import get_config
 
-        # Clear the cache to pick up new env var
         get_config.cache_clear()
-
         with patch.dict(os.environ, {"SECONDBRAIN_MODEL": "mxbai-embed-large:latest"}):
-            config = Config()
-            assert config.model == "mxbai-embed-large:latest"
-        """Test model from environment variable (spec: SECONDBRAIN_MODEL)."""
-        import os
-        from unittest.mock import patch
-
-        with patch.dict(os.environ, {"SECONDBRAIN_MODEL": "mxbai-embed-large:latest"}):
-            from secondbrain.config import get_config
             config = get_config()
             assert config.model == "mxbai-embed-large:latest"
+        get_config.cache_clear()
 
     @patch("secondbrain.embedding.httpx.Client")
     def test_connection_timeout_handling(self, mock_client_class: MagicMock) -> None:
@@ -269,7 +263,9 @@ class TestEmbeddingSpecRequirements:
 
         mock_client_instance = MagicMock()
         mock_client_instance.get.return_value = MagicMock(status_code=200)
-        mock_client_instance.post.side_effect = httpx.TimeoutException("Request timed out")
+        mock_client_instance.post.side_effect = httpx.TimeoutException(
+            "Request timed out"
+        )
         mock_client_class.return_value = mock_client_instance
 
         gen = EmbeddingGenerator()
@@ -278,4 +274,108 @@ class TestEmbeddingSpecRequirements:
         with pytest.raises(EmbeddingGenerationError) as exc_info:
             gen.generate("test text")
 
-        assert "timed out" in str(exc_info.value).lower() or "timeout" in str(exc_info.value).lower()
+        assert (
+            "timed out" in str(exc_info.value).lower()
+            or "timeout" in str(exc_info.value).lower()
+        )
+
+    @patch("secondbrain.embedding.httpx.Client")
+    def test_validate_connection_caches_result(
+        self, mock_client_class: MagicMock
+    ) -> None:
+        """Test that validate_connection caches results to avoid repeated API calls."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_client_instance = MagicMock()
+        mock_client_instance.get.return_value = mock_response
+        mock_client_class.return_value = mock_client_instance
+        gen = EmbeddingGenerator()
+
+        # First call should hit the API
+        result1 = gen.validate_connection()
+        assert result1 is True
+        assert mock_client_instance.get.call_count == 1
+
+        # Second call should use cached result (no API call)
+        result2 = gen.validate_connection()
+        assert result2 is True
+        # Should still be 1 because of caching
+        assert mock_client_instance.get.call_count == 1
+
+        # Third call with force=True should bypass cache
+        result3 = gen.validate_connection(force=True)
+        assert result3 is True
+        # Should be 2 because force=True bypasses cache
+        assert mock_client_instance.get.call_count == 2
+
+    @patch("secondbrain.embedding.httpx.Client")
+    def test_generate_uses_cached_connection(
+        self, mock_client_class: MagicMock
+    ) -> None:
+        """Test that generate() uses cached connection validation."""
+        mock_client_instance = MagicMock()
+        mock_client_instance.get.return_value = MagicMock(status_code=200)
+        mock_client_instance.post.return_value = MagicMock(
+            status_code=200, json=lambda: {"embedding": [0.1, 0.2, 0.3]}
+        )
+        mock_client_class.return_value = mock_client_instance
+
+        gen = EmbeddingGenerator()
+        gen._model_pulled = True
+
+        # First generate call
+        result1 = gen.generate("test text 1")
+        assert result1 == [0.1, 0.2, 0.3]
+        initial_get_count = mock_client_instance.get.call_count
+
+        # Second generate call should NOT call validate_connection again (cached)
+        result2 = gen.generate("test text 2")
+        assert result2 == [0.1, 0.2, 0.3]
+
+        # get() should NOT have been called again because connection is cached
+        assert mock_client_instance.get.call_count == initial_get_count
+
+    @patch("secondbrain.embedding.httpx.Client")
+    def test_generate_batch_single_connection_check(
+        self, mock_client_class: MagicMock
+    ) -> None:
+        """Test batch generation only checks connection once."""
+        mock_client_instance = MagicMock()
+        mock_client_instance.get.return_value = MagicMock(status_code=200)
+        mock_client_instance.post.return_value = MagicMock(
+            status_code=200, json=lambda: {"embedding": [0.1]}
+        )
+        mock_client_class.return_value = mock_client_instance
+
+        gen = EmbeddingGenerator()
+        gen._model_pulled = True
+
+        # Generate 10 texts in batch
+        texts = [f"text number {i}" for i in range(10)]
+        results = gen.generate_batch(texts)
+
+        assert len(results) == 10
+
+        # Should only have checked connection once (not 10 times!)
+        assert mock_client_instance.get.call_count == 1
+
+    @patch("secondbrain.embedding.httpx.Client")
+    def test_invalidate_connection_cache(self, mock_client_class: MagicMock) -> None:
+        """Test invalidate_connection_cache clears the cached state."""
+        mock_client_instance = MagicMock()
+        mock_client_instance.get.return_value = MagicMock(status_code=200)
+        mock_client_class.return_value = mock_client_instance
+
+        gen = EmbeddingGenerator()
+
+        # First validation - hits API
+        gen.validate_connection()
+        assert mock_client_instance.get.call_count == 1
+
+        # Invalidate cache
+        gen.invalidate_connection_cache()
+        assert gen._connection_valid is None
+
+        # Next validation should hit API again
+        gen.validate_connection()
+        assert mock_client_instance.get.call_count == 2

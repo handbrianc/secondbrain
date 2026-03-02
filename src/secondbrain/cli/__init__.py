@@ -1,6 +1,8 @@
 """CLI module for secondbrain."""
 
 import sys
+from collections.abc import Callable
+from functools import wraps
 from typing import Any
 
 import click
@@ -10,6 +12,18 @@ from secondbrain.config import get_config
 from secondbrain.logging import setup_logging
 
 console = Console()
+
+
+def handle_cli_errors(func: Callable[..., Any]) -> Callable[..., Any]:
+    @wraps(func)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            console.print(f"[red]Error: {e}[/red]")
+            sys.exit(1)
+
+    return wrapper
 
 
 @click.group()
@@ -163,16 +177,19 @@ def _display_search_results(results: list[dict[str, Any]], format: str) -> None:
         return
 
     for i, result in enumerate(results, 1):
+        chunk_preview = result.get("chunk_text", "")[:100]
+        page_num = result.get("page_number", "N/A")
         if format == "verbose":
             console.print(f"\n[bold]Result {i}[/bold]")
             console.print(f"  Source: {result.get('source_file', 'N/A')}")
-            console.print(f"  Page: {result.get('page_number', 'N/A')}")
+            console.print(f"  Page: {page_num}")
             console.print(f"  Score: {result.get('score', 0):.4f}")
             console.print(f"  Text: {result.get('chunk_text', '')[:200]}...")
         else:
             console.print(
                 f"{i}. {result.get('source_file', 'N/A')} "
-                f"(score: {result.get('score', 0):.4f})"
+                f"(page {page_num}, score: {result.get('score', 0):.4f}) "
+                f"- {chunk_preview}..."
             )
 
 
@@ -205,6 +222,12 @@ def _display_search_results(results: list[dict[str, Any]], format: str) -> None:
     default=0,
     help="Offset for pagination",
 )
+@click.option(
+    "--all",
+    "-a",
+    is_flag=True,
+    help="Show all results without pagination",
+)
 @click.pass_context
 def list_cmd(
     ctx: click.Context,
@@ -212,11 +235,16 @@ def list_cmd(
     chunk_id: str | None,
     limit: int,
     offset: int,
+    all: bool = False,
 ) -> None:
     """List ingested documents/chunks."""
     from secondbrain.management import Lister
 
     lister = Lister(verbose=ctx.obj.get("verbose", False))
+
+    # Use a large limit when --all flag is set
+    if all:
+        limit = 100000
 
     try:
         results = lister.list_chunks(

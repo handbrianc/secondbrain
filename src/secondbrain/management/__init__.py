@@ -1,22 +1,9 @@
-"""Management module for list, delete, and status operations."""
-
-import logging
-from typing import Any
-
 from secondbrain.storage import StorageConnectionError, VectorStorage
-
-logger = logging.getLogger(__name__)
+from secondbrain.utils.connections import ServiceUnavailableError
 
 
 class Lister:
-    """Handles listing of documents."""
-
     def __init__(self, verbose: bool = False) -> None:
-        """Initialize lister.
-
-        Args:
-            verbose: Enable verbose logging
-        """
         self.verbose = verbose
         self.storage = VectorStorage()
 
@@ -26,20 +13,8 @@ class Lister:
         chunk_id: str | None = None,
         limit: int = 50,
         offset: int = 0,
-    ) -> list[dict[str, Any]]:
-        """List chunks with filters.
-
-        Args:
-            source_filter: Filter by source file
-            chunk_id: Filter by chunk ID
-            limit: Max results
-            offset: Pagination offset
-
-        Returns:
-            list: List of chunks
-        """
-        if not self.storage.validate_connection():
-            raise RuntimeError("Cannot connect to MongoDB")
+    ) -> list[dict]:
+        self._ensure_storage_available()
 
         return self.storage.list_chunks(
             source_filter=source_filter,
@@ -48,16 +23,14 @@ class Lister:
             offset=offset,
         )
 
+    def _ensure_storage_available(self) -> None:
+        from secondbrain.utils.connections import ensure_service_available
+
+        ensure_service_available("MongoDB", self.storage.validate_connection)
+
 
 class Deleter:
-    """Handles deletion of documents."""
-
     def __init__(self, verbose: bool = False) -> None:
-        """Initialize deleter.
-
-        Args:
-            verbose: Enable verbose logging
-        """
         self.verbose = verbose
         self.storage = VectorStorage()
 
@@ -67,18 +40,7 @@ class Deleter:
         chunk_id: str | None = None,
         all: bool = False,
     ) -> int:
-        """Delete documents.
-
-        Args:
-            source: Source file to delete
-            chunk_id: Specific chunk ID to delete
-            all: Delete all
-
-        Returns:
-            int: Number of deleted documents
-        """
-        if not self.storage.validate_connection():
-            raise RuntimeError("Cannot connect to MongoDB")
+        self._ensure_storage_available()
 
         if all:
             return self.storage.delete_all()
@@ -91,26 +53,23 @@ class Deleter:
 
         return 0
 
+    def _ensure_storage_available(self) -> None:
+        from secondbrain.utils.connections import ensure_service_available
+
+        ensure_service_available("MongoDB", self.storage.validate_connection)
+
 
 class StatusChecker:
-    """Handles status checking."""
-
     def __init__(self, verbose: bool = False) -> None:
-        """Initialize status checker.
-
-        Args:
-            verbose: Enable verbose logging
-        """
         self.verbose = verbose
         self.storage = VectorStorage()
 
-    def get_status(self) -> dict[str, Any]:
-        """Get database status.
-
-        Returns:
-            dict: Status information
-        """
-        if not self.storage.validate_connection():
-            raise RuntimeError("Cannot connect to MongoDB")
+    def get_status(self) -> dict:
+        self._ensure_storage_available()
 
         return self.storage.get_stats()
+
+    def _ensure_storage_available(self) -> None:
+        from secondbrain.utils.connections import ensure_service_available
+
+        ensure_service_available("MongoDB", self.storage.validate_connection)

@@ -168,19 +168,39 @@ class TestDocumentIngestionSpecRequirements:
         ingestor = DocumentIngestor()
         # Verify batch_size parameter exists in ingest method signature
         import inspect
+
         sig = inspect.signature(ingestor.ingest)
         assert "batch_size" in sig.parameters
-
 
     def test_supported_file_types_all_specified(self) -> None:
         """Test all specified file types from spec are supported."""
         # Spec lists: PDF, DOCX, PPTX, XLSX, HTML, Markdown, AsciiDoc, LaTeX, CSV,
         # Images (PNG, JPEG, TIFF, BMP, WEBP), Audio (WAV, MP3), WebVTT, XML, Docling JSON
         expected = {
-            ".pdf", ".docx", ".pptx", ".xlsx", ".html", ".htm",
-            ".md", ".txt", ".asciidoc", ".adoc", ".tex", ".csv",
-            ".png", ".jpg", ".jpeg", ".tiff", ".tif", ".bmp", ".webp",
-            ".wav", ".mp3", ".vtt", ".xml", ".json",
+            ".pdf",
+            ".docx",
+            ".pptx",
+            ".xlsx",
+            ".html",
+            ".htm",
+            ".md",
+            ".txt",
+            ".asciidoc",
+            ".adoc",
+            ".tex",
+            ".csv",
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".tiff",
+            ".tif",
+            ".bmp",
+            ".webp",
+            ".wav",
+            ".mp3",
+            ".vtt",
+            ".xml",
+            ".json",
         }
         assert expected == SUPPORTED_EXTENSIONS
 

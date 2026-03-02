@@ -1,15 +1,16 @@
 """Vector storage module for MongoDB integration."""
 
 import logging
+import time
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, TypedDict
 
 from pymongo import MongoClient
 from pymongo.collection import Collection
 from pymongo.database import Database
 from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError
 
-from secondbrain.config import get_config
+from secondbrain.config import Config, get_config
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +19,21 @@ class StorageConnectionError(Exception):
     """Cannot connect to MongoDB."""
 
     pass
+
+
+class SearchResult(TypedDict):
+    chunk_id: str
+    source_file: str
+    page_number: int | None
+    chunk_text: str
+    score: float
+
+
+class ChunkInfo(TypedDict):
+    chunk_id: str
+    source_file: str
+    page_number: int | None
+    chunk_text: str
 
 
 class VectorStorage:
@@ -40,6 +56,7 @@ class VectorStorage:
         self.mongo_uri: str = mongo_uri or config.mongo_uri
         self.db_name: str = db_name or config.mongo_db
         self.collection_name: str = collection_name or config.mongo_collection
+        self._config: Config = config
         self._client: MongoClient[Any] | None = None
         self._db: Database[Any] | None = None
         self._collection: Collection[Any] | None = None
@@ -49,7 +66,7 @@ class VectorStorage:
     def client(self) -> MongoClient[Any]:
         """Get MongoDB client."""
         if self._client is None:
-            self._client = MongoClient(self.mongo_uri)
+            self._client = MongoClient(self.mongo_uri, directConnection=True)
         return self._client
 
     @property
@@ -84,14 +101,23 @@ class VectorStorage:
             return
 
         try:
-            _ = self.collection.create_index(
-                [("embedding", "vector")],
-                name="embedding_index",
-                vectorOptions={
-                    "dimensions": 384,
-                    "metric": "cosine",
+            from pymongo.operations import SearchIndexModel
+
+            search_index_model = SearchIndexModel(
+                definition={
+                    "fields": [
+                        {
+                            "type": "vector",
+                            "path": "embedding",
+                            "numDimensions": self._config.embedding_dimensions,
+                            "similarity": "cosine",
+                        }
+                    ]
                 },
+                name="embedding_index",
+                type="vectorSearch",
             )
+            _ = self.collection.create_search_index(model=search_index_model)
             self._index_created = True
             logger.info("Created vector index")
         except Exception as e:
@@ -149,7 +175,7 @@ class VectorStorage:
         top_k: int = 5,
         source_filter: str | None = None,
         file_type_filter: str | None = None,
-    ) -> list[dict[str, Any]]:
+    ) -> list[SearchResult]:
         """Search for similar embeddings.
 
         Args:
@@ -166,6 +192,20 @@ class VectorStorage:
                 f"Cannot connect to MongoDB at {self.mongo_uri}"
             )
 
+        # Ensure index exists and wait for it to be ready
+        self.ensure_index()
+        for _ in range(15):
+            try:
+                for idx in self.collection.list_search_indexes():
+                    if (
+                        idx.get("name") == "embedding_index"
+                        and idx.get("status") == "READY"
+                    ):
+                        break
+            except Exception:
+                pass
+            time.sleep(1)
+
         # Build filter
         query_filter: dict[str, Any] = {}
         if source_filter:
@@ -174,6 +214,7 @@ class VectorStorage:
             query_filter["metadata.file_type"] = file_type_filter
 
         # Cosine similarity search
+        # $vectorSearch must be the FIRST stage in the pipeline
         pipeline: list[dict[str, Any]] = [
             {
                 "$vectorSearch": {
@@ -186,8 +227,9 @@ class VectorStorage:
             },
         ]
 
+        # Apply filters AFTER vector search (cannot be in vectorSearch stage)
         if query_filter:
-            pipeline.insert(0, {"$match": query_filter})
+            pipeline.append({"$match": query_filter})
 
         pipeline.extend(
             [
@@ -203,7 +245,7 @@ class VectorStorage:
             ]
         )
 
-        results: list[dict[str, Any]] = list(self.collection.aggregate(pipeline))
+        results: list[SearchResult] = list(self.collection.aggregate(pipeline))
         return results
 
     def list_chunks(
@@ -212,7 +254,7 @@ class VectorStorage:
         chunk_id: str | None = None,
         limit: int = 50,
         offset: int = 0,
-    ) -> list[dict[str, Any]]:
+    ) -> list[ChunkInfo]:
         """List chunks with optional filters.
 
         Args:
@@ -250,7 +292,8 @@ class VectorStorage:
             .limit(limit)
         )
 
-        return list(cursor)
+        chunks: list[ChunkInfo] = list(cursor)
+        return chunks
 
     def delete_by_source(self, source: str) -> int:
         """Delete all chunks from a source file.

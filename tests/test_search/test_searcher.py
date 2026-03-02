@@ -144,7 +144,6 @@ class TestSearcher:
             assert "Cannot connect to MongoDB" in str(e)
 
 
-
 class TestSemanticSearchSpecRequirements:
     """Tests for semantic search specification requirements."""
 
@@ -330,7 +329,6 @@ class TestSemanticSearchSpecRequirements:
         mock_storage.validate_connection.return_value = True
         mock_storage.search.return_value = []  # Empty results
         mock_storage_class.return_value = mock_storage
-
 
         searcher = Searcher()
         results = searcher.search("test query")

@@ -65,7 +65,8 @@ docker-compose down
 ### Manual Docker Setup
 
 ```bash
-# Run MongoDB
+# Run MongoDB (8.0+ required for vector search)
+docker run -d --name mongodb -p 27017:27017 mongo:8.0
 docker run -d --name mongodb -p 27017:27017 mongo:7.0
 
 # Run Ollama
@@ -86,7 +87,7 @@ Configure SecondBrain using environment variables:
 | `SECONDBRAIN_MONGO_COLLECTION` | `embeddings` | Collection name for embeddings |
 | `SECONDBRAIN_OLLAMA_URL` | `http://localhost:11434` | Ollama API URL |
 | `SECONDBRAIN_MODEL` | `embeddinggemma:latest` | Embedding model to use |
-| `SECONDBRAIN_CHUNK_SIZE` | `512` | Chunk size for document splitting |
+| `SECONDBRAIN_CHUNK_SIZE` | `4096` | Chunk size for document splitting |
 | `SECONDBRAIN_CHUNK_OVERLAP` | `50` | Chunk overlap for splitting |
 | `SECONDBRAIN_DEFAULT_TOP_K` | `5` | Default number of search results |
 

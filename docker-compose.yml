@@ -1,5 +1,20 @@
-# docker-compose.yml for secondbrain development environment
 services:
+  mongodb:
+    image: mongodb/mongodb-atlas-local:latest
+    container_name: secondbrain-mongodb
+    hostname: mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGODB_INITDB_ROOT_USERNAME=${MONGODB_INITDB_ROOT_USERNAME:-admin}
+      - MONGODB_INITDB_ROOT_PASSWORD=${MONGODB_INITDB_ROOT_PASSWORD:-password}
+    volumes:
+      - mongodb-data:/data/db
+      - mongodb-configdb:/data/configdb
+      - mongot-data:/data/mongot
+    networks:
+      - secondbrain-network
+
   ollama:
     image: ollama/ollama:latest
     container_name: secondbrain-ollama
@@ -7,18 +22,13 @@ services:
       - "11434:11434"
     volumes:
       - ollama-data:/root/.ollama
-    environment:
-      - OLLAMA_HOST=0.0.0.0
     networks:
       - secondbrain-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
 
 volumes:
+  mongodb-data:
+  mongodb-configdb:
+  mongot-data:
   ollama-data:
 
 networks:
