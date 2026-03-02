@@ -9,9 +9,11 @@ import click
 from rich.console import Console
 
 from secondbrain.config import get_config
-from secondbrain.logging import setup_logging
+from secondbrain.logging import get_health_status, setup_logging
 
 console = Console()
+
+MAX_LIST_LIMIT = 100000
 
 
 def handle_cli_errors(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -244,7 +246,7 @@ def list_cmd(
 
     # Use a large limit when --all flag is set
     if all:
-        limit = 100000
+        limit = MAX_LIST_LIMIT
 
     try:
         results = lister.list_chunks(
@@ -362,6 +364,40 @@ def _display_status(stats: dict[str, Any]) -> None:
     console.print(f"  Unique sources: {stats.get('unique_sources', 0)}")
     console.print(f"  Database: {stats.get('database', 'N/A')}")
     console.print(f"  Collection: {stats.get('collection', 'N/A')}")
+
+
+@cli.command()
+@click.option("--output", "-o", type=click.Choice(["text", "json"]), default="text")
+@click.pass_context
+def health(ctx: click.Context, output: str) -> None:
+    """Check health status of all services."""
+    from secondbrain.logging import check_services
+
+    try:
+        health_status = get_health_status()
+        if output == "json":
+            import json
+
+            console.print(json.dumps(health_status, indent=2))
+        else:
+            _display_health_text(health_status)
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        sys.exit(1)
+
+
+def _display_health_text(status: dict[str, Any]) -> None:
+    """Display health status in text format."""
+    status_color = "green" if status["status"] == "healthy" else "yellow"
+    console.print(
+        f"[bold {status_color}]Health Status: {status['status'].upper()}[/bold {status_color}]"
+    )
+    console.print(f"  Timestamp: {status['timestamp']}")
+    console.print(f"  Check Duration: {status['check_duration_seconds']:.3f}s")
+    console.print("\n[bold]Services:[/bold]")
+    for service, available in status["services"].items():
+        icon = "[green]✓[/green]" if available else "[red]✗[/red]"
+        console.print(f"  {icon} {service}")
 
 
 def main() -> None:

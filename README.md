@@ -90,6 +90,8 @@ Configure SecondBrain using environment variables:
 | `SECONDBRAIN_CHUNK_SIZE` | `4096` | Chunk size for document splitting |
 | `SECONDBRAIN_CHUNK_OVERLAP` | `50` | Chunk overlap for splitting |
 | `SECONDBRAIN_DEFAULT_TOP_K` | `5` | Default number of search results |
+| `SECONDBRAIN_LOG_FORMAT` | `rich` | Log format: `rich` or `json` |
+| `SECONDBRAIN_HEALTH_CHECK_TTL` | `60` | Service check cache TTL in seconds |
 
 ### Using .env File
 
@@ -121,6 +123,37 @@ secondbrain ingest document.pdf --chunk-size 1024 --chunk-overlap 100
 
 # Verbose output
 secondbrain ingest document.pdf --verbose
+```
+
+### Async Support
+
+SecondBrain includes full async support for embeddings and storage operations:
+
+```python
+# Async embedding generation
+from secondbrain.embedding import EmbeddingGenerator
+
+generator = EmbeddingGenerator()
+
+# Single async embedding
+embedding = await generator.generate_async("your text here")
+
+# Batch async embeddings
+embeddings = await generator.generate_batch_async(["text1", "text2"])
+```
+
+```python
+# Async connection validation
+from secondbrain.embedding import EmbeddingGenerator
+
+generator = EmbeddingGenerator()
+is_available = await generator.validate_connection_async(force=False)
+```
+
+```bash
+# CLI commands support async operations internally
+# All CLI commands can be called with --verbose for async timing info
+secondbrain search "query" --verbose
 ```
 
 ### Semantic Search
@@ -178,7 +211,38 @@ secondbrain delete --all
 secondbrain status
 ```
 
+### Health Check
+
+```bash
+# Check health status (text format)
+secondbrain health
+
+# Check health status (JSON format)
+secondbrain health --output json
+
+# Verbose output for health check
+secondbrain health --verbose
+```
+
 ## Development Setup
+
+### Performance Optimizations
+
+SecondBrain includes several performance optimizations:
+
+```bash
+# Batch processing for document ingestion
+secondbrain ingest /path/to/documents/ --batch-size 20
+
+# Adjust chunk size for optimal processing
+secondbrain ingest document.pdf --chunk-size 2048 --chunk-overlap 100
+```
+
+**Built-in Optimizations:**
+- **Connection caching** - Service checks are cached (default 60s TTL)
+- **Rate limiting** - Protects Ollama API from overload
+- **Batch processing** - Parallel file processing with `--batch-size`
+- **Async support** - Full async API for embedding generation
 
 ### Code Quality Tools
 
@@ -210,6 +274,12 @@ pytest --cov=secondbrain --cov-report=html
 
 # Run specific test file
 pytest tests/test_embedding.py
+
+# Run tests with verbose output
+pytest -v
+
+# Run tests matching a pattern
+pytest -k "test_pattern"
 ```
 
 ### Pre-commit Hooks
@@ -230,6 +300,13 @@ bandit -r secondbrain/
 
 # Check dependencies for vulnerabilities
 safety check
+```
+
+### Run All Quality Checks
+
+```bash
+# Run linting, formatting check, and type checking
+ruff check . && ruff format --check . && mypy .
 ```
 
 ## Building

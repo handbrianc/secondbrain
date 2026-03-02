@@ -67,7 +67,9 @@ class VectorStorage:
     def client(self) -> MongoClient[Any]:
         """Get MongoDB client."""
         if self._client is None:
-            self._client = MongoClient(self.mongo_uri, directConnection=True)
+            self._client = MongoClient(
+                self.mongo_uri, directConnection=True, serverSelectionTimeoutMS=5000
+            )
         return self._client
 
     @property
@@ -204,7 +206,7 @@ class VectorStorage:
                     ):
                         break
             except Exception:
-                pass
+                pass  # Index not ready - retry on next iteration
             time.sleep(1)
 
         # Build filter

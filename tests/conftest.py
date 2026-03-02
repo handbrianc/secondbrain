@@ -42,16 +42,11 @@ def sample_text() -> str:
 
 @pytest.fixture
 def sample_embedding() -> list[float]:
-    """Sample embedding vector (384 dimensions).
-
-    Note: Test embeddings use 384 dimensions for lightweight testing,
-    but the production config defaults to 768 dimensions for the
-    embeddinggemma model. Tests should not rely on a specific dimension.
-    """
+    """Sample embedding vector."""
     import random
 
     random.seed(42)
-    return [random.random() for _ in range(384)]
+    return [random.random() for _ in range(768)]
 
 
 @pytest.fixture

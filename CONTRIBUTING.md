@@ -38,7 +38,35 @@ Feature requests should include:
 6. Ensure code quality checks pass: `ruff check . && ruff format --check . && mypy .`
 7. Commit using conventional commits: `git commit -m "feat: add amazing feature"`
 8. Push your branch: `git push origin feature/amazing-feature`
-9. Open a pull request
+9. Open a pull request using the PR template (automatically populated)
+
+## PR Template
+
+When creating a pull request, use the provided template in `.github/PULL_REQUEST_TEMPLATE.md`. Include:
+
+- Summary of changes
+- Related issue (if any)
+- Testing details
+- Checklist completion
+
+- **One feature/fix per PR** - Keep PRs focused
+- **Update documentation** - Include examples for new features
+- **Add tests** - New functionality needs test coverage
+- **Update CHANGELOG** - Highlight breaking changes and new features
+- **Self-review** - Review your own code before submitting
+- **Address feedback** - Make requested changes promptly
+
+## PR Checklist
+
+Before merging, ensure:
+
+- [ ] Tests pass
+- [ ] Linting passes (`ruff check .`)
+- [ ] Formatting check passes (`ruff format --check .`)
+- [ ] Type checking passes (`mypy .`)
+- [ ] Documentation updated
+- [ ] CHANGELOG updated (if significant change)
+- [ ] PR description is clear and complete
 
 ## Development Setup
 

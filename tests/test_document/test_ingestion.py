@@ -7,6 +7,7 @@ import pytest
 from secondbrain.document import (
     SUPPORTED_EXTENSIONS,
     DocumentIngestor,
+    Segment,
     get_file_type,
     is_supported,
 )
@@ -75,7 +76,7 @@ class TestDocumentIngestor:
     def test_init_defaults(self) -> None:
         """Test DocumentIngestor default values."""
         ingestor = DocumentIngestor()
-        assert ingestor.chunk_size == 512
+        assert ingestor.chunk_size == 4096
         assert ingestor.chunk_overlap == 50
 
     def test_ingest_nonexistent_file(self) -> None:
@@ -94,7 +95,9 @@ class TestDocumentIngestor:
     def test_chunk_text_simple(self) -> None:
         """Test text chunking with simple text."""
         ingestor = DocumentIngestor(chunk_size=50, chunk_overlap=10)
-        segments = [{"text": "This is a test document with some content.", "page": 1}]
+        segments: list[Segment] = [
+            {"text": "This is a test document with some content.", "page": 1}
+        ]
         chunks = ingestor._chunk_text(segments)
         assert len(chunks) > 0
         assert all("text" in chunk and "page" in chunk for chunk in chunks)
@@ -103,7 +106,7 @@ class TestDocumentIngestor:
         """Test text chunking with exact chunk size."""
         text = "A" * 100  # 100 chars
         ingestor = DocumentIngestor(chunk_size=100, chunk_overlap=0)
-        segments = [{"text": text, "page": 1}]
+        segments: list[Segment] = [{"text": text, "page": 1}]
         chunks = ingestor._chunk_text(segments)
         assert len(chunks) == 1
         assert len(chunks[0]["text"]) <= 100
@@ -112,7 +115,7 @@ class TestDocumentIngestor:
         """Test text chunking producing multiple chunks."""
         text = "Word " * 200  # More than chunk size
         ingestor = DocumentIngestor(chunk_size=100, chunk_overlap=20)
-        segments = [{"text": text, "page": 1}]
+        segments: list[Segment] = [{"text": text, "page": 1}]
         chunks = ingestor._chunk_text(segments)
         assert len(chunks) > 1
 

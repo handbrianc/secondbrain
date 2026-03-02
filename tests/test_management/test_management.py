@@ -73,7 +73,9 @@ class TestLister:
 
     @patch("secondbrain.management.VectorStorage")
     def test_list_chunks_connection_error(self, mock_storage_class: MagicMock) -> None:
-        """Test listing raises on connection error."""
+        """Test list_chunks raises on connection error."""
+        from secondbrain.utils.connections import ServiceUnavailableError
+
         mock_storage = MagicMock()
         mock_storage.validate_connection.return_value = False
         mock_storage_class.return_value = mock_storage
@@ -81,8 +83,8 @@ class TestLister:
         lister = Lister()
         try:
             lister.list_chunks()
-        except RuntimeError as e:
-            assert "Cannot connect to MongoDB" in str(e)
+        except ServiceUnavailableError as e:
+            assert "MongoDB" in str(e)
 
 
 class TestDeleter:
@@ -147,6 +149,8 @@ class TestDeleter:
     @patch("secondbrain.management.VectorStorage")
     def test_delete_connection_error(self, mock_storage_class: MagicMock) -> None:
         """Test delete raises on connection error."""
+        from secondbrain.utils.connections import ServiceUnavailableError
+
         mock_storage = MagicMock()
         mock_storage.validate_connection.return_value = False
         mock_storage_class.return_value = mock_storage
@@ -154,8 +158,8 @@ class TestDeleter:
         deleter = Deleter()
         try:
             deleter.delete(all=True)
-        except RuntimeError as e:
-            assert "Cannot connect to MongoDB" in str(e)
+        except ServiceUnavailableError as e:
+            assert "MongoDB" in str(e)
 
 
 class TestStatusChecker:
@@ -191,6 +195,8 @@ class TestStatusChecker:
     @patch("secondbrain.management.VectorStorage")
     def test_get_status_connection_error(self, mock_storage_class: MagicMock) -> None:
         """Test get status raises on connection error."""
+        from secondbrain.utils.connections import ServiceUnavailableError
+
         mock_storage = MagicMock()
         mock_storage.validate_connection.return_value = False
         mock_storage_class.return_value = mock_storage
@@ -198,5 +204,5 @@ class TestStatusChecker:
         status_checker = StatusChecker()
         try:
             status_checker.get_status()
-        except RuntimeError as e:
-            assert "Cannot connect to MongoDB" in str(e)
+        except ServiceUnavailableError as e:
+            assert "MongoDB" in str(e)

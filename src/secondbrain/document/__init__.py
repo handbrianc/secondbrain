@@ -45,10 +45,26 @@ SUPPORTED_EXTENSIONS = {
 
 
 def is_supported(file_path: Path) -> bool:
+    """Check if file extension is supported.
+
+    Args:
+        file_path: Path to check.
+
+    Returns:
+        True if file type is supported, False otherwise.
+    """
     return file_path.suffix.lower() in SUPPORTED_EXTENSIONS
 
 
 def get_file_type(file_path: Path) -> str:
+    """Get the file type for a given file path.
+
+    Args:
+        file_path: Path to determine file type for.
+
+    Returns:
+        File type string (e.g., 'pdf', 'docx', 'image', etc.).
+    """
     ext = file_path.suffix.lower()
     type_map: dict[str, str] = {
         ".pdf": "pdf",
@@ -80,12 +96,21 @@ def get_file_type(file_path: Path) -> str:
 
 
 class DocumentIngestor:
+    """Handles document ingestion and chunking."""
+
     def __init__(
         self,
-        chunk_size: int = 512,
+        chunk_size: int = 4096,
         chunk_overlap: int = 50,
         verbose: bool = False,
     ) -> None:
+        """Initialize document ingestor.
+
+        Args:
+            chunk_size: Size of text chunks in tokens.
+            chunk_overlap: Overlap between chunks in tokens.
+            verbose: Enable verbose logging.
+        """
         if chunk_size <= 0:
             raise ValueError("chunk_size must be positive")
         if chunk_overlap < 0:
@@ -121,6 +146,8 @@ class DocumentIngestor:
         if not files:
             return {"success": 0, "failed": 0}
 
+        failed_files = 0
+
         embedding_gen = EmbeddingGenerator()
         storage = VectorStorage()
 
@@ -132,6 +159,7 @@ class DocumentIngestor:
                 file_data.append((file_path, segments, [s["text"] for s in segments]))
             except Exception:
                 logger.error(f"Failed to extract text from {file_path}")
+                failed_files += 1
 
         all_chunks: list[dict[str, Any]] = []
         seen_hashes = set()
@@ -210,7 +238,7 @@ class DocumentIngestor:
         if all_docs:
             storage.store_batch(all_docs)
 
-        return {"success": len(file_data), "failed": 0}
+        return {"success": len(file_data), "failed": failed_files}
 
     def _extract_text(self, file_path: Path) -> list[Segment]:
         try:

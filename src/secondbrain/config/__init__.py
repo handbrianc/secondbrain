@@ -3,7 +3,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -50,7 +50,7 @@ class Config(BaseSettings):
         description="Chunk size for document splitting",
     )
     chunk_overlap: int = Field(
-        default=200,
+        default=50,
         description="Chunk overlap for splitting",
     )
 
@@ -65,6 +65,20 @@ class Config(BaseSettings):
         default=768,
         description="Dimensionality of embedding vectors (must match model)",
     )
+
+    @model_validator(mode="after")
+    def validate_config(self) -> "Config":
+        if self.chunk_size <= 0:
+            raise ValueError("chunk_size must be positive")
+        if self.chunk_overlap < 0:
+            raise ValueError("chunk_overlap must be non-negative")
+        if self.chunk_overlap >= self.chunk_size:
+            raise ValueError("chunk_overlap must be less than chunk_size")
+        if self.embedding_dimensions <= 0:
+            raise ValueError("embedding_dimensions must be positive")
+        if self.default_top_k <= 0:
+            raise ValueError("default_top_k must be positive")
+        return self
 
 
 @lru_cache
