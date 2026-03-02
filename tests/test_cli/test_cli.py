@@ -163,5 +163,77 @@ class TestCLI:
         ]
         mock_searcher_class.return_value = mock_searcher
 
+    runner = CliRunner()
+    runner.invoke(cli, ["search", "test", "--format", "verbose"])
+
+
+class TestCLIHealth:
+    """Tests for CLI health command."""
+
+    @patch("secondbrain.cli.get_health_status")
+    def test_health_command_text(self, mock_get_health: MagicMock) -> None:
+        """Test health command with text output."""
+        mock_get_health.return_value = {
+            "status": "healthy",
+            "timestamp": "2024-01-01T00:00:00+00:00",
+            "uptime": 3600.0,
+            "services": {"ollama": True, "mongodb": True},
+            "check_duration_seconds": 0.5,
+        }
+
         runner = CliRunner()
-        runner.invoke(cli, ["search", "test", "--format", "verbose"])
+        result = runner.invoke(cli, ["health"])
+        assert result.exit_code == 0
+        assert "HEALTHY" in result.output
+        assert "ollama" in result.output
+        assert "mongodb" in result.output
+
+    @patch("secondbrain.cli.get_health_status")
+    def test_health_command_json(self, mock_get_health: MagicMock) -> None:
+        """Test health command with JSON output."""
+        expected_status = {
+            "status": "healthy",
+            "timestamp": "2024-01-01T00:00:00+00:00",
+            "uptime": 3600.0,
+            "services": {"ollama": True, "mongodb": True},
+            "check_duration_seconds": 0.5,
+        }
+        mock_get_health.return_value = expected_status
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["health", "--output", "json"])
+        assert result.exit_code == 0
+        assert "healthy" in result.output
+        assert "ollama" in result.output
+
+    @patch("secondbrain.cli.get_health_status")
+    def test_health_command_degraded(self, mock_get_health: MagicMock) -> None:
+        """Test health command when services are degraded."""
+        mock_get_health.return_value = {
+            "status": "degraded",
+            "timestamp": "2024-01-01T00:00:00+00:00",
+            "uptime": 3600.0,
+            "services": {"ollama": True, "mongodb": False},
+            "check_duration_seconds": 0.5,
+        }
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["health"])
+        assert result.exit_code == 0
+        assert "DEGRADED" in result.output
+
+    @patch("secondbrain.cli.get_health_status")
+    def test_health_command_verbose(self, mock_get_health: MagicMock) -> None:
+        """Test health command with verbose flag."""
+        mock_get_health.return_value = {
+            "status": "healthy",
+            "timestamp": "2024-01-01T00:00:00+00:00",
+            "uptime": 3600.0,
+            "services": {"ollama": True, "mongodb": True},
+            "check_duration_seconds": 0.5,
+        }
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["health", "--output", "json"])
+        assert result.exit_code == 0
+        assert "3600.0" in result.output

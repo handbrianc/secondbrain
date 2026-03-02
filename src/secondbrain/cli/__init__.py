@@ -1,5 +1,6 @@
 """CLI module for secondbrain."""
 
+import json
 import sys
 from collections.abc import Callable, Sequence
 from functools import wraps
@@ -18,6 +19,12 @@ MAX_LIST_LIMIT = 100000
 
 
 T = TypeVar("T", bound=Callable[..., Any])
+
+
+class CLIValidationError(Exception):
+    """Custom exception for CLI validation failures."""
+
+    pass
 
 
 def handle_cli_errors(func: T) -> T:
@@ -47,6 +54,7 @@ def cli(ctx: click.Context, verbose: bool) -> None:
 
 
 @cli.command()
+@handle_cli_errors
 @click.argument("path", type=click.Path(exists=True))
 @click.option(
     "--recursive",
@@ -99,19 +107,14 @@ def ingest(
     )
 
     console.print(f"[bold]Ingesting: {path}[/bold]")
-    try:
-        results = ingestor.ingest(path, recursive=recursive, batch_size=batch_size)
-        console.print(
-            f"[green]Successfully ingested {results['success']} files[/green]"
-        )
-        if results["failed"] > 0:
-            console.print(f"[yellow]Failed: {results['failed']} files[/yellow]")
-    except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
-        sys.exit(1)
+    results = ingestor.ingest(path, recursive=recursive, batch_size=batch_size)
+    console.print(f"[green]Successfully ingested {results['success']} files[/green]")
+    if results["failed"] > 0:
+        console.print(f"[yellow]Failed: {results['failed']} files[/yellow]")
 
 
 @cli.command()
+@handle_cli_errors
 @click.argument("query", type=str)
 @click.option(
     "--top-k",
@@ -161,17 +164,13 @@ def search(
 
     searcher = Searcher(verbose=ctx.obj.get("verbose", False))
 
-    try:
-        results = searcher.search(
-            query=query,
-            top_k=top_k,
-            source_filter=source,
-            file_type_filter=file_type,
-        )
-        _display_search_results(results, format)
-    except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
-        sys.exit(1)
+    results = searcher.search(
+        query=query,
+        top_k=top_k,
+        source_filter=source,
+        file_type_filter=file_type,
+    )
+    _display_search_results(results, format)
 
 
 def _display_search_results(results: list[dict[str, Any]], format: str) -> None:
@@ -200,6 +199,7 @@ def _display_search_results(results: list[dict[str, Any]], format: str) -> None:
 
 
 @cli.command()
+@handle_cli_errors
 @click.option(
     "--source",
     "-s",
@@ -252,17 +252,13 @@ def list_cmd(
     if all:
         limit = MAX_LIST_LIMIT
 
-    try:
-        results = lister.list_chunks(
-            source_filter=source,
-            chunk_id=chunk_id,
-            limit=limit,
-            offset=offset,
-        )
-        _display_list_results(results)
-    except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
-        sys.exit(1)
+    results = lister.list_chunks(
+        source_filter=source,
+        chunk_id=chunk_id,
+        limit=limit,
+        offset=offset,
+    )
+    _display_list_results(results)
 
 
 def _display_list_results(results: Sequence[ChunkInfo]) -> None:
@@ -313,8 +309,6 @@ def delete(
     """Delete documents from the vector database."""
     from secondbrain.management import Deleter
 
-    deleter = Deleter(verbose=ctx.obj.get("verbose", False))
-
     # Validate options
     if not any([source, chunk_id, all]):
         console.print("[red]Error: Must specify --source, --chunk-id, or --all[/red]")
@@ -337,6 +331,8 @@ def delete(
                 console.print("Cancelled.")
                 return
 
+    deleter = Deleter(verbose=ctx.obj.get("verbose", False))
+
     try:
         count = deleter.delete(source=source, chunk_id=chunk_id, all=all)
         console.print(f"[green]Deleted {count} document(s)[/green]")
@@ -346,6 +342,7 @@ def delete(
 
 
 @cli.command()
+@handle_cli_errors
 @click.pass_context
 def status(ctx: click.Context) -> None:
     """Show statistics about the vector database."""
@@ -353,12 +350,8 @@ def status(ctx: click.Context) -> None:
 
     status_checker = StatusChecker(verbose=ctx.obj.get("verbose", False))
 
-    try:
-        stats = status_checker.get_status()
-        _display_status(stats)
-    except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
-        sys.exit(1)
+    stats = status_checker.get_status()
+    _display_status(stats)
 
 
 def _display_status(stats: DatabaseStats) -> None:
@@ -371,23 +364,17 @@ def _display_status(stats: DatabaseStats) -> None:
 
 
 @cli.command()
+@handle_cli_errors
 @click.option("--output", "-o", type=click.Choice(["text", "json"]), default="text")
 @click.pass_context
 def health(ctx: click.Context, output: str) -> None:
     """Check health status of all services."""
-    from secondbrain.logging import check_services
 
-    try:
-        health_status = get_health_status()
-        if output == "json":
-            import json
-
-            console.print(json.dumps(health_status, indent=2))
-        else:
-            _display_health_text(health_status)
-    except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
-        sys.exit(1)
+    health_status = get_health_status()
+    if output == "json":
+        console.print(json.dumps(health_status, indent=2))
+    else:
+        _display_health_text(health_status)
 
 
 def _display_health_text(status: HealthStatus) -> None:

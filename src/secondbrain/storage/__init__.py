@@ -12,30 +12,24 @@ from pymongo.database import Database
 from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError
 
 from secondbrain.config import Config, get_config
+from secondbrain.types import ChunkInfo, SearchResult
 from secondbrain.utils.connections import ValidatableService
 
 logger = logging.getLogger(__name__)
+
+__all__ = [
+    "ChunkInfo",
+    "DatabaseStats",
+    "SearchResult",
+    "StorageConnectionError",
+    "VectorStorage",
+]
 
 
 class StorageConnectionError(Exception):
     """Cannot connect to MongoDB."""
 
     pass
-
-
-class SearchResult(TypedDict):
-    chunk_id: str
-    source_file: str
-    page_number: int | None
-    chunk_text: str
-    score: float
-
-
-class ChunkInfo(TypedDict):
-    chunk_id: str
-    source_file: str
-    page_number: int | None
-    chunk_text: str
 
 
 class DatabaseStats(TypedDict):
@@ -216,7 +210,7 @@ class VectorStorage(ValidatableService):
                     ):
                         break
             except Exception:
-                pass  # Index not ready - retry on next iteration
+                logger.debug("Index not ready, retrying...")
             time.sleep(1)
 
         # Build filter

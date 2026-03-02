@@ -321,4 +321,16 @@ class EmbeddingGenerator(ValidatableService):
         Returns:
             List of embedding vectors.
         """
-        return [await self.generate_async(text) for text in texts]
+        return [await self._generate_async_with_rate_limit(text) for text in texts]
+
+    async def _generate_async_with_rate_limit(self, text: str) -> list[float]:
+        """Generate embedding with rate limiting applied.
+
+        Args:
+            text: Text to generate embedding for.
+
+        Returns:
+            Embedding vector.
+        """
+        self._check_rate_limit()
+        return await self.generate_async(text)

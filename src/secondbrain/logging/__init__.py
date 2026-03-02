@@ -8,6 +8,8 @@ from typing import TypedDict
 from rich.console import Console
 from rich.logging import RichHandler
 
+from secondbrain.types import ChunkInfo, SearchResult
+
 
 class HealthStatus(TypedDict):
     """Typed dictionary for health status response."""
@@ -19,13 +21,7 @@ class HealthStatus(TypedDict):
     check_duration_seconds: float
 
 
-class DatabaseStats(TypedDict):
-    """Typed dictionary for database statistics."""
-
-    total_chunks: int
-    unique_sources: int
-    database: str
-    collection: str
+DatabaseStats = ChunkInfo  # Alias - same structure for now
 
 
 _request_id: ContextVar[str] = ContextVar("request_id", default="")

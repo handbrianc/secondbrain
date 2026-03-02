@@ -1,6 +1,7 @@
 """Tests for embedding module."""
 
-from unittest.mock import MagicMock, patch
+import time
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -386,3 +387,85 @@ class TestEmbeddingSpecRequirements:
 
         gen.validate_connection()
         assert mock_client_instance.request.call_count == 2
+
+
+@pytest.mark.asyncio
+class TestAsyncEmbeddingGenerator:
+    """Tests for async embedding generator."""
+
+    @patch("secondbrain.embedding.httpx.AsyncClient")
+    async def test_generate_batch_async_respects_rate_limit(
+        self, mock_async_client_class: MagicMock
+    ) -> None:
+        """Test async batch generation applies rate limiting."""
+        from secondbrain.embedding import EmbeddingGenerator, RateLimiter
+
+        # Track rate limiting calls
+        rate_limit_calls = []
+
+        class TrackingRateLimiter(RateLimiter):
+            def acquire(self) -> None:
+                rate_limit_calls.append(time.monotonic())
+                super().acquire()
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json = lambda: {"embedding": [0.1, 0.2, 0.3]}
+
+        mock_async_client_instance = MagicMock()
+        mock_async_client_instance.request = AsyncMock(return_value=mock_response)
+        mock_async_client_class.return_value = mock_async_client_instance
+
+        rate_limiter = TrackingRateLimiter(max_requests=2, window_seconds=1.0)
+        gen = EmbeddingGenerator(rate_limiter=rate_limiter)
+
+        # Mock the connection validation to return True
+        gen._connection_valid = True
+        gen._connection_checked_at = time.monotonic()
+        gen._model_pulled = True
+
+        texts = ["text1", "text2", "text3"]
+        await gen.generate_batch_async(texts)
+
+        # Verify rate limiting was applied
+        assert len(rate_limit_calls) >= 3
+
+    @patch("secondbrain.embedding.httpx.AsyncClient")
+    async def test_generate_async_success(
+        self, mock_async_client_class: MagicMock
+    ) -> None:
+        """Test successful async embedding generation."""
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json = lambda: {"embedding": [0.1, 0.2, 0.3]}
+
+        mock_async_client_instance = MagicMock()
+        mock_async_client_instance.request = AsyncMock(return_value=mock_response)
+        mock_async_client_class.return_value = mock_async_client_instance
+
+        gen = EmbeddingGenerator()
+        gen._connection_valid = True
+        gen._connection_checked_at = time.monotonic()
+        gen._model_pulled = True
+
+        result = await gen.generate_async("test text")
+        assert result == [0.1, 0.2, 0.3]
+
+    @patch("secondbrain.embedding.httpx.AsyncClient")
+    async def test_generate_async_connection_unavailable(
+        self, mock_async_client_class: MagicMock
+    ) -> None:
+        """Test async generate raises when Ollama unavailable."""
+
+        mock_async_client_instance = MagicMock()
+        mock_async_client_instance.request = AsyncMock(
+            side_effect=Exception("Connection refused")
+        )
+        mock_async_client_class.return_value = mock_async_client_instance
+
+        gen = EmbeddingGenerator()
+        gen._connection_valid = False
+
+        with pytest.raises(OllamaUnavailableError):
+            await gen.generate_async("test text")

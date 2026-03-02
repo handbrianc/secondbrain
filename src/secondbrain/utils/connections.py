@@ -1,6 +1,7 @@
 """Connection utilities for service availability checks."""
 
 import threading
+from abc import abstractmethod
 from collections.abc import Callable
 from time import monotonic, time
 
@@ -99,6 +100,7 @@ class ValidatableService:
         """Handle service recovery - clear cached connection state."""
         self.invalidate_connection_cache()
 
+    @abstractmethod
     def _do_validate(self) -> bool:
         """Override in subclass to perform actual validation.
 
@@ -106,6 +108,49 @@ class ValidatableService:
             True if service is available.
         """
         raise NotImplementedError
+
+    async def validate_connection_async(self, force: bool = False) -> bool:
+        """Check if service is available with caching (async version).
+
+        Args:
+            force: If True, bypass cache and check connection.
+
+        Returns:
+            True if service is available, False otherwise.
+        """
+        current_time = monotonic()
+
+        with self._lock:
+            if (
+                not force
+                and self._connection_valid is not None
+                and current_time - self._connection_checked_at
+                < self._connection_cache_ttl
+            ):
+                return self._connection_valid
+
+        try:
+            self._connection_valid = await self._do_validate_async()
+        except Exception:
+            self._connection_valid = False
+
+        with self._lock:
+            self._connection_checked_at = current_time
+
+        return self._connection_valid
+
+    async def _do_validate_async(self) -> bool:
+        """Async version of validation to be overridden in subclass.
+
+        Default implementation calls synchronous _do_validate() wrapped in
+        asyncio.to_thread to avoid blocking.
+
+        Returns:
+            True if service is available.
+        """
+        import asyncio
+
+        return await asyncio.to_thread(self._do_validate)
 
 
 class ServiceValidator:
