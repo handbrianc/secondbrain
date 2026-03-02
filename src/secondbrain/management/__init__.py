@@ -1,4 +1,6 @@
-from secondbrain.storage import StorageConnectionError, VectorStorage
+from typing import Any
+
+from secondbrain.storage import ChunkInfo, StorageConnectionError, VectorStorage
 from secondbrain.utils.connections import ServiceUnavailableError
 
 
@@ -13,7 +15,7 @@ class Lister:
         chunk_id: str | None = None,
         limit: int = 50,
         offset: int = 0,
-    ) -> list[dict]:
+    ) -> list[ChunkInfo]:
         self._ensure_storage_available()
 
         return self.storage.list_chunks(
@@ -64,7 +66,7 @@ class StatusChecker:
         self.verbose = verbose
         self.storage = VectorStorage()
 
-    def get_status(self) -> dict:
+    def get_status(self) -> dict[str, Any]:
         self._ensure_storage_available()
 
         return self.storage.get_stats()

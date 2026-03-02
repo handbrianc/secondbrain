@@ -1,7 +1,7 @@
 """CLI module for secondbrain."""
 
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from functools import wraps
 from typing import Any
 
@@ -259,13 +259,13 @@ def list_cmd(
         sys.exit(1)
 
 
-def _display_list_results(results: list[dict[str, Any]]) -> None:
+def _display_list_results(results: Sequence[Any]) -> None:
     """Display list results."""
-    for result in results:
+    for chunk_info in results:
         console.print(
-            f"{result.get('chunk_id', 'N/A')}: "
-            f"{result.get('source_file', 'N/A')} "
-            f"(page {result.get('page_number', 'N/A')})"
+            f"{chunk_info.get('chunk_id', 'N/A')}: "
+            f"{chunk_info.get('source_file', 'N/A')} "
+            f"(page {chunk_info.get('page_number', 'N/A')})"
         )
 
 

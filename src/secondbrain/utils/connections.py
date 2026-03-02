@@ -1,8 +1,8 @@
-from typing import Callable
+from collections.abc import Callable
 
 
 class ServiceUnavailableError(Exception):
-    def __init__(self, service_name: str, message: str | None = None):
+    def __init__(self, service_name: str, message: str | None = None) -> None:
         super().__init__(message or f"{service_name} is unavailable")
         self.service_name = service_name
 

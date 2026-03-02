@@ -1,11 +1,12 @@
 """Search module for semantic search."""
 
 import logging
+from collections.abc import Sequence
 from typing import Any
 
 from secondbrain.config import get_config
 from secondbrain.embedding import EmbeddingGenerator
-from secondbrain.storage import StorageConnectionError, VectorStorage
+from secondbrain.storage import SearchResult, StorageConnectionError, VectorStorage
 
 logger = logging.getLogger(__name__)
 
@@ -55,11 +56,13 @@ class Searcher:
         query_embedding = self.embedding_gen.generate(query)
 
         # Search in storage
-        results = self.storage.search(
+        raw_results: Sequence[SearchResult] = self.storage.search(
             embedding=query_embedding,
             top_k=top_k,
             source_filter=source_filter,
             file_type_filter=file_type_filter,
         )
 
+        # Convert SearchResult to dict[str, Any] for CLI compatibility
+        results: list[dict[str, Any]] = [dict(r) for r in raw_results]
         return results

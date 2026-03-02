@@ -6,8 +6,14 @@ from typing import Any
 from uuid import uuid4
 
 from docling.document_converter import DocumentConverter
+from typing_extensions import TypedDict
 
 logger = logging.getLogger(__name__)
+
+
+class Segment(TypedDict):
+    text: str
+    page: int
 
 
 SUPPORTED_EXTENSIONS = {
@@ -38,13 +44,13 @@ SUPPORTED_EXTENSIONS = {
 }
 
 
-def is_supported(file_path):
+def is_supported(file_path: Path) -> bool:
     return file_path.suffix.lower() in SUPPORTED_EXTENSIONS
 
 
-def get_file_type(file_path):
+def get_file_type(file_path: Path) -> str:
     ext = file_path.suffix.lower()
-    type_map = {
+    type_map: dict[str, str] = {
         ".pdf": "pdf",
         ".docx": "docx",
         ".pptx": "pptx",
@@ -73,22 +79,13 @@ def get_file_type(file_path):
     return type_map.get(ext, "unknown")
 
 
-class TextSegment:
-    def __init__(self, text, page):
-        self.text = text
-        self.page = page
-
-    def __repr__(self):
-        return f"TextSegment(text='{self.text[:50]}...', page={self.page})"
-
-
 class DocumentIngestor:
     def __init__(
         self,
         chunk_size: int = 512,
         chunk_overlap: int = 50,
         verbose: bool = False,
-    ):
+    ) -> None:
         if chunk_size <= 0:
             raise ValueError("chunk_size must be positive")
         if chunk_overlap < 0:
@@ -107,7 +104,7 @@ class DocumentIngestor:
         path: str,
         recursive: bool = False,
         batch_size: int = 10,
-    ):
+    ) -> dict[str, int]:
         from secondbrain.embedding import EmbeddingGenerator
         from secondbrain.storage import VectorStorage
 
@@ -127,20 +124,20 @@ class DocumentIngestor:
         embedding_gen = EmbeddingGenerator()
         storage = VectorStorage()
 
-        file_data = []
+        # Use Segments directly; no need for TextSegment class wrapper
+        file_data: list[tuple[Path, list[Segment], list[str]]] = []
         for file_path in files:
             try:
-                segments = self._extract_text(file_path)
-                chunks = [TextSegment(s["text"], s["page"]) for s in segments]
-                file_data.append((file_path, chunks, [s["text"] for s in segments]))
+                segments: list[Segment] = self._extract_text(file_path)
+                file_data.append((file_path, segments, [s["text"] for s in segments]))
             except Exception:
                 logger.error(f"Failed to extract text from {file_path}")
 
-        all_chunks = []
+        all_chunks: list[dict[str, Any]] = []
         seen_hashes = set()
 
         for file_path, chunks, texts in file_data:
-            for i, (chunk, text) in enumerate(zip(chunks, texts)):
+            for i, (chunk, text) in enumerate(zip(chunks, texts, strict=True)):
                 cleaned = text.strip()
                 if not cleaned:
                     continue
@@ -153,7 +150,7 @@ class DocumentIngestor:
                             "file_path": file_path,
                             "original_index": i,
                             "text": cleaned,
-                            "page": chunk.page,
+                            "page": chunk["page"],
                             "text_hash": text_hash,
                             "chunk": chunk,
                         }
@@ -161,7 +158,7 @@ class DocumentIngestor:
 
         from concurrent.futures import ThreadPoolExecutor, as_completed
 
-        chunk_to_embedding = {}
+        chunk_to_embedding: dict[int, list[float]] = {}
         with ThreadPoolExecutor(max_workers=10) as executor:
             futures = {
                 executor.submit(embedding_gen.generate, c["text"]): c
@@ -169,21 +166,21 @@ class DocumentIngestor:
             }
 
             for future in as_completed(futures):
-                chunk = futures[future]
+                chunk_dict = futures[future]
                 try:
                     embedding = future.result()
-                    chunk_to_embedding[chunk["text_hash"]] = embedding
+                    chunk_to_embedding[chunk_dict["text_hash"]] = embedding
                 except Exception:
                     logger.error("Failed to generate embedding for chunk")
 
-        all_docs = []
+        all_docs: list[dict[str, Any]] = []
         seen_doc_keys = set()
 
-        for chunk in all_chunks:
-            file_path = chunk["file_path"]
-            text = chunk["text"]
-            page = chunk["page"]
-            text_hash = chunk["text_hash"]
+        for chunk_item in all_chunks:
+            file_path = chunk_item["file_path"]
+            text = chunk_item["text"]
+            page = chunk_item["page"]
+            text_hash = chunk_item["text_hash"]
 
             if text_hash not in chunk_to_embedding:
                 continue
@@ -205,7 +202,7 @@ class DocumentIngestor:
                 "metadata": {
                     "file_type": file_type,
                     "ingested_at": None,
-                    "chunk_index": chunk["original_index"],
+                    "chunk_index": chunk_item["original_index"],
                 },
             }
             all_docs.append(doc)
@@ -215,12 +212,12 @@ class DocumentIngestor:
 
         return {"success": len(file_data), "failed": 0}
 
-    def _extract_text(self, file_path):
+    def _extract_text(self, file_path: Path) -> list[Segment]:
         try:
             result = self.converter.convert(file_path)
             content = result.document
 
-            segments = []
+            segments: list[Segment] = []
 
             if hasattr(content, "texts") and content.texts:
                 for text_item in content.texts:
@@ -246,8 +243,8 @@ class DocumentIngestor:
             logger.error(f"Error extracting text from {file_path}")
             raise
 
-    def _chunk_text(self, segments):
-        chunks = []
+    def _chunk_text(self, segments: list[Segment]) -> list[Segment]:
+        chunks: list[Segment] = []
 
         for segment in segments:
             text = segment["text"]

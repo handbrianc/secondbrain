@@ -2,6 +2,7 @@
 
 import logging
 import time
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any, TypedDict
 
@@ -175,7 +176,7 @@ class VectorStorage:
         top_k: int = 5,
         source_filter: str | None = None,
         file_type_filter: str | None = None,
-    ) -> list[SearchResult]:
+    ) -> Sequence[SearchResult]:
         """Search for similar embeddings.
 
         Args:
