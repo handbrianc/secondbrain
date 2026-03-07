@@ -54,6 +54,9 @@ htmlcov/
 config.yaml
 config.yml
 !config.example.yaml
+
+# Sisyphus Loop
+.sisyphus/
 venv/
 .mypy_cache/
 .pytest_cache/
