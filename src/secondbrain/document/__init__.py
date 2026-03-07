@@ -8,20 +8,15 @@ from uuid import uuid4
 from docling.document_converter import DocumentConverter
 from typing_extensions import TypedDict
 
+from secondbrain.config import get_config
+from secondbrain.exceptions import DocumentExtractionError, UnsupportedFileError
+
 logger = logging.getLogger(__name__)
 
 
 class Segment(TypedDict):
     text: str
     page: int
-
-
-class DocumentExtractionError(Exception):
-    pass
-
-
-class UnsupportedFileError(Exception):
-    pass
 
 
 SUPPORTED_EXTENSIONS = {
@@ -65,13 +60,13 @@ def is_supported(file_path: Path) -> bool:
 
 
 def get_file_type(file_path: Path) -> str:
-    """Get the file type for a given file path.
+    """Get the file type category for a given file path.
 
     Args:
         file_path: Path to determine file type for.
 
     Returns:
-        File type string (e.g., 'pdf', 'docx', 'image', etc.).
+        File type string (e.g., 'pdf', 'docx', 'image', 'audio', etc.).
     """
     ext = file_path.suffix.lower()
     type_map: dict[str, str] = {
@@ -104,7 +99,11 @@ def get_file_type(file_path: Path) -> str:
 
 
 class DocumentIngestor:
-    """Handles document ingestion and chunking."""
+    """Handles document ingestion, chunking, embedding generation, and storage.
+
+    Processes documents by extracting text, splitting into chunks, generating
+    embeddings, and storing them in the vector database.
+    """
 
     def __init__(
         self,
@@ -129,8 +128,49 @@ class DocumentIngestor:
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
         self.verbose = verbose
+        self.max_file_size_bytes: int = get_config().max_file_size_bytes
 
         self.converter = DocumentConverter()
+
+    def _validate_file_path(self, path: Path) -> None:
+        """Validate file path for security.
+
+        Args:
+            path: Path to validate.
+
+        Raises:
+            ValueError: If path contains traversal sequences or is outside allowed directory.
+        """
+        # Resolve to absolute path
+        resolved_path = path.resolve()
+
+        # Check for path traversal attempts
+        if ".." in path.parts:
+            raise ValueError(
+                f"Path traversal detected: '{path}' contains '..' sequence"
+            )
+
+        # Additional check: ensure no encoded traversal attempts
+        normalized = str(resolved_path).lower()
+        if "%2e%2e" in normalized or "%2e." in normalized:
+            raise ValueError(f"Encoded path traversal detected in: '{path}'")
+
+    def _validate_file_size(self, path: Path) -> None:
+        """Validate file size does not exceed limit.
+
+        Args:
+            path: Path to file to validate.
+
+        Raises:
+            ValueError: If file exceeds maximum size limit.
+        """
+        file_size = path.stat().st_size
+        if file_size > self.max_file_size_bytes:
+            raise ValueError(
+                f"File '{path}' exceeds maximum size limit of "
+                f"{self.max_file_size_bytes / (1024 * 1024):.0f}MB "
+                f"(actual: {file_size / (1024 * 1024):.2f}MB)"
+            )
 
     def ingest(
         self,
@@ -138,16 +178,34 @@ class DocumentIngestor:
         recursive: bool = False,
         batch_size: int = 10,
     ) -> dict[str, int]:
+        """Ingest documents from a file or directory.
+
+        Args:
+            path: Path to file or directory to ingest.
+            recursive: Recursively process subdirectories.
+            batch_size: Number of files to process in parallel.
+
+        Returns:
+            dict with 'success' and 'failed' counts.
+        """
         from secondbrain.embedding import EmbeddingGenerator
         from secondbrain.storage import VectorStorage
 
         path_obj = Path(path)
 
         if path_obj.is_file():
+            self._validate_file_path(path_obj)
+            self._validate_file_size(path_obj)
             files = [path_obj]
         elif path_obj.is_dir():
             files = list(path_obj.rglob("*")) if recursive else list(path_obj.glob("*"))
-            files = [f for f in files if f.is_file() and is_supported(f)]
+            validated_files = []
+            for f in files:
+                if f.is_file() and is_supported(f):
+                    self._validate_file_path(f)
+                    self._validate_file_size(f)
+                    validated_files.append(f)
+            files = validated_files
         else:
             raise ValueError(f"Invalid path: {path}")
 
@@ -155,28 +213,43 @@ class DocumentIngestor:
             return {"success": 0, "failed": 0}
 
         failed_files = 0
+        successful_files = 0
 
         embedding_gen = EmbeddingGenerator()
         storage = VectorStorage()
 
-        # Use Segments directly; no need for TextSegment class wrapper
-        file_data: list[tuple[Path, list[Segment], list[str]]] = []
-        for file_path in files:
+        # Process files in streaming batches
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        from secondbrain.exceptions import (
+            EmbeddingGenerationError,
+            OllamaUnavailableError,
+        )
+
+        def process_single_file(
+            file_path: Path,
+        ) -> tuple[Path, list[Segment], list[str]] | None:
             try:
                 segments: list[Segment] = self._extract_text(file_path)
-                file_data.append((file_path, segments, [s["text"] for s in segments]))
+                texts = [s["text"] for s in segments]
+                return (file_path, segments, texts)
             except (OSError, DocumentExtractionError) as e:
                 logger.error(f"Failed to extract text from {file_path}: {e}")
-                failed_files += 1
+                return None
             except Exception as e:
                 logger.error(f"Unexpected error extracting text from {file_path}: {e}")
-                failed_files += 1
+                return None
 
-        all_chunks: list[dict[str, Any]] = []
-        seen_hashes = set()
+        def chunk_and_process(
+            file_path: Path,
+            segments: list[Segment],
+            texts: list[str],
+        ) -> list[dict[str, Any]]:
 
-        for file_path, chunks, texts in file_data:
-            for i, (chunk, text) in enumerate(zip(chunks, texts, strict=True)):
+            all_chunks: list[dict[str, Any]] = []
+            seen_hashes = set()
+
+            for i, (chunk, text) in enumerate(zip(segments, texts, strict=True)):
                 cleaned = text.strip()
                 if not cleaned:
                     continue
@@ -191,76 +264,106 @@ class DocumentIngestor:
                             "text": cleaned,
                             "page": chunk["page"],
                             "text_hash": text_hash,
-                            "chunk": chunk,
                         }
                     )
 
-        from concurrent.futures import ThreadPoolExecutor, as_completed
+            # Generate embeddings for this file's chunks
+            chunk_to_embedding: dict[int, list[float]] = {}
+            with ThreadPoolExecutor(max_workers=10) as executor:
+                future_to_hash: dict[Any, int] = {}
+                for c in all_chunks:
+                    future = executor.submit(embedding_gen.generate, c["text"])
+                    future_to_hash[future] = c["text_hash"]
 
-        from secondbrain.embedding import (
-            EmbeddingGenerationError,
-            OllamaUnavailableError,
-        )
+                for future in as_completed(future_to_hash):
+                    text_hash = future_to_hash.pop(future)
+                    try:
+                        embedding = future.result()
+                        chunk_to_embedding[text_hash] = embedding
+                    except (OllamaUnavailableError, EmbeddingGenerationError) as e:
+                        logger.error(f"Failed to generate embedding for chunk: {e}")
+                    except Exception as e:
+                        logger.error(
+                            f"Unexpected error generating embedding for chunk: {e}"
+                        )
 
-        chunk_to_embedding: dict[int, list[float]] = {}
-        with ThreadPoolExecutor(max_workers=10) as executor:
+            # Build documents for storage
+            docs_to_store: list[dict[str, Any]] = []
+            seen_doc_keys = set()
+
+            for chunk_item in all_chunks:
+                file_path_loc = chunk_item["file_path"]
+                text = chunk_item["text"]
+                page = chunk_item["page"]
+                text_hash = chunk_item["text_hash"]
+
+                if text_hash not in chunk_to_embedding:
+                    continue
+
+                doc_key = (str(file_path_loc), page, text_hash)
+                if doc_key in seen_doc_keys:
+                    continue
+                seen_doc_keys.add(doc_key)
+
+                embedding = chunk_to_embedding[text_hash]
+
+                file_type = get_file_type(file_path_loc)
+                doc = {
+                    "chunk_id": str(uuid4()),
+                    "source_file": str(file_path_loc),
+                    "page_number": page,
+                    "chunk_text": text,
+                    "embedding": embedding,
+                    "metadata": {
+                        "file_type": file_type,
+                        "ingested_at": None,
+                        "chunk_index": chunk_item["original_index"],
+                    },
+                }
+                docs_to_store.append(doc)
+
+            return docs_to_store
+
+        # Process files in parallel batches
+        with ThreadPoolExecutor(max_workers=batch_size) as executor:
             futures = {
-                executor.submit(embedding_gen.generate, c["text"]): c
-                for c in all_chunks
+                executor.submit(process_single_file, file_path): file_path
+                for file_path in files
             }
 
             for future in as_completed(futures):
-                chunk_dict = futures[future]
+                file_path = futures[future]
                 try:
-                    embedding = future.result()
-                    chunk_to_embedding[chunk_dict["text_hash"]] = embedding
-                except (OllamaUnavailableError, EmbeddingGenerationError) as e:
-                    logger.error(f"Failed to generate embedding for chunk: {e}")
+                    result = future.result()
+                    if result is None:
+                        failed_files += 1
+                        continue
+
+                    file_path_proc, segments, texts = result
+                    docs_to_store = chunk_and_process(file_path_proc, segments, texts)
+
+                    if docs_to_store:
+                        storage.store_batch(docs_to_store)
+                        successful_files += 1
+
                 except Exception as e:
-                    logger.error(
-                        f"Unexpected error generating embedding for chunk: {e}"
-                    )
+                    logger.error(f"Unexpected error processing file {file_path}: {e}")
+                    failed_files += 1
 
-        all_docs: list[dict[str, Any]] = []
-        seen_doc_keys = set()
-
-        for chunk_item in all_chunks:
-            file_path = chunk_item["file_path"]
-            text = chunk_item["text"]
-            page = chunk_item["page"]
-            text_hash = chunk_item["text_hash"]
-
-            if text_hash not in chunk_to_embedding:
-                continue
-
-            doc_key = (str(file_path), page, text_hash)
-            if doc_key in seen_doc_keys:
-                continue
-            seen_doc_keys.add(doc_key)
-
-            embedding = chunk_to_embedding[text_hash]
-
-            file_type = get_file_type(file_path)
-            doc = {
-                "chunk_id": str(uuid4()),
-                "source_file": str(file_path),
-                "page_number": page,
-                "chunk_text": text,
-                "embedding": embedding,
-                "metadata": {
-                    "file_type": file_type,
-                    "ingested_at": None,
-                    "chunk_index": chunk_item["original_index"],
-                },
-            }
-            all_docs.append(doc)
-
-        if all_docs:
-            storage.store_batch(all_docs)
-
-        return {"success": len(file_data), "failed": failed_files}
+        return {"success": successful_files, "failed": failed_files}
 
     def _extract_text(self, file_path: Path) -> list[Segment]:
+        """Extract text content from a file.
+
+        Args:
+            file_path: Path to the file to extract text from.
+
+        Returns:
+            List of segments with text and page number.
+
+        Raises:
+            DocumentExtractionError: If text extraction fails.
+        """
         try:
             result = self.converter.convert(file_path)
             content = result.document
@@ -289,34 +392,58 @@ class DocumentIngestor:
 
         except OSError as e:
             logger.error(f"Error reading file {file_path}: {e}")
-            raise DocumentExtractionError(f"Failed to read file {file_path}") from e
+            raise DocumentExtractionError(
+                f"Failed to read file '{file_path}': {type(e).__name__}: {e}"
+            ) from e
         except Exception as e:
             logger.error(f"Error extracting text from {file_path}: {e}")
             raise DocumentExtractionError(
-                f"Failed to extract text from {file_path}"
+                f"Failed to extract text from '{file_path}': {type(e).__name__}: {e}"
             ) from e
 
     def _chunk_text(self, segments: list[Segment]) -> list[Segment]:
+        """Split segments into overlapping chunks.
+
+        Args:
+            segments: List of text segments to chunk.
+
+        Returns:
+            List of chunked segments with overlapping text.
+        """
         chunks: list[Segment] = []
 
         for segment in segments:
             text = segment["text"]
             page = segment["page"]
 
+            if not text.strip():
+                continue
+
             start = 0
             while start < len(text):
-                end = start + self.chunk_size
-
-                if end < len(text):
-                    last_space = text.rfind(" ", start, end)
-                    if last_space > start:
-                        end = last_space
-                chunk_text = text[start:end].strip()
+                next_start = start + self.chunk_size
+                chunk_end = next_start if next_start < len(text) else len(text)
+                last_space = text.rfind(" ", start, chunk_end)
+                if last_space > start:
+                    chunk_end = last_space
+                chunk_text = text[start:chunk_end].strip()
                 if chunk_text:
                     chunks.append({"text": chunk_text, "page": page})
 
-                start = end - self.chunk_overlap
-                if start < 0:
-                    start = 0
+                new_start = chunk_end - self.chunk_overlap
+                if new_start >= len(text) or new_start <= start:
+                    break
+                start = new_start
 
         return chunks
+
+
+__all__ = [
+    "SUPPORTED_EXTENSIONS",
+    "DocumentExtractionError",
+    "DocumentIngestor",
+    "Segment",
+    "UnsupportedFileError",
+    "get_file_type",
+    "is_supported",
+]

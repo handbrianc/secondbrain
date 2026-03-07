@@ -1,19 +1,24 @@
 """CLI module for secondbrain."""
 
 import json
+import logging
 import sys
+import traceback
 from collections.abc import Callable, Sequence
 from functools import wraps
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 
 import click
 from rich.console import Console
+from rich.table import Table
 
 from secondbrain.config import get_config
+from secondbrain.exceptions import CLIValidationError
 from secondbrain.logging import HealthStatus, get_health_status, setup_logging
 from secondbrain.storage import ChunkInfo, DatabaseStats
 
 console = Console()
+logger = logging.getLogger(__name__)
 
 MAX_LIST_LIMIT = 100000
 
@@ -21,19 +26,31 @@ MAX_LIST_LIMIT = 100000
 T = TypeVar("T", bound=Callable[..., Any])
 
 
-class CLIValidationError(Exception):
-    """Custom exception for CLI validation failures."""
-
-    pass
-
-
 def handle_cli_errors(func: T) -> T:
+    """Decorator to handle CLI errors gracefully.
+
+    Catches specific exceptions, displays user-friendly error messages,
+    logs full traceback for debugging, and exits with status 1.
+
+    Args:
+        func: Function to decorate.
+
+    Returns:
+        Wrapped function with error handling.
+    """
+
     @wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         try:
             return func(*args, **kwargs)
-        except Exception as e:
+        except (ValueError, FileNotFoundError, CLIValidationError) as e:
+            logger.warning(f"Validation error: {e}", exc_info=True)
             console.print(f"[red]Error: {e}[/red]")
+            sys.exit(1)
+        except Exception as e:
+            logger.exception("Unexpected error in CLI command")
+            console.print(f"[red]Error: {e}[/red]")
+            console.print("[yellow]Run with --verbose for details[/yellow]")
             sys.exit(1)
 
     return wrapper  # type: ignore[return-value]
@@ -162,19 +179,23 @@ def search(
     config = get_config()
     top_k = top_k or config.default_top_k
 
-    searcher = Searcher(verbose=ctx.obj.get("verbose", False))
-
-    results = searcher.search(
-        query=query,
-        top_k=top_k,
-        source_filter=source,
-        file_type_filter=file_type,
-    )
+    with Searcher(verbose=ctx.obj.get("verbose", False)) as searcher:
+        results = searcher.search(
+            query=query,
+            top_k=top_k,
+            source_filter=source,
+            file_type_filter=file_type,
+        )
     _display_search_results(results, format)
 
 
 def _display_search_results(results: list[dict[str, Any]], format: str) -> None:
-    """Display search results in the specified format."""
+    """Display search results in the specified format.
+
+    Args:
+        results: List of search results to display.
+        format: Output format: 'default', 'verbose', or 'json'.
+    """
     import json
 
     if format == "json":
@@ -246,29 +267,42 @@ def list_cmd(
     """List ingested documents/chunks."""
     from secondbrain.management import Lister
 
-    lister = Lister(verbose=ctx.obj.get("verbose", False))
-
-    # Use a large limit when --all flag is set
-    if all:
-        limit = MAX_LIST_LIMIT
-
-    results = lister.list_chunks(
-        source_filter=source,
-        chunk_id=chunk_id,
-        limit=limit,
-        offset=offset,
-    )
+    with Lister(verbose=ctx.obj.get("verbose", False)) as lister:
+        lister = cast(Lister, lister)
+        if all:
+            limit = MAX_LIST_LIMIT
+        results: list[ChunkInfo] = lister.list_chunks(
+            source_filter=source,
+            chunk_id=chunk_id,
+            limit=limit,
+            offset=offset,
+        )
     _display_list_results(results)
 
 
 def _display_list_results(results: Sequence[ChunkInfo]) -> None:
-    """Display list results."""
+    """Display list results in table format.
+
+    Args:
+        results: Sequence of ChunkInfo objects to display.
+    """
+    if not results:
+        console.print("[yellow]No results found[/yellow]")
+        return
+
+    table = Table(title="Ingested Documents")
+    table.add_column("Chunk ID", style="cyan", no_wrap=True)
+    table.add_column("Source File", style="magenta")
+    table.add_column("Page", justify="right")
+
     for chunk_info in results:
-        console.print(
-            f"{chunk_info['chunk_id']}: "
-            f"{chunk_info['source_file']} "
-            f"(page {chunk_info['page_number']})"
+        table.add_row(
+            chunk_info["chunk_id"][:8] + "...",
+            chunk_info["source_file"],
+            str(chunk_info["page_number"]) if chunk_info["page_number"] else "N/A",
         )
+
+    console.print(table)
 
 
 @cli.command()
@@ -331,14 +365,14 @@ def delete(
                 console.print("Cancelled.")
                 return
 
-    deleter = Deleter(verbose=ctx.obj.get("verbose", False))
-
-    try:
-        count = deleter.delete(source=source, chunk_id=chunk_id, all=all)
-        console.print(f"[green]Deleted {count} document(s)[/green]")
-    except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
-        sys.exit(1)
+    with Deleter(verbose=ctx.obj.get("verbose", False)) as deleter:
+        deleter = cast(Deleter, deleter)
+        try:
+            count = deleter.delete(source=source, chunk_id=chunk_id, all=all)
+            console.print(f"[green]Deleted {count} document(s)[/green]")
+        except Exception as e:
+            console.print(f"[red]Error: {e}[/red]")
+            sys.exit(1)
 
 
 @cli.command()
@@ -348,14 +382,18 @@ def status(ctx: click.Context) -> None:
     """Show statistics about the vector database."""
     from secondbrain.management import StatusChecker
 
-    status_checker = StatusChecker(verbose=ctx.obj.get("verbose", False))
-
-    stats = status_checker.get_status()
+    with StatusChecker(verbose=ctx.obj.get("verbose", False)) as status_checker:
+        status_checker = cast(StatusChecker, status_checker)
+        stats = status_checker.get_status()
     _display_status(stats)
 
 
 def _display_status(stats: DatabaseStats) -> None:
-    """Display status statistics."""
+    """Display database status statistics.
+
+    Args:
+        stats: DatabaseStats dictionary with chunk and collection info.
+    """
     console.print("[bold]Database Status[/bold]")
     console.print(f"  Total chunks: {stats['total_chunks']}")
     console.print(f"  Unique sources: {stats['unique_sources']}")
@@ -378,7 +416,11 @@ def health(ctx: click.Context, output: str) -> None:
 
 
 def _display_health_text(status: HealthStatus) -> None:
-    """Display health status in text format."""
+    """Display health status in text format.
+
+    Args:
+        status: HealthStatus dictionary with service availability and timing.
+    """
     status_color = "green" if status["status"] == "healthy" else "yellow"
     console.print(
         f"[bold {status_color}]Health Status: {status['status'].upper()}[/bold {status_color}]"

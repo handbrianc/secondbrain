@@ -1,17 +1,22 @@
 """Connection utilities for service availability checks."""
 
+import logging
 import threading
+import time
 from abc import abstractmethod
 from collections.abc import Callable
-from time import monotonic, time
+from time import monotonic
 
+from secondbrain.exceptions import ServiceUnavailableError
 
-class ServiceUnavailableError(Exception):
-    service_name: str
+logger = logging.getLogger(__name__)
 
-    def __init__(self, service_name: str, message: str | None = None) -> None:
-        super().__init__(message or f"{service_name} is unavailable")
-        self.service_name = service_name
+__all__ = [
+    "RateLimitedRetry",
+    "ServiceUnavailableError",
+    "ValidatableService",
+    "ensure_service_available",
+]
 
 
 def ensure_service_available(service_name: str, validator: Callable[[], bool]) -> None:
@@ -28,25 +33,124 @@ def ensure_service_available(service_name: str, validator: Callable[[], bool]) -
         raise ServiceUnavailableError(service_name)
 
 
+class RateLimitedRetry:
+    """Retry wrapper with exponential backoff and rate limiting.
+
+    This class provides controlled retry behavior with exponential backoff,
+    maximum retry limits, and rate limiting to avoid overwhelming services.
+
+    Use this to wrap validation calls that may transiently fail:
+        retry = RateLimitedRetry(max_retries=3, base_delay=0.5, max_delay=5.0)
+        is_valid = retry.call(validator_function)
+    """
+
+    def __init__(
+        self,
+        max_retries: int = 3,
+        base_delay: float = 0.5,
+        max_delay: float = 5.0,
+        exponential_base: float = 2.0,
+    ) -> None:
+        """Initialize retry configuration.
+
+        Args:
+            max_retries: Maximum number of retry attempts.
+            base_delay: Initial delay between retries in seconds.
+            max_delay: Maximum delay between retries in seconds.
+            exponential_base: Base for exponential backoff calculation.
+        """
+        self.max_retries = max_retries
+        self.base_delay = base_delay
+        self.max_delay = max_delay
+        self.exponential_base = exponential_base
+        self._lock = threading.Lock()
+        self._retry_count = 0
+        self._last_retry_time = 0.0
+
+    def _calculate_delay(self, attempt: int) -> float:
+        """Calculate delay with exponential backoff.
+
+        Args:
+            attempt: Current attempt number (0-indexed).
+
+        Returns:
+            Delay in seconds.
+        """
+        delay = min(
+            self.base_delay * (self.exponential_base**attempt),
+            self.max_delay,
+        )
+        # Add small jitter to prevent thundering herd
+        return delay * (0.9 + 0.2 * (attempt % 5))  # 19% jitter
+
+    def _can_retry(self) -> bool:
+        """Check if another retry is allowed.
+
+        Returns:
+            True if retry allowed, False otherwise.
+        """
+        with self._lock:
+            if self._retry_count >= self.max_retries:
+                return False
+            self._retry_count += 1
+            return True
+
+    def _wait_before_retry(self) -> None:
+        """Wait before next retry with rate limiting."""
+        current_time = monotonic()
+        elapsed = current_time - self._last_retry_time
+
+        if elapsed < self.base_delay:
+            time.sleep(self.base_delay - elapsed)
+
+        self._last_retry_time = monotonic()
+
+    def call(self, func: Callable[[], bool]) -> bool:
+        """Call function with retry and rate limiting.
+
+        Args:
+            func: Function to call, should return bool.
+
+        Returns:
+            Result of function call, False if all retries exhausted.
+        """
+        if not self._can_retry():
+            return func()
+
+        last_result = False
+        last_error: Exception | None = None
+
+        for attempt in range(self.max_retries + 1):
+            try:
+                last_result = func()
+                if last_result:
+                    return True
+            except Exception as e:
+                logger.debug(f"Attempt {attempt + 1} failed: {e}")
+                last_error = e
+
+            if not self._can_retry():
+                break
+
+            self._wait_before_retry()
+
+        if last_error:
+            logger.debug(f"All retries exhausted: {last_error}")
+
+        return last_result
+
+    def reset(self) -> None:
+        """Reset retry count."""
+        with self._lock:
+            self._retry_count = 0
+
+
 class ValidatableService:
     """Base class for services requiring connection validation with caching.
 
     This class provides thread-safe connection validation with TTL-based caching
     to reduce repeated network calls. Subclasses must implement _do_validate()
     to perform the actual service-specific validation.
-
-    Example:
-        ```python
-        class MyService(ValidatableService):
-            def __init__(self, url: str, cache_ttl: float = 60.0) -> None:
-                super().__init__(cache_ttl)
-                self.url = url
-
-            def _do_validate(self) -> bool:
-                # Perform actual validation
-                response = requests.get(self.url, timeout=5)
-                return response.status_code == 200
-        ```
     """
 
     def __init__(self, cache_ttl: float = 60.0) -> None:
@@ -82,7 +186,8 @@ class ValidatableService:
 
         try:
             self._connection_valid = self._do_validate()
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Validation failed: {e}")
             self._connection_valid = False
 
         with self._lock:
@@ -131,7 +236,8 @@ class ValidatableService:
 
         try:
             self._connection_valid = await self._do_validate_async()
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Async validation failed: {e}")
             self._connection_valid = False
 
         with self._lock:
@@ -143,7 +249,7 @@ class ValidatableService:
         """Async version of validation to be overridden in subclass.
 
         Default implementation calls synchronous _do_validate() wrapped in
-        asyncio.to_thread to avoid blocking.
+        asyncio.to_thread to avoid blocking the event loop.
 
         Returns:
             True if service is available.
@@ -154,13 +260,22 @@ class ValidatableService:
 
 
 class ServiceValidator:
-    service_name: str
+    """Validator for service availability with caching.
+
+    This class provides service availability checking with TTL-based caching.
+    """
+
     _cache_ttl: float
     _last_check: float
     _is_valid: bool | None
     _validator: Callable[[], bool] | None
 
     def __init__(self, cache_ttl: float = 60.0) -> None:
+        """Initialize the service validator.
+
+        Args:
+            cache_ttl: Time-to-live for connection cache in seconds.
+        """
         self._cache_ttl = cache_ttl
         self._last_check = 0.0
         self._is_valid = None
@@ -189,14 +304,14 @@ class ServiceValidator:
 
         if force or self._is_valid is None:
             self._is_valid = self._validator()
-            self._last_check = time()
+            self._last_check = monotonic()
             return self._is_valid
 
-        if time() - self._last_check < self._cache_ttl:
+        if monotonic() - self._last_check < self._cache_ttl:
             return self._is_valid
 
         self._is_valid = self._validator()
-        self._last_check = time()
+        self._last_check = monotonic()
         return self._is_valid
 
     def invalidate(self) -> None:

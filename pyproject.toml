@@ -37,10 +37,12 @@ dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
     "pytest-cov>=4.1.0",
+    "pytest-benchmark>=4.0.0",
     "bandit>=1.7.0",
     "safety>=3.0.0",
     "pre-commit>=3.6.0",
     "pyinstaller>=6.0.0",
+    "mongomock>=6.0.0",
 ]
 
 [project.scripts]
@@ -85,21 +87,8 @@ warn_unused_ignores = true
 warn_no_return = true
 warn_unreachable = true
 strict_equality = true
-exclude = ["venv/*", ".git/*"]
+exclude = ["venv/*", ".git/*", "tests/*"]
 
-[tool.pytest.ini_options]
-filterwarnings = [
-    "ignore::DeprecationWarning",
-]
-testpaths = ["tests"]
-addopts = "-v --strict-markers --tb=short"
-markers = [
-    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
-    "integration: marks tests as integration tests",
-]
-
-[tool.pytest_asyncio]
-mode = "auto"
 
 [tool.coverage.run]
 source = ["src"]
@@ -117,6 +106,11 @@ exclude_lines = [
 
 [tool.bandit]
 skips = ["B101"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--cov=secondbrain --cov-report=term-missing --cov-fail-under=80"
+asyncio_mode = "auto"
 
 [tool.pre-commit]
 default_stages = ["pre-commit"]

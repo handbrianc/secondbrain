@@ -2,12 +2,66 @@
 
 from __future__ import annotations
 
+import atexit
 from pathlib import Path
 from typing import Any, TypeVar
 
 import pytest
 
 T = TypeVar("T")
+
+
+@pytest.fixture
+def clean_vector_storage() -> Any:
+    """Fixture to ensure VectorStorage client is properly closed."""
+    from secondbrain.storage import VectorStorage
+
+    storage = VectorStorage()
+    try:
+        yield storage
+    finally:
+        storage.close()
+
+
+@pytest.fixture
+def clean_embedding_generator() -> Any:
+    """Fixture to ensure EmbeddingGenerator client is properly closed."""
+    from secondbrain.embedding import EmbeddingGenerator
+
+    generator = EmbeddingGenerator()
+    try:
+        yield generator
+    finally:
+        generator.close()
+
+
+@pytest.fixture(autouse=True)
+def cleanup_resources(request: Any) -> Any:
+    """Automatically cleanup VectorStorage and EmbeddingGenerator after each test."""
+    try:
+        yield
+    finally:
+        from secondbrain.embedding import EmbeddingGenerator
+        from secondbrain.search import Searcher
+        from secondbrain.storage import VectorStorage
+
+        try:
+            storage = VectorStorage()
+            storage.close()
+        except Exception:
+            pass
+
+        try:
+            generator = EmbeddingGenerator()
+            generator.close()
+        except Exception:
+            pass
+
+        try:
+            searcher = Searcher()
+            searcher.close()
+        except Exception:
+            pass
 
 
 @pytest.fixture
@@ -28,6 +82,10 @@ def mock_config(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         "SECONDBRAIN_CHUNK_SIZE": 512,
         "SECONDBRAIN_CHUNK_OVERLAP": 50,
         "SECONDBRAIN_DEFAULT_TOP_K": 5,
+        "SECONDBRAIN_EMBEDDING_DIMENSIONS": 384,
+        "SECONDBRAIN_RATE_LIMIT_MAX_REQUESTS": 10,
+        "SECONDBRAIN_RATE_LIMIT_WINDOW_SECONDS": 1.0,
+        "SECONDBRAIN_CONNECTION_CACHE_TTL": 60.0,
     }
     for key, value in test_config.items():
         monkeypatch.setenv(key, str(value))
@@ -136,19 +194,73 @@ def sample_pdf_with_multiple_pages(tmp_path: Path) -> Path:
     return pdf_path
 
 
-def pytest_sessionfinish(session: Any, exitstatus: int) -> None:
-    """Clean up test embeddings after all tests complete.
+def _cleanup_storage() -> None:
+    """Cleanup function to be registered with atexit."""
+    try:
+        from secondbrain.storage import VectorStorage
 
-    This hook runs after all tests in the session are complete.
-    It deletes all documents from the test MongoDB database.
-    """
+        storage = VectorStorage()
+        storage.close()
+    except Exception:
+        pass
+
+
+def _cleanup_embedding() -> None:
+    """Cleanup function to be registered with atexit."""
+    try:
+        from secondbrain.embedding import EmbeddingGenerator
+
+        generator = EmbeddingGenerator()
+        generator.close()
+    except Exception:
+        pass
+
+
+@pytest.fixture(autouse=True)
+def mock_config_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ensure all config defaults are available for tests that patch get_config."""
+    test_config = {
+        "SECONDBRAIN_MONGO_URI": "mongodb://localhost:27017",
+        "SECONDBRAIN_MONGO_DB": "test_secondbrain",
+        "SECONDBRAIN_MONGO_COLLECTION": "test_embeddings",
+        "SECONDBRAIN_OLLAMA_URL": "http://localhost:11434",
+        "SECONDBRAIN_MODEL": "embeddinggemma:latest",
+        "SECONDBRAIN_CHUNK_SIZE": 512,
+        "SECONDBRAIN_CHUNK_OVERLAP": 50,
+        "SECONDBRAIN_DEFAULT_TOP_K": 5,
+        "SECONDBRAIN_EMBEDDING_DIMENSIONS": 384,
+        "SECONDBRAIN_RATE_LIMIT_MAX_REQUESTS": 10,
+        "SECONDBRAIN_RATE_LIMIT_WINDOW_SECONDS": 1.0,
+        "SECONDBRAIN_CONNECTION_CACHE_TTL": 60.0,
+    }
+    for key, value in test_config.items():
+        monkeypatch.setenv(key, str(value))
+
+
+def _cleanup_mongodb() -> None:
+    """Cleanup MongoDB test database."""
     try:
         from pymongo import MongoClient
 
         client: MongoClient[dict[str, Any]] = MongoClient(
-            "mongodb://localhost:27017", serverSelectionTimeoutMS=2000
+            "mongodb://localhost:27017", serverSelectionTimeoutMS=1000
         )
-        client.drop_database("test_secondbrain")
-        client.close()
+        try:
+            client.drop_database("test_secondbrain")
+        finally:
+            client.close()
     except Exception:
-        pass  # Ignore cleanup errors
+        pass
+
+
+def pytest_sessionfinish(session: Any, exitstatus: int) -> None:
+    # Cleanup after all tests complete
+    _cleanup_mongodb()
+    _cleanup_storage()
+    _cleanup_embedding()
+
+
+# Register cleanup handlers for atexit to catch any remaining resources
+atexit.register(_cleanup_storage)
+atexit.register(_cleanup_embedding)
+atexit.register(_cleanup_mongodb)

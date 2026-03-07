@@ -22,3 +22,6 @@ pyinstaller>=6.0.0
 
 # ReportLab for test PDF generation
 reportlab>=4.0.0
+
+# MongoDB mocking for integration tests without real MongoDB instance
+mongomock>=6.0.0

@@ -2,9 +2,10 @@
 
 from unittest.mock import MagicMock, patch
 
+import pytest
 from click.testing import CliRunner
 
-from secondbrain.cli import cli
+from secondbrain.cli import CLIValidationError, cli, handle_cli_errors
 
 
 class TestCLI:
@@ -163,8 +164,9 @@ class TestCLI:
         ]
         mock_searcher_class.return_value = mock_searcher
 
-    runner = CliRunner()
-    runner.invoke(cli, ["search", "test", "--format", "verbose"])
+        runner = CliRunner()
+        result = runner.invoke(cli, ["search", "test", "--format", "verbose"])
+        assert result.exit_code == 0
 
 
 class TestCLIHealth:
@@ -237,3 +239,63 @@ class TestCLIHealth:
         result = runner.invoke(cli, ["health", "--output", "json"])
         assert result.exit_code == 0
         assert "3600.0" in result.output
+
+
+class TestHandleCliErrors:
+    """Tests for handle_cli_errors decorator."""
+
+    def test_decorator_passes_through_success(self) -> None:
+        """Test decorator allows successful function to pass through."""
+
+        @handle_cli_errors
+        def successful_func() -> str:
+            return "success"
+
+        result = successful_func()
+        assert result == "success"
+
+    def test_decorator_catches_exception_and_exits(self) -> None:
+        """Test decorator catches exception and exits with status 1."""
+
+        @handle_cli_errors
+        def failing_func() -> None:
+            raise ValueError("Test error")
+
+        with pytest.raises(SystemExit) as exc_info:
+            failing_func()
+
+        assert exc_info.value.code == 1
+
+    def test_decorator_catches_specific_exception(self) -> None:
+        """Test decorator catches CLIValidationError."""
+
+        @handle_cli_errors
+        def validation_func() -> None:
+            raise CLIValidationError("Validation failed")
+
+        with pytest.raises(SystemExit) as exc_info:
+            validation_func()
+
+        assert exc_info.value.code == 1
+
+    def test_decorator_with_args(self) -> None:
+        """Test decorator works with function arguments."""
+
+        @handle_cli_errors
+        def func_with_args(a: int, b: int) -> int:
+            return a + b
+
+        result = func_with_args(2, 3)
+        assert result == 5
+
+    def test_decorator_with_exception_message(self) -> None:
+        """Test decorator includes exception message in output."""
+
+        @handle_cli_errors
+        def error_func() -> None:
+            raise RuntimeError("Something went wrong")
+
+        with pytest.raises(SystemExit) as exc_info:
+            error_func()
+
+        assert exc_info.value.code == 1

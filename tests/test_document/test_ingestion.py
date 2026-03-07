@@ -6,6 +6,7 @@ import pytest
 
 from secondbrain.document import (
     SUPPORTED_EXTENSIONS,
+    DocumentExtractionError,
     DocumentIngestor,
     Segment,
     get_file_type,
@@ -291,3 +292,159 @@ class TestDocumentIngestionSpecRequirements:
         # Whitespace-only segment should produce no chunks
         chunks = ingestor._chunk_text([{"text": "   ", "page": 1}])
         assert len(chunks) == 0
+
+
+class TestChunkTextEdgeCases:
+    """Additional edge case tests for _chunk_text."""
+
+    def test_chunk_text_whitespace_only_produces_no_chunks(self) -> None:
+        """Test whitespace-only text produces no chunks."""
+        ingestor = DocumentIngestor(chunk_size=100, chunk_overlap=0)
+        chunks = ingestor._chunk_text([{"text": "   ", "page": 1}])
+        assert len(chunks) == 0
+
+    def test_chunk_text_single_page_numbers_preserved(self) -> None:
+        """Test page numbers preserved across all chunks."""
+        ingestor = DocumentIngestor(chunk_size=50, chunk_overlap=10)
+        text = "Word " * 20
+        segments = [{"text": text, "page": 7}]
+        chunks = ingestor._chunk_text(segments)
+        assert len(chunks) > 1
+        assert all(chunk["page"] == 7 for chunk in chunks)
+
+    def test_chunk_text_larger_overlap(self) -> None:
+        """Test chunking with larger overlap."""
+        text = "Word " * 30
+        ingestor = DocumentIngestor(chunk_size=50, chunk_overlap=30)
+        segments = [{"text": text, "page": 1}]
+        chunks = ingestor._chunk_text(segments)
+        assert len(chunks) >= 2
+
+
+class TestDocumentIngestorExtractText:
+    """Tests for _extract_text method including error paths."""
+
+    def test_extract_text_empty_text_item(self, tmp_path: Path) -> None:
+        """Test _extract_text handles empty text items."""
+        from unittest.mock import MagicMock, patch
+
+        # Create a simple text file
+        test_file = tmp_path / "empty.txt"
+        test_file.write_text("Test content")
+
+        ingestor = DocumentIngestor()
+
+        # Mock the converter to return empty segments, triggering fallback
+        mock_result = MagicMock()
+        mock_content = MagicMock()
+        mock_content.texts = []  # Empty texts triggers fallback
+        mock_result.document = mock_content
+
+        with patch.object(ingestor.converter, "convert", return_value=mock_result):
+            segments = ingestor._extract_text(test_file)
+
+        assert len(segments) >= 1
+        assert "text" in segments[0]
+        assert "page" in segments[0]
+
+    def test_extract_text_with_fallback(self, tmp_path: Path) -> None:
+        """Test _extract_text fallback to file read."""
+        from unittest.mock import MagicMock, patch
+
+        # Create a simple text file
+        test_file = tmp_path / "simple.txt"
+        test_file.write_text("Simple text content")
+
+        ingestor = DocumentIngestor()
+
+        # Mock the converter to return content with empty segments
+        mock_result = MagicMock()
+        mock_content = MagicMock()
+        # No texts attribute or empty texts triggers fallback
+        del mock_content.texts
+        mock_result.document = mock_content
+
+        with patch.object(ingestor.converter, "convert", return_value=mock_result):
+            segments = ingestor._extract_text(test_file)
+
+        # Should have at least one segment from fallback
+        assert len(segments) >= 1
+        assert "Simple text content" in segments[0]["text"]
+
+    def test_extract_text_file_not_found(self, tmp_path: Path) -> None:
+        """Test _extract_text raises DocumentExtractionError for missing file."""
+        ingestor = DocumentIngestor()
+        nonexistent = tmp_path / "does_not_exist.pdf"
+
+        with pytest.raises(DocumentExtractionError):
+            ingestor._extract_text(nonexistent)
+
+    def test_extract_text_exception_handling(self, tmp_path: Path) -> None:
+        """Test _extract_text exception handling."""
+        from unittest.mock import patch
+
+        ingestor = DocumentIngestor()
+
+        # Create a scenario that triggers exception handling
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("Test")
+
+        # Mock converter to raise an exception
+        with (
+            patch.object(
+                ingestor.converter, "convert", side_effect=Exception("Test error")
+            ),
+            pytest.raises(DocumentExtractionError),
+        ):
+            ingestor._extract_text(test_file)
+
+    def test_extract_text_text_item_without_text_attr(self, tmp_path: Path) -> None:
+        """Test _extract_text falls back to file read when text items have no text attr."""
+        from unittest.mock import MagicMock, patch
+
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("Test content")
+
+        ingestor = DocumentIngestor()
+
+        # Mock converter to return content with a text item missing text attribute
+        mock_result = MagicMock()
+        mock_content = MagicMock()
+
+        mock_text_item = MagicMock()
+        # No text attribute - triggers the hasattr check, skips this item
+        del mock_text_item.text
+        mock_content.texts = [mock_text_item]
+        mock_result.document = mock_content
+
+        with patch.object(ingestor.converter, "convert", return_value=mock_result):
+            segments = ingestor._extract_text(test_file)
+
+        # Should fall back to file read when all text items are skipped
+        assert len(segments) >= 1
+        assert "Test content" in segments[0]["text"]
+
+    def test_extract_text_text_item_without_text_value(self, tmp_path: Path) -> None:
+        """Test _extract_text falls back to file read when text items have empty text."""
+        from unittest.mock import MagicMock, patch
+
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("Test content")
+
+        ingestor = DocumentIngestor()
+
+        # Mock converter to return content with text item having empty text
+        mock_result = MagicMock()
+        mock_content = MagicMock()
+
+        mock_text_item = MagicMock()
+        mock_text_item.text = ""  # Empty text - triggers continue
+        mock_content.texts = [mock_text_item]
+        mock_result.document = mock_content
+
+        with patch.object(ingestor.converter, "convert", return_value=mock_result):
+            segments = ingestor._extract_text(test_file)
+
+        # Should fall back to file read when text is empty
+        assert len(segments) >= 1
+        assert "Test content" in segments[0]["text"]

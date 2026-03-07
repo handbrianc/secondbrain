@@ -10,6 +10,17 @@ from rich.logging import RichHandler
 
 from secondbrain.types import ChunkInfo, SearchResult
 
+__all__ = [
+    "HealthStatus",
+    "get_health_status",
+    "get_logger",
+    "get_request_id",
+    "set_request_id",
+    "setup_json_logging",
+    "setup_logging",
+    "setup_rich_logging",
+]
+
 
 class HealthStatus(TypedDict):
     """Typed dictionary for health status response."""
@@ -21,17 +32,27 @@ class HealthStatus(TypedDict):
     check_duration_seconds: float
 
 
-DatabaseStats = ChunkInfo  # Alias - same structure for now
-
-
 _request_id: ContextVar[str] = ContextVar("request_id", default="")
 
 
 def get_request_id() -> str:
+    """Get the current request ID from context.
+
+    Returns:
+        Current request ID string.
+    """
     return _request_id.get()
 
 
 def set_request_id(request_id: str | None = None) -> str:
+    """Set or generate a request ID for the current context.
+
+    Args:
+        request_id: Request ID string. If None, generates a new UUID.
+
+    Returns:
+        The request ID string that was set.
+    """
     if request_id is None:
         request_id = str(uuid.uuid4())
     _request_id.set(request_id)
@@ -39,6 +60,12 @@ def set_request_id(request_id: str | None = None) -> str:
 
 
 def setup_logging(verbose: bool = False, json_format: bool = False) -> None:
+    """Configure logging with the specified options.
+
+    Args:
+        verbose: Enable DEBUG level if True, INFO otherwise.
+        json_format: Use JSON format if True, rich text otherwise.
+    """
     level = logging.DEBUG if verbose else logging.INFO
 
     if json_format:
@@ -48,6 +75,11 @@ def setup_logging(verbose: bool = False, json_format: bool = False) -> None:
 
 
 def setup_rich_logging(level: int) -> None:
+    """Configure rich console logging.
+
+    Args:
+        level: Logging level constant (e.g., logging.INFO).
+    """
     logging.basicConfig(
         level=level,
         format="%(message)s",
@@ -57,6 +89,12 @@ def setup_rich_logging(level: int) -> None:
 
 
 def setup_json_logging(level: int) -> None:
+    """Configure JSON structured logging.
+
+    Args:
+        level: Logging level constant (e.g., logging.INFO).
+    """
+
     class JSONFormatter(logging.Formatter):
         def format(self, record: logging.LogRecord) -> str:
             log_entry = {
@@ -103,7 +141,7 @@ def get_health_status() -> HealthStatus:
     """Get health status of all services.
 
     Returns:
-        Health status dictionary.
+        HealthStatus dictionary with status, timestamp, services, and check timing.
     """
     check_start = time.time()
 
@@ -122,4 +160,12 @@ def get_health_status() -> HealthStatus:
 
 
 def get_logger(name: str) -> logging.Logger:
+    """Get a logger instance by name.
+
+    Args:
+        name: Logger name.
+
+    Returns:
+        Configured Logger instance.
+    """
     return logging.getLogger(name)

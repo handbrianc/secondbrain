@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from secondbrain.utils.connections import (
+    RateLimitedRetry,
     ServiceUnavailableError,
     ServiceValidator,
     ensure_service_available,
@@ -137,3 +138,115 @@ class TestServiceValidator:
         result = validator.is_available()
         assert call_count == 2
         assert result is False
+
+
+class TestServiceValidatorEdgeCases:
+    """Additional edge case tests for ServiceValidator."""
+
+    def test_validator_multiple_configures(self) -> None:
+        """Test configuring validator multiple times."""
+        validator = ServiceValidator()
+        validator.configure(lambda: True)
+        assert validator.is_available() is True
+
+        validator.configure(lambda: False)
+        # Should invalidate cache on configure
+        assert validator.is_available() is False
+
+    def test_validator_cache_ttl_zero(self) -> None:
+        """Test validator with zero TTL always revalidates."""
+        validator = ServiceValidator(cache_ttl=0.0)
+        call_count = 0
+
+        def incrementing_validator() -> bool:
+            nonlocal call_count
+            call_count += 1
+            return True
+
+        validator.configure(incrementing_validator)
+        validator.is_available()
+        validator.is_available()
+        validator.is_available()
+        # With TTL of 0, should always revalidate
+        assert call_count == 3
+
+    def test_validator_validator_callable_changes(self) -> None:
+        """Test validator behavior when validator function state changes."""
+        validator = ServiceValidator()
+        status = [True]
+
+        def status_validator() -> bool:
+            return status[0]
+
+        validator.configure(status_validator)
+        assert validator.is_available() is True
+
+        status[0] = False
+        # Without calling on_recovery, should still return cached True
+        assert validator.is_available() is True
+
+        validator.on_recovery()
+        assert validator.is_available() is False
+
+
+class TestRateLimitedRetry:
+    def test_retry_on_failure(self) -> None:
+        """Test all retries exhausted returns False."""
+        retry = RateLimitedRetry(max_retries=2, base_delay=0.01)
+
+        call_count = 0
+
+        def always_failing() -> bool:
+            nonlocal call_count
+            call_count += 1
+            return False
+
+        result = retry.call(always_failing)
+        assert result is False
+        assert call_count == 2
+
+    def test_success_on_first_attempt(self) -> None:
+        """Test no retries when first attempt succeeds."""
+        retry = RateLimitedRetry(max_retries=3, base_delay=0.01)
+
+        result = retry.call(lambda: True)
+        assert result is True
+
+    def test_retry_with_exception(self) -> None:
+        """Test retry handles exceptions."""
+        retry = RateLimitedRetry(max_retries=2, base_delay=0.01)
+
+        call_count = 0
+
+        def failing_with_exception() -> bool:
+            nonlocal call_count
+            call_count += 1
+            if call_count < 2:
+                raise ValueError("Temporary failure")
+            return True
+
+        result = retry.call(failing_with_exception)
+        assert result is True
+        assert call_count == 2
+
+    def test_retry_resets_after_success(self) -> None:
+        """Test retry counter resets after a successful call."""
+        retry = RateLimitedRetry(max_retries=3, base_delay=0.01)
+
+        call_count = 0
+
+        def failing_then_succeeding() -> bool:
+            nonlocal call_count
+            call_count += 1
+            return not call_count < 3
+
+        # First sequence - succeeds on 3rd attempt
+        result1 = retry.call(failing_then_succeeding)
+        assert result1 is True
+
+        # Reset and run again
+        retry.reset()
+        call_count = 0
+        result2 = retry.call(failing_then_succeeding)
+        assert result2 is True
+        assert call_count == 3  # Should be able to retry again

@@ -1,4 +1,8 @@
-"""Shared type definitions for secondbrain."""
+"""Shared type definitions for secondbrain.
+
+This module defines TypedDicts used throughout the application for
+representing document chunks and search results.
+"""
 
 from typing import TypedDict
 
