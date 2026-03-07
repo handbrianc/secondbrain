@@ -86,7 +86,7 @@ The `version` field allows for incremental schema evolution. When upgrading the 
 3. Migration scripts can process documents by version
 
 ### Migration Process
-See `MIGRATIONS.md` for migration procedures.
+See `../guide/MIGRATIONS.md` for migration procedures.
 
 ## Data Types
 

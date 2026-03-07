@@ -424,7 +424,7 @@ export SECONDBRAIN_RATE_LIMIT_WINDOW_SECONDS=1.0
 - [README.md](README.md) - Project overview and usage
 - [AGENTS.md](AGENTS.md) - Agent coding guidelines
 - [CODE_STANDARDS.md](CODE_STANDARDS.md) - Code style guidelines
-- [CONTRIBUTING.md](CONTRIBUTING.md) - Contribution guidelines
+- [CONTRIBUTING.md](CONTRIBUTING.md) - Contribution guidelines  
 - [SECURITY.md](SECURITY.md) - Security policies
 
 ## Support

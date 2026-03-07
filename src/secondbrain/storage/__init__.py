@@ -166,6 +166,29 @@ class VectorStorage(ValidatableService):
             result["metadata"]["ingested_at"] = datetime.now(UTC).isoformat()
         return result
 
+    def _add_ingestion_timestamps(
+        self, documents: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Add ingestion timestamps to multiple documents.
+
+        Args:
+            documents: List of documents to add timestamps to.
+
+        Returns:
+            List of documents with updated timestamps.
+        """
+        now = datetime.now(UTC).isoformat()
+        docs_with_timestamps: list[dict[str, Any]] = []
+
+        for doc in documents:
+            doc_copy = doc.copy()
+            if "metadata" not in doc_copy:
+                doc_copy["metadata"] = {}
+            doc_copy["metadata"]["ingested_at"] = now
+            docs_with_timestamps.append(doc_copy)
+
+        return docs_with_timestamps
+
     def _wait_for_index_ready(self) -> None:
         """Wait for MongoDB vector search index to be ready.
 
@@ -409,16 +432,7 @@ class VectorStorage(ValidatableService):
         self._require_connection("store batch")
 
         # Add timestamps to all documents
-        now = datetime.now(UTC).isoformat()
-        docs_with_timestamps = []
-        for doc in documents:
-            doc_copy = doc.copy()
-            # Ensure metadata exists
-            if "metadata" not in doc_copy:
-                doc_copy["metadata"] = {}
-            # Add or update ingested_at timestamp
-            doc_copy["metadata"]["ingested_at"] = now
-            docs_with_timestamps.append(doc_copy)
+        docs_with_timestamps = self._add_ingestion_timestamps(documents)
 
         result = self.collection.insert_many(docs_with_timestamps)
         return len(result.inserted_ids)
@@ -594,13 +608,7 @@ class VectorStorage(ValidatableService):
         await self._require_connection_async("store batch")
 
         # Add timestamps to all documents
-        now = datetime.now(UTC).isoformat()
-        docs_with_timestamps = []
-        for doc in documents:
-            doc_copy = doc.copy()
-            if "metadata" in doc_copy and "ingested_at" in doc_copy["metadata"]:
-                doc_copy["metadata"]["ingested_at"] = now
-            docs_with_timestamps.append(doc_copy)
+        docs_with_timestamps = self._add_ingestion_timestamps(documents)
 
         result = await asyncio.to_thread(
             lambda: self.collection.insert_many(docs_with_timestamps)

@@ -2,6 +2,14 @@
 
 A local document intelligence CLI tool that ingests documents, generates embeddings using Ollama, and stores vectors in MongoDB for semantic search.
 
+## Documentation
+
+- **[Full Documentation](docs/)** - Complete documentation index
+- **[Development Guide](docs/guide/DEVELOPMENT.md)** - Development setup and workflow
+- **[Code Standards](docs/guide/CODE_STANDARDS.md)** - Coding guidelines
+- **[Contributing](docs/guide/CONTRIBUTING.md)** - How to contribute
+- **[Architecture](docs/architecture/SCHEMA.md)** - Database schema reference
+
 ## Features
 
 - **Multi-format document ingestion**: Supports PDF, DOCX, PPTX, XLSX, HTML, Markdown, AsciiDoc, LaTeX, CSV, Images, Audio, and more
