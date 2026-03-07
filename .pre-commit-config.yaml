@@ -29,10 +29,18 @@ repos:
 
   - repo: local
     hooks:
+      - id: sbom-analysis
+        name: Generate SBOM and License Risk Analysis
+        entry: python3 scripts/generate_sbom_analysis.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
       - id: pytest
         name: pytest
         entry: pytest
         language: system
         pass_filenames: false
         always_run: true
-        stages: ["pre-commit"]
+        stages: [pre-commit]
