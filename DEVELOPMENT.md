@@ -47,9 +47,35 @@ cp .env.example .env
 
 ### Docker Development Environment
 
+#### macOS (Ollama installed locally)
+
+```bash
+# Start MongoDB only
+docker-compose up -d
+
+# Start Ollama locally
+ollama serve
+
+# Verify services are running
+docker-compose ps
+ollama list
+
+# View logs
+docker-compose logs -f
+
+# Stop services
+docker-compose down
+```
+
+#### Linux / Windows (Ollama via Docker)
+
 ```bash
 # Start all services
 docker-compose up -d
+
+# Or start them separately:
+docker-compose up -d mongodb        # MongoDB only
+docker-compose -f docker-compose.ollama.yml up -d  # Ollama only
 
 # Verify services are running
 docker-compose ps

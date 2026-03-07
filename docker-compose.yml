@@ -15,21 +15,10 @@ services:
     networks:
       - secondbrain-network
 
-  ollama:
-    image: ollama/ollama:latest
-    container_name: secondbrain-ollama
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama-data:/root/.ollama
-    networks:
-      - secondbrain-network
-
 volumes:
   mongodb-data:
   mongodb-configdb:
   mongot-data:
-  ollama-data:
 
 networks:
   secondbrain-network:

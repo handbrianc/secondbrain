@@ -14,6 +14,18 @@ A local document intelligence CLI tool that ingests documents, generates embeddi
 
 ### Quick Start with Docker
 
+#### macOS (Ollama installed locally)
+
+```bash
+# Clone and start MongoDB
+docker-compose up -d
+
+# Start Ollama locally
+ollama serve
+```
+
+#### Linux / Windows (Ollama via Docker)
+
 ```bash
 # Clone and run with Docker Compose
 docker-compose up -d
@@ -49,11 +61,31 @@ secondbrain --help
 
 ## Docker Setup
 
-### Using Docker Compose
+### macOS (Ollama installed locally)
+
+If you have Ollama installed locally (via `brew install ollama`), only start MongoDB:
 
 ```bash
-# Start services
+# Start MongoDB only
 docker-compose up -d
+
+# Start Ollama locally
+ollama serve
+
+# Verify services
+docker-compose ps
+ollama list
+```
+
+### Linux / Windows (Ollama via Docker)
+
+```bash
+# Start MongoDB and Ollama
+docker-compose up -d
+
+# Or start them separately:
+docker-compose up -d mongodb        # MongoDB only
+docker-compose -f docker-compose.ollama.yml up -d  # Ollama only
 
 # Verify Ollama is running
 curl http://localhost:11434/api/tags
