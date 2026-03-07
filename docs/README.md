@@ -11,6 +11,10 @@ docs/
 │   └── (coming soon)      # User guides, tutorials, FAQs
 ├── guide/                 # Development guides
 │   ├── DEVELOPMENT.md     # Development setup and workflow
+│   ├── DOCKER.md          # Docker setup and deployment
+│   ├── CONFIGURATION.md   # Full configuration reference
+│   ├── ASYNC.md           # Asynchronous API usage
+│   ├── BUILDING.md        # Create distributable binaries
 │   ├── CODE_STANDARDS.md  # Coding standards and best practices
 │   ├── CONTRIBUTING.md    # How to contribute to the project
 │   ├── MIGRATIONS.md      # Schema migration strategies
@@ -18,7 +22,8 @@ docs/
 │   ├── CHANGELOG.md       # Version history and changes
 │   └── CHANGES.md         # Recent changes summary
 ├── architecture/          # Architecture documentation
-│   └── SCHEMA.md          # Database schema reference
+│   ├── SCHEMA.md          # Database schema reference
+│   └── DATA_FLOW.md       # Data flow and component interactions
 └── specs/                 # Technical specifications
     └── (coming soon)      # API specs, protocol definitions
 ```
@@ -31,10 +36,16 @@ docs/
 - [Configuration](../README.md#configuration) - Main README
 
 ### For Developers
+- [Quick Start](../README.md#quick-start) - Get started in 5 minutes
 - [Development Setup](guide/DEVELOPMENT.md) - Get started with development
+- [Docker Setup](guide/DOCKER.md) - Containerized deployment
+- [Configuration Reference](guide/CONFIGURATION.md) - Full config guide
+- [Async API Guide](guide/ASYNC.md) - Asynchronous programming
+- [Building & Distribution](guide/BUILDING.md) - Create binaries
 - [Code Standards](guide/CODE_STANDARDS.md) - Coding guidelines
 - [Contributing](guide/CONTRIBUTING.md) - How to contribute
 - [Schema Reference](architecture/SCHEMA.md) - Database schema
+- [Data Flow](architecture/DATA_FLOW.md) - Component interactions
 - [Migration Guide](guide/MIGRATIONS.md) - Schema migration strategies
 - [Security Guidelines](guide/SECURITY.md) - Security best practices
 
@@ -52,10 +63,12 @@ Technical specifications and design documents are maintained separately in the `
 
 ## Getting Started
 
-1. **New to SecondBrain?** Start with the [main README](../README.md)
+1. **New to SecondBrain?** Start with the [Quick Start](../README.md#quick-start)
 2. **Want to contribute?** Read [CONTRIBUTING.md](guide/CONTRIBUTING.md)
 3. **Setting up development?** Follow [DEVELOPMENT.md](guide/DEVELOPMENT.md)
-4. **Need schema info?** Check [SCHEMA.md](architecture/SCHEMA.md)
+4. **Need Docker setup?** Check [DOCKER.md](guide/DOCKER.md)
+5. **Need schema info?** Check [SCHEMA.md](architecture/SCHEMA.md)
+6. **Need data flow docs?** See [DATA_FLOW.md](architecture/DATA_FLOW.md)
 
 ## Documentation Standards
 
