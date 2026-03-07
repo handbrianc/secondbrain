@@ -12,10 +12,9 @@
 
 - [x] 2.1 Create Dockerfile for single executable build
 - [x] 2.2 Create docker-compose.yml with Ollama and MongoDB
-- [x] 2.4 Test Docker Compose startup
-- [x] 2.5 Verify Ollama embeddinggemma model availability
-- [ ] 2.4 Test Docker Compose startup
-- [ ] 2.5 Verify Ollama embeddinggemma model availability
+- [x] 2.3 Test Docker Compose startup
+- [x] 2.4 Verify Ollama embeddinggemma model availability
+- [x] 2.5 Split docker-compose for macOS native Ollama support
 
 ## 3. Core Modules
 
@@ -81,23 +80,16 @@
 
 ## 10. Build & Release
 
-- [x] 10.2 Build single executable
-- [x] 10.3 Generate SBOM using SPDX
+- [x] 10.1 Create Docker Compose setup
+- [ ] 10.2 Build single executable (PyInstaller) - Deferred
+- [ ] 10.3 Generate SBOM using SPDX - Deferred
 - [x] 10.4 Write comprehensive README
 - [x] 10.5 Create project documentation (code standards)
-- [ ] 10.2 Build single executable
-- [ ] 10.3 Generate SBOM using SPDX
-- [ ] 10.4 Write comprehensive README
-- [ ] 10.5 Create project documentation (code standards)
 
 ## 11. Documentation
+
 - [x] 11.1 Write README with installation and usage
 - [x] 11.2 Document CLI commands
 - [x] 11.3 Document configuration (environment variables)
-- [x] 11.4 Document Docker setup
+- [x] 11.4 Document Docker setup (including macOS native Ollama)
 - [x] 11.5 Document development setup
-- [ ] 11.1 Write README with installation and usage
-- [ ] 11.2 Document CLI commands
-- [ ] 11.3 Document configuration (environment variables)
-- [ ] 11.4 Document Docker setup
-- [ ] 11.5 Document development setup
