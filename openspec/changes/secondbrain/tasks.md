@@ -81,8 +81,8 @@
 ## 10. Build & Release
 
 - [x] 10.1 Create Docker Compose setup
-- [ ] 10.2 Build single executable (PyInstaller) - Deferred
-- [ ] 10.3 Generate SBOM using SPDX - Deferred
+- [x] 10.2 Build single executable (PyInstaller)
+- [x] 10.3 Generate SBOM using SPDX
 - [x] 10.4 Write comprehensive README
 - [x] 10.5 Create project documentation (code standards)
 
