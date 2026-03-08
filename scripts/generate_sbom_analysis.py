@@ -25,11 +25,11 @@ def analyze_licenses() -> None:
         print("Error: sbom.json not found. Run cyclonedx-py first.", file=sys.stderr)
         sys.exit(1)
 
-    with open(sbom_path, "r") as f:
+    with sbom_path.open() as f:
         sbom = json.load(f)
 
-    HIGH_RISK_PATTERNS = ["gpl", "agpl", "lgpl", "sspl", "busl", "proprietary"]
-    MEDIUM_RISK_PATTERNS = ["mpl", "cpl", "epl", "cpal"]
+    high_risk_patterns = ["gpl", "agpl", "lgpl", "sspl", "busl", "proprietary"]
+    medium_risk_patterns = ["mpl", "cpl", "epl", "cpal"]
 
     unknown_licenses = []
     high_risk = []
@@ -54,11 +54,11 @@ def analyze_licenses() -> None:
         primary_license = license_ids[0]
         license_map[primary_license].append({"name": name, "version": version})
         license_lower = primary_license.lower()
-        if any(p in license_lower for p in HIGH_RISK_PATTERNS):
+        if any(p in license_lower for p in high_risk_patterns):
             high_risk.append(
                 {"name": name, "version": version, "license": primary_license}
             )
-        elif any(p in license_lower for p in MEDIUM_RISK_PATTERNS):
+        elif any(p in license_lower for p in medium_risk_patterns):
             medium_risk.append(
                 {"name": name, "version": version, "license": primary_license}
             )
@@ -71,7 +71,7 @@ def analyze_licenses() -> None:
     report_lines = [
         "# License Risk Report",
         "",
-        f"**Project**: secondbrain",
+        "**Project**: secondbrain",
         f"**Generated**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
         "**SBOM File**: sbom.json",
         "",
@@ -185,12 +185,12 @@ def analyze_licenses() -> None:
             "",
             "---",
             "",
-            f"*Report generated from CycloneDX SBOM using automated license analysis.*",
+            "*Report generated from CycloneDX SBOM using automated license analysis.*",
             f"*Review date: {datetime.now().strftime('%Y-%m-%d')}*",
         ]
     )
 
-    with open("LICENSE-RISK-REPORT.md", "w") as f:
+    with Path("LICENSE-RISK-REPORT.md").open("w") as f:
         f.write("\n".join(report_lines))
 
     # Save analysis data
@@ -205,7 +205,7 @@ def analyze_licenses() -> None:
         "license_distribution": {k: len(v) for k, v in license_map.items()},
     }
 
-    with open("license_analysis.json", "w") as f:
+    with Path("license_analysis.json").open("w") as f:
         json.dump(analysis, f, indent=2)
 
     # Print summary
@@ -220,13 +220,72 @@ def analyze_licenses() -> None:
 
 def main() -> None:
     """Main entry point."""
-    # Generate SBOM
-    print("Generating CycloneDX SBOM...")
-    run_command(
-        "cyclonedx-py environment --pyproject pyproject.toml "
-        "--output-format JSON --spec-version 1.6 "
-        "--output-file sbom.json --gather-license-texts --output-reproducible"
+    import shutil
+    import subprocess
+
+    venv_path = Path("/tmp/sbom-venv-clean")
+    if venv_path.exists():
+        shutil.rmtree(venv_path)
+
+    print("Creating isolated venv...")
+    subprocess.run(["python", "-m", "venv", str(venv_path)], check=True)
+
+    venv_bin = venv_path / "bin"
+    pip = venv_bin / "pip"
+    python = venv_bin / "python"
+    cyclonedx = venv_bin / "cyclonedx-py"
+
+    print("Upgrading pip...")
+    subprocess.run(
+        [str(pip), "install", "--upgrade", "pip"], check=True, capture_output=True
     )
+
+    print("Installing production dependencies only...")
+    subprocess.run([str(pip), "install", "-e", "."], check=True, capture_output=True)
+
+    print("Installing cyclonedx-bom for SBOM generation...")
+    subprocess.run(
+        [str(pip), "install", "cyclonedx-bom"], check=True, capture_output=True
+    )
+
+    print("Generating production-only SBOM (excluding cyclonedx-bom and its deps)...")
+    subprocess.run(
+        [
+            str(cyclonedx),
+            "environment",
+            str(python),
+            "--output-format",
+            "JSON",
+            "--spec-version",
+            "1.6",
+            "--output-file",
+            "sbom.json",
+            "--gather-license-texts",
+            "--output-reproducible",
+        ],
+        check=True,
+    )
+
+    print("Removing SBOM generation tools from SBOM...")
+    with Path("sbom.json").open() as f:
+        sbom = json.load(f)
+
+    filtered_components = [
+        c
+        for c in sbom.get("components", [])
+        if c.get("name")
+        not in ("cyclonedx-bom", "cyclonedx-python-lib", "chardet", "fqdn")
+    ]
+
+    sbom["components"] = filtered_components
+
+    with Path("sbom.json").open("w") as f:
+        json.dump(sbom, f, indent=2)
+
+    print(f"SBOM updated with {len(filtered_components)} production components")
+
+    print("Cleaning up...")
+    shutil.rmtree(venv_path)
 
     # Analyze licenses
     print("Analyzing licenses...")

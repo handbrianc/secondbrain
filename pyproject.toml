@@ -44,6 +44,7 @@ dev = [
     "pyinstaller>=6.0.0",
     "mongomock>=4.0.0",
     "vulture>=2.11",
+    "cyclonedx-bom>=7.0.0",
 ]
 
 [project.scripts]
