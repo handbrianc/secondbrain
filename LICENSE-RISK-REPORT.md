@@ -1,7 +1,7 @@
 # License Risk Report
 
 **Project**: secondbrain
-**Generated**: 2026-03-07 00:35:14
+**Generated**: 2026-03-07 18:18:19
 **SBOM File**: sbom.json
 
 ---
@@ -10,12 +10,12 @@
 
 | Metric | Value |
 |--------|-------|
-| **Total Dependencies** | 181 |
+| **Total Dependencies** | 184 |
 | **Unique Licenses** | 18 |
 | **Unknown Licenses** | 5 |
 | **High Risk Packages** | 3 |
 | **Medium Risk Packages** | 3 |
-| **Low Risk Packages** | 170 |
+| **Low Risk Packages** | 173 |
 
 ### Overall Risk Assessment: **REQUIRES REVIEW**
 - **WARNING**: 3 packages use strong copyleft licenses (GPL/LGPL)
@@ -47,7 +47,7 @@
 
 ### LOW RISK (Permissive)
 
-**Count**: 170 packages
+**Count**: 173 packages
 
 ---
 

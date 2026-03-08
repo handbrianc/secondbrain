@@ -14,9 +14,11 @@ This is a Python CLI project with best practices for CLI application development
 
 ### Running the Application
 ```bash
-# Install dependencies
-pip install -r requirements.txt
-pip install -e .  # Install in editable mode
+# Install runtime dependencies
+pip install -e .
+
+# Install with dev dependencies
+pip install -e ".[dev]"
 
 # Run the CLI
 python -m <package_name> [command] [options]
@@ -73,8 +75,11 @@ python -m venv venv
 source venv/bin/activate  # Linux/macOS
 venv\Scripts\activate  # Windows
 
-# Install dev dependencies
-pip install -r requirements-dev.txt
+# Install dependencies (runtime only)
+pip install -e .
+
+# Or with dev dependencies
+pip install -e ".[dev]"
 ```
 
 ---
@@ -250,7 +255,6 @@ project/
 │   ├── test_utils/
 │   └── conftest.py
 ├── pyproject.toml
-├── uv.lock or requirements.txt
 └── README.md
 ```
 

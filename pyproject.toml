@@ -42,7 +42,8 @@ dev = [
     "safety>=3.0.0",
     "pre-commit>=3.6.0",
     "pyinstaller>=6.0.0",
-    "mongomock>=6.0.0",
+    "mongomock>=4.0.0",
+    "vulture>=2.11",
 ]
 
 [project.scripts]
@@ -114,3 +115,12 @@ asyncio_mode = "auto"
 
 [tool.pre-commit]
 default_stages = ["pre-commit"]
+
+[tool.vulture]
+paths = ["src"]
+ignore_decorators = ["@pytest.*"]
+ignore_names = ["test_*", "setUp", "tearDown", "setUpModule", "tearDownModule"]
+min_confidence = 80
+exclude = ["venv/*", ".git/*", "tests/*", "scripts/*"]
+sort_by_size = true
+verbose = false

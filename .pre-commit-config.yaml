@@ -1,31 +1,29 @@
 # See https://pre-commit.com for more information
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.4.0
+    rev: v0.15.5
     hooks:
       - id: ruff
         args: [--fix]
       - id: ruff-format
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.8.0
+    rev: v1.19.1
     hooks:
       - id: mypy
-        additional_dependencies:
-          - types-all
         args: [--config-file=pyproject.toml, src]
 
+  - repo: https://github.com/jendrikseipp/vulture
+    rev: v2.15
+    hooks:
+      - id: vulture
+        args: [--min-confidence=80, src, --ignore-names, "cls,exc_type,exc_val,exc_tb"]
+
   - repo: https://github.com/PyCQA/bandit
-    rev: 1.7.6
+    rev: 1.9.4
     hooks:
       - id: bandit
         args: ["-r", "src/secondbrain"]
-
-  - repo: https://github.com/pyupio/safety
-    rev: 3.3.0
-    hooks:
-      - id: safety
-        args: ["--ignore=50000", "--ignore=50001"]
 
   - repo: local
     hooks:

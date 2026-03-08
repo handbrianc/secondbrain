@@ -172,15 +172,12 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Install dependencies from pyproject.toml
+COPY pyproject.toml .
+RUN pip install --no-cache-dir -e ".[dev]"
 
 # Copy source code
 COPY src/ ./src/
-
-# Install package
-RUN pip install -e .
 
 # Set entrypoint
 ENTRYPOINT ["secondbrain"]
@@ -202,8 +199,8 @@ docker run --rm -v $(pwd):/data secondbrain:latest --help
 FROM python:3.12-slim AS builder
 
 WORKDIR /app
-COPY requirements.txt .
-RUN pip install --user --no-cache-dir -r requirements.txt
+COPY pyproject.toml .
+RUN pip install --user --no-cache-dir -e ".[dev]"
 
 FROM python:3.12-slim
 

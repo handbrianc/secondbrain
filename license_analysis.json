@@ -1,5 +1,5 @@
 {
-  "total_components": 181,
+  "total_components": 184,
   "unique_licenses": 18,
   "unknown_count": 5,
   "high_risk": [
@@ -508,6 +508,11 @@
       "license": "MIT"
     },
     {
+      "name": "py-cpuinfo",
+      "version": "9.0.0",
+      "license": "MIT"
+    },
+    {
       "name": "py-serializable",
       "version": "2.1.0",
       "license": "Apache-2.0"
@@ -591,6 +596,11 @@
       "name": "pytest-asyncio",
       "version": "1.3.0",
       "license": "Apache-2.0"
+    },
+    {
+      "name": "pytest-benchmark",
+      "version": "5.2.3",
+      "license": "BSD-2-Clause"
     },
     {
       "name": "pytest-cov",
@@ -873,6 +883,11 @@
       "license": "MIT"
     },
     {
+      "name": "vulture",
+      "version": "2.15",
+      "license": "MIT"
+    },
+    {
       "name": "wcwidth",
       "version": "0.6.0",
       "license": "MIT"
@@ -912,9 +927,9 @@
   ],
   "license_distribution": {
     "BSD-3-Clause": 18,
-    "MIT": 99,
+    "MIT": 101,
     "License :: OSI Approved :: BSD License": 12,
-    "BSD-2-Clause": 3,
+    "BSD-2-Clause": 4,
     "License :: OSI Approved :: Apache Software License": 12,
     "declared license of 'antlr4-python3-runtime'": 1,
     "Apache-2.0": 14,
