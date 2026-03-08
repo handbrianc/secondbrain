@@ -72,9 +72,17 @@ class TestStorageEdgeCases:
         self, storage: VectorStorage
     ) -> None:
         """Test _do_validate_async handles exceptions gracefully."""
-        # Mock _do_validate to raise an exception
-        with patch.object(storage, "_client", None):
-            # Should return False on exception
+        from pymongo.errors import ConnectionFailure
+
+        mock_admin = MagicMock()
+        mock_admin.command = MagicMock(
+            side_effect=ConnectionFailure("Connection failed")
+        )
+
+        mock_client = MagicMock()
+        mock_client.admin = mock_admin
+
+        with patch.object(storage, "_client", mock_client):
             result = await storage._do_validate_async()
             assert result is False
 

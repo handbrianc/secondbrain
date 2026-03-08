@@ -10,6 +10,7 @@ Note: These tests require MongoDB and Ollama to be running.
 Run with: pytest tests/test_document/test_e2e_pdf_ingestion.py -v
 """
 
+import contextlib
 from pathlib import Path
 
 import pytest
@@ -189,15 +190,29 @@ class TestPDFSearchIntegration:
     """Integration tests for search functionality after ingestion."""
 
     @pytest.fixture(autouse=True)
-    def setup_search_index(self) -> None:
+    def setup_search_index(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Clean up and recreate search index before each test."""
+        from secondbrain.config import get_config
+
+        # Override the autouse mock_config_defaults which sets 384 dimensions
+        # The E2E tests need 768 dimensions to match the actual Ollama model
+        monkeypatch.setenv("SECONDBRAIN_EMBEDDING_DIMENSIONS", "768")
+
+        # Clear config cache to pick up the new value
+        get_config.cache_clear()
+
         try:
             from secondbrain.storage import VectorStorage
 
             storage = VectorStorage()
             if not storage.validate_connection():
                 pytest.skip("MongoDB not available")
-            # This will create/recreate the index if needed
+
+            # Drop existing index to ensure correct dimensions
+            with contextlib.suppress(Exception):
+                storage.collection.drop_search_index("embedding_index")
+
+            # Create fresh index with correct dimensions (768)
             storage.ensure_index()
         except Exception:
             pass  # Ignore errors

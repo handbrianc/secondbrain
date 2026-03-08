@@ -241,21 +241,23 @@ class TestCLILargeResultSets:
 class TestCLIHealthEdgeCases:
     """Tests for health check edge cases."""
 
-    @patch("secondbrain.logging.get_health_status")
+    @patch("secondbrain.cli.get_health_status")
     def test_health_command_with_degraded_services(
         self, mock_get_health_status: MagicMock
     ) -> None:
         """Test health command shows degraded status."""
-        mock_get_health_status.return_value = MagicMock(
-            mongo_healthy=False,
-            ollama_healthy=True,
-            degraded=True,
-        )
+        mock_get_health_status.return_value = {
+            "status": "degraded",
+            "timestamp": "2024-01-01T00:00:00+00:00",
+            "uptime": None,
+            "services": {"ollama": True, "mongodb": False},
+            "check_duration_seconds": 0.5,
+        }
 
         runner = CliRunner()
         result = runner.invoke(cli, ["health"])
         assert result.exit_code == 0
-        assert "degraded" in result.output.lower() or "warning" in result.output.lower()
+        assert "degraded" in result.output.lower()
 
     @patch("secondbrain.logging.get_health_status")
     def test_health_command_json_format(
