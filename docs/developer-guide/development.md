@@ -35,7 +35,15 @@ source venv/bin/activate  # Linux/macOS
 # or: venv\Scripts\activate  # Windows
 
 # 4. Install dependencies
+
+# Option A: Install with dev dependencies (recommended for development)
 pip install -e ".[dev]"
+
+# Option B: Install from locked requirements (for reproducible builds)
+pip install -r requirements.txt
+
+# Option C: Install runtime dependencies only
+pip install -e .
 
 # 5. Install pre-commit hooks
 pre-commit install
@@ -261,7 +269,7 @@ pytest --cov=secondbrain --cov-report=html
 **Solutions**:
 1. Verify Ollama is running:
    ```bash
-   curl http://localhost:11434/api/tags
+   curl http://localhost:114../api-reference/index.mdtags
    ```
 
 2. Check Ollama URL in `.env`:
@@ -421,11 +429,11 @@ export SECONDBRAIN_RATE_LIMIT_WINDOW_SECONDS=1.0
 
 ## Additional Resources
 
-- [README.md](README.md) - Project overview and usage
-- [AGENTS.md](AGENTS.md) - Agent coding guidelines
-- [CODE_STANDARDS.md](CODE_STANDARDS.md) - Code style guidelines
-- [CONTRIBUTING.md](CONTRIBUTING.md) - Contribution guidelines  
-- [SECURITY.md](SECURITY.md) - Security policies
+
+
+- [Code Standards](./code-standards.md) - Code style guidelines
+- [Contributing](./contributing.md) - Contribution guidelines
+- [Security](./security.md) - Security policies
 
 ## Support
 

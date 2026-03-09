@@ -6,52 +6,78 @@ Welcome to the SecondBrain documentation. This folder contains comprehensive gui
 
 ```
 docs/
-├── README.md              # This file - Documentation index
-├── user/                  # User-facing documentation
-│   └── (coming soon)      # User guides, tutorials, FAQs
-├── guide/                 # Development guides
-│   ├── DEVELOPMENT.md     # Development setup and workflow
-│   ├── DOCKER.md          # Docker setup and deployment
-│   ├── CONFIGURATION.md   # Full configuration reference
-│   ├── ASYNC.md           # Asynchronous API usage
-│   ├── BUILDING.md        # Create distributable binaries
-│   ├── CODE_STANDARDS.md  # Coding standards and best practices
-│   ├── CONTRIBUTING.md    # How to contribute to the project
-│   ├── MIGRATIONS.md      # Schema migration strategies
-│   ├── SECURITY.md        # Security guidelines
-│   ├── CHANGELOG.md       # Version history and changes
-│   └── CHANGES.md         # Recent changes summary
-├── architecture/          # Architecture documentation
-│   ├── SCHEMA.md          # Database schema reference
-│   └── DATA_FLOW.md       # Data flow and component interactions
-└── specs/                 # Technical specifications
-    └── (coming soon)      # API specs, protocol definitions
+├── index.md                 # Main documentation index
+├── README.md                # This file - Documentation overview
+├── getting-started/         # New user guides
+│   ├── index.md             # Getting started overview
+│   ├── installation.md      # Installation guide
+│   ├── quick-start.md       # Quick start tutorial
+│   └── configuration.md     # Essential configuration
+├── user-guide/              # User-facing documentation
+│   └── index.md             # User guide overview
+├── developer-guide/         # Developer documentation
+│   ├── index.md             # Developer guide overview
+│   ├── development.md       # Development setup and workflow
+│   ├── docker.md            # Docker setup and deployment
+│   ├── configuration.md     # Full configuration reference
+│   ├── building.md          # Create distributable binaries
+│   ├── async-api.md         # Asynchronous API usage
+│   ├── code-standards.md    # Coding standards and best practices
+│   ├── contributing.md      # How to contribute to the project
+│   ├── migrations.md        # Schema migration strategies
+│   ├── security.md          # Security guidelines
+│   └── changelog.md         # Version history and changes
+├── architecture/            # Architecture documentation
+│   ├── index.md             # Architecture overview
+│   ├── data-flow.md         # Data flow and component interactions
+│   └── schema.md            # Database schema reference
+├── api-reference/           # Auto-generated API docs
+│   ├── index.md             # API reference overview
+│   ├── cli.md               # CLI module
+│   ├── config.md            # Configuration module
+│   ├── document.md          # Document ingestion
+│   ├── storage.md           # Storage layer
+│   ├── search.md            # Search functionality
+│   ├── embedding.md         # Embedding generation
+│   ├── logging.md           # Logging utilities
+│   ├── exceptions.md        # Exception classes
+│   └── types.md             # Type definitions
+├── security/                # Security reports
+│   ├── bandit_report.json   # Security scan results
+│   └── bom.json             # Software bill of materials
+└── LICENSE.md               # License information
 ```
 
 ## Quick Links
 
+### For New Users
+- [Getting Started](index.md) - Main documentation index
+- [Installation Guide](getting-started/installation.md) - Detailed installation steps
+- [Quick Start](getting-started/quick-start.md) - Get started in 5 minutes
+- [Configuration](getting-started/configuration.md) - Essential configuration
+
 ### For Users
-- [Installation Guide](../README.md#installation) - Main README
-- [CLI Commands](../README.md#cli-commands) - Main README
-- [Configuration](../README.md#configuration) - Main README
+- [User Guide](user-guide/) - Complete usage guide
+- [CLI Reference](api-reference/cli.md) - All CLI commands
+- [Examples](examples/) - Practical code examples
 
 ### For Developers
-- [Quick Start](../README.md#quick-start) - Get started in 5 minutes
-- [Development Setup](guide/DEVELOPMENT.md) - Get started with development
-- [Docker Setup](guide/DOCKER.md) - Containerized deployment
-- [Configuration Reference](guide/CONFIGURATION.md) - Full config guide
-- [Async API Guide](guide/ASYNC.md) - Asynchronous programming
-- [Building & Distribution](guide/BUILDING.md) - Create binaries
-- [Code Standards](guide/CODE_STANDARDS.md) - Coding guidelines
-- [Contributing](guide/CONTRIBUTING.md) - How to contribute
-- [Schema Reference](architecture/SCHEMA.md) - Database schema
-- [Data Flow](architecture/DATA_FLOW.md) - Component interactions
-- [Migration Guide](guide/MIGRATIONS.md) - Schema migration strategies
-- [Security Guidelines](guide/SECURITY.md) - Security best practices
+- [Developer Guide](developer-guide/) - Development setup and workflows
+- [Docker Setup](developer-guide/docker.md) - Containerized deployment
+- [Configuration Reference](developer-guide/configuration.md) - Full config guide
+- [Async API Guide](developer-guide/async-api.md) - Asynchronous programming
+- [Building & Distribution](developer-guide/building.md) - Create binaries
+- [Code Standards](developer-guide/code-standards.md) - Coding guidelines
+- [Contributing](developer-guide/contributing.md) - How to contribute
+- [Schema Reference](architecture/schema.md) - Database schema
+- [Data Flow](architecture/data-flow.md) - Component interactions
+- [Migration Guide](developer-guide/migrations.md) - Schema migration strategies
+- [Security Guidelines](developer-guide/security.md) - Security best practices
 
 ### Project Information
-- [Changelog](guide/CHANGELOG.md) - Version history
-- [Recent Changes](guide/CHANGES.md) - Latest changes summary
+- [Changelog](developer-guide/changelog.md) - Version history
+- [Architecture Overview](architecture/) - System design
+- [API Reference](api-reference/) - Code-level documentation
 
 ## OpenSpec Documentation
 
@@ -63,12 +89,12 @@ Technical specifications and design documents are maintained separately in the `
 
 ## Getting Started
 
-1. **New to SecondBrain?** Start with the [Quick Start](../README.md#quick-start)
-2. **Want to contribute?** Read [CONTRIBUTING.md](guide/CONTRIBUTING.md)
-3. **Setting up development?** Follow [DEVELOPMENT.md](guide/DEVELOPMENT.md)
-4. **Need Docker setup?** Check [DOCKER.md](guide/DOCKER.md)
-5. **Need schema info?** Check [SCHEMA.md](architecture/SCHEMA.md)
-6. **Need data flow docs?** See [DATA_FLOW.md](architecture/DATA_FLOW.md)
+1. **New to SecondBrain?** Start with the [Quick Start](getting-started/quick-start.md)
+2. **Want to contribute?** Read [CONTRIBUTING.md](developer-guide/contributing.md)
+3. **Setting up development?** Follow [DEVELOPMENT.md](developer-guide/development.md)
+4. **Need Docker setup?** Check [DOCKER.md](developer-guide/docker.md)
+5. **Need schema info?** Check [SCHEMA.md](architecture/schema.md)
+6. **Need data flow docs?** See [DATA_FLOW.md](architecture/data-flow.md)
 
 ## Documentation Standards
 

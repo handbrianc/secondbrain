@@ -1,0 +1,89 @@
+site_name: SecondBrain Documentation
+site_description: Local document intelligence CLI for semantic search
+site_author: SecondBrain Team
+site_dir: site
+
+theme:
+  name: mkdocs
+
+plugins:
+  - search
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          options:
+            show_root_heading: true
+            show_source: false
+            merge_init_into_class: true
+            docstring_section_style: spacy
+            heading_level: 2
+            inherited_members: true
+            members_order: source
+            separate_signature: true
+            show_signature_annotations: true
+            signature_crossrefs: true
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Getting Started: getting-started/index.md
+      - Installation: getting-started/installation.md
+      - Quick Start: getting-started/quick-start.md
+      - Configuration: getting-started/configuration.md
+  - User Guide:
+      - User Guide: user-guide/index.md
+      - CLI Reference: user-guide/cli-reference.md
+      - Document Ingestion: user-guide/document-ingestion.md
+      - Search Guide: user-guide/search-guide.md
+      - Document Management: user-guide/document-management.md
+  - Developer Guide:
+      - Developer Guide: developer-guide/index.md
+      - Development Setup: developer-guide/development.md
+      - Docker Setup: developer-guide/docker.md
+      - Configuration Reference: developer-guide/configuration.md
+      - Building & Distribution: developer-guide/building.md
+      - Async API Guide: developer-guide/async-api.md
+      - Code Standards: developer-guide/code-standards.md
+      - Testing: developer-guide/development.md
+      - Contributing: developer-guide/contributing.md
+      - Migrations: developer-guide/migrations.md
+      - Security: developer-guide/security.md
+      - Changelog: developer-guide/changelog.md
+  - Architecture:
+      - Architecture: architecture/index.md
+      - Data Flow: architecture/DATA_FLOW.md
+      - Schema Reference: architecture/SCHEMA.md
+  - API Reference:
+      - API Reference: api-reference/index.md
+      - CLI: api-reference/cli.md
+      - Configuration: api-reference/config.md
+      - Document Ingestion: api-reference/document.md
+      - Storage: api-reference/storage.md
+      - Search: api-reference/search.md
+      - Embedding: api-reference/embedding.md
+      - Logging: api-reference/logging.md
+      - Exceptions: api-reference/exceptions.md
+      - Types: api-reference/types.md
+  - Security:
+      - Security Guide: security/index.md
+  - License: license.md
+
+markdown_extensions:
+  - toc:
+      permalink: true
+  - codehilite
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - admonition
+  - pymdownx.details
+
+exclude_docs: |
+  README.md
+  examples/
+
+extra:
+  version:
+    provider: mike

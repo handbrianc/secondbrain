@@ -432,6 +432,11 @@ secondbrain search "query" --verbose
 
 ## Next Steps
 
-- [Development Guide](./DEVELOPMENT.md) - Full development workflow
-- [Performance Optimization](./DEVELOPMENT.md#performance-optimization) - Tuning async operations
-- [Testing Async Code](./DEVELOPMENT.md#testing) - Async test patterns
+- [Development Guide](./development.md) - Full development workflow
+- [Performance Optimization](./development.md#performance-optimization) - Tuning async operations
+- [Testing Async Code](./development.md#testing) - Async test patterns
+
+## Related Documentation
+
+- [Development Guide](./development.md) - Full development workflow
+- [Performance Optimization](./development.md#performance-optimization) - Tuning async operations

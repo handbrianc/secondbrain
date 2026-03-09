@@ -502,7 +502,7 @@ SecondBrain uses semantic versioning:
 
 ### Changelog
 
-Update `docs/guide/CHANGELOG.md` for each release:
+Update `do../developer-guide/index.mdCHANGELOG.md` for each release:
 
 ```markdown
 ## [0.2.0] - 2026-03-15
@@ -520,6 +520,12 @@ Update `docs/guide/CHANGELOG.md` for each release:
 
 ## Next Steps
 
-- [Deployment Guide](./DOCKER.md#production-deployment) - Production deployment
-- [Configuration](./CONFIGURATION.md) - Environment configuration
-- [Contributing](./CONTRIBUTING.md) - How to contribute
+- [Deployment Guide](./docker.md#production-deployment) - Production deployment
+- [Configuration](./configuration.md) - Environment configuration
+- [Contributing](./contributing.md) - How to contribute
+
+## Related Documentation
+
+- [Deployment Guide](./docker.md#production-deployment) - Production deployment
+- [Configuration](./configuration.md) - Environment configuration
+- [Contributing](./contributing.md) - How to contribute

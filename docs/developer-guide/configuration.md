@@ -299,11 +299,11 @@ export SECONDBRAIN_CHUNK_SIZE=4096
    mongosh mongodb://localhost:27017
 
    # Test Ollama
-   curl http://localhost:11434/api/tags
+   curl http://localhost:114../api-reference/index.mdtags
    ```
 
 ## Next Steps
 
-- [Docker Setup](./DOCKER.md) - Containerized deployment
-- [Development Guide](./DEVELOPMENT.md) - Development workflow
+- [Docker Setup](./docker.md) - Containerized deployment
+- [Development Guide](./development.md) - Development workflow
 - [Architecture](../architecture/SCHEMA.md) - Database schema

@@ -37,7 +37,7 @@ docker-compose up -d mongodb        # MongoDB only
 docker-compose -f docker-compose.ollama.yml up -d  # Ollama only
 
 # Verify Ollama is running
-curl http://localhost:11434/api/tags
+curl http://localhost:114../api-reference/index.mdtags
 
 # View logs
 docker-compose logs -f
@@ -80,7 +80,7 @@ docker exec ollama ollama list
 docker exec mongodb mongosh --eval "db.version()"
 
 # Check Ollama is responding
-curl http://localhost:11434/api/tags
+curl http://localhost:114../api-reference/index.mdtags
 
 # Check both services
 docker-compose ps
@@ -188,7 +188,7 @@ docker run --rm -v secondbrain_ollama_data:/root/.ollama -v $(pwd)/backup:/backu
 **Solutions**:
 1. Verify Ollama is running:
    ```bash
-   curl http://localhost:11434/api/tags
+   curl http://localhost:114../api-reference/index.mdtags
    ```
 
 2. Check Ollama URL in `.env`:
@@ -333,6 +333,6 @@ services:
 
 ## Next Steps
 
-- [Configuration Guide](./CONFIGURATION.md) - Environment variables and settings
-- [Development Setup](./DEVELOPMENT.md) - Local development workflow
+- [Configuration Guide](./configuration.md) - Environment variables and settings
+- [Development Setup](./development.md) - Local development workflow
 - [Architecture Overview](../architecture/SCHEMA.md) - Database schema

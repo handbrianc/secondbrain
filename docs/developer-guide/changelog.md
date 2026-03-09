@@ -67,8 +67,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 - Comprehensive README with installation and usage instructions
-- Code standards documentation (CODE_STANDARDS.md)
-- Contribution guidelines (CONTRIBUTING.md)
-- Security policy (SECURITY.md)
-- Data schema documentation (SCHEMA.md)
-- Migration guide (MIGRATIONS.md)
+- Code standards documentation (./code-standards.md)
+- Contribution guidelines (./contributing.md)
+- Security policy (./security.md)
+- Data schema documentation (../architecture/index.mdschema.md)
+- Migration guide (./migrations.md)
+
+## Related Documentation
+
+- [Development Guide](./development.md) - Development workflow
+- [Contributing](./contributing.md) - How to contribute

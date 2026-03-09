@@ -108,3 +108,8 @@ fix: resolve timeout issue in CLI
 docs: update README
 refactor: simplify config loading
 ```
+
+## Related Documentation
+
+- [Development Guide](./development.md) - Development workflow
+- [Contributing](./contributing.md) - Contribution guidelines

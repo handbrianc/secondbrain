@@ -184,3 +184,8 @@ src/secondbrain/
 ## Questions?
 
 For questions about contributing, please open an issue with the "question" label.
+
+## Related Documentation
+
+- [Development Guide](./development.md) - Development setup
+- [Code Standards](./code-standards.md) - Coding guidelines
