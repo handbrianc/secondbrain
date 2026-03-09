@@ -49,6 +49,7 @@ Thumbs.db
 htmlcov/
 .tox/
 .hypothesis/
+.benchmarks/
 
 # Local config
 config.yaml
