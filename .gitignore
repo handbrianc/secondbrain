@@ -73,3 +73,7 @@ venv/
 
 # Environment
 .env
+
+# Build artifacts
+site/
+docs/site/
