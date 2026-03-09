@@ -6,11 +6,13 @@ A local document intelligence CLI tool that ingests documents, generates embeddi
 
 - **[Full Documentation](docs/)** - Complete documentation index
 - **[Quick Start](#quick-start)** - Get started in 5 minutes
-- **[Development Guide](docs/guide/DEVELOPMENT.md)** - Development setup and workflow
-- **[Configuration](docs/guide/CONFIGURATION.md)** - Full configuration reference
-- **[Async Guide](docs/guide/ASYNC.md)** - Asynchronous API usage
-- **[Docker Setup](docs/guide/DOCKER.md)** - Containerized deployment
-- **[Building](docs/guide/BUILDING.md)** - Create distributable binaries
+- **[Getting Started](docs/getting-started/)** - Installation and setup
+- **[User Guide](docs/user-guide/)** - Complete usage guide
+- **[Developer Guide](docs/developer-guide/)** - Development setup and workflow
+- **[Configuration](docs/getting-started/configuration.md)** - Configuration reference
+- **[Async Guide](docs/developer-guide/async-api.md)** - Asynchronous API usage
+- **[Docker Setup](docs/developer-guide/docker.md)** - Containerized deployment
+- **[Building](docs/developer-guide/building.md)** - Create distributable binaries
 
 ## Quick Start
 
@@ -78,7 +80,7 @@ secondbrain search --help
 
 ## Configuration
 
-Key environment variables (see [Full Config](docs/guide/CONFIGURATION.md)):
+Key environment variables (see [Full Config](docs/getting-started/configuration.md)):
 
 ```bash
 # .env file
@@ -114,7 +116,7 @@ ruff check . && ruff format --check . && mypy . && pytest
 
 ## Architecture
 
-See the [Architecture Documentation](docs/architecture/DATA_FLOW.md) for:
+See the [Architecture Documentation](docs/architecture/) for:
 - High-level system architecture
 - Component details and responsibilities
 - Data flow diagrams
@@ -122,9 +124,9 @@ See the [Architecture Documentation](docs/architecture/DATA_FLOW.md) for:
 - Performance considerations
 - Error handling strategies
 
-And [Schema Reference](docs/architecture/SCHEMA.md) for database structure.
+And [Schema Reference](docs/architecture/schema.md) for database structure.
 
 ## License
 
-This project is licensed under the MIT License. See [LICENSE.md](docs/LICENSE.md) for details.
+This project is licensed under the MIT License. See [LICENSE](docs/license.md) for details.
 
