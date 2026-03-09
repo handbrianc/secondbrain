@@ -51,6 +51,9 @@ htmlcov/
 .hypothesis/
 .benchmarks/
 
+# Lockfile (keep for reproducibility)
+# requirements.txt is tracked for reproducible installs
+
 # Local config
 config.yaml
 config.yml

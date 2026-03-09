@@ -1,0 +1,11 @@
+# Runtime dependencies (pinned for reproducibility)
+# Generated from pyproject.toml dependencies section
+click>=8.1.0
+docling>=2.77.0
+docling-core>=2.48.4
+pymongo>=4.6.0
+httpx>=0.27.0
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+rich>=14.0.0
+python-dotenv>=1.2.2
