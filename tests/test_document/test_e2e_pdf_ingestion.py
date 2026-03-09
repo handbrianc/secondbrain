@@ -19,9 +19,6 @@ from secondbrain.document import DocumentIngestor, get_file_type
 from secondbrain.embedding import EmbeddingGenerator
 from secondbrain.storage import VectorStorage
 
-# This file uses fixtures defined in tests/fixtures/pdf_fixtures.py
-# which are automatically discovered by pytest
-
 
 @pytest.mark.integration
 class TestPDFIngestionE2E:

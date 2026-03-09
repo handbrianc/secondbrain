@@ -1,7 +1,7 @@
 # License Risk Report
 
 **Project**: secondbrain
-**Generated**: 2026-03-08 01:24:01
+**Generated**: 2026-03-08 21:26:35
 **SBOM File**: sbom.json
 
 ---
@@ -10,15 +10,15 @@
 
 | Metric | Value |
 |--------|-------|
-| **Total Dependencies** | 126 |
-| **Unique Licenses** | 14 |
-| **Unknown Licenses** | 4 |
-| **High Risk Packages** | 0 |
-| **Medium Risk Packages** | 1 |
-| **Low Risk Packages** | 121 |
+| **Total Dependencies** | 186 |
+| **Unique Licenses** | 15 |
+| **Unknown Licenses** | 0 |
+| **High Risk Packages** | 3 |
+| **Medium Risk Packages** | 3 |
+| **Low Risk Packages** | 180 |
 
 ### Overall Risk Assessment: **REQUIRES REVIEW**
-- **WARNING**: 4 packages have unknown licenses requiring manual review
+- **WARNING**: 3 packages use strong copyleft licenses (GPL/LGPL)
 
 ---
 
@@ -26,34 +26,30 @@
 
 ### HIGH RISK (Strong Copyleft)
 
-**Count**: 0 packages
-
-*No high-risk licenses found.*
-
-### MEDIUM RISK (Weak Copyleft)
-
-**Count**: 1 packages
+**Count**: 3 packages
 
 | Package | Version | License | Concern |
 |---------|---------|---------|---------|
+| pyinstaller | 6.19.0 | GPL-2.0-only | Strong copyleft - GPL requires open source |
+| pyinstaller-hooks-contrib | 2026.1 | GPL-2.0-only | Strong copyleft - GPL requires open source |
+| chardet | 5.2.0 | License :: OSI Approved :: GNU Lesser General Public License v2 or later (LGPLv2+) | Copyleft - may affect distribution |
+
+### MEDIUM RISK (Weak Copyleft)
+
+**Count**: 3 packages
+
+| Package | Version | License | Concern |
+|---------|---------|---------|---------|
+| fqdn | 1.5.1 | License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0) | Weak copyleft - review distribution model |
+| pathspec | 1.0.4 | License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0) | Weak copyleft - review distribution model |
 | certifi | 2026.2.25 | MPL-2.0 | Weak copyleft - review distribution model |
 
 ### LOW RISK (Permissive)
 
-**Count**: 121 packages
+**Count**: 180 packages
 
----
+Most dependencies use permissive licenses (MIT, Apache-2.0, BSD, ISC, etc.)
 
-## Packages Requiring Manual Review
-
-**Count**: 4
-
-The following packages have unknown or missing license metadata:
-
-- **numpy@2.4.2**
-- **packaging@26.0**
-- **regex@2026.2.28**
-- **tqdm@4.67.3**
 
 ---
 

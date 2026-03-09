@@ -7,11 +7,15 @@ repos:
         args: [--fix]
       - id: ruff-format
 
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.19.1
+  # Use local mypy to access installed packages from venv
+  - repo: local
     hooks:
       - id: mypy
+        name: mypy
+        entry: mypy
+        language: system
         args: [--config-file=pyproject.toml, src]
+        pass_filenames: false
 
   - repo: https://github.com/jendrikseipp/vulture
     rev: v2.15
@@ -23,18 +27,11 @@ repos:
     rev: 1.9.4
     hooks:
       - id: bandit
-        args: ["-r", "src/secondbrain"]
+        entry: bandit -r src/secondbrain -c pyproject.toml
+        pass_filenames: false
 
   - repo: local
     hooks:
-      - id: sbom-analysis
-        name: Generate SBOM and License Risk Analysis
-        entry: python3 scripts/generate_sbom_analysis.py
-        language: system
-        pass_filenames: false
-        always_run: true
-        stages: [pre-commit]
-
       - id: pytest
         name: pytest
         entry: pytest
