@@ -50,9 +50,9 @@ SOFTWARE.**
 
 This project also adheres to the following guidelines and policies:
 
-- **Code of Conduct**: See [CONTRIBUTING.md](developer-guide/contributing.md)
-- **Security Policy**: See [SECURITY.md](developer-guide/security.md)
-- **Development Guidelines**: See [DEVELOPMENT.md](developer-guide/development.md)
+- **Code of Conduct**: See [CONTRIBUTING.md](guide/CONTRIBUTING.md)
+- **Security Policy**: See [SECURITY.md](guide/SECURITY.md)
+- **Development Guidelines**: See [DEVELOPMENT.md](guide/DEVELOPMENT.md)
 
 ## Questions?
 
