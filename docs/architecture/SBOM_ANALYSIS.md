@@ -1,7 +1,7 @@
 # SBOM Analysis & Dependency Trade-offs
 
-**Last Updated**: 2026-03-08 21:26
-**SBOM File**: `sbom.json` (0KB, CycloneDX 1.5)
+**Last Updated**: 2026-03-08 21:38
+**SBOM File**: `docs/sbom.json` (0KB, CycloneDX 1.5)
 **Total Production Dependencies**: 186
 
 ---
@@ -123,4 +123,4 @@ The following packages use weak copyleft licenses (MPL-2.0, etc.):
 
 | Date | Change |
 |------|--------|
-| 2026-03-08 21:26 | SBOM updated via automated script |
+| 2026-03-08 21:38 | SBOM updated via automated script |

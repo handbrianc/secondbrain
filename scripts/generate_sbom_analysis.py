@@ -82,15 +82,17 @@ def generate_sbom() -> Path:
     if not cyclonedx.exists():
         run_command(f"{venv_path}/bin/pip install cyclonedx-bom")
 
-    # Generate SBOM
+    # Ensure docs folder exists
+    sbom_output_path = Path("docs/sbom.json")
+    sbom_output_path.parent.mkdir(parents=True, exist_ok=True)
     python_bin = venv_path / "bin" / "python"
     run_command(
         f"{cyclonedx} environment {python_bin} "
-        "--sv 1.5 --of JSON -o sbom.json --validate"
+        f"--sv 1.5 --of JSON -o {sbom_output_path} --validate"
     )
 
-    print("✅ SBOM generated: sbom.json")
-    return Path("sbom.json")
+    print(f"✅ SBOM generated: {sbom_output_path}")
+    return sbom_output_path
 
 
 def analyze_licenses(sbom_path: Path) -> dict[str, Any]:
@@ -176,8 +178,12 @@ def analyze_licenses(sbom_path: Path) -> dict[str, Any]:
 
 
 def generate_license_risk_report(analysis: dict[str, Any]) -> None:
-    """Generate LICENSE-RISK-REPORT.md."""
+    """Generate LICENSE-RISK-REPORT.md in docs folder."""
     print("📝 Generating LICENSE-RISK-REPORT.md...")
+
+    # Ensure docs folder exists
+    output_path = Path("docs/LICENSE-RISK-REPORT.md")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
 
     report_lines = [
         "# License Risk Report",
@@ -303,10 +309,10 @@ def generate_license_risk_report(analysis: dict[str, Any]) -> None:
         ]
     )
 
-    with Path("LICENSE-RISK-REPORT.md").open("w") as f:
+    with output_path.open("w") as f:
         f.write("\n".join(report_lines))
 
-    print("✅ LICENSE-RISK-REPORT.md generated")
+    print(f"✅ {output_path} generated")
 
 
 def generate_sbom_analysis_doc(analysis: dict[str, Any]) -> None:
@@ -345,7 +351,8 @@ def generate_sbom_analysis_doc(analysis: dict[str, Any]) -> None:
                     direct_deps.append(dep)
 
     # Get SBOM file size
-    sbom_size = Path("sbom.json").stat().st_size if Path("sbom.json").exists() else 0
+    sbom_path = Path("docs/sbom.json")
+    sbom_size = sbom_path.stat().st_size if sbom_path.exists() else 0
     sbom_size_mb = sbom_size / (1024 * 1024)
 
     # Known license mappings for unknown packages
@@ -365,7 +372,7 @@ def generate_sbom_analysis_doc(analysis: dict[str, Any]) -> None:
         "# SBOM Analysis & Dependency Trade-offs",
         "",
         f"**Last Updated**: {_get_timestamp().strftime('%Y-%m-%d %H:%M')}",
-        f"**SBOM File**: `sbom.json` ({sbom_size_mb:.0f}KB, CycloneDX 1.5)",
+        f"**SBOM File**: `docs/sbom.json` ({sbom_size_mb:.0f}KB, CycloneDX 1.5)",
         f"**Total Production Dependencies**: {analysis['total_components']}",
         "",
         "---",
@@ -635,9 +642,11 @@ def main() -> None:
     print()
 
     # Step 5: Save JSON analysis
-    with Path("license_analysis.json").open("w") as f:
+    license_analysis_path = Path("docs/license_analysis.json")
+    license_analysis_path.parent.mkdir(parents=True, exist_ok=True)
+    with license_analysis_path.open("w") as f:
         json.dump(analysis, f, indent=2)
-    print("✅ license_analysis.json generated")
+    print(f"✅ {license_analysis_path} generated")
     print()
 
     # Print summary
@@ -657,10 +666,10 @@ def main() -> None:
     )
     print()
     print("📁 Generated files:")
-    print("  - sbom.json")
-    print("  - LICENSE-RISK-REPORT.md")
+    print("  - docs/sbom.json")
+    print("  - docs/LICENSE-RISK-REPORT.md")
     print("  - docs/architecture/SBOM_ANALYSIS.md")
-    print("  - license_analysis.json")
+    print("  - docs/license_analysis.json")
     print()
     print("✅ SBOM analysis complete!")
 
