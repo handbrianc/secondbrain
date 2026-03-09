@@ -578,5 +578,5 @@ Low-level error
 ## Next Steps
 
 - [Schema Reference](./SCHEMA.md) - Database schema details
-- [Configuration](../guide/CONFIGURATION.md) - Tuning parameters
-- [Development Guide](../guide/DEVELOPMENT.md) - Implementation details
+- [Configuration](../developer-guide/configuration.md) - Tuning parameters
+- [Development Guide](../developer-guide/development.md) - Implementation details

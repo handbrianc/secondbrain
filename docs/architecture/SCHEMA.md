@@ -149,3 +149,9 @@ Breaking changes to the schema should be avoided. When changes are necessary:
 1. Increment the `version` field
 2. Provide migration scripts
 3. Maintain backward-compatible read logic
+
+## Related Documentation
+
+- [Architecture Overview](./index.md) - System architecture
+- [Data Flow](./DATA_FLOW.md) - Data flow documentation
+- [Development Guide](../developer-guide/development.md) - Development workflow
