@@ -118,12 +118,14 @@ exclude_dirs = ["tests"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--cov=secondbrain --cov-report=term-missing --cov-fail-under=80 -m 'not slow'"
+addopts = "--cov=secondbrain --cov-report=term-missing --cov-fail-under=80 -m 'not slow' -n auto"
 asyncio_mode = "auto"
 markers = [
     "integration: marks tests as integration tests that require external services",
     "unit: marks tests as unit tests that use mocks",
     "slow: marks tests as slow (takes >1s to execute)",
+    "fast: marks tests as fast (takes <50ms to execute)",
+    "medium: marks tests as medium speed (takes <500ms to execute)",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning:docling",

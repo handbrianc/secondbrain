@@ -14,6 +14,7 @@ Run excluded from fast tests: pytest -m "not integration"
 import contextlib
 import warnings
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -34,6 +35,16 @@ warnings.filterwarnings(
 @pytest.mark.slow
 class TestPDFIngestionE2E:
     """End-to-end tests for PDF ingestion pipeline."""
+
+    @pytest.fixture(autouse=True)
+    def mock_external_services(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        cached_embedding_generator: MagicMock,
+        mocked_pdf_extraction: MagicMock,
+    ) -> None:
+        """Mock external services to speed up E2E tests."""
+        pass
 
     @pytest.mark.slow
     def test_pdf_text_extraction(self, sample_pdf_path: Path) -> None:

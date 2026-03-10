@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import atexit
+import contextlib
 from pathlib import Path
 from typing import Any, TypeVar
 from unittest.mock import MagicMock
@@ -81,31 +82,55 @@ def clean_embedding_generator() -> Any:
 
 @pytest.fixture(autouse=True)
 def cleanup_resources(request: Any) -> Any:
-    """Automatically cleanup VectorStorage and EmbeddingGenerator after each test."""
+    """Automatically cleanup VectorStorage and EmbeddingGenerator after each test.
+
+    Optimized to only cleanup clients that were actually instantiated during the test,
+    avoiding unnecessary connection attempts that add ~0.2s per test.
+    """
+    # Track which clients were actually used during the test
+    clients_to_cleanup: list[tuple[str, Any]] = []
+
+    # Patch the classes to track instantiation
+    original_init: dict[str, Any] = {}
+
+    def track_storage_init(self: Any, *args: Any, **kwargs: Any) -> None:
+        clients_to_cleanup.append(("storage", self))
+        original_init.get("storage", lambda *a, **k: None)(self, *args, **kwargs)
+
+    def track_generator_init(self: Any, *args: Any, **kwargs: Any) -> None:
+        clients_to_cleanup.append(("generator", self))
+        original_init.get("generator", lambda *a, **k: None)(self, *args, **kwargs)
+
+    def track_searcher_init(self: Any, *args: Any, **kwargs: Any) -> None:
+        clients_to_cleanup.append(("searcher", self))
+        original_init.get("searcher", lambda *a, **k: None)(self, *args, **kwargs)
+
+    from secondbrain.embedding import EmbeddingGenerator
+    from secondbrain.search import Searcher
+    from secondbrain.storage import VectorStorage
+
+    original_init["storage"] = VectorStorage.__init__
+    original_init["generator"] = EmbeddingGenerator.__init__
+    original_init["searcher"] = Searcher.__init__
+
+    VectorStorage.__init__ = track_storage_init  # type: ignore[method-assign]
+    EmbeddingGenerator.__init__ = track_generator_init  # type: ignore[method-assign]
+    Searcher.__init__ = track_searcher_init  # type: ignore[method-assign]
+
     try:
         yield
     finally:
-        from secondbrain.embedding import EmbeddingGenerator
-        from secondbrain.search import Searcher
-        from secondbrain.storage import VectorStorage
+        # Restore original init methods
+        VectorStorage.__init__ = original_init.get("storage", VectorStorage.__init__)  # type: ignore[method-assign]
+        EmbeddingGenerator.__init__ = original_init.get(
+            "generator", EmbeddingGenerator.__init__
+        )  # type: ignore[method-assign]
+        Searcher.__init__ = original_init.get("searcher", Searcher.__init__)  # type: ignore[method-assign]
 
-        try:
-            storage = VectorStorage()
-            storage.close()
-        except Exception:
-            pass
-
-        try:
-            generator = EmbeddingGenerator()
-            generator.close()
-        except Exception:
-            pass
-
-        try:
-            searcher = Searcher()
-            searcher.close()
-        except Exception:
-            pass
+        # Only cleanup clients that were actually instantiated
+        with contextlib.suppress(Exception):
+            for _, client in clients_to_cleanup:
+                client.close()
 
 
 @pytest.fixture
@@ -200,15 +225,7 @@ def cached_embedding_generator(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
     mock.generate_batch.side_effect = lambda texts: [mock_generate(t) for t in texts]
 
     monkeypatch.setattr(
-        "secondbrain.document.EmbeddingGenerator",
-        lambda *args, **kwargs: mock,
-    )
-    monkeypatch.setattr(
         "secondbrain.embedding.EmbeddingGenerator",
-        lambda *args, **kwargs: mock,
-    )
-    monkeypatch.setattr(
-        "secondbrain.search.EmbeddingGenerator",
         lambda *args, **kwargs: mock,
     )
 
@@ -229,9 +246,9 @@ def mocked_pdf_extraction(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
 
     # Pre-computed mock segments that mimic real PDF extraction
     mock_segments = [
-        {"text": "This is mock text from page 1. " * 10, "page": 1},
-        {"text": "This is mock text from page 2. " * 10, "page": 2},
-        {"text": "This is mock text from page 3. " * 10, "page": 3},
+        {"text": "This is mock SecondBrain test text from page 1. " * 10, "page": 1},
+        {"text": "This is mock SecondBrain test text from page 2. " * 10, "page": 2},
+        {"text": "This is mock SecondBrain test text from page 3. " * 10, "page": 3},
     ]
 
     def mock_extract_text(self: Any, pdf_path: Path) -> list[dict[str, Any]]:
