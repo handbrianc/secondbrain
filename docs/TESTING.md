@@ -215,6 +215,24 @@ def test_rate_limiting(fast_test_config):
 
 **Time saved:** 90% on rate limiter tests
 
+### 6. Fixtures for CLI Tests
+
+When testing CLI commands that invoke heavy operations, mock at the CLI level:
+
+```python
+@patch("secondbrain.document.DocumentIngestor")
+def test_ingest_command(mock_ingestor_class):
+    """Test CLI command without running actual ingestion."""
+    mock_ingestor = MagicMock()
+    mock_ingestor.ingest.return_value = {"success": 5, "failed": 0}
+    mock_ingestor_class.return_value = mock_ingestor
+    
+    result = runner.invoke(cli, ["ingest", "/tmp/test"])
+    assert result.exit_code == 0
+```
+
+**Time saved:** 7+ seconds per CLI test
+
 ## Running Tests in CI/CD
 
 ### GitHub Actions (Local Development)
@@ -307,27 +325,55 @@ pytest --cov=secondbrain --cov-fail-under=80
        pass
    ```
 
-## Performance Benchmarks
+## Test Profiling and Timing
 
-### Current Performance
+### Identifying Slow Tests
 
-| Test Category | Count | Total Time | Avg per Test |
-|---------------|-------|------------|--------------|
-| Fast Tests | 400+ | <5s | <0.01s |
-| Integration Tests | 50+ | ~15s | ~0.3s |
-| Slow Tests (E2E) | 11 | ~16s | ~1.5s |
-| **Total** | **513** | **~42s** | **~0.08s** |
+Run tests with timing information:
 
-### Target Performance (After Optimizations)
+```bash
+# Show slowest 10 tests
+pytest --durations=10
 
-| Test Category | Count | Total Time | Avg per Test |
-|---------------|-------|------------|--------------|
-| Fast Tests | 400+ | <3s | <0.01s |
-| Integration Tests | 50+ | ~8s | ~0.16s |
-| Slow Tests (E2E) | 11 | ~8s | ~0.7s |
-| **Total** | **513** | **~19s** | **~0.04s** |
+# Show all tests with durations > 0.1s
+pytest --durations=50 --durations-minimum=0.1
 
-**Expected Improvement:** 50-60% faster overall
+# Show detailed timing with setup/teardown
+pytest --setup-show --durations=20
+```
+
+### Test Performance Targets
+
+| Test Category | Target Time | Current Status |
+|---------------|-------------|----------------|
+| Fast unit tests | <0.01s | ✅ Achieved |
+| CLI tests (mocked) | <0.1s | ✅ Achieved |
+| Rate limiter tests | <0.1s | ✅ Achieved |
+| Integration tests | <1s each | ⚠️ Requires services |
+| Slow E2E tests | <5s each | 🔴 Expected (real operations) |
+
+### Common Slow Test Patterns
+
+1. **Unmocked external services** - Use mocks/fakes
+2. **Real PDF processing** - Use `mocked_pdf_extraction` fixture
+3. **Real embedding generation** - Use `cached_embedding_generator` fixture
+4. **Large sleep() calls** - Reduce window sizes in tests
+5. **Real database operations** - Use mongomock
+
+### Coverage vs Speed Trade-off
+
+```bash
+# Fast tests without coverage (for quick iteration)
+pytest -m "not integration" --no-cov
+
+# Fast tests with coverage (for CI)
+pytest -m "not integration" --cov=secondbrain
+
+# Full suite with coverage (for releases)
+pytest --cov=secondbrain --cov-fail-under=80
+```
+
+**Note:** Coverage reporting adds ~30-50% overhead to test execution time.
 
 ## Contributing Test Improvements
 

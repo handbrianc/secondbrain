@@ -50,7 +50,7 @@ class TestRateLimiterSync:
     def test_window_sliding(self) -> None:
         """Test that the sliding window works correctly."""
         with patch("secondbrain.embedding.time.sleep"):
-            limiter = RateLimiter(max_requests=2, window_seconds=0.3)
+            limiter = RateLimiter(max_requests=2, window_seconds=0.03)
             limiter.acquire()
             limiter.acquire()
             limiter.acquire()
@@ -76,7 +76,7 @@ class TestRateLimiterAsync:
     async def test_acquire_async_blocks_when_limit_exceeded(self) -> None:
         """Test that acquire_async blocks when limit is exceeded."""
         with patch("secondbrain.embedding.time.sleep"):
-            limiter = RateLimiter(max_requests=2, window_seconds=0.5)
+            limiter = RateLimiter(max_requests=2, window_seconds=0.05)
             await limiter.acquire_async()
             await limiter.acquire_async()
             await limiter.acquire_async()
@@ -106,7 +106,7 @@ class TestRateLimiterAsync:
     async def test_async_concurrent_with_limiting(self) -> None:
         """Test async concurrent access respects rate limits."""
         with patch("secondbrain.embedding.time.sleep"):
-            limiter = RateLimiter(max_requests=2, window_seconds=0.3)
+            limiter = RateLimiter(max_requests=2, window_seconds=0.03)
             request_count = 0
 
             async def make_request(request_id: int) -> None:
@@ -140,7 +140,7 @@ class TestRateLimiterEdgeCases:
 
     def test_very_small_window(self) -> None:
         """Test rate limiter with very small window."""
-        limiter = RateLimiter(max_requests=1, window_seconds=0.01)
+        limiter = RateLimiter(max_requests=1, window_seconds=0.001)
 
         # First request
         limiter.acquire()
@@ -150,7 +150,7 @@ class TestRateLimiterEdgeCases:
         limiter.acquire()
         elapsed = time.time() - start
 
-        assert elapsed >= 0.005
+        assert elapsed >= 0.0005
 
     def test_large_max_requests(self) -> None:
         """Test rate limiter with large max requests."""

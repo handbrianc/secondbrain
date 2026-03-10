@@ -100,7 +100,7 @@ class TestServiceValidator:
 
         validator.configure(incrementing_validator)
         validator.is_available()
-        time.sleep(0.15)
+        time.sleep(0.11)  # Wait for cache to expire (TTL = 0.1s)
         validator.is_available()
         assert call_count == 2
 

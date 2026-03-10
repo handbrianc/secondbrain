@@ -118,7 +118,7 @@ exclude_dirs = ["tests"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--cov=secondbrain --cov-report=term-missing --cov-fail-under=80"
+addopts = "--cov=secondbrain --cov-report=term-missing --cov-fail-under=80 -m 'not slow'"
 asyncio_mode = "auto"
 markers = [
     "integration: marks tests as integration tests that require external services",

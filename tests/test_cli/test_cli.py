@@ -26,7 +26,7 @@ class TestCLI:
 
     @patch("secondbrain.document.DocumentIngestor")
     def test_ingest_command(self, mock_ingestor_class: MagicMock) -> None:
-        """Test ingest command."""
+        """Test ingest command with mocked ingestion to avoid slow PDF processing."""
         mock_ingestor = MagicMock()
         mock_ingestor.ingest.return_value = {"success": 5, "failed": 0}
         mock_ingestor_class.return_value = mock_ingestor
@@ -36,7 +36,10 @@ class TestCLI:
             from pathlib import Path
 
             Path("/tmp/test_docs").mkdir(parents=True, exist_ok=True)
-            runner.invoke(cli, ["ingest", "/tmp/test_docs"])
+            result = runner.invoke(cli, ["ingest", "/tmp/test_docs"])
+            assert result.exit_code == 0
+            mock_ingestor_class.assert_called_once()
+            mock_ingestor.ingest.assert_called_once()
 
     @patch("secondbrain.document.DocumentIngestor")
     def test_ingest_command_recursive(self, mock_ingestor_class: MagicMock) -> None:
@@ -46,8 +49,10 @@ class TestCLI:
         mock_ingestor_class.return_value = mock_ingestor
 
         runner = CliRunner()
-        runner.invoke(cli, ["ingest", "/tmp", "--recursive"])
-        # May fail due to path, but tests the flag
+        result = runner.invoke(cli, ["ingest", "/tmp", "--recursive"])
+        assert result.exit_code == 0
+        mock_ingestor_class.assert_called_once()
+        mock_ingestor.ingest.assert_called_once()
 
     @patch("secondbrain.search.Searcher")
     def test_search_command(self, mock_searcher_class: MagicMock) -> None:
