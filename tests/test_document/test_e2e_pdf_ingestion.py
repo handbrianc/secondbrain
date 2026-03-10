@@ -1,6 +1,6 @@
 """End-to-end integration tests for PDF ingestion.
 
-These tests verify the full ingestion pipeline:
+These tests exercise the full ingestion pipeline:
 1. PDF text extraction (via docling)
 2. Text chunking
 3. Embedding generation (via Ollama)
@@ -8,9 +8,11 @@ These tests verify the full ingestion pipeline:
 
 Note: These tests require MongoDB and Ollama to be running.
 Run with: pytest tests/test_document/test_e2e_pdf_ingestion.py -v
+Run excluded from fast tests: pytest -m "not integration"
 """
 
 import contextlib
+import warnings
 from pathlib import Path
 
 import pytest
@@ -19,11 +21,21 @@ from secondbrain.document import DocumentIngestor, get_file_type
 from secondbrain.embedding import EmbeddingGenerator
 from secondbrain.storage import VectorStorage
 
+# Suppress docling deprecation warnings (upstream library issue)
+warnings.filterwarnings(
+    "ignore",
+    message=".*This field is deprecated.*",
+    category=DeprecationWarning,
+    module="docling",
+)
+
 
 @pytest.mark.integration
+@pytest.mark.slow
 class TestPDFIngestionE2E:
     """End-to-end tests for PDF ingestion pipeline."""
 
+    @pytest.mark.slow
     def test_pdf_text_extraction(self, sample_pdf_path: Path) -> None:
         """Test that PDF text extraction works correctly."""
         # Verify the PDF file exists
@@ -47,6 +59,7 @@ class TestPDFIngestionE2E:
         assert len(combined_text) > 0
         assert "SecondBrain" in combined_text or "test" in combined_text.lower()
 
+    @pytest.mark.slow
     def test_pdf_text_chunking(self, sample_pdf_path: Path) -> None:
         """Test that PDF text is chunked correctly."""
         ingestor = DocumentIngestor(chunk_size=100, chunk_overlap=20)
@@ -65,6 +78,7 @@ class TestPDFIngestionE2E:
         for chunk in chunks:
             assert len(chunk["text"]) <= 100
 
+    @pytest.mark.slow
     def test_embedding_generation(self) -> None:
         """Test that embedding generation works."""
         # Skip if Ollama is not available
@@ -82,6 +96,7 @@ class TestPDFIngestionE2E:
         assert len(embedding) > 0
         assert all(isinstance(x, float) for x in embedding)
 
+    @pytest.mark.slow
     def test_full_ingestion_pipeline(self, sample_pdf_path: Path) -> None:
         """Test the full ingestion pipeline from PDF to storage.
 
@@ -121,6 +136,7 @@ class TestPDFIngestionE2E:
             assert "chunk_text" in chunk
             assert len(chunk["chunk_text"]) > 0
 
+    @pytest.mark.slow
     def test_multi_page_pdf_ingestion(
         self, sample_pdf_with_multiple_pages: Path
     ) -> None:
@@ -152,6 +168,7 @@ class TestPDFIngestionE2E:
         page_numbers = {chunk.get("page_number", 0) for chunk in chunks}
         assert len(page_numbers) >= 2  # At least 2 different pages
 
+    @pytest.mark.slow
     def test_ingestion_with_custom_chunking(self, sample_pdf_path: Path) -> None:
         """Test ingestion with custom chunk size and overlap."""
         # Skip if services are not available
@@ -183,6 +200,7 @@ class TestPDFIngestionE2E:
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 class TestPDFSearchIntegration:
     """Integration tests for search functionality after ingestion."""
 
@@ -214,6 +232,7 @@ class TestPDFSearchIntegration:
         except Exception:
             pass  # Ignore errors
 
+    @pytest.mark.slow
     def test_search_after_ingestion(self, sample_pdf_path: Path) -> None:
         """Test that semantic search works after PDF ingestion."""
         # Skip if services are not available
@@ -264,6 +283,7 @@ class TestPDFSearchIntegration:
                 )
             raise
 
+    @pytest.mark.slow
     def test_search_with_filters(self, sample_pdf_path: Path) -> None:
         """Test search with source and file type filters."""
         # Skip if services are not available

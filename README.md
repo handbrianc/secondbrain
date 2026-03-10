@@ -101,18 +101,35 @@ ruff check . && ruff format .
 # Type checking
 mypy .
 
-# Tests
+# Tests (fast profile - default)
+pytest -m "not integration" -n auto
+
+# Full test suite (requires MongoDB + Ollama)
 pytest
 
 # All checks
-ruff check . && ruff format --check . && mypy . && pytest
+ruff check . && ruff format --check . && mypy . && pytest -m "not integration" -n auto
 ```
+
+### Test Profiles
+
+The test suite supports different execution profiles:
+
+| Profile | Command | Duration | Use Case |
+|---------|---------|----------|----------|
+| **Fast** | `pytest -m "not integration" -n auto` | <5s | Pre-commit, quick feedback |
+| **Integration** | `pytest -m integration` | ~15s | Nightly builds, service testing |
+| **Slow (E2E)** | `pytest -m slow` | ~16s | Release validation |
+| **Full** | `pytest` | ~42s | Complete validation |
+
+See [TESTING.md](docs/TESTING.md) for detailed testing documentation.
 
 ### Performance Tips
 
 - Use `--batch-size` for parallel processing
 - Adjust `chunk_size` for your document types
 - Enable verbose mode for timing info: `--verbose`
+- Use `-n auto` for parallel test execution (pytest-xdist)
 
 ## Architecture
 

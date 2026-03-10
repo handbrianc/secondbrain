@@ -13,6 +13,16 @@ from secondbrain.exceptions import DocumentExtractionError, UnsupportedFileError
 
 logger = logging.getLogger(__name__)
 
+# Suppress docling deprecation warnings (upstream library issue)
+import warnings  # noqa: E402
+
+warnings.filterwarnings(
+    "ignore",
+    message=".*This field is deprecated.*",
+    category=DeprecationWarning,
+    module="docling",
+)
+
 
 class Segment(TypedDict):
     text: str

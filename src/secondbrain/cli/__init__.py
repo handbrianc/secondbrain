@@ -46,11 +46,12 @@ def handle_cli_errors(func: T) -> T:
         except (ValueError, FileNotFoundError, CLIValidationError) as e:
             logger.warning(f"Validation error: {e}", exc_info=True)
             console.print(f"[red]Error: {e}[/red]")
+            console.print("[yellow]Run with --verbose for full traceback[/yellow]")
             sys.exit(1)
         except Exception as e:
             logger.exception("Unexpected error in CLI command")
             console.print(f"[red]Error: {e}[/red]")
-            console.print("[yellow]Run with --verbose for details[/yellow]")
+            console.print("[yellow]Run with --verbose for full traceback[/yellow]")
             sys.exit(1)
 
     return wrapper  # type: ignore[return-value]

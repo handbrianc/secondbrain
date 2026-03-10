@@ -10,6 +10,7 @@ Uses mongomock for in-memory MongoDB testing.
 from __future__ import annotations
 
 import uuid
+import warnings
 from collections.abc import Generator
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,14 @@ import pytest
 
 from secondbrain.document import DocumentIngestor
 from secondbrain.embedding import EmbeddingGenerator
+
+# Suppress docling deprecation warnings (upstream library issue)
+warnings.filterwarnings(
+    "ignore",
+    message=".*This field is deprecated.*",
+    category=DeprecationWarning,
+    module="docling",
+)
 
 
 @pytest.fixture

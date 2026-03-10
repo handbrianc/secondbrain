@@ -38,6 +38,7 @@ dev = [
     "pytest-asyncio>=0.23.0",
     "pytest-cov>=4.1.0",
     "pytest-benchmark>=4.0.0",
+    "pytest-xdist>=3.0.0",
     "bandit>=1.7.0",
     "safety>=3.0.0",
     "pre-commit>=3.6.0",
@@ -94,7 +95,7 @@ warn_unused_ignores = true
 warn_no_return = true
 warn_unreachable = true
 strict_equality = true
-exclude = ["venv/", ".git/", "tests/", ".*\\.egg-info/"]
+exclude = ["venv/", ".git/", "tests/", "docs/examples/", ".*\\.egg-info/"]
 
 
 [tool.coverage.run]
@@ -119,7 +120,14 @@ exclude_dirs = ["tests"]
 testpaths = ["tests"]
 addopts = "--cov=secondbrain --cov-report=term-missing --cov-fail-under=80"
 asyncio_mode = "auto"
-markers = ["integration: marks tests as integration tests that require external services"]
+markers = [
+    "integration: marks tests as integration tests that require external services",
+    "unit: marks tests as unit tests that use mocks",
+    "slow: marks tests as slow (takes >1s to execute)",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning:docling",
+]
 
 [tool.pre-commit]
 default_stages = ["pre-commit"]
