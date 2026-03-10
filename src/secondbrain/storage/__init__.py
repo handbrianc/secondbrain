@@ -18,6 +18,7 @@ from secondbrain.config import Config, get_config
 from secondbrain.exceptions import StorageConnectionError
 from secondbrain.types import ChunkInfo, SearchResult
 from secondbrain.utils.connections import ValidatableService
+from secondbrain.utils.perf_monitor import async_timing, metrics, timing
 
 logger = logging.getLogger(__name__)
 
@@ -27,21 +28,28 @@ def build_search_pipeline(
     top_k: int,
     source_filter: str | None = None,
     file_type_filter: str | None = None,
+    use_prefix_match: bool = True,
 ) -> list[dict[str, Any]]:
     """Build MongoDB aggregation pipeline for vector search.
+
+    Uses anchored regex for source filtering to improve index performance.
 
     Args:
         embedding: Query embedding vector.
         top_k: Number of results to return.
         source_filter: Filter by source file.
         file_type_filter: Filter by file type.
+        use_prefix_match: If True, use anchored regex for better index usage.
 
     Returns:
         Aggregation pipeline for vector search.
     """
     query_filter: dict[str, Any] = {}
     if source_filter:
-        query_filter["source_file"] = {"$regex": source_filter}
+        if use_prefix_match:
+            query_filter["source_file"] = {"$regex": f"^{source_filter}"}
+        else:
+            query_filter["source_file"] = {"$regex": source_filter}
     if file_type_filter:
         query_filter["metadata.file_type"] = file_type_filter
 
@@ -404,6 +412,7 @@ class VectorStorage(ValidatableService):
             logger.warning(f"Could not create index: {e}")
             self._index_created = False
 
+    @timing("storage_store")
     def store(self, document: dict[str, Any]) -> str:
         """Store a document with embedding.
 
@@ -420,6 +429,7 @@ class VectorStorage(ValidatableService):
         result = self.collection.insert_one(doc)
         return str(result.inserted_id)
 
+    @timing("storage_store_batch")
     def store_batch(self, documents: list[dict[str, Any]]) -> int:
         """Store multiple documents.
 
@@ -437,6 +447,7 @@ class VectorStorage(ValidatableService):
         result = self.collection.insert_many(docs_with_timestamps)
         return len(result.inserted_ids)
 
+    @timing("storage_search")
     def search(
         self,
         embedding: list[float],
@@ -476,14 +487,18 @@ class VectorStorage(ValidatableService):
         chunk_id: str | None = None,
         limit: int = 50,
         offset: int = 0,
+        use_prefix_match: bool = True,
     ) -> list[ChunkInfo]:
         """List chunks with optional filters.
+
+        Uses indexed queries where possible for better performance.
 
         Args:
             source_filter: Filter by source file.
             chunk_id: Filter by specific chunk ID.
             limit: Maximum number of results to return.
             offset: Pagination offset.
+            use_prefix_match: If True, use $regex with anchored prefix for better index usage.
 
         Returns:
             list of ChunkInfo objects.
@@ -492,7 +507,10 @@ class VectorStorage(ValidatableService):
 
         query: dict[str, Any] = {}
         if source_filter:
-            query["source_file"] = {"$regex": source_filter}
+            if use_prefix_match:
+                query["source_file"] = {"$regex": f"^{source_filter}"}
+            else:
+                query["source_file"] = {"$regex": source_filter}
         if chunk_id:
             query["chunk_id"] = chunk_id
 
@@ -580,6 +598,7 @@ class VectorStorage(ValidatableService):
         self._connection_checked_at = current_time
         return self._connection_valid
 
+    @async_timing("storage_store_async")
     async def store_async(self, document: dict[str, Any]) -> str:
         """Store a document with embedding asynchronously.
 
@@ -596,6 +615,7 @@ class VectorStorage(ValidatableService):
         result = await asyncio.to_thread(lambda: self.collection.insert_one(doc))
         return str(result.inserted_id)
 
+    @async_timing("storage_store_batch_async")
     async def store_batch_async(self, documents: list[dict[str, Any]]) -> int:
         """Store multiple documents asynchronously.
 
@@ -615,6 +635,7 @@ class VectorStorage(ValidatableService):
         )
         return len(result.inserted_ids)
 
+    @async_timing("storage_search_async")
     async def search_async(
         self,
         embedding: list[float],

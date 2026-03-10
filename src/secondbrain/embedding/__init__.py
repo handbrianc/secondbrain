@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import logging
 import time
+from collections import deque
 from collections.abc import Callable
 from threading import Lock
 from typing import Any
@@ -16,10 +17,13 @@ from secondbrain.exceptions import (
     EmbeddingGenerationError,
     OllamaUnavailableError,
 )
+from secondbrain.utils.circuit_breaker import CircuitBreaker, CircuitBreakerError
 from secondbrain.utils.connections import (
     ServiceUnavailableError,
     ValidatableService,
 )
+from secondbrain.utils.embedding_cache import EmbeddingCache
+from secondbrain.utils.perf_monitor import async_timing, metrics, timing
 
 logger = logging.getLogger(__name__)
 
@@ -53,26 +57,26 @@ class RateLimiter:
         )
         self._lock = Lock()
         self._async_lock = asyncio.Lock()
-        self._requests: list[float] = []
+        self._requests: deque[float] = deque()
 
     def acquire(self) -> None:
         """Acquire rate limit token, blocking if necessary."""
         current_time = time.time()
 
         with self._lock:
-            self._requests[:] = [
-                t for t in self._requests if current_time - t < self.window_seconds
-            ]
+            cutoff = current_time - self.window_seconds
+            while self._requests and self._requests[0] < cutoff:
+                self._requests.popleft()
 
             while len(self._requests) >= self.max_requests:
-                oldest = min(self._requests)
+                oldest = self._requests[0]
                 sleep_time = self.window_seconds - (current_time - oldest)
                 if sleep_time > 0:
                     time.sleep(sleep_time)
                 current_time = time.time()
-                self._requests[:] = [
-                    t for t in self._requests if current_time - t < self.window_seconds
-                ]
+                cutoff = current_time - self.window_seconds
+                while self._requests and self._requests[0] < cutoff:
+                    self._requests.popleft()
 
             self._requests.append(current_time)
 
@@ -84,19 +88,19 @@ class RateLimiter:
         current_time = time.time()
 
         async with self._async_lock:
-            self._requests[:] = [
-                t for t in self._requests if current_time - t < self.window_seconds
-            ]
+            cutoff = current_time - self.window_seconds
+            while self._requests and self._requests[0] < cutoff:
+                self._requests.popleft()
 
             while len(self._requests) >= self.max_requests:
-                oldest = min(self._requests)
+                oldest = self._requests[0]
                 sleep_time = self.window_seconds - (current_time - oldest)
                 if sleep_time > 0:
                     await asyncio.sleep(sleep_time)
                 current_time = time.time()
-                self._requests[:] = [
-                    t for t in self._requests if current_time - t < self.window_seconds
-                ]
+                cutoff = current_time - self.window_seconds
+                while self._requests and self._requests[0] < cutoff:
+                    self._requests.popleft()
 
             self._requests.append(current_time)
 
@@ -123,6 +127,7 @@ class EmbeddingGenerator(ValidatableService):
         model: str | None = None,
         ollama_url: str | None = None,
         rate_limiter: RateLimiter | None = None,
+        cache_size: int | None = None,
     ) -> None:
         """Initialize the embedding generator.
 
@@ -130,6 +135,7 @@ class EmbeddingGenerator(ValidatableService):
             model: Model name to use. If None, uses config default.
             ollama_url: Ollama API URL. If None, uses config default.
             rate_limiter: Optional RateLimiter instance. If None, creates new one.
+            cache_size: Optional cache size. If None, uses unlimited cache.
         """
         config = get_config()
         self.model = model or config.model
@@ -137,10 +143,14 @@ class EmbeddingGenerator(ValidatableService):
         self._client: httpx.Client | None = None
         self._async_client: httpx.AsyncClient | None = None
         self._model_pulled = False
-        config = get_config()
         self._rate_limiter = rate_limiter or RateLimiter(
             max_requests=config.rate_limit_max_requests,
             window_seconds=config.rate_limit_window_seconds,
+        )
+        self._cache = EmbeddingCache(max_size=cache_size or 10000)
+        self._circuit_breaker = CircuitBreaker(
+            failure_threshold=5,
+            recovery_timeout=30.0,
         )
         super().__init__(cache_ttl=config.connection_cache_ttl)
 
@@ -360,8 +370,11 @@ class EmbeddingGenerator(ValidatableService):
             logger.error(f"Error pulling model: {e}")
             raise OllamaUnavailableError(f"Failed to pull model: {e}") from e
 
+    @timing("embedding_generate")
     def generate(self, text: str) -> list[float]:
         """Generate an embedding for the given text.
+
+        Uses cache to avoid redundant API calls for duplicate texts.
 
         Args:
             text: Text to generate embedding for.
@@ -373,109 +386,160 @@ class EmbeddingGenerator(ValidatableService):
             OllamaUnavailableError: If Ollama service is unavailable.
             EmbeddingGenerationError: If embedding generation fails.
         """
-        self._check_rate_limit()
 
-        if not self.validate_connection():
-            raise OllamaUnavailableError(
-                f"Cannot connect to Ollama service at {self.ollama_url} "
-                f"(model: {self.model}). Check that Ollama is running and accessible."
-            )
+        def _generate(text: str) -> list[float]:
+            self._check_rate_limit()
 
-        if not self._model_pulled:
-            self.pull_model()
-
-        try:
-            response = self._request(
-                "POST",
-                f"{self.ollama_url}/api/embeddings",
-                json={"model": self.model, "prompt": text},
-                timeout=30.0,
-            )
-
-            if response.status_code != 200:
-                raise EmbeddingGenerationError(
-                    f"Failed to generate embedding for model '{self.model}': "
-                    f"HTTP {response.status_code} - {response.text} "
-                    f"(text length: {len(text)} chars)"
+            if not self.validate_connection():
+                raise OllamaUnavailableError(
+                    f"Cannot connect to Ollama service at {self.ollama_url} "
+                    f"(model: {self.model}). Check that Ollama is running and accessible."
                 )
 
-            data = response.json()
-            embedding = list(data.get("embedding", []))
-            return embedding
+            if not self._model_pulled:
+                self.pull_model()
 
-        except httpx.ConnectError as e:
+            try:
+                response = self._request(
+                    "POST",
+                    f"{self.ollama_url}/api/embeddings",
+                    json={"model": self.model, "prompt": text},
+                    timeout=30.0,
+                )
+
+                if response.status_code != 200:
+                    raise EmbeddingGenerationError(
+                        f"Failed to generate embedding for model '{self.model}': "
+                        f"HTTP {response.status_code} - {response.text} "
+                        f"(text length: {len(text)} chars)"
+                    )
+
+                data = response.json()
+                embedding = list(data.get("embedding", []))
+                return embedding
+
+            except httpx.ConnectError as e:
+                raise OllamaUnavailableError(
+                    f"Cannot connect to Ollama at {self.ollama_url}: {e}"
+                ) from e
+            except httpx.TimeoutException as e:
+                raise EmbeddingGenerationError(
+                    f"Timeout generating embedding: model={self.model}, "
+                    f"text_length={len(text)} chars, timeout=30s: {e}"
+                ) from e
+            except Exception as e:
+                raise EmbeddingGenerationError(
+                    f"Failed to generate embedding: model={self.model}, "
+                    f"text_length={len(text)} chars, error={type(e).__name__}: {e}"
+                ) from e
+
+        try:
+            return self._circuit_breaker.call(
+                self._cache.get_or_create, text, _generate
+            )
+        except CircuitBreakerError as e:
             raise OllamaUnavailableError(
-                f"Cannot connect to Ollama at {self.ollama_url}: {e}"
-            ) from e
-        except httpx.TimeoutException as e:
-            raise EmbeddingGenerationError(
-                f"Timeout generating embedding: model={self.model}, "
-                f"text_length={len(text)} chars, timeout=30s: {e}"
-            ) from e
-        except Exception as e:
-            raise EmbeddingGenerationError(
-                f"Failed to generate embedding: model={self.model}, "
-                f"text_length={len(text)} chars, error={type(e).__name__}: {e}"
+                f"Circuit breaker open: {e}. Service may be unavailable."
             ) from e
 
+    @async_timing("embedding_generate_async")
     async def generate_async(self, text: str) -> list[float]:
-        await self._check_rate_limit_async()
+        """Generate an embedding for the given text asynchronously.
 
-        if not await self.validate_connection_async():
-            raise OllamaUnavailableError(
-                f"Cannot connect to Ollama at {self.ollama_url}"
-            )
+        Uses cache to avoid redundant API calls for duplicate texts.
 
-        if not self._model_pulled:
-            await self.pull_model_async()
+        Args:
+            text: Text to generate embedding for.
 
-        try:
-            response = await self._request_async(
-                "POST",
-                f"{self.ollama_url}/api/embeddings",
-                json={"model": self.model, "prompt": text},
-                timeout=30.0,
-            )
+        Returns:
+            List of float values representing the embedding.
 
-            if response.status_code != 200:
-                raise EmbeddingGenerationError(
-                    f"Failed to generate embedding for model '{self.model}': "
-                    f"HTTP {response.status_code} - {response.text} "
-                    f"(text length: {len(text)} chars)"
+        Raises:
+            OllamaUnavailableError: If Ollama service is unavailable.
+            EmbeddingGenerationError: If embedding generation fails.
+        """
+
+        async def _generate_async(text: str) -> list[float]:
+            await self._check_rate_limit_async()
+
+            if not await self.validate_connection_async():
+                raise OllamaUnavailableError(
+                    f"Cannot connect to Ollama at {self.ollama_url}"
                 )
 
-            data = response.json()
-            embedding = list(data.get("embedding", []))
-            return embedding
+            if not self._model_pulled:
+                await self.pull_model_async()
 
-        except httpx.ConnectError as e:
-            raise OllamaUnavailableError(
-                f"Cannot connect to Ollama at {self.ollama_url}: {e}"
-            ) from e
-        except httpx.TimeoutException as e:
-            raise EmbeddingGenerationError(
-                f"Timeout generating embedding: model={self.model}, "
-                f"text_length={len(text)} chars, timeout=30s: {e}"
-            ) from e
-        except Exception as e:
-            raise EmbeddingGenerationError(
-                f"Failed to generate embedding: model={self.model}, "
-                f"text_length={len(text)} chars, error={type(e).__name__}: {e}"
-            ) from e
+            try:
+                response = await self._request_async(
+                    "POST",
+                    f"{self.ollama_url}/api/embeddings",
+                    json={"model": self.model, "prompt": text},
+                    timeout=30.0,
+                )
 
+                if response.status_code != 200:
+                    raise EmbeddingGenerationError(
+                        f"Failed to generate embedding for model '{self.model}': "
+                        f"HTTP {response.status_code} - {response.text} "
+                        f"(text length: {len(text)} chars)"
+                    )
+
+                data = response.json()
+                embedding = list(data.get("embedding", []))
+                return embedding
+
+            except httpx.ConnectError as e:
+                raise OllamaUnavailableError(
+                    f"Cannot connect to Ollama at {self.ollama_url}: {e}"
+                ) from e
+            except httpx.TimeoutException as e:
+                raise EmbeddingGenerationError(
+                    f"Timeout generating embedding: model={self.model}, "
+                    f"text_length={len(text)} chars, timeout=30s: {e}"
+                ) from e
+            except Exception as e:
+                raise EmbeddingGenerationError(
+                    f"Failed to generate embedding: model={self.model}, "
+                    f"text_length={len(text)} chars, error={type(e).__name__}: {e}"
+                ) from e
+
+        return await self._cache.get_or_create_async(text, _generate_async)
+
+    @timing("embedding_generate_batch")
     def generate_batch(self, texts: list[str]) -> list[list[float]]:
-        """Generate embeddings for a batch of texts.
+        """Generate embeddings for a batch of texts in parallel.
+
+        Uses thread pool for concurrent embedding generation while
+        respecting rate limits and leveraging cache.
 
         Args:
             texts: List of texts to generate embeddings for.
 
         Returns:
-            List of embedding vectors.
+            List of embedding vectors in original order.
         """
-        return [self.generate(text) for text in texts]
+        from concurrent.futures import ThreadPoolExecutor, as_completed
 
+        with ThreadPoolExecutor(max_workers=min(len(texts), 10)) as executor:
+            future_to_idx = {
+                executor.submit(self.generate, text): i for i, text in enumerate(texts)
+            }
+
+            results: dict[int, list[float]] = {}
+
+            for future in as_completed(future_to_idx):
+                idx = future_to_idx[future]
+                results[idx] = future.result()
+
+            return [results[i] for i in range(len(texts))]
+
+    @async_timing("embedding_generate_batch_async")
     async def generate_batch_async(self, texts: list[str]) -> list[list[float]]:
-        """Generate embeddings for a batch of texts asynchronously.
+        """Generate embeddings for a batch of texts concurrently.
+
+        Uses asyncio.gather for concurrent embedding generation while
+        respecting rate limits and leveraging cache.
 
         Args:
             texts: List of texts to generate embeddings for.
@@ -483,8 +547,10 @@ class EmbeddingGenerator(ValidatableService):
         Returns:
             List of embedding vectors.
         """
-        return [await self._generate_async_with_rate_limit(text) for text in texts]
+        results = await asyncio.gather(*[self.generate_async(text) for text in texts])
+        return list(results)
 
     async def _generate_async_with_rate_limit(self, text: str) -> list[float]:
-        await self._check_rate_limit_async()
-        return await self.generate_async(text)
+        # Deprecated - use generate_async directly which now handles caching
+        result: list[float] = await self.generate_async(text)
+        return result

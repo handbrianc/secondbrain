@@ -277,25 +277,19 @@ class DocumentIngestor:
                         }
                     )
 
-            # Generate embeddings for this file's chunks
+            # Generate embeddings sequentially (cache handles deduplication)
             chunk_to_embedding: dict[int, list[float]] = {}
-            with ThreadPoolExecutor(max_workers=10) as executor:
-                future_to_hash: dict[Any, int] = {}
-                for c in all_chunks:
-                    future = executor.submit(embedding_gen.generate, c["text"])
-                    future_to_hash[future] = c["text_hash"]
 
-                for future in as_completed(future_to_hash):
-                    text_hash = future_to_hash.pop(future)
-                    try:
-                        embedding = future.result()
-                        chunk_to_embedding[text_hash] = embedding
-                    except (OllamaUnavailableError, EmbeddingGenerationError) as e:
-                        logger.error(f"Failed to generate embedding for chunk: {e}")
-                    except Exception as e:
-                        logger.error(
-                            f"Unexpected error generating embedding for chunk: {e}"
-                        )
+            for c in all_chunks:
+                try:
+                    embedding = embedding_gen.generate(c["text"])
+                    chunk_to_embedding[c["text_hash"]] = embedding
+                except (OllamaUnavailableError, EmbeddingGenerationError) as e:
+                    logger.error(f"Failed to generate embedding for chunk: {e}")
+                except Exception as e:
+                    logger.error(
+                        f"Unexpected error generating embedding for chunk: {e}"
+                    )
 
             # Build documents for storage
             docs_to_store: list[dict[str, Any]] = []

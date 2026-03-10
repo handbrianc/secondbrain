@@ -138,6 +138,28 @@ class EmbeddingCache:
         self.set(text, embedding)
         return embedding
 
+    async def get_or_create_async(
+        self, text: str, generate_fn: Callable[[str], Any]
+    ) -> list[float]:
+        """Get embedding from cache or generate and cache it asynchronously.
+
+        This is a convenience method that combines cache lookup and async generation.
+
+        Args:
+            text: Text to get or generate embedding for.
+            generate_fn: Async function that generates embedding for the text.
+
+        Returns:
+            Embedding vector (from cache or newly generated).
+        """
+        cached = self.get(text)
+        if cached is not None:
+            return cached
+
+        embedding: list[float] = await generate_fn(text)
+        self.set(text, embedding)
+        return embedding
+
     def clear(self) -> None:
         """Clear all cached embeddings and reset statistics."""
         with self._lock:

@@ -434,6 +434,80 @@ def _display_health_text(status: HealthStatus) -> None:
         console.print(f"  {icon} {service}")
 
 
+@cli.command()
+@handle_cli_errors
+@click.option("--reset", "-r", is_flag=True, help="Reset all metrics")
+@click.pass_context
+def metrics(ctx: click.Context, reset: bool) -> None:
+    """Show performance metrics and statistics."""
+    from secondbrain.utils.perf_monitor import metrics as perf_metrics
+
+    if reset:
+        perf_metrics.reset()
+        console.print("[green]All metrics reset[/green]")
+        return
+
+    all_metrics = [
+        "embedding_generate",
+        "embedding_generate_async",
+        "embedding_generate_batch",
+        "embedding_generate_batch_async",
+        "storage_store",
+        "storage_store_batch",
+        "storage_search",
+        "storage_store_async",
+        "storage_store_batch_async",
+        "storage_search_async",
+    ]
+
+    console.print("[bold]Performance Metrics[/bold]")
+    console.print("=" * 60)
+
+    has_data = False
+    for metric_name in all_metrics:
+        stats = perf_metrics.get_stats(metric_name)
+        if stats and stats["count"] > 0:
+            has_data = True
+            console.print(f"\n[bold]{metric_name}[/bold]")
+            console.print(f"  Count: {stats['count']}")
+            console.print(f"  Total: {stats['total_seconds']:.3f}s")
+            console.print(f"  Avg: {stats['avg_seconds']:.3f}s")
+            console.print(f"  Min: {stats['min_seconds']:.3f}s")
+            console.print(f"  Max: {stats['max_seconds']:.3f}s")
+
+    if not has_data:
+        console.print(
+            "[yellow]No metrics collected yet. Run some operations first.[/yellow]"
+        )
+
+
+@cli.command()
+@handle_cli_errors
+@click.option("--reset", "-r", is_flag=True, help="Reset circuit breakers")
+@click.pass_context
+def circuit_breaker(ctx: click.Context, reset: bool) -> None:
+    """Show circuit breaker status."""
+    from secondbrain.embedding import EmbeddingGenerator
+    from secondbrain.utils.circuit_breaker import CircuitBreaker
+
+    embed_gen = EmbeddingGenerator()
+    cb = embed_gen._circuit_breaker
+
+    if reset:
+        cb.reset()
+        console.print("[green]Circuit breaker reset[/green]")
+        return
+
+    stats = cb.get_stats()
+    console.print("[bold]Circuit Breaker Status[/bold]")
+    console.print(f"  State: {stats['state']}")
+    console.print(f"  Failure count: {stats['failure_count']}")
+    console.print(f"  Success count: {stats['success_count']}")
+    console.print(f"  Half-open calls: {stats['half_open_calls']}")
+    if stats["last_failure_time"]:
+        console.print(f"  Last failure: {stats['last_failure_time']:.3f}s ago")
+
+
 def main() -> None:
     """Entry point for the CLI."""
     cli(obj={})
