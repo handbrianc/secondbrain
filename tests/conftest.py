@@ -5,6 +5,7 @@ from __future__ import annotations
 import atexit
 import contextlib
 import shutil
+from collections.abc import Generator
 from pathlib import Path
 from typing import Any, TypeVar
 from unittest.mock import MagicMock
@@ -14,6 +15,52 @@ import pytest
 from secondbrain.config import Config
 
 T = TypeVar("T")
+
+
+@pytest.fixture
+def storage_config_mock() -> MagicMock:
+
+    config = MagicMock()
+    config.mongo_uri = "mongodb://localhost:27017"
+    config.mongo_db = "secondbrain"
+    config.mongo_collection = "embeddings"
+    config.embedding_dimensions = 384
+    return config
+
+
+@pytest.fixture
+def storage_with_mocks(storage_config_mock: MagicMock) -> Generator[Any, None, None]:
+    # Create a VectorStorage using mocked config to avoid real DB access
+    from unittest.mock import patch
+
+    from secondbrain.storage import VectorStorage
+
+    with patch("secondbrain.storage.get_config", return_value=storage_config_mock):
+        storage = VectorStorage()
+        yield storage
+        storage.close()
+
+
+@pytest.fixture
+def mock_mongo_client() -> MagicMock:
+    """Mock MongoDB client with ping/compat methods.
+
+    This can be used to patch pymongo.MongoClient in tests that exercise
+    Mongo interactions without requiring a real database.
+    """
+    mock = MagicMock()
+    mock.ping.return_value = True  # some code paths use a ping check
+    mock.admin.command.return_value = {"ok": 1}
+    mock.drop_database.return_value = None
+    # Support dict-like access (db[collection]) if the code uses it
+    mock.__getitem__.return_value = MagicMock()
+    return mock
+
+
+@pytest.fixture
+def mock_collection() -> MagicMock:
+    """Generic mock for a MongoDB collection."""
+    return MagicMock()
 
 
 @pytest.fixture(scope="session")

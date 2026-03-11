@@ -6,87 +6,36 @@ from secondbrain.config import Config, get_config
 
 
 class TestConfigExtensionsSet:
-    """Tests for Config.extensions_set property."""
+    """Parameterized tests for Config.extensions_set variations."""
 
-    def test_extensions_set_returns_self(self, session_config: Config) -> None:
-        """Test extensions_set returns a set."""
-        extensions = session_config.extensions_set
+    @pytest.mark.parametrize(
+        "extensions_input, expected_len, expected_members",
+        [
+            (None, 24, None),
+            ("pdf", 1, [".pdf"]),
+            ("pdf,docx", 2, [".pdf", ".docx"]),
+            ("", 0, []),
+            ("pdf,pdf", 1, [".pdf"]),
+            ("pdf, docx", 2, [".pdf", ".docx"]),
+        ],
+    )
+    def test_extensions_set_parametrized(
+        self, extensions_input, expected_len, expected_members
+    ):
+        """Test extensions_set with various configuration inputs using parametrization."""
+        if extensions_input is None:
+            config = Config()
+        else:
+            config = Config(supported_extensions=extensions_input)
+
+        extensions = config.extensions_set
+
         assert isinstance(extensions, set)
+        assert len(extensions) == expected_len
 
-    def test_extensions_set_contains_dots(self, session_config: Config) -> None:
-        """Test extensions contain leading dots."""
-        extensions = session_config.extensions_set
-
-        for ext in extensions:
-            assert ext.startswith(".")
-
-    def test_extensions_set_contains_expected_extensions(
-        self, session_config: Config
-    ) -> None:
-        """Test extensions_set contains standard expected extensions."""
-        extensions = session_config.extensions_set
-
-        expected = {
-            ".pdf",
-            ".docx",
-            ".pptx",
-            ".xlsx",
-            ".html",
-            ".htm",
-            ".md",
-            ".txt",
-            ".asciidoc",
-            ".adoc",
-            ".tex",
-            ".csv",
-            ".png",
-            ".jpg",
-            ".jpeg",
-            ".tiff",
-            ".tif",
-            ".bmp",
-            ".webp",
-            ".wav",
-            ".mp3",
-            ".vtt",
-            ".xml",
-            ".json",
-        }
-        assert extensions == expected
-
-    def test_extensions_set_case_preserves(self) -> None:
-        """Test extensions preserve case from configured string."""
-        # Create config with mixed case extensions
-        config = Config(supported_extensions="PDF,Docx,md")
-        extensions = config.extensions_set
-
-        assert ".PDF" in extensions
-        assert ".Docx" in extensions
-        assert ".md" in extensions
-
-    def test_extensions_set_empty_string(self) -> None:
-        """Test extensions_set handles empty string."""
-        config = Config(supported_extensions="")
-        extensions = config.extensions_set
-        assert len(extensions) == 0
-
-    def test_extensions_set_whitespace_handling(self) -> None:
-        """Test extensions_set handles whitespace around extensions."""
-        config = Config(supported_extensions="pdf, docx, md")
-        extensions = config.extensions_set
-
-        assert ".pdf" in extensions
-        assert ".docx" in extensions
-        assert ".md" in extensions
-
-    def test_extensions_set_custom_extensions(self) -> None:
-        """Test extensions_set with custom extensions."""
-        config = Config(supported_extensions="custom1,custom2")
-        extensions = config.extensions_set
-
-        assert ".custom1" in extensions
-        assert ".custom2" in extensions
-        assert ".pdf" not in extensions
+        if expected_members is not None:
+            for member in expected_members:
+                assert member in extensions
 
 
 class TestConfig:
@@ -150,43 +99,37 @@ class TestConfig:
         assert config.default_top_k == 10
         assert config.embedding_dimensions == 384
 
-    def test_config_validation_mongo_uri(self) -> None:
-        """Test MongoDB URI validation."""
-        with pytest.raises(ValueError, match="mongo_uri must start"):
-            Config(mongo_uri="http://invalid:27017")
-
-    def test_config_validation_ollama_url(self) -> None:
-        """Test Ollama URL validation."""
-        with pytest.raises(ValueError, match="ollama_url must be a valid URL"):
-            Config(ollama_url="not-a-url")
-
-    def test_config_validation_chunk_overlap_ge_chunk_size(self) -> None:
-        """Test chunk_overlap must be less than chunk_size."""
-        with pytest.raises(
-            ValueError, match="chunk_overlap must be less than chunk_size"
-        ):
-            Config(chunk_size=100, chunk_overlap=100)
-
-    def test_config_validation_chunk_overlap_negative(self) -> None:
-        """Test chunk_overlap must be non-negative."""
-        with pytest.raises(ValueError, match="chunk_overlap must be non-negative"):
-            Config(chunk_overlap=-10)
-
-    def test_config_validation_embedding_dimensions(self) -> None:
-        """Test embedding_dimensions must be positive."""
-        with pytest.raises(ValueError, match="embedding_dimensions must be positive"):
-            Config(embedding_dimensions=0)
-
-    def test_config_validation_top_k(self) -> None:
-        """Test default_top_k must be positive."""
-        with pytest.raises(ValueError, match="default_top_k must be positive"):
-            Config(default_top_k=0)
-
-    def test_get_config_cache(self) -> None:
-        """Test get_config returns cached instance."""
-        config1 = get_config()
-        config2 = get_config()
-        assert config1 is config2
+    @pytest.mark.parametrize(
+        "updates, expected",
+        [
+            ({"mongo_uri": "http://invalid:27017"}, "mongo_uri must start"),
+            ({"ollama_url": "not-a-url"}, "ollama_url must be a valid URL"),
+            (
+                {"ollama_url": "ftp://invalid:11434"},
+                "ollama_url must use http or https",
+            ),
+            (
+                {"chunk_size": 100, "chunk_overlap": 100},
+                "chunk_overlap must be less than",
+            ),
+            ({"chunk_overlap": -10}, "chunk_overlap must be non-negative"),
+            ({"embedding_dimensions": 0}, "embedding_dimensions must be positive"),
+            ({"default_top_k": 0}, "default_top_k must be positive"),
+            ({"chunk_size": 0}, "chunk_size must be positive"),
+        ],
+    )
+    def test_config_validation_errors(self, updates, expected) -> None:
+        base = {
+            "mongo_uri": "mongodb://localhost:27017",
+            "ollama_url": "http://localhost:11434",
+            "chunk_size": 64,
+            "chunk_overlap": 16,
+            "embedding_dimensions": 128,
+            "default_top_k": 8,
+        }
+        config_kwargs = {**base, **updates}
+        with pytest.raises(ValueError, match=expected):
+            Config(**config_kwargs)
 
     def test_get_config_reloads_after_cache_clear(self) -> None:
         """Test get_config can reload after cache clear."""

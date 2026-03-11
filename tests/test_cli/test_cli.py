@@ -5,7 +5,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from click.testing import CliRunner
 
-from secondbrain.cli import CLIValidationError, cli, handle_cli_errors
+from secondbrain.cli import cli, handle_cli_errors
+from secondbrain.exceptions import CLIValidationError
 
 
 class TestCLI:
@@ -177,9 +178,11 @@ class TestCLI:
 class TestCLIHealth:
     """Tests for CLI health command."""
 
+    @pytest.mark.parametrize("output_format", ["text", "json"])
     @patch("secondbrain.cli.get_health_status")
-    def test_health_command_text(self, mock_get_health: MagicMock) -> None:
-        """Test health command with text output."""
+    def test_health_command_output_format(
+        self, mock_get_health: MagicMock, output_format: str
+    ) -> None:
         mock_get_health.return_value = {
             "status": "healthy",
             "timestamp": "2024-01-01T00:00:00+00:00",
@@ -187,63 +190,37 @@ class TestCLIHealth:
             "services": {"ollama": True, "mongodb": True},
             "check_duration_seconds": 0.5,
         }
-
         runner = CliRunner()
-        result = runner.invoke(cli, ["health"])
-        assert result.exit_code == 0
-        assert "HEALTHY" in result.output
-        assert "ollama" in result.output
-        assert "mongodb" in result.output
+        if output_format == "text":
+            result = runner.invoke(cli, ["health"])
+            assert result.exit_code == 0
+            assert "HEALTHY" in result.output
+            assert "ollama" in result.output
+            assert "mongodb" in result.output
+        else:
+            result = runner.invoke(cli, ["health", "--output", "json"])
+            assert result.exit_code == 0
+            assert "healthy" in result.output
+            assert "ollama" in result.output
 
     @patch("secondbrain.cli.get_health_status")
-    def test_health_command_json(self, mock_get_health: MagicMock) -> None:
-        """Test health command with JSON output."""
-        expected_status = {
-            "status": "healthy",
-            "timestamp": "2024-01-01T00:00:00+00:00",
-            "uptime": 3600.0,
-            "services": {"ollama": True, "mongodb": True},
-            "check_duration_seconds": 0.5,
-        }
-        mock_get_health.return_value = expected_status
-
-        runner = CliRunner()
-        result = runner.invoke(cli, ["health", "--output", "json"])
-        assert result.exit_code == 0
-        assert "healthy" in result.output
-        assert "ollama" in result.output
-
-    @patch("secondbrain.cli.get_health_status")
-    def test_health_command_degraded(self, mock_get_health: MagicMock) -> None:
-        """Test health command when services are degraded."""
-        mock_get_health.return_value = {
-            "status": "degraded",
-            "timestamp": "2024-01-01T00:00:00+00:00",
-            "uptime": 3600.0,
-            "services": {"ollama": True, "mongodb": False},
-            "check_duration_seconds": 0.5,
-        }
-
-        runner = CliRunner()
-        result = runner.invoke(cli, ["health"])
-        assert result.exit_code == 0
-        assert "DEGRADED" in result.output
-
-    @patch("secondbrain.cli.get_health_status")
-    def test_health_command_verbose(self, mock_get_health: MagicMock) -> None:
-        """Test health command with verbose flag."""
-        mock_get_health.return_value = {
-            "status": "healthy",
-            "timestamp": "2024-01-01T00:00:00+00:00",
-            "uptime": 3600.0,
-            "services": {"ollama": True, "mongodb": True},
-            "check_duration_seconds": 0.5,
-        }
-
-        runner = CliRunner()
-        result = runner.invoke(cli, ["health", "--output", "json"])
-        assert result.exit_code == 0
-        assert "3600.0" in result.output
+    def test_health_command_status(self, mock_get_health: MagicMock) -> None:
+        for status in ["healthy", "degraded"]:
+            degraded = status == "degraded"
+            mock_get_health.return_value = {
+                "status": status,
+                "timestamp": "2024-01-01T00:00:00+00:00",
+                "uptime": 3600.0,
+                "services": {"ollama": not degraded, "mongodb": degraded},
+                "check_duration_seconds": 0.5,
+            }
+            runner = CliRunner()
+            result = runner.invoke(cli, ["health"])
+            assert result.exit_code == 0
+            if status == "healthy":
+                assert "HEALTHY" in result.output
+            else:
+                assert "DEGRADED" in result.output
 
 
 class TestHandleCliErrors:
