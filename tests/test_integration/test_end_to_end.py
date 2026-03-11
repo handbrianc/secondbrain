@@ -30,23 +30,6 @@ warnings.filterwarnings(
     module="docling",
 )
 
-# Check if docling can be imported properly (some versions have transformers incompatibility)
-_DOCLING_AVAILABLE = True
-_DOCLING_ERROR = None
-try:
-    from docling.document_converter import DocumentConverter
-
-    # Try to actually use docling to detect runtime import errors
-    _test_converter = DocumentConverter()
-except (ImportError, AttributeError) as e:
-    _DOCLING_AVAILABLE = False
-    _DOCLING_ERROR = str(e)
-    warnings.warn(
-        f"docling not available, skipping PDF ingestion tests: {_DOCLING_ERROR}",
-        RuntimeWarning,
-        stacklevel=2,
-    )
-
 
 @pytest.fixture
 def mongomock_client() -> Generator[mongomock.MongoClient[Any], None, None]:
@@ -62,10 +45,6 @@ class TestDocumentIngestion:
     """Tests for document ingestion end-to-end workflow."""
 
     @pytest.mark.slow
-    @pytest.mark.skipif(
-        not _DOCLING_AVAILABLE,
-        reason=f"docling not available: {_DOCLING_ERROR}",
-    )
     def test_ingest_single_pdf_document(
         self,
         sample_pdf_path: Path,
@@ -446,10 +425,6 @@ class TestIntegrationDataFlow:
             assert "test0" in chunk["source_file"]
 
     @pytest.mark.slow
-    @pytest.mark.skipif(
-        not _DOCLING_AVAILABLE,
-        reason=f"docling not available: {_DOCLING_ERROR}",
-    )
     def test_chunk_overlapping_text(
         self,
         sample_pdf_path: Path,
