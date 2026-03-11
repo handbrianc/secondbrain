@@ -126,7 +126,7 @@ See [TESTING.md](docs/TESTING.md) for detailed testing documentation.
 
 ### Coverage Cleanup
 
-Coverage files (`.coverage*` and `htmlcov/`) are automatically cleaned up after each test run. To manually cleanup:
+To manually cleanup coverage files after test runs:
 
 ```bash
 ./scripts/cleanup_coverage.sh

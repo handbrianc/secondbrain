@@ -118,7 +118,7 @@ exclude_dirs = ["tests"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--cov=secondbrain --cov-report=term-missing --cov-fail-under=80 -m 'not slow' -n auto --dist loadscope --cov-context=test"
+addopts = "--cov=secondbrain --cov-report=term-missing --cov-fail-under=80 -m 'not slow' -n auto --dist loadscope"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 markers = [

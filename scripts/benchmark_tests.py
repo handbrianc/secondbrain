@@ -55,8 +55,6 @@ def run_tests(args: list[str]) -> TestResult:
         cwd=Path(__file__).parent.parent,
     )
 
-    cleanup_coverage_files()
-
     total_time = time.time() - start_time
 
     slow_tests = []

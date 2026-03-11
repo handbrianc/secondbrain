@@ -5,7 +5,6 @@ from __future__ import annotations
 import atexit
 import contextlib
 import shutil
-import subprocess
 from pathlib import Path
 from typing import Any, TypeVar
 from unittest.mock import MagicMock
@@ -490,17 +489,7 @@ def pytest_sessionfinish(session: Any, exitstatus: int) -> None:
 def pytest_terminal_summary(
     terminalreporter: Any, exitstatus: int, config: Any
 ) -> None:
-    try:
-        scripts_dir = Path(__file__).parent.parent / "scripts"
-        cleanup_script = scripts_dir / "cleanup_coverage.sh"
-        if cleanup_script.exists():
-            subprocess.run(
-                [str(cleanup_script)],
-                check=False,
-                cwd=scripts_dir.parent,
-            )
-    except Exception:
-        pass
+    pass
 
 
 # Register cleanup handlers for atexit to catch any remaining resources

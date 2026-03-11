@@ -300,7 +300,7 @@ pytest --cov=secondbrain --cov-fail-under=80
 
 ### Coverage Cleanup
 
-Coverage files (`.coverage*` and `htmlcov/`) are automatically cleaned up after each test run via the `pytest_terminal_summary` hook. To manually cleanup:
+To manually cleanup coverage files after test runs:
 
 ```bash
 ./scripts/cleanup_coverage.sh
