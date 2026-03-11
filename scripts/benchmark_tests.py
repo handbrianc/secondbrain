@@ -2,6 +2,7 @@
 """Test performance benchmark script."""
 
 import contextlib
+import shutil
 import subprocess
 import sys
 import time
@@ -14,6 +15,23 @@ class TestResult:
     total_time: float
     num_tests: int
     slow_tests: list[tuple[float, str]]
+
+
+def cleanup_coverage_files() -> None:
+    project_root = Path(__file__).parent.parent
+    coverage_patterns = [
+        project_root / ".coverage",
+        project_root / ".coverage.*",
+    ]
+
+    for pattern in coverage_patterns:
+        for coverage_file in pattern.parent.glob(pattern.name):
+            with contextlib.suppress(OSError):
+                coverage_file.unlink()
+
+    htmlcov_dir = project_root / "htmlcov"
+    if htmlcov_dir.exists():
+        shutil.rmtree(htmlcov_dir, ignore_errors=True)
 
 
 def run_tests(args: list[str]) -> TestResult:
@@ -36,6 +54,8 @@ def run_tests(args: list[str]) -> TestResult:
         text=True,
         cwd=Path(__file__).parent.parent,
     )
+
+    cleanup_coverage_files()
 
     total_time = time.time() - start_time
 

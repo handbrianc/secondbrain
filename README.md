@@ -124,6 +124,14 @@ The test suite supports different execution profiles:
 
 See [TESTING.md](docs/TESTING.md) for detailed testing documentation.
 
+### Coverage Cleanup
+
+Coverage files (`.coverage*` and `htmlcov/`) are automatically cleaned up after each test run. To manually cleanup:
+
+```bash
+./scripts/cleanup_coverage.sh
+```
+
 ### Performance Tips
 
 - Use `--batch-size` for parallel processing

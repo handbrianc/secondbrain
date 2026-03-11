@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import atexit
 import contextlib
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Any, TypeVar
 from unittest.mock import MagicMock
@@ -445,6 +447,23 @@ def mock_config_defaults() -> None:
         os.environ[key] = str(value)
 
 
+def _cleanup_coverage_files() -> None:
+    project_root = Path(__file__).parent.parent.parent
+    coverage_patterns = [
+        project_root / ".coverage",
+        project_root / ".coverage.*",
+    ]
+
+    for pattern in coverage_patterns:
+        for coverage_file in pattern.parent.glob(pattern.name):
+            with contextlib.suppress(OSError):
+                coverage_file.unlink()
+
+    htmlcov_dir = project_root / "htmlcov"
+    if htmlcov_dir.exists():
+        shutil.rmtree(htmlcov_dir, ignore_errors=True)
+
+
 def _cleanup_mongodb() -> None:
     """Cleanup MongoDB test database."""
     try:
@@ -462,10 +481,26 @@ def _cleanup_mongodb() -> None:
 
 
 def pytest_sessionfinish(session: Any, exitstatus: int) -> None:
-    # Cleanup after all tests complete
     _cleanup_mongodb()
     _cleanup_storage()
     _cleanup_embedding()
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_terminal_summary(
+    terminalreporter: Any, exitstatus: int, config: Any
+) -> None:
+    try:
+        scripts_dir = Path(__file__).parent.parent / "scripts"
+        cleanup_script = scripts_dir / "cleanup_coverage.sh"
+        if cleanup_script.exists():
+            subprocess.run(
+                [str(cleanup_script)],
+                check=False,
+                cwd=scripts_dir.parent,
+            )
+    except Exception:
+        pass
 
 
 # Register cleanup handlers for atexit to catch any remaining resources

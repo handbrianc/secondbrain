@@ -11,6 +11,7 @@ from typing import Any, TypeVar, cast
 import click
 from rich.console import Console
 from rich.table import Table
+from typing_extensions import ParamSpec
 
 from secondbrain.config import get_config
 from secondbrain.exceptions import CLIValidationError
@@ -23,10 +24,11 @@ logger = logging.getLogger(__name__)
 MAX_LIST_LIMIT = 100000
 
 
-T = TypeVar("T", bound=Callable[..., Any])
+P = ParamSpec("P")
+T = TypeVar("T")
 
 
-def handle_cli_errors(func: T) -> T:
+def handle_cli_errors(func: Callable[P, T]) -> Callable[P, T]:
     """Decorator to handle CLI errors gracefully.
 
     Catches specific exceptions, displays user-friendly error messages,
@@ -40,7 +42,7 @@ def handle_cli_errors(func: T) -> T:
     """
 
     @wraps(func)
-    def wrapper(*args: Any, **kwargs: Any) -> Any:
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
         try:
             return func(*args, **kwargs)
         except (ValueError, FileNotFoundError, CLIValidationError) as e:
@@ -54,7 +56,7 @@ def handle_cli_errors(func: T) -> T:
             console.print("[yellow]Run with --verbose for full traceback[/yellow]")
             sys.exit(1)
 
-    return wrapper  # type: ignore[return-value]
+    return wrapper
 
 
 @click.group()
