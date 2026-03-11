@@ -99,6 +99,7 @@ class EmbeddingCache:
         """Store an embedding in the cache.
 
         If the cache is at capacity, the least recently used entry is evicted.
+        If max_size is 0, nothing is cached.
 
         Args:
             text: Text to use as cache key.
@@ -107,6 +108,10 @@ class EmbeddingCache:
         key = self._generate_key(text)
 
         with self._lock:
+            # If max_size is 0, don't cache anything
+            if self._max_size == 0:
+                return
+
             if key in self._cache:
                 self._cache.move_to_end(key)
                 self._cache[key] = embedding

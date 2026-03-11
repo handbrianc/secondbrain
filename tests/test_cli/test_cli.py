@@ -281,3 +281,171 @@ class TestHandleCliErrors:
             error_func()
 
         assert exc_info.value.code == 1
+
+
+class TestCLIMetricsCommand:
+    """Tests for metrics command."""
+
+    @patch("secondbrain.utils.perf_monitor.metrics.get_stats")
+    def test_metrics_command_with_data(self, mock_get_stats: MagicMock) -> None:
+        """Test metrics command displays performance data."""
+        mock_get_stats.return_value = {
+            "count": 10,
+            "total_seconds": 1.5,
+            "avg_seconds": 0.15,
+            "min_seconds": 0.1,
+            "max_seconds": 0.3,
+        }
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["metrics"])
+
+        assert result.exit_code == 0
+        assert "Performance Metrics" in result.output
+        assert "Count: 10" in result.output
+
+    @patch("secondbrain.utils.perf_monitor.metrics.get_stats")
+    def test_metrics_command_empty_data(self, mock_get_stats: MagicMock) -> None:
+        """Test metrics command when no metrics collected."""
+        mock_get_stats.return_value = None
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["metrics"])
+
+        assert result.exit_code == 0
+        assert "No metrics collected" in result.output
+
+    @patch("secondbrain.utils.perf_monitor.metrics.reset")
+    def test_metrics_command_reset(self, mock_reset: MagicMock) -> None:
+        """Test metrics command with reset flag."""
+        runner = CliRunner()
+        result = runner.invoke(cli, ["metrics", "--reset"])
+
+        assert result.exit_code == 0
+        assert "All metrics reset" in result.output
+        mock_reset.assert_called_once()
+
+
+class TestCLICircuitBreakerCommand:
+    """Tests for circuit breaker command."""
+
+    @patch("secondbrain.utils.circuit_breaker.CircuitBreaker.get_stats")
+    def test_circuit_breaker_command(self, mock_get_stats: MagicMock) -> None:
+        """Test circuit breaker command displays status."""
+        mock_get_stats.return_value = {
+            "state": "closed",
+            "failure_count": 0,
+            "success_count": 10,
+            "last_failure_time": None,
+            "half_open_calls": 0,
+        }
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["circuit-breaker"])
+
+        assert result.exit_code == 0
+        assert "Circuit Breaker Status" in result.output
+        assert "State: closed" in result.output
+
+    @patch("secondbrain.utils.circuit_breaker.CircuitBreaker.get_stats")
+    def test_circuit_breaker_command_open_state(
+        self, mock_get_stats: MagicMock
+    ) -> None:
+        """Test circuit breaker command with open state."""
+        mock_get_stats.return_value = {
+            "state": "open",
+            "failure_count": 5,
+            "success_count": 0,
+            "last_failure_time": 100.0,
+            "half_open_calls": 0,
+        }
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["circuit-breaker"])
+
+        assert result.exit_code == 0
+        assert "State: open" in result.output
+        assert "Failure count: 5" in result.output
+
+    @patch("secondbrain.utils.circuit_breaker.CircuitBreaker.reset")
+    def test_circuit_breaker_command_reset(self, mock_reset: MagicMock) -> None:
+        """Test circuit breaker command with reset flag."""
+        runner = CliRunner()
+        result = runner.invoke(cli, ["circuit-breaker", "--reset"])
+
+        assert result.exit_code == 0
+        assert "Circuit breaker reset" in result.output
+        mock_reset.assert_called_once()
+
+
+class TestCLIDeleteValidation:
+    """Tests for delete command validation."""
+
+    def test_delete_requires_option(self) -> None:
+        """Test delete command requires --source, --chunk-id, or --all."""
+        runner = CliRunner()
+        result = runner.invoke(cli, ["delete"])
+
+        assert result.exit_code != 0
+        assert "Error" in result.output
+
+    def test_delete_rejects_multiple_options(self) -> None:
+        """Test delete rejects multiple conflicting options."""
+        runner = CliRunner()
+        result = runner.invoke(
+            cli, ["delete", "--source", "test.pdf", "--chunk-id", "123"]
+        )
+
+        assert result.exit_code != 0
+        assert "Error" in result.output or "Specify only one" in result.output
+
+    @patch("secondbrain.management.Deleter")
+    def test_delete_with_source(self, mock_deleter_class: MagicMock) -> None:
+        """Test delete command with source option."""
+        mock_deleter = MagicMock()
+        mock_deleter.delete.return_value = 5
+        mock_deleter_class.return_value = mock_deleter
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["delete", "--source", "test.pdf", "--yes"])
+
+        assert result.exit_code == 0
+        assert "Deleted" in result.output
+        assert "document" in result.output
+
+    @patch("secondbrain.management.Deleter")
+    def test_delete_with_chunk_id(self, mock_deleter_class: MagicMock) -> None:
+        """Test delete command with chunk-id option."""
+        mock_deleter = MagicMock()
+        mock_deleter.delete.return_value = 1
+        mock_deleter_class.return_value = mock_deleter
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["delete", "--chunk-id", "test-123", "--yes"])
+
+        assert result.exit_code == 0
+        assert "Deleted" in result.output
+        assert "document" in result.output
+
+    @patch("secondbrain.management.Deleter")
+    def test_delete_all_with_confirmation(self, mock_deleter_class: MagicMock) -> None:
+        """Test delete all command with confirmation."""
+        mock_deleter = MagicMock()
+        mock_deleter.delete.return_value = 100
+        mock_deleter_class.return_value = mock_deleter
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["delete", "--all", "--yes"])
+
+        assert result.exit_code == 0
+        assert "Deleted" in result.output
+        assert "document" in result.output
+
+    @patch("secondbrain.management.Deleter")
+    def test_delete_cancelled_by_user(self, mock_deleter_class: MagicMock) -> None:
+        """Test delete command cancelled by user."""
+        runner = CliRunner()
+        result = runner.invoke(cli, ["delete", "--source", "test.pdf"], input="n\n")
+
+        assert result.exit_code == 0
+        assert "Cancelled" in result.output

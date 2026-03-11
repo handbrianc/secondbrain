@@ -1,4 +1,4 @@
-"""Tests for CircuitBreaker pattern implementation."""
+"""Tests for CircuitBreaker and EmbeddingCache pattern implementations."""
 
 import time
 from unittest.mock import MagicMock
@@ -10,6 +10,7 @@ from secondbrain.utils.circuit_breaker import (
     CircuitBreakerError,
     CircuitState,
 )
+from secondbrain.utils.embedding_cache import EmbeddingCache
 
 
 class TestCircuitBreakerInitialState:
@@ -359,3 +360,223 @@ class TestCircuitBreakerStatistics:
         stats = cb.get_stats()
         assert stats["state"] == "open"
         assert stats["last_failure_time"] is not None
+
+
+class TestEmbeddingCache:
+    """Tests for EmbeddingCache functionality."""
+
+    def test_cache_hit_returns_cached_embedding(self) -> None:
+        """Test that cache hit returns cached embedding."""
+        cache = EmbeddingCache(max_size=10)
+        text = "test text"
+        embedding = [0.1, 0.2, 0.3]
+
+        # First call - cache miss
+        result = cache.get(text)
+        assert result is None
+        assert cache.misses == 1
+
+        # Set the embedding
+        cache.set(text, embedding)
+
+        # Second call - cache hit
+        result = cache.get(text)
+        assert result == embedding
+        assert cache.hits == 1
+
+    def test_cache_miss_returns_none(self) -> None:
+        """Test that cache miss returns None."""
+        cache = EmbeddingCache(max_size=10)
+        result = cache.get("nonexistent")
+
+        assert result is None
+        assert cache.misses == 1
+
+    def test_set_updates_cache(self) -> None:
+        """Test that set stores embedding in cache."""
+        cache = EmbeddingCache(max_size=10)
+        text = "test"
+        embedding = [0.5, 0.6]
+
+        cache.set(text, embedding)
+
+        assert text in cache
+        assert cache.size == 1
+
+    def test_cache_eviction_on_max_size(self) -> None:
+        """Test that LRU eviction occurs when cache is full."""
+        cache = EmbeddingCache(max_size=3)
+
+        # Fill cache
+        cache.set("key1", [1.0])
+        cache.set("key2", [2.0])
+        cache.set("key3", [3.0])
+
+        assert cache.size == 3
+
+        # Add new key should evict least recently used (key1)
+        cache.set("key4", [4.0])
+
+        assert "key1" not in cache
+        assert "key4" in cache
+        assert cache.size == 3
+
+    def test_lru_updates_on_access(self) -> None:
+        """Test that accessing a key updates its LRU position."""
+        cache = EmbeddingCache(max_size=2)
+
+        cache.set("key1", [1.0])
+        cache.set("key2", [2.0])
+
+        # Access key1 to make it most recently used
+        cache.get("key1")
+
+        # Add new key should evict key2 (now LRU)
+        cache.set("key3", [3.0])
+
+        assert "key1" in cache
+        assert "key2" not in cache
+        assert "key3" in cache
+
+    def test_get_or_create_returns_cached_if_available(self) -> None:
+        """Test get_or_create returns cached embedding if available."""
+        cache = EmbeddingCache(max_size=10)
+        text = "test"
+        embedding = [0.1, 0.2]
+
+        cache.set(text, embedding)
+        generate_fn = MagicMock(return_value=[9.9, 9.9])
+
+        result = cache.get_or_create(text, generate_fn)
+
+        assert result == embedding
+        generate_fn.assert_not_called()
+
+    def test_get_or_create_calls_generator_on_miss(self) -> None:
+        """Test get_or_create calls generator on cache miss."""
+        cache = EmbeddingCache(max_size=10)
+        text = "test"
+        embedding = [0.1, 0.2]
+
+        generate_fn = MagicMock(return_value=embedding)
+
+        result = cache.get_or_create(text, generate_fn)
+
+        assert result == embedding
+        generate_fn.assert_called_once_with(text)
+        assert text in cache
+
+    async def test_get_or_create_async_returns_cached(self) -> None:
+        """Test async get_or_create returns cached embedding."""
+        cache = EmbeddingCache(max_size=10)
+        text = "test"
+        embedding = [0.1, 0.2]
+
+        cache.set(text, embedding)
+        generate_fn = MagicMock()
+
+        result = await cache.get_or_create_async(text, generate_fn)
+
+        assert result == embedding
+        generate_fn.assert_not_called()
+
+    async def test_get_or_create_async_calls_generator(self) -> None:
+        """Test async get_or_create calls async generator."""
+        cache = EmbeddingCache(max_size=10)
+        text = "test"
+        embedding = [0.1, 0.2]
+
+        async def async_gen(t: str) -> list[float]:
+            return embedding
+
+        result = await cache.get_or_create_async(text, async_gen)
+
+        assert result == embedding
+        assert text in cache
+
+    def test_clear_resets_cache_and_stats(self) -> None:
+        """Test that clear resets cache and statistics."""
+        cache = EmbeddingCache(max_size=10)
+
+        cache.set("key1", [1.0])
+        cache.get("key1")  # Create a hit
+        cache.get("nonexistent")  # Create a miss
+
+        assert cache.size == 1
+        assert cache.hits == 1
+        assert cache.misses == 1
+
+        cache.clear()
+
+        assert cache.size == 0
+        assert cache.hits == 0
+        assert cache.misses == 0
+        assert "key1" not in cache
+
+    def test_get_stats_returns_hit_rate(self) -> None:
+        """Test that get_stats calculates hit rate correctly."""
+        cache = EmbeddingCache(max_size=10)
+
+        cache.set("key1", [1.0])
+        cache.get("key1")  # Hit
+        cache.get("key1")  # Hit
+        cache.get("nonexistent")  # Miss
+
+        stats = cache.get_stats()
+
+        assert stats["hits"] == 2
+        assert stats["misses"] == 1
+        assert stats["hit_rate_percent"] == pytest.approx(66.67, rel=0.1)
+
+    def test_get_stats_empty_cache(self) -> None:
+        """Test get_stats with empty cache."""
+        cache = EmbeddingCache(max_size=10)
+
+        stats = cache.get_stats()
+
+        assert stats["hits"] == 0
+        assert stats["misses"] == 0
+        assert stats["size"] == 0
+        assert stats["hit_rate_percent"] == 0.0
+
+    def test_contains_returns_correct_result(self) -> None:
+        """Test __contains__ returns correct result."""
+        cache = EmbeddingCache(max_size=10)
+
+        cache.set("key1", [1.0])
+
+        assert "key1" in cache
+        assert "key2" not in cache
+
+    def test_len_returns_cache_size(self) -> None:
+        """Test __len__ returns cache size."""
+        cache = EmbeddingCache(max_size=10)
+
+        assert len(cache) == 0
+
+        cache.set("key1", [1.0])
+        cache.set("key2", [2.0])
+
+        assert len(cache) == 2
+
+    def test_update_existing_key(self) -> None:
+        """Test that updating existing key doesn't increase size."""
+        cache = EmbeddingCache(max_size=10)
+
+        cache.set("key1", [1.0])
+        cache.set("key1", [2.0])  # Update
+
+        assert cache.size == 1
+        assert cache.get("key1") == [2.0]
+
+    def test_max_size_zero(self) -> None:
+        """Test cache with max_size=0."""
+        cache = EmbeddingCache(max_size=0)
+
+        # With max_size=0, set should not store anything
+        cache.set("key1", [1.0])
+
+        # Cache should remain empty
+        assert cache.size == 0
+        assert "key1" not in cache
+        assert cache.get("key1") is None
