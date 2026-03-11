@@ -190,6 +190,168 @@ class DocumentIngestor:
                 f"(actual: {file_size / (1024 * 1024):.2f}MB)"
             )
 
+    def _collect_and_validate_files(self, path: str, recursive: bool) -> list[Path]:
+        """Collect and validate files from path.
+
+        Args:
+            path: Path to file or directory.
+            recursive: Recursively process subdirectories.
+
+        Returns:
+            List of validated file paths.
+
+        Raises:
+            ValueError: If path is invalid or files fail validation.
+        """
+        path_obj = Path(path)
+
+        if path_obj.is_file():
+            self._validate_file_path(path_obj)
+            self._validate_file_size(path_obj)
+            return [path_obj]
+        elif path_obj.is_dir():
+            files = list(path_obj.rglob("*")) if recursive else list(path_obj.glob("*"))
+            validated_files = []
+            for f in files:
+                if f.is_file() and is_supported(f):
+                    self._validate_file_path(f)
+                    self._validate_file_size(f)
+                    validated_files.append(f)
+            return validated_files
+        else:
+            raise ValueError(f"Invalid path: {path}")
+
+    def _process_file_for_storage(
+        self,
+        file_path: Path,
+        embedding_gen: Any,
+    ) -> list[dict[str, Any]] | None:
+        """Process a single file and build documents for storage.
+
+        Args:
+            file_path: Path to the file to process.
+            embedding_gen: EmbeddingGenerator instance.
+
+        Returns:
+            List of documents ready for storage, or None if processing fails.
+        """
+        from secondbrain.exceptions import (
+            EmbeddingGenerationError,
+            OllamaUnavailableError,
+        )
+
+        try:
+            # Extract text
+            segments: list[Segment] = self._extract_text(file_path)
+        except (OSError, DocumentExtractionError) as e:
+            logger.error(f"Failed to extract text from {file_path}: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error extracting text from {file_path}: {e}")
+            return None
+
+        # Chunk and build documents with embeddings
+        return self._build_documents_with_embeddings(
+            file_path=file_path,
+            segments=segments,
+            embedding_gen=embedding_gen,
+        )
+
+    def _build_documents_with_embeddings(
+        self,
+        file_path: Path,
+        segments: list[Segment],
+        embedding_gen: Any,
+    ) -> list[dict[str, Any]]:
+        """Build documents with embeddings from text segments.
+
+        Args:
+            file_path: Source file path.
+            segments: List of text segments to process.
+            embedding_gen: EmbeddingGenerator instance.
+
+        Returns:
+            List of documents ready for storage.
+        """
+        from secondbrain.exceptions import (
+            EmbeddingGenerationError,
+            OllamaUnavailableError,
+        )
+
+        # Chunk text and deduplicate
+        all_chunks: list[dict[str, Any]] = []
+        seen_hashes = set()
+
+        for i, segment in enumerate(segments):
+            cleaned = segment["text"].strip()
+            if not cleaned:
+                continue
+
+            normalized = " ".join(cleaned.lower().split())
+            text_hash = hash(normalized)
+
+            if text_hash not in seen_hashes:
+                seen_hashes.add(text_hash)
+                all_chunks.append(
+                    {
+                        "file_path": file_path,
+                        "original_index": i,
+                        "text": cleaned,
+                        "page": segment["page"],
+                        "text_hash": text_hash,
+                    }
+                )
+
+        # Generate embeddings sequentially (cache handles deduplication)
+        chunk_to_embedding: dict[int, list[float]] = {}
+
+        for chunk in all_chunks:
+            try:
+                embedding = embedding_gen.generate(chunk["text"])
+                chunk_to_embedding[chunk["text_hash"]] = embedding
+            except (OllamaUnavailableError, EmbeddingGenerationError) as e:
+                logger.error(f"Failed to generate embedding for chunk: {e}")
+            except Exception as e:
+                logger.error(f"Unexpected error generating embedding for chunk: {e}")
+
+        # Build final documents
+        docs_to_store: list[dict[str, Any]] = []
+        seen_doc_keys = set()
+
+        for chunk_item in all_chunks:
+            text_hash = chunk_item["text_hash"]
+
+            if text_hash not in chunk_to_embedding:
+                continue
+
+            doc_key = (
+                str(chunk_item["file_path"]),
+                chunk_item["page"],
+                text_hash,
+            )
+            if doc_key in seen_doc_keys:
+                continue
+            seen_doc_keys.add(doc_key)
+
+            embedding = chunk_to_embedding[text_hash]
+            file_type = get_file_type(chunk_item["file_path"])
+
+            doc = {
+                "chunk_id": str(uuid4()),
+                "source_file": str(chunk_item["file_path"]),
+                "page_number": chunk_item["page"],
+                "chunk_text": chunk_item["text"],
+                "embedding": embedding,
+                "metadata": {
+                    "file_type": file_type,
+                    "ingested_at": None,
+                    "chunk_index": chunk_item["original_index"],
+                },
+            }
+            docs_to_store.append(doc)
+
+        return docs_to_store
+
     def ingest(
         self,
         path: str,
@@ -206,153 +368,39 @@ class DocumentIngestor:
         Returns:
             dict with 'success' and 'failed' counts.
         """
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
         from secondbrain.embedding import EmbeddingGenerator
         from secondbrain.storage import VectorStorage
 
-        path_obj = Path(path)
-
-        if path_obj.is_file():
-            self._validate_file_path(path_obj)
-            self._validate_file_size(path_obj)
-            files = [path_obj]
-        elif path_obj.is_dir():
-            files = list(path_obj.rglob("*")) if recursive else list(path_obj.glob("*"))
-            validated_files = []
-            for f in files:
-                if f.is_file() and is_supported(f):
-                    self._validate_file_path(f)
-                    self._validate_file_size(f)
-                    validated_files.append(f)
-            files = validated_files
-        else:
-            raise ValueError(f"Invalid path: {path}")
+        # Collect and validate files
+        files = self._collect_and_validate_files(path, recursive)
 
         if not files:
             return {"success": 0, "failed": 0}
 
-        failed_files = 0
-        successful_files = 0
-
+        # Initialize services
         embedding_gen = EmbeddingGenerator()
         storage = VectorStorage()
 
-        # Process files in streaming batches
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-
-        from secondbrain.exceptions import (
-            EmbeddingGenerationError,
-            OllamaUnavailableError,
-        )
-
-        def process_single_file(
-            file_path: Path,
-        ) -> tuple[Path, list[Segment], list[str]] | None:
-            try:
-                segments: list[Segment] = self._extract_text(file_path)
-                texts = [s["text"] for s in segments]
-                return (file_path, segments, texts)
-            except (OSError, DocumentExtractionError) as e:
-                logger.error(f"Failed to extract text from {file_path}: {e}")
-                return None
-            except Exception as e:
-                logger.error(f"Unexpected error extracting text from {file_path}: {e}")
-                return None
-
-        def chunk_and_process(
-            file_path: Path,
-            segments: list[Segment],
-            texts: list[str],
-        ) -> list[dict[str, Any]]:
-
-            all_chunks: list[dict[str, Any]] = []
-            seen_hashes = set()
-
-            for i, (chunk, text) in enumerate(zip(segments, texts, strict=True)):
-                cleaned = text.strip()
-                if not cleaned:
-                    continue
-                normalized = " ".join(cleaned.lower().split())
-                text_hash = hash(normalized)
-                if text_hash not in seen_hashes:
-                    seen_hashes.add(text_hash)
-                    all_chunks.append(
-                        {
-                            "file_path": file_path,
-                            "original_index": i,
-                            "text": cleaned,
-                            "page": chunk["page"],
-                            "text_hash": text_hash,
-                        }
-                    )
-
-            # Generate embeddings sequentially (cache handles deduplication)
-            chunk_to_embedding: dict[int, list[float]] = {}
-
-            for c in all_chunks:
-                try:
-                    embedding = embedding_gen.generate(c["text"])
-                    chunk_to_embedding[c["text_hash"]] = embedding
-                except (OllamaUnavailableError, EmbeddingGenerationError) as e:
-                    logger.error(f"Failed to generate embedding for chunk: {e}")
-                except Exception as e:
-                    logger.error(
-                        f"Unexpected error generating embedding for chunk: {e}"
-                    )
-
-            # Build documents for storage
-            docs_to_store: list[dict[str, Any]] = []
-            seen_doc_keys = set()
-
-            for chunk_item in all_chunks:
-                file_path_loc = chunk_item["file_path"]
-                text = chunk_item["text"]
-                page = chunk_item["page"]
-                text_hash = chunk_item["text_hash"]
-
-                if text_hash not in chunk_to_embedding:
-                    continue
-
-                doc_key = (str(file_path_loc), page, text_hash)
-                if doc_key in seen_doc_keys:
-                    continue
-                seen_doc_keys.add(doc_key)
-
-                embedding = chunk_to_embedding[text_hash]
-
-                file_type = get_file_type(file_path_loc)
-                doc = {
-                    "chunk_id": str(uuid4()),
-                    "source_file": str(file_path_loc),
-                    "page_number": page,
-                    "chunk_text": text,
-                    "embedding": embedding,
-                    "metadata": {
-                        "file_type": file_type,
-                        "ingested_at": None,
-                        "chunk_index": chunk_item["original_index"],
-                    },
-                }
-                docs_to_store.append(doc)
-
-            return docs_to_store
+        failed_files = 0
+        successful_files = 0
 
         # Process files in parallel batches
         with ThreadPoolExecutor(max_workers=batch_size) as executor:
             futures = {
-                executor.submit(process_single_file, file_path): file_path
-                for file_path in files
+                executor.submit(self._process_file_for_storage, f, embedding_gen): f
+                for f in files
             }
 
             for future in as_completed(futures):
                 file_path = futures[future]
                 try:
-                    result = future.result()
-                    if result is None:
+                    docs_to_store = future.result()
+
+                    if docs_to_store is None:
                         failed_files += 1
                         continue
-
-                    file_path_proc, segments, texts = result
-                    docs_to_store = chunk_and_process(file_path_proc, segments, texts)
 
                     if docs_to_store:
                         storage.store_batch(docs_to_store)
