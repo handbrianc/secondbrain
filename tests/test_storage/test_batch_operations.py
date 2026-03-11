@@ -1,3 +1,8 @@
+# NOTE: Use the `storage_with_mock` fixture from conftest.py to avoid
+# ~1s overhead per test. Example:
+#     def test_something(self, storage_with_mock):
+#         with patch.object(storage_with_mock, "_collection", mock_coll):
+#             # test code
 """Tests for batch operations in storage module."""
 
 from unittest.mock import MagicMock, patch

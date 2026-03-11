@@ -10,11 +10,24 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from secondbrain.config import Config
+
 T = TypeVar("T")
 
 
-@pytest.fixture
-def mock_embedding_generator(monkeypatch: pytest.MonkeyPatch) -> Any:
+@pytest.fixture(scope="session")
+def session_config() -> Config:
+    """Session-scoped Config instance to avoid repeated initialization overhead.
+
+    Creating a Config instance takes ~180ms due to Pydantic BaseSettings initialization
+    (env file parsing, validation, etc.). This fixture creates it once per test session
+    instead of per test, saving ~3.5s across 19 config tests.
+    """
+    return Config()
+
+
+@pytest.fixture(scope="module")
+def mock_embedding_generator() -> Any:
     from unittest.mock import MagicMock
 
     mock = MagicMock()
@@ -22,15 +35,11 @@ def mock_embedding_generator(monkeypatch: pytest.MonkeyPatch) -> Any:
     mock.generate.return_value = [0.1] * 768
     mock.generate_batch.return_value = [[0.1] * 768 for _ in range(5)]
 
-    monkeypatch.setattr(
-        "secondbrain.document.EmbeddingGenerator",
-        lambda *args, **kwargs: mock,
-    )
     return mock
 
 
-@pytest.fixture
-def mock_vector_storage(monkeypatch: pytest.MonkeyPatch) -> Any:
+@pytest.fixture(scope="module")
+def mock_vector_storage() -> Any:
     from unittest.mock import MagicMock
 
     mock = MagicMock()
@@ -49,10 +58,6 @@ def mock_vector_storage(monkeypatch: pytest.MonkeyPatch) -> Any:
         "collection": "test",
     }
 
-    monkeypatch.setattr(
-        "secondbrain.document.VectorStorage",
-        lambda *args, **kwargs: mock,
-    )
     return mock
 
 
@@ -80,12 +85,20 @@ def clean_embedding_generator() -> Any:
         generator.close()
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 def cleanup_resources(request: Any) -> Any:
-    """Automatically cleanup VectorStorage and EmbeddingGenerator after each test.
+    """Opt-in cleanup for VectorStorage and EmbeddingGenerator after tests.
 
-    Optimized to only cleanup clients that were actually instantiated during the test,
-    avoiding unnecessary connection attempts that add ~0.2s per test.
+    This fixture is NO LONGER autouse - tests must explicitly request it via
+    `cleanup_resources` parameter to get automatic client cleanup.
+
+    For tests that don't need cleanup (e.g., pure unit tests with mocks),
+    this avoids the ~0.2s overhead from patching/unpatching classes.
+
+    Usage:
+        def test_something(cleanup_resources):
+            # cleanup will happen automatically after this test
+            ...
     """
     # Track which clients were actually used during the test
     clients_to_cleanup: list[tuple[str, Any]] = []
@@ -181,10 +194,46 @@ def fast_test_config(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         "SECONDBRAIN_RATE_LIMIT_MAX_REQUESTS": 100,  # Higher limit for faster tests
         "SECONDBRAIN_RATE_LIMIT_WINDOW_SECONDS": 0.1,  # 10x faster for testing
         "SECONDBRAIN_CONNECTION_CACHE_TTL": 10.0,  # Shorter cache TTL
+        "SECONDBRAIN_CIRCUIT_BREAKER_RECOVERY_TIMEOUT": 0.1,  # 300x faster for testing
+        "SECONDBRAIN_CIRCUIT_BREAKER_FAILURE_THRESHOLD": 3,  # Lower threshold for testing
     }
     for key, value in test_config.items():
         monkeypatch.setenv(key, str(value))
     return test_config
+
+
+@pytest.fixture
+def fast_cli_test(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Fixture for fast CLI unit tests that don't need client cleanup.
+
+    This fixture:
+    - Sets up minimal config defaults
+    - Does NOT patch VectorStorage/EmbeddingGenerator (avoids 0.2s overhead)
+    - Does NOT enable automatic cleanup
+
+    Use this for pure CLI validation tests that mock all dependencies.
+
+    Usage:
+        def test_cli_validation(fast_cli_test):
+            # No cleanup overhead, fast execution
+            ...
+    """
+    test_config = {
+        "SECONDBRAIN_MONGO_URI": "mongodb://localhost:27017",
+        "SECONDBRAIN_MONGO_DB": "test_secondbrain",
+        "SECONDBRAIN_MONGO_COLLECTION": "test_embeddings",
+        "SECONDBRAIN_OLLAMA_URL": "http://localhost:11434",
+        "SECONDBRAIN_MODEL": "embeddinggemma:latest",
+        "SECONDBRAIN_CHUNK_SIZE": 512,
+        "SECONDBRAIN_CHUNK_OVERLAP": 50,
+        "SECONDBRAIN_DEFAULT_TOP_K": 5,
+        "SECONDBRAIN_EMBEDDING_DIMENSIONS": 384,
+        "SECONDBRAIN_RATE_LIMIT_MAX_REQUESTS": 10,
+        "SECONDBRAIN_RATE_LIMIT_WINDOW_SECONDS": 1.0,
+        "SECONDBRAIN_CONNECTION_CACHE_TTL": 60.0,
+    }
+    for key, value in test_config.items():
+        monkeypatch.setenv(key, str(value))
 
 
 @pytest.fixture
@@ -372,9 +421,10 @@ def _cleanup_embedding() -> None:
         pass
 
 
-@pytest.fixture(autouse=True)
-def mock_config_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Ensure all config defaults are available for tests that patch get_config."""
+@pytest.fixture(scope="module", autouse=True)
+def mock_config_defaults() -> None:
+    import os
+
     test_config = {
         "SECONDBRAIN_MONGO_URI": "mongodb://localhost:27017",
         "SECONDBRAIN_MONGO_DB": "test_secondbrain",
@@ -388,9 +438,11 @@ def mock_config_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
         "SECONDBRAIN_RATE_LIMIT_MAX_REQUESTS": 10,
         "SECONDBRAIN_RATE_LIMIT_WINDOW_SECONDS": 1.0,
         "SECONDBRAIN_CONNECTION_CACHE_TTL": 60.0,
+        "SECONDBRAIN_CIRCUIT_BREAKER_RECOVERY_TIMEOUT": 0.5,
+        "SECONDBRAIN_CIRCUIT_BREAKER_FAILURE_THRESHOLD": 3,
     }
     for key, value in test_config.items():
-        monkeypatch.setenv(key, str(value))
+        os.environ[key] = str(value)
 
 
 def _cleanup_mongodb() -> None:

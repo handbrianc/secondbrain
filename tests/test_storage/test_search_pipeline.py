@@ -40,10 +40,10 @@ class TestBuildSearchPipeline:
 
         assert len(pipeline) == 3  # vectorSearch, match, project
 
-        # Second stage should be match with source filter
+        # Second stage should be match with source filter (anchored regex)
         assert "$match" in pipeline[1]
         match = pipeline[1]["$match"]
-        assert match["source_file"] == {"$regex": "document.pdf"}
+        assert match["source_file"] == {"$regex": "^document.pdf"}
 
     def test_pipeline_with_file_type_filter(self) -> None:
         """Test pipeline with file type filter."""
@@ -71,10 +71,10 @@ class TestBuildSearchPipeline:
 
         assert len(pipeline) == 3  # vectorSearch, match, project
 
-        # Second stage should be match with both filters
+        # Second stage should be match with both filters (anchored regex)
         assert "$match" in pipeline[1]
         match = pipeline[1]["$match"]
-        assert match["source_file"] == {"$regex": "report.pdf"}
+        assert match["source_file"] == {"$regex": "^report.pdf"}
         assert match["metadata.file_type"] == "pdf"
 
     def test_pipeline_numcandidates_scaling(self) -> None:
@@ -131,14 +131,15 @@ class TestBuildSearchPipeline:
             assert vector_search["limit"] == expected_limit
 
     def test_pipeline_filter_regex_pattern(self) -> None:
-        """Test that source filter uses regex pattern."""
+        """Test that source filter uses anchored regex pattern."""
         embedding = [0.1] * 10
         pipeline = build_search_pipeline(
             embedding=embedding, top_k=5, source_filter="partial"
         )
 
         match = pipeline[1]["$match"]
-        assert match["source_file"] == {"$regex": "partial"}
+        # Default behavior uses anchored regex for better index performance
+        assert match["source_file"] == {"$regex": "^partial"}
 
     def test_pipeline_field_selection(self) -> None:
         """Test that projection selects only required fields."""

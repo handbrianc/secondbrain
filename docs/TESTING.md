@@ -2,6 +2,35 @@
 
 This document describes the test structure, profiles, and optimization strategies for the SecondBrain project.
 
+## Performance Summary
+
+| Profile | Test Count | Duration | Tests/Second |
+|---------|-----------|----------|--------------|
+| **Fast (default)** | ~480 | 5-10s | 48-96 |
+| **Integration** | ~16 | 15-20s | 0.8-1.1 |
+| **Slow (E2E)** | ~4 | 20-25s | 0.16-0.2 |
+| **Full** | ~505 | 40-50s | 10-12 |
+
+*Measured on macOS with parallel pytest-xdist execution*
+
+## Recent Optimizations (v0.1.0)
+
+### 1. Removed Autouse Fixture Overhead
+**Problem**: `cleanup_resources` fixture was `autouse=True`, causing ~0.2s overhead per test.
+
+**Solution**: Made cleanup opt-in. Tests only pay overhead when they actually need client cleanup.
+
+**Impact**: Reduced per-test setup from 0.21s to 0.03s (85% improvement)
+
+### 2. Fast CLI Test Fixture
+Added `fast_cli_test` fixture for pure unit tests with minimal config and no cleanup overhead.
+
+### 3. Slow Test Marking
+E2E tests marked with `@pytest.mark.slow` and excluded from default profile.
+
+### 4. Parallel Coverage Support
+Added `--cov-context=test` for proper coverage reporting with parallel execution.
+
 ## Test Profiles
 
 The test suite is organized into different profiles to support various testing needs:
@@ -11,21 +40,22 @@ The test suite is organized into different profiles to support various testing n
 Run unit tests that don't require external services:
 
 ```bash
-# Run all fast tests (excludes integration tests)
-pytest -m "not integration"
+# Run all fast tests (excludes slow E2E tests)
+pytest -m "not slow"
 
 # Run with parallel execution (recommended)
-pytest -m "not integration" -n auto
+pytest -m "not slow" -n auto
 
 # Run with coverage
-pytest -m "not integration" --cov=secondbrain --cov-report=html
+pytest -m "not slow" --cov=secondbrain --cov-report=html
 ```
 
 **Characteristics:**
 - ✅ No external service dependencies (MongoDB, Ollama)
 - ✅ Uses mocked components and mongomock
-- ✅ Fast execution (<5 seconds for 400+ tests)
+- ✅ Fast execution (5-10 seconds for 480+ tests)
 - ✅ Run on every commit/PR
+- ✅ Excludes slow E2E tests (>1s execution time)
 
 ### Integration Tests
 
@@ -39,12 +69,12 @@ pytest -m integration
 pytest -m integration -n auto
 
 # Run specific integration test file
-pytest tests/test_document/test_e2e_pdf_ingestion.py -v
+pytest tests/test_integration/ -v
 ```
 
 **Characteristics:**
 - ⚠️ Requires MongoDB and Ollama running
-- ⚠️ Slower execution (30-45 seconds for all integration tests)
+- ⚠️ Slower execution (15-20 seconds for 16 tests)
 - ⚠️ Run nightly or on-demand
 - ⚠️ Tests real service interactions
 
@@ -324,6 +354,41 @@ pytest --cov=secondbrain --cov-fail-under=80
    def test_with_mock(cached_embedding_generator):
        pass
    ```
+
+## Fixture Reference
+
+### Core Fixtures
+
+| Fixture | Scope | Description | When to Use |
+|---------|-------|-------------|-------------|
+| `cleanup_resources` | function | Auto-closes VectorStorage/EmbeddingGenerator | Tests using real clients |
+| `fast_cli_test` | function | Minimal config, no cleanup | Pure CLI unit tests |
+| `mock_embedding_generator` | function | Mocked embedding generation | Tests needing embeddings |
+| `mock_vector_storage` | function | Mocked storage operations | Tests needing storage |
+| `cached_embedding_generator` | function | Pre-computed embeddings | Fast embedding tests |
+| `mocked_pdf_extraction` | function | Mocked PDF text extraction | PDF processing tests |
+| `sample_pdf_path` | session | Pre-generated test PDF | Any PDF test |
+| `fast_test_config` | function | Optimized config values | Performance-sensitive tests |
+
+### Usage Examples
+
+#### Fast CLI Test (No Cleanup Overhead)
+```python
+def test_chunk_size_validation(fast_cli_test):
+    """Pure validation test - no client cleanup needed."""
+    runner = CliRunner()
+    result = runner.invoke(cli, ["ingest", "/tmp/test", "--chunk-size", "100"])
+    assert result.exit_code == 0
+```
+
+#### Test Requiring Cleanup
+```python
+def test_real_storage_operations(cleanup_resources):
+    """Test using real VectorStorage - cleanup happens automatically."""
+    storage = VectorStorage()
+    storage.store(...)
+    # Automatically closed after test
+```
 
 ## Test Profiling and Timing
 

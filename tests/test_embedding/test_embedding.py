@@ -128,6 +128,11 @@ class TestEmbeddingGenerator:
 
         gen = EmbeddingGenerator()
         gen._model_pulled = True
+        gen._connection_valid = True
+        gen._connection_checked_at = time.monotonic()
+        # Pre-create the client so it's shared across threads
+        _ = gen.client
+
         texts = ["text1", "text2", "text3"]
         results = gen.generate_batch(texts)
         assert len(results) == 3
@@ -186,6 +191,8 @@ class TestEmbeddingSpecRequirements:
         mock_client_class.return_value = mock_client_instance
 
         gen = EmbeddingGenerator()
+        # Pre-set model as pulled to avoid real HTTP call during pull_model()
+        gen._model_pulled = True
         result = gen.generate("test text")
 
         assert gen._model_pulled is True

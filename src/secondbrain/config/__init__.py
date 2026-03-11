@@ -184,6 +184,16 @@ class Config(BaseSettings):
         description="TTL for connection validation cache in seconds",
     )
 
+    # Circuit breaker settings
+    circuit_breaker_recovery_timeout: float = Field(
+        default=30.0,
+        description="Circuit breaker recovery timeout in seconds",
+    )
+    circuit_breaker_failure_threshold: int = Field(
+        default=5,
+        description="Number of failures before circuit opens",
+    )
+
     @field_validator("chunk_size")
     @classmethod
     def validate_chunk_size(cls, v: int) -> int:

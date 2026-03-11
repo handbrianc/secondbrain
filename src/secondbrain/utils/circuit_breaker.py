@@ -4,7 +4,7 @@ import logging
 import time
 from collections.abc import Callable
 from enum import Enum
-from threading import Lock
+from threading import RLock
 from typing import Any, TypeVar
 
 logger = logging.getLogger(__name__)
@@ -53,7 +53,7 @@ class CircuitBreaker:
         self._success_count = 0
         self._last_failure_time: float | None = None
         self._half_open_calls = 0
-        self._lock = Lock()
+        self._lock = RLock()
 
     @property
     def state(self) -> CircuitState:

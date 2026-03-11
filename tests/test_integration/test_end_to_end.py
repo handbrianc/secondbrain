@@ -44,6 +44,7 @@ def mongomock_client() -> Generator[mongomock.MongoClient[Any], None, None]:
 class TestDocumentIngestion:
     """Tests for document ingestion end-to-end workflow."""
 
+    @pytest.mark.slow
     def test_ingest_single_pdf_document(
         self,
         sample_pdf_path: Path,
@@ -87,6 +88,7 @@ class TestDocumentIngestion:
         finally:
             mongomock_client.close()
 
+    @pytest.mark.slow
     def test_ingest_multiple_files_batch(
         self,
         sample_pdf_path: Path,
@@ -257,6 +259,7 @@ class TestFullWorkflow:
 class TestIntegrationDataFlow:
     """Tests validating data flows between modules."""
 
+    @pytest.mark.slow
     def test_ingestion_creates_proper_chunks(
         self,
         sample_pdf_path: Path,
@@ -421,6 +424,7 @@ class TestIntegrationDataFlow:
         for chunk in filtered:
             assert "test0" in chunk["source_file"]
 
+    @pytest.mark.slow
     def test_chunk_overlapping_text(
         self,
         sample_pdf_path: Path,

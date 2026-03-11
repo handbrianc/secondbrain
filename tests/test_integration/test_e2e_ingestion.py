@@ -9,7 +9,7 @@ from secondbrain.document import DocumentIngestor
 class TestEndToEndIngestion:
     """Test full document ingestion workflow."""
 
-    @patch("secondbrain.document.DocumentConverter")
+    @patch("docling.document_converter.DocumentConverter")
     @patch("secondbrain.embedding.EmbeddingGenerator")
     @patch("secondbrain.storage.VectorStorage")
     def test_ingest_file_e2e(
@@ -50,7 +50,7 @@ class TestEndToEndIngestion:
         assert result["success"] == 1
         assert result["failed"] == 0
 
-    @patch("secondbrain.document.DocumentConverter")
+    @patch("docling.document_converter.DocumentConverter")
     @patch("secondbrain.embedding.EmbeddingGenerator")
     @patch("secondbrain.storage.VectorStorage")
     def test_ingest_directory_e2e(

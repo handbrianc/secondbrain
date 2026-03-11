@@ -2,14 +2,19 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
-from docling.document_converter import DocumentConverter
+import typing_extensions
 from typing_extensions import TypedDict
 
 from secondbrain.config import get_config
 from secondbrain.exceptions import DocumentExtractionError, UnsupportedFileError
+
+# Lazy import docling to avoid 2+ second import overhead in tests
+# Only import when actually needed (DocumentConverter instantiation)
+if TYPE_CHECKING:
+    from docling.document_converter import DocumentConverter
 
 logger = logging.getLogger(__name__)
 
@@ -139,6 +144,9 @@ class DocumentIngestor:
         self.chunk_overlap = chunk_overlap
         self.verbose = verbose
         self.max_file_size_bytes: int = get_config().max_file_size_bytes
+
+        # Lazily import docling to avoid 2+ second import overhead
+        from docling.document_converter import DocumentConverter
 
         self.converter = DocumentConverter()
 

@@ -8,24 +8,23 @@ from secondbrain.config import Config, get_config
 class TestConfigExtensionsSet:
     """Tests for Config.extensions_set property."""
 
-    def test_extensions_set_returns_set(self) -> None:
+    def test_extensions_set_returns_self(self, session_config: Config) -> None:
         """Test extensions_set returns a set."""
-        config = Config()
-        extensions = config.extensions_set
+        extensions = session_config.extensions_set
         assert isinstance(extensions, set)
 
-    def test_extensions_set_contains_dots(self) -> None:
+    def test_extensions_set_contains_dots(self, session_config: Config) -> None:
         """Test extensions contain leading dots."""
-        config = Config()
-        extensions = config.extensions_set
+        extensions = session_config.extensions_set
 
         for ext in extensions:
             assert ext.startswith(".")
 
-    def test_extensions_set_contains_expected_extensions(self) -> None:
+    def test_extensions_set_contains_expected_extensions(
+        self, session_config: Config
+    ) -> None:
         """Test extensions_set contains standard expected extensions."""
-        config = Config()
-        extensions = config.extensions_set
+        extensions = session_config.extensions_set
 
         expected = {
             ".pdf",

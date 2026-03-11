@@ -7,6 +7,8 @@ from click.testing import CliRunner
 
 from secondbrain.cli import cli
 
+TEST_PATH = "/tmp/test_docs"
+
 
 class TestCLIChunkSizeValidation:
     """Tests for chunk size validation in CLI."""
@@ -14,83 +16,49 @@ class TestCLIChunkSizeValidation:
     def test_ingest_rejects_negative_chunk_size(self) -> None:
         """Test that negative chunk size is rejected."""
         runner = CliRunner()
-        with runner.isolated_filesystem():
-            from pathlib import Path
+        result = runner.invoke(cli, ["ingest", TEST_PATH, "--chunk-size", "-100"])
+        assert result.exit_code != 0
 
-            Path("/tmp/test_docs").mkdir(parents=True, exist_ok=True)
-            result = runner.invoke(
-                cli, ["ingest", "/tmp/test_docs", "--chunk-size", "-100"]
-            )
-            # Click should reject negative integer
-            assert result.exit_code != 0
-
-    def test_ingest_accepts_zero_chunk_size(self) -> None:
+    @patch("secondbrain.document.DocumentIngestor")
+    def test_ingest_accepts_zero_chunk_size(self, mock_ingestor: MagicMock) -> None:
         """Test that zero chunk size is accepted by Click (validated by Config)."""
-        with patch("secondbrain.document.DocumentIngestor") as mock_ingestor:
-            mock_ingestor_instance = MagicMock()
-            mock_ingestor_instance.ingest.return_value = {"success": 1, "failed": 0}
-            mock_ingestor.return_value = mock_ingestor_instance
+        mock_ingestor_instance = MagicMock()
+        mock_ingestor_instance.ingest.return_value = {"success": 1, "failed": 0}
+        mock_ingestor.return_value = mock_ingestor_instance
 
-            runner = CliRunner()
-            with runner.isolated_filesystem():
-                from pathlib import Path
+        runner = CliRunner()
+        result = runner.invoke(cli, ["ingest", TEST_PATH, "--chunk-size", "0"])
+        assert result.exit_code == 0
 
-                Path("/tmp/test_docs").mkdir(parents=True, exist_ok=True)
-                # Click accepts 0, but Config validation would reject it
-                result = runner.invoke(
-                    cli, ["ingest", "/tmp/test_docs", "--chunk-size", "0"]
-                )
-                # Click passes it through; validation happens in Config
-                assert result.exit_code == 0
-
-    def test_ingest_accepts_valid_chunk_size(self) -> None:
+    @patch("secondbrain.document.DocumentIngestor")
+    def test_ingest_accepts_valid_chunk_size(self, mock_ingestor: MagicMock) -> None:
         """Test that valid positive chunk sizes are accepted."""
-        with patch("secondbrain.document.DocumentIngestor") as mock_ingestor:
-            mock_ingestor_instance = MagicMock()
-            mock_ingestor_instance.ingest.return_value = {"success": 1, "failed": 0}
-            mock_ingestor.return_value = mock_ingestor_instance
+        mock_ingestor_instance = MagicMock()
+        mock_ingestor_instance.ingest.return_value = {"success": 1, "failed": 0}
+        mock_ingestor.return_value = mock_ingestor_instance
 
-            runner = CliRunner()
-            with runner.isolated_filesystem():
-                from pathlib import Path
+        runner = CliRunner()
+        result = runner.invoke(cli, ["ingest", TEST_PATH, "--chunk-size", "2048"])
+        assert result.exit_code == 0 or "Validation error" not in result.output
 
-                Path("/tmp/test_docs").mkdir(parents=True, exist_ok=True)
-                result = runner.invoke(
-                    cli, ["ingest", "/tmp/test_docs", "--chunk-size", "2048"]
-                )
-                # Should not fail due to validation
-                assert result.exit_code == 0 or "Validation error" not in result.output
-
-    def test_ingest_chunk_size_boundary_values(self) -> None:
+    @patch("secondbrain.document.DocumentIngestor")
+    def test_ingest_chunk_size_boundary_values(self, mock_ingestor: MagicMock) -> None:
         """Test chunk size with boundary values."""
-        with patch("secondbrain.document.DocumentIngestor") as mock_ingestor:
-            mock_ingestor_instance = MagicMock()
-            mock_ingestor_instance.ingest.return_value = {"success": 1, "failed": 0}
-            mock_ingestor.return_value = mock_ingestor_instance
+        mock_ingestor_instance = MagicMock()
+        mock_ingestor_instance.ingest.return_value = {"success": 1, "failed": 0}
+        mock_ingestor.return_value = mock_ingestor_instance
 
-            runner = CliRunner()
-            with runner.isolated_filesystem():
-                from pathlib import Path
+        runner = CliRunner()
+        result = runner.invoke(cli, ["ingest", TEST_PATH, "--chunk-size", "1"])
+        assert result.exit_code == 0 or "Validation error" not in result.output
 
-                Path("/tmp/test_docs").mkdir(parents=True, exist_ok=True)
-
-                # Test minimum valid value
-                result = runner.invoke(
-                    cli, ["ingest", "/tmp/test_docs", "--chunk-size", "1"]
-                )
-                assert result.exit_code == 0 or "Validation error" not in result.output
-
-                # Test large valid value
-                result = runner.invoke(
-                    cli, ["ingest", "/tmp/test_docs", "--chunk-size", "10000"]
-                )
-                assert result.exit_code == 0 or "Validation error" not in result.output
+        result = runner.invoke(cli, ["ingest", TEST_PATH, "--chunk-size", "10000"])
+        assert result.exit_code == 0 or "Validation error" not in result.output
 
     def test_ingest_chunk_size_with_non_integer(self) -> None:
         """Test that non-integer chunk size is rejected."""
         runner = CliRunner()
         result = runner.invoke(cli, ["ingest", "/tmp/test", "--chunk-size", "abc"])
-        # Click should reject non-integer
         assert result.exit_code != 0
         assert "Invalid value" in result.output or "UsageError" in result.output
 
@@ -98,75 +66,49 @@ class TestCLIChunkSizeValidation:
 class TestCLIBatchSizeValidation:
     """Tests for batch size validation in CLI."""
 
-    def test_ingest_accepts_negative_batch_size(self) -> None:
+    @patch("secondbrain.document.DocumentIngestor")
+    def test_ingest_accepts_negative_batch_size(self, mock_ingestor: MagicMock) -> None:
         """Test that negative batch size is accepted by Click (validated by app logic)."""
-        with patch("secondbrain.document.DocumentIngestor") as mock_ingestor:
-            mock_ingestor_instance = MagicMock()
-            mock_ingestor_instance.ingest.return_value = {"success": 1, "failed": 0}
-            mock_ingestor.return_value = mock_ingestor_instance
+        mock_ingestor_instance = MagicMock()
+        mock_ingestor_instance.ingest.return_value = {"success": 1, "failed": 0}
+        mock_ingestor.return_value = mock_ingestor_instance
 
-            runner = CliRunner()
-            with runner.isolated_filesystem():
-                from pathlib import Path
+        runner = CliRunner()
+        result = runner.invoke(cli, ["ingest", TEST_PATH, "--batch-size", "-5"])
+        assert result.exit_code == 0
 
-                Path("/tmp/test_docs").mkdir(parents=True, exist_ok=True)
-                # Click accepts negative values; app logic should validate
-                result = runner.invoke(
-                    cli, ["ingest", "/tmp/test_docs", "--batch-size", "-5"]
-                )
-                assert result.exit_code == 0
-
-    def test_ingest_accepts_zero_batch_size(self) -> None:
+    @patch("secondbrain.document.DocumentIngestor")
+    def test_ingest_accepts_zero_batch_size(self, mock_ingestor: MagicMock) -> None:
         """Test that zero batch size is accepted by Click (validated by app logic)."""
-        with patch("secondbrain.document.DocumentIngestor") as mock_ingestor:
-            mock_ingestor_instance = MagicMock()
-            mock_ingestor_instance.ingest.return_value = {"success": 1, "failed": 0}
-            mock_ingestor.return_value = mock_ingestor_instance
+        mock_ingestor_instance = MagicMock()
+        mock_ingestor_instance.ingest.return_value = {"success": 1, "failed": 0}
+        mock_ingestor.return_value = mock_ingestor_instance
 
-            runner = CliRunner()
-            with runner.isolated_filesystem():
-                from pathlib import Path
+        runner = CliRunner()
+        result = runner.invoke(cli, ["ingest", TEST_PATH, "--batch-size", "0"])
+        assert result.exit_code == 0
 
-                Path("/tmp/test_docs").mkdir(parents=True, exist_ok=True)
-                # Click accepts zero; app logic should validate
-                result = runner.invoke(
-                    cli, ["ingest", "/tmp/test_docs", "--batch-size", "0"]
-                )
-                assert result.exit_code == 0
-
-    def test_ingest_accepts_large_batch_size(self) -> None:
+    @patch("secondbrain.document.DocumentIngestor")
+    def test_ingest_accepts_large_batch_size(self, mock_ingestor: MagicMock) -> None:
         """Test that large batch sizes are accepted."""
-        with patch("secondbrain.document.DocumentIngestor") as mock_ingestor:
-            mock_ingestor_instance = MagicMock()
-            mock_ingestor_instance.ingest.return_value = {"success": 1, "failed": 0}
-            mock_ingestor.return_value = mock_ingestor_instance
+        mock_ingestor_instance = MagicMock()
+        mock_ingestor_instance.ingest.return_value = {"success": 1, "failed": 0}
+        mock_ingestor.return_value = mock_ingestor_instance
 
-            runner = CliRunner()
-            with runner.isolated_filesystem():
-                from pathlib import Path
+        runner = CliRunner()
+        result = runner.invoke(cli, ["ingest", TEST_PATH, "--batch-size", "100"])
+        assert result.exit_code == 0 or "Validation error" not in result.output
 
-                Path("/tmp/test_docs").mkdir(parents=True, exist_ok=True)
-                result = runner.invoke(
-                    cli, ["ingest", "/tmp/test_docs", "--batch-size", "100"]
-                )
-                # Should accept large batch size
-                assert result.exit_code == 0 or "Validation error" not in result.output
-
-    def test_ingest_batch_size_defaults(self) -> None:
+    @patch("secondbrain.document.DocumentIngestor")
+    def test_ingest_batch_size_defaults(self, mock_ingestor: MagicMock) -> None:
         """Test that default batch size is used when not specified."""
-        with patch("secondbrain.document.DocumentIngestor") as mock_ingestor:
-            mock_ingestor_instance = MagicMock()
-            mock_ingestor_instance.ingest.return_value = {"success": 1, "failed": 0}
-            mock_ingestor.return_value = mock_ingestor_instance
+        mock_ingestor_instance = MagicMock()
+        mock_ingestor_instance.ingest.return_value = {"success": 1, "failed": 0}
+        mock_ingestor.return_value = mock_ingestor_instance
 
-            runner = CliRunner()
-            with runner.isolated_filesystem():
-                from pathlib import Path
-
-                Path("/tmp/test_docs").mkdir(parents=True, exist_ok=True)
-                result = runner.invoke(cli, ["ingest", "/tmp/test_docs"])
-                # Should use default batch size
-                assert result.exit_code == 0 or "Validation error" not in result.output
+        runner = CliRunner()
+        result = runner.invoke(cli, ["ingest", TEST_PATH])
+        assert result.exit_code == 0 or "Validation error" not in result.output
 
 
 class TestCLIJSONFormatValidation:

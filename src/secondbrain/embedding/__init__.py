@@ -149,8 +149,8 @@ class EmbeddingGenerator(ValidatableService):
         )
         self._cache = EmbeddingCache(max_size=cache_size or 10000)
         self._circuit_breaker = CircuitBreaker(
-            failure_threshold=5,
-            recovery_timeout=30.0,
+            failure_threshold=config.circuit_breaker_failure_threshold,
+            recovery_timeout=config.circuit_breaker_recovery_timeout,
         )
         super().__init__(cache_ttl=config.connection_cache_ttl)
 

@@ -13,7 +13,7 @@ from pathlib import Path
 class TestResult:
     total_time: float
     num_tests: int
-    slow_tests: list[tuple]
+    slow_tests: list[tuple[float, str]]
 
 
 def run_tests(args: list[str]) -> TestResult:
