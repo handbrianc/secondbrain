@@ -2,7 +2,76 @@
 
 from unittest.mock import MagicMock, patch
 
-from secondbrain.management import Deleter, Lister, StatusChecker
+import pytest
+
+from secondbrain.management import BaseManager, Deleter, Lister, StatusChecker
+from secondbrain.utils.connections import ServiceUnavailableError
+
+
+class TestBaseManager:
+    """Tests for BaseManager class."""
+
+    @patch("secondbrain.management.VectorStorage")
+    def test_init_default(self, mock_storage_class: MagicMock) -> None:
+        """Test initialization with defaults."""
+        manager = BaseManager()
+        assert manager.verbose is False
+        mock_storage_class.assert_called_once()
+
+    @patch("secondbrain.management.VectorStorage")
+    def test_init_verbose(self, mock_storage_class: MagicMock) -> None:
+        """Test initialization with verbose flag."""
+        manager = BaseManager(verbose=True)
+        assert manager.verbose is True
+
+    @patch("secondbrain.management.VectorStorage")
+    def test_close(self, mock_storage_class: MagicMock) -> None:
+        """Test close method."""
+        mock_storage = MagicMock()
+        mock_storage_class.return_value = mock_storage
+
+        manager = BaseManager()
+        manager.close()
+        mock_storage.close.assert_called_once()
+
+    @patch("secondbrain.management.VectorStorage")
+    def test_context_manager(self, mock_storage_class: MagicMock) -> None:
+        """Test context manager protocol."""
+        mock_storage = MagicMock()
+        mock_storage_class.return_value = mock_storage
+
+        with BaseManager() as manager:
+            assert isinstance(manager, BaseManager)
+
+        mock_storage.close.assert_called_once()
+
+    @patch("secondbrain.management.VectorStorage")
+    def test_ensure_storage_available_success(
+        self, mock_storage_class: MagicMock
+    ) -> None:
+        """Test _ensure_storage_available when service is available."""
+        mock_storage = MagicMock()
+        mock_storage.validate_connection.return_value = True
+        mock_storage_class.return_value = mock_storage
+
+        manager = BaseManager()
+        # Should not raise
+        manager._ensure_storage_available()
+
+    @patch("secondbrain.management.VectorStorage")
+    def test_ensure_storage_available_failure(
+        self, mock_storage_class: MagicMock
+    ) -> None:
+        """Test _ensure_storage_available raises when service unavailable."""
+        mock_storage = MagicMock()
+        mock_storage.validate_connection.return_value = False
+        mock_storage_class.return_value = mock_storage
+
+        manager = BaseManager()
+        with pytest.raises(ServiceUnavailableError) as exc_info:
+            manager._ensure_storage_available()
+
+        assert "MongoDB" in str(exc_info.value)
 
 
 class TestLister:
@@ -145,6 +214,42 @@ class TestDeleter:
         deleter = Deleter()
         result = deleter.delete()
         assert result == 0
+
+    @patch("secondbrain.management.VectorStorage")
+    def test_delete_priority_all_over_chunk_id(
+        self, mock_storage_class: MagicMock
+    ) -> None:
+        """Test that all=True takes priority over chunk_id."""
+        mock_storage = MagicMock()
+        mock_storage.validate_connection.return_value = True
+        mock_storage.delete_all.return_value = 100
+        mock_storage.delete_by_chunk_id.return_value = 1
+        mock_storage_class.return_value = mock_storage
+
+        deleter = Deleter()
+        result = deleter.delete(all=True, chunk_id="chunk-123")
+
+        assert result == 100
+        mock_storage.delete_all.assert_called_once()
+        mock_storage.delete_by_chunk_id.assert_not_called()
+
+    @patch("secondbrain.management.VectorStorage")
+    def test_delete_priority_chunk_id_over_source(
+        self, mock_storage_class: MagicMock
+    ) -> None:
+        """Test that chunk_id takes priority over source."""
+        mock_storage = MagicMock()
+        mock_storage.validate_connection.return_value = True
+        mock_storage.delete_by_chunk_id.return_value = 1
+        mock_storage.delete_by_source.return_value = 5
+        mock_storage_class.return_value = mock_storage
+
+        deleter = Deleter()
+        result = deleter.delete(chunk_id="chunk-123", source="test.pdf")
+
+        assert result == 1
+        mock_storage.delete_by_chunk_id.assert_called_once_with("chunk-123")
+        mock_storage.delete_by_source.assert_not_called()
 
     @patch("secondbrain.management.VectorStorage")
     def test_delete_connection_error(self, mock_storage_class: MagicMock) -> None:

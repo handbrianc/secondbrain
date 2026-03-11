@@ -256,7 +256,8 @@ class Config(BaseSettings):
             Set of file extensions with leading dots (e.g., {".pdf", ".docx"}).
         """
         extensions = self.supported_extensions.split(",")
-        return {f".{ext.strip()}" for ext in extensions if ext.strip()}
+        # Ensure we don't end up with double dots if an input already has a leading dot
+        return {f".{ext.strip().lstrip('.')}" for ext in extensions if ext.strip()}
 
 
 @lru_cache

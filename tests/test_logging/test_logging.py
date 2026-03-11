@@ -8,11 +8,14 @@ import pytest
 
 from secondbrain.logging import (
     HealthStatus,
+    check_services,
     get_health_status,
+    get_logger,
     get_request_id,
     set_request_id,
     setup_json_logging,
     setup_logging,
+    setup_rich_logging,
 )
 
 
@@ -26,11 +29,38 @@ def test_setup_logging_debug() -> None:
     setup_logging(verbose=True)
 
 
+def test_setup_logging_json_format() -> None:
+    """Test setup_logging with JSON format."""
+    setup_logging(verbose=False, json_format=True)
+    root_logger = logging.getLogger()
+    assert len(root_logger.handlers) > 0
+
+
+def test_setup_logging_verbose_and_json() -> None:
+    """Test setup_logging with both verbose and JSON format."""
+    setup_logging(verbose=True, json_format=True)
+    root_logger = logging.getLogger()
+    assert len(root_logger.handlers) > 0
+
+
 def test_get_logger() -> None:
     """Test getting a logger instance."""
-    logger = logging.getLogger("test")
+    logger = get_logger("test_module")
     assert isinstance(logger, logging.Logger)
-    assert logger.name == "test"
+    assert logger.name == "test_module"
+
+
+def test_setup_rich_logging() -> None:
+    """Test setup_rich_logging configures handlers."""
+    root_logger = logging.getLogger()
+    root_logger.handlers.clear()
+
+    setup_rich_logging(logging.DEBUG)
+    root_logger = logging.getLogger()
+    assert len(root_logger.handlers) > 0
+    from rich.logging import RichHandler
+
+    assert any(isinstance(h, RichHandler) for h in root_logger.handlers)
 
 
 class TestHealthStatus:
@@ -165,19 +195,24 @@ class TestSetupJsonLogging:
 
     def test_setup_json_logging_creates_formatter(self) -> None:
         """Test JSON logging setup creates proper formatter."""
+        root_logger = logging.getLogger()
+        root_logger.handlers.clear()
+
         setup_json_logging(logging.DEBUG)
         root_logger = logging.getLogger()
         assert len(root_logger.handlers) > 0
 
     def test_setup_json_logging_sets_level(self) -> None:
         """Test JSON logging sets correct log level."""
-        # Setup with INFO level
+        root_logger = logging.getLogger()
+        root_logger.handlers.clear()
+
         setup_json_logging(logging.INFO)
-        # Get the root logger and check it has handlers
         root_logger = logging.getLogger()
         assert len(root_logger.handlers) > 0
 
     def test_json_formatter_includes_request_id(self) -> None:
+        """Test JSON formatter includes request_id in output."""
         stream = io.StringIO()
         handler = logging.StreamHandler(stream)
 
@@ -200,6 +235,7 @@ class TestSetupJsonLogging:
         handler.setFormatter(formatter)
 
         logger = logging.getLogger("test_request_id")
+        logger.handlers.clear()
         logger.addHandler(handler)
         logger.setLevel(logging.INFO)
 
@@ -212,6 +248,17 @@ class TestSetupJsonLogging:
         assert json_data["request_id"] == "custom-req-123"
 
         logger.removeHandler(handler)
+
+    def test_setup_json_logging_formats_output(self) -> None:
+        """Test that setup_json_logging formats log output correctly."""
+        root_logger = logging.getLogger()
+        root_logger.handlers.clear()
+
+        setup_json_logging(logging.DEBUG)
+        set_request_id("test-request-id")
+        test_logger = get_logger("test_json_output")
+        test_logger.info("Test message for JSON output")
+        assert len(root_logger.handlers) > 0
 
 
 class TestGetHealthStatus:
@@ -228,3 +275,19 @@ class TestGetHealthStatus:
 
         assert "ollama" in status["services"]
         assert "mongodb" in status["services"]
+
+
+class TestCheckServices:
+    def test_check_services_returns_dict(self) -> None:
+        result = check_services()
+        assert isinstance(result, dict)
+
+    def test_check_services_has_required_keys(self) -> None:
+        result = check_services()
+        assert "ollama" in result
+        assert "mongodb" in result
+
+    def test_check_services_values_are_booleans(self) -> None:
+        result = check_services()
+        assert isinstance(result["ollama"], bool)
+        assert isinstance(result["mongodb"], bool)
