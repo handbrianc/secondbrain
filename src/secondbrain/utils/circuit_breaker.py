@@ -78,10 +78,12 @@ class CircuitBreaker:
             *args: Positional arguments for function.
             **kwargs: Keyword arguments for function.
 
-        Returns:
+        Returns
+        -------
             Function return value.
 
-        Raises:
+        Raises
+        ------
             CircuitBreakerError: If circuit is open.
             Exception: Any exception from the function.
         """

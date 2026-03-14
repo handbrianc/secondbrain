@@ -58,7 +58,8 @@ def timing(metric_name: str) -> Callable[[Callable[..., Any]], Callable[..., Any
     Args:
         metric_name: Name of the metric to record.
 
-    Returns:
+    Returns
+    -------
         Decorated function that records execution time.
     """
 
@@ -86,7 +87,8 @@ def async_timing(
     Args:
         metric_name: Name of the metric to record.
 
-    Returns:
+    Returns
+    -------
         Decorated async function that records execution time.
     """
 

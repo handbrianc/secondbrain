@@ -326,7 +326,6 @@ class TestValidatableService:
 
     def test_validate_connection_cache_miss(self) -> None:
         """Test that validate_connection revalidates after TTL expires."""
-
         from secondbrain.utils.connections import ValidatableService
 
         call_count = 0
@@ -357,7 +356,6 @@ class TestValidatableService:
 
     def test_validate_connection_exception_handling(self) -> None:
         """Test that validate_connection handles exceptions gracefully."""
-
         from secondbrain.utils.connections import ValidatableService
 
         class ConcreteService(ValidatableService):
@@ -375,7 +373,6 @@ class TestValidatableService:
 
     def test_invalidate_connection_cache(self) -> None:
         """Test that invalidate_connection_cache clears the cache."""
-
         from secondbrain.utils.connections import ValidatableService
 
         call_count = 0
@@ -404,7 +401,6 @@ class TestValidatableService:
 
     def test_on_service_recovery(self) -> None:
         """Test that on_service_recovery clears the cache."""
-
         from secondbrain.utils.connections import ValidatableService
 
         call_count = 0

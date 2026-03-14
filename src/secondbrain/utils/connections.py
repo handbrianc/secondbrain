@@ -26,7 +26,8 @@ def ensure_service_available(service_name: str, validator: Callable[[], bool]) -
         service_name: Name of the service to check.
         validator: Callable that returns True if service is available.
 
-    Raises:
+    Raises
+    ------
         ServiceUnavailableError: If service is not available.
     """
     if not validator():
@@ -73,7 +74,8 @@ class RateLimitedRetry:
         Args:
             attempt: Current attempt number (0-indexed).
 
-        Returns:
+        Returns
+        -------
             Delay in seconds.
         """
         delay = min(
@@ -86,7 +88,8 @@ class RateLimitedRetry:
     def _can_retry(self) -> bool:
         """Check if another retry is allowed.
 
-        Returns:
+        Returns
+        -------
             True if retry allowed, False otherwise.
         """
         with self._lock:
@@ -111,7 +114,8 @@ class RateLimitedRetry:
         Args:
             func: Function to call, should return bool.
 
-        Returns:
+        Returns
+        -------
             Result of function call, False if all retries exhausted.
         """
         if not self._can_retry():
@@ -170,7 +174,8 @@ class ValidatableService:
         Args:
             force: If True, bypass cache and check connection.
 
-        Returns:
+        Returns
+        -------
             True if service is available, False otherwise.
         """
         current_time = monotonic()
@@ -209,7 +214,8 @@ class ValidatableService:
     def _do_validate(self) -> bool:
         """Override in subclass to perform actual validation.
 
-        Returns:
+        Returns
+        -------
             True if service is available.
         """
         raise NotImplementedError
@@ -220,7 +226,8 @@ class ValidatableService:
         Args:
             force: If True, bypass cache and check connection.
 
-        Returns:
+        Returns
+        -------
             True if service is available, False otherwise.
         """
         current_time = monotonic()
@@ -251,7 +258,8 @@ class ValidatableService:
         Default implementation calls synchronous _do_validate() wrapped in
         asyncio.to_thread to avoid blocking the event loop.
 
-        Returns:
+        Returns
+        -------
             True if service is available.
         """
         import asyncio
@@ -296,7 +304,8 @@ class ServiceValidator:
         Args:
             force: If True, bypass cache and check connection.
 
-        Returns:
+        Returns
+        -------
             True if service is available.
         """
         if self._validator is None:

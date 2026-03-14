@@ -68,7 +68,8 @@ def is_supported(file_path: Path) -> bool:
     Args:
         file_path: Path to check.
 
-    Returns:
+    Returns
+    -------
         True if file type is supported, False otherwise.
     """
     return file_path.suffix.lower() in SUPPORTED_EXTENSIONS
@@ -80,7 +81,8 @@ def get_file_type(file_path: Path) -> str:
     Args:
         file_path: Path to determine file type for.
 
-    Returns:
+    Returns
+    -------
         File type string (e.g., 'pdf', 'docx', 'image', 'audio', etc.).
     """
     ext = file_path.suffix.lower()
@@ -156,7 +158,8 @@ class DocumentIngestor:
         Args:
             path: Path to validate.
 
-        Raises:
+        Raises
+        ------
             ValueError: If path contains traversal sequences or is outside allowed directory.
         """
         # Resolve to absolute path
@@ -179,7 +182,8 @@ class DocumentIngestor:
         Args:
             path: Path to file to validate.
 
-        Raises:
+        Raises
+        ------
             ValueError: If file exceeds maximum size limit.
         """
         file_size = path.stat().st_size
@@ -197,10 +201,12 @@ class DocumentIngestor:
             path: Path to file or directory.
             recursive: Recursively process subdirectories.
 
-        Returns:
+        Returns
+        -------
             List of validated file paths.
 
-        Raises:
+        Raises
+        ------
             ValueError: If path is invalid or files fail validation.
         """
         path_obj = Path(path)
@@ -232,7 +238,8 @@ class DocumentIngestor:
             file_path: Path to the file to process.
             embedding_gen: EmbeddingGenerator instance.
 
-        Returns:
+        Returns
+        -------
             List of documents ready for storage, or None if processing fails.
         """
         from secondbrain.exceptions import (
@@ -270,7 +277,8 @@ class DocumentIngestor:
             segments: List of text segments to process.
             embedding_gen: EmbeddingGenerator instance.
 
-        Returns:
+        Returns
+        -------
             List of documents ready for storage.
         """
         from secondbrain.exceptions import (
@@ -365,7 +373,8 @@ class DocumentIngestor:
             recursive: Recursively process subdirectories.
             batch_size: Number of files to process in parallel.
 
-        Returns:
+        Returns
+        -------
             dict with 'success' and 'failed' counts.
         """
         from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -418,10 +427,12 @@ class DocumentIngestor:
         Args:
             file_path: Path to the file to extract text from.
 
-        Returns:
+        Returns
+        -------
             List of segments with text and page number.
 
-        Raises:
+        Raises
+        ------
             DocumentExtractionError: If text extraction fails.
         """
         try:
@@ -467,7 +478,8 @@ class DocumentIngestor:
         Args:
             segments: List of text segments to chunk.
 
-        Returns:
+        Returns
+        -------
             List of chunked segments with overlapping text.
         """
         chunks: list[Segment] = []

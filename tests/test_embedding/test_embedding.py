@@ -447,7 +447,6 @@ class TestAsyncEmbeddingGenerator:
         self, mock_async_client_class: MagicMock
     ) -> None:
         """Test successful async embedding generation."""
-
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json = lambda: {"embedding": [0.1, 0.2, 0.3]}
@@ -469,7 +468,6 @@ class TestAsyncEmbeddingGenerator:
         self, mock_async_client_class: MagicMock
     ) -> None:
         """Test async generate raises when Ollama unavailable."""
-
         mock_async_client_instance = MagicMock()
         mock_async_client_instance.request = AsyncMock(
             side_effect=Exception("Connection refused")

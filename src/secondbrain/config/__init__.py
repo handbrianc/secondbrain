@@ -21,10 +21,12 @@ def _validate_mongo_uri(value: str) -> str:
     Args:
         value: MongoDB URI to validate.
 
-    Returns:
+    Returns
+    -------
         Validated URI string.
 
-    Raises:
+    Raises
+    ------
         ValueError: If URI doesn't start with mongodb:// or mongodb+srv://
     """
     if not value.startswith("mongodb://") and not value.startswith("mongodb+srv://"):
@@ -40,10 +42,12 @@ def _validate_ollama_url(value: str) -> str:
     Args:
         value: Ollama URL to validate.
 
-    Returns:
+    Returns
+    -------
         Validated URL string.
 
-    Raises:
+    Raises
+    ------
         ValueError: If URL doesn't have valid scheme and host
     """
     parsed = urlparse(value)
@@ -85,7 +89,8 @@ class Config(BaseSettings):
         Args:
             v: MongoDB URI to validate.
 
-        Returns:
+        Returns
+        -------
             Validated URI string.
         """
         return _validate_mongo_uri(v)
@@ -113,7 +118,8 @@ class Config(BaseSettings):
         Args:
             v: Ollama URL to validate.
 
-        Returns:
+        Returns
+        -------
             Validated URL string.
         """
         return _validate_ollama_url(v)
@@ -202,10 +208,12 @@ class Config(BaseSettings):
         Args:
             v: Chunk size value to validate.
 
-        Returns:
+        Returns
+        -------
             Validated chunk size value.
 
-        Raises:
+        Raises
+        ------
             ValueError: If chunk size is not positive.
         """
         if v <= 0:
@@ -220,10 +228,12 @@ class Config(BaseSettings):
         Args:
             v: Chunk overlap value to validate.
 
-        Returns:
+        Returns
+        -------
             Validated chunk overlap value.
 
-        Raises:
+        Raises
+        ------
             ValueError: If chunk overlap is negative.
         """
         if v < 0:
@@ -234,10 +244,12 @@ class Config(BaseSettings):
     def validate_config_values(self) -> "Config":
         """Validate configuration values.
 
-        Returns:
+        Returns
+        -------
             Config instance after validation.
 
-        Raises:
+        Raises
+        ------
             ValueError: If validation fails.
         """
         if self.chunk_overlap >= self.chunk_size:
@@ -252,7 +264,8 @@ class Config(BaseSettings):
     def extensions_set(self) -> set[str]:
         """Get supported extensions as a set with dots.
 
-        Returns:
+        Returns
+        -------
             Set of file extensions with leading dots (e.g., {".pdf", ".docx"}).
         """
         extensions = self.supported_extensions.split(",")
@@ -264,7 +277,8 @@ class Config(BaseSettings):
 def get_config() -> Config:
     """Get cached configuration instance.
 
-    Returns:
+    Returns
+    -------
         Config: Configuration instance.
     """
     return Config()

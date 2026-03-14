@@ -235,7 +235,7 @@ class TestCLILargeResultSets:
 class TestCLIHealthEdgeCases:
     """Tests for health check edge cases."""
 
-    @patch("secondbrain.cli.get_health_status")
+    @patch("secondbrain.cli.commands.get_health_status")
     def test_health_command_with_degraded_services(
         self, mock_get_health_status: MagicMock
     ) -> None:

@@ -125,7 +125,6 @@ class TestStorageEdgeCases:
 
     def test_require_connection_async_raises_on_failure(self) -> None:
         """Test _require_connection_async raises StorageConnectionError on failure."""
-
         with patch("secondbrain.storage.get_config") as mock_config:
             mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
             mock_config.return_value.mongo_db = "secondbrain"

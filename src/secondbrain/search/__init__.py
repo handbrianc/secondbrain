@@ -40,10 +40,12 @@ def sanitize_query(query: str) -> str:
     Args:
         query: Raw search query string.
 
-    Returns:
+    Returns
+    -------
         Sanitized query string.
 
-    Raises:
+    Raises
+    ------
         ValueError: If query exceeds maximum length or contains dangerous patterns.
     """
     if not query:
@@ -126,10 +128,12 @@ class Searcher:
             source_filter: Filter by source file.
             file_type_filter: Filter by file type.
 
-        Returns:
+        Returns
+        -------
             list of search results with scores.
 
-        Raises:
+        Raises
+        ------
             ValueError: If query is invalid or contains dangerous patterns.
         """
         # Sanitize query to prevent injection attacks

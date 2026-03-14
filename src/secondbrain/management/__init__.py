@@ -36,7 +36,8 @@ class BaseManager:
     def _ensure_storage_available(self) -> None:
         """Ensure MongoDB is available, raise if not.
 
-        Raises:
+        Raises
+        ------
             ServiceUnavailableError: If MongoDB connection cannot be established.
         """
         ensure_service_available("MongoDB", self.storage.validate_connection)
@@ -83,7 +84,8 @@ class Lister(BaseManager):
             limit: Maximum number of results.
             offset: Pagination offset.
 
-        Returns:
+        Returns
+        -------
             List of chunk information.
         """
         return self.storage.list_chunks(
@@ -118,7 +120,8 @@ class Deleter(BaseManager):
             chunk_id: Delete by specific chunk ID.
             all: Delete all documents.
 
-        Returns:
+        Returns
+        -------
             Number of deleted documents.
         """
         if all:
@@ -147,7 +150,8 @@ class StatusChecker(BaseManager):
     def get_status(self) -> DatabaseStats:
         """Get database statistics.
 
-        Returns:
+        Returns
+        -------
             Dictionary of database statistics.
         """
         return self.storage.get_stats()

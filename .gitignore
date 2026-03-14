@@ -77,3 +77,6 @@ venv/
 # Build artifacts
 site/
 docs/site/
+
+# Secrets baseline
+.secrets.baseline

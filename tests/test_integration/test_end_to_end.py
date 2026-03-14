@@ -95,7 +95,6 @@ class TestDocumentIngestion:
         multi_page_pdf_path: Path,
     ) -> None:
         """Test batch ingestion of multiple PDF files."""
-
         mongomock_client = mongomock.MongoClient()
         try:
             db = mongomock_client["secondbrain"]

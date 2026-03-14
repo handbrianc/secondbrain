@@ -303,7 +303,6 @@ class TestVectorStorageAsync:
     @pytest.mark.asyncio
     async def test_aclose_closes_both_clients(self, storage: VectorStorage) -> None:
         """Test async close closes both sync and async clients."""
-
         mock_client = MagicMock()
         storage._client = mock_client
 

@@ -17,7 +17,8 @@ class EmbeddingCache:
     Caches embeddings by SHA256 hash of the input text to avoid redundant
     Ollama API calls for duplicate texts.
 
-    Attributes:
+    Attributes
+    ----------
         max_size: Maximum number of cache entries before eviction.
         hits: Number of cache hits (read-only, for statistics).
         misses: Number of cache misses (read-only, for statistics).
@@ -70,7 +71,8 @@ class EmbeddingCache:
         Args:
             text: Input text to hash.
 
-        Returns:
+        Returns
+        -------
             Hexadecimal SHA256 hash string.
         """
         return hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -81,7 +83,8 @@ class EmbeddingCache:
         Args:
             text: Text to look up in cache.
 
-        Returns:
+        Returns
+        -------
             Cached embedding if found, None otherwise.
         """
         key = self._generate_key(text)
@@ -132,7 +135,8 @@ class EmbeddingCache:
             text: Text to get or generate embedding for.
             generate_fn: Function that generates embedding for the text.
 
-        Returns:
+        Returns
+        -------
             Embedding vector (from cache or newly generated).
         """
         cached = self.get(text)
@@ -154,7 +158,8 @@ class EmbeddingCache:
             text: Text to get or generate embedding for.
             generate_fn: Async function that generates embedding for the text.
 
-        Returns:
+        Returns
+        -------
             Embedding vector (from cache or newly generated).
         """
         cached = self.get(text)
@@ -175,7 +180,8 @@ class EmbeddingCache:
     def get_stats(self) -> dict[str, Any]:
         """Get cache statistics.
 
-        Returns:
+        Returns
+        -------
             Dictionary with cache statistics including hits, misses, size,
             and hit rate percentage.
         """
@@ -196,7 +202,8 @@ class EmbeddingCache:
         Args:
             text: Text to check.
 
-        Returns:
+        Returns
+        -------
             True if text is cached, False otherwise.
         """
         key = self._generate_key(text)
@@ -206,7 +213,8 @@ class EmbeddingCache:
     def __len__(self) -> int:
         """Get the number of cached entries.
 
-        Returns:
+        Returns
+        -------
             Number of entries in the cache.
         """
         with self._lock:

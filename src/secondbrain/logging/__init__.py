@@ -38,7 +38,8 @@ _request_id: ContextVar[str] = ContextVar("request_id", default="")
 def get_request_id() -> str:
     """Get the current request ID from context.
 
-    Returns:
+    Returns
+    -------
         Current request ID string.
     """
     return _request_id.get()
@@ -50,7 +51,8 @@ def set_request_id(request_id: str | None = None) -> str:
     Args:
         request_id: Request ID string. If None, generates a new UUID.
 
-    Returns:
+    Returns
+    -------
         The request ID string that was set.
     """
     if request_id is None:
@@ -122,7 +124,8 @@ def setup_json_logging(level: int) -> None:
 def check_services() -> dict[str, bool]:
     """Check availability of required services.
 
-    Returns:
+    Returns
+    -------
         Dictionary with service names as keys and boolean availability status.
     """
     from secondbrain.embedding import EmbeddingGenerator
@@ -140,7 +143,8 @@ def check_services() -> dict[str, bool]:
 def get_health_status() -> HealthStatus:
     """Get health status of all services.
 
-    Returns:
+    Returns
+    -------
         HealthStatus dictionary with status, timestamp, services, and check timing.
     """
     check_start = time.time()
@@ -165,7 +169,8 @@ def get_logger(name: str) -> logging.Logger:
     Args:
         name: Logger name.
 
-    Returns:
+    Returns
+    -------
         Configured Logger instance.
     """
     return logging.getLogger(name)

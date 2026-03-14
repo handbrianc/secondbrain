@@ -403,7 +403,6 @@ class TestEmbeddingGeneratorEdgeCases:
     @pytest.mark.asyncio
     async def test_generate_async_with_model_pull(self, monkeypatch):
         """Test async generate pulls model if not pulled."""
-
         gen = EmbeddingGenerator()
         gen._model_pulled = False
 
