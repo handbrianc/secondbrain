@@ -8,6 +8,7 @@ Commands are now organized in separate modules:
 """
 
 import click
+
 from secondbrain.logging import setup_logging
 
 
@@ -27,7 +28,7 @@ def cli(ctx: click.Context, verbose: bool) -> None:
 
 # Import and register commands after cli group is defined
 # This ensures commands are properly decorated and registered
-from . import commands  # noqa: F401 (import for side effects - command registration)
+from . import commands  # noqa: E402
 
 
 def main() -> None:

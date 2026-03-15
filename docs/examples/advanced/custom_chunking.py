@@ -47,7 +47,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
-    """Main entry point."""
+    """Run main entry point."""
     args = parse_args()
     setup_logging(verbose=args.verbose)
 
@@ -82,7 +82,7 @@ def main() -> None:
             )
             console.print("[green]✓ Ingestion complete[/green]")
             console.print(f"  Success: {result['success']}, Failed: {result['failed']}")
-        except Exception as e:
+        except (OSError, RuntimeError, ValueError) as e:
             console.print(f"[red]Error: {e}[/red]")
             sys.exit(1)
 

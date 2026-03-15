@@ -1,3 +1,5 @@
+"""Logging utilities for SecondBrain application."""
+
 import json
 import logging
 import time

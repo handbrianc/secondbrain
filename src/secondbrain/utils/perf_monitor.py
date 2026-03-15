@@ -11,7 +11,20 @@ logger = logging.getLogger(__name__)
 
 
 class PerfMetrics:
-    """Thread-safe performance metrics collector."""
+    """Thread-safe performance metrics collector.
+
+    Collects and aggregates duration measurements for named operations,
+    providing statistical summaries (min, max, avg, p50, p95, p99).
+
+    Used by @timing and @async_timing decorators to track operation
+    performance across the application.
+
+    Example:
+        metrics = PerfMetrics()
+        metrics.record("query", 0.045)
+        stats = metrics.get_stats("query")
+        print(f"Average: {stats['avg']:.3f}s")
+    """
 
     def __init__(self) -> None:
         self._metrics: dict[str, list[float]] = {}
@@ -53,7 +66,7 @@ metrics = PerfMetrics()
 
 
 def timing(metric_name: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-    """Decorator to track function execution time.
+    """Track function execution time.
 
     Args:
         metric_name: Name of the metric to record.
@@ -82,7 +95,7 @@ def timing(metric_name: str) -> Callable[[Callable[..., Any]], Callable[..., Any
 def async_timing(
     metric_name: str,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-    """Decorator to track async function execution time.
+    """Track async function execution time.
 
     Args:
         metric_name: Name of the metric to record.

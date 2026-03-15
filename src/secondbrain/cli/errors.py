@@ -4,7 +4,7 @@ import logging
 import sys
 from collections.abc import Callable
 from functools import wraps
-from typing import TypeVar, cast
+from typing import TypeVar
 
 import click
 from rich.console import Console
@@ -20,7 +20,7 @@ T = TypeVar("T")
 
 
 def handle_cli_errors(func: Callable[P, T]) -> Callable[P, T]:
-    """Decorator to handle CLI errors gracefully.
+    """Handle CLI errors gracefully by catching exceptions.
 
     Catches specific exceptions, displays user-friendly error messages,
     logs full traceback for debugging, and exits with status 1.
@@ -28,7 +28,8 @@ def handle_cli_errors(func: Callable[P, T]) -> Callable[P, T]:
     Args:
         func: Function to decorate.
 
-    Returns:
+    Returns
+    -------
         Wrapped function with error handling.
     """
 

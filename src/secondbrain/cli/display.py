@@ -2,6 +2,7 @@
 
 import json
 from collections.abc import Sequence
+from typing import Any
 
 from rich.console import Console
 from rich.table import Table
@@ -12,7 +13,7 @@ from secondbrain.storage import ChunkInfo, DatabaseStats
 console = Console()
 
 
-def display_search_results(results: list[dict[str, object]], format: str) -> None:
+def display_search_results(results: list[dict[str, Any]], format: str) -> None:
     """Display search results in the specified format.
 
     Args:
@@ -85,8 +86,9 @@ def display_health_status(status: HealthStatus) -> None:
         status: HealthStatus dictionary with service availability and timing.
     """
     status_color = "green" if status["status"] == "healthy" else "yellow"
+    status_value = status["status"].upper()
     console.print(
-        f"[bold {status_color}]Health Status: {status['status'].upper()}[/bold {status_color}]"
+        f"[bold {status_color}]Health Status: {status_value}[/bold {status_color}]"
     )
     console.print(f"  Timestamp: {status['timestamp']}")
     console.print(f"  Check Duration: {status['check_duration_seconds']:.3f}s")

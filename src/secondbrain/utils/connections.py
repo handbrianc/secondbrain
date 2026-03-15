@@ -130,7 +130,9 @@ class RateLimitedRetry:
                 if last_result:
                     return True
             except Exception as e:
-                logger.debug(f"Attempt {attempt + 1} failed: {e}")
+                logger.debug(
+                    "Attempt %s failed: %s: %s", attempt + 1, type(e).__name__, e
+                )
                 last_error = e
 
             if not self._can_retry():
@@ -192,7 +194,7 @@ class ValidatableService:
         try:
             self._connection_valid = self._do_validate()
         except Exception as e:
-            logger.debug(f"Validation failed: {e}")
+            logger.debug("Validation failed: %s: %s", type(e).__name__, e)
             self._connection_valid = False
 
         with self._lock:
@@ -244,7 +246,7 @@ class ValidatableService:
         try:
             self._connection_valid = await self._do_validate_async()
         except Exception as e:
-            logger.debug(f"Async validation failed: {e}")
+            logger.debug("Async validation failed: %s: %s", type(e).__name__, e)
             self._connection_valid = False
 
         with self._lock:

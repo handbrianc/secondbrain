@@ -75,7 +75,7 @@ line-ending = "auto"
 extend-select = ["I"]
 select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM", "PTH", "RUF", "D"]
 ignore = []
-extend-ignore = ["E501", "D406", "D407", "D102", "D105"]
+extend-ignore = ["E501", "D406", "D407"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "numpy"
@@ -83,6 +83,7 @@ convention = "numpy"
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
 "examples/**" = ["ANN", "E501", "SIM"]  # Examples prioritize readability over strict typing
+"tests/**" = ["BLE001", "D103"]  # Tests may catch generic exceptions; fixtures/hooks don't need docstrings
 
 [tool.mypy]
 python_version = "3.11"
@@ -98,7 +99,8 @@ warn_unused_ignores = true
 warn_no_return = true
 warn_unreachable = true
 strict_equality = true
-exclude = ["venv/", ".git/", "tests/", "docs/examples/", ".*\\.egg-info/"]
+exclude = ["venv/", ".git/", "tests/", "docs/examples/", ".*\\.egg-info/", "scripts/"]
+ignore_missing_imports = true
 
 
 [tool.coverage.run]

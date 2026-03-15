@@ -54,7 +54,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
-    """Main entry point for listing documents."""
+    """Run main entry point for listing documents."""
     args = parse_args()
 
     # Setup logging
@@ -101,7 +101,7 @@ def main() -> None:
         console.print(f"  Total chunks: {stats['total_chunks']}")
         console.print(f"  Unique sources: {stats['unique_sources']}")
 
-    except Exception as e:
+    except (OSError, RuntimeError) as e:
         console.print(f"[red]Error listing documents: {e}[/red]")
         sys.exit(1)
 

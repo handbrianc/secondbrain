@@ -23,12 +23,16 @@ app = FastAPI(title="SecondBrain API", version="1.0.0")
 
 
 class IngestRequest(BaseModel):
+    """Request model for document ingestion endpoint."""
+
     path: str
     recursive: bool = True
     batch_size: int = 5
 
 
 class IngestResponse(BaseModel):
+    """Response model for document ingestion endpoint."""
+
     status: str
     files_processed: int
     successful: int
@@ -36,6 +40,8 @@ class IngestResponse(BaseModel):
 
 
 class SearchRequest(BaseModel):
+    """Request model for semantic search endpoint."""
+
     query: str
     top_k: int = 5
     filter_source: str | None = None
@@ -43,6 +49,8 @@ class SearchRequest(BaseModel):
 
 
 class SearchResult(BaseModel):
+    """Search result item model."""
+
     score: float
     source: str
     page: int | None
@@ -50,18 +58,24 @@ class SearchResult(BaseModel):
 
 
 class SearchResponse(BaseModel):
+    """Response model for semantic search endpoint."""
+
     status: str
     query: str
     results: list[SearchResult]
 
 
 class DocumentList(BaseModel):
+    """Document metadata item model."""
+
     source: str
     page: int | None
     size: int
 
 
 class DocumentsResponse(BaseModel):
+    """Response model for document listing endpoint."""
+
     status: str
     total: int
     documents: list[DocumentList]

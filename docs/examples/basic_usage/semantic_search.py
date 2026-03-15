@@ -57,7 +57,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
-    """Main entry point for semantic search."""
+    """Run main entry point for semantic search."""
     args = parse_args()
 
     # Setup logging
@@ -107,7 +107,7 @@ def main() -> None:
         console.print(table)
         console.print(f"\n[blue]Total results: {len(results)}[/blue]")
 
-    except Exception as e:
+    except (OSError, RuntimeError) as e:
         console.print(f"[red]Search error: {e}[/red]")
         sys.exit(1)
 

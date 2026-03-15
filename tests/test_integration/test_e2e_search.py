@@ -8,11 +8,14 @@ from secondbrain.search import Searcher
 
 
 class TestSearchE2E:
+    """Test suite for end-to-end search integration."""
+
     @patch("secondbrain.search.EmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_search_e2e(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
     ) -> None:
+        """Test that end-to-end search returns expected results."""
         mock_embed = MagicMock()
         mock_embed.validate_connection.return_value = True
         mock_embed.generate.return_value = [0.5, 0.3, 0.8]
@@ -66,6 +69,7 @@ class TestSearchE2E:
     def test_search_with_filters(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
     ) -> None:
+        """Test that search applies filters correctly."""
         mock_embed = MagicMock()
         mock_embed.validate_connection.return_value = True
         mock_embed.generate.return_value = [0.4, 0.6, 0.2]
@@ -104,11 +108,14 @@ class TestSearchE2E:
 
 
 class TestSearchIntegration:
+    """Test suite for search integration scenarios."""
+
     @patch("secondbrain.search.EmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_search_with_custom_top_k(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
     ) -> None:
+        """Test that search with custom top_k parameter works correctly."""
         mock_embed = MagicMock()
         mock_embed.validate_connection.return_value = True
         mock_embed.generate.return_value = [0.1] * 768
@@ -130,6 +137,7 @@ class TestSearchIntegration:
     def test_search_no_results(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
     ) -> None:
+        """Test that search returns empty list when no results found."""
         mock_embed = MagicMock()
         mock_embed.validate_connection.return_value = True
         mock_embed.generate.return_value = [0.5] * 768
@@ -150,6 +158,7 @@ class TestSearchIntegration:
     def test_search_empty_embed_result(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
     ) -> None:
+        """Test that search handles empty embedding results."""
         mock_embed = MagicMock()
         mock_embed.validate_connection.return_value = True
         mock_embed.generate.return_value = []

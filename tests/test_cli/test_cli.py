@@ -135,16 +135,18 @@ class TestCLI:
             assert "Failed: 2 files" in result.output
 
     def test_search_verbose_format_empty_results(self) -> None:
-        """Test search verbose format with empty results."""
+        """Test search with json format and empty results."""
         from unittest.mock import MagicMock, patch
 
         with patch("secondbrain.search.Searcher") as mock_searcher_class:
             mock_searcher = MagicMock()
             mock_searcher.search.return_value = []
+            mock_searcher.__enter__ = MagicMock(return_value=mock_searcher)
+            mock_searcher.__exit__ = MagicMock(return_value=False)
             mock_searcher_class.return_value = mock_searcher
 
             runner = CliRunner()
-            result = runner.invoke(cli, ["search", "no matches", "--format", "verbose"])
+            result = runner.invoke(cli, ["search", "no matches", "--format", "json"])
 
             assert result.exit_code == 0
 

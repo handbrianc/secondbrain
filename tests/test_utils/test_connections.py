@@ -15,26 +15,35 @@ from secondbrain.utils.connections import (
 
 
 class TestServiceUnavailableError:
+    """Test suite for ServiceUnavailableError exception."""
+
     def test_exception_default_message(self) -> None:
+        """Test that ServiceUnavailableError has default message."""
         error = ServiceUnavailableError("test-service")
         assert str(error) == "test-service is unavailable"
 
     def test_exception_custom_message(self) -> None:
+        """Test that ServiceUnavailableError accepts custom message."""
         error = ServiceUnavailableError("test-service", "Custom error text")
         assert str(error) == "Custom error text"
 
     def test_exception_service_name_attribute(self) -> None:
+        """Test that ServiceUnavailableError has service_name attribute."""
         error = ServiceUnavailableError("my-service")
         assert error.service_name == "my-service"
 
 
 class TestEnsureServiceAvailable:
+    """Test suite for ensure_service_available function."""
+
     def test_service_available(self) -> None:
+        """Test that ensure_service_available succeeds when service is available."""
         validator = MagicMock(return_value=True)
         ensure_service_available("test-service", validator)
         validator.assert_called_once()
 
     def test_service_unavailable_raises(self) -> None:
+        """Test that ensure_service_available raises when service is unavailable."""
         validator = MagicMock(return_value=False)
         with pytest.raises(ServiceUnavailableError) as exc_info:
             ensure_service_available("test-service", validator)
@@ -43,24 +52,30 @@ class TestEnsureServiceAvailable:
 
 
 class TestServiceValidator:
+    """Test suite for ServiceValidator class."""
+
     def test_validator_not_configured(self) -> None:
+        """Test that ServiceValidator raises when not configured."""
         validator = ServiceValidator()
         with pytest.raises(RuntimeError, match="Validator not configured"):
             validator.is_available()
 
     def test_validator_configured_and_available(self) -> None:
+        """Test that ServiceValidator returns True when configured and available."""
         validator = ServiceValidator()
         validator.configure(lambda: True)
         result = validator.is_available()
         assert result is True
 
     def test_validator_configured_and_unavailable(self) -> None:
+        """Test that ServiceValidator returns False when configured and unavailable."""
         validator = ServiceValidator()
         validator.configure(lambda: False)
         result = validator.is_available()
         assert result is False
 
     def test_validator_caching(self) -> None:
+        """Test that ServiceValidator caches validation results."""
         validator = ServiceValidator(cache_ttl=60.0)
         call_count = 0
 
@@ -76,6 +91,7 @@ class TestServiceValidator:
         assert call_count == 1
 
     def test_validator_force_check(self) -> None:
+        """Test that ServiceValidator force check bypasses cache."""
         validator = ServiceValidator(cache_ttl=60.0)
         call_count = 0
 
@@ -91,6 +107,7 @@ class TestServiceValidator:
         assert call_count == 2
 
     def test_validator_cache_expiration(self) -> None:
+        """Test that ServiceValidator cache expires after TTL."""
         validator = ServiceValidator(cache_ttl=0.1)
         call_count = 0
 
@@ -106,6 +123,7 @@ class TestServiceValidator:
         assert call_count == 2
 
     def test_validator_invalidate(self) -> None:
+        """Test that ServiceValidator invalidate clears cache."""
         validator = ServiceValidator(cache_ttl=60.0)
         call_count = 0
 
@@ -122,6 +140,7 @@ class TestServiceValidator:
         assert call_count == 2
 
     def test_validator_on_recovery(self) -> None:
+        """Test that ServiceValidator on_recovery updates cache."""
         validator = ServiceValidator(cache_ttl=60.0)
         call_count = 0
         is_available = True
@@ -145,7 +164,7 @@ class TestServiceValidatorEdgeCases:
     """Additional edge case tests for ServiceValidator."""
 
     def test_validator_multiple_configures(self) -> None:
-        """Test configuring validator multiple times."""
+        """Test that ServiceValidator handles multiple configures."""
         validator = ServiceValidator()
         validator.configure(lambda: True)
         assert validator.is_available() is True
@@ -155,7 +174,7 @@ class TestServiceValidatorEdgeCases:
         assert validator.is_available() is False
 
     def test_validator_cache_ttl_zero(self) -> None:
-        """Test validator with zero TTL always revalidates."""
+        """Test that ServiceValidator with zero TTL always revalidates."""
         validator = ServiceValidator(cache_ttl=0.0)
         call_count = 0
 
@@ -172,7 +191,7 @@ class TestServiceValidatorEdgeCases:
         assert call_count == 3
 
     def test_validator_validator_callable_changes(self) -> None:
-        """Test validator behavior when validator function state changes."""
+        """Test that ServiceValidator handles validator function state changes."""
         validator = ServiceValidator()
         status = [True]
 
@@ -191,8 +210,10 @@ class TestServiceValidatorEdgeCases:
 
 
 class TestRateLimitedRetry:
+    """Test suite for RateLimitedRetry class."""
+
     def test_retry_on_failure(self) -> None:
-        """Test all retries exhausted returns False."""
+        """Test that RateLimitedRetry exhausts retries on failure."""
         retry = RateLimitedRetry(max_retries=2, base_delay=0.01)
 
         call_count = 0
@@ -207,14 +228,14 @@ class TestRateLimitedRetry:
         assert call_count == 2
 
     def test_success_on_first_attempt(self) -> None:
-        """Test no retries when first attempt succeeds."""
+        """Test that RateLimitedRetry doesn't retry on first success."""
         retry = RateLimitedRetry(max_retries=3, base_delay=0.01)
 
         result = retry.call(lambda: True)
         assert result is True
 
     def test_retry_with_exception(self) -> None:
-        """Test retry handles exceptions."""
+        """Test that RateLimitedRetry handles exceptions."""
         retry = RateLimitedRetry(max_retries=2, base_delay=0.01)
 
         call_count = 0
@@ -231,7 +252,7 @@ class TestRateLimitedRetry:
         assert call_count == 2
 
     def test_retry_resets_after_success(self) -> None:
-        """Test retry counter resets after a successful call."""
+        """Test that RateLimitedRetry resets after success."""
         retry = RateLimitedRetry(max_retries=3, base_delay=0.01)
 
         call_count = 0
@@ -257,7 +278,7 @@ class TestRateLimitedRetryEdgeCases:
     """Additional edge case tests for RateLimitedRetry."""
 
     def test_calculate_delay_with_jitter(self) -> None:
-        """Test delay calculation includes jitter."""
+        """Test that RateLimitedRetry delay calculation includes jitter."""
         retry = RateLimitedRetry(max_retries=3, base_delay=1.0, max_delay=10.0)
 
         # Calculate delay for attempt 0
@@ -271,7 +292,7 @@ class TestRateLimitedRetryEdgeCases:
         assert 1.8 <= delay <= 2.2
 
     def test_can_retry_exhausted(self) -> None:
-        """Test that can_retry returns False when retries exhausted."""
+        """Test that RateLimitedRetry can_retry returns False when exhausted."""
         retry = RateLimitedRetry(max_retries=2, base_delay=0.01)
 
         # First call should succeed
@@ -282,7 +303,7 @@ class TestRateLimitedRetryEdgeCases:
         assert retry._can_retry() is False
 
     def test_wait_before_retry_elapsed(self) -> None:
-        """Test wait_before_retry when enough time has elapsed."""
+        """Test that RateLimitedRetry wait_before_retry when elapsed."""
         retry = RateLimitedRetry(max_retries=3, base_delay=0.01)
 
         # Set last retry time to long ago
@@ -300,7 +321,7 @@ class TestValidatableService:
     """Tests for ValidatableService base class."""
 
     def test_validate_connection_cache_hit(self) -> None:
-        """Test that validate_connection uses cache."""
+        """Test that ValidatableService validate_connection uses cache."""
 
         class TestService:
             pass
@@ -325,7 +346,7 @@ class TestValidatableService:
         assert result2 is True
 
     def test_validate_connection_cache_miss(self) -> None:
-        """Test that validate_connection revalidates after TTL expires."""
+        """Test that ValidatableService validate_connection revalidates after TTL."""
         from secondbrain.utils.connections import ValidatableService
 
         call_count = 0
@@ -355,7 +376,7 @@ class TestValidatableService:
         assert call_count == 2
 
     def test_validate_connection_exception_handling(self) -> None:
-        """Test that validate_connection handles exceptions gracefully."""
+        """Test that ValidatableService validate_connection handles exceptions."""
         from secondbrain.utils.connections import ValidatableService
 
         class ConcreteService(ValidatableService):
@@ -372,7 +393,7 @@ class TestValidatableService:
         assert result is False
 
     def test_invalidate_connection_cache(self) -> None:
-        """Test that invalidate_connection_cache clears the cache."""
+        """Test that ValidatableService invalidate_connection_cache clears cache."""
         from secondbrain.utils.connections import ValidatableService
 
         call_count = 0
@@ -400,7 +421,7 @@ class TestValidatableService:
         assert call_count == 2
 
     def test_on_service_recovery(self) -> None:
-        """Test that on_service_recovery clears the cache."""
+        """Test that ValidatableService on_service_recovery clears cache."""
         from secondbrain.utils.connections import ValidatableService
 
         call_count = 0
@@ -433,7 +454,7 @@ class TestValidatableServiceAsync:
 
     @pytest.mark.asyncio
     async def test_validate_connection_async_cache_hit(self) -> None:
-        """Test that validate_connection_async uses cache."""
+        """Test that ValidatableService validate_connection_async uses cache."""
         from secondbrain.utils.connections import ValidatableService
 
         class ConcreteService(ValidatableService):
@@ -455,7 +476,7 @@ class TestValidatableServiceAsync:
 
     @pytest.mark.asyncio
     async def test_validate_connection_async_cache_miss(self) -> None:
-        """Test that validate_connection_async revalidates after TTL expires."""
+        """Test that ValidatableService validate_connection_async revalidates after TTL."""
         from secondbrain.utils.connections import ValidatableService
 
         call_count = 0
@@ -486,7 +507,7 @@ class TestValidatableServiceAsync:
 
     @pytest.mark.asyncio
     async def test_validate_connection_async_exception_handling(self) -> None:
-        """Test that validate_connection_async handles exceptions gracefully."""
+        """Test that ValidatableService validate_connection_async handles exceptions."""
         from secondbrain.utils.connections import ValidatableService
 
         class ConcreteService(ValidatableService):
@@ -504,7 +525,7 @@ class TestValidatableServiceAsync:
 
     @pytest.mark.asyncio
     async def test_do_validate_async_default_implementation(self) -> None:
-        """Test that _do_validate_async default calls _do_validate in thread."""
+        """Test that ValidatableService _do_validate_async default implementation."""
         from secondbrain.utils.connections import ValidatableService
 
         class ConcreteService(ValidatableService):

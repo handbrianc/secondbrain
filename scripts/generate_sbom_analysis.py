@@ -619,7 +619,7 @@ def generate_sbom_analysis_doc(analysis: dict[str, Any]) -> None:
 
 
 def main() -> None:
-    """Main entry point."""
+    """Run main entry point."""
     print("=" * 60)
     print("🔧 SBOM & Analysis Generator")
     print("=" * 60)

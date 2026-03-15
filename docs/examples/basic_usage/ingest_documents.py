@@ -53,7 +53,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
-    """Main entry point for document ingestion."""
+    """Run main entry point for document ingestion."""
     args = parse_args()
 
     # Setup logging
@@ -92,7 +92,7 @@ def main() -> None:
                     f"  Success: {result['success']}, Failed: {result['failed']}"
                 )
 
-        except Exception as e:
+        except (OSError, RuntimeError, ValueError) as e:
             console.print(f"[red]Error during ingestion: {e}[/red]")
             sys.exit(1)
 

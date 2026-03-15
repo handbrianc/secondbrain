@@ -9,6 +9,7 @@ from secondbrain.storage import VectorStorage
 
 @pytest.fixture(scope="module")
 def mock_storage_config():
+    """Provide mock storage configuration for aggregation edge case tests."""
     config = MagicMock()
     config.mongo_uri = "mongodb://localhost:27017"
     config.mongo_db = "secondbrain"
@@ -19,7 +20,7 @@ def mock_storage_config():
 
 @pytest.fixture(scope="module")
 def storage_with_mock(mock_storage_config):
-    """Module-scoped VectorStorage instance to avoid 1s+ overhead per test."""
+    """Provide module-scoped VectorStorage instance for aggregation tests."""
     with patch("secondbrain.storage.get_config", return_value=mock_storage_config):
         storage = VectorStorage()
         yield storage

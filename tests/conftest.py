@@ -13,13 +13,15 @@ from unittest.mock import MagicMock
 import pytest
 
 from secondbrain.config import Config
+from secondbrain.embedding import EmbeddingGenerator
+from secondbrain.storage import VectorStorage
 
 T = TypeVar("T")
 
 
 @pytest.fixture
 def storage_config_mock() -> MagicMock:
-
+    """Provide storage configuration mock for tests."""
     config = MagicMock()
     config.mongo_uri = "mongodb://localhost:27017"
     config.mongo_db = "secondbrain"
@@ -30,6 +32,7 @@ def storage_config_mock() -> MagicMock:
 
 @pytest.fixture
 def storage_with_mocks(storage_config_mock: MagicMock) -> Generator[Any, None, None]:
+    """Provide storage instance with mocks to avoid real DB access."""
     # Create a VectorStorage using mocked config to avoid real DB access
     from unittest.mock import patch
 
@@ -59,7 +62,7 @@ def mock_mongo_client() -> MagicMock:
 
 @pytest.fixture
 def mock_collection() -> MagicMock:
-    """Generic mock for a MongoDB collection."""
+    """Provide generic mock for a MongoDB collection."""
     return MagicMock()
 
 
@@ -75,7 +78,8 @@ def session_config() -> Config:
 
 
 @pytest.fixture(scope="module")
-def mock_embedding_generator() -> Any:
+def mock_embedding_generator() -> MagicMock:
+    """Provide mock embedding generator for tests."""
     from unittest.mock import MagicMock
 
     mock = MagicMock()
@@ -87,7 +91,8 @@ def mock_embedding_generator() -> Any:
 
 
 @pytest.fixture(scope="module")
-def mock_vector_storage() -> Any:
+def mock_vector_storage() -> MagicMock:
+    """Provide mock vector storage for tests."""
     from unittest.mock import MagicMock
 
     mock = MagicMock()
@@ -110,7 +115,7 @@ def mock_vector_storage() -> Any:
 
 
 @pytest.fixture
-def clean_vector_storage() -> Any:
+def clean_vector_storage() -> Generator[VectorStorage, None, None]:
     """Fixture to ensure VectorStorage client is properly closed."""
     from secondbrain.storage import VectorStorage
 
@@ -122,7 +127,7 @@ def clean_vector_storage() -> Any:
 
 
 @pytest.fixture
-def clean_embedding_generator() -> Any:
+def clean_embedding_generator() -> Generator[EmbeddingGenerator, None, None]:
     """Fixture to ensure EmbeddingGenerator client is properly closed."""
     from secondbrain.embedding import EmbeddingGenerator
 
@@ -134,7 +139,7 @@ def clean_embedding_generator() -> Any:
 
 
 @pytest.fixture
-def cleanup_resources(request: Any) -> Any:
+def cleanup_resources(request: Any) -> Generator[None, None, None]:
     """Opt-in cleanup for VectorStorage and EmbeddingGenerator after tests.
 
     This fixture is NO LONGER autouse - tests must explicitly request it via
@@ -183,9 +188,9 @@ def cleanup_resources(request: Any) -> Any:
     finally:
         # Restore original init methods
         VectorStorage.__init__ = original_init.get("storage", VectorStorage.__init__)  # type: ignore[method-assign]
-        EmbeddingGenerator.__init__ = original_init.get(
+        EmbeddingGenerator.__init__ = original_init.get(  # type: ignore[method-assign]
             "generator", EmbeddingGenerator.__init__
-        )  # type: ignore[method-assign]
+        )
         Searcher.__init__ = original_init.get("searcher", Searcher.__init__)  # type: ignore[method-assign]
 
         # Only cleanup clients that were actually instantiated
@@ -454,7 +459,7 @@ def _cleanup_storage() -> None:
 
         storage = VectorStorage()
         storage.close()
-    except Exception:
+    except (OSError, RuntimeError):
         pass
 
 
@@ -465,12 +470,13 @@ def _cleanup_embedding() -> None:
 
         generator = EmbeddingGenerator()
         generator.close()
-    except Exception:
+    except (OSError, RuntimeError):
         pass
 
 
 @pytest.fixture(scope="module", autouse=True)
 def mock_config_defaults() -> None:
+    """Mock configuration defaults for test environment."""
     import os
 
     test_config = {
@@ -522,11 +528,13 @@ def _cleanup_mongodb() -> None:
             client.drop_database("test_secondbrain")
         finally:
             client.close()
-    except Exception:
+    except (OSError, RuntimeError, Exception):
+        # Silently ignore cleanup errors when MongoDB is unavailable
         pass
 
 
 def pytest_sessionfinish(session: Any, exitstatus: int) -> None:
+    """Cleanup after test session finishes."""
     _cleanup_mongodb()
     _cleanup_storage()
     _cleanup_embedding()
@@ -536,6 +544,7 @@ def pytest_sessionfinish(session: Any, exitstatus: int) -> None:
 def pytest_terminal_summary(
     terminalreporter: Any, exitstatus: int, config: Any
 ) -> None:
+    """Provide terminal summary after test run."""
     pass
 
 

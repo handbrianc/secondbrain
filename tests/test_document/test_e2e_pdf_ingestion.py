@@ -240,7 +240,7 @@ class TestPDFSearchIntegration:
 
             # Create fresh index with correct dimensions (768)
             storage.ensure_index()
-        except Exception:
+        except (OSError, RuntimeError):
             pass  # Ignore errors
 
     @pytest.mark.slow

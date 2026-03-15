@@ -1,5 +1,7 @@
 """Shared fixtures for storage tests."""
 
+from collections.abc import Generator
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -8,7 +10,7 @@ from secondbrain.storage import VectorStorage
 
 
 @pytest.fixture(scope="module")
-def mock_storage_config():
+def mock_storage_config() -> MagicMock:
     """Module-scoped mock config to avoid repeated Config initialization."""
     config = MagicMock()
     config.mongo_uri = "mongodb://localhost:27017"
@@ -19,7 +21,7 @@ def mock_storage_config():
 
 
 @pytest.fixture(scope="module")
-def storage_with_mock(mock_storage_config):
+def storage_with_mock(mock_storage_config: MagicMock) -> Generator[Any, None, None]:
     """Module-scoped VectorStorage instance to avoid 1s+ overhead per test.
 
     This fixture creates a single VectorStorage instance with mocked config

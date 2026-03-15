@@ -12,7 +12,10 @@ import httpx
 from pymongo import MongoClient
 from pymongo.collection import Collection
 from pymongo.database import Database
-from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError
+from pymongo.errors import (
+    ConnectionFailure,
+    ServerSelectionTimeoutError,
+)
 
 from secondbrain.config import Config, get_config
 from secondbrain.exceptions import StorageConnectionError
@@ -132,7 +135,11 @@ class VectorStorage(ValidatableService):
                         return
             except Exception as e:
                 logger.debug(
-                    f"Index not ready, retrying... (attempt {attempt + 1}/{self._index_ready_retry_count}, error: {e})"
+                    "Index not ready, retrying... (attempt %s/%s, error: %s: %s)",
+                    attempt + 1,
+                    self._index_ready_retry_count,
+                    type(e).__name__,
+                    e,
                 )
             time.sleep(self._index_ready_retry_delay)
 
@@ -177,13 +184,18 @@ class VectorStorage(ValidatableService):
                         return
             except Exception as e:
                 logger.debug(
-                    f"Index not ready, retrying... (attempt {attempt + 1}/{self._index_ready_retry_count}, error: {e})"
+                    "Index not ready, retrying... (attempt %s/%s, error: %s: %s)",
+                    attempt + 1,
+                    self._index_ready_retry_count,
+                    type(e).__name__,
+                    e,
                 )
             await asyncio.sleep(self._index_ready_retry_delay)
 
         logger.warning("Vector search index may not be ready after maximum retries")
 
     def close(self) -> None:
+        """Close resources and release connections."""
         if self._client is not None:
             self._client.close()
             self._client = None
@@ -204,12 +216,14 @@ class VectorStorage(ValidatableService):
             self._async_client = None
 
     def __del__(self) -> None:
+        """Destructor - cleanup resources."""
         if self._client is not None:
             with contextlib.suppress(Exception):
                 self._client.close()
             self._client = None
 
     def __enter__(self) -> "VectorStorage":
+        """Enter runtime context manager."""
         return self
 
     def __exit__(
@@ -218,6 +232,7 @@ class VectorStorage(ValidatableService):
         exc_val: BaseException | None,
         exc_tb: Any,
     ) -> None:
+        """Exit runtime context manager."""
         self.close()
 
     @property
@@ -286,11 +301,11 @@ class VectorStorage(ValidatableService):
         try:
             _ = await asyncio.to_thread(lambda: self.client.admin.command("ping"))
             return True
-        except (ConnectionFailure, ServerSelectionTimeoutError):
+        except Exception:
             return False
 
     def _do_validate(self) -> bool:
-        """Synchronous MongoDB connection validation.
+        """Validate synchronous MongoDB connection.
 
         Returns
         -------
@@ -331,7 +346,7 @@ class VectorStorage(ValidatableService):
             )
             self._index_created = True
         except Exception as e:
-            logger.warning(f"Could not create index: {e}")
+            logger.warning("Could not create index: %s: %s", type(e).__name__, e)
             self._index_created = False
 
     @timing("storage_store")
@@ -522,7 +537,11 @@ class VectorStorage(ValidatableService):
         try:
             self._connection_valid = await asyncio.to_thread(self._do_validate)
         except Exception as e:
-            logger.debug(f"MongoDB async connection validation failed: {e}")
+            logger.debug(
+                "MongoDB async connection validation failed: %s: %s",
+                type(e).__name__,
+                e,
+            )
             self._connection_valid = False
 
         self._connection_checked_at = current_time

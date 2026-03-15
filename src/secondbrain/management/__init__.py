@@ -4,7 +4,7 @@ This module provides classes for listing, deleting, and checking status
 of documents stored in the vector database.
 """
 
-from typing import Any
+from typing import Any, Self
 
 from secondbrain.storage import ChunkInfo, DatabaseStats, VectorStorage
 from secondbrain.utils.connections import ensure_service_available
@@ -42,7 +42,8 @@ class BaseManager:
         """
         ensure_service_available("MongoDB", self.storage.validate_connection)
 
-    def __enter__(self) -> "BaseManager":
+    def __enter__(self) -> Self:
+        """Enter runtime context manager."""
         return self
 
     def __exit__(
@@ -51,6 +52,7 @@ class BaseManager:
         exc_val: BaseException | None,
         exc_tb: Any,
     ) -> None:
+        """Exit runtime context manager."""
         self.storage.close()
 
     def close(self) -> None:

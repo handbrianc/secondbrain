@@ -66,6 +66,7 @@ class EmbeddingGenerator(ValidatableService):
         super().__init__(cache_ttl=config.connection_cache_ttl)
 
     def close(self) -> None:
+        """Close resources and release connections."""
         if self._client is not None:
             self._client.close()
             self._client = None
@@ -84,12 +85,14 @@ class EmbeddingGenerator(ValidatableService):
             self._async_client = None
 
     def __del__(self) -> None:
+        """Destructor - cleanup resources."""
         if self._client is not None:
             with contextlib.suppress(Exception):
                 self._client.close()
             self._client = None
 
     def __enter__(self) -> "EmbeddingGenerator":
+        """Enter runtime context manager."""
         return self
 
     def __exit__(
@@ -98,9 +101,11 @@ class EmbeddingGenerator(ValidatableService):
         exc_val: BaseException | None,
         exc_tb: Any,
     ) -> None:
+        """Exit runtime context manager."""
         self.close()
 
     async def __aenter__(self) -> "EmbeddingGenerator":
+        """Enter async runtime context manager."""
         return self
 
     async def __aexit__(
@@ -109,6 +114,7 @@ class EmbeddingGenerator(ValidatableService):
         exc_val: BaseException | None,
         exc_tb: Any,
     ) -> None:
+        """Exit async runtime context manager."""
         await self.aclose()
 
     @property
@@ -147,7 +153,9 @@ class EmbeddingGenerator(ValidatableService):
             response = self._request("GET", f"{self.ollama_url}/api/tags")
             return response.status_code == 200
         except Exception as e:
-            logger.debug(f"Ollama connection validation failed: {e}")
+            logger.debug(
+                f"Ollama connection validation failed: {type(e).__name__}: {e}"
+            )
             return False
 
     async def validate_connection_async(self, force: bool = False) -> bool:
@@ -173,7 +181,9 @@ class EmbeddingGenerator(ValidatableService):
             response = await self._request_async("GET", f"{self.ollama_url}/api/tags")
             self._connection_valid = response.status_code == 200
         except Exception as e:
-            logger.debug(f"Ollama async connection validation failed: {e}")
+            logger.debug(
+                f"Ollama async connection validation failed: {type(e).__name__}: {e}"
+            )
             self._connection_valid = False
 
         self._connection_checked_at = current_time
@@ -213,7 +223,7 @@ class EmbeddingGenerator(ValidatableService):
                     }
             return None
         except Exception as e:
-            logger.debug(f"Failed to get model info: {e}")
+            logger.debug(f"Failed to get model info: {type(e).__name__}: {e}")
             return None
 
     async def get_model_info_async(self) -> dict[str, Any] | None:
@@ -239,7 +249,7 @@ class EmbeddingGenerator(ValidatableService):
                     }
             return None
         except Exception as e:
-            logger.debug(f"Failed to get model info async: {e}")
+            logger.debug(f"Failed to get model info async: {type(e).__name__}: {e}")
             return None
 
     def pull_model(self) -> None:
@@ -260,7 +270,7 @@ class EmbeddingGenerator(ValidatableService):
             else:
                 logger.warning(f"Failed to pull model: {response.text}")
         except Exception as e:
-            logger.error(f"Error pulling model: {e}")
+            logger.error(f"Error pulling model: {type(e).__name__}: {e}")
             raise OllamaUnavailableError(f"Failed to pull model: {e}") from e
 
     async def pull_model_async(self) -> None:
@@ -281,7 +291,7 @@ class EmbeddingGenerator(ValidatableService):
             else:
                 logger.warning(f"Failed to pull model: {response.text}")
         except Exception as e:
-            logger.error(f"Error pulling model: {e}")
+            logger.error(f"Error pulling model: {type(e).__name__}: {e}")
             raise OllamaUnavailableError(f"Failed to pull model: {e}") from e
 
     @timing("embedding_generate")

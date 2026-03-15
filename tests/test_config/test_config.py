@@ -119,6 +119,7 @@ class TestConfig:
         ],
     )
     def test_config_validation_errors(self, updates, expected) -> None:
+        """Test that config validation raises errors for invalid values."""
         base = {
             "mongo_uri": "mongodb://localhost:27017",
             "ollama_url": "http://localhost:11434",

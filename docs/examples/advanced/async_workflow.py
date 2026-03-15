@@ -39,7 +39,7 @@ async def search_async(
 
 
 async def main_async(path: str, queries: list[str]) -> None:
-    """Main async workflow."""
+    """Execute main async workflow."""
     setup_logging(verbose=True)
 
     console.print("[blue]Starting async workflow[/blue]\n")
@@ -77,7 +77,7 @@ async def main_async(path: str, queries: list[str]) -> None:
 
 
 def main() -> None:
-    """Main entry point."""
+    """Run main entry point."""
     parser = argparse.ArgumentParser(description="Async workflow example")
     parser.add_argument("path", type=str, help="Directory to ingest")
     parser.add_argument(

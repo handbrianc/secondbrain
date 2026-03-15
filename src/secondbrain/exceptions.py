@@ -8,43 +8,43 @@ handling and categorization across the application.
 class SecondBrainError(Exception):
     """Base exception for all secondbrain errors."""
 
-    ...
+    pass
 
 
 class ConfigError(SecondBrainError):
     """Raised when configuration issues occur."""
 
-    ...
+    pass
 
 
 class ValidationError(SecondBrainError):
     """Raised when input validation fails."""
 
-    ...
+    pass
 
 
 class ServiceError(SecondBrainError):
     """Raised when external service (Ollama, MongoDB) is unavailable."""
 
-    ...
+    pass
 
 
 class StorageError(SecondBrainError):
     """Raised when database/storage operations fail."""
 
-    ...
+    pass
 
 
 class DocumentExtractionError(SecondBrainError):
     """Raised when document extraction fails."""
 
-    ...
+    pass
 
 
 class EmbeddingError(SecondBrainError):
     """Raised when embedding generation fails."""
 
-    ...
+    pass
 
 
 class StorageConnectionError(SecondBrainError):
@@ -57,25 +57,25 @@ class StorageConnectionError(SecondBrainError):
 class CLIValidationError(SecondBrainError):
     """Raised when CLI input validation fails."""
 
-    ...
+    pass
 
 
 class UnsupportedFileError(SecondBrainError):
     """Raised when attempting to process an unsupported file type."""
 
-    ...
+    pass
 
 
 class EmbeddingGenerationError(EmbeddingError):
     """Raised when embedding generation fails due to API or model errors."""
 
-    ...
+    pass
 
 
 class OllamaUnavailableError(ServiceError):
     """Raised when Ollama service is unavailable or unreachable."""
 
-    ...
+    pass
 
 
 class ServiceUnavailableError(ServiceError):

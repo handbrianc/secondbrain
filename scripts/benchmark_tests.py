@@ -12,12 +12,15 @@ from pathlib import Path
 
 @dataclass
 class TestResult:
+    """Data class holding test benchmark results."""
+
     total_time: float
     num_tests: int
     slow_tests: list[tuple[float, str]]
 
 
 def cleanup_coverage_files() -> None:
+    """Remove coverage artifacts from previous test runs."""
     project_root = Path(__file__).parent.parent
     coverage_patterns = [
         project_root / ".coverage",
@@ -35,6 +38,7 @@ def cleanup_coverage_files() -> None:
 
 
 def run_tests(args: list[str]) -> TestResult:
+    """Run pytest and parse results for benchmarking."""
     start_time = time.time()
 
     cmd = [
@@ -81,6 +85,7 @@ def run_tests(args: list[str]) -> TestResult:
 
 
 def print_results(result: TestResult, test_type: str) -> None:
+    """Print formatted test performance report to console."""
     print(f"\n{'=' * 60}")
     print(f"Test Performance Report: {test_type}")
     print(f"{'=' * 60}")
@@ -99,6 +104,7 @@ def print_results(result: TestResult, test_type: str) -> None:
 
 
 def main() -> int:
+    """Run test benchmarks with optional test type filtering."""
     args = sys.argv[1:]
 
     if "--all" in args or not any(a in args for a in ["--unit", "--integration"]):

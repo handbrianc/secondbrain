@@ -1,26 +1,41 @@
-"""CLI commands module."""
+"""CLI commands for secondbrain document intelligence tool.
+
+This module provides Click-based CLI commands for:
+- Document ingestion (ingest)
+- Semantic search (search)
+- Document listing (list)
+- Document deletion (delete)
+- Status display (status)
+- Health checks (health)
+
+Each command includes comprehensive error handling, progress indicators,
+and user-friendly output formatting using Rich library.
+"""
 
 import json
 import logging
 import sys
-from typing import cast
+from typing import Any
 
 import click
 from rich.console import Console
 
 from secondbrain.config import get_config
-from secondbrain.exceptions import CLIValidationError
+from secondbrain.exceptions import (
+    CLIValidationError,
+    ServiceUnavailableError,
+    StorageConnectionError,
+)
 from secondbrain.logging import get_health_status
-from secondbrain.storage import ChunkInfo, DatabaseStats
+from secondbrain.storage import ChunkInfo
 
+from . import cli
 from .display import (
     display_health_status,
     display_list_results,
     display_search_results,
     display_status,
 )
-from .errors import handle_cli_errors
-from . import cli
 
 console = Console()
 logger = logging.getLogger(__name__)
@@ -102,7 +117,7 @@ def search(
     top_k = top_k or config.default_top_k
 
     with Searcher(verbose=ctx.obj.get("verbose", False)) as searcher:
-        results = searcher.search(
+        results: list[dict[str, Any]] = searcher.search(
             query=query,
             top_k=top_k,
             source_filter=source,
@@ -133,7 +148,8 @@ def list_cmd(
         raise CLIValidationError("Limit must be non-negative")
     if limit > MAX_LIST_LIMIT:
         click.echo(
-            f"Warning: Limit {limit} exceeds maximum {MAX_LIST_LIMIT}, clamping to {MAX_LIST_LIMIT}",
+            f"Warning: Limit {limit} exceeds maximum {MAX_LIST_LIMIT}, "
+            f"clamping to {MAX_LIST_LIMIT}",
             err=True,
         )
         limit = MAX_LIST_LIMIT
@@ -142,7 +158,6 @@ def list_cmd(
         raise CLIValidationError("Offset must be non-negative")
 
     with Lister(verbose=ctx.obj.get("verbose", False)) as lister:
-        lister = cast(Lister, lister)
         if all:
             limit = MAX_LIST_LIMIT
         results: list[ChunkInfo] = lister.list_chunks(
@@ -193,11 +208,14 @@ def delete(
                 return
 
     with Deleter(verbose=ctx.obj.get("verbose", False)) as deleter:
-        deleter = cast(Deleter, deleter)
         try:
             count = deleter.delete(source=source, chunk_id=chunk_id, all=all)
             console.print(f"[green]Deleted {count} document(s)[/green]")
-        except Exception as e:
+        except (
+            ServiceUnavailableError,
+            StorageConnectionError,
+            CLIValidationError,
+        ) as e:
             console.print(f"[red]Error: {e}[/red]")
             sys.exit(1)
 
@@ -209,7 +227,6 @@ def status(ctx: click.Context) -> None:
     from secondbrain.management import StatusChecker
 
     with StatusChecker(verbose=ctx.obj.get("verbose", False)) as status_checker:
-        status_checker = cast(StatusChecker, status_checker)
         stats = status_checker.get_status()
     display_status(stats)
 
@@ -283,7 +300,6 @@ def metrics(ctx: click.Context, reset: bool) -> None:
 def circuit_breaker(ctx: click.Context, reset: bool) -> None:
     """Show circuit breaker status."""
     from secondbrain.embedding import EmbeddingGenerator
-    from secondbrain.utils.circuit_breaker import CircuitBreaker
 
     embed_gen = EmbeddingGenerator()
     cb = embed_gen._circuit_breaker

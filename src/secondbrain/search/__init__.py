@@ -88,6 +88,7 @@ class Searcher:
         self.storage = VectorStorage()
 
     def close(self) -> None:
+        """Close resources and release connections."""
         self.embedding_gen.close()
         self.storage.close()
 
@@ -103,6 +104,7 @@ class Searcher:
             await self.storage.aclose()
 
     def __enter__(self) -> "Searcher":
+        """Enter runtime context manager."""
         return self
 
     def __exit__(
@@ -111,7 +113,21 @@ class Searcher:
         exc_val: BaseException | None,
         exc_tb: Any,
     ) -> None:
+        """Exit runtime context manager."""
         self.close()
+
+    async def __aenter__(self) -> "Searcher":
+        """Async context manager entry."""
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: Any,
+    ) -> None:
+        """Async context manager exit - closes async resources."""
+        await self.aclose()
 
     def search(
         self,

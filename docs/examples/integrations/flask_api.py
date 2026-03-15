@@ -46,7 +46,7 @@ def ingest():  # type: ignore
                 "failed": result["failed"],
             }
         )
-    except Exception as e:
+    except (OSError, RuntimeError) as e:
         return jsonify({"error": str(e)}), 500
 
 
@@ -79,7 +79,7 @@ def search():  # type: ignore
                 ],
             }
         )
-    except Exception as e:
+    except (OSError, RuntimeError) as e:
         return jsonify({"error": str(e)}), 500
 
 
@@ -107,11 +107,12 @@ def list_documents():  # type: ignore
                 ],
             }
         )
-    except Exception as e:
+    except (OSError, RuntimeError) as e:
         return jsonify({"error": str(e)}), 500
 
 
 def main() -> None:
+    """Run the Flask API server."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--host", default="0.0.0.0")

@@ -37,8 +37,10 @@ class TestRateLimiterSync:
             return current_time[0]
 
         with (
-            patch("secondbrain.embedding.time.sleep"),
-            patch("secondbrain.embedding.time.time", side_effect=mock_time),
+            patch("secondbrain.embedding.rate_limiter.time.sleep"),
+            patch(
+                "secondbrain.embedding.rate_limiter.time.time", side_effect=mock_time
+            ),
         ):
             limiter = RateLimiter(max_requests=2, window_seconds=0.5)
             limiter.acquire()
@@ -49,7 +51,7 @@ class TestRateLimiterSync:
 
     def test_window_sliding(self) -> None:
         """Test that the sliding window works correctly."""
-        with patch("secondbrain.embedding.time.sleep"):
+        with patch("secondbrain.embedding.rate_limiter.time.sleep"):
             limiter = RateLimiter(max_requests=2, window_seconds=0.03)
             limiter.acquire()
             limiter.acquire()
@@ -75,7 +77,7 @@ class TestRateLimiterAsync:
     @pytest.mark.asyncio
     async def test_acquire_async_blocks_when_limit_exceeded(self) -> None:
         """Test that acquire_async blocks when limit is exceeded."""
-        with patch("secondbrain.embedding.time.sleep"):
+        with patch("secondbrain.embedding.rate_limiter.time.sleep"):
             limiter = RateLimiter(max_requests=2, window_seconds=0.05)
             await limiter.acquire_async()
             await limiter.acquire_async()
@@ -105,7 +107,7 @@ class TestRateLimiterAsync:
     @pytest.mark.asyncio
     async def test_async_concurrent_with_limiting(self) -> None:
         """Test async concurrent access respects rate limits."""
-        with patch("secondbrain.embedding.time.sleep"):
+        with patch("secondbrain.embedding.rate_limiter.time.sleep"):
             limiter = RateLimiter(max_requests=2, window_seconds=0.03)
             request_count = 0
 
@@ -170,19 +172,17 @@ class TestRateLimiterEdgeCases:
 
     def test_request_timestamp_ordering(self) -> None:
         """Test that request timestamps are properly maintained."""
-        with patch("secondbrain.embedding.time.sleep"):
-            limiter = RateLimiter(max_requests=5, window_seconds=1.0)
-            for _ in range(5):
-                time.sleep(0.01)
-                limiter.acquire()
-            assert len(limiter._requests) == 5
+        limiter = RateLimiter(max_requests=5, window_seconds=1.0)
+        for _ in range(5):
+            time.sleep(0.01)
+            limiter.acquire()
+        assert len(limiter._requests) == 5
 
     @pytest.mark.asyncio
     async def test_async_request_timestamp_ordering(self) -> None:
         """Test that async request timestamps are properly maintained."""
-        with patch("secondbrain.embedding.time.sleep"):
-            limiter = RateLimiter(max_requests=5, window_seconds=1.0)
-            for _ in range(5):
-                await asyncio.sleep(0.01)
-                await limiter.acquire_async()
-            assert len(limiter._requests) == 5
+        limiter = RateLimiter(max_requests=5, window_seconds=1.0)
+        for _ in range(5):
+            await asyncio.sleep(0.01)
+            await limiter.acquire_async()
+        assert len(limiter._requests) == 5

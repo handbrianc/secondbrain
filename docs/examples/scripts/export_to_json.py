@@ -18,6 +18,7 @@ console = Console()
 
 
 def main() -> None:
+    """Export ingested documents to JSON file."""
     parser = argparse.ArgumentParser(description="Export documents to JSON")
     parser.add_argument("--output", "-o", required=True, help="Output JSON file")
     parser.add_argument("--limit", "-l", type=int, default=1000, help="Max documents")

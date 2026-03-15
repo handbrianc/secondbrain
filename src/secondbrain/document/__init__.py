@@ -1,3 +1,12 @@
+"""Document ingestion and processing for secondbrain.
+
+This module provides:
+- DocumentIngestor: Main class for ingesting documents
+- Segment: TypedDict for text segments with page info
+- is_supported: Check if file type is supported
+- get_file_type: Get file type category string
+"""
+
 from __future__ import annotations
 
 import logging
@@ -30,6 +39,19 @@ warnings.filterwarnings(
 
 
 class Segment(TypedDict):
+    """Text segment extracted from a document.
+
+    Represents a chunk of text with its source page information,
+    used during document ingestion pipeline.
+
+    Attributes
+    ----------
+    text : str
+        The extracted text content.
+    page : int
+        The page number where this segment was found (0-indexed).
+    """
+
     text: str
     page: int
 
@@ -254,7 +276,10 @@ class DocumentIngestor:
             logger.error(f"Failed to extract text from {file_path}: {e}")
             return None
         except Exception as e:
-            logger.error(f"Unexpected error extracting text from {file_path}: {e}")
+            logger.error(
+                f"Unexpected error extracting text from {file_path}: "
+                f"{type(e).__name__}: {e}"
+            )
             return None
 
         # Chunk and build documents with embeddings
@@ -317,10 +342,14 @@ class DocumentIngestor:
             try:
                 embedding = embedding_gen.generate(chunk["text"])
                 chunk_to_embedding[chunk["text_hash"]] = embedding
-            except (OllamaUnavailableError, EmbeddingGenerationError) as e:
-                logger.error(f"Failed to generate embedding for chunk: {e}")
             except Exception as e:
-                logger.error(f"Unexpected error generating embedding for chunk: {e}")
+                logger.error(
+                    "Failed to generate embedding for chunk: %s: %s",
+                    type(e).__name__,
+                    e,
+                )
+                # Skip this chunk - continue with others
+                continue
 
         # Build final documents
         docs_to_store: list[dict[str, Any]] = []
@@ -416,7 +445,10 @@ class DocumentIngestor:
                         successful_files += 1
 
                 except Exception as e:
-                    logger.error(f"Unexpected error processing file {file_path}: {e}")
+                    logger.error(
+                        f"Unexpected error processing file {file_path}: "
+                        f"{type(e).__name__}: {e}"
+                    )
                     failed_files += 1
 
         return {"success": successful_files, "failed": failed_files}
@@ -461,15 +493,14 @@ class DocumentIngestor:
 
             return segments
 
-        except OSError as e:
-            logger.error(f"Error reading file {file_path}: {e}")
-            raise DocumentExtractionError(
-                f"Failed to read file '{file_path}': {type(e).__name__}: {e}"
-            ) from e
+        except DocumentExtractionError:
+            raise
         except Exception as e:
-            logger.error(f"Error extracting text from {file_path}: {e}")
+            logger.error(
+                "Error extracting text from %s: %s: %s", file_path, type(e).__name__, e
+            )
             raise DocumentExtractionError(
-                f"Failed to extract text from '{file_path}': {type(e).__name__}: {e}"
+                f"Failed to extract text from {file_path}: {e}"
             ) from e
 
     def _chunk_text(self, segments: list[Segment]) -> list[Segment]:

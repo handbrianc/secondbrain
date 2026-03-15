@@ -78,13 +78,13 @@ class TestHealthStatus:
         }
 
     def test_health_status_has_status_field(self, sample_status: HealthStatus) -> None:
-        """Test health status dict has status field."""
+        """Test that health status dict has status field."""
         assert "status" in sample_status
 
     def test_health_status_has_services_field(
         self, sample_status: HealthStatus
     ) -> None:
-        """Test health status dict has services field."""
+        """Test that health status dict has services field."""
         assert "services" in sample_status
 
 
@@ -92,7 +92,7 @@ class TestJsonLogging:
     """Tests for JSON logging format."""
 
     def test_json_formatter_output(self) -> None:
-        """Test JSON formatter produces valid JSON."""
+        """Test that JSON formatter produces valid JSON."""
         stream = io.StringIO()
         handler = logging.StreamHandler(stream)
 
@@ -115,7 +115,7 @@ class TestJsonLogging:
         logger.removeHandler(handler)
 
     def test_json_formatter_includes_metadata(self) -> None:
-        """Test JSON formatter includes metadata fields."""
+        """Test that JSON formatter includes metadata fields."""
         stream = io.StringIO()
         handler = logging.StreamHandler(stream)
 
@@ -159,31 +159,31 @@ class TestRequestContext:
     """Tests for request ID context management."""
 
     def test_get_request_id_default_empty(self) -> None:
-        """Test get_request_id returns empty string by default."""
+        """Test that get_request_id returns empty string by default."""
         result = get_request_id()
         assert result == ""
 
     def test_set_request_id_generates_uuid(self) -> None:
-        """Test set_request_id generates UUID when no ID provided."""
+        """Test that set_request_id generates UUID when no ID provided."""
         request_id = set_request_id()
         assert len(request_id) > 0
         assert isinstance(request_id, str)
 
     def test_set_request_id_with_custom_id(self) -> None:
-        """Test set_request_id accepts custom ID."""
+        """Test that set_request_id accepts custom ID."""
         custom_id = "custom-request-123"
         request_id = set_request_id(custom_id)
         assert request_id == custom_id
 
     def test_get_request_id_returns_set_value(self) -> None:
-        """Test get_request_id returns the value set by set_request_id."""
+        """Test that get_request_id returns the value set by set_request_id."""
         custom_id = "test-request-456"
         set_request_id(custom_id)
         result = get_request_id()
         assert result == custom_id
 
     def test_request_id_isolation(self) -> None:
-        """Test request ID is isolated between tests (pytest fixtures)."""
+        """Test that request ID is isolated between tests."""
         # This test verifies that each test starts with a clean context
         result = get_request_id()
         # Should be empty or a new value, not carrying over from previous tests
@@ -194,7 +194,7 @@ class TestSetupJsonLogging:
     """Tests for JSON logging setup."""
 
     def test_setup_json_logging_creates_formatter(self) -> None:
-        """Test JSON logging setup creates proper formatter."""
+        """Test that JSON logging setup creates proper formatter."""
         root_logger = logging.getLogger()
         root_logger.handlers.clear()
 
@@ -203,7 +203,7 @@ class TestSetupJsonLogging:
         assert len(root_logger.handlers) > 0
 
     def test_setup_json_logging_sets_level(self) -> None:
-        """Test JSON logging sets correct log level."""
+        """Test that JSON logging sets correct log level."""
         root_logger = logging.getLogger()
         root_logger.handlers.clear()
 
@@ -212,7 +212,7 @@ class TestSetupJsonLogging:
         assert len(root_logger.handlers) > 0
 
     def test_json_formatter_includes_request_id(self) -> None:
-        """Test JSON formatter includes request_id in output."""
+        """Test that JSON formatter includes request_id in output."""
         stream = io.StringIO()
         handler = logging.StreamHandler(stream)
 
@@ -262,7 +262,10 @@ class TestSetupJsonLogging:
 
 
 class TestGetHealthStatus:
+    """Tests for get_health_status function."""
+
     def test_get_health_status_structure(self) -> None:
+        """Test that get_health_status returns correct structure."""
         status = get_health_status()
 
         assert "status" in status
@@ -271,6 +274,7 @@ class TestGetHealthStatus:
         assert "check_duration_seconds" in status
 
     def test_get_health_status_services_keys(self) -> None:
+        """Test that get_health_status has correct service keys."""
         status = get_health_status()
 
         assert "ollama" in status["services"]
@@ -278,16 +282,21 @@ class TestGetHealthStatus:
 
 
 class TestCheckServices:
+    """Tests for check_services function."""
+
     def test_check_services_returns_dict(self) -> None:
+        """Test that check_services returns a dict."""
         result = check_services()
         assert isinstance(result, dict)
 
     def test_check_services_has_required_keys(self) -> None:
+        """Test that check_services has required keys."""
         result = check_services()
         assert "ollama" in result
         assert "mongodb" in result
 
     def test_check_services_values_are_booleans(self) -> None:
+        """Test that check_services values are booleans."""
         result = check_services()
         assert isinstance(result["ollama"], bool)
         assert isinstance(result["mongodb"], bool)

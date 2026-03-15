@@ -41,12 +41,12 @@ def process_file(
     try:
         result = ingestor.ingest(str(filepath))
         return filepath, result["success"], None
-    except Exception as e:
+    except (OSError, RuntimeError) as e:
         return filepath, 0, str(e)
 
 
 def main() -> None:
-    """Main entry point."""
+    """Run main entry point."""
     args = parse_args()
     setup_logging(verbose=args.verbose)
 
