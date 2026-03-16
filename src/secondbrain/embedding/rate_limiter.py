@@ -5,11 +5,14 @@ and time window. Provides both synchronous and asynchronous interfaces.
 """
 
 import asyncio
+import logging
 import time
 from collections import deque
 from threading import Lock
 
 from secondbrain.config import get_config
+
+logger = logging.getLogger(__name__)
 
 
 class RateLimiter:
@@ -44,7 +47,10 @@ class RateLimiter:
         self._requests: deque[float] = deque()
 
     def acquire(self) -> None:
-        """Acquire rate limit token, blocking if necessary."""
+        """Acquire rate limit token, blocking if necessary.
+
+        Logs rate limit queue status in verbose mode.
+        """
         current_time = time.time()
 
         with self._lock:
@@ -56,6 +62,10 @@ class RateLimiter:
                 oldest = self._requests[0]
                 sleep_time = self.window_seconds - (current_time - oldest)
                 if sleep_time > 0:
+                    logger.debug(
+                        f"Rate limit queue full ({len(self._requests)}/{self.max_requests}), "
+                        f"waiting {sleep_time:.2f}s"
+                    )
                     time.sleep(sleep_time)
                 current_time = time.time()
                 cutoff = current_time - self.window_seconds
@@ -63,6 +73,9 @@ class RateLimiter:
                     self._requests.popleft()
 
             self._requests.append(current_time)
+            logger.debug(
+                f"Rate limit acquired, queue size: {len(self._requests)}/{self.max_requests}"
+            )
 
     async def acquire_async(self) -> None:
         """Acquire rate limit token asynchronously, awaiting if necessary.

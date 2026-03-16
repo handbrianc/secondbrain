@@ -14,6 +14,7 @@ and user-friendly output formatting using Rich library.
 
 import json
 import logging
+import os
 import sys
 from typing import Any
 
@@ -51,10 +52,16 @@ MAX_LIST_LIMIT = 100000
     "-b",
     type=int,
     default=10,
-    help="Batch size for parallel processing",
+    help="Batch size for ThreadPoolExecutor (used when cores=1)",
 )
 @click.option("--chunk-size", type=int, help="Override default chunk size")
 @click.option("--chunk-overlap", type=int, help="Override default chunk overlap")
+@click.option(
+    "--cores",
+    "-c",
+    type=int,
+    help="Number of CPU cores to use for parallel processing (default: auto-detect)",
+)
 @click.pass_context
 def ingest(
     ctx: click.Context,
@@ -63,6 +70,7 @@ def ingest(
     batch_size: int,
     chunk_size: int | None,
     chunk_overlap: int | None,
+    cores: int | None,
 ) -> None:
     """Ingest documents into the vector database.
 
@@ -74,6 +82,17 @@ def ingest(
     chunk_size = chunk_size or config.chunk_size
     chunk_overlap = chunk_overlap or config.chunk_overlap
 
+    # Validate and resolve core count
+    if cores is not None:
+        if cores <= 0:
+            raise CLIValidationError("cores must be positive")
+        available_cores = os.cpu_count() or 1
+        if cores > available_cores:
+            console.print(
+                f"[yellow]Warning: Requested {cores} cores, but only {available_cores} available. Using {available_cores}.[/yellow]"
+            )
+            cores = available_cores
+
     ingestor = DocumentIngestor(
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
@@ -81,7 +100,9 @@ def ingest(
     )
 
     console.print(f"[bold]Ingesting: {path}[/bold]")
-    results = ingestor.ingest(path, recursive=recursive, batch_size=batch_size)
+    results = ingestor.ingest(
+        path, recursive=recursive, batch_size=batch_size, cores=cores
+    )
     console.print(f"[green]Successfully ingested {results['success']} files[/green]")
     if results["failed"] > 0:
         console.print(f"[yellow]Failed: {results['failed']} files[/yellow]")
