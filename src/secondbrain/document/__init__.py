@@ -9,7 +9,10 @@ This module provides:
 
 from __future__ import annotations
 
+import hashlib
 import logging
+import os
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
@@ -25,6 +28,8 @@ from secondbrain.exceptions import DocumentExtractionError, UnsupportedFileError
 if TYPE_CHECKING:
     from docling.document_converter import DocumentConverter
 
+    from secondbrain.embedding.generator import EmbeddingGenerator
+
 logger = logging.getLogger(__name__)
 
 # Suppress docling deprecation warnings (upstream library issue)
@@ -36,6 +41,118 @@ warnings.filterwarnings(
     category=DeprecationWarning,
     module="docling",
 )
+
+# Memory management constant for batch sizes
+MAX_MEMORY_BATCH_SIZE = 100
+
+
+def _extract_and_chunk_file(
+    file_path_str: str, chunk_size: int, chunk_overlap: int
+) -> dict[str, Any]:
+    """Worker function for multiprocessing: extract and chunk a single file.
+
+    This function runs in a separate process and returns extracted chunks.
+    Must be at module level to be picklable for ProcessPoolExecutor.
+
+    Args:
+        file_path_str: String path to the file to process.
+        chunk_size: Maximum chunk size in characters.
+        chunk_overlap: Overlap between consecutive chunks.
+
+    Returns
+    -------
+        Dict with keys: 'success' (bool), 'file_path' (str),
+        'chunks' (list[Segment]), 'error' (str | None).
+    """
+    file_path = Path(file_path_str)
+    try:
+        # Lazy import to avoid heavy import overhead in main process
+        from docling.document_converter import DocumentConverter
+
+        converter = DocumentConverter()
+        result = converter.convert(file_path)
+        content = result.document
+
+        # Extract segments from document
+        segments: list[Segment] = []
+
+        if hasattr(content, "texts") and content.texts:
+            for text_item in content.texts:
+                if not hasattr(text_item, "text") or not text_item.text:
+                    continue
+
+                page_num = 1
+                if hasattr(text_item, "prov") and text_item.prov:
+                    prov = text_item.prov[0]
+                    if hasattr(prov, "page_no"):
+                        page_num = prov.page_no
+
+                segments.append({"text": text_item.text, "page": page_num})
+
+        # Fallback: read file directly for plain text formats
+        if not segments:
+            with file_path.open(encoding="utf-8", errors="ignore") as f:
+                text = f.read()
+            segments = [{"text": text, "page": 1}]
+
+        # Chunk the extracted segments
+        chunks = _chunk_segments(segments, chunk_size, chunk_overlap)
+
+        return {
+            "success": True,
+            "file_path": file_path,
+            "chunks": chunks,
+            "error": None,
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "file_path": file_path,
+            "chunks": [],
+            "error": f"{type(e).__name__}: {e}",
+        }
+
+
+def _chunk_segments(
+    segments: list[Segment], chunk_size: int, chunk_overlap: int
+) -> list[Segment]:
+    """Chunk segments into smaller pieces respecting size limits.
+
+    Args:
+        segments: List of extracted text segments.
+        chunk_size: Maximum chunk size in characters.
+        chunk_overlap: Overlap between consecutive chunks.
+
+    Returns
+    -------
+        List of chunked segments.
+    """
+    chunks: list[Segment] = []
+
+    for segment in segments:
+        text = segment["text"]
+        page = segment.get("page", 0)
+
+        if not text.strip():
+            continue
+
+        start = 0
+        while start < len(text):
+            next_start = start + chunk_size
+            chunk_end = next_start if next_start < len(text) else len(text)
+            last_space = text.rfind(" ", start, chunk_end)
+            if last_space > start:
+                chunk_end = last_space
+            chunk_text = text[start:chunk_end].strip()
+            if chunk_text:
+                chunks.append({"text": chunk_text, "page": page})
+
+            new_start = chunk_end - chunk_overlap
+            if new_start >= len(text) or new_start <= start:
+                break
+            start = new_start
+
+    return chunks
 
 
 class Segment(TypedDict):
@@ -321,7 +438,7 @@ class DocumentIngestor:
                 continue
 
             normalized = " ".join(cleaned.lower().split())
-            text_hash = hash(normalized)
+            text_hash = int(hashlib.sha256(normalized.encode()).hexdigest(), 16)
 
             if text_hash not in seen_hashes:
                 seen_hashes.add(text_hash)
@@ -381,7 +498,7 @@ class DocumentIngestor:
                 "embedding": embedding,
                 "metadata": {
                     "file_type": file_type,
-                    "ingested_at": None,
+                    "ingested_at": datetime.now(UTC).isoformat(),
                     "chunk_index": chunk_item["original_index"],
                 },
             }
@@ -394,22 +511,39 @@ class DocumentIngestor:
         path: str,
         recursive: bool = False,
         batch_size: int = 10,
+        cores: int | None = None,
     ) -> dict[str, int]:
         """Ingest documents from a file or directory.
 
         Args:
             path: Path to file or directory to ingest.
             recursive: Recursively process subdirectories.
-            batch_size: Number of files to process in parallel.
+            batch_size: Number of files to process in parallel (ThreadPool).
+            cores: Number of CPU cores for multiprocessing. If None, uses
+                config.max_workers or auto-detects CPU count.
 
         Returns
         -------
             dict with 'success' and 'failed' counts.
         """
-        from concurrent.futures import ThreadPoolExecutor, as_completed
+        from concurrent.futures import (
+            ProcessPoolExecutor,
+            ThreadPoolExecutor,
+            as_completed,
+        )
 
+        from secondbrain.config import get_config
         from secondbrain.embedding import EmbeddingGenerator
         from secondbrain.storage import VectorStorage
+
+        # Resolve core count
+        config = get_config()
+        if cores is None:
+            cores = config.max_workers or os.cpu_count() or 1
+
+        # Validate core count
+        if cores <= 0:
+            raise ValueError("cores must be positive")
 
         # Collect and validate files
         files = self._collect_and_validate_files(path, recursive)
@@ -424,32 +558,96 @@ class DocumentIngestor:
         failed_files = 0
         successful_files = 0
 
-        # Process files in parallel batches
-        with ThreadPoolExecutor(max_workers=batch_size) as executor:
-            futures = {
-                executor.submit(self._process_file_for_storage, f, embedding_gen): f
-                for f in files
-            }
+        # Use multiprocessing if cores > 1, otherwise use ThreadPoolExecutor
+        if cores > 1:
+            # Process files using ProcessPoolExecutor for true parallelism
+            with ProcessPoolExecutor(max_workers=cores) as executor:
+                futures = {
+                    executor.submit(
+                        _extract_and_chunk_file,
+                        str(f),  # Pass as string for cross-process serialization
+                        self.chunk_size,
+                        self.chunk_overlap,
+                    ): f
+                    for f in files
+                }
 
-            for future in as_completed(futures):
-                file_path = futures[future]
-                try:
-                    docs_to_store = future.result()
+                for future in as_completed(
+                    futures, timeout=3600
+                ):  # 1 hour timeout per file
+                    file_path = futures[future]
+                    try:
+                        result = future.result(
+                            timeout=300
+                        )  # 5 minute timeout for result retrieval
 
-                    if docs_to_store is None:
-                        failed_files += 1
-                        continue
+                        if not result["success"]:
+                            logger.error(
+                                "Failed to process %s: %s", file_path, result["error"]
+                            )
+                            failed_files += 1
+                            continue
 
-                    if docs_to_store:
-                        storage.store_batch(docs_to_store)
+                        chunks = result["chunks"]
+                        if not chunks:
+                            logger.warning(
+                                "File %s produced no chunks (may be empty, image-only, or extraction failed)",
+                                file_path,
+                            )
+                            failed_files += 1
+                            continue
+
+                        # Convert chunks to documents with embeddings
+                        docs_to_store = self._chunks_to_documents(
+                            file_path, chunks, embedding_gen
+                        )
+
+                        # Store in batches to manage memory
+                        for i in range(0, len(docs_to_store), MAX_MEMORY_BATCH_SIZE):
+                            batch = docs_to_store[i : i + MAX_MEMORY_BATCH_SIZE]
+                            storage.store_batch(batch)
+
                         successful_files += 1
 
-                except Exception as e:
-                    logger.error(
-                        f"Unexpected error processing file {file_path}: "
-                        f"{type(e).__name__}: {e}"
-                    )
-                    failed_files += 1
+                    except Exception as e:
+                        logger.error(
+                            "Unexpected error processing file %s: %s: %s",
+                            file_path,
+                            type(e).__name__,
+                            e,
+                        )
+                        failed_files += 1
+        else:
+            # Use ThreadPoolExecutor for sequential/batch processing
+            with ThreadPoolExecutor(max_workers=batch_size) as executor:
+                futures = {
+                    executor.submit(self._process_file_for_storage, f, embedding_gen): f
+                    for f in files
+                }
+
+                for future in as_completed(
+                    futures, timeout=3600
+                ):  # 1 hour timeout per file
+                    file_path = futures[future]
+                    try:
+                        docs_to_store = future.result(timeout=300)  # 5 minute timeout
+
+                        if docs_to_store is None:
+                            failed_files += 1
+                            continue
+
+                        if docs_to_store:
+                            storage.store_batch(docs_to_store)
+                            successful_files += 1
+
+                    except Exception as e:
+                        logger.error(
+                            "Unexpected error processing file %s: %s: %s",
+                            file_path,
+                            type(e).__name__,
+                            e,
+                        )
+                        failed_files += 1
 
         return {"success": successful_files, "failed": failed_files}
 
@@ -539,6 +737,102 @@ class DocumentIngestor:
                 start = new_start
 
         return chunks
+
+    def _chunks_to_documents(
+        self,
+        file_path: Path,
+        chunks: list[Segment],
+        embedding_gen: EmbeddingGenerator,
+    ) -> list[dict[str, Any]]:
+        """Convert chunks to documents with embeddings.
+
+        Args:
+            file_path: Source file path.
+            chunks: List of text chunks to process.
+            embedding_gen: Embedding generator instance.
+
+        Returns
+        -------
+            List of documents ready for storage.
+        """
+        from uuid import uuid4
+
+        # Deduplicate chunks by text hash
+        all_chunks: list[dict[str, Any]] = []
+        seen_hashes = set()
+
+        for i, chunk in enumerate(chunks):
+            cleaned = chunk["text"].strip()
+            if not cleaned:
+                continue
+
+            normalized = " ".join(cleaned.lower().split())
+            text_hash = int(hashlib.sha256(normalized.encode()).hexdigest(), 16)
+
+            if text_hash not in seen_hashes:
+                seen_hashes.add(text_hash)
+                all_chunks.append(
+                    {
+                        "file_path": file_path,
+                        "original_index": i,
+                        "text": cleaned,
+                        "page": chunk["page"],
+                        "text_hash": text_hash,
+                    }
+                )
+
+        # Generate embeddings
+        chunk_to_embedding: dict[int, list[float]] = {}
+
+        for chunk in all_chunks:
+            try:
+                embedding = embedding_gen.generate(chunk["text"])
+                chunk_to_embedding[chunk["text_hash"]] = embedding
+            except Exception as e:
+                logger.error(
+                    "Failed to generate embedding for chunk: %s: %s",
+                    type(e).__name__,
+                    e,
+                )
+                continue
+
+        # Build final documents
+        docs_to_store: list[dict[str, Any]] = []
+        seen_doc_keys = set()
+
+        for chunk_item in all_chunks:
+            text_hash = chunk_item["text_hash"]
+
+            if text_hash not in chunk_to_embedding:
+                continue
+
+            doc_key = (
+                str(chunk_item["file_path"]),
+                chunk_item["page"],
+                text_hash,
+            )
+            if doc_key in seen_doc_keys:
+                continue
+            seen_doc_keys.add(doc_key)
+
+            embedding = chunk_to_embedding[text_hash]
+            file_type = get_file_type(chunk_item["file_path"])
+
+            doc = {
+                "chunk_id": str(uuid4()),
+                "source_file": str(chunk_item["file_path"]),
+                "page_number": chunk_item["page"],
+                "chunk_text": chunk_item["text"],
+                "embedding": embedding,
+                "metadata": {
+                    "file_type": file_type,
+                    "ingested_at": datetime.now(UTC).isoformat(),
+                    "chunk_index": chunk_item["original_index"],
+                },
+            }
+            docs_to_store.append(doc)
+
+        return docs_to_store
 
 
 __all__ = [

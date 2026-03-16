@@ -200,6 +200,12 @@ class Config(BaseSettings):
         description="Number of failures before circuit opens",
     )
 
+    # Multicore processing settings
+    max_workers: int | None = Field(
+        default=None,
+        description="Maximum number of worker processes for parallel processing (default: auto-detect CPU count)",
+    )
+
     @field_validator("chunk_size")
     @classmethod
     def validate_chunk_size(cls, v: int) -> int:
@@ -258,6 +264,8 @@ class Config(BaseSettings):
             raise ValueError("embedding_dimensions must be positive")
         if self.default_top_k <= 0:
             raise ValueError("default_top_k must be positive")
+        if self.max_workers is not None and self.max_workers <= 0:
+            raise ValueError("max_workers must be positive when set")
         return self
 
     @property
@@ -276,6 +284,9 @@ class Config(BaseSettings):
 @lru_cache
 def get_config() -> Config:
     """Get cached configuration instance.
+
+    Configuration supports multicore processing via `max_workers` setting
+    (or `--cores` CLI flag for ingestion command).
 
     Returns
     -------

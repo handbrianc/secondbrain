@@ -57,6 +57,7 @@ secondbrain health
 - **Multi-format ingestion**: PDF, DOCX, PPTX, XLSX, HTML, Markdown, images, audio
 - **Semantic search**: Natural language queries with cosine similarity
 - **Async support**: Full async API for embedding generation and storage
+- **Multicore processing**: Parallel document ingestion with configurable CPU core count
 - **Rate limiting**: Protects Ollama API from overload
 - **12-factor app**: Environment-driven configuration
 
@@ -76,6 +77,12 @@ secondbrain health
 secondbrain --help
 secondbrain ingest --help
 secondbrain search --help
+
+# Ingest with multicore support (4 CPU cores)
+secondbrain ingest /path/to/documents --cores 4
+
+# Use config default (set SECONDBRAIN_MAX_WORKERS=4 in .env)
+secondbrain ingest /path/to/documents
 ```
 
 ## Configuration
