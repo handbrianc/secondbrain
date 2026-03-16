@@ -185,6 +185,83 @@ class TestCLIJSONFormat:
         runner = CliRunner()
         result = runner.invoke(cli, ["search", "nonexistent query", "--format", "json"])
         assert result.exit_code == 0
+        import json
+
+        data = json.loads(result.output)
+        assert data == []
+
+    @patch("secondbrain.search.Searcher")
+    def test_search_with_empty_results_table_format(
+        self, mock_searcher_class: MagicMock
+    ) -> None:
+        """Test search with empty results in table format shows 'no results' message."""
+        mock_searcher = MagicMock()
+        mock_searcher.search.return_value = []
+        mock_searcher.__enter__ = MagicMock(return_value=mock_searcher)
+        mock_searcher.__exit__ = MagicMock(return_value=False)
+        mock_searcher_class.return_value = mock_searcher
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["search", "nonexistent query"])
+        assert result.exit_code == 0
+        assert "no results found" in result.output.lower()
+
+    @patch("secondbrain.search.Searcher")
+    def test_search_with_low_score_results_filtered(
+        self, mock_searcher_class: MagicMock
+    ) -> None:
+        """Test search filters out results below minimum score threshold."""
+        mock_searcher = MagicMock()
+        mock_searcher.search.return_value = [
+            {"chunk_id": "1", "score": 0.15, "source_file": "test.pdf"},
+            {"chunk_id": "2", "score": 0.25, "source_file": "test2.pdf"},
+        ]
+        mock_searcher.__enter__ = MagicMock(return_value=mock_searcher)
+        mock_searcher.__exit__ = MagicMock(return_value=False)
+        mock_searcher_class.return_value = mock_searcher
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["search", "query", "--min-score", "0.3"])
+        assert result.exit_code == 0
+        assert "no relevant results found" in result.output.lower()
+
+    @patch("secondbrain.search.Searcher")
+    def test_search_with_mixed_scores_applies_threshold(
+        self, mock_searcher_class: MagicMock
+    ) -> None:
+        """Test search shows only results above threshold when mixed scores exist."""
+        mock_searcher = MagicMock()
+        mock_searcher.search.return_value = [
+            {"chunk_id": "1", "score": 0.15, "source_file": "test.pdf"},
+            {"chunk_id": "2", "score": 0.85, "source_file": "test2.pdf"},
+            {"chunk_id": "3", "score": 0.45, "source_file": "test3.pdf"},
+        ]
+        mock_searcher.__enter__ = MagicMock(return_value=mock_searcher)
+        mock_searcher.__exit__ = MagicMock(return_value=False)
+        mock_searcher_class.return_value = mock_searcher
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["search", "query", "--min-score", "0.4"])
+        assert result.exit_code == 0
+        assert "Result 1" in result.output or "1." in result.output
+
+    @patch("secondbrain.search.Searcher")
+    def test_search_min_score_option_defaults_to_0_3(
+        self, mock_searcher_class: MagicMock
+    ) -> None:
+        """Test search uses default min-score of 0.3 when not specified."""
+        mock_searcher = MagicMock()
+        mock_searcher.search.return_value = [
+            {"chunk_id": "1", "score": 0.25, "source_file": "test.pdf"},
+            {"chunk_id": "2", "score": 0.85, "source_file": "test2.pdf"},
+        ]
+        mock_searcher.__enter__ = MagicMock(return_value=mock_searcher)
+        mock_searcher.__exit__ = MagicMock(return_value=False)
+        mock_searcher_class.return_value = mock_searcher
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["search", "query"])
+        assert result.exit_code == 0
 
     @patch("secondbrain.management.Lister")
     def test_list_with_large_result_set(self, mock_lister_class: MagicMock) -> None:

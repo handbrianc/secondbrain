@@ -98,6 +98,12 @@ def ingest(
     default="table",
     help="Output format",
 )
+@click.option(
+    "--min-score",
+    type=float,
+    default=0.78,
+    help="Minimum similarity score threshold (0.0-1.0)",
+)
 @click.pass_context
 def search(
     ctx: click.Context,
@@ -106,6 +112,7 @@ def search(
     source: str | None,
     file_type: str | None,
     format: str,
+    min_score: float,
 ) -> None:
     """Search the vector database with semantic query.
 
@@ -123,7 +130,7 @@ def search(
             source_filter=source,
             file_type_filter=file_type,
         )
-    display_search_results(results, format)
+    display_search_results(results, format, min_score=min_score)
 
 
 @cli.command("list-cmd")

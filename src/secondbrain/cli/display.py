@@ -12,19 +12,43 @@ from secondbrain.storage import ChunkInfo, DatabaseStats
 
 console = Console()
 
+# Minimum similarity threshold for displaying search results
+# Results below this score are considered irrelevant
+DEFAULT_MIN_SIMILARITY_THRESHOLD = 0.78
 
-def display_search_results(results: list[dict[str, Any]], format: str) -> None:
+
+def display_search_results(
+    results: list[dict[str, Any]],
+    format: str,
+    min_score: float = DEFAULT_MIN_SIMILARITY_THRESHOLD,
+) -> None:
     """Display search results in the specified format.
 
     Args:
         results: List of search results to display.
-        format: Output format: 'default', 'verbose', or 'json'.
+        format: Output format: 'table', 'json'.
+        min_score: Minimum similarity score threshold (0.0-1.0).
     """
+    # JSON format always returns valid JSON, even for empty results
     if format == "json":
         console.print(json.dumps(results, indent=2))
         return
 
-    for i, result in enumerate(results, 1):
+    if not results:
+        console.print("[yellow]No results found[/yellow]")
+        return
+
+    # Filter by minimum similarity threshold
+    filtered_results = [r for r in results if r.get("score", 0) >= min_score]
+
+    if not filtered_results:
+        console.print(
+            f"[yellow]No relevant results found (minimum score: {min_score})[/yellow]"
+        )
+        console.print("[dim]Try different keywords or lower the threshold[/dim]")
+        return
+
+    for i, result in enumerate(filtered_results, 1):
         chunk_preview = result.get("chunk_text", "")[:100]
         page_num = result.get("page_number", "N/A")
         if format == "verbose":
