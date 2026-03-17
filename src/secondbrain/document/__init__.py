@@ -452,21 +452,42 @@ class DocumentIngestor:
                     }
                 )
 
-        # Generate embeddings sequentially (cache handles deduplication)
+        # Generate embeddings in batches for better performance
+        # Batch size of 20 balances memory usage and throughput
+        batch_size = 20
         chunk_to_embedding: dict[int, list[float]] = {}
 
-        for chunk in all_chunks:
+        # Process chunks in batches
+        for i in range(0, len(all_chunks), batch_size):
+            batch = all_chunks[i : i + batch_size]
+            texts = [chunk["text"] for chunk in batch]
+
             try:
-                embedding = embedding_gen.generate(chunk["text"])
-                chunk_to_embedding[chunk["text_hash"]] = embedding
+                # Use batch embedding for better performance
+                embeddings = embedding_gen.generate_batch(texts)
+
+                # Map embeddings back to chunks
+                for chunk, embedding in zip(batch, embeddings, strict=True):
+                    chunk_to_embedding[chunk["text_hash"]] = embedding
+
             except Exception as e:
                 logger.error(
-                    "Failed to generate embedding for chunk: %s: %s",
+                    "Failed to generate batch embeddings: %s: %s",
                     type(e).__name__,
                     e,
                 )
-                # Skip this chunk - continue with others
-                continue
+                # Fall back to sequential for this batch
+                for chunk in batch:
+                    try:
+                        embedding = embedding_gen.generate(chunk["text"])
+                        chunk_to_embedding[chunk["text_hash"]] = embedding
+                    except Exception as e2:
+                        logger.error(
+                            "Failed to generate embedding for chunk: %s: %s",
+                            type(e2).__name__,
+                            e2,
+                        )
+                        continue
 
         # Build final documents
         docs_to_store: list[dict[str, Any]] = []
