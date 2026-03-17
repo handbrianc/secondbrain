@@ -1,13 +1,12 @@
 """Embedding generator using Ollama API."""
 
-import asyncio
 import contextlib
 import logging
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
 import httpx
+import ollama
 
 from secondbrain.config import get_config
 from secondbrain.exceptions import (
@@ -299,6 +298,7 @@ class EmbeddingGenerator(ValidatableService):
         """Generate an embedding for the given text.
 
         Uses cache to avoid redundant API calls for duplicate texts.
+        Uses native ollama package for better performance (no HTTP overhead).
 
         Args:
             text: Text to generate embedding for.
@@ -326,32 +326,28 @@ class EmbeddingGenerator(ValidatableService):
                 self.pull_model()
 
             try:
-                response = self._request(
-                    "POST",
-                    f"{self.ollama_url}/api/embeddings",
-                    json={"model": self.model, "prompt": text},
-                    timeout=30.0,
+                # Use native ollama.embed() instead of HTTP requests
+                response = ollama.embed(
+                    model=self.model,
+                    input=text,
+                    base_url=self.ollama_url,
                 )
 
-                if response.status_code != 200:
+                # ollama.embed returns dict with 'embeddings' key (list of lists)
+                # For single input, it returns [[embedding_vector]]
+                embeddings = response.get("embeddings", [])
+                if not embeddings:
                     raise EmbeddingGenerationError(
-                        f"Failed to generate embedding for model '{self.model}': "
-                        f"HTTP {response.status_code} - {response.text} "
-                        f"(text length: {len(text)} chars)"
+                        f"No embeddings returned for model '{self.model}'"
                     )
 
-                data = response.json()
-                embedding = list(data.get("embedding", []))
+                embedding = list(embeddings[0])
                 return embedding
 
-            except httpx.ConnectError as e:
-                raise OllamaUnavailableError(
-                    f"Cannot connect to Ollama at {self.ollama_url}: {e}"
-                ) from e
-            except httpx.TimeoutException as e:
+            except ollama.ResponseError as e:
                 raise EmbeddingGenerationError(
-                    f"Timeout generating embedding: model={self.model}, "
-                    f"text_length={len(text)} chars, timeout=30s: {e}"
+                    f"Failed to generate embedding: model={self.model}, "
+                    f"text_length={len(text)} chars, error: {e}"
                 ) from e
             except Exception as e:
                 raise EmbeddingGenerationError(
@@ -366,6 +362,71 @@ class EmbeddingGenerator(ValidatableService):
         except CircuitBreakerError as e:
             raise OllamaUnavailableError(
                 f"Circuit breaker open: {e}. Service may be unavailable."
+            ) from e
+
+    def generate_batch(self, texts: list[str]) -> list[list[float]]:
+        """Generate embeddings for multiple texts in a single call.
+
+        Uses ollama.embed() with batch input for better performance.
+        This is significantly faster than calling generate() multiple times.
+
+        Args:
+            texts: List of texts to generate embeddings for.
+
+        Returns
+        -------
+            List of embedding vectors, one for each input text.
+
+        Raises
+        ------
+            OllamaUnavailableError: If Ollama service is unavailable.
+            EmbeddingGenerationError: If embedding generation fails.
+        """
+        if not texts:
+            return []
+
+        # Filter out empty texts
+        non_empty_texts = [t for t in texts if t.strip()]
+        if not non_empty_texts:
+            return []
+
+        self._check_rate_limit()
+
+        if not self.validate_connection():
+            raise OllamaUnavailableError(
+                f"Cannot connect to Ollama service at {self.ollama_url} "
+                f"(model: {self.model})"
+            )
+
+        if not self._model_pulled:
+            self.pull_model()
+
+        try:
+            # Use native ollama.embed() with batch input
+            response = ollama.embed(
+                model=self.model,
+                input=non_empty_texts,
+                base_url=self.ollama_url,
+            )
+
+            embeddings = response.get("embeddings", [])
+            if not embeddings:
+                raise EmbeddingGenerationError(
+                    f"No embeddings returned for model '{self.model}'"
+                )
+
+            # Convert to list of lists
+            return [list(emb) for emb in embeddings]
+
+        except ollama.ResponseError as e:
+            raise EmbeddingGenerationError(
+                f"Failed to generate batch embeddings: model={self.model}, "
+                f"texts_count={len(texts)}, error: {e}"
+            ) from e
+        except Exception as e:
+            raise EmbeddingGenerationError(
+                f"Failed to generate batch embeddings: model={self.model}, "
+                f"texts_count={len(texts)}, error={type(e).__name__}: {e}"
             ) from e
 
     @async_timing("embedding_generate_async")
@@ -434,46 +495,5 @@ class EmbeddingGenerator(ValidatableService):
 
         return await self._cache.get_or_create_async(text, _generate_async)
 
-    @timing("embedding_generate_batch")
-    def generate_batch(self, texts: list[str]) -> list[list[float]]:
-        """Generate embeddings for a batch of texts in parallel.
 
-        Uses thread pool for concurrent embedding generation while
-        respecting rate limits and leveraging cache.
-
-        Args:
-            texts: List of texts to generate embeddings for.
-
-        Returns
-        -------
-            List of embedding vectors in original order.
-        """
-        with ThreadPoolExecutor(max_workers=min(len(texts), 10)) as executor:
-            future_to_idx = {
-                executor.submit(self.generate, text): i for i, text in enumerate(texts)
-            }
-
-            results: dict[int, list[float]] = {}
-
-            for future in as_completed(future_to_idx):
-                idx = future_to_idx[future]
-                results[idx] = future.result()
-
-            return [results[i] for i in range(len(texts))]
-
-    @async_timing("embedding_generate_batch_async")
-    async def generate_batch_async(self, texts: list[str]) -> list[list[float]]:
-        """Generate embeddings for a batch of texts concurrently.
-
-        Uses asyncio.gather for concurrent embedding generation while
-        respecting rate limits and leveraging cache.
-
-        Args:
-            texts: List of texts to generate embeddings for.
-
-        Returns
-        -------
-            List of embedding vectors.
-        """
-        results = await asyncio.gather(*[self.generate_async(text) for text in texts])
-        return list(results)
+__all__ = ["EmbeddingGenerator"]
