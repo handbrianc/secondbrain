@@ -326,23 +326,35 @@ class EmbeddingGenerator(ValidatableService):
                 self.pull_model()
 
             try:
-                # Use native ollama.embed() instead of HTTP requests
-                response = ollama.embed(
-                    model=self.model,
-                    input=text,
-                    base_url=self.ollama_url,
-                )
+                # Set OLLAMA_HOST environment variable for ollama client
+                import os
 
-                # ollama.embed returns dict with 'embeddings' key (list of lists)
-                # For single input, it returns [[embedding_vector]]
-                embeddings = response.get("embeddings", [])
-                if not embeddings:
-                    raise EmbeddingGenerationError(
-                        f"No embeddings returned for model '{self.model}'"
+                old_host = os.environ.get("OLLAMA_HOST")
+                os.environ["OLLAMA_HOST"] = self.ollama_url
+
+                try:
+                    # Use native ollama.embed() instead of HTTP requests
+                    response = ollama.embed(
+                        model=self.model,
+                        input=text,
                     )
 
-                embedding = list(embeddings[0])
-                return embedding
+                    # ollama.embed returns dict with 'embeddings' key (list of lists)
+                    # For single input, it returns [[embedding_vector]]
+                    embeddings = response.get("embeddings", [])
+                    if not embeddings:
+                        raise EmbeddingGenerationError(
+                            f"No embeddings returned for model '{self.model}'"
+                        )
+
+                    embedding = list(embeddings[0])
+                    return embedding
+                finally:
+                    # Restore original OLLAMA_HOST
+                    if old_host is not None:
+                        os.environ["OLLAMA_HOST"] = old_host
+                    else:
+                        os.environ.pop("OLLAMA_HOST", None)
 
             except ollama.ResponseError as e:
                 raise EmbeddingGenerationError(
@@ -402,21 +414,33 @@ class EmbeddingGenerator(ValidatableService):
             self.pull_model()
 
         try:
-            # Use native ollama.embed() with batch input
-            response = ollama.embed(
-                model=self.model,
-                input=non_empty_texts,
-                base_url=self.ollama_url,
-            )
+            # Set OLLAMA_HOST environment variable for ollama client
+            import os
 
-            embeddings = response.get("embeddings", [])
-            if not embeddings:
-                raise EmbeddingGenerationError(
-                    f"No embeddings returned for model '{self.model}'"
+            old_host = os.environ.get("OLLAMA_HOST")
+            os.environ["OLLAMA_HOST"] = self.ollama_url
+
+            try:
+                # Use native ollama.embed() with batch input
+                response = ollama.embed(
+                    model=self.model,
+                    input=non_empty_texts,
                 )
 
-            # Convert to list of lists
-            return [list(emb) for emb in embeddings]
+                embeddings = response.get("embeddings", [])
+                if not embeddings:
+                    raise EmbeddingGenerationError(
+                        f"No embeddings returned for model '{self.model}'"
+                    )
+
+                # Convert to list of lists
+                return [list(emb) for emb in embeddings]
+            finally:
+                # Restore original OLLAMA_HOST
+                if old_host is not None:
+                    os.environ["OLLAMA_HOST"] = old_host
+                else:
+                    os.environ.pop("OLLAMA_HOST", None)
 
         except ollama.ResponseError as e:
             raise EmbeddingGenerationError(
