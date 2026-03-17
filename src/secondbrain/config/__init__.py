@@ -206,6 +206,12 @@ class Config(BaseSettings):
         description="Maximum number of worker processes for parallel processing (default: auto-detect CPU count)",
     )
 
+    # Embedding backend selection
+    embedding_backend: str = Field(
+        default="local",
+        description="Embedding backend: 'local' (sentence-transformers, fast, no HTTP) or 'ollama' (requires Ollama)",
+    )
+
     @field_validator("chunk_size")
     @classmethod
     def validate_chunk_size(cls, v: int) -> int:
