@@ -143,7 +143,7 @@ secondbrain health [OPTIONS]
 
 **Checks:**
 - MongoDB connectivity
-- Ollama availability
+- sentence-transformers availability
 - Configuration validity
 
 ## Global Options

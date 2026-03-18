@@ -2,7 +2,7 @@
 
 This module provides a Config class that loads configuration from environment
 variables following 12-factor app principles, with validation for MongoDB
-and Ollama connection strings.
+connection strings.
 """
 
 from functools import lru_cache
@@ -32,32 +32,6 @@ def _validate_mongo_uri(value: str) -> str:
     if not value.startswith("mongodb://") and not value.startswith("mongodb+srv://"):
         raise ValueError(
             f"mongo_uri must start with 'mongodb://' or 'mongodb+srv://', got: {value}"
-        )
-    return value
-
-
-def _validate_ollama_url(value: str) -> str:
-    """Validate Ollama URL format.
-
-    Args:
-        value: Ollama URL to validate.
-
-    Returns
-    -------
-        Validated URL string.
-
-    Raises
-    ------
-        ValueError: If URL doesn't have valid scheme and host
-    """
-    parsed = urlparse(value)
-    if not parsed.scheme or not parsed.netloc:
-        raise ValueError(
-            f"ollama_url must be a valid URL with scheme and host, got: {value}"
-        )
-    if parsed.scheme not in ("http", "https"):
-        raise ValueError(
-            f"ollama_url must use http or https scheme, got: {parsed.scheme}"
         )
     return value
 
@@ -103,26 +77,6 @@ class Config(BaseSettings):
         default="embeddings",
         description="Collection name for embeddings",
     )
-
-    # Ollama settings
-    ollama_url: str = Field(
-        default="http://localhost:11434",
-        description="Ollama API URL",
-    )
-
-    @field_validator("ollama_url")
-    @classmethod
-    def validate_ollama_url(cls, v: str) -> str:
-        """Validate Ollama URL.
-
-        Args:
-            v: Ollama URL to validate.
-
-        Returns
-        -------
-            Validated URL string.
-        """
-        return _validate_ollama_url(v)
 
     model: str = Field(
         default="embeddinggemma:latest",
@@ -204,12 +158,6 @@ class Config(BaseSettings):
     max_workers: int | None = Field(
         default=None,
         description="Maximum number of worker processes for parallel processing (default: auto-detect CPU count)",
-    )
-
-    # Embedding backend selection
-    embedding_backend: str = Field(
-        default="local",
-        description="Embedding backend: 'local' (sentence-transformers, fast, no HTTP) or 'ollama' (requires Ollama)",
     )
 
     @field_validator("chunk_size")

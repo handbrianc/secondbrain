@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Progress indicators for batch document processing operations
-- Embedding cache to reduce redundant Ollama API calls
+- Embedding cache to reduce redundant sentence-transformers API calls
 - Shell completion scripts for bash, zsh, and fish
 - Prometheus metrics export for monitoring performance and cache hit rates
 
@@ -31,10 +31,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Initial release of SecondBrain CLI
 - Multi-format document ingestion (PDF, DOCX, PPTX, XLSX, HTML, Markdown, etc.)
-- Semantic search using Ollama embeddings with `embeddinggemma:latest` model
+- Semantic search using sentence-transformers embeddings with `embeddinggemma:latest` model
 - MongoDB-backed vector storage with cosine similarity search
 - Full async support for embedding generation and storage operations
-- Rate limiting for Ollama API protection
+- Rate limiting for sentence-transformers API protection
 - Connection caching with configurable TTL
 - Rich terminal output with formatted tables and progress
 - Health check endpoint for service availability monitoring
@@ -50,7 +50,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Environment-driven configuration (12-factor app)
 - Pre-commit hooks for code quality
 - Security scanning with Bandit and Safety
-- Docker Compose setup for MongoDB and Ollama services
+- Docker Compose setup for MongoDB and sentence-transformers services
 
 ### Changed
 - Initial implementation with production-ready architecture
@@ -63,7 +63,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Input sanitization for search queries
 - Path traversal prevention
 - File size limits (100MB maximum)
-- Validation for MongoDB URI and Ollama URL formats
+- Validation for MongoDB URI and sentence-transformers URL formats
 
 ### Documentation
 - Comprehensive README with installation and usage instructions

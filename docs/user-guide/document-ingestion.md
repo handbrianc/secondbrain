@@ -114,7 +114,7 @@ File → Text Extraction → Chunking → Embedding → Storage
 
 ### Step 3: Embedding
 
-- Send chunks to Ollama
+- Send chunks to sentence-transformers
 - Generate vector embeddings
 - Apply rate limiting
 

@@ -24,7 +24,7 @@ class ValidationError(SecondBrainError):
 
 
 class ServiceError(SecondBrainError):
-    """Raised when external service (Ollama, MongoDB) is unavailable."""
+    """Raised when external service (e.g., MongoDB) is unavailable."""
 
     pass
 
@@ -72,12 +72,6 @@ class EmbeddingGenerationError(EmbeddingError):
     pass
 
 
-class OllamaUnavailableError(ServiceError):
-    """Raised when Ollama service is unavailable or unreachable."""
-
-    pass
-
-
 class ServiceUnavailableError(ServiceError):
     """Raised when a service is unavailable."""
 
@@ -86,3 +80,10 @@ class ServiceUnavailableError(ServiceError):
     def __init__(self, service_name: str, message: str | None = None) -> None:
         super().__init__(message or f"{service_name} is unavailable")
         self.service_name = service_name
+
+
+class SentenceTransformersUnavailableError(ServiceUnavailableError):
+    """Raised when sentence-transformers service is unavailable."""
+
+    def __init__(self, message: str | None = None) -> None:
+        super().__init__("sentence-transformers", message)

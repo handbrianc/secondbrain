@@ -96,11 +96,11 @@ class TestDocumentIngestorIngestEdgeCases:
 class TestDocumentIngestorBuildDocumentsEdgeCases:
     """Edge case tests for _build_documents_with_embeddings."""
 
-    def test_build_documents_with_ollama_unavailable_error(
+    def test_build_documents_with_sentence_transformers_unavailable_error(
         self, tmp_path: Path
     ) -> None:
-        """Test OllamaUnavailableError in embedding generation."""
-        from secondbrain.exceptions import OllamaUnavailableError
+        """Test SentenceTransformersUnavailableError in embedding generation."""
+        from secondbrain.exceptions import SentenceTransformersUnavailableError
 
         ingestor = DocumentIngestor()
         test_file = tmp_path / "test.txt"
@@ -108,8 +108,8 @@ class TestDocumentIngestorBuildDocumentsEdgeCases:
         segments: list[Segment] = [{"text": "test text", "page": 1}]
 
         mock_embedding_gen = MagicMock()
-        mock_embedding_gen.generate.side_effect = OllamaUnavailableError(
-            "Ollama unavailable"
+        mock_embedding_gen.generate.side_effect = SentenceTransformersUnavailableError(
+            "SentenceTransformers unavailable"
         )
 
         docs = ingestor._build_documents_with_embeddings(

@@ -321,7 +321,7 @@ class TestCLIHealthEdgeCases:
             "status": "degraded",
             "timestamp": "2024-01-01T00:00:00+00:00",
             "uptime": None,
-            "services": {"ollama": True, "mongodb": False},
+            "services": {"sentence-transformers": True, "mongodb": False},
             "check_duration_seconds": 0.5,
         }
 
@@ -337,7 +337,7 @@ class TestCLIHealthEdgeCases:
         """Test health command with JSON output."""
         mock_status = MagicMock()
         mock_status.mongo_healthy = True
-        mock_status.ollama_healthy = True
+        mock_status.sentence_transformers_healthy = True
         mock_status.degraded = False
         mock_get_health_status.return_value = mock_status
 
@@ -352,7 +352,7 @@ class TestCLIHealthEdgeCases:
         """Test health command with verbose output."""
         mock_status = MagicMock(
             mongo_healthy=True,
-            ollama_healthy=True,
+            sentence_transformers_healthy=True,
             degraded=False,
         )
         mock_get_health_status.return_value = mock_status

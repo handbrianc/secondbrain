@@ -73,7 +73,7 @@ class TestHealthStatus:
             "status": "healthy",
             "timestamp": "2024-01-01T00:00:00+00:00",
             "uptime": 3600.0,
-            "services": {"ollama": True, "mongodb": True},
+            "services": {"sentence-transformers": True, "mongodb": True},
             "check_duration_seconds": 0.5,
         }
 
@@ -277,7 +277,6 @@ class TestGetHealthStatus:
         """Test that get_health_status has correct service keys."""
         status = get_health_status()
 
-        assert "ollama" in status["services"]
         assert "mongodb" in status["services"]
 
 
@@ -292,11 +291,9 @@ class TestCheckServices:
     def test_check_services_has_required_keys(self) -> None:
         """Test that check_services has required keys."""
         result = check_services()
-        assert "ollama" in result
         assert "mongodb" in result
 
     def test_check_services_values_are_booleans(self) -> None:
         """Test that check_services values are booleans."""
         result = check_services()
-        assert isinstance(result["ollama"], bool)
         assert isinstance(result["mongodb"], bool)

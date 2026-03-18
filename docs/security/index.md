@@ -37,7 +37,7 @@ SECONDBRAIN_MONGO_URI=mongodb://user:pass@host:27017
 
 All user inputs are validated:
 - MongoDB URI format
-- Ollama URL format
+- sentence-transformers URL format
 - File paths (prevents path traversal)
 - Search queries (sanitization)
 

@@ -21,7 +21,7 @@ All configuration options use the `SECONDBRAIN_` prefix.
 | `SECONDBRAIN_MONGO_URI` | `mongodb://localhost:27017` | MongoDB connection URI |
 | `SECONDBRAIN_MONGO_DB` | `secondbrain` | Database name |
 | `SECONDBRAIN_MONGO_COLLECTION` | `embeddings` | Collection name for embeddings |
-| `SECONDBRAIN_OLLAMA_URL` | `http://localhost:11434` | Ollama API URL |
+| `SECONDBRAIN_SENTENCE_TRANSFORMERS_URL` | `http://localhost:local embedding` | sentence-transformers API URL |
 | `SECONDBRAIN_MODEL` | `embeddinggemma:latest` | Embedding model to use |
 
 ### Document Processing
@@ -65,7 +65,7 @@ Create a `.env` file in the project root:
 SECONDBRAIN_MONGO_URI=mongodb://localhost:27017
 SECONDBRAIN_MONGO_DB=secondbrain
 SECONDBRAIN_MONGO_COLLECTION=embeddings
-SECONDBRAIN_OLLAMA_URL=http://localhost:11434
+SECONDBRAIN_SENTENCE_TRANSFORMERS_URL=http://localhost:local embedding
 SECONDBRAIN_MODEL=embeddinggemma:latest
 
 # Document Processing
@@ -104,17 +104,17 @@ SECONDBRAIN_MONGO_URI=mongodb://localhost:27017
 SECONDBRAIN_MONGO_URI=mongodb+srv://username:password@cluster.mongodb.net
 ```
 
-### Ollama URL Validation
+### sentence-transformers URL Validation
 
 Must have valid HTTP/HTTPS scheme and host:
 
 ```bash
 # Invalid
-SECONDBRAIN_OLLAMA_URL=localhost:11434  # Missing scheme!
+SECONDBRAIN_SENTENCE_TRANSFORMERS_URL=localhost:local embedding  # Missing scheme!
 
 # Valid
-SECONDBRAIN_OLLAMA_URL=http://localhost:11434
-SECONDBRAIN_OLLAMA_URL=https://ollama.example.com
+SECONDBRAIN_SENTENCE_TRANSFORMERS_URL=http://localhost:local embedding
+SECONDBRAIN_SENTENCE_TRANSFORMERS_URL=https://sentence-transformers.example.com
 ```
 
 ### Chunk Size Validation
@@ -148,7 +148,7 @@ SECONDBRAIN_CONNECTION_CACHE_TTL=30.0  # Shorter cache for dev
 ```bash
 # .env.production
 SECONDBRAIN_MONGO_URI=mongodb://user:pass@prod-cluster.mongodb.net:27017
-SECONDBRAIN_OLLAMA_URL=https://ollama.prod.example.com
+SECONDBRAIN_SENTENCE_TRANSFORMERS_URL=https://sentence-transformers.prod.example.com
 SECONDBRAIN_LOG_FORMAT=json  # Structured logging for production
 SECONDBRAIN_CONNECTION_CACHE_TTL=120.0  # Longer cache for production
 SECONDBRAIN_RATE_LIMIT_MAX_REQUESTS=20  # Higher limit for production
@@ -212,7 +212,7 @@ SECONDBRAIN_RATE_LIMIT_WINDOW_SECONDS=1.0
 SECONDBRAIN_RATE_LIMIT_MAX_REQUESTS=20
 SECONDBRAIN_RATE_LIMIT_WINDOW_SECONDS=1.0
 
-# Production with dedicated Ollama server
+# Production with dedicated sentence-transformers server
 SECONDBRAIN_RATE_LIMIT_MAX_REQUESTS=50
 SECONDBRAIN_RATE_LIMIT_WINDOW_SECONDS=1.0
 ```
@@ -288,7 +288,7 @@ export SECONDBRAIN_CHUNK_SIZE=4096
 
 ### Connection Failures
 
-**Problem**: Cannot connect to MongoDB or Ollama despite correct config
+**Problem**: Cannot connect to MongoDB or sentence-transformers despite correct config
 
 **Solutions**:
 1. Verify services are running
@@ -298,7 +298,7 @@ export SECONDBRAIN_CHUNK_SIZE=4096
    # Test MongoDB
    mongosh mongodb://localhost:27017
 
-   # Test Ollama
+   # Test sentence-transformers
    curl http://localhost:114../api-reference/index.mdtags
    ```
 

@@ -10,7 +10,7 @@ pip install -e ".[dev]"
 
 # Start services (Docker)
 docker-compose up -d  # MongoDB
-ollama serve          # Ollama
+sentence-transformers serve          # sentence-transformers
 ```
 
 ## Step 2: Configure
@@ -20,7 +20,7 @@ Create a `.env` file in your project root:
 ```bash
 # Core settings
 SECONDBRAIN_MONGO_URI=mongodb://localhost:27017
-SECONDBRAIN_OLLAMA_URL=http://localhost:11434
+SECONDBRAIN_SENTENCE_TRANSFORMERS_URL=http://localhost:local embedding
 SECONDBRAIN_MODEL=embeddinggemma:latest
 
 # Optional: adjust chunk size

@@ -6,7 +6,7 @@ Welcome to the SecondBrain documentation. This is your complete guide to using a
 
 SecondBrain is a local document intelligence CLI tool that:
 - **Ingests documents** in multiple formats (PDF, DOCX, PPTX, XLSX, HTML, Markdown, images, audio)
-- **Generates embeddings** using Ollama's local AI models
+- **Generates embeddings** using sentence-transformers's local AI models
 - **Stores vectors** in MongoDB for efficient semantic search
 - **Provides both sync and async APIs** for flexibility
 
@@ -18,7 +18,7 @@ pip install -e ".[dev]"
 
 # Start services
 docker-compose up -d  # MongoDB
-ollama serve          # Ollama
+sentence-transformers serve          # sentence-transformers
 
 # Run the CLI
 secondbrain --help
@@ -55,7 +55,7 @@ secondbrain --help
 
 ## Examples
 
-For practical usage examples, see the [examples/](examples/) directory:
+For practical usage examples, see the [examples directory](https://github.com/your-repo/examples) on GitHub:
 
 - **Basic Usage**: Simple CLI-style examples
 - **Advanced**: Custom chunking, batch processing, async workflows
@@ -68,7 +68,7 @@ All modules use environment-based configuration. See [Configuration Guide](getti
 
 Key environment variables:
 - `SECONDBRAIN_MONGO_URI`: MongoDB connection string
-- `SECONDBRAIN_OLLAMA_URL`: Ollama API URL
+- `SECONDBRAIN_SENTENCE_TRANSFORMERS_URL`: sentence-transformers API URL
 - `SECONDBRAIN_MODEL`: Embedding model name
 - `SECONDBRAIN_CHUNK_SIZE`: Text chunk size
 
@@ -78,4 +78,4 @@ We welcome contributions! See [Contributing Guide](developer-guide/contributing.
 
 ## License
 
-This project is licensed under the MIT License. See [LICENSE](license.md) for details.
+This project is licensed under the MIT License. See [LICENSE](LICENSE.md) for details.

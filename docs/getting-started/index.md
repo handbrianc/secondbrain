@@ -6,7 +6,7 @@ Welcome to SecondBrain - your local document intelligence CLI for semantic searc
 
 SecondBrain is a command-line tool that:
 - **Ingests documents** in multiple formats (PDF, DOCX, PPTX, XLSX, HTML, Markdown, images, audio)
-- **Generates embeddings** using Ollama's local AI models
+- **Generates embeddings** using sentence-transformers's local AI models
 - **Stores vectors** in MongoDB for efficient semantic search
 - **Provides both sync and async APIs** for flexibility
 
@@ -16,7 +16,7 @@ SecondBrain is a command-line tool that:
 
 - Python 3.11+
 - MongoDB 8.0+ (via Docker or local installation)
-- Ollama (via Docker or local installation)
+- sentence-transformers (via Docker or local installation)
 
 ### Installation
 
@@ -26,7 +26,7 @@ pip install -e ".[dev]"
 
 # Start services
 docker-compose up -d  # MongoDB
-ollama serve          # Ollama (macOS/Linux)
+sentence-transformers serve          # sentence-transformers (macOS/Linux)
 
 # Verify installation
 secondbrain --help
@@ -66,7 +66,7 @@ secondbrain list
 1. Read the [Quick Start Guide](./quick-start.md) for a 5-minute introduction
 2. Configure your environment using [Configuration Guide](./configuration.md)
 3. Explore the [User Guide](../user-guide/index.md) for detailed usage
-4. Check out [examples/](../examples/) for practical code examples
+4. Check out the [examples directory](https://github.com/your-repo/examples) on GitHub for practical code examples
 
 ## Need Help?
 

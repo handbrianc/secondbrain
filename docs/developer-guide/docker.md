@@ -4,20 +4,20 @@ Complete Docker setup instructions for SecondBrain development and production en
 
 ## Quick Start
 
-### macOS (Ollama Installed Locally)
+### macOS (sentence-transformers Installed Locally)
 
-If you have Ollama installed locally via `brew install ollama`, only start MongoDB:
+If you have sentence-transformers installed locally via `brew install sentence-transformers`, only start MongoDB:
 
 ```bash
 # Start MongoDB only
 docker-compose up -d
 
-# Start Ollama locally
-ollama serve
+# Start sentence-transformers locally
+sentence-transformers serve
 
 # Verify services
 docker-compose ps
-ollama list
+sentence-transformers list
 
 # View logs
 docker-compose logs -f mongodb
@@ -26,17 +26,17 @@ docker-compose logs -f mongodb
 docker-compose down
 ```
 
-### Linux / Windows (Ollama via Docker)
+### Linux / Windows (sentence-transformers via Docker)
 
 ```bash
-# Start MongoDB and Ollama
+# Start MongoDB and sentence-transformers
 docker-compose up -d
 
 # Or start them separately:
 docker-compose up -d mongodb        # MongoDB only
-docker-compose -f docker-compose.ollama.yml up -d  # Ollama only
+docker-compose -f docker-compose.sentence-transformers.yml up -d  # sentence-transformers only
 
-# Verify Ollama is running
+# Verify sentence-transformers is running
 curl http://localhost:114../api-reference/index.mdtags
 
 # View logs
@@ -60,17 +60,17 @@ docker run -d --name mongodb -p 27017:27017 mongo:8.0
 docker run -d --name mongodb -p 27017:27017 mongo:7.0
 ```
 
-### Run Ollama
+### Run sentence-transformers
 
 ```bash
-# Start Ollama container
-docker run -d --name ollama -p 11434:11434 ollama/ollama
+# Start sentence-transformers container
+docker run -d --name sentence-transformers -p local embedding:local embedding sentence-transformers/sentence-transformers
 
 # Pull the embedding model (first time only)
-docker exec ollama ollama pull embeddinggemma:latest
+docker exec sentence-transformers sentence-transformers pull embeddinggemma:latest
 
 # Verify model is available
-docker exec ollama ollama list
+docker exec sentence-transformers sentence-transformers list
 ```
 
 ### Verify Setup
@@ -79,7 +79,7 @@ docker exec ollama ollama list
 # Check MongoDB is running
 docker exec mongodb mongosh --eval "db.version()"
 
-# Check Ollama is responding
+# Check sentence-transformers is responding
 curl http://localhost:114../api-reference/index.mdtags
 
 # Check both services
@@ -107,23 +107,23 @@ volumes:
   mongodb_data:
 ```
 
-### docker-compose.ollama.yml
+### docker-compose.sentence-transformers.yml
 
 ```yaml
 version: '3.8'
 
 services:
-  ollama:
-    image: ollama/ollama:latest
-    container_name: secondbrain-ollama
+  sentence-transformers:
+    image: sentence-transformers/sentence-transformers:latest
+    container_name: secondbrain-sentence-transformers
     ports:
-      - "11434:11434"
+      - "local embedding:local embedding"
     volumes:
-      - ollama_data:/root/.ollama
+      - sentence-transformers_data:/root/.sentence-transformers
     restart: unless-stopped
 
 volumes:
-  ollama_data:
+  sentence-transformers_data:
 ```
 
 ## Persistent Storage
@@ -143,19 +143,19 @@ docker run --rm -v secondbrain_mongodb_data:/data mongo:8.0 mongodump --out /bac
 docker run --rm -v secondbrain_mongodb_data:/data -v $(pwd)/backup:/backup mongo:8.0 mongorestore /backup
 ```
 
-### Ollama Models
+### sentence-transformers Models
 
-Ollama models are persisted in Docker volumes:
+sentence-transformers models are persisted in Docker volumes:
 
 ```bash
-# List Ollama volume
-docker volume ls | grep ollama
+# List sentence-transformers volume
+docker volume ls | grep sentence-transformers
 
-# Backup Ollama models
-docker run --rm -v secondbrain_ollama_data:/root/.ollama busybox tar czf /backup/ollama.tar.gz /root/.ollama
+# Backup sentence-transformers models
+docker run --rm -v secondbrain_sentence-transformers_data:/root/.sentence-transformers busybox tar czf /backup/sentence-transformers.tar.gz /root/.sentence-transformers
 
-# Restore Ollama models
-docker run --rm -v secondbrain_ollama_data:/root/.ollama -v $(pwd)/backup:/backup busybox tar xzf /backup/ollama.tar.gz -C /
+# Restore sentence-transformers models
+docker run --rm -v secondbrain_sentence-transformers_data:/root/.sentence-transformers -v $(pwd)/backup:/backup busybox tar xzf /backup/sentence-transformers.tar.gz -C /
 ```
 
 ## Troubleshooting
@@ -181,29 +181,29 @@ docker run --rm -v secondbrain_ollama_data:/root/.ollama -v $(pwd)/backup:/backu
    docker exec secondbrain-mongodb mongosh --eval "db.version()"
    ```
 
-### Ollama Connection Issues
+### sentence-transformers Connection Issues
 
-**Problem**: Cannot connect to Ollama
+**Problem**: Cannot connect to sentence-transformers
 
 **Solutions**:
-1. Verify Ollama is running:
+1. Verify sentence-transformers is running:
    ```bash
    curl http://localhost:114../api-reference/index.mdtags
    ```
 
-2. Check Ollama URL in `.env`:
+2. Check sentence-transformers URL in `.env`:
    ```
-   SECONDBRAIN_OLLAMA_URL=http://localhost:11434
+   SECONDBRAIN_SENTENCE_TRANSFORMERS_URL=http://localhost:local embedding
    ```
 
 3. Pull the embedding model:
    ```bash
-   docker exec secondbrain-ollama ollama pull embeddinggemma:latest
+   docker exec secondbrain-sentence-transformers sentence-transformers pull embeddinggemma:latest
    ```
 
-4. Check Ollama logs:
+4. Check sentence-transformers logs:
    ```bash
-   docker logs secondbrain-ollama
+   docker logs secondbrain-sentence-transformers
    ```
 
 ### Port Conflicts
@@ -217,9 +217,9 @@ docker run --rm -v secondbrain_ollama_data:/root/.ollama -v $(pwd)/backup:/backu
    lsof -i :27017  # macOS/Linux
    netstat -ano | findstr :27017  # Windows
 
-   # Ollama port
-   lsof -i :11434  # macOS/Linux
-   netstat -ano | findstr :11434  # Windows
+   # sentence-transformers port
+   lsof -i :local embedding  # macOS/Linux
+   netstat -ano | findstr :local embedding  # Windows
    ```
 
 2. Change port mapping in docker-compose.yml:
@@ -250,7 +250,7 @@ docker run --rm -v secondbrain_ollama_data:/root/.ollama -v $(pwd)/backup:/backu
 
 3. Monitor container resource usage:
    ```bash
-   docker stats secondbrain-mongodb secondbrain-ollama
+   docker stats secondbrain-mongodb secondbrain-sentence-transformers
    ```
 
 ## Development Workflow
@@ -268,10 +268,10 @@ services:
       - ./tests:/app/tests
     environment:
       - SECONDBRAIN_MONGO_URI=mongodb://mongodb:27017
-      - SECONDBRAIN_OLLAMA_URL=http://ollama:11434
+      - SECONDBRAIN_SENTENCE_TRANSFORMERS_URL=http://sentence-transformers:local embedding
     depends_on:
       - mongodb
-      - ollama
+      - sentence-transformers
 ```
 
 ### Running Tests in Docker

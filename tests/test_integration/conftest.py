@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 import pytest
 from pymongo import MongoClient
 
-from secondbrain.embedding import EmbeddingGenerator
+from secondbrain.embedding import LocalEmbeddingGenerator
 from secondbrain.storage import VectorStorage
 
 if TYPE_CHECKING:
@@ -55,27 +55,29 @@ def sample_embedding() -> list[float]:
 @pytest.fixture
 def mock_embedder(sample_embedding: list[float]) -> Any:
     """Create a mock embedding generator that returns predictable embeddings."""
-    original_gen = EmbeddingGenerator.generate
-    original_gen_async = EmbeddingGenerator.generate_async
+    original_gen = LocalEmbeddingGenerator.generate
+    original_gen_async = LocalEmbeddingGenerator.generate_async
 
-    def mock_generate(self: EmbeddingGenerator, text: str) -> list[float]:
+    def mock_generate(self: LocalEmbeddingGenerator, text: str) -> list[float]:
         text_hash = hash(text.strip().lower())
         import random
 
         random.seed(text_hash)
         return [random.random() for _ in range(EMBEDDING_DIMENSIONS)]
 
-    async def mock_generate_async(self: EmbeddingGenerator, text: str) -> list[float]:
+    async def mock_generate_async(
+        self: LocalEmbeddingGenerator, text: str
+    ) -> list[float]:
         return mock_generate(self, text)
 
-    EmbeddingGenerator.generate = mock_generate
-    EmbeddingGenerator.generate_async = mock_generate_async
+    LocalEmbeddingGenerator.generate = mock_generate
+    LocalEmbeddingGenerator.generate_async = mock_generate_async
 
     try:
         yield mock_generate
     finally:
-        EmbeddingGenerator.generate = original_gen
-        EmbeddingGenerator.generate_async = original_gen_async
+        LocalEmbeddingGenerator.generate = original_gen
+        LocalEmbeddingGenerator.generate_async = original_gen_async
 
 
 @pytest.fixture
@@ -189,17 +191,17 @@ def ingestor_with_mock_embedder(sample_embedding: list[float]) -> Any:
 
     ingestor = DocumentIngestor(chunk_size=100, chunk_overlap=10, verbose=False)
 
-    original_gen = EmbeddingGenerator.generate
+    original_gen = LocalEmbeddingGenerator.generate
 
-    def mock_generate(self: EmbeddingGenerator, text: str) -> list[float]:
+    def mock_generate(self: LocalEmbeddingGenerator, text: str) -> list[float]:
         return sample_embedding
 
-    EmbeddingGenerator.generate = mock_generate
+    LocalEmbeddingGenerator.generate = mock_generate
 
     try:
         yield ingestor
     finally:
-        EmbeddingGenerator.generate = original_gen
+        LocalEmbeddingGenerator.generate = original_gen
 
 
 @pytest.fixture
@@ -208,7 +210,7 @@ def storage_with_index(test_collection: Any) -> Any:
     os.environ["SECONDBRAIN_MONGO_URI"] = "mongodb://localhost:27017"
     os.environ["SECONDBRAIN_MONGO_DB"] = "test_secondbrain"
     os.environ["SECONDBRAIN_MONGO_COLLECTION"] = "test_embeddings"
-    os.environ["SECONDBRAIN_OLLAMA_URL"] = "http://localhost:11434"
+    os.environ["SECONDBRAIN_LOCALHOST"] = "http://localhost:11434"
     os.environ["SECONDBRAIN_MODEL"] = "embeddinggemma:latest"
 
     from secondbrain.config import get_config
@@ -236,16 +238,16 @@ def search_workflow(storage_with_index: Any, sample_embedding: list[float]) -> A
     """Create a Searcher-like workflow for testing search operations."""
     from secondbrain.search import Searcher
 
-    original_gen = EmbeddingGenerator.generate
+    original_gen = LocalEmbeddingGenerator.generate
 
-    def mock_generate(self: EmbeddingGenerator, text: str) -> list[float]:
+    def mock_generate(self: LocalEmbeddingGenerator, text: str) -> list[float]:
         hash_val = hash(text.lower())
         import random
 
         random.seed(hash_val % (2**32))
         return [random.random() for _ in range(EMBEDDING_DIMENSIONS)]
 
-    EmbeddingGenerator.generate = mock_generate
+    LocalEmbeddingGenerator.generate = mock_generate
 
     storage_with_index.ensure_index()
 
@@ -253,7 +255,7 @@ def search_workflow(storage_with_index: Any, sample_embedding: list[float]) -> A
         yield {
             "searcher": Searcher(verbose=False),
             "storage": storage_with_index,
-            "embedding_gen": EmbeddingGenerator(),
+            "embedding_gen": LocalEmbeddingGenerator(),
         }
     finally:
-        EmbeddingGenerator.generate = original_gen
+        LocalEmbeddingGenerator.generate = original_gen

@@ -1,10 +1,10 @@
 # Embedding Module
 
-Ollama integration with rate limiting and caching.
+sentence-transformers integration with rate limiting and caching.
 
-## EmbeddingGenerator
+## LocalEmbeddingGenerator
 
-::: secondbrain.embedding.EmbeddingGenerator
+::: secondbrain.embedding.LocalEmbeddingGenerator
     options:
         show_root_heading: true
         show_source: false

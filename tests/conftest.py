@@ -13,7 +13,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from secondbrain.config import Config
-from secondbrain.embedding import EmbeddingGenerator
+from secondbrain.embedding import LocalEmbeddingGenerator
 from secondbrain.storage import VectorStorage
 
 T = TypeVar("T")
@@ -127,11 +127,11 @@ def clean_vector_storage() -> Generator[VectorStorage, None, None]:
 
 
 @pytest.fixture
-def clean_embedding_generator() -> Generator[EmbeddingGenerator, None, None]:
-    """Fixture to ensure EmbeddingGenerator client is properly closed."""
-    from secondbrain.embedding import EmbeddingGenerator
+def clean_embedding_generator() -> Generator[LocalEmbeddingGenerator, None, None]:
+    """Fixture to ensure LocalEmbeddingGenerator client is properly closed."""
+    from secondbrain.embedding import LocalEmbeddingGenerator
 
-    generator = EmbeddingGenerator()
+    generator = LocalEmbeddingGenerator()
     try:
         yield generator
     finally:
@@ -140,7 +140,7 @@ def clean_embedding_generator() -> Generator[EmbeddingGenerator, None, None]:
 
 @pytest.fixture
 def cleanup_resources(request: Any) -> Generator[None, None, None]:
-    """Opt-in cleanup for VectorStorage and EmbeddingGenerator after tests.
+    """Opt-in cleanup for VectorStorage and LocalEmbeddingGenerator after tests.
 
     This fixture is NO LONGER autouse - tests must explicitly request it via
     `cleanup_resources` parameter to get automatic client cleanup.
@@ -171,16 +171,16 @@ def cleanup_resources(request: Any) -> Generator[None, None, None]:
         clients_to_cleanup.append(("searcher", self))
         original_init.get("searcher", lambda *a, **k: None)(self, *args, **kwargs)
 
-    from secondbrain.embedding import EmbeddingGenerator
+    from secondbrain.embedding import LocalEmbeddingGenerator
     from secondbrain.search import Searcher
     from secondbrain.storage import VectorStorage
 
     original_init["storage"] = VectorStorage.__init__
-    original_init["generator"] = EmbeddingGenerator.__init__
+    original_init["generator"] = LocalEmbeddingGenerator.__init__
     original_init["searcher"] = Searcher.__init__
 
     VectorStorage.__init__ = track_storage_init  # type: ignore[method-assign]
-    EmbeddingGenerator.__init__ = track_generator_init  # type: ignore[method-assign]
+    LocalEmbeddingGenerator.__init__ = track_generator_init  # type: ignore[method-assign]
     Searcher.__init__ = track_searcher_init  # type: ignore[method-assign]
 
     try:
@@ -188,8 +188,8 @@ def cleanup_resources(request: Any) -> Generator[None, None, None]:
     finally:
         # Restore original init methods
         VectorStorage.__init__ = original_init.get("storage", VectorStorage.__init__)  # type: ignore[method-assign]
-        EmbeddingGenerator.__init__ = original_init.get(  # type: ignore[method-assign]
-            "generator", EmbeddingGenerator.__init__
+        LocalEmbeddingGenerator.__init__ = original_init.get(  # type: ignore[method-assign]
+            "generator", LocalEmbeddingGenerator.__init__
         )
         Searcher.__init__ = original_init.get("searcher", Searcher.__init__)  # type: ignore[method-assign]
 
@@ -212,7 +212,7 @@ def mock_config(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         "SECONDBRAIN_MONGO_URI": "mongodb://localhost:27017",
         "SECONDBRAIN_MONGO_DB": "test_secondbrain",
         "SECONDBRAIN_MONGO_COLLECTION": "test_embeddings",
-        "SECONDBRAIN_OLLAMA_URL": "http://localhost:11434",
+        "SECONDBRAIN_LOCALHOST": "http://localhost:11434",
         "SECONDBRAIN_MODEL": "embeddinggemma:latest",
         "SECONDBRAIN_CHUNK_SIZE": 512,
         "SECONDBRAIN_CHUNK_OVERLAP": 50,
@@ -238,7 +238,7 @@ def fast_test_config(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         "SECONDBRAIN_MONGO_URI": "mongodb://localhost:27017",
         "SECONDBRAIN_MONGO_DB": "test_secondbrain_fast",
         "SECONDBRAIN_MONGO_COLLECTION": "test_embeddings_fast",
-        "SECONDBRAIN_OLLAMA_URL": "http://localhost:11434",
+        "SECONDBRAIN_LOCALHOST": "http://localhost:11434",
         "SECONDBRAIN_MODEL": "embeddinggemma:latest",
         "SECONDBRAIN_CHUNK_SIZE": 256,  # Smaller chunks for faster processing
         "SECONDBRAIN_CHUNK_OVERLAP": 25,
@@ -261,7 +261,7 @@ def fast_cli_test(monkeypatch: pytest.MonkeyPatch) -> None:
 
     This fixture:
     - Sets up minimal config defaults
-    - Does NOT patch VectorStorage/EmbeddingGenerator (avoids 0.2s overhead)
+    - Does NOT patch VectorStorage/LocalEmbeddingGenerator (avoids 0.2s overhead)
     - Does NOT enable automatic cleanup
 
     Use this for pure CLI validation tests that mock all dependencies.
@@ -275,7 +275,7 @@ def fast_cli_test(monkeypatch: pytest.MonkeyPatch) -> None:
         "SECONDBRAIN_MONGO_URI": "mongodb://localhost:27017",
         "SECONDBRAIN_MONGO_DB": "test_secondbrain",
         "SECONDBRAIN_MONGO_COLLECTION": "test_embeddings",
-        "SECONDBRAIN_OLLAMA_URL": "http://localhost:11434",
+        "SECONDBRAIN_LOCALHOST": "http://localhost:11434",
         "SECONDBRAIN_MODEL": "embeddinggemma:latest",
         "SECONDBRAIN_CHUNK_SIZE": 512,
         "SECONDBRAIN_CHUNK_OVERLAP": 50,
@@ -308,8 +308,8 @@ def sample_embedding() -> list[float]:
 def cached_embedding_generator(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
     """Mock embedding generator with pre-cached embeddings for fast tests.
 
-    This fixture mocks the EmbeddingGenerator to return pre-computed
-    embeddings instead of calling Ollama, reducing test time by ~2-3s per test.
+    This fixture mocks the LocalEmbeddingGenerator to return pre-computed
+    embeddings instead of calling SentenceTransformers, reducing test time by ~2-3s per test.
     """
     import random
     from unittest.mock import MagicMock
@@ -327,7 +327,7 @@ def cached_embedding_generator(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
     mock.generate_batch.side_effect = lambda texts: [mock_generate(t) for t in texts]
 
     monkeypatch.setattr(
-        "secondbrain.embedding.EmbeddingGenerator",
+        "secondbrain.embedding.LocalEmbeddingGenerator",
         lambda *args, **kwargs: mock,
     )
 
@@ -466,9 +466,9 @@ def _cleanup_storage() -> None:
 def _cleanup_embedding() -> None:
     """Cleanup function to be registered with atexit."""
     try:
-        from secondbrain.embedding import EmbeddingGenerator
+        from secondbrain.embedding import LocalEmbeddingGenerator
 
-        generator = EmbeddingGenerator()
+        generator = LocalEmbeddingGenerator()
         generator.close()
     except (OSError, RuntimeError):
         pass
@@ -483,7 +483,7 @@ def mock_config_defaults() -> None:
         "SECONDBRAIN_MONGO_URI": "mongodb://localhost:27017",
         "SECONDBRAIN_MONGO_DB": "test_secondbrain",
         "SECONDBRAIN_MONGO_COLLECTION": "test_embeddings",
-        "SECONDBRAIN_OLLAMA_URL": "http://localhost:11434",
+        "SECONDBRAIN_LOCALHOST": "http://localhost:11434",
         "SECONDBRAIN_MODEL": "embeddinggemma:latest",
         "SECONDBRAIN_CHUNK_SIZE": 512,
         "SECONDBRAIN_CHUNK_OVERLAP": 50,

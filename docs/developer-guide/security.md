@@ -22,7 +22,7 @@ If you discover a security vulnerability in SecondBrain, please report it respon
 - **Environment-driven configuration**: Sensitive settings via environment variables
 - **Input validation**: All user inputs validated before processing
 - **Error handling**: Granular error types prevent information leakage
-- **Rate limiting**: Ollama API rate limiting prevents abuse
+- **Rate limiting**: sentence-transformers API rate limiting prevents abuse
 - **Connection validation**: Service health checks with TTL caching
 
 ## Security Best Practices

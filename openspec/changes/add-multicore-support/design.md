@@ -174,7 +174,7 @@ batch_size = min(len(chunks), MAX_MEMORY_BATCH_SIZE)
 
 ### 5. Rate limiting with multiple workers
 
-**Risk**: Multiple processes/threads may overwhelm Ollama API.
+**Risk**: Multiple processes/threads may overwhelm sentence-transformers API.
 
 **Mitigation**:
 - Keep rate limiter as singleton shared across workers

@@ -8,7 +8,7 @@ Before installing SecondBrain, ensure you have:
 
 - **Python 3.11+** - Check with `python --version`
 - **MongoDB 8.0+** - Can run via Docker or local installation
-- **Ollama** - For embedding generation (can run via Docker or local)
+- **sentence-transformers** - For embedding generation (can run via Docker or local)
 
 ## Option 1: Docker (Recommended)
 
@@ -19,7 +19,7 @@ The easiest way to get started is using Docker Compose:
 git clone https://github.com/your-org/secondbrain.git
 cd secondbrain
 
-# Start MongoDB and Ollama services
+# Start MongoDB and sentence-transformers services
 docker-compose up -d
 
 # Install SecondBrain
@@ -52,16 +52,16 @@ brew services start mongodb-community
 **Windows:**
 Download from [MongoDB Download Center](https://www.mongodb.com/try/download/community)
 
-### 2. Install Ollama
+### 2. Install sentence-transformers
 
 **macOS/Linux:**
 ```bash
-curl -fsSL https://ollama.ai/install.sh | sh
-ollama serve
+curl -fsSL https://sentence-transformers.ai/install.sh | sh
+sentence-transformers serve
 ```
 
 **Windows:**
-Download from [Ollama Website](https://ollama.ai)
+Download from [sentence-transformers Website](https://sentence-transformers.ai)
 
 ### 3. Install SecondBrain
 
@@ -73,8 +73,8 @@ cd secondbrain
 # Install with dev dependencies
 pip install -e ".[dev]"
 
-# Install Ollama model
-ollama pull embeddinggemma:latest
+# Install sentence-transformers model
+sentence-transformers pull embeddinggemma:latest
 ```
 
 ## Verify Installation
@@ -86,8 +86,8 @@ secondbrain --version
 # Check MongoDB connection
 secondbrain health
 
-# Check Ollama connection
-curl http://localhost:11434/api/tags
+# Check sentence-transformers connection
+curl http://localhost:local embedding/api/tags
 ```
 
 ## Configuration
@@ -116,17 +116,17 @@ docker-compose up -d  # Docker
 brew services start mongodb-community  # macOS
 ```
 
-### Ollama Not Responding
+### sentence-transformers Not Responding
 
 ```bash
-# Check Ollama status
-ollama list
+# Check sentence-transformers status
+sentence-transformers list
 
-# Start Ollama
-ollama serve
+# Start sentence-transformers
+sentence-transformers serve
 
 # Pull required model
-ollama pull embeddinggemma:latest
+sentence-transformers pull embeddinggemma:latest
 ```
 
 ### Python Version Issues

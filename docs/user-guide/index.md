@@ -39,11 +39,7 @@ See [Document Ingestion](./document-ingestion.md) for details.
 
 ## Examples
 
-Practical examples are available in the [examples/](examples/) directory:
-
-- [Basic Usage](examples/basic_usage/) - Simple CLI examples
-- [Advanced](examples/advanced/) - Custom workflows
-- [Integrations](examples/integrations/) - REST API examples
+Practical examples are available in the [examples directory](https://github.com/your-repo/examples) on GitHub.
 
 ## Related Documentation
 

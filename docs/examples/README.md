@@ -33,8 +33,8 @@ pip install -e ".[dev]"
 # Start MongoDB (if using Docker)
 docker-compose up -d
 
-# Ensure Ollama is running
-ollama serve
+# Ensure sentence-transformers is running
+sentence-transformers serve
 ```
 
 ### Running Examples

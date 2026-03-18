@@ -73,7 +73,7 @@ Before merging, ensure:
 ### Prerequisites
 
 - Python 3.11+
-- Docker and Docker Compose (for local development with MongoDB and Ollama)
+- Docker and Docker Compose (for local development with MongoDB and sentence-transformers)
 
 ### Installation
 
@@ -167,7 +167,7 @@ src/secondbrain/
 ├── cli/          # CLI commands and interface
 ├── config/       # Configuration management
 ├── document/     # Document ingestion and processing
-├── embedding/    # Embedding generation via Ollama
+├── embedding/    # Embedding generation via sentence-transformers
 ├── storage/      # MongoDB vector storage
 ├── search/       # Semantic search functionality
 ├── management/   # List, delete, and status operations

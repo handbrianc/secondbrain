@@ -327,21 +327,13 @@ def metrics(ctx: click.Context, reset: bool) -> None:
 @click.pass_context
 def circuit_breaker(ctx: click.Context, reset: bool) -> None:
     """Show circuit breaker status."""
-    from secondbrain.embedding import EmbeddingGenerator
-
-    embed_gen = EmbeddingGenerator()
-    cb = embed_gen._circuit_breaker
-
     if reset:
-        cb.reset()
-        console.print("[green]Circuit breaker reset[/green]")
+        console.print("[yellow]Circuit breaker state is per-instance[/yellow]")
+        console.print("[yellow]No global circuit breaker to reset[/yellow]")
         return
 
-    stats = cb.get_stats()
-    console.print("[bold]Circuit Breaker Status[/bold]")
-    console.print(f"  State: {stats['state']}")
-    console.print(f"  Failure count: {stats['failure_count']}")
-    console.print(f"  Success count: {stats['success_count']}")
-    console.print(f"  Half-open calls: {stats['half_open_calls']}")
-    if stats["last_failure_time"]:
-        console.print(f"  Last failure: {stats['last_failure_time']:.3f}s ago")
+    console.print("[bold]Circuit Breaker Module Available[/bold]")
+    console.print(
+        "  The CircuitBreaker class is available in secondbrain.utils.circuit_breaker"
+    )
+    console.print("  Each service that uses circuit breaker maintains its own state")

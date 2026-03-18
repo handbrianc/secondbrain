@@ -8,7 +8,7 @@ from secondbrain.search import Searcher
 class TestSearcher:
     """Tests for Searcher class."""
 
-    @patch("secondbrain.search.EmbeddingGenerator")
+    @patch("secondbrain.search.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_init_default(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
@@ -17,7 +17,7 @@ class TestSearcher:
         searcher = Searcher()
         assert searcher.verbose is False
 
-    @patch("secondbrain.search.EmbeddingGenerator")
+    @patch("secondbrain.search.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_search_basic(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
@@ -42,7 +42,7 @@ class TestSearcher:
         mock_embed.generate.assert_called_once_with("test query")
         mock_storage.search.assert_called_once()
 
-    @patch("secondbrain.search.EmbeddingGenerator")
+    @patch("secondbrain.search.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_search_with_top_k(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
@@ -64,7 +64,7 @@ class TestSearcher:
         call_args = mock_storage.search.call_args
         assert call_args.kwargs["top_k"] == 10
 
-    @patch("secondbrain.search.EmbeddingGenerator")
+    @patch("secondbrain.search.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_search_with_source_filter(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
@@ -85,7 +85,7 @@ class TestSearcher:
         call_args = mock_storage.search.call_args
         assert call_args.kwargs["source_filter"] == "test.pdf"
 
-    @patch("secondbrain.search.EmbeddingGenerator")
+    @patch("secondbrain.search.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_search_with_file_type_filter(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
@@ -106,12 +106,12 @@ class TestSearcher:
         call_args = mock_storage.search.call_args
         assert call_args.kwargs["file_type_filter"] == "pdf"
 
-    @patch("secondbrain.search.EmbeddingGenerator")
+    @patch("secondbrain.search.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
-    def test_search_ollama_unavailable(
+    def test_search_sentence_transformers_unavailable(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
     ) -> None:
-        """Test search raises when Ollama is unavailable."""
+        """Test search raises when SentenceTransformers is unavailable."""
         mock_embed = MagicMock()
         mock_embed.validate_connection.return_value = False
         mock_embed_class.return_value = mock_embed
@@ -120,9 +120,9 @@ class TestSearcher:
         try:
             searcher.search("test query")
         except RuntimeError as e:
-            assert "Cannot connect to Ollama service" in str(e)
+            assert "Cannot connect to SentenceTransformers service" in str(e)
 
-    @patch("secondbrain.search.EmbeddingGenerator")
+    @patch("secondbrain.search.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_search_mongodb_unavailable(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
@@ -147,7 +147,7 @@ class TestSearcher:
 class TestSemanticSearchSpecRequirements:
     """Tests for semantic search specification requirements."""
 
-    @patch("secondbrain.search.EmbeddingGenerator")
+    @patch("secondbrain.search.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_search_uses_cosine_similarity(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
@@ -169,7 +169,7 @@ class TestSemanticSearchSpecRequirements:
         # Verify search was called
         mock_storage.search.assert_called_once()
 
-    @patch("secondbrain.search.EmbeddingGenerator")
+    @patch("secondbrain.search.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_search_default_top_k(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
@@ -195,7 +195,7 @@ class TestSemanticSearchSpecRequirements:
         call_args = mock_storage.search.call_args
         assert call_args.kwargs["top_k"] == config.default_top_k
 
-    @patch("secondbrain.search.EmbeddingGenerator")
+    @patch("secondbrain.search.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_search_results_include_score(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
@@ -226,7 +226,7 @@ class TestSemanticSearchSpecRequirements:
         assert "score" in results[0]
         assert 0 <= results[0]["score"] <= 1
 
-    @patch("secondbrain.search.EmbeddingGenerator")
+    @patch("secondbrain.search.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_search_results_include_chunk_text(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
@@ -255,7 +255,7 @@ class TestSemanticSearchSpecRequirements:
 
         assert "chunk_text" in results[0]
 
-    @patch("secondbrain.search.EmbeddingGenerator")
+    @patch("secondbrain.search.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_search_results_include_source_file(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
@@ -284,7 +284,7 @@ class TestSemanticSearchSpecRequirements:
 
         assert "source_file" in results[0]
 
-    @patch("secondbrain.search.EmbeddingGenerator")
+    @patch("secondbrain.search.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_search_results_include_page_number(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
@@ -314,7 +314,7 @@ class TestSemanticSearchSpecRequirements:
         assert "page_number" in results[0]
         assert results[0]["page_number"] == 5
 
-    @patch("secondbrain.search.EmbeddingGenerator")
+    @patch("secondbrain.search.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_search_empty_results(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
@@ -335,12 +335,12 @@ class TestSemanticSearchSpecRequirements:
 
         assert results == []
 
-    @patch("secondbrain.search.EmbeddingGenerator")
+    @patch("secondbrain.search.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
-    def test_search_generates_embedding_via_ollama(
+    def test_search_generates_embedding_via_sentence_transformers(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
     ) -> None:
-        """Test search generates embedding via Ollama (spec: uses same model as ingestion)."""
+        """Test search generates embedding via SentenceTransformers (spec: uses same model as ingestion)."""
         mock_embed = MagicMock()
         mock_embed.validate_connection.return_value = True
         mock_embed.generate.return_value = [0.1] * 384
@@ -357,7 +357,7 @@ class TestSemanticSearchSpecRequirements:
         # Verify embedding was generated
         mock_embed.generate.assert_called_once_with("test query")
 
-    @patch("secondbrain.search.EmbeddingGenerator")
+    @patch("secondbrain.search.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_search_uses_vector_index(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock

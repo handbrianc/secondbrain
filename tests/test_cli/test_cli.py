@@ -191,5 +191,6 @@ class TestCLI:
             result = runner.invoke(cli, ["circuit-breaker", "--reset"])
 
             assert result.exit_code == 0
-            assert "Circuit breaker reset" in result.output
-            mock_reset.assert_called_once()
+            assert "Circuit breaker state is per-instance" in result.output
+            assert "No global circuit breaker to reset" in result.output
+            mock_reset.assert_not_called()

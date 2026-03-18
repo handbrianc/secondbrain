@@ -1,6 +1,6 @@
 # SecondBrain - Local Document Intelligence CLI
 
-A local document intelligence CLI tool that ingests documents, generates embeddings using Ollama, and stores vectors in MongoDB for semantic search.
+A local document intelligence CLI tool that ingests documents, generates embeddings using sentence-transformers, and stores vectors in MongoDB for semantic search.
 
 ## Documentation
 
@@ -20,14 +20,14 @@ A local document intelligence CLI tool that ingests documents, generates embeddi
 
 - Python 3.11+
 - MongoDB 8.0+ (via Docker or local)
-- Ollama (via Docker or local)
+- sentence-transformers (via Docker or local)
 
 ### Installation
 
 ```bash
 # Start services (Docker)
 docker-compose up -d  # MongoDB
-ollama serve          # Ollama (macOS/Linux)
+sentence-transformers serve          # sentence-transformers (macOS/Linux)
 
 # Install SecondBrain
 pip install -e ".[dev]"
@@ -58,7 +58,7 @@ secondbrain health
 - **Semantic search**: Natural language queries with cosine similarity
 - **Async support**: Full async API for embedding generation and storage
 - **Multicore processing**: Parallel document ingestion with configurable CPU core count
-- **Rate limiting**: Protects Ollama API from overload
+- **Rate limiting**: Protects sentence-transformers API from overload
 - **12-factor app**: Environment-driven configuration
 
 ## CLI Reference
@@ -92,8 +92,6 @@ Key environment variables (see [Full Config](docs/getting-started/configuration.
 ```bash
 # .env file
 SECONDBRAIN_MONGO_URI=mongodb://localhost:27017
-SECONDBRAIN_OLLAMA_URL=http://localhost:11434
-SECONDBRAIN_MODEL=embeddinggemma:latest
 SECONDBRAIN_CHUNK_SIZE=4096
 ```
 
@@ -111,7 +109,7 @@ mypy .
 # Tests (fast profile - default)
 pytest -m "not integration" -n auto
 
-# Full test suite (requires MongoDB + Ollama)
+# Full test suite (requires MongoDB + sentence-transformers)
 pytest
 
 # All checks

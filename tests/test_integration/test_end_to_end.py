@@ -20,7 +20,7 @@ import mongomock
 import pytest
 
 from secondbrain.document import DocumentIngestor
-from secondbrain.embedding import EmbeddingGenerator
+from secondbrain.embedding import LocalEmbeddingGenerator
 
 # Suppress docling deprecation warnings (upstream library issue)
 warnings.filterwarnings(
@@ -44,6 +44,7 @@ def mongomock_client() -> Generator[mongomock.MongoClient[Any], None, None]:
 class TestDocumentIngestion:
     """Tests for document ingestion end-to-end workflow."""
 
+    @pytest.mark.integration
     @pytest.mark.slow
     def test_ingest_single_pdf_document(
         self,
@@ -70,13 +71,15 @@ class TestDocumentIngestion:
                     chunk_size=500, chunk_overlap=50, verbose=False
                 )
 
-                original_gen = EmbeddingGenerator.generate
+                original_gen = LocalEmbeddingGenerator.generate
 
-                def mock_generate(self: EmbeddingGenerator, text: str) -> list[float]:
+                def mock_generate(
+                    self: LocalEmbeddingGenerator, text: str
+                ) -> list[float]:
                     random.seed(hash(text.lower()))
                     return [random.random() for _ in range(768)]
 
-                EmbeddingGenerator.generate = mock_generate
+                LocalEmbeddingGenerator.generate = mock_generate
 
                 try:
                     result = ingestor.ingest(str(sample_pdf_path))
@@ -84,10 +87,11 @@ class TestDocumentIngestion:
                     assert result["success"] >= 1
                     assert result["failed"] == 0
                 finally:
-                    EmbeddingGenerator.generate = original_gen
+                    LocalEmbeddingGenerator.generate = original_gen
         finally:
             mongomock_client.close()
 
+    @pytest.mark.integration
     @pytest.mark.slow
     def test_ingest_multiple_files_batch(
         self,
@@ -113,15 +117,17 @@ class TestDocumentIngestion:
                     chunk_size=500, chunk_overlap=50, verbose=False
                 )
 
-                original_gen = EmbeddingGenerator.generate
+                original_gen = LocalEmbeddingGenerator.generate
 
-                def mock_generate(self: EmbeddingGenerator, text: str) -> list[float]:
+                def mock_generate(
+                    self: LocalEmbeddingGenerator, text: str
+                ) -> list[float]:
                     import random as r
 
                     r.seed(hash(text.lower()))
                     return [r.random() for _ in range(768)]
 
-                EmbeddingGenerator.generate = mock_generate
+                LocalEmbeddingGenerator.generate = mock_generate
 
                 try:
                     result = ingestor.ingest(str(sample_pdf_path.parent))
@@ -129,7 +135,7 @@ class TestDocumentIngestion:
                     assert result["success"] >= 1
                     assert result["failed"] == 0
                 finally:
-                    EmbeddingGenerator.generate = original_gen
+                    LocalEmbeddingGenerator.generate = original_gen
         finally:
             mongomock_client.close()
 
@@ -149,15 +155,15 @@ class TestFullWorkflow:
 
         ingestor = DocumentIngestor(chunk_size=500, chunk_overlap=50, verbose=False)
 
-        original_gen = EmbeddingGenerator.generate
+        original_gen = LocalEmbeddingGenerator.generate
 
-        def mock_generate(self: EmbeddingGenerator, text: str) -> list[float]:
+        def mock_generate(self: LocalEmbeddingGenerator, text: str) -> list[float]:
             import random as r
 
             r.seed(hash(text.lower()))
             return [r.random() for _ in range(768)]
 
-        EmbeddingGenerator.generate = mock_generate
+        LocalEmbeddingGenerator.generate = mock_generate
 
         sample_pdf = db["sample_pdf"]
         sample_pdf.insert_one(
@@ -200,7 +206,7 @@ class TestFullWorkflow:
             remaining = list(collection.find())
             assert len(remaining) == final_count - delete_count
         finally:
-            EmbeddingGenerator.generate = original_gen
+            LocalEmbeddingGenerator.generate = original_gen
             pdf_path.unlink(missing_ok=True)
 
     def test_delete_by_chunk_id(
@@ -258,6 +264,7 @@ class TestFullWorkflow:
 class TestIntegrationDataFlow:
     """Tests validating data flows between modules."""
 
+    @pytest.mark.integration
     @pytest.mark.slow
     def test_ingestion_creates_proper_chunks(
         self,
@@ -284,13 +291,15 @@ class TestIntegrationDataFlow:
                     chunk_size=500, chunk_overlap=50, verbose=False
                 )
 
-                original_gen = EmbeddingGenerator.generate
+                original_gen = LocalEmbeddingGenerator.generate
 
-                def mock_generate(self: EmbeddingGenerator, text: str) -> list[float]:
+                def mock_generate(
+                    self: LocalEmbeddingGenerator, text: str
+                ) -> list[float]:
                     random.seed(hash(text.lower()))
                     return [random.random() for _ in range(768)]
 
-                EmbeddingGenerator.generate = mock_generate
+                LocalEmbeddingGenerator.generate = mock_generate
 
                 try:
                     result = ingestor.ingest(str(sample_pdf_path))
@@ -328,7 +337,7 @@ class TestIntegrationDataFlow:
                         assert "metadata" in chunk
                         assert "file_type" in chunk["metadata"]
                 finally:
-                    EmbeddingGenerator.generate = original_gen
+                    LocalEmbeddingGenerator.generate = original_gen
         finally:
             mongomock_client.close()
 
@@ -423,6 +432,7 @@ class TestIntegrationDataFlow:
         for chunk in filtered:
             assert "test0" in chunk["source_file"]
 
+    @pytest.mark.integration
     @pytest.mark.slow
     def test_chunk_overlapping_text(
         self,

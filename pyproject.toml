@@ -8,7 +8,7 @@ authors = [
 ]
 license = {text = "MIT"}
 readme = "README.md"
-keywords = ["cli", "document", "embedding", "ollama", "mongodb", "vector-search"]
+keywords = ["cli", "document", "embedding", "mongodb", "vector-search", "sentence-transformers"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -24,7 +24,6 @@ dependencies = [
     "docling-core>=2.48.4",
     "pymongo>=4.6.0",
     "httpx>=0.27.0",
-    "ollama>=0.4.0",
     "pydantic>=2.0.0",
     "pydantic-settings>=2.0.0",
     "rich>=14.0.0",
