@@ -325,6 +325,35 @@ class VectorStorage(ValidatableService):
         try:
             from pymongo.operations import SearchIndexModel
 
+            existing_indexes = list(
+                self.collection.list_search_indexes("embedding_index")
+            )
+            if existing_indexes:
+                existing_index = existing_indexes[0]
+                existing_dims = (
+                    existing_index.get("definition", {})
+                    .get("fields", [{}])[0]
+                    .get("numDimensions")
+                )
+                current_dims = self._config.embedding_dimensions
+
+                if existing_dims != current_dims:
+                    logger.info(
+                        "Dropping old index with %d dimensions to create new index with %d dimensions",
+                        existing_dims,
+                        current_dims,
+                    )
+                    try:
+                        self.collection.drop_search_index("embedding_index")
+                        logger.info("Dropped old index successfully")
+                    except Exception as drop_err:
+                        logger.error(
+                            "Failed to drop old index: %s: %s",
+                            type(drop_err).__name__,
+                            drop_err,
+                        )
+                        raise
+
             search_index_model = SearchIndexModel(
                 definition={
                     "fields": [
