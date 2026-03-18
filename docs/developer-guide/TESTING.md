@@ -51,7 +51,7 @@ pytest -m "not slow" --cov=secondbrain --cov-report=html
 ```
 
 **Characteristics:**
-- ✅ No external service dependencies (MongoDB, Ollama)
+- ✅ No external service dependencies (MongoDB, sentence-transformers)
 - ✅ Uses mocked components and mongomock
 - ✅ Fast execution (5-10 seconds for 480+ tests)
 - ✅ Run on every commit/PR
@@ -73,7 +73,7 @@ pytest tests/test_integration/ -v
 ```
 
 **Characteristics:**
-- ⚠️ Requires MongoDB and Ollama running
+- ⚠️ Requires MongoDB and sentence-transformers running
 - ⚠️ Slower execution (15-20 seconds for 16 tests)
 - ⚠️ Run nightly or on-demand
 - ⚠️ Tests real service interactions
@@ -112,10 +112,10 @@ import pytest
 
 @pytest.mark.integration
 class TestMyFeature:
-    """Integration test requiring MongoDB/Ollama."""
+    """Integration test requiring MongoDB/sentence-transformers."""
     
     def test_with_real_services(self):
-        # Uses real MongoDB and Ollama
+        # Uses real MongoDB and sentence-transformers
         pass
 
 @pytest.mark.slow
@@ -186,7 +186,7 @@ def test_pdf_ingestion(mocked_pdf_extraction, sample_pdf_path):
 ```python
 def test_search():
     generator = EmbeddingGenerator()
-    embedding = generator.generate("query")  # ~2s (Ollama call)
+    embedding = generator.generate("query")  # ~2s (sentence-transformers call)
 ```
 
 **After (fast):**
@@ -281,7 +281,7 @@ pytest -m "not integration" -n auto
 
 # Integration tests (requires services)
 docker-compose up -d  # Start MongoDB
-ollama serve &        # Start Ollama
+sentence-transformers serve &        # Start sentence-transformers
 pytest -m integration
 ```
 
@@ -345,16 +345,16 @@ To manually cleanup coverage files after test runs:
    mongosh secondbrain --eval "db.dropDatabase()"
    ```
 
-### Ollama Connection Errors
+### sentence-transformers Connection Errors
 
-1. **Ensure Ollama is running:**
+1. **Ensure sentence-transformers is running:**
    ```bash
-   ollama serve
+   sentence-transformers serve
    ```
 
 2. **Pull required model:**
    ```bash
-   ollama pull embeddinggemma:latest
+   sentence-transformers pull embeddinggemma:latest
    ```
 
 3. **Use mocked embeddings:**
@@ -485,7 +485,6 @@ def test_chunking_logic():
 
 ## Related Documentation
 
-- [README.md](../README.md) - Project overview
-- [Developer Guide](developer-guide.md) - Development setup
-- [Configuration Guide](../docs/getting-started/configuration.md) - Environment variables
-- [AGENTS.md](../AGENTS.md) - Agent coding guidelines
+- [Home](index.md) - Documentation home
+- [Developer Guide](../index.md) - Development setup
+- [Configuration Guide](../getting-started/configuration.md) - Environment variables

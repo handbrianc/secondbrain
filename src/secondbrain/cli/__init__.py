@@ -18,7 +18,7 @@ from secondbrain.logging import setup_logging
 def cli(ctx: click.Context, verbose: bool) -> None:
     """SecondBrain - A local document intelligence CLI tool.
 
-    Ingests documents, generates embeddings using Ollama, and stores
+    Ingests documents, generates embeddings using sentence-transformers, and stores
     vectors in MongoDB for semantic search.
     """
     ctx.ensure_object(dict)

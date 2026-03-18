@@ -71,7 +71,7 @@ secondbrain health
 
 Verifies:
 - MongoDB connectivity
-- Ollama availability
+- sentence-transformers availability
 - Configuration validity
 
 ## Organizing Documents

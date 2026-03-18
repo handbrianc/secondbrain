@@ -7,7 +7,7 @@ The system SHALL allow users to ingest documents from local filesystem paths and
 - **WHEN** user runs `secondbrain ingest document.pdf`
 - **THEN** the system parses the document using Docling
 - **AND** extracts text content in chunks
-- **AND** generates embeddings using Ollama
+- **AND** generates embeddings using sentence-transformers
 - **AND** stores vectors in MongoDB with metadata
 
 #### Scenario: Ingest multiple documents recursively

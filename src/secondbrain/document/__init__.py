@@ -28,7 +28,7 @@ from secondbrain.exceptions import DocumentExtractionError, UnsupportedFileError
 if TYPE_CHECKING:
     from docling.document_converter import DocumentConverter
 
-    from secondbrain.embedding.generator import EmbeddingGenerator
+    from secondbrain.embedding.local import LocalEmbeddingGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -383,7 +383,6 @@ class DocumentIngestor:
         """
         from secondbrain.exceptions import (
             EmbeddingGenerationError,
-            OllamaUnavailableError,
         )
 
         try:
@@ -425,7 +424,6 @@ class DocumentIngestor:
         """
         from secondbrain.exceptions import (
             EmbeddingGenerationError,
-            OllamaUnavailableError,
         )
 
         # Chunk text and deduplicate
@@ -554,8 +552,21 @@ class DocumentIngestor:
         )
 
         from secondbrain.config import get_config
-        from secondbrain.embedding import EmbeddingGenerator
+        from secondbrain.embedding import LocalEmbeddingGenerator
         from secondbrain.storage import VectorStorage
+
+        # Initialize services
+        embedding_gen = LocalEmbeddingGenerator()
+        storage = VectorStorage()
+
+        # Collect and validate files
+        files = self._collect_and_validate_files(path, recursive)
+
+        if not files:
+            return {"success": 0, "failed": 0}
+
+        failed_files = 0
+        successful_files = 0
 
         # Resolve core count
         config = get_config()
@@ -565,19 +576,6 @@ class DocumentIngestor:
         # Validate core count
         if cores <= 0:
             raise ValueError("cores must be positive")
-
-        # Collect and validate files
-        files = self._collect_and_validate_files(path, recursive)
-
-        if not files:
-            return {"success": 0, "failed": 0}
-
-        # Initialize services
-        embedding_gen = EmbeddingGenerator()
-        storage = VectorStorage()
-
-        failed_files = 0
-        successful_files = 0
 
         # Use multiprocessing if cores > 1, otherwise use ThreadPoolExecutor
         if cores > 1:
@@ -763,7 +761,7 @@ class DocumentIngestor:
         self,
         file_path: Path,
         chunks: list[Segment],
-        embedding_gen: EmbeddingGenerator,
+        embedding_gen: LocalEmbeddingGenerator,
     ) -> list[dict[str, Any]]:
         """Convert chunks to documents with embeddings.
 

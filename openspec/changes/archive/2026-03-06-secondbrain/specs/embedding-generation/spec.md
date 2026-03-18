@@ -1,18 +1,18 @@
 ## ADDED Requirements
 
 ### Requirement: Embedding Generation
-The system SHALL generate semantic embeddings for text chunks using Ollama with embeddinggemma:latest model.
+The system SHALL generate semantic embeddings for text chunks using sentence-transformers with embeddinggemma:latest model.
 
 #### Scenario: Generate embedding for text
 - **WHEN** user ingests a document with extracted text
 - **THEN** the system chunks text into segments
-- **AND** generates embedding vector for each chunk using Ollama API
+- **AND** generates embedding vector for each chunk using sentence-transformers API
 - **AND** returns 384-dimensional vectors (embeddinggemma output)
 
-#### Scenario: Ollama service unavailable
-- **WHEN** user attempts ingestion but Ollama is not running
+#### Scenario: sentence-transformers service unavailable
+- **WHEN** user attempts ingestion but sentence-transformers is not running
 - **THEN** the system reports connection error
-- **AND** suggests checking Docker Compose status
+- **AND** suggests checking if sentence-transformers service is started
 - **AND** does not proceed without valid connection
 
 #### Scenario: Model not pulled
@@ -29,11 +29,11 @@ The system SHALL generate semantic embeddings for text chunks using Ollama with 
 #### Scenario: Custom embedding model
 - **WHEN** user sets SECONDBRAIN_MODEL environment variable
 - **THEN** the system uses specified model instead of default
-- **AND** validates model is available in Ollama
+- **AND** validates model is available in sentence-transformers
 
 #### Scenario: Batch embedding generation
 - **WHEN** system has multiple chunks to embed
-- **THEN** the system sends batches to Ollama API
+- **THEN** the system sends batches to sentence-transformers API
 - **AND** processes efficiently to minimize API calls
 
 ### Requirement: Text Chunking
@@ -54,19 +54,19 @@ The system SHALL split documents into overlapping text chunks for embedding.
 - **THEN** the system skips generating embedding for that chunk
 - **AND** logs warning
 
-### Requirement: Ollama Configuration
-The system SHALL connect to Ollama via configurable URL and validate connectivity.
+### Requirement: sentence-transformers Configuration
+The system SHALL connect to sentence-transformers via configurable URL and validate connectivity.
 
-#### Scenario: Default Ollama URL
-- **WHEN** SECONDBRAIN_OLLAMA_URL is not set
-- **THEN** system connects to http://localhost:11434
+#### Scenario: Default sentence-transformers URL
+- **WHEN** SECONDBRAIN_SENTENCE_TRANSFORMERS_URL is not set
+- **THEN** system connects to http://localhost:local embedding
 
-#### Scenario: Custom Ollama URL
-- **WHEN** user sets SECONDBRAIN_OLLAMA_URL to custom URL
+#### Scenario: Custom sentence-transformers URL
+- **WHEN** user sets SECONDBRAIN_SENTENCE_TRANSFORMERS_URL to custom URL
 - **THEN** system connects to specified URL
 - **AND** validates connection before operations
 
 #### Scenario: Connection timeout
-- **WHEN** Ollama does not respond within timeout
+- **WHEN** sentence-transformers does not respond within timeout
 - **THEN** system reports timeout error
 - **AND** allows retry

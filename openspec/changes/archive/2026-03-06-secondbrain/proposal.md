@@ -2,7 +2,7 @@
 
 ## Why
 
-A local document intelligence tool is needed that allows users to ingest documents, generate embeddings using Ollama with the embeddinggemma model, and store vectors in MongoDB for semantic search. The tool should be a CLI-only application (not a server), following industry best practices including 12-factor app principles, high test coverage, security compliance, and SBOM management.
+A local document intelligence tool is needed that allows users to ingest documents, generate embeddings using sentence-transformers with the embeddinggemma model, and store vectors in MongoDB for semantic search. The tool should be a CLI-only application (not a server), following industry best practices including 12-factor app principles, high test coverage, security compliance, and SBOM management.
 
 ## What Changes
 
@@ -26,9 +26,9 @@ A local document intelligence tool is needed that allows users to ingest documen
   - WebVTT (video text tracks)
   - XML (USPTO patents, JATS XML for scientific articles)
   - Docling JSON
-- Use Ollama with `embeddinggemma:latest` for generating embeddings
+- Use sentence-transformers with `embeddinggemma:latest` for generating embeddings
 - Use MongoDB for vector storage
-- Docker Compose to manage Ollama and MongoDB containers
+- Docker Compose to manage MongoDB containers
 - Single executable CLI build (no server required)
 - Follow 12-factor app principles
 - Maintain >= 80% test coverage
@@ -40,8 +40,8 @@ A local document intelligence tool is needed that allows users to ingest documen
 
 ### New Capabilities
 
-- **document-ingestion**: Parse and process documents using Docling, chunk content, generate embeddings via Ollama, and store in MongoDB
-- **embedding-generation**: Use embeddinggemma:latest model via Ollama API to generate semantic embeddings
+- **document-ingestion**: Parse and process documents using Docling, chunk content, generate embeddings via sentence-transformers, and store in MongoDB
+- **embedding-generation**: Use embeddinggemma:latest model via sentence-transformers API to generate semantic embeddings
 - **vector-storage**: Store embeddings in MongoDB with metadata (source file, page number, chunk text)
 - **semantic-search**: Perform cosine similarity search on stored embeddings
 - **document-management**: List and delete ingested documents/chunks from the database
@@ -56,8 +56,8 @@ A local document intelligence tool is needed that allows users to ingest documen
 
 - Python CLI application using Click framework
 - Docling for document parsing
-- Ollama client for embeddings
-- PyMongo or mongoflake for MongoDB connection
+- sentence-transformers for embeddings
+- MongoDB for vector storage
 - Dockerfile for single executable build
 - Docker Compose for container orchestration
 
@@ -65,7 +65,7 @@ A local document intelligence tool is needed that allows users to ingest documen
 
 - **Python**: 3.11+
 - **Docling**: Document parsing
-- **Ollama**: Embedding generation (embeddinggemma:latest)
+- **sentence-transformers**: Embedding generation (embeddinggemma:latest)
 - **MongoDB**: Vector storage
 - **PyTest**: Testing framework
 - **Coverage**: Test coverage measurement
@@ -74,15 +74,15 @@ A local document intelligence tool is needed that allows users to ingest documen
 
 ### External Systems
 
-- Ollama Docker container (embeddinggemma:latest)
+- sentence-transformers local installation (embeddinggemma:latest)
 - MongoDB Docker container (with vector search support)
 
 ### Technical Requirements (12-Factor Compliance)
 
 1. **Codebase**: Single git repository, tracked in version control
 2. **Dependencies**: Explicitly declare and isolate all dependencies in requirements.txt/pyproject.toml
-3. **Config**: Store configuration in environment variables (MongoDB URI, Ollama URL, etc.)
-4. **Backing Services**: Treat MongoDB and Ollama as attached resources via URLs
+3. **Config**: Store configuration in environment variables (MongoDB URI, sentence-transformers URL, etc.)
+4. **Backing Services**: Treat MongoDB and sentence-transformers as attached resources via URLs
 5. **Build/Release/Run**: Separate build (compile to executable) from release (bundle with config)
 6. **Processes**: Stateless CLI - no in-memory state between invocations
 7. **Port Binding**: Not applicable (CLI tool, not web server)
@@ -114,17 +114,21 @@ A local document intelligence tool is needed that allows users to ingest documen
 ### Docker Architecture
 
 ```
-┌─────────────────┐     ┌─────────────────┐
-│   secondbrain  │     │     MongoDB    │
-│   CLI Tool      │────▶│  (vector store)│
-│                 │     │                 │
-└─────────────────┘     └─────────────────┘
-         │
-         ▼
-┌─────────────────┐
-│     Ollama      │
-│ (embeddinggemma) │
-└─────────────────┘
+┌─────────────────────────┐
+│   secondbrain CLI Tool  │
+└─────────────────────────┘
+          │
+          ▼
+┌─────────────────────────┐
+│   MongoDB              │
+│   (vector store)       │
+└─────────────────────────┘
+          │
+          ▼
+┌─────────────────────────┐
+│   sentence-transformers │
+│   (embeddinggemma)      │
+└─────────────────────────┘
 ```
 
 ## Implementation Notes
@@ -156,7 +160,7 @@ secondbrain delete --all
 - `SECONDBRAIN_MONGO_URI`: MongoDB connection string (default: mongodb://localhost:27017)
 - `SECONDBRAIN_MONGO_DB`: Database name (default: secondbrain)
 - `SECONDBRAIN_MONGO_COLLECTION`: Collection name (default: embeddings)
-- `SECONDBRAIN_OLLAMA_URL`: Ollama API URL (default: http://localhost:11434)
+- `SECONDBRAIN_SENTENCE_TRANSFORMERS_URL`: sentence-transformers API URL (default: http://localhost:local embedding)
 - `SECONDBRAIN_MODEL`: Embedding model (default: embeddinggemma:latest)
 - `SECONDBRAIN_CHUNK_SIZE`: Chunk size for document splitting (default: 512)
 - `SECONDBRAIN_CHUNK_OVERLAP`: Chunk overlap for splitting (default: 50)

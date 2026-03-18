@@ -17,7 +17,7 @@ This guide provides detailed information for developers working on the SecondBra
 
 - Python 3.11 or higher
 - MongoDB 7.0+ (for vector search)
-- Ollama (for embedding generation)
+- sentence-transformers (for embedding generation)
 - Docker (optional, for containerized development)
 
 ### Local Development Setup
@@ -55,18 +55,18 @@ cp .env.example .env
 
 ### Docker Development Environment
 
-#### macOS (Ollama installed locally)
+#### macOS (sentence-transformers installed locally)
 
 ```bash
 # Start MongoDB only
 docker-compose up -d
 
-# Start Ollama locally
-ollama serve
+# Start sentence-transformers locally
+sentence-transformers serve
 
 # Verify services are running
 docker-compose ps
-ollama list
+sentence-transformers list
 
 # View logs
 docker-compose logs -f
@@ -75,7 +75,7 @@ docker-compose logs -f
 docker-compose down
 ```
 
-#### Linux / Windows (Ollama via Docker)
+#### Linux / Windows (sentence-transformers via Docker)
 
 ```bash
 # Start all services
@@ -83,7 +83,7 @@ docker-compose up -d
 
 # Or start them separately:
 docker-compose up -d mongodb        # MongoDB only
-docker-compose -f docker-compose.ollama.yml up -d  # Ollama only
+docker-compose -f docker-compose.sentence-transformers.yml up -d  # sentence-transformers only
 
 # Verify services are running
 docker-compose ps
@@ -262,24 +262,24 @@ pytest --cov=secondbrain --cov-report=html
 
 3. Ensure MongoDB version is 7.0+ (required for vector search)
 
-#### Ollama Connection Issues
+#### sentence-transformers Connection Issues
 
-**Problem**: Cannot connect to Ollama
+**Problem**: Cannot connect to sentence-transformers
 
 **Solutions**:
-1. Verify Ollama is running:
+1. Verify sentence-transformers is running:
    ```bash
    curl http://localhost:114../api-reference/index.mdtags
    ```
 
-2. Check Ollama URL in `.env`:
+2. Check sentence-transformers URL in `.env`:
    ```
-   SECONDBRAIN_OLLAMA_URL=http://localhost:11434
+   SECONDBRAIN_SENTENCE_TRANSFORMERS_URL=http://localhost:local embedding
    ```
 
 3. Pull the embedding model:
    ```bash
-   ollama pull embeddinggemma:latest
+   sentence-transformers pull embeddinggemma:latest
    ```
 
 #### Embedding Generation Failures
@@ -287,7 +287,7 @@ pytest --cov=secondbrain --cov-report=html
 **Problem**: Embedding generation fails or times out
 
 **Solutions**:
-1. Check Ollama model is loaded
+1. Check sentence-transformers model is loaded
 2. Verify embedding dimensions match configuration
 3. Check system resources (memory/CPU)
 
@@ -368,7 +368,7 @@ MongoDB connection pooling is configured automatically:
 
 ### Rate Limiting
 
-Rate limiting protects Ollama API:
+Rate limiting protects sentence-transformers API:
 
 ```bash
 # Configure via environment
@@ -422,7 +422,7 @@ export SECONDBRAIN_RATE_LIMIT_WINDOW_SECONDS=1.0
 
 - **cli**: Command-line interface using Click
 - **document**: Document parsing and chunking using Docling
-- **embedding**: Embedding generation using Ollama
+- **embedding**: Embedding generation using sentence-transformers
 - **storage**: Vector storage in MongoDB
 - **search**: Semantic search with cosine similarity
 - **config**: Configuration management with Pydantic

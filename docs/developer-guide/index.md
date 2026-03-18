@@ -9,7 +9,7 @@ SecondBrain is a local document intelligence CLI built with:
 - **Click** for CLI interface
 - **Pydantic** for configuration validation
 - **MongoDB** for vector storage
-- **Ollama** for embedding generation
+- **sentence-transformers** for embedding generation
 - **Docling** for document parsing
 
 ## Getting Started
@@ -28,12 +28,14 @@ pre-commit install
 
 ### Development Environment
 
-- [Environment Setup](./development.md#environment-setup) - Prerequisites and installation
+- [Environment Setup](./development.md) - Prerequisites and installation
 - [Docker Setup](./docker.md) - Containerized development
-- [Testing](./development.md#testing) - Running and writing tests
+- [Testing](./development.md) - Running and writing tests
 - [Code Standards](./code-standards.md) - Coding guidelines
 
-## Developer Resources
+## Examples
+
+For practical usage examples, see the [examples directory](https://github.com/your-repo/examples) on GitHub.
 
 ### Setup & Configuration
 - [Development Setup](./development.md) - Full development workflow
@@ -44,7 +46,7 @@ pre-commit install
 ### Development Practices
 - [Code Standards](./code-standards.md) - Coding guidelines and best practices
 - [Async API Guide](./async-api.md) - Asynchronous programming patterns
-- [Testing](./development.md#testing) - Test structure and coverage
+- [Testing](./development.md) - Test structure and coverage
 - [Contributing](./contributing.md) - How to contribute to the project
 
 ### Architecture & Design
@@ -65,7 +67,7 @@ pre-commit install
 
 ## Examples
 
-Check the [examples/](../examples/) directory for:
+Check the [examples directory](https://github.com/your-repo/examples) on GitHub for:
 - Basic CLI usage
 - Advanced async workflows
 - REST API integrations (Flask, FastAPI)

@@ -3,10 +3,10 @@
 These tests exercise the full ingestion pipeline:
 1. PDF text extraction (via docling)
 2. Text chunking
-3. Embedding generation (via Ollama)
+3. Embedding generation (via SentenceTransformers)
 4. Vector storage (in MongoDB)
 
-Note: These tests require MongoDB and Ollama to be running.
+Note: These tests require MongoDB and SentenceTransformers to be running.
 Run with: pytest tests/test_document/test_e2e_pdf_ingestion.py -v
 Run excluded from fast tests: pytest -m "not integration"
 """
@@ -19,7 +19,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from secondbrain.document import DocumentIngestor, get_file_type
-from secondbrain.embedding import EmbeddingGenerator
+from secondbrain.embedding import LocalEmbeddingGenerator
 from secondbrain.storage import VectorStorage
 
 # Suppress docling deprecation warnings (upstream library issue)
@@ -92,11 +92,11 @@ class TestPDFIngestionE2E:
     @pytest.mark.slow
     def test_embedding_generation(self) -> None:
         """Test that embedding generation works."""
-        # Skip if Ollama is not available
-        embedding_gen = EmbeddingGenerator()
+        # Skip if SentenceTransformers is not available
+        embedding_gen = LocalEmbeddingGenerator()
 
         if not embedding_gen.validate_connection():
-            pytest.skip("Ollama not available - skipping embedding test")
+            pytest.skip("SentenceTransformers not available - skipping embedding test")
 
         # Generate embedding
         test_text = "This is a test document for embedding generation."
@@ -118,9 +118,9 @@ class TestPDFIngestionE2E:
         4. Vector storage in MongoDB
         """
         # Skip if services are not available
-        embedding_gen = EmbeddingGenerator()
+        embedding_gen = LocalEmbeddingGenerator()
         if not embedding_gen.validate_connection():
-            pytest.skip("Ollama not available - skipping e2e test")
+            pytest.skip("SentenceTransformers not available - skipping e2e test")
 
         storage = VectorStorage()
         if not storage.validate_connection():
@@ -153,9 +153,9 @@ class TestPDFIngestionE2E:
     ) -> None:
         """Test ingestion of a multi-page PDF document."""
         # Skip if services are not available
-        embedding_gen = EmbeddingGenerator()
+        embedding_gen = LocalEmbeddingGenerator()
         if not embedding_gen.validate_connection():
-            pytest.skip("Ollama not available - skipping e2e test")
+            pytest.skip("SentenceTransformers not available - skipping e2e test")
 
         storage = VectorStorage()
         if not storage.validate_connection():
@@ -183,9 +183,9 @@ class TestPDFIngestionE2E:
     def test_ingestion_with_custom_chunking(self, sample_pdf_path: Path) -> None:
         """Test ingestion with custom chunk size and overlap."""
         # Skip if services are not available
-        embedding_gen = EmbeddingGenerator()
+        embedding_gen = LocalEmbeddingGenerator()
         if not embedding_gen.validate_connection():
-            pytest.skip("Ollama not available - skipping e2e test")
+            pytest.skip("SentenceTransformers not available - skipping e2e test")
 
         storage = VectorStorage()
         if not storage.validate_connection():
@@ -221,7 +221,7 @@ class TestPDFSearchIntegration:
         from secondbrain.config import get_config
 
         # Override the autouse mock_config_defaults which sets 384 dimensions
-        # The E2E tests need 768 dimensions to match the actual Ollama model
+        # The E2E tests need 768 dimensions to match the actual SentenceTransformers model
         monkeypatch.setenv("SECONDBRAIN_EMBEDDING_DIMENSIONS", "768")
 
         # Clear config cache to pick up the new value
@@ -247,9 +247,9 @@ class TestPDFSearchIntegration:
     def test_search_after_ingestion(self, sample_pdf_path: Path) -> None:
         """Test that semantic search works after PDF ingestion."""
         # Skip if services are not available
-        embedding_gen = EmbeddingGenerator()
+        embedding_gen = LocalEmbeddingGenerator()
         if not embedding_gen.validate_connection():
-            pytest.skip("Ollama not available - skipping e2e test")
+            pytest.skip("SentenceTransformers not available - skipping e2e test")
 
         storage = VectorStorage()
         if not storage.validate_connection():
@@ -298,9 +298,9 @@ class TestPDFSearchIntegration:
     def test_search_with_filters(self, sample_pdf_path: Path) -> None:
         """Test search with source and file type filters."""
         # Skip if services are not available
-        embedding_gen = EmbeddingGenerator()
+        embedding_gen = LocalEmbeddingGenerator()
         if not embedding_gen.validate_connection():
-            pytest.skip("Ollama not available - skipping e2e test")
+            pytest.skip("SentenceTransformers not available - skipping e2e test")
 
         storage = VectorStorage()
         if not storage.validate_connection():

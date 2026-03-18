@@ -53,7 +53,6 @@ class TestConfig:
                 "SECONDBRAIN_MONGO_URI": "mongodb://localhost:27017",
                 "SECONDBRAIN_MONGO_DB": "secondbrain",
                 "SECONDBRAIN_MONGO_COLLECTION": "embeddings",
-                "SECONDBRAIN_OLLAMA_URL": "http://localhost:11434",
                 "SECONDBRAIN_MODEL": "embeddinggemma:latest",
                 "SECONDBRAIN_CHUNK_SIZE": "4096",
                 "SECONDBRAIN_CHUNK_OVERLAP": "50",
@@ -68,7 +67,6 @@ class TestConfig:
             assert config.mongo_uri == "mongodb://localhost:27017"
             assert config.mongo_db == "secondbrain"
             assert config.mongo_collection == "embeddings"
-            assert config.ollama_url == "http://localhost:11434"
             assert config.model == "embeddinggemma:latest"
             assert config.chunk_size == 4096
             assert config.chunk_overlap == 50
@@ -81,7 +79,6 @@ class TestConfig:
             mongo_uri="mongodb://custom:27017",
             mongo_db="custom_db",
             mongo_collection="custom_collection",
-            ollama_url="http://custom:11434",
             model="custom-model:latest",
             chunk_size=2048,
             chunk_overlap=100,
@@ -92,7 +89,6 @@ class TestConfig:
         assert config.mongo_uri == "mongodb://custom:27017"
         assert config.mongo_db == "custom_db"
         assert config.mongo_collection == "custom_collection"
-        assert config.ollama_url == "http://custom:11434"
         assert config.model == "custom-model:latest"
         assert config.chunk_size == 2048
         assert config.chunk_overlap == 100
@@ -103,11 +99,6 @@ class TestConfig:
         "updates, expected",
         [
             ({"mongo_uri": "http://invalid:27017"}, "mongo_uri must start"),
-            ({"ollama_url": "not-a-url"}, "ollama_url must be a valid URL"),
-            (
-                {"ollama_url": "ftp://invalid:11434"},
-                "ollama_url must use http or https",
-            ),
             (
                 {"chunk_size": 100, "chunk_overlap": 100},
                 "chunk_overlap must be less than",
@@ -122,7 +113,6 @@ class TestConfig:
         """Test that config validation raises errors for invalid values."""
         base = {
             "mongo_uri": "mongodb://localhost:27017",
-            "ollama_url": "http://localhost:11434",
             "chunk_size": 64,
             "chunk_overlap": 16,
             "embedding_dimensions": 128,
@@ -141,13 +131,6 @@ class TestConfig:
 
         config2 = get_config()
         assert config1 is not config2
-
-    def test_config_validation_ollama_url_scheme(self) -> None:
-        """Test ollama_url must use http or https scheme."""
-        with pytest.raises(
-            ValueError, match="ollama_url must use http or https scheme"
-        ):
-            Config(ollama_url="ftp://invalid:11434")
 
     def test_config_validation_chunk_size(self) -> None:
         """Test chunk_size must be positive."""

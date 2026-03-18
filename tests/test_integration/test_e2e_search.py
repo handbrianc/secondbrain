@@ -4,13 +4,16 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from secondbrain.search import Searcher
 
 
 class TestSearchE2E:
     """Test suite for end-to-end search integration."""
 
-    @patch("secondbrain.search.EmbeddingGenerator")
+    @pytest.mark.integration
+    @patch("secondbrain.search.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_search_e2e(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
@@ -64,7 +67,7 @@ class TestSearchE2E:
             file_type_filter=None,
         )
 
-    @patch("secondbrain.search.EmbeddingGenerator")
+    @patch("secondbrain.search.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_search_with_filters(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
@@ -110,7 +113,7 @@ class TestSearchE2E:
 class TestSearchIntegration:
     """Test suite for search integration scenarios."""
 
-    @patch("secondbrain.search.EmbeddingGenerator")
+    @patch("secondbrain.search.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_search_with_custom_top_k(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
@@ -132,7 +135,7 @@ class TestSearchIntegration:
         call_args = mock_storage.search.call_args
         assert call_args.kwargs["top_k"] == 20
 
-    @patch("secondbrain.search.EmbeddingGenerator")
+    @patch("secondbrain.search.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_search_no_results(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
@@ -153,7 +156,7 @@ class TestSearchIntegration:
 
         assert results == []
 
-    @patch("secondbrain.search.EmbeddingGenerator")
+    @patch("secondbrain.search.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_search_empty_embed_result(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock

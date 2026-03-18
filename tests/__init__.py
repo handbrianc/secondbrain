@@ -21,7 +21,6 @@ def test_config_default_values() -> None:
         assert config.mongo_uri == "mongodb://localhost:27017"
         assert config.mongo_db == "secondbrain"
         assert config.mongo_collection == "embeddings"
-        assert config.ollama_url == "http://localhost:11434"
         assert config.model == "embeddinggemma:latest"
         assert config.chunk_size == 512
         assert config.chunk_overlap == 50
@@ -36,7 +35,6 @@ def test_config_from_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SECONDBRAIN_MONGO_URI", "mongodb://custom:27017")
     monkeypatch.setenv("SECONDBRAIN_MONGO_DB", "custom_db")
     monkeypatch.setenv("SECONDBRAIN_MONGO_COLLECTION", "custom_collection")
-    monkeypatch.setenv("SECONDBRAIN_OLLAMA_URL", "http://custom:11434")
     monkeypatch.setenv("SECONDBRAIN_MODEL", "custom-model:latest")
     monkeypatch.setenv("SECONDBRAIN_CHUNK_SIZE", "1024")
     monkeypatch.setenv("SECONDBRAIN_CHUNK_OVERLAP", "100")
@@ -46,7 +44,6 @@ def test_config_from_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     assert config.mongo_uri == "mongodb://custom:27017"
     assert config.mongo_db == "custom_db"
     assert config.mongo_collection == "custom_collection"
-    assert config.ollama_url == "http://custom:11434"
     assert config.model == "custom-model:latest"
     assert config.chunk_size == 1024
     assert config.chunk_overlap == 100

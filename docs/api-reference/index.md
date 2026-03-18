@@ -18,7 +18,7 @@ SecondBrain provides both synchronous and asynchronous APIs for document intelli
 
 ### Core Functionality
 - [Document Ingestion](./document.md) - Multi-format document processing
-- [Embedding Generation](./embedding.md) - Ollama integration with rate limiting
+- [Embedding Generation](./embedding.md) - sentence-transformers integration with rate limiting
 - [Storage](./storage.md) - MongoDB vector storage with batch operations
 - [Search](./search.md) - Semantic search with cosine similarity
 

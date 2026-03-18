@@ -135,7 +135,7 @@ class TestSanitizeQuery:
 class TestSearcherAsyncClose:
     """Tests for Searcher async close patterns."""
 
-    @patch("secondbrain.search.EmbeddingGenerator")
+    @patch("secondbrain.search.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_aclose_with_async_support(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
@@ -161,7 +161,7 @@ class TestSearcherAsyncClose:
 
         asyncio.run(test_async_close())
 
-    @patch("secondbrain.search.EmbeddingGenerator")
+    @patch("secondbrain.search.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_aclose_with_sync_only_components(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
@@ -184,7 +184,7 @@ class TestSearcherAsyncClose:
         # Should not raise AttributeError
         asyncio.run(test_async_close())
 
-    @patch("secondbrain.search.EmbeddingGenerator")
+    @patch("secondbrain.search.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_searcher_context_manager(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
@@ -203,7 +203,7 @@ class TestSearcherAsyncClose:
         mock_embed.close.assert_called_once()
         mock_storage.close.assert_called_once()
 
-    @patch("secondbrain.search.EmbeddingGenerator")
+    @patch("secondbrain.search.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_searcher_close_closes_both_components(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
@@ -221,25 +221,26 @@ class TestSearcherAsyncClose:
         mock_embed.close.assert_called_once()
         mock_storage.close.assert_called_once()
 
-    @patch("secondbrain.search.EmbeddingGenerator")
+    @patch("secondbrain.search.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_searcher_search_validates_connections(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
     ) -> None:
-        """Test search validates both connections."""
+        """Test search validates storage connection."""
         mock_embed = MagicMock()
-        mock_embed.validate_connection.return_value = False
+        mock_embed.validate_connection.return_value = True
         mock_embed_class.return_value = mock_embed
 
         mock_storage = MagicMock()
+        mock_storage.validate_connection.return_value = False
         mock_storage_class.return_value = mock_storage
 
         searcher = Searcher()
 
-        with pytest.raises(RuntimeError, match="Cannot connect to Ollama"):
+        with pytest.raises(RuntimeError, match="Cannot connect to MongoDB"):
             searcher.search("test query")
 
-    @patch("secondbrain.search.EmbeddingGenerator")
+    @patch("secondbrain.search.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_searcher_storage_connection_failure(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock

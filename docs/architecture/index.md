@@ -15,7 +15,7 @@ This section provides deep technical documentation for developers and architects
 
 1. **CLI Interface** - Click-based command-line tool
 2. **Document Ingestor** - Multi-format document processing
-3. **Embedding Engine** - Ollama integration for vector generation
+3. **Embedding Engine** - sentence-transformers integration for vector generation
 4. **Storage Layer** - MongoDB vector storage
 5. **Search Engine** - Semantic search with cosine similarity
 
@@ -45,7 +45,7 @@ See [Schema Reference](./SCHEMA.md) for complete schema details.
 - Flexible schema for document metadata
 - Easy deployment via Docker
 
-### Why Ollama?
+### Why sentence-transformers?
 
 - Local embedding generation (privacy)
 - No API costs
@@ -56,7 +56,7 @@ See [Schema Reference](./SCHEMA.md) for complete schema details.
 
 - **Batch Processing**: Process documents in parallel
 - **Connection Caching**: Reduce connection overhead
-- **Rate Limiting**: Protect Ollama API
+- **Rate Limiting**: Protect sentence-transformers API
 - **Chunk Optimization**: Adjust chunk size for your use case
 
 See [Building & Performance](../developer-guide/building.md) for optimization tips.

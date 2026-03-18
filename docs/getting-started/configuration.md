@@ -18,7 +18,7 @@ Create a `.env` file:
 ```bash
 # Core settings (required)
 SECONDBRAIN_MONGO_URI=mongodb://localhost:27017
-SECONDBRAIN_OLLAMA_URL=http://localhost:11434
+SECONDBRAIN_SENTENCE_TRANSFORMERS_URL=http://localhost:local embedding
 SECONDBRAIN_MODEL=embeddinggemma:latest
 
 # Document processing
@@ -44,14 +44,14 @@ SECONDBRAIN_MONGO_URI=mongodb://user:password@localhost:27017
 SECONDBRAIN_MONGO_URI=mongodb+srv://user:password@cluster.mongodb.net
 ```
 
-### Ollama Settings
+### sentence-transformers Settings
 
 ```bash
-# Local Ollama
-SECONDBRAIN_OLLAMA_URL=http://localhost:11434
+# Local sentence-transformers
+SECONDBRAIN_SENTENCE_TRANSFORMERS_URL=http://localhost:local embedding
 
-# Remote Ollama server
-SECONDBRAIN_OLLAMA_URL=https://ollama.your-server.com
+# Remote sentence-transformers server
+SECONDBRAIN_SENTENCE_TRANSFORMERS_URL=https://sentence-transformers.your-server.com
 ```
 
 ### Embedding Model
@@ -67,7 +67,7 @@ SECONDBRAIN_MODEL=mxbai-embed-large:latest
 
 ⚠️ **Important**: Make sure to pull the model first:
 ```bash
-ollama pull embeddinggemma:latest
+sentence-transformers pull embeddinggemma:latest
 ```
 
 ## Document Processing
@@ -246,8 +246,8 @@ find . -type d -name __pycache__ -exec rm -rf {} +
 # Test MongoDB connection
 mongosh mongodb://localhost:27017
 
-# Test Ollama connection
-curl http://localhost:11434/api/tags
+# Test sentence-transformers connection
+curl http://localhost:local embedding/api/tags
 ```
 
 ### Multicore Processing Issues
@@ -263,14 +263,14 @@ curl http://localhost:11434/api/tags
 - Monitor memory with `top` or `htop` during ingestion
 
 **Slow performance:**
-- Check if Ollama is running on GPU (faster embeddings)
+- Check if sentence-transformers is running on GPU (faster embeddings)
 - Ensure MongoDB is on fast storage (SSD recommended)
-- Verify network latency if using remote Ollama/MongoDB
+- Verify network latency if using remote sentence-transformers/MongoDB
 
 **Rate limiting issues:**
 - Increase `SECONDBRAIN_RATE_LIMIT_MAX_REQUESTS` for local setups
 - Reduce core count if hitting rate limits frequently
-- Check Ollama logs for request throttling
+- Check sentence-transformers logs for request throttling
 
 ### Debugging Multiprocessing Issues
 

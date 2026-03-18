@@ -4,16 +4,11 @@ A comprehensive benchmark for evaluating Python CLI project quality against indu
 
 ---
 
-## Table of Contents
+## Overview
 
-1. [CLI Framework & Architecture](#1-cli-framework--architecture)
-2. [Type Safety Standards](#2-type-safety-standards)
-3. [Error Handling & Exit Codes](#3-error-handling--exit-codes)
-4. [Testing Standards](#4-testing-standards)
-5. [User Experience & Output](#5-user-experience--output)
-6. [Security & Configuration](#6-security--configuration)
-7. [Code Organization & Packaging](#7-code-organization--packaging)
-8. [Common Anti-Patterns](#8-common-anti-patterns)
+This document provides a comprehensive checklist for evaluating Python CLI project quality. Each section covers critical aspects of CLI development best practices.
+
+**Note**: For detailed implementation guidance, see the [Developer Guide](../index.md) and [Code Standards](code-standards.md).
 
 ---
 

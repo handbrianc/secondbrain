@@ -11,7 +11,7 @@ SecondBrain processes documents through a pipeline of components that transform 
 ```
 ┌──────────────┐     ┌──────────────────┐     ┌──────────────────┐     ┌──────────────────┐
 │   User CLI   │────▶│   Document Ingest│────▶│   Embedding Gen  │────▶│   MongoDB Store  │
-│  (secondbrain)│     │    (docling)     │     │  (ollama API)    │     │(vector search)   │
+│  (secondbrain)│     │    (docling)     │     │  (sentence-transformers API)    │     │(vector search)   │
 └──────────────┘     └──────────────────┘     └──────────────────┘     └──────────────────┘
           │                                                                   │
           │                                                                   ▼
@@ -130,12 +130,12 @@ while start < len(text):
 **Purpose**: Convert text chunks to semantic vector embeddings
 
 **Components**:
-- `secondbrain.embedding.EmbeddingGenerator` - Ollama API client
+- `secondbrain.embedding.EmbeddingGenerator` - sentence-transformers API client
 - Rate limiting for API protection
 - Connection validation and caching
 - Async/sync dual API
 
-**Ollama Integration**:
+**sentence-transformers Integration**:
 
 ```
 Text Chunk
@@ -150,7 +150,7 @@ Text Chunk
          ▼
 ┌─────────────────┐
 │ Connection Check│  - TTL-cached validation
-│                 │  - Ollama availability
+│                 │  - sentence-transformers availability
 │                 │  - Model verification
 └────────┬────────┘
          │
@@ -419,7 +419,7 @@ User: secondbrain ingest report.pdf
     │   └─▶ For each chunk:
     │       ├─▶ EmbeddingGenerator.generate(chunk.text)
     │       │   ├─▶ Rate limiter.acquire()
-    │       │   ├─▶ Ollama API: POST /api/embeddings
+    │       │   ├─▶ sentence-transformers API: POST /api/embeddings
     │       │   └─▶ Return [0.123, ...] (768 dims)
     │       │
     │       └─▶ VectorStorage.store(chunk + embedding)
@@ -448,7 +448,7 @@ User: secondbrain search "machine learning"
     │   │   - Strip control chars ✓
     │   │
     │   ├─▶ Connection validation
-    │   │   ├─▶ Ollama: validate_connection()
+    │   │   ├─▶ sentence-transformers: validate_connection()
     │   │   └─▶ MongoDB: validate_connection()
     │   │
     │   ├─▶ Generate query embedding
@@ -473,7 +473,7 @@ User: secondbrain search "machine learning"
 ### Bottlenecks
 
 1. **Embedding Generation** (slowest)
-   - Ollama API latency: ~100-500ms per chunk
+   - sentence-transformers API latency: ~100-500ms per chunk
    - Rate limited to 10 req/sec
    - **Mitigation**: Batch processing, async operations
 
@@ -521,7 +521,7 @@ User: secondbrain search "machine learning"
 |-----------|-------------|----------|
 | File Validation | Unsupported type, too large | Skip file, log error |
 | Text Extraction | Corrupt file, format error | Retry, fallback to raw text |
-| Embedding Gen | Ollama down, timeout | Retry with backoff, queue for later |
+| Embedding Gen | sentence-transformers down, timeout | Retry with backoff, queue for later |
 | Storage | MongoDB down, index missing | Reconnect, create index, retry |
 | Search | Invalid query, no results | Sanitize query, return empty |
 

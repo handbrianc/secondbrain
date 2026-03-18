@@ -45,7 +45,9 @@ nav:
       - Building & Distribution: developer-guide/building.md
       - Async API Guide: developer-guide/async-api.md
       - Code Standards: developer-guide/code-standards.md
-      - Testing: developer-guide/development.md
+      - Testing Guide: developer-guide/TESTING.md
+      - Test Performance: developer-guide/TEST_PERFORMANCE_OPTIMIZATION.md
+      - CLI Best Practices: developer-guide/python-cli-best-practices-checklist.md
       - Contributing: developer-guide/contributing.md
       - Migrations: developer-guide/migrations.md
       - Security: developer-guide/security.md
@@ -54,20 +56,27 @@ nav:
       - Architecture: architecture/index.md
       - Data Flow: architecture/DATA_FLOW.md
       - Schema Reference: architecture/SCHEMA.md
+      - Integration Test Evaluation: architecture/INTEGRATION_TEST_EVALUATION.md
+      - Security Risk Report: architecture/LICENSE-RISK-REPORT.md
+      - SBOM Analysis: architecture/SBOM_ANALYSIS.md
   - API Reference:
       - API Reference: api-reference/index.md
       - CLI: api-reference/cli.md
       - Configuration: api-reference/config.md
       - Document Ingestion: api-reference/document.md
       - Storage: api-reference/storage.md
+      - Pipeline: api-reference/pipeline.md
       - Search: api-reference/search.md
       - Embedding: api-reference/embedding.md
       - Logging: api-reference/logging.md
+      - Circuit Breaker: api-reference/circuit-breaker.md
+      - Performance Monitor: api-reference/perf-monitor.md
+      - Management: api-reference/management.md
       - Exceptions: api-reference/exceptions.md
       - Types: api-reference/types.md
   - Security:
       - Security Guide: security/index.md
-  - License: license.md
+  - License: LICENSE.md
 
 markdown_extensions:
   - toc:

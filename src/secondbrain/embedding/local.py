@@ -4,8 +4,6 @@ import logging
 
 from sentence_transformers import SentenceTransformer
 
-from secondbrain.exceptions import EmbeddingGenerationError
-
 logger = logging.getLogger(__name__)
 
 
@@ -44,3 +42,12 @@ class LocalEmbeddingGenerator:
             show_progress_bar=False,
         )
         return embeddings.tolist()
+
+    def close(self) -> None:
+        """Close the model and release resources."""
+        if self._model is not None:
+            logger.info("Closing embedding model: %s", self.model_name)
+            # SentenceTransformer doesn't have a close() method, but we can delete the reference
+            # to allow garbage collection
+            self._model = None
+            logger.info("Embedding model closed successfully")

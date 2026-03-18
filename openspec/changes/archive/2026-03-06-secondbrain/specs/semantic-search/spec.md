@@ -61,5 +61,5 @@ The system SHALL optimize search for fast response times.
 
 #### Scenario: Query embedding
 - **WHEN** user submits search query
-- **THEN** system generates embedding via Ollama
+- **THEN** system generates embedding via sentence-transformers
 - **AND** uses same model as ingestion

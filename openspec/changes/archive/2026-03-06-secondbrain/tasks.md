@@ -11,10 +11,10 @@
 ## 2. Docker Infrastructure
 
 - [x] 2.1 Create Dockerfile for single executable build
-- [x] 2.2 Create docker-compose.yml with Ollama and MongoDB
+- [x] 2.2 Create docker-compose.yml with MongoDB
 - [x] 2.3 Test Docker Compose startup
-- [x] 2.4 Verify Ollama embeddinggemma model availability
-- [x] 2.5 Split docker-compose for macOS native Ollama support
+- [x] 2.4 Verify sentence-transformers embeddinggemma model availability
+- [x] 2.5 Document sentence-transformers setup (local or Docker)
 
 ## 3. Core Modules
 
@@ -36,11 +36,11 @@
 
 ## 5. Embedding Generation
 
-- [x] 5.1 Integrate Ollama client
+- [x] 5.1 Integrate sentence-transformers client
 - [x] 5.2 Implement embedding generation for text
 - [x] 5.3 Add model pull on first use
 - [x] 5.4 Implement connection validation
-- [x] 5.5 Handle Ollama service unavailable
+- [x] 5.5 Handle sentence-transformers service unavailable
 - [x] 5.6 Write tests for embedding module
 
 ## 6. Vector Storage
@@ -55,7 +55,7 @@
 ## 7. Semantic Search
 
 - [x] 7.1 Implement search command
-- [x] 7.2 Generate query embedding via Ollama
+- [x] 7.2 Generate query embedding via sentence-transformers
 - [x] 7.3 Perform cosine similarity search in MongoDB
 - [x] 7.4 Add result formatting (default, verbose, JSON)
 - [x] 7.5 Add filter options (--source, --file-type)
@@ -91,5 +91,5 @@
 - [x] 11.1 Write README with installation and usage
 - [x] 11.2 Document CLI commands
 - [x] 11.3 Document configuration (environment variables)
-- [x] 11.4 Document Docker setup (including macOS native Ollama)
+- [x] 11.4 Document Docker setup (MongoDB and sentence-transformers)
 - [x] 11.5 Document development setup

@@ -1,7 +1,7 @@
-"""Embedding cache module for reducing redundant Ollama API calls.
+"""Embedding cache module for reducing redundant embedding generation.
 
 This module provides a thread-safe, in-memory cache for embeddings with
-LRU eviction policy to optimize performance and reduce API costs.
+LRU eviction policy to optimize performance.
 """
 
 import hashlib
@@ -15,7 +15,7 @@ class EmbeddingCache:
     """Thread-safe embedding cache with LRU eviction policy.
 
     Caches embeddings by SHA256 hash of the input text to avoid redundant
-    Ollama API calls for duplicate texts.
+    embedding generation for duplicate texts.
 
     Attributes
     ----------

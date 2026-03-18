@@ -10,7 +10,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from secondbrain.config import get_config
-from secondbrain.embedding import EmbeddingGenerator
+from secondbrain.embedding import LocalEmbeddingGenerator
 from secondbrain.storage import (
     SearchResult,
     StorageConnectionError,
@@ -72,8 +72,8 @@ def sanitize_query(query: str) -> str:
 class Searcher:
     """Performs semantic search against stored embeddings.
 
-    Uses Ollama to generate query embeddings and MongoDB for vector similarity
-    search against the stored document embeddings.
+    Uses sentence-transformers to generate query embeddings and MongoDB for
+    vector similarity search against the stored document embeddings.
     """
 
     def __init__(self, verbose: bool = False) -> None:
@@ -84,7 +84,7 @@ class Searcher:
         """
         self.verbose = verbose
         self.config = get_config()
-        self.embedding_gen = EmbeddingGenerator()
+        self.embedding_gen = LocalEmbeddingGenerator()
         self.storage = VectorStorage()
 
     def close(self) -> None:
@@ -158,9 +158,6 @@ class Searcher:
         top_k = top_k or self.config.default_top_k
 
         # Validate connections
-        if not self.embedding_gen.validate_connection():
-            raise RuntimeError("Cannot connect to Ollama service")
-
         if not self.storage.validate_connection():
             raise RuntimeError("Cannot connect to MongoDB")
 

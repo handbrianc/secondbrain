@@ -90,7 +90,7 @@ The system SHALL properly handle and report errors that occur in worker processe
 - **AND** continues processing other files
 
 ### Requirement: Rate limiting works with parallel processing
-The system SHALL maintain rate limiting across all worker processes to prevent overwhelming the Ollama API.
+The system SHALL maintain rate limiting across all worker processes to prevent overwhelming the sentence-transformers API.
 
 #### Scenario: Multiple workers respect rate limits
 - **WHEN** 4 worker processes simultaneously generate embeddings

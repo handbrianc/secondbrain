@@ -52,7 +52,7 @@ async def check_availability():
     try:
         # Force fresh check (bypass cache)
         is_available = await generator.validate_connection_async(force=True)
-        print(f"Ollama available: {is_available}")
+        print(f"sentence-transformers available: {is_available}")
         
         # Get model info
         model_info = await generator.get_model_info_async()
@@ -67,7 +67,7 @@ async def check_availability():
 
 ```python
 from secondbrain.embedding import EmbeddingGenerator
-from secondbrain.exceptions import OllamaUnavailableError
+from secondbrain.exceptions import sentence-transformersUnavailableError
 
 async def ensure_model():
     generator = EmbeddingGenerator(model="embeddinggemma:latest")
@@ -75,15 +75,15 @@ async def ensure_model():
     try:
         # Check if model is available
         if not await generator.validate_connection_async():
-            print("Ollama not available")
+            print("sentence-transformers not available")
             return
         
         # Pull model if needed
         await generator.pull_model_async()
         print("Model ready")
         
-    except OllamaUnavailableError as e:
-        print(f"Ollama unavailable: {e}")
+    except sentence-transformersUnavailableError as e:
+        print(f"sentence-transformers unavailable: {e}")
     finally:
         await generator.aclose()
 ```
@@ -285,7 +285,7 @@ Handle async-specific errors:
 
 ```python
 from secondbrain.exceptions import (
-    OllamaUnavailableError,
+    sentence-transformersUnavailableError,
     EmbeddingGenerationError,
     StorageConnectionError
 )
@@ -299,7 +299,7 @@ async def robust_embedding(text):
         for attempt in range(3):
             try:
                 return await generator.generate_async(text)
-            except (OllamaUnavailableError, asyncio.TimeoutError) as e:
+            except (sentence-transformersUnavailableError, asyncio.TimeoutError) as e:
                 if attempt == 2:
                     raise
                 await asyncio.sleep(2 ** attempt)  # Exponential backoff

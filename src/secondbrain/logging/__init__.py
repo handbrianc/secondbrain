@@ -130,14 +130,11 @@ def check_services() -> dict[str, bool]:
     -------
         Dictionary with service names as keys and boolean availability status.
     """
-    from secondbrain.embedding import EmbeddingGenerator
     from secondbrain.storage import VectorStorage
 
-    embedding_gen = EmbeddingGenerator()
     storage = VectorStorage()
 
     return {
-        "ollama": embedding_gen.validate_connection(),
         "mongodb": storage.validate_connection(),
     }
 

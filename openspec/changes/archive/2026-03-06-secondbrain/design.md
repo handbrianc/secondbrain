@@ -2,14 +2,14 @@
 
 The secondbrain project is a CLI-only document intelligence tool that:
 - Ingests documents using Docling (PDF, DOCX, PPTX, XLSX, HTML, Markdown, etc.)
-- Generates embeddings using Ollama with `embeddinggemma:latest` model
+- Generates embeddings using sentence-transformers with `embeddinggemma:latest` model
 - Stores vectors in MongoDB for semantic search
 - Provides CLI commands: ingest, search, list, delete
 
 ### Current State
 - This is a new greenfield project
 - No existing codebase
-- Docker Compose will manage Ollama and MongoDB containers
+- sentence-transformers runs locally or via Docker, MongoDB via Docker
 
 ### Constraints
 - CLI-only application (not a server)
@@ -29,9 +29,9 @@ The secondbrain project is a CLI-only document intelligence tool that:
 **Goals:**
 - Create a production-ready Python CLI tool using Click
 - Support all Docling-supported document types
-- Implement semantic search using Ollama embeddings
+- Implement semantic search using sentence-transformers embeddings
 - Store vectors in MongoDB with proper metadata
-- Provide complete Docker Compose setup for local development
+- Provide complete Docker setup for MongoDB and local sentence-transformers installation
 - Achieve 80%+ test coverage with all linting/type warnings resolved
 - Generate SBOM using SPDX standard
 
@@ -70,18 +70,18 @@ The secondbrain project is a CLI-only document intelligence tool that:
 - **PyMuPDF (fitz)**: Good for PDF but limited to PDF only
 - **python-docx**: Only handles DOCX, would need multiple libraries
 
-### 3. Embeddings: Ollama with embeddinggemma
-**Decision:** Use Ollama as the embedding service with embeddinggemma:latest model.
+### 3. Embeddings: sentence-transformers with embeddinggemma
+**Decision:** Use sentence-transformers as the embedding service with embeddinggemma:latest model.
 
 **Rationale:**
-- Ollama provides local embedding generation (privacy-friendly)
+- sentence-transformers provides local embedding generation (privacy-friendly)
 - embeddinggemma is a high-quality embedding model
-- Easy to swap models (nomic-embed-text, etc.) via configuration
-- Runs in Docker, consistent across environments (12-factor)
+- Easy to swap models (nomic-embed-text, mxbai-embed-large, etc.) via configuration
+- Runs locally or via Docker, consistent across environments (12-factor)
 
 **Alternatives Considered:**
 - **OpenAI API**: Requires API key, not local, costs money
-- **HuggingFace Transformers**: Requires more setup, no Docker container
+- **HuggingFace Transformers**: Requires more setup, no dedicated server option
 
 ### 4. Vector Storage: MongoDB
 **Decision:** Use MongoDB with vector search capabilities.
@@ -97,14 +97,14 @@ The secondbrain project is a CLI-only document intelligence tool that:
 - **Pinecone**: Cloud-only, not local
 - **Chroma**: Good but less mature than MongoDB
 
-### 5. Docker Orchestration: Docker Compose
-**Decision:** Use Docker Compose to manage Ollama and MongoDB containers.
+### 5. Local Server: sentence-transformers
+**Decision:** Use sentence-transformers server to manage embedding model.
 
 **Rationale:**
-- Single command to start all services
+- Single command to start the embedding service
 - Environment variable configuration
 - Ensures consistent local dev environment (12-factor)
-- Easy to add to CI/CD
+- Can run locally (macOS/Linux via brew) or via Docker
 
 ### 6. Build System: PyInstaller
 **Decision:** Use PyInstaller to create single executable.
@@ -141,9 +141,9 @@ The secondbrain project is a CLI-only document intelligence tool that:
 
 ## Risks / Trade-offs
 
-### Risk: Ollama Model Availability
+### Risk: sentence-transformers Model Availability
 **Risk:** The embeddinggemma model may not be available or may require specific pulling.
-**Mitigation:** Include model pull in Docker Compose startup, add fallback to nomic-embed-text.
+**Mitigation:** Include model pull in setup instructions, add fallback to nomic-embed-text.
 
 ### Risk: MongoDB Vector Search Performance
 **Risk:** Vector search on large collections may be slow without proper indexing.
@@ -170,7 +170,7 @@ The secondbrain project is a CLI-only document intelligence tool that:
 
 ### Phase 2: Core Implementation
 - Implement document ingestion (Docling integration)
-- Implement embedding generation (Ollama client)
+- Implement embedding generation (sentence-transformers client)
 - Implement vector storage (MongoDB client)
 - Implement CLI commands (Click)
 

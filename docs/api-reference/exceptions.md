@@ -44,7 +44,7 @@ Custom exception hierarchy for SecondBrain.
         show_root_heading: false
         show_source: false
 
-::: secondbrain.exceptions.OllamaUnavailableError
+::: secondbrain.exceptions.ServiceUnavailableError
     options:
         show_root_heading: false
         show_source: false
