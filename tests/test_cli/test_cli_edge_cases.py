@@ -111,37 +111,37 @@ class TestCLIPaginationEdgeCases:
 
     @patch("secondbrain.management.Lister")
     def test_list_with_large_limit(self, mock_lister_class: MagicMock) -> None:
-        """Test list-cmd command with large limit."""
+        """Test list command with large limit."""
         mock_lister = MagicMock()
         mock_lister.list_chunks.return_value = []
         mock_lister_class.return_value = mock_lister
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["list-cmd", "--limit", "10000"])
+        result = runner.invoke(cli, ["list", "--limit", "10000"])
         # Should handle gracefully
         assert result.exit_code == 0
 
     @patch("secondbrain.management.Lister")
     def test_list_with_zero_limit(self, mock_lister_class: MagicMock) -> None:
-        """Test list-cmd command with zero limit."""
+        """Test list command with zero limit."""
         mock_lister = MagicMock()
         mock_lister.list_chunks.return_value = []
         mock_lister_class.return_value = mock_lister
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["list-cmd", "--limit", "0"])
+        result = runner.invoke(cli, ["list", "--limit", "0"])
         # Should handle gracefully
         assert result.exit_code in [0, 1]
 
     @patch("secondbrain.management.Lister")
     def test_list_with_negative_offset(self, mock_lister_class: MagicMock) -> None:
-        """Test list-cmd command with negative offset."""
+        """Test list command with negative offset."""
         mock_lister = MagicMock()
         mock_lister.list_chunks.return_value = []
         mock_lister_class.return_value = mock_lister
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["list-cmd", "--offset", "-1"])
+        result = runner.invoke(cli, ["list", "--offset", "-1"])
         # Should handle gracefully
         assert result.exit_code in [0, 1]
 
@@ -265,7 +265,7 @@ class TestCLIJSONFormat:
 
     @patch("secondbrain.management.Lister")
     def test_list_with_large_result_set(self, mock_lister_class: MagicMock) -> None:
-        """Test list-cmd command handles large result sets."""
+        """Test list command handles large result sets."""
         large_results = [
             {"chunk_id": f"chunk-{i}", "source_file": f"file-{i}.pdf", "page_number": 1}
             for i in range(1000)
@@ -275,7 +275,7 @@ class TestCLIJSONFormat:
         mock_lister_class.return_value = mock_lister
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["list-cmd"])
+        result = runner.invoke(cli, ["list"])
         assert result.exit_code == 0
 
 
@@ -284,7 +284,7 @@ class TestCLILargeResultSets:
 
     @patch("secondbrain.management.Lister")
     def test_list_handles_large_result_set(self, mock_lister_class: MagicMock) -> None:
-        """Test list-cmd command handles large result sets."""
+        """Test list command handles large result sets."""
         large_results = [
             {"chunk_id": f"chunk-{i}", "source_file": f"file-{i}.pdf", "page_number": 1}
             for i in range(1000)
@@ -294,18 +294,18 @@ class TestCLILargeResultSets:
         mock_lister_class.return_value = mock_lister
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["list-cmd"])
+        result = runner.invoke(cli, ["list"])
         assert result.exit_code == 0
 
     @patch("secondbrain.management.Lister")
     def test_list_with_max_limit(self, mock_lister_class: MagicMock) -> None:
-        """Test list-cmd respects maximum limit."""
+        """Test list respects maximum limit."""
         mock_lister = MagicMock()
         mock_lister.list_chunks.return_value = []
         mock_lister_class.return_value = mock_lister
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["list-cmd", "--limit", "200000"])
+        result = runner.invoke(cli, ["list", "--limit", "200000"])
         assert result.exit_code in [0, 1]
 
 

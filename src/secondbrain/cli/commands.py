@@ -154,7 +154,7 @@ def search(
     display_search_results(results, format, min_score=min_score)
 
 
-@cli.command("list-cmd")
+@cli.command("list")
 @click.option("--source", type=str, help="Filter by source file")
 @click.option("--chunk-id", type=str, help="Filter by specific chunk ID")
 @click.option("--limit", type=int, default=100, help="Maximum number of results")
