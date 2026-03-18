@@ -138,6 +138,7 @@ markers = [
 filterwarnings = [
     "ignore::DeprecationWarning:docling",
     "ignore::DeprecationWarning:pyparsing",
+    "ignore:.*Benchmarks are automatically disabled.*",
 ]
 
 [tool.pre-commit]

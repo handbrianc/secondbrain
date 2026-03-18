@@ -121,10 +121,15 @@ class VectorStorage(ValidatableService):
     def _wait_for_index_ready(self) -> None:
         """Wait for MongoDB vector search index to be ready.
 
-        Retries up to _index_ready_retry_count times with _index_ready_retry_delay
-        seconds between attempts. Logs debug messages if index is not ready.
+        Uses exponential backoff: starts at 100ms, doubles each retry,
+        max 2 seconds per wait. Total max wait time ~15 seconds.
         """
         self.ensure_index()
+
+        base_delay = 0.1  # 100ms
+        max_delay = 2.0  # 2 seconds
+        delay = base_delay
+
         for attempt in range(self._index_ready_retry_count):
             try:
                 for idx in self.collection.list_search_indexes():
@@ -135,13 +140,17 @@ class VectorStorage(ValidatableService):
                         return
             except Exception as e:
                 logger.debug(
-                    "Index not ready, retrying... (attempt %s/%s, error: %s: %s)",
+                    "Index not ready, retrying... (attempt %s/%s, delay %.2fs, error: %s: %s)",
                     attempt + 1,
                     self._index_ready_retry_count,
+                    delay,
                     type(e).__name__,
                     e,
                 )
-            time.sleep(self._index_ready_retry_delay)
+
+            # Exponential backoff with max delay cap
+            time.sleep(delay)
+            delay = min(delay * 2, max_delay)  # Double delay, cap at 2s
 
         logger.warning("Vector search index may not be ready after maximum retries")
 
@@ -167,10 +176,15 @@ class VectorStorage(ValidatableService):
     async def _wait_for_index_ready_async(self) -> None:
         """Wait for MongoDB vector search index to be ready asynchronously.
 
-        Retries up to _index_ready_retry_count times with _index_ready_retry_delay
-        seconds between attempts using asyncio.sleep.
+        Uses exponential backoff: starts at 100ms, doubles each retry,
+        max 2 seconds per wait. Total max wait time ~15 seconds.
         """
         await asyncio.to_thread(self.ensure_index)
+
+        base_delay = 0.1  # 100ms
+        max_delay = 2.0  # 2 seconds
+        delay = base_delay
+
         for attempt in range(self._index_ready_retry_count):
             try:
                 indexes = await asyncio.to_thread(
@@ -184,13 +198,16 @@ class VectorStorage(ValidatableService):
                         return
             except Exception as e:
                 logger.debug(
-                    "Index not ready, retrying... (attempt %s/%s, error: %s: %s)",
+                    "Index not ready, retrying... (attempt %s/%s, delay %.2fs, error: %s: %s)",
                     attempt + 1,
                     self._index_ready_retry_count,
+                    delay,
                     type(e).__name__,
                     e,
                 )
-            await asyncio.sleep(self._index_ready_retry_delay)
+
+            await asyncio.sleep(delay)
+            delay = min(delay * 2, max_delay)  # Double delay, cap at 2s
 
         logger.warning("Vector search index may not be ready after maximum retries")
 

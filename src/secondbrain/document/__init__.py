@@ -22,6 +22,7 @@ from typing_extensions import TypedDict
 
 from secondbrain.config import get_config
 from secondbrain.exceptions import DocumentExtractionError, UnsupportedFileError
+from secondbrain.utils.embedding_cache import EmbeddingCache
 
 # Lazy import docling to avoid 2+ second import overhead in tests
 # Only import when actually needed (DocumentConverter instantiation)
@@ -45,6 +46,22 @@ warnings.filterwarnings(
 # Memory management constant for batch sizes
 MAX_MEMORY_BATCH_SIZE = 100
 
+# Global variable for worker converter (set by ProcessPoolExecutor initializer)
+_worker_converter: DocumentConverter | None = None
+
+
+def _init_worker() -> None:
+    """Initialize worker process with DocumentConverter.
+
+    This is called once per worker process in ProcessPoolExecutor to create
+    a shared DocumentConverter instance, avoiding re-initialization overhead
+    for each file processed.
+    """
+    global _worker_converter
+    from docling.document_converter import DocumentConverter
+
+    _worker_converter = DocumentConverter()
+
 
 def _extract_and_chunk_file(
     file_path_str: str, chunk_size: int, chunk_overlap: int
@@ -53,6 +70,7 @@ def _extract_and_chunk_file(
 
     This function runs in a separate process and returns extracted chunks.
     Must be at module level to be picklable for ProcessPoolExecutor.
+    Uses the global _worker_converter if initialized, otherwise creates one.
 
     Args:
         file_path_str: String path to the file to process.
@@ -66,10 +84,15 @@ def _extract_and_chunk_file(
     """
     file_path = Path(file_path_str)
     try:
-        # Lazy import to avoid heavy import overhead in main process
-        from docling.document_converter import DocumentConverter
+        # Use pre-initialized converter if available, otherwise create one
+        # This allows the function to work both in ProcessPoolExecutor workers
+        # (where _init_worker is called) and in tests (where it's called directly)
+        converter = _worker_converter
+        if converter is None:
+            from docling.document_converter import DocumentConverter
 
-        converter = DocumentConverter()
+            converter = DocumentConverter()
+
         result = converter.convert(file_path)
         content = result.document
 
@@ -274,6 +297,8 @@ class DocumentIngestor:
             chunk_overlap: Overlap between chunks in tokens.
             verbose: Enable verbose logging.
         """
+        config = get_config()
+
         if chunk_size <= 0:
             raise ValueError("chunk_size must be positive")
         if chunk_overlap < 0:
@@ -284,7 +309,10 @@ class DocumentIngestor:
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
         self.verbose = verbose
-        self.max_file_size_bytes: int = get_config().max_file_size_bytes
+        self.max_file_size_bytes: int = config.max_file_size_bytes
+
+        # Initialize embedding cache for deduplication
+        self.embedding_cache = EmbeddingCache(max_size=config.embedding_cache_size)
 
         # Lazily import docling to avoid 2+ second import overhead
         from docling.document_converter import DocumentConverter
@@ -451,8 +479,11 @@ class DocumentIngestor:
                 )
 
         # Generate embeddings in batches for better performance
-        # Batch size of 20 balances memory usage and throughput
-        batch_size = 20
+        # Batch size is configurable via environment variable
+        from secondbrain.config import get_config
+
+        config = get_config()
+        batch_size = config.embedding_batch_size
         chunk_to_embedding: dict[int, list[float]] = {}
 
         # Process chunks in batches
@@ -461,12 +492,27 @@ class DocumentIngestor:
             texts = [chunk["text"] for chunk in batch]
 
             try:
-                # Use batch embedding for better performance
-                embeddings = embedding_gen.generate_batch(texts)
+                # Check cache first, generate only for uncached texts
+                texts_to_embed = []
+                cached_indices = []
 
-                # Map embeddings back to chunks
-                for chunk, embedding in zip(batch, embeddings, strict=True):
-                    chunk_to_embedding[chunk["text_hash"]] = embedding
+                for idx, text in enumerate(texts):
+                    cached = self.embedding_cache.get(text)
+                    if cached is not None:
+                        chunk_to_embedding[batch[idx]["text_hash"]] = cached
+                    else:
+                        texts_to_embed.append(text)
+                        cached_indices.append(idx)
+
+                # Generate embeddings only for uncached texts
+                if texts_to_embed:
+                    embeddings = embedding_gen.generate_batch(texts_to_embed)
+
+                    # Cache and map embeddings
+                    for idx, embedding in zip(cached_indices, embeddings, strict=True):
+                        text = texts[idx]
+                        self.embedding_cache.set(text, embedding)
+                        chunk_to_embedding[batch[idx]["text_hash"]] = embedding
 
             except Exception as e:
                 logger.error(
@@ -477,7 +523,15 @@ class DocumentIngestor:
                 # Fall back to sequential for this batch
                 for chunk in batch:
                     try:
+                        # Check cache first
+                        cached = self.embedding_cache.get(chunk["text"])
+                        if cached is not None:
+                            chunk_to_embedding[chunk["text_hash"]] = cached
+                            continue
+
                         embedding = embedding_gen.generate(chunk["text"])
+                        # Cache the embedding
+                        self.embedding_cache.set(chunk["text"], embedding)
                         chunk_to_embedding[chunk["text_hash"]] = embedding
                     except Exception as e2:
                         logger.error(
@@ -580,7 +634,11 @@ class DocumentIngestor:
         # Use multiprocessing if cores > 1, otherwise use ThreadPoolExecutor
         if cores > 1:
             # Process files using ProcessPoolExecutor for true parallelism
-            with ProcessPoolExecutor(max_workers=cores) as executor:
+            # Use initializer to create DocumentConverter once per worker
+            with ProcessPoolExecutor(
+                max_workers=cores,
+                initializer=_init_worker,  # Create converter once per worker
+            ) as executor:
                 futures = {
                     executor.submit(
                         _extract_and_chunk_file,
@@ -800,12 +858,20 @@ class DocumentIngestor:
                     }
                 )
 
-        # Generate embeddings
+        # Generate embeddings (with cache)
         chunk_to_embedding: dict[int, list[float]] = {}
 
         for chunk in all_chunks:
+            # Check cache first
+            cached = self.embedding_cache.get(chunk["text"])
+            if cached is not None:
+                chunk_to_embedding[chunk["text_hash"]] = cached
+                continue
+
             try:
                 embedding = embedding_gen.generate(chunk["text"])
+                # Cache the embedding
+                self.embedding_cache.set(chunk["text"], embedding)
                 chunk_to_embedding[chunk["text_hash"]] = embedding
             except Exception as e:
                 logger.error(
