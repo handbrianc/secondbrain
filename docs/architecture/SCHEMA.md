@@ -42,7 +42,7 @@ Each document in the `embeddings` collection stores a single chunk of text with 
 | `source_file` | string | Yes | Path to the source file |
 | `page_number` | integer | Yes | Page number in the source document (1-indexed) |
 | `chunk_text` | string | Yes | The text content of this chunk |
-| `embedding` | float array | Yes | Vector embedding (768 dimensions for embeddinggemma) |
+| `embedding` | float array | Yes | Vector embedding (384 dimensions for all-MiniLM-L6-v2) |
 | `metadata.file_type` | string | Yes | Document type (pdf, docx, image, etc.) |
 | `metadata.ingested_at` | string (ISO8601) | Yes | Timestamp of ingestion |
 | `metadata.chunk_index` | integer | Yes | Original chunk index in the document |
@@ -59,7 +59,7 @@ Named: `embedding_index`
     {
       "type": "vector",
       "path": "embedding",
-      "numDimensions": 768,
+      "numDimensions": 384,
       "similarity": "cosine"
     }
   ]
@@ -99,7 +99,7 @@ See `../guide/MIGRATIONS.md` for migration procedures.
 
 ## Constraints
 
-- `embedding` vector must have exactly 768 dimensions (matches embeddinggemma model)
+- `embedding` vector must have exactly 384 dimensions (matches all-MiniLM-L6-v2 model)
 - `source_file` should be an absolute path for consistent lookups
 - `chunk_id` must be unique (UUIDv4 format)
 
@@ -138,10 +138,10 @@ db.embeddings.find(
 
 For a typical document:
 - Chunk size: ~4096 characters
-- Embedding size: 768 floats × 8 bytes = 6144 bytes
+- Embedding size: 384 floats × 8 bytes = 3072 bytes
 - Overhead: ~1KB per document
 
-Estimate: ~2KB per chunk × 100,000 chunks = ~200MB
+Estimate: ~1.5KB per chunk × 100,000 chunks = ~150MB
 
 ## Backward Compatibility
 

@@ -337,12 +337,20 @@ class VectorStorage(ValidatableService):
                 )
                 current_dims = self._config.embedding_dimensions
 
-                if existing_dims != current_dims:
-                    logger.info(
-                        "Dropping old index with %d dimensions to create new index with %d dimensions",
-                        existing_dims,
-                        current_dims,
-                    )
+                # Check if dimensions mismatch (handle None case)
+                dims_mismatch = existing_dims is None or existing_dims != current_dims
+
+                if dims_mismatch:
+                    if existing_dims is None:
+                        logger.info(
+                            "Existing index dimensions unreadable. Dropping and recreating."
+                        )
+                    else:
+                        logger.info(
+                            "Dropping old index with %d dimensions to create new index with %d dimensions",
+                            existing_dims,
+                            current_dims,
+                        )
                     try:
                         self.collection.drop_search_index("embedding_index")
                         logger.info("Dropped old index successfully")
