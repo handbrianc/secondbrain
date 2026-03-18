@@ -108,7 +108,7 @@ class Config(BaseSettings):
 
     # Embedding settings
     embedding_dimensions: int = Field(
-        default=768,
+        default=384,
         description="Dimensionality of embedding vectors (must match model)",
     )
 
