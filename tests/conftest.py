@@ -84,8 +84,8 @@ def mock_embedding_generator() -> MagicMock:
 
     mock = MagicMock()
     mock.validate_connection.return_value = True
-    mock.generate.return_value = [0.1] * 768
-    mock.generate_batch.return_value = [[0.1] * 768 for _ in range(5)]
+    mock.generate.return_value = [0.1] * 384
+    mock.generate_batch.return_value = [[0.1] * 384 for _ in range(5)]
 
     return mock
 
@@ -301,7 +301,7 @@ def sample_embedding() -> list[float]:
     import random
 
     random.seed(42)
-    return [random.random() for _ in range(768)]
+    return [random.random() for _ in range(384)]
 
 
 @pytest.fixture
@@ -321,7 +321,7 @@ def cached_embedding_generator(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
     # Pre-compute deterministic embeddings based on text hash
     def mock_generate(text: str) -> list[float]:
         random.seed(hash(text.lower()) % (2**32))
-        return [random.random() for _ in range(768)]
+        return [random.random() for _ in range(384)]
 
     mock.generate.side_effect = mock_generate
     mock.generate_batch.side_effect = lambda texts: [mock_generate(t) for t in texts]
