@@ -136,3 +136,136 @@ class TestConfig:
         """Test chunk_size must be positive."""
         with pytest.raises(ValueError, match="chunk_size must be positive"):
             Config(chunk_size=0)
+
+    def test_embedding_cache_size_validation_valid(self) -> None:
+        """Test valid embedding_cache_size values."""
+        # Test default value
+        config = Config(
+            mongo_uri="mongodb://localhost:27017",
+            chunk_size=64,
+            chunk_overlap=16,
+            embedding_dimensions=128,
+            default_top_k=8,
+        )
+        assert config.embedding_cache_size == 1000
+
+        # Test custom values
+        config = Config(
+            mongo_uri="mongodb://localhost:27017",
+            chunk_size=64,
+            chunk_overlap=16,
+            embedding_dimensions=128,
+            default_top_k=8,
+            embedding_cache_size=500,
+        )
+        assert config.embedding_cache_size == 500
+
+        # Test zero (disables cache)
+        config = Config(
+            mongo_uri="mongodb://localhost:27017",
+            chunk_size=64,
+            chunk_overlap=16,
+            embedding_dimensions=128,
+            default_top_k=8,
+            embedding_cache_size=0,
+        )
+        assert config.embedding_cache_size == 0
+
+    def test_embedding_cache_size_validation_invalid(self) -> None:
+        """Test embedding_cache_size validation for negative values."""
+        with pytest.raises(
+            ValueError, match="embedding_cache_size must be non-negative"
+        ):
+            Config(
+                mongo_uri="mongodb://localhost:27017",
+                chunk_size=64,
+                chunk_overlap=16,
+                embedding_dimensions=128,
+                default_top_k=8,
+                embedding_cache_size=-1,
+            )
+
+    def test_embedding_batch_size_validation_valid(self) -> None:
+        """Test valid embedding_batch_size values."""
+        # Test default value
+        config = Config(
+            mongo_uri="mongodb://localhost:27017",
+            chunk_size=64,
+            chunk_overlap=16,
+            embedding_dimensions=128,
+            default_top_k=8,
+        )
+        assert config.embedding_batch_size == 20
+
+        # Test custom values
+        config = Config(
+            mongo_uri="mongodb://localhost:27017",
+            chunk_size=64,
+            chunk_overlap=16,
+            embedding_dimensions=128,
+            default_top_k=8,
+            embedding_batch_size=50,
+        )
+        assert config.embedding_batch_size == 50
+
+        # Test boundary values
+        config = Config(
+            mongo_uri="mongodb://localhost:27017",
+            chunk_size=64,
+            chunk_overlap=16,
+            embedding_dimensions=128,
+            default_top_k=8,
+            embedding_batch_size=1,
+        )
+        assert config.embedding_batch_size == 1
+
+        config = Config(
+            mongo_uri="mongodb://localhost:27017",
+            chunk_size=64,
+            chunk_overlap=16,
+            embedding_dimensions=128,
+            default_top_k=8,
+            embedding_batch_size=100,
+        )
+        assert config.embedding_batch_size == 100
+
+    def test_embedding_batch_size_validation_invalid(self) -> None:
+        """Test embedding_batch_size validation for invalid values."""
+        # Test zero
+        with pytest.raises(
+            ValueError, match="embedding_batch_size must be between 1 and 100"
+        ):
+            Config(
+                mongo_uri="mongodb://localhost:27017",
+                chunk_size=64,
+                chunk_overlap=16,
+                embedding_dimensions=128,
+                default_top_k=8,
+                embedding_batch_size=0,
+            )
+
+        # Test negative
+        with pytest.raises(
+            ValueError, match="embedding_batch_size must be between 1 and 100"
+        ):
+            Config(
+                mongo_uri="mongodb://localhost:27017",
+                chunk_size=64,
+                chunk_overlap=16,
+                embedding_dimensions=128,
+                default_top_k=8,
+                embedding_batch_size=-5,
+            )
+
+        # Test too large
+        with pytest.raises(
+            ValueError, match="embedding_batch_size must be between 1 and 100"
+        ):
+            Config(
+                mongo_uri="mongodb://localhost:27017",
+                chunk_size=64,
+                chunk_overlap=16,
+                embedding_dimensions=128,
+                default_top_k=8,
+                embedding_batch_size=101,
+            )

@@ -111,6 +111,14 @@ class Config(BaseSettings):
         default=384,
         description="Dimensionality of embedding vectors (must match model)",
     )
+    embedding_cache_size: int = Field(
+        default=1000,
+        description="Maximum number of embeddings to cache (0 disables cache)",
+    )
+    embedding_batch_size: int = Field(
+        default=20,
+        description="Batch size for embedding generation (1-100)",
+    )
 
     # Document ingestion settings
     max_file_size_bytes: int = Field(
@@ -200,6 +208,46 @@ class Config(BaseSettings):
             raise ValueError("chunk_overlap must be non-negative")
         return v
 
+    @field_validator("embedding_cache_size")
+    @classmethod
+    def validate_embedding_cache_size(cls, v: int) -> int:
+        """Validate embedding cache size is non-negative.
+
+        Args:
+            v: Cache size value to validate.
+
+        Returns
+        -------
+            Validated cache size value.
+
+        Raises
+        ------
+            ValueError: If cache size is negative.
+        """
+        if v < 0:
+            raise ValueError("embedding_cache_size must be non-negative")
+        return v
+
+    @field_validator("embedding_batch_size")
+    @classmethod
+    def validate_embedding_batch_size(cls, v: int) -> int:
+        """Validate embedding batch size is between 1 and 100.
+
+        Args:
+            v: Batch size value to validate.
+
+        Returns
+        -------
+            Validated batch size value.
+
+        Raises
+        ------
+            ValueError: If batch size is not in range [1, 100].
+        """
+        if v <= 0 or v > 100:
+            raise ValueError("embedding_batch_size must be between 1 and 100")
+        return v
+
     @model_validator(mode="after")
     def validate_config_values(self) -> "Config":
         """Validate configuration values.
@@ -220,6 +268,10 @@ class Config(BaseSettings):
             raise ValueError("default_top_k must be positive")
         if self.max_workers is not None and self.max_workers <= 0:
             raise ValueError("max_workers must be positive when set")
+        if self.embedding_cache_size < 0:
+            raise ValueError("embedding_cache_size must be non-negative")
+        if self.embedding_batch_size <= 0 or self.embedding_batch_size > 100:
+            raise ValueError("embedding_batch_size must be between 1 and 100")
         return self
 
     @property
