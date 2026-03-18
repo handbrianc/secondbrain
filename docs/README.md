@@ -30,7 +30,7 @@ docs/
 ├── architecture/            # Architecture documentation
 │   ├── index.md             # Architecture overview
 │   ├── data-flow.md         # Data flow and component interactions
-│   └── schema.md            # Database schema reference
+│   └── SCHEMA.md            # Database schema reference
 ├── api-reference/           # Auto-generated API docs
 │   ├── index.md             # API reference overview
 │   ├── cli.md               # CLI module
@@ -69,7 +69,7 @@ docs/
 - [Building & Distribution](developer-guide/building.md) - Create binaries
 - [Code Standards](developer-guide/code-standards.md) - Coding guidelines
 - [Contributing](developer-guide/contributing.md) - How to contribute
-- [Schema Reference](architecture/schema.md) - Database schema
+- [Schema Reference](architecture/SCHEMA.md) - Database schema
 - [Data Flow](architecture/data-flow.md) - Component interactions
 - [Migration Guide](developer-guide/migrations.md) - Schema migration strategies
 - [Security Guidelines](developer-guide/security.md) - Security best practices
@@ -93,7 +93,7 @@ Technical specifications and design documents are maintained separately in the `
 2. **Want to contribute?** Read [CONTRIBUTING.md](developer-guide/contributing.md)
 3. **Setting up development?** Follow [DEVELOPMENT.md](developer-guide/development.md)
 4. **Need Docker setup?** Check [DOCKER.md](developer-guide/docker.md)
-5. **Need schema info?** Check [SCHEMA.md](architecture/schema.md)
+5. **Need schema info?** Check [SCHEMA.md](architecture/SCHEMA.md)
 6. **Need data flow docs?** See [DATA_FLOW.md](architecture/data-flow.md)
 
 ## Documentation Standards

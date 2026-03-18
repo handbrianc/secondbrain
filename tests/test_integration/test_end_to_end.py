@@ -143,6 +143,7 @@ class TestDocumentIngestion:
 class TestFullWorkflow:
     """Tests for complete workflow: ingest -> list -> delete."""
 
+    @pytest.mark.integration
     def test_full_workflow(
         self,
         mongomock_client: mongomock.MongoClient,
@@ -209,6 +210,7 @@ class TestFullWorkflow:
             LocalEmbeddingGenerator.generate = original_gen
             pdf_path.unlink(missing_ok=True)
 
+    @pytest.mark.integration
     def test_delete_by_chunk_id(
         self,
         mongomock_client: mongomock.MongoClient,
@@ -234,6 +236,7 @@ class TestFullWorkflow:
         remaining = list(collection.find())
         assert len(remaining) == 0
 
+    @pytest.mark.integration
     def test_delete_all(
         self,
         mongomock_client: mongomock.MongoClient,
@@ -341,6 +344,7 @@ class TestIntegrationDataFlow:
         finally:
             mongomock_client.close()
 
+    @pytest.mark.integration
     def test_list_pagination_works(
         self,
         mongomock_client: mongomock.MongoClient,
@@ -396,6 +400,7 @@ class TestIntegrationDataFlow:
 
         assert chunk_ids_page1.isdisjoint(chunk_ids_page2)
 
+    @pytest.mark.integration
     def test_list_with_source_filter(
         self,
         mongomock_client: mongomock.MongoClient,

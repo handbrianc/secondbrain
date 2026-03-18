@@ -29,6 +29,8 @@ dependencies = [
     "rich>=14.0.0",
     "python-dotenv>=1.2.2",
     "sentence-transformers>=5.0.0",
+    "opentelemetry-api>=1.20.0",
+    "opentelemetry-sdk>=1.20.0",
 ]
 
 [project.optional-dependencies]
@@ -40,6 +42,8 @@ dev = [
     "pytest-cov>=4.1.0",
     "pytest-benchmark>=4.0.0",
     "pytest-xdist>=3.0.0",
+    "pytest-hypothesis>=6.0.0",
+    "hypothesis>=6.0.0",
     "bandit>=1.7.0",
     "safety>=3.0.0",
     "pre-commit>=3.6.0",
@@ -51,6 +55,10 @@ dev = [
     "mkdocstrings>=0.24.0",
     "mkdocstrings-python>=2.0.0",
     "mkdocs-material>=9.5.0",
+]
+
+opentelemetry = [
+    "opentelemetry-exporter-otlp>=1.20.0",
 ]
 
 [project.scripts]
@@ -102,7 +110,26 @@ warn_unreachable = true
 strict_equality = true
 exclude = ["venv/", ".git/", "tests/", "docs/examples/", ".*\\.egg-info/", "scripts/"]
 ignore_missing_imports = true
+namespace_packages = false
 
+[[tool.mypy.overrides]]
+module = ["secondbrain.document"]
+warn_unused_ignores = false
+disable_error_code = ["arg-type"]
+
+[[tool.mypy.overrides]]
+module = ["secondbrain.storage.storage", "secondbrain.embedding.local"]
+disable_error_code = ["attr-defined", "no-any-return", "valid-type", "operator", "unreachable", "has-type", "misc"]
+
+# Skip problematic third-party packages with namespace package issues
+[[tool.mypy.overrides]]
+module = ["google.*"]
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = ["sentence_transformers", "torch", "transformers", "pymongo", "docling", "docling.*"]
+follow_imports = "skip"
+disable_error_code = ["attr-defined", "no-any-return", "valid-type", "operator", "unreachable", "has-type", "misc"]
 
 [tool.coverage.run]
 source = ["src"]

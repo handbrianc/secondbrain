@@ -17,6 +17,7 @@ from secondbrain.storage import (
     VectorStorage,
     build_search_pipeline,
 )
+from secondbrain.utils.tracing import trace_operation
 
 logger = logging.getLogger(__name__)
 
@@ -136,22 +137,7 @@ class Searcher:
         source_filter: str | None = None,
         file_type_filter: str | None = None,
     ) -> list[dict[str, Any]]:
-        """Search for similar documents using semantic similarity.
-
-        Args:
-            query: Search query text.
-            top_k: Number of results to return.
-            source_filter: Filter by source file.
-            file_type_filter: Filter by file type.
-
-        Returns
-        -------
-            list of search results with scores.
-
-        Raises
-        ------
-            ValueError: If query is invalid or contains dangerous patterns.
-        """
+        """Search for similar documents using semantic similarity."""
         # Sanitize query to prevent injection attacks
         sanitized_query = sanitize_query(query)
 
@@ -162,15 +148,17 @@ class Searcher:
             raise RuntimeError("Cannot connect to MongoDB")
 
         # Generate query embedding
-        query_embedding = self.embedding_gen.generate(sanitized_query)
+        with trace_operation("search_generate_embedding"):
+            query_embedding = self.embedding_gen.generate(sanitized_query)
 
         # Search in storage
-        raw_results: Sequence[SearchResult] = self.storage.search(
-            embedding=query_embedding,
-            top_k=top_k,
-            source_filter=source_filter,
-            file_type_filter=file_type_filter,
-        )
+        with trace_operation("search_storage"):
+            raw_results: Sequence[SearchResult] = self.storage.search(
+                embedding=query_embedding,
+                top_k=top_k,
+                source_filter=source_filter,
+                file_type_filter=file_type_filter,
+            )
 
         # Convert SearchResult to dict[str, Any] for CLI compatibility
         results: list[dict[str, Any]] = [dict(r) for r in raw_results]

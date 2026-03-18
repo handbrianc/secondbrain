@@ -10,7 +10,7 @@ This document describes how schema changes are handled in SecondBrain.
 
 ### Version Tracking
 - Each document in the database includes a `version` field
-- The schema version is tracked in `../architecture/index.mdschema.md`
+- The schema version is tracked in `../architecture/SCHEMA.md`
 - Migration scripts are stored in `migrations/` directory
 
 ## Migration Categories
@@ -129,7 +129,7 @@ python -m secondbrain migrations rollback
 1. Always version documents
 2. Provide migration scripts for breaking changes
 3. Test migrations on full dataset before production
-4. Document all changes in `../architecture/index.mdschema.md`
+4. Document all changes in `../architecture/SCHEMA.md`
 5. Update this migration guide with new patterns
 
 ### Avoid
@@ -149,7 +149,7 @@ If migration fails and leaves the database in an inconsistent state:
 
 ### Version Mismatch
 If application version doesn't match database schema version:
-1. Check `../architecture/index.mdschema.md` for current version
+1. Check `../architecture/SCHEMA.md` for current version
 2. Run migrations
 3. Check logs for migration errors
 

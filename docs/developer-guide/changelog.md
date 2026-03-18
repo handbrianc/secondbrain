@@ -70,7 +70,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Code standards documentation (./code-standards.md)
 - Contribution guidelines (./contributing.md)
 - Security policy (./security.md)
-- Data schema documentation (../architecture/index.mdschema.md)
+- Data schema documentation (../architecture/SCHEMA.md)
 - Migration guide (./migrations.md)
 
 ## Related Documentation

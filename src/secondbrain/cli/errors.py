@@ -38,12 +38,12 @@ def handle_cli_errors(func: Callable[P, T]) -> Callable[P, T]:
         try:
             return func(*args, **kwargs)
         except click.BadParameter as e:
-            logger.warning(f"Parameter validation error: {e}", exc_info=True)
+            logger.warning("Parameter validation error: %s", e, exc_info=True)
             console.print(f"[red]Error: {e}[/red]")
             console.print("[yellow]Run with --verbose for full traceback[/yellow]")
             sys.exit(1)
         except (ValueError, FileNotFoundError, CLIValidationError) as e:
-            logger.warning(f"Validation error: {e}", exc_info=True)
+            logger.warning("Validation error: %s", e, exc_info=True)
             console.print(f"[red]Error: {e}[/red]")
             console.print("[yellow]Run with --verbose for full traceback[/yellow]")
             sys.exit(1)

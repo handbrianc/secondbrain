@@ -272,7 +272,7 @@ pip install secondbrain
 name = "secondbrain"
 version = "0.1.0"
 description = "A local document intelligence CLI tool"
-authors = [{name = "Your Name", email = "your.email@example.com"}]
+authors = [{name = "Your Name", email = "your.email@example.com"}]  # TODO: Replace with actual author info
 license = {text = "MIT"}
 readme = "README.md"
 requires-python = ">=3.11"
@@ -332,7 +332,7 @@ Note: Per project policy, GitHub Actions is prohibited. Use local builds instead
 
 ```bash
 # Clone repository
-git clone https://github.com/your-org/secondbrain.git
+git clone <repository-url>
 cd secondbrain
 
 # Install in editable mode
@@ -358,31 +358,18 @@ pip install secondbrain==0.2.0a1
 ### From Binary
 
 ```bash
-# macOS (Apple Silicon)
-curl -L https://github.com/your-org/secondbrain/releases/download/v0.1.0/secondbrain-macos-arm64 -o /usr/local/bin/secondbrain
-chmod +x /usr/local/bin/secondbrain
-
-# macOS (Intel)
-curl -L https://github.com/your-org/secondbrain/releases/download/v0.1.0/secondbrain-macos-x64 -o /usr/local/bin/secondbrain
-chmod +x /usr/local/bin/secondbrain
-
-# Linux
-curl -L https://github.com/your-org/secondbrain/releases/download/v0.1.0/secondbrain-linux-amd64 -o /usr/local/bin/secondbrain
-chmod +x /usr/local/bin/secondbrain
-
-# Windows
-# Download secondbrain-windows-amd64.exe from releases
+# Download from releases page
 # Add to PATH or run directly
 ```
 
 ### From Docker
 
 ```bash
-# Pull from Docker Hub
-docker pull your-org/secondbrain:latest
+# Pull from Docker Hub (when published)
+docker pull <docker-image>:latest
 
 # Run
-docker run --rm -v $(pwd):/data your-org/secondbrain:latest --help
+docker run --rm -v $(pwd):/data <docker-image>:latest --help
 ```
 
 ## Platform-Specific Instructions
@@ -392,7 +379,7 @@ docker run --rm -v $(pwd):/data your-org/secondbrain:latest --help
 #### Install via Homebrew (if published)
 
 ```bash
-brew install your-org/tap/secondbrain
+brew install <tap>/secondbrain
 ```
 
 #### Code Signing (for distribution)
@@ -502,7 +489,7 @@ SecondBrain uses semantic versioning:
 
 ### Changelog
 
-Update `do../developer-guide/index.mdCHANGELOG.md` for each release:
+Update `docs/developer-guide/changelog.md` for each release:
 
 ```markdown
 ## [0.2.0] - 2026-03-15

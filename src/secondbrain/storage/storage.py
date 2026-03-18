@@ -22,6 +22,7 @@ from secondbrain.exceptions import StorageConnectionError
 from secondbrain.storage.models import DatabaseStats
 from secondbrain.storage.pipeline import build_search_pipeline
 from secondbrain.types import ChunkInfo, SearchResult
+from secondbrain.utils.tracing import trace_operation
 from secondbrain.utils.connections import ValidatableService
 from secondbrain.utils.perf_monitor import async_timing, timing
 
@@ -121,13 +122,36 @@ class VectorStorage(ValidatableService):
     def _wait_for_index_ready(self) -> None:
         """Wait for MongoDB vector search index to be ready.
 
-        Uses exponential backoff: starts at 100ms, doubles each retry,
-        max 2 seconds per wait. Total max wait time ~15 seconds.
+        Why We Wait for Index Readiness:
+        --------------------------------
+        MongoDB Atlas vector search indexes are created asynchronously. After
+        creating an index, it may take time to build and become queryable.
+        Attempting searches before the index is READY will fail.
+
+        Exponential Backoff Strategy:
+        -----------------------------
+        - Base delay: 100ms (quick initial check)
+        - Doubling: 100ms → 200ms → 400ms → 800ms → 1600ms → 2000ms (capped)
+        - Max delay: 2 seconds (prevents excessive waiting)
+        - Retry count: 15 attempts (configurable via index_ready_retry_count)
+        - Total max wait: ~15 seconds (sum of geometric series)
+
+        This approach balances:
+        - Responsiveness: Quick checks when index builds fast
+        - Efficiency: Longer waits as build time increases
+        - Safety: Caps prevent infinite waiting
+
+        Args:
+            None
+
+        Returns
+        -------
+            None (returns when index is READY or max retries exceeded)
         """
         self.ensure_index()
 
-        base_delay = 0.1  # 100ms
-        max_delay = 2.0  # 2 seconds
+        base_delay = 0.1  # 100ms base delay for exponential backoff
+        max_delay = 2.0  # 2 seconds maximum delay cap
         delay = base_delay
 
         for attempt in range(self._index_ready_retry_count):
@@ -148,9 +172,10 @@ class VectorStorage(ValidatableService):
                     e,
                 )
 
-            # Exponential backoff with max delay cap
+            # Exponential backoff: double delay each retry, cap at max_delay
+            # Sequence: 0.1s → 0.2s → 0.4s → 0.8s → 1.6s → 2.0s → 2.0s → ...
             time.sleep(delay)
-            delay = min(delay * 2, max_delay)  # Double delay, cap at 2s
+            delay = min(delay * 2, max_delay)
 
         logger.warning("Vector search index may not be ready after maximum retries")
 
@@ -176,13 +201,26 @@ class VectorStorage(ValidatableService):
     async def _wait_for_index_ready_async(self) -> None:
         """Wait for MongoDB vector search index to be ready asynchronously.
 
-        Uses exponential backoff: starts at 100ms, doubles each retry,
-        max 2 seconds per wait. Total max wait time ~15 seconds.
+        See _wait_for_index_ready() for explanation of exponential backoff strategy.
+        This is the async version using asyncio.sleep() instead of time.sleep().
+
+        Why We Wait for Index Readiness:
+        --------------------------------
+        MongoDB Atlas vector search indexes are created asynchronously. After
+        creating an index, it may take time to build and become queryable.
+
+        Exponential Backoff Strategy:
+        -----------------------------
+        - Base delay: 100ms (quick initial check)
+        - Doubling: 100ms → 200ms → 400ms → 800ms → 1600ms → 2000ms (capped)
+        - Max delay: 2 seconds (prevents excessive waiting)
+        - Retry count: 15 attempts (configurable)
+        - Total max wait: ~15 seconds
         """
         await asyncio.to_thread(self.ensure_index)
 
-        base_delay = 0.1  # 100ms
-        max_delay = 2.0  # 2 seconds
+        base_delay = 0.1  # 100ms base delay for exponential backoff
+        max_delay = 2.0  # 2 seconds maximum delay cap
         delay = base_delay
 
         for attempt in range(self._index_ready_retry_count):
@@ -207,7 +245,7 @@ class VectorStorage(ValidatableService):
                 )
 
             await asyncio.sleep(delay)
-            delay = min(delay * 2, max_delay)  # Double delay, cap at 2s
+            delay = min(delay * 2, max_delay)  # Exponential backoff: 0.1s → 2.0s cap
 
         logger.warning("Vector search index may not be ready after maximum retries")
 
@@ -405,39 +443,25 @@ class VectorStorage(ValidatableService):
 
     @timing("storage_store")
     def store(self, document: dict[str, Any]) -> str:
-        """Store a document with embedding.
-
-        Args:
-            document: Document containing chunk_id, text, embedding, and metadata.
-
-        Returns
-        -------
-            str: Stored document ID.
-        """
+        """Store a document with embedding."""
         self._require_connection("store document")
 
         # Add timestamp and store
         doc = self._add_ingestion_timestamp(document)
-        result = self.collection.insert_one(doc)
+        with trace_operation("storage_insert_one"):
+            result = self.collection.insert_one(doc)
         return str(result.inserted_id)
 
     @timing("storage_store_batch")
     def store_batch(self, documents: list[dict[str, Any]]) -> int:
-        """Store multiple documents.
-
-        Args:
-            documents: List of documents to store.
-
-        Returns
-        -------
-            int: Number of documents stored.
-        """
+        """Store multiple documents."""
         self._require_connection("store batch")
 
         # Add timestamps to all documents
         docs_with_timestamps = self._add_ingestion_timestamps(documents)
 
-        result = self.collection.insert_many(docs_with_timestamps)
+        with trace_operation("storage_insert_many"):
+            result = self.collection.insert_many(docs_with_timestamps)
         return len(result.inserted_ids)
 
     @timing("storage_search")
@@ -448,31 +472,21 @@ class VectorStorage(ValidatableService):
         source_filter: str | None = None,
         file_type_filter: str | None = None,
     ) -> Sequence[SearchResult]:
-        """Search for similar embeddings.
-
-        Args:
-            embedding: Query embedding vector.
-            top_k: Number of results to return.
-            source_filter: Filter by source file.
-            file_type_filter: Filter by file type.
-
-        Returns
-        -------
-            Sequence of search results.
-        """
+        """Search for similar embeddings."""
         self._require_connection("search")
 
         # Ensure index exists and wait for it to be ready
         self._wait_for_index_ready()
 
-        pipeline = build_search_pipeline(
-            embedding=embedding,
-            top_k=top_k,
-            source_filter=source_filter,
-            file_type_filter=file_type_filter,
-        )
+        with trace_operation("storage_aggregate"):
+            pipeline = build_search_pipeline(
+                embedding=embedding,
+                top_k=top_k,
+                source_filter=source_filter,
+                file_type_filter=file_type_filter,
+            )
 
-        results: list[SearchResult] = list(self.collection.aggregate(pipeline))
+            results: list[SearchResult] = list(self.collection.aggregate(pipeline))
         return results
 
     def list_chunks(

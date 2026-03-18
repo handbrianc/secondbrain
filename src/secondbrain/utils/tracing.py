@@ -1,0 +1,279 @@
+"""OpenTelemetry tracing utilities for distributed tracing.
+
+This module provides tracing setup and helpers for instrumenting
+the secondbrain application with OpenTelemetry distributed tracing.
+
+Note: OpenTelemetry is an optional dependency. If not installed, tracing will
+be disabled and all tracing functions will be no-ops.
+
+Usage:
+    # Enable tracing via environment variable
+    export OTEL_TRACING_ENABLED=true
+
+    # Setup tracing (call once at application startup)
+    from secondbrain.utils.tracing import setup_tracing, get_tracer
+
+    setup_tracing(service_name="secondbrain", service_version="0.1.0")
+    tracer = get_tracer()
+
+    # Use tracer to create spans
+    with tracer.start_as_current_span("operation_name") as span:
+        span.set_attribute("key", "value")
+        # ... operation ...
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+from contextlib import contextmanager
+from typing import TYPE_CHECKING, Any, Callable, Generator
+from functools import wraps
+
+logger = logging.getLogger(__name__)
+
+# Check if OpenTelemetry is available
+try:
+    from opentelemetry import trace as otel_trace
+    from opentelemetry.sdk.resources import Resource as OTelResource
+    from opentelemetry.sdk.trace import TracerProvider as OTelTracerProvider
+    from opentelemetry.sdk.trace.export import (
+        BatchSpanProcessor,
+        ConsoleSpanExporter,
+    )
+
+    OTTEL_AVAILABLE = True
+except ImportError:
+    OTTEL_AVAILABLE = False
+    otel_trace = None  # type: ignore
+
+if TYPE_CHECKING and OTTEL_AVAILABLE:
+    from opentelemetry.trace import Tracer
+
+# Global tracer and state
+_tracer: Any = None
+_tracing_enabled: bool = False
+
+
+def is_tracing_enabled() -> bool:
+    """Check if tracing is enabled via environment variable.
+
+    Returns
+    -------
+        True if OTEL_TRACING_ENABLED is set to "true" (case-insensitive).
+    """
+    global _tracing_enabled
+    if not _tracing_enabled:
+        _tracing_enabled = os.getenv("OTEL_TRACING_ENABLED", "false").lower() == "true"
+    return _tracing_enabled
+
+
+def setup_tracing(
+    service_name: str = "secondbrain",
+    service_version: str = "0.1.0",
+    environment: str = "development",
+) -> None:
+    """Setup OpenTelemetry tracing.
+
+    Must be called once at application startup before any tracing occurs.
+
+    Args:
+        service_name: Name of the service for tracing.
+        service_version: Version of the service.
+        environment: Deployment environment (development, staging, production).
+
+    Returns
+    -------
+        None
+
+    Note:
+        If OpenTelemetry is not installed, this function is a no-op.
+    """
+    global _tracer, _tracing_enabled
+
+    if not OTTEL_AVAILABLE:
+        logger.warning("OpenTelemetry not installed, tracing disabled")
+        return
+
+    if not is_tracing_enabled():
+        logger.debug("Tracing not enabled (OTEL_TRACING_ENABLED not set)")
+        return
+
+    try:
+        # Create resource with service metadata
+        resource = OTelResource.create(
+            {
+                "service.name": service_name,
+                "service.version": service_version,
+                "deployment.environment": environment,
+            }
+        )
+
+        # Create tracer provider
+        tracer_provider = OTelTracerProvider(resource=resource)
+
+        # Add console exporter for development
+        tracer_provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))
+
+        # Set as global tracer provider
+        otel_trace.set_tracer_provider(tracer_provider)
+
+        # Get tracer
+        _tracer = otel_trace.get_tracer(service_name, service_version)
+
+        logger.info(
+            "OpenTelemetry tracing enabled for %s v%s", service_name, service_version
+        )
+
+    except Exception as e:
+        logger.warning("Failed to setup OpenTelemetry tracing: %s", e)
+
+
+def get_tracer() -> Any:
+    """Get the global tracer instance.
+
+    Returns
+    -------
+        Tracer instance if tracing is enabled and initialized,
+        otherwise a mock tracer that does nothing.
+
+    Note:
+        Returns a no-op tracer if OpenTelemetry is not available or not initialized.
+    """
+    global _tracer
+
+    if not OTTEL_AVAILABLE:
+        return _NoOpTracer()
+
+    if _tracer is None and is_tracing_enabled():
+        setup_tracing()
+
+    if _tracer is None:
+        return _NoOpTracer()
+
+    return _tracer
+
+
+@contextmanager
+def trace_operation(operation_name: str) -> Generator[Any, None, None]:
+    """Context manager for tracing an operation.
+
+    Args:
+        operation_name: Name of the operation to trace.
+
+    Yields
+    ------
+        Span object if tracing is enabled, None otherwise.
+
+    Example:
+        with trace_operation("process_document"):
+            # ... operation ...
+            pass
+    """
+    if not OTTEL_AVAILABLE or not is_tracing_enabled():
+        yield None
+        return
+
+    tracer = get_tracer()
+    with tracer.start_as_current_span(operation_name) as span:
+        yield span
+
+
+def trace_decorator(operation_name: str) -> Callable[[Callable], Callable]:
+    """Decorator for tracing a function.
+
+    Args:
+        operation_name: Name of the operation to trace.
+
+    Returns
+    -------
+        Decorated function with tracing.
+
+    Example:
+        @trace_decorator("save_document")
+        def save_document(doc):
+            # ... save logic ...
+            pass
+    """
+
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            if not OTTEL_AVAILABLE or not is_tracing_enabled():
+                return func(*args, **kwargs)
+
+            with trace_operation(operation_name) as span:
+                if span:
+                    span.set_attribute("function.name", func.__name__)
+                return func(*args, **kwargs)
+
+        return wrapper
+
+    return decorator
+
+
+class _NoOpTracer:
+    """No-op tracer when OpenTelemetry is not available."""
+
+    def start_as_current_span(self, name: str, *args: Any, **kwargs: Any) -> Any:
+        """Start a no-op span."""
+        return _NoOpSpan()
+
+    def __getattr__(self, name: str) -> Any:
+        """Return no-op methods for any attribute access."""
+        return lambda *args, **kwargs: None
+
+
+def shutdown_tracing() -> None:
+    """Shutdown OpenTelemetry tracing and release resources.
+
+    Should be called at application shutdown to ensure all spans are flushed.
+
+    Note:
+        If OpenTelemetry is not available or not initialized, this function is a no-op.
+    """
+    global _tracer, _tracing_enabled
+
+    if not OTTEL_AVAILABLE:
+        return
+
+    if _tracer is not None:
+        try:
+            # Shutdown the tracer provider to flush all spans
+            from opentelemetry.sdk.trace import TracerProvider
+
+            provider = otel_trace.get_tracer_provider()
+            if isinstance(provider, TracerProvider):
+                provider.shutdown()
+                logger.info("OpenTelemetry tracing shutdown")
+        except Exception as e:
+            logger.warning("Error during OpenTelemetry shutdown: %s", e)
+
+    _tracer = None
+    _tracing_enabled = False
+
+
+class _NoOpSpan:
+    """No-op span when OpenTelemetry is not available."""
+
+    def __enter__(self) -> _NoOpSpan:
+        return self
+
+    def __exit__(self, *args: Any) -> None:
+        pass
+
+    def set_attribute(self, key: str, value: Any) -> None:
+        """No-op attribute setting."""
+        pass
+
+    def set_status(self, status: Any, description: str | None = None) -> None:
+        """No-op status setting."""
+        pass
+
+    def record_exception(self, exception: Exception) -> None:
+        """No-op exception recording."""
+        pass
+
+    def add_event(self, name: str, attributes: dict | None = None) -> None:
+        """No-op event adding."""
+        pass
