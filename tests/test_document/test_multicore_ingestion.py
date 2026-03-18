@@ -114,38 +114,42 @@ class TestWorkerFunction:
         test_file = tmp_path / "test.md"
         test_file.write_text("# Test\n\nThis is test content for the worker function.")
 
-        result = _extract_and_chunk_file(test_file, chunk_size=100, chunk_overlap=10)
+        result = _extract_and_chunk_file(
+            str(test_file), chunk_size=100, chunk_overlap=10
+        )
 
         assert isinstance(result, dict)
         assert "success" in result
         assert "file_path" in result
-        assert "chunks" in result
+        assert "segments" in result
         assert "error" in result
         assert result["success"] is True
         assert result["error"] is None
-        assert isinstance(result["chunks"], list)
-        assert len(result["chunks"]) > 0
+        assert isinstance(result["segments"], list)
+        assert len(result["segments"]) > 0
 
     def test_worker_function_handles_extraction_errors(self, tmp_path: Path):
         """Test worker function handles extraction errors gracefully.
 
-        QA: Verify error info returned instead of raising exception.
+        QA: Verify error info return instead of raising exception.
         """
         # Create a file with invalid format
         test_file = tmp_path / "corrupted.xyz"  # Unsupported extension
         test_file.write_bytes(b"\x00\x01\x02\x03")
 
-        result = _extract_and_chunk_file(test_file, chunk_size=100, chunk_overlap=10)
+        result = _extract_and_chunk_file(
+            str(test_file), chunk_size=100, chunk_overlap=10
+        )
 
         assert isinstance(result, dict)
         assert result["success"] is False
         assert result["error"] is not None
-        assert len(result["chunks"]) == 0
+        assert len(result["segments"]) == 0
 
     def test_worker_function_chunks_text_correctly(self, tmp_path: Path):
-        """Test worker function splits text into chunks properly.
+        """Test worker function extracts segments correctly.
 
-        QA: Verify chunking respects chunk_size and chunk_overlap.
+        QA: Verify segment extraction works for long content.
         """
         # Create a long markdown file
         test_file = tmp_path / "long.md"
@@ -155,12 +159,13 @@ class TestWorkerFunction:
         result = _extract_and_chunk_file(test_file, chunk_size=50, chunk_overlap=5)
 
         assert result["success"] is True
-        assert len(result["chunks"]) > 1  # Should be split into multiple chunks
+        assert len(result["segments"]) > 0
 
-        # Verify chunks don't exceed size limit (roughly)
-        for chunk in result["chunks"]:
-            # Allow some tolerance for word boundary splitting
-            assert len(chunk["text"]) <= 100  # Generous limit for word boundaries
+        for segment in result["segments"]:
+            assert "text" in segment
+            assert "page" in segment
+            assert isinstance(segment["text"], str)
+            assert isinstance(segment["page"], int)
 
 
 class TestMemoryManagement:

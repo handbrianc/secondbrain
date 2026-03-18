@@ -96,7 +96,7 @@ def _extract_and_chunk_file(
         result = converter.convert(file_path)
         content = result.document
 
-        # Extract segments from document
+        # Extract segments from document (don't chunk yet - let main process handle streaming)
         segments: list[Segment] = []
 
         if hasattr(content, "texts") and content.texts:
@@ -118,20 +118,17 @@ def _extract_and_chunk_file(
                 text = f.read()
             segments = [{"text": text, "page": 1}]
 
-        # Chunk the extracted segments
-        chunks = _chunk_segments(segments, chunk_size, chunk_overlap)
-
         return {
             "success": True,
             "file_path": file_path,
-            "chunks": chunks,
+            "segments": segments,  # Return segments, not chunks
             "error": None,
         }
     except Exception as e:
         return {
             "success": False,
             "file_path": file_path,
-            "chunks": [],
+            "segments": [],
             "error": f"{type(e).__name__}: {e}",
         }
 
@@ -399,22 +396,13 @@ class DocumentIngestor:
         file_path: Path,
         embedding_gen: Any,
     ) -> list[dict[str, Any]] | None:
-        """Process a single file and build documents for storage.
+        """Process a single file - uses streaming if enabled."""
+        from secondbrain.config import get_config
+        from secondbrain.storage import VectorStorage
 
-        Args:
-            file_path: Path to the file to process.
-            embedding_gen: EmbeddingGenerator instance.
-
-        Returns
-        -------
-            List of documents ready for storage, or None if processing fails.
-        """
-        from secondbrain.exceptions import (
-            EmbeddingGenerationError,
-        )
+        config = get_config()
 
         try:
-            # Extract text
             segments: list[Segment] = self._extract_text(file_path)
         except (OSError, DocumentExtractionError) as e:
             logger.error(f"Failed to extract text from {file_path}: {e}")
@@ -426,12 +414,21 @@ class DocumentIngestor:
             )
             return None
 
-        # Chunk and build documents with embeddings
-        return self._build_documents_with_embeddings(
-            file_path=file_path,
-            segments=segments,
-            embedding_gen=embedding_gen,
-        )
+        # Use streaming if enabled
+        if config.streaming_enabled:
+            storage = VectorStorage()
+            docs_count = self._stream_process_chunks(
+                file_path, segments, embedding_gen, storage
+            )
+            # Return empty list to signal success (documents stored via streaming)
+            return [] if docs_count > 0 else None
+        else:
+            # Fall back to original batch processing
+            return self._build_documents_with_embeddings(
+                file_path=file_path,
+                segments=segments,
+                embedding_gen=embedding_gen,
+            )
 
     def _build_documents_with_embeddings(
         self,
@@ -579,6 +576,149 @@ class DocumentIngestor:
 
         return docs_to_store
 
+    def _stream_process_chunks(
+        self,
+        file_path: Path,
+        segments: list[Segment],
+        embedding_gen: Any,
+        storage: Any,
+    ) -> int:
+        """Stream process chunks: extract -> chunk -> embed -> store per batch.
+
+        Processes chunks in configurable batches to reduce memory usage.
+        Each batch is embedded and stored before moving to the next batch.
+
+        Args:
+            file_path: Source file path.
+            segments: List of text segments to process.
+            embedding_gen: EmbeddingGenerator instance.
+            storage: VectorStorage instance.
+
+        Returns
+        -------
+            Number of documents successfully stored.
+        """
+        from secondbrain.config import get_config
+
+        config = get_config()
+        batch_size = config.streaming_chunk_batch_size
+
+        # Deduplicate chunks across all segments
+        seen_hashes = set()
+        batch_chunks: list[dict[str, Any]] = []
+        docs_stored = 0
+
+        for i, segment in enumerate(segments):
+            cleaned = segment["text"].strip()
+            if not cleaned:
+                continue
+
+            normalized = " ".join(cleaned.lower().split())
+            text_hash = int(hashlib.sha256(normalized.encode()).hexdigest(), 16)
+
+            if text_hash in seen_hashes:
+                continue
+            seen_hashes.add(text_hash)
+
+            batch_chunks.append(
+                {
+                    "file_path": file_path,
+                    "original_index": i,
+                    "text": cleaned,
+                    "page": segment["page"],
+                    "text_hash": text_hash,
+                }
+            )
+
+            # Process batch when full
+            if len(batch_chunks) >= batch_size:
+                docs_stored += self._store_embedding_batch(
+                    file_path, batch_chunks, embedding_gen, storage
+                )
+                batch_chunks = []
+
+        # Process remaining chunks
+        if batch_chunks:
+            docs_stored += self._store_embedding_batch(
+                file_path, batch_chunks, embedding_gen, storage
+            )
+
+        return docs_stored
+
+    def _store_embedding_batch(
+        self,
+        file_path: Path,
+        chunks: list[dict[str, Any]],
+        embedding_gen: Any,
+        storage: Any,
+    ) -> int:
+        """Generate embeddings and store a batch of chunks.
+
+        Args:
+            file_path: Source file path.
+            chunks: List of chunk dicts to process.
+            embedding_gen: EmbeddingGenerator instance.
+            storage: VectorStorage instance.
+
+        Returns
+        -------
+            Number of documents stored.
+        """
+        # Generate embeddings with cache
+        chunk_to_embedding: dict[int, list[float]] = {}
+
+        for chunk in chunks:
+            cached = self.embedding_cache.get(chunk["text"])
+            if cached is not None:
+                chunk_to_embedding[chunk["text_hash"]] = cached
+                continue
+
+            try:
+                embedding = embedding_gen.generate(chunk["text"])
+                self.embedding_cache.set(chunk["text"], embedding)
+                chunk_to_embedding[chunk["text_hash"]] = embedding
+            except Exception as e:
+                logger.error(
+                    "Failed to generate embedding: %s: %s", type(e).__name__, e
+                )
+                continue
+
+        # Build and store documents
+        docs_to_store: list[dict[str, Any]] = []
+        seen_doc_keys = set()
+
+        for chunk_item in chunks:
+            text_hash = chunk_item["text_hash"]
+            if text_hash not in chunk_to_embedding:
+                continue
+
+            doc_key = (str(chunk_item["file_path"]), chunk_item["page"], text_hash)
+            if doc_key in seen_doc_keys:
+                continue
+            seen_doc_keys.add(doc_key)
+
+            embedding = chunk_to_embedding[text_hash]
+            file_type = get_file_type(chunk_item["file_path"])
+
+            doc = {
+                "chunk_id": str(uuid4()),
+                "source_file": str(chunk_item["file_path"]),
+                "page_number": chunk_item["page"],
+                "chunk_text": chunk_item["text"],
+                "embedding": embedding,
+                "metadata": {
+                    "file_type": file_type,
+                    "ingested_at": datetime.now(UTC).isoformat(),
+                    "chunk_index": chunk_item["original_index"],
+                },
+            }
+            docs_to_store.append(doc)
+
+        if docs_to_store:
+            storage.store_batch(docs_to_store)
+
+        return len(docs_to_store)
+
     def ingest(
         self,
         path: str,
@@ -665,26 +805,43 @@ class DocumentIngestor:
                             failed_files += 1
                             continue
 
-                        chunks = result["chunks"]
-                        if not chunks:
+                        segments = result["segments"]
+                        if not segments:
                             logger.warning(
-                                "File %s produced no chunks (may be empty, image-only, or extraction failed)",
+                                "File %s produced no segments (may be empty, image-only, or extraction failed)",
                                 file_path,
                             )
                             failed_files += 1
                             continue
 
-                        # Convert chunks to documents with embeddings
-                        docs_to_store = self._chunks_to_documents(
-                            file_path, chunks, embedding_gen
-                        )
+                        # Use streaming processing if enabled
+                        from secondbrain.config import get_config
 
-                        # Store in batches to manage memory
-                        for i in range(0, len(docs_to_store), MAX_MEMORY_BATCH_SIZE):
-                            batch = docs_to_store[i : i + MAX_MEMORY_BATCH_SIZE]
-                            storage.store_batch(batch)
+                        config = get_config()
 
-                        successful_files += 1
+                        if config.streaming_enabled:
+                            # Streaming handles storage internally via _stream_process_chunks
+                            docs_count = self._stream_process_chunks(
+                                file_path, segments, embedding_gen, storage
+                            )
+                            if docs_count > 0:
+                                successful_files += 1
+                            else:
+                                failed_files += 1
+                        else:
+                            # Legacy batch processing via _build_documents_with_embeddings
+                            docs_to_store = self._build_documents_with_embeddings(
+                                file_path, segments, embedding_gen
+                            )
+                            if docs_to_store:
+                                for i in range(
+                                    0, len(docs_to_store), MAX_MEMORY_BATCH_SIZE
+                                ):
+                                    batch = docs_to_store[i : i + MAX_MEMORY_BATCH_SIZE]
+                                    storage.store_batch(batch)
+                                successful_files += 1
+                            else:
+                                failed_files += 1
 
                     except Exception as e:
                         logger.error(

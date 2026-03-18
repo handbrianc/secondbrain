@@ -168,6 +168,15 @@ class Config(BaseSettings):
         description="Maximum number of worker processes for parallel processing (default: auto-detect CPU count)",
     )
 
+    streaming_enabled: bool = Field(
+        default=True,
+        description="Enable streaming processing for memory efficiency (default: true)",
+    )
+    streaming_chunk_batch_size: int = Field(
+        default=50,
+        description="Number of chunks to process per streaming batch (1-200, default: 50)",
+    )
+
     @field_validator("chunk_size")
     @classmethod
     def validate_chunk_size(cls, v: int) -> int:
@@ -248,6 +257,26 @@ class Config(BaseSettings):
             raise ValueError("embedding_batch_size must be between 1 and 100")
         return v
 
+    @field_validator("streaming_chunk_batch_size")
+    @classmethod
+    def validate_streaming_chunk_batch_size(cls, v: int) -> int:
+        """Validate streaming chunk batch size is between 1 and 200.
+
+        Args:
+            v: Batch size value to validate.
+
+        Returns
+        -------
+            Validated batch size value.
+
+        Raises
+        ------
+            ValueError: If batch size is not in range [1, 200].
+        """
+        if v <= 0 or v > 200:
+            raise ValueError("streaming_chunk_batch_size must be between 1 and 200")
+        return v
+
     @model_validator(mode="after")
     def validate_config_values(self) -> "Config":
         """Validate configuration values.
@@ -272,6 +301,11 @@ class Config(BaseSettings):
             raise ValueError("embedding_cache_size must be non-negative")
         if self.embedding_batch_size <= 0 or self.embedding_batch_size > 100:
             raise ValueError("embedding_batch_size must be between 1 and 100")
+        if (
+            self.streaming_chunk_batch_size <= 0
+            or self.streaming_chunk_batch_size > 200
+        ):
+            raise ValueError("streaming_chunk_batch_size must be between 1 and 200")
         return self
 
     @property
