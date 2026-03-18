@@ -85,7 +85,7 @@ def timing(metric_name: str) -> Callable[[Callable[..., Any]], Callable[..., Any
             finally:
                 duration = time.perf_counter() - start
                 metrics.record(metric_name, duration)
-                logger.debug(f"{metric_name}: {duration:.3f}s")
+                logger.debug("%s: %.3fs", metric_name, duration)
 
         return wrapper
 
@@ -114,7 +114,7 @@ def async_timing(
             finally:
                 duration = time.perf_counter() - start
                 metrics.record(metric_name, duration)
-                logger.debug(f"{metric_name}: {duration:.3f}s")
+                logger.debug("%s: %.3fs", metric_name, duration)
 
         return wrapper
 

@@ -8,10 +8,18 @@ from collections.abc import Callable
 from time import monotonic
 
 from secondbrain.exceptions import ServiceUnavailableError
+from secondbrain.utils.circuit_breaker import (
+    CircuitBreaker,
+    CircuitBreakerConfig,
+    CircuitBreakerError,
+)
 
 logger = logging.getLogger(__name__)
 
 __all__ = [
+    "CircuitBreaker",
+    "CircuitBreakerConfig",
+    "CircuitBreakerError",
     "RateLimitedRetry",
     "ServiceUnavailableError",
     "ValidatableService",
@@ -141,7 +149,7 @@ class RateLimitedRetry:
             self._wait_before_retry()
 
         if last_error:
-            logger.debug(f"All retries exhausted: {last_error}")
+            logger.debug("All retries exhausted: %s", last_error)
 
         return last_result
 
@@ -157,18 +165,46 @@ class ValidatableService:
     This class provides thread-safe connection validation with TTL-based caching
     to reduce repeated network calls. Subclasses must implement _do_validate()
     to perform the actual service-specific validation.
+
+    Optional circuit breaker support can be enabled by providing a
+    circuit_breaker_config parameter during initialization.
     """
 
-    def __init__(self, cache_ttl: float = 60.0) -> None:
+    def __init__(
+        self,
+        cache_ttl: float = 60.0,
+        circuit_breaker_config: CircuitBreakerConfig | None = None,
+    ) -> None:
         """Initialize the validatable service.
 
         Args:
             cache_ttl: Time-to-live for connection cache in seconds.
+            circuit_breaker_config: Optional circuit breaker configuration.
+                If provided, circuit breaker will be enabled for this service.
         """
         self._connection_cache_ttl = cache_ttl
         self._connection_valid: bool | None = None
         self._connection_checked_at = 0.0
         self._lock = threading.Lock()
+
+        self._circuit_breaker: CircuitBreaker | None = None
+        self._circuit_breaker_enabled = circuit_breaker_config is not None
+
+        if self._circuit_breaker_enabled:
+            self._circuit_breaker = CircuitBreaker(
+                config=circuit_breaker_config,
+                service_name=self.__class__.__name__,
+            )
+
+    @property
+    def circuit_breaker(self) -> CircuitBreaker | None:
+        """Get the circuit breaker instance (if enabled)."""
+        return self._circuit_breaker
+
+    @property
+    def is_circuit_breaker_enabled(self) -> bool:
+        """Check if circuit breaker is enabled for this service."""
+        return self._circuit_breaker_enabled
 
     def validate_connection(self, force: bool = False) -> bool:
         """Check if service is available with caching.
@@ -211,6 +247,39 @@ class ValidatableService:
     def on_service_recovery(self) -> None:
         """Handle service recovery - clear cached connection state."""
         self.invalidate_connection_cache()
+
+    def validate_connection_with_circuit_breaker(self, force: bool = False) -> bool:
+        """Check if service is available with circuit breaker protection.
+
+        Args:
+            force: If True, bypass cache and check connection.
+
+        Returns:
+            True if service is available, False otherwise.
+
+        Raises:
+            CircuitBreakerError: If circuit breaker is open.
+        """
+        if self._circuit_breaker_enabled and self._circuit_breaker is not None:
+            if not self._circuit_breaker.is_allowed():
+                logger.warning(
+                    "Circuit breaker open for service %s, failing fast",
+                    self.__class__.__name__,
+                )
+                raise CircuitBreakerError(
+                    "Circuit breaker is open",
+                    service_name=self.__class__.__name__,
+                )
+
+        result = self.validate_connection(force=force)
+
+        if self._circuit_breaker_enabled and self._circuit_breaker is not None:
+            if result:
+                self._circuit_breaker.record_success()
+            else:
+                self._circuit_breaker.record_failure()
+
+        return result
 
     @abstractmethod
     def _do_validate(self) -> bool:
@@ -268,68 +337,37 @@ class ValidatableService:
 
         return await asyncio.to_thread(self._do_validate)
 
-
-class ServiceValidator:
-    """Validator for service availability with caching.
-
-    This class provides service availability checking with TTL-based caching.
-    """
-
-    _cache_ttl: float
-    _last_check: float
-    _is_valid: bool | None
-    _validator: Callable[[], bool] | None
-
-    def __init__(self, cache_ttl: float = 60.0) -> None:
-        """Initialize the service validator.
-
-        Args:
-            cache_ttl: Time-to-live for connection cache in seconds.
-        """
-        self._cache_ttl = cache_ttl
-        self._last_check = 0.0
-        self._is_valid = None
-        self._validator = None
-
-    def configure(self, validator: Callable[[], bool]) -> None:
-        """Configure the validator callback.
-
-        Args:
-            validator: Callable that returns True if service is available.
-        """
-        self._validator = validator
-        self.invalidate()
-
-    def is_available(self, force: bool = False) -> bool:
-        """Check if service is available.
+    async def validate_connection_async_with_circuit_breaker(
+        self, force: bool = False
+    ) -> bool:
+        """Check if service is available with circuit breaker protection (async).
 
         Args:
             force: If True, bypass cache and check connection.
 
-        Returns
-        -------
-            True if service is available.
+        Returns:
+            True if service is available, False otherwise.
+
+        Raises:
+            CircuitBreakerError: If circuit breaker is open.
         """
-        if self._validator is None:
-            raise RuntimeError("Validator not configured - call configure() first")
+        if self._circuit_breaker_enabled and self._circuit_breaker is not None:
+            if not self._circuit_breaker.is_allowed():
+                logger.warning(
+                    "Circuit breaker open for service %s, failing fast",
+                    self.__class__.__name__,
+                )
+                raise CircuitBreakerError(
+                    "Circuit breaker is open",
+                    service_name=self.__class__.__name__,
+                )
 
-        if force or self._is_valid is None:
-            self._is_valid = self._validator()
-            self._last_check = monotonic()
-            return self._is_valid
+        result = await self.validate_connection_async(force=force)
 
-        if monotonic() - self._last_check < self._cache_ttl:
-            return self._is_valid
+        if self._circuit_breaker_enabled and self._circuit_breaker is not None:
+            if result:
+                self._circuit_breaker.record_success()
+            else:
+                self._circuit_breaker.record_failure()
 
-        self._is_valid = self._validator()
-        self._last_check = monotonic()
-        return self._is_valid
-
-    def invalidate(self) -> None:
-        """Clear cached connection state."""
-        self._is_valid = None
-        self._last_check = 0.0
-
-    def on_recovery(self) -> None:
-        """Handle service recovery - clear cached state."""
-        self.invalidate()
+        return result

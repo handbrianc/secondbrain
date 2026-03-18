@@ -35,7 +35,7 @@ pre-commit install
 
 ## Examples
 
-For practical usage examples, see the [examples directory](https://github.com/your-repo/examples) on GitHub.
+For practical usage examples, see the [examples directory](../examples/README.md).
 
 ### Setup & Configuration
 - [Development Setup](./development.md) - Full development workflow
@@ -67,7 +67,7 @@ For practical usage examples, see the [examples directory](https://github.com/yo
 
 ## Examples
 
-Check the [examples directory](https://github.com/your-repo/examples) on GitHub for:
+Check the [examples directory](../examples/README.md) for:
 - Basic CLI usage
 - Advanced async workflows
 - REST API integrations (Flask, FastAPI)

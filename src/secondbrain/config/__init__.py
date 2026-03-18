@@ -109,15 +109,28 @@ class Config(BaseSettings):
     # Embedding settings
     embedding_dimensions: int = Field(
         default=384,
-        description="Dimensionality of embedding vectors (must match model)",
+        description=(
+            "Dimensionality of embedding vectors (must match model). "
+            "384 = sentence-transformers/all-MiniLM-L6-v2 default. "
+            "Other models: 768 (all-mpnet-base-v2), 1024 (large models)"
+        ),
     )
     embedding_cache_size: int = Field(
         default=1000,
-        description="Maximum number of embeddings to cache (0 disables cache)",
+        description=(
+            "Maximum number of embeddings to cache (0 disables cache). "
+            "Caches reduce API calls for duplicate text. "
+            "1000 embeddings x 384 floats x 4 bytes ~1.5MB RAM"
+        ),
     )
     embedding_batch_size: int = Field(
         default=20,
-        description="Batch size for embedding generation (1-100)",
+        description=(
+            "Batch size for embedding generation (1-100). "
+            "Higher = better throughput, lower = less memory. "
+            "sentence-transformers API typically handles 20-50 well. "
+            "Max 100 to prevent timeout on slow networks"
+        ),
     )
 
     # Document ingestion settings
@@ -129,37 +142,42 @@ class Config(BaseSettings):
     # Storage settings
     index_ready_retry_count: int = Field(
         default=15,
-        description="Max retries for index ready check",
+        description=(
+            "Max retries for index ready check (exponential backoff). "
+            "With 100ms base, 2s max: 15 retries ≈ 15 seconds total wait time. "
+            "MongoDB Atlas index creation typically completes in 5-10 seconds"
+        ),
     )
     index_ready_retry_delay: float = Field(
         default=1.0,
-        description="Delay between index ready retries in seconds",
+        description=(
+            "Initial delay for index ready retries (not used directly; "
+            "exponential backoff starts at 100ms, this is for future extensibility)"
+        ),
     )
 
     # Rate limiting settings
     rate_limit_max_requests: int = Field(
         default=10,
-        description="Maximum requests per rate limit window",
+        description=(
+            "Maximum requests per rate limit window. "
+            "Protects sentence-transformers API from overload. "
+            "10 req/s = 600 req/min, sufficient for batch processing"
+        ),
     )
     rate_limit_window_seconds: float = Field(
         default=1.0,
-        description="Rate limit window in seconds",
+        description=(
+            "Rate limit window in seconds. "
+            "1-second window = sliding window rate limiting. "
+            "Combine with rate_limit_max_requests for token-bucket style limiting"
+        ),
     )
 
     # Connection validation settings
     connection_cache_ttl: float = Field(
         default=60.0,
         description="TTL for connection validation cache in seconds",
-    )
-
-    # Circuit breaker settings
-    circuit_breaker_recovery_timeout: float = Field(
-        default=30.0,
-        description="Circuit breaker recovery timeout in seconds",
-    )
-    circuit_breaker_failure_threshold: int = Field(
-        default=5,
-        description="Number of failures before circuit opens",
     )
 
     # Multicore processing settings

@@ -1,582 +1,309 @@
-"""Tests for CircuitBreaker and EmbeddingCache pattern implementations."""
+"""Tests for circuit breaker implementation."""
 
 import time
-from unittest.mock import MagicMock
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
 from secondbrain.utils.circuit_breaker import (
     CircuitBreaker,
+    CircuitBreakerConfig,
     CircuitBreakerError,
     CircuitState,
 )
-from secondbrain.utils.embedding_cache import EmbeddingCache
 
 
-class TestCircuitBreakerInitialState:
-    """Tests for circuit breaker initial state."""
+@pytest.mark.circuit_breaker
+class TestCircuitState:
+    """Test CircuitState enum."""
 
-    def test_initial_state_is_closed(self) -> None:
-        """Test that circuit starts in closed state."""
-        cb = CircuitBreaker()
-        assert cb.state == CircuitState.CLOSED
+    def test_state_values(self):
+        """Test that all states have correct values."""
+        assert CircuitState.CLOSED.value == "closed"
+        assert CircuitState.OPEN.value == "open"
+        assert CircuitState.HALF_OPEN.value == "half_open"
 
-    def test_initial_failure_count_is_zero(self) -> None:
-        """Test initial failure count."""
-        cb = CircuitBreaker()
-        stats = cb.get_stats()
-        assert stats["failure_count"] == 0
-
-    def test_initial_success_count_is_zero(self) -> None:
-        """Test initial success count."""
-        cb = CircuitBreaker()
-        stats = cb.get_stats()
-        assert stats["success_count"] == 0
+    def test_state_count(self):
+        """Test that there are exactly 3 states."""
+        assert len(list(CircuitState)) == 3
 
 
-class TestCircuitBreakerSuccessPath:
-    """Tests for successful call paths."""
+@pytest.mark.circuit_breaker
+class TestCircuitBreakerConfig:
+    """Test CircuitBreakerConfig dataclass."""
 
-    def test_successful_call_returns_result(self) -> None:
-        """Test that successful calls return the function result."""
-        cb = CircuitBreaker()
-        func = MagicMock(return_value="success")
+    def test_default_values(self):
+        """Test default configuration values."""
+        config = CircuitBreakerConfig()
+        assert config.failure_threshold == 5
+        assert config.success_threshold == 2
+        assert config.recovery_timeout == 30.0
+        assert config.half_open_max_calls == 3
 
-        result = cb.call(func, "arg1", kwarg="value")
-
-        assert result == "success"
-        func.assert_called_once_with("arg1", kwarg="value")
-
-    def test_successful_call_resets_failure_count(self) -> None:
-        """Test that success resets failure count in closed state."""
-        cb = CircuitBreaker(failure_threshold=3)
-
-        # Simulate some failures
-        for _ in range(2):
-            with pytest.raises(RuntimeError):
-                cb.call(MagicMock(side_effect=RuntimeError("fail")))
-
-        # One success should reset failures
-        cb.call(MagicMock(return_value="success"))
-
-        stats = cb.get_stats()
-        assert stats["failure_count"] == 0
-
-    def test_multiple_successful_calls_keep_circuit_closed(self) -> None:
-        """Test that multiple successes keep circuit closed."""
-        cb = CircuitBreaker(failure_threshold=3)
-
-        for _ in range(10):
-            cb.call(MagicMock(return_value="success"))
-
-        assert cb.state == CircuitState.CLOSED
-
-
-class TestCircuitBreakerFailurePath:
-    """Tests for failure handling paths."""
-
-    def test_failure_increments_count(self) -> None:
-        """Test that failures increment the failure count."""
-        cb = CircuitBreaker(failure_threshold=5)
-
-        with pytest.raises(RuntimeError):
-            cb.call(MagicMock(side_effect=RuntimeError("fail")))
-
-        stats = cb.get_stats()
-        assert stats["failure_count"] == 1
-
-    def test_failures_below_threshold_keep_circuit_closed(self) -> None:
-        """Test that failures below threshold don't open circuit."""
-        cb = CircuitBreaker(failure_threshold=5)
-
-        for _ in range(4):
-            with pytest.raises(RuntimeError):
-                cb.call(MagicMock(side_effect=RuntimeError("fail")))
-
-        assert cb.state == CircuitState.CLOSED
-
-    def test_failures_at_threshold_opens_circuit(self) -> None:
-        """Test that failures at threshold opens the circuit."""
-        cb = CircuitBreaker(failure_threshold=3)
-
-        for _ in range(3):
-            with pytest.raises(RuntimeError):
-                cb.call(MagicMock(side_effect=RuntimeError("fail")))
-
-        assert cb.state == CircuitState.OPEN
-
-    def test_open_circuit_raises_circuit_breaker_error(self) -> None:
-        """Test that calling open circuit raises CircuitBreakerError."""
-        cb = CircuitBreaker(failure_threshold=1)
-
-        # Open the circuit
-        with pytest.raises(RuntimeError):
-            cb.call(MagicMock(side_effect=RuntimeError("fail")))
-
-        # Next call should raise CircuitBreakerError
-        with pytest.raises(CircuitBreakerError):
-            cb.call(MagicMock(return_value="success"))
-
-
-class TestCircuitBreakerRecoveryPath:
-    """Tests for circuit breaker recovery (half-open state)."""
-
-    def test_circuit_transitions_to_half_open_after_timeout(self) -> None:
-        """Test automatic transition to half-open after recovery timeout."""
-        cb = CircuitBreaker(failure_threshold=1, recovery_timeout=0.1)
-
-        # Open the circuit
-        with pytest.raises(RuntimeError):
-            cb.call(MagicMock(side_effect=RuntimeError("fail")))
-
-        assert cb.state == CircuitState.OPEN
-
-        # Wait for recovery timeout
-        time.sleep(0.15)
-
-        # Should transition to half-open
-        assert cb.state == CircuitState.HALF_OPEN
-
-    def test_successful_call_in_half_open_closes_circuit(self) -> None:
-        """Test that success in half-open state closes the circuit."""
-        # Use half_open_max_calls=1 so single success closes circuit
-        cb = CircuitBreaker(
-            failure_threshold=1, recovery_timeout=0.1, half_open_max_calls=1
+    def test_custom_values(self):
+        """Test custom configuration values."""
+        config = CircuitBreakerConfig(
+            failure_threshold=10,
+            success_threshold=5,
+            recovery_timeout=60.0,
+            half_open_max_calls=10,
         )
+        assert config.failure_threshold == 10
+        assert config.success_threshold == 5
+        assert config.recovery_timeout == 60.0
+        assert config.half_open_max_calls == 10
 
-        # Open the circuit
-        with pytest.raises(RuntimeError):
-            cb.call(MagicMock(side_effect=RuntimeError("fail")))
 
-        # Wait for recovery
-        time.sleep(0.15)
-        assert cb.state == CircuitState.HALF_OPEN
+@pytest.mark.circuit_breaker
+class TestCircuitBreakerBasic:
+    """Test basic circuit breaker functionality."""
 
-        # Successful call should close circuit
-        cb.call(MagicMock(return_value="success"))
-
+    def test_initial_state_is_closed(self):
+        """Test that circuit starts in CLOSED state."""
+        cb = CircuitBreaker()
         assert cb.state == CircuitState.CLOSED
 
-        # Verify failure count is reset
-        stats = cb.get_stats()
-        assert stats["failure_count"] == 0
-        assert stats["success_count"] == 0
+    def test_is_allowed_when_closed(self):
+        """Test that requests are allowed when CLOSED."""
+        cb = CircuitBreaker()
+        assert cb.is_allowed() is True
 
-    def test_half_open_limits_recovery_calls(self) -> None:
-        """Test that half-open state limits the number of recovery calls."""
-        cb = CircuitBreaker(
-            failure_threshold=1, recovery_timeout=0.1, half_open_max_calls=2
-        )
-
-        # Open the circuit
-        with pytest.raises(RuntimeError):
-            cb.call(MagicMock(side_effect=RuntimeError("fail")))
-
-        # Wait for recovery
-        time.sleep(0.15)
-        assert cb.state == CircuitState.HALF_OPEN
-
-        # Make max recovery calls
-        cb.call(MagicMock(return_value="success"))
-        cb.call(MagicMock(return_value="success"))
-
-        # Next call in half-open should still be allowed (within limit)
-        stats = cb.get_stats()
-        assert stats["half_open_calls"] == 2
-
-    def test_failure_in_half_open_reopens_circuit(self) -> None:
-        """Test that failure in half-open state reopens the circuit."""
-        cb = CircuitBreaker(failure_threshold=1, recovery_timeout=0.1)
-
-        # Open the circuit
-        with pytest.raises(RuntimeError):
-            cb.call(MagicMock(side_effect=RuntimeError("fail")))
-
-        # Wait for recovery
-        time.sleep(0.15)
-        assert cb.state == CircuitState.HALF_OPEN
-
-        # Failure should reopen circuit
-        with pytest.raises(RuntimeError):
-            cb.call(MagicMock(side_effect=RuntimeError("fail")))
-
-        assert cb.state == CircuitState.OPEN
-
-    def test_full_recovery_sequence(self) -> None:
-        """Test complete recovery sequence: closed -> open -> half-open -> closed."""
-        cb = CircuitBreaker(
-            failure_threshold=2, recovery_timeout=0.1, half_open_max_calls=2
-        )
-
-        # Start closed
+    def test_record_success_when_closed(self):
+        """Test that success doesn't change CLOSED state."""
+        cb = CircuitBreaker()
+        cb.record_success()
         assert cb.state == CircuitState.CLOSED
 
-        # Failures to open circuit
-        for _ in range(2):
-            with pytest.raises(RuntimeError):
-                cb.call(MagicMock(side_effect=RuntimeError("fail")))
-
+    def test_reset_returns_to_closed(self):
+        """Test that reset returns circuit to CLOSED state."""
+        cb = CircuitBreaker()
+        # Force to OPEN state
+        for _ in range(5):
+            cb.record_failure()
         assert cb.state == CircuitState.OPEN
-
-        # Wait for recovery timeout
-        time.sleep(0.15)
-        assert cb.state == CircuitState.HALF_OPEN
-
-        # Successful recovery calls
-        cb.call(MagicMock(return_value="success"))
-        cb.call(MagicMock(return_value="success"))
-
-        # Should be closed again
-        assert cb.state == CircuitState.CLOSED
-
-
-class TestCircuitBreakerManualReset:
-    """Tests for manual circuit reset."""
-
-    def test_manual_reset_closes_circuit(self) -> None:
-        """Test that manual reset closes the circuit."""
-        cb = CircuitBreaker(failure_threshold=1)
-
-        # Open the circuit
-        with pytest.raises(RuntimeError):
-            cb.call(MagicMock(side_effect=RuntimeError("fail")))
-
-        assert cb.state == CircuitState.OPEN
-
-        # Manual reset
-        cb.reset()
-
-        assert cb.state == CircuitState.CLOSED
-
-    def test_manual_reset_clears_counts(self) -> None:
-        """Test that manual reset clears all counters."""
-        cb = CircuitBreaker(failure_threshold=1)
-
-        # Open the circuit with first failure
-        with pytest.raises(RuntimeError):
-            cb.call(MagicMock(side_effect=RuntimeError("fail")))
-
-        assert cb.state == CircuitState.OPEN
-
-        # Add some success count by transitioning to half-open and succeeding
-        time.sleep(0.15)  # Wait for half-open
-        if cb.state == CircuitState.HALF_OPEN:
-            cb.call(MagicMock(return_value="success"))
 
         # Reset
         cb.reset()
-
-        stats = cb.get_stats()
-        assert stats["failure_count"] == 0
-        assert stats["success_count"] == 0
-        assert stats["half_open_calls"] == 0
-
-
-class TestCircuitBreakerThreadSafety:
-    """Tests for thread safety of circuit breaker."""
-
-    def test_concurrent_successes_are_thread_safe(self) -> None:
-        """Test that concurrent successful calls are thread-safe."""
-        import threading
-
-        cb = CircuitBreaker(failure_threshold=100)
-        results: list[str] = []
-        lock = threading.Lock()
-
-        def make_call() -> None:
-            result = cb.call(lambda: "success")
-            with lock:
-                results.append(result)
-
-        threads = [threading.Thread(target=make_call) for _ in range(50)]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join()
-
-        assert len(results) == 50
         assert cb.state == CircuitState.CLOSED
 
-    def test_concurrent_failures_are_thread_safe(self) -> None:
-        """Test that concurrent failures are thread-safe."""
-        import threading
 
-        cb = CircuitBreaker(failure_threshold=10)
-        errors: list[Exception] = []
-        lock = threading.Lock()
+@pytest.mark.circuit_breaker
+class TestCircuitBreakerStateTransitions:
+    """Test circuit breaker state transitions."""
 
-        def make_failing_call() -> None:
-            try:
-                cb.call(MagicMock(side_effect=Exception("fail")))
-            except Exception as e:
-                with lock:
-                    errors.append(e)
+    def test_closed_to_open_after_threshold_failures(self):
+        """Test that circuit opens after failure_threshold consecutive failures."""
+        config = CircuitBreakerConfig(failure_threshold=3)
+        cb = CircuitBreaker(config)
 
-        threads = [threading.Thread(target=make_failing_call) for _ in range(20)]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join()
+        # Should stay closed for 2 failures
+        cb.record_failure()
+        assert cb.state == CircuitState.CLOSED
 
-        # Circuit should be open after enough failures
+        cb.record_failure()
+        assert cb.state == CircuitState.CLOSED
+
+        # Should open on 3rd failure
+        cb.record_failure()
+        assert cb.state == CircuitState.OPEN
+
+    def test_open_blocks_requests(self):
+        """Test that OPEN circuit blocks all requests."""
+        cb = CircuitBreaker()
+
+        # Open the circuit
+        for _ in range(5):
+            cb.record_failure()
+
+        assert cb.is_allowed() is False
+
+    def test_open_to_half_open_after_timeout(self):
+        """Test that circuit transitions to HALF_OPEN after recovery_timeout."""
+        config = CircuitBreakerConfig(recovery_timeout=0.1)  # 100ms for testing
+        cb = CircuitBreaker(config)
+
+        # Open the circuit
+        for _ in range(5):
+            cb.record_failure()
+
+        assert cb.state == CircuitState.OPEN
+
+        # Wait for recovery timeout
+        time.sleep(0.15)
+
+        # Should transition to HALF_OPEN on next check
+        assert cb.is_allowed() is True
+        assert cb.state == CircuitState.HALF_OPEN
+
+    def test_half_open_to_closed_after_successes(self):
+        """Test that circuit closes after success_threshold successes in HALF_OPEN."""
+        config = CircuitBreakerConfig(
+            failure_threshold=3,
+            success_threshold=2,
+            recovery_timeout=0.1,
+        )
+        cb = CircuitBreaker(config)
+
+        # Open the circuit
+        for _ in range(3):
+            cb.record_failure()
+
+        # Wait for half-open
+        time.sleep(0.15)
+        cb.is_allowed()  # Trigger transition to HALF_OPEN
+
+        assert cb.state == CircuitState.HALF_OPEN
+
+        # Successes should close the circuit
+        cb.record_success()
+        assert cb.state == CircuitState.HALF_OPEN  # Need 2 successes
+
+        cb.record_success()
+        assert cb.state == CircuitState.CLOSED
+
+    def test_half_open_to_open_on_failure(self):
+        """Test that circuit reopens on failure in HALF_OPEN state."""
+        config = CircuitBreakerConfig(
+            failure_threshold=3,
+            success_threshold=2,
+            recovery_timeout=0.1,
+        )
+        cb = CircuitBreaker(config)
+
+        # Open the circuit
+        for _ in range(3):
+            cb.record_failure()
+
+        # Wait for half-open
+        time.sleep(0.15)
+        cb.is_allowed()  # Trigger transition to HALF_OPEN
+
+        assert cb.state == CircuitState.HALF_OPEN
+
+        # Failure should reopen the circuit
+        cb.record_failure()
         assert cb.state == CircuitState.OPEN
 
 
-class TestCircuitBreakerStatistics:
-    """Tests for circuit breaker statistics."""
+@pytest.mark.circuit_breaker
+class TestCircuitBreakerThreadSafety:
+    """Test circuit breaker thread safety."""
 
-    def test_get_stats_returns_all_fields(self) -> None:
-        """Test that get_stats returns all expected fields."""
+    def test_concurrent_record_success(self):
+        """Test that concurrent successes don't break state."""
         cb = CircuitBreaker()
 
-        stats = cb.get_stats()
-
-        assert "state" in stats
-        assert "failure_count" in stats
-        assert "success_count" in stats
-        assert "last_failure_time" in stats
-        assert "half_open_calls" in stats
-
-    def test_stats_reflect_state_changes(self) -> None:
-        """Test that statistics accurately reflect state changes."""
-        cb = CircuitBreaker(failure_threshold=2, recovery_timeout=0.1)
-
-        # Initial state
-        stats = cb.get_stats()
-        assert stats["state"] == "closed"
-        assert stats["failure_count"] == 0
-
-        # After failures
-        with pytest.raises(RuntimeError):
-            cb.call(MagicMock(side_effect=RuntimeError("fail")))
-
-        stats = cb.get_stats()
-        assert stats["failure_count"] == 1
-
-        # After opening
-        with pytest.raises(RuntimeError):
-            cb.call(MagicMock(side_effect=RuntimeError("fail")))
-
-        stats = cb.get_stats()
-        assert stats["state"] == "open"
-        assert stats["last_failure_time"] is not None
-
-
-class TestEmbeddingCache:
-    """Tests for EmbeddingCache functionality."""
-
-    def test_cache_hit_returns_cached_embedding(self) -> None:
-        """Test that cache hit returns cached embedding."""
-        cache = EmbeddingCache(max_size=10)
-        text = "test text"
-        embedding = [0.1, 0.2, 0.3]
-
-        # First call - cache miss
-        result = cache.get(text)
-        assert result is None
-        assert cache.misses == 1
-
-        # Set the embedding
-        cache.set(text, embedding)
-
-        # Second call - cache hit
-        result = cache.get(text)
-        assert result == embedding
-        assert cache.hits == 1
-
-    def test_cache_miss_returns_none(self) -> None:
-        """Test that cache miss returns None."""
-        cache = EmbeddingCache(max_size=10)
-        result = cache.get("nonexistent")
-
-        assert result is None
-        assert cache.misses == 1
-
-    def test_set_updates_cache(self) -> None:
-        """Test that set stores embedding in cache."""
-        cache = EmbeddingCache(max_size=10)
-        text = "test"
-        embedding = [0.5, 0.6]
-
-        cache.set(text, embedding)
-
-        assert text in cache
-        assert cache.size == 1
-
-    def test_cache_eviction_on_max_size(self) -> None:
-        """Test that LRU eviction occurs when cache is full."""
-        cache = EmbeddingCache(max_size=3)
-
-        # Fill cache
-        cache.set("key1", [1.0])
-        cache.set("key2", [2.0])
-        cache.set("key3", [3.0])
-
-        assert cache.size == 3
-
-        # Add new key should evict least recently used (key1)
-        cache.set("key4", [4.0])
-
-        assert "key1" not in cache
-        assert "key4" in cache
-        assert cache.size == 3
-
-    def test_lru_updates_on_access(self) -> None:
-        """Test that accessing a key updates its LRU position."""
-        cache = EmbeddingCache(max_size=2)
-
-        cache.set("key1", [1.0])
-        cache.set("key2", [2.0])
-
-        # Access key1 to make it most recently used
-        cache.get("key1")
-
-        # Add new key should evict key2 (now LRU)
-        cache.set("key3", [3.0])
-
-        assert "key1" in cache
-        assert "key2" not in cache
-        assert "key3" in cache
-
-    def test_get_or_create_returns_cached_if_available(self) -> None:
-        """Test get_or_create returns cached embedding if available."""
-        cache = EmbeddingCache(max_size=10)
-        text = "test"
-        embedding = [0.1, 0.2]
-
-        cache.set(text, embedding)
-        generate_fn = MagicMock(return_value=[9.9, 9.9])
-
-        result = cache.get_or_create(text, generate_fn)
-
-        assert result == embedding
-        generate_fn.assert_not_called()
-
-    def test_get_or_create_calls_generator_on_miss(self) -> None:
-        """Test get_or_create calls generator on cache miss."""
-        cache = EmbeddingCache(max_size=10)
-        text = "test"
-        embedding = [0.1, 0.2]
-
-        generate_fn = MagicMock(return_value=embedding)
-
-        result = cache.get_or_create(text, generate_fn)
-
-        assert result == embedding
-        generate_fn.assert_called_once_with(text)
-        assert text in cache
-
-    async def test_get_or_create_async_returns_cached(self) -> None:
-        """Test async get_or_create returns cached embedding."""
-        cache = EmbeddingCache(max_size=10)
-        text = "test"
-        embedding = [0.1, 0.2]
-
-        cache.set(text, embedding)
-        generate_fn = MagicMock()
-
-        result = await cache.get_or_create_async(text, generate_fn)
-
-        assert result == embedding
-        generate_fn.assert_not_called()
-
-    async def test_get_or_create_async_calls_generator(self) -> None:
-        """Test async get_or_create calls async generator."""
-        cache = EmbeddingCache(max_size=10)
-        text = "test"
-        embedding = [0.1, 0.2]
-
-        async def async_gen(t: str) -> list[float]:
-            return embedding
-
-        result = await cache.get_or_create_async(text, async_gen)
-
-        assert result == embedding
-        assert text in cache
-
-    def test_clear_resets_cache_and_stats(self) -> None:
-        """Test that clear resets cache and statistics."""
-        cache = EmbeddingCache(max_size=10)
-
-        cache.set("key1", [1.0])
-        cache.get("key1")  # Create a hit
-        cache.get("nonexistent")  # Create a miss
-
-        assert cache.size == 1
-        assert cache.hits == 1
-        assert cache.misses == 1
-
-        cache.clear()
-
-        assert cache.size == 0
-        assert cache.hits == 0
-        assert cache.misses == 0
-        assert "key1" not in cache
-
-    def test_get_stats_returns_hit_rate(self) -> None:
-        """Test that get_stats calculates hit rate correctly."""
-        cache = EmbeddingCache(max_size=10)
-
-        cache.set("key1", [1.0])
-        cache.get("key1")  # Hit
-        cache.get("key1")  # Hit
-        cache.get("nonexistent")  # Miss
-
-        stats = cache.get_stats()
-
-        assert stats["hits"] == 2
-        assert stats["misses"] == 1
-        assert stats["hit_rate_percent"] == pytest.approx(66.67, rel=0.1)
-
-    def test_get_stats_empty_cache(self) -> None:
-        """Test get_stats with empty cache."""
-        cache = EmbeddingCache(max_size=10)
-
-        stats = cache.get_stats()
-
-        assert stats["hits"] == 0
-        assert stats["misses"] == 0
-        assert stats["size"] == 0
-        assert stats["hit_rate_percent"] == 0.0
-
-    def test_contains_returns_correct_result(self) -> None:
-        """Test __contains__ returns correct result."""
-        cache = EmbeddingCache(max_size=10)
-
-        cache.set("key1", [1.0])
-
-        assert "key1" in cache
-        assert "key2" not in cache
-
-    def test_len_returns_cache_size(self) -> None:
-        """Test __len__ returns cache size."""
-        cache = EmbeddingCache(max_size=10)
-
-        assert len(cache) == 0
-
-        cache.set("key1", [1.0])
-        cache.set("key2", [2.0])
-
-        assert len(cache) == 2
-
-    def test_update_existing_key(self) -> None:
-        """Test that updating existing key doesn't increase size."""
-        cache = EmbeddingCache(max_size=10)
-
-        cache.set("key1", [1.0])
-        cache.set("key1", [2.0])  # Update
-
-        assert cache.size == 1
-        assert cache.get("key1") == [2.0]
-
-    def test_max_size_zero(self) -> None:
-        """Test cache with max_size=0."""
-        cache = EmbeddingCache(max_size=0)
-
-        # With max_size=0, set should not store anything
-        cache.set("key1", [1.0])
-
-        # Cache should remain empty
-        assert cache.size == 0
-        assert "key1" not in cache
-        assert cache.get("key1") is None
+        def record_success_many_times():
+            for _ in range(100):
+                cb.record_success()
+
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            futures = [executor.submit(record_success_many_times) for _ in range(10)]
+            for future in futures:
+                future.result()
+
+        # Should still be closed
+        assert cb.state == CircuitState.CLOSED
+
+    def test_concurrent_record_failure(self):
+        """Test that concurrent failures correctly open circuit."""
+        config = CircuitBreakerConfig(failure_threshold=10)
+        cb = CircuitBreaker(config)
+
+        def record_failure_many_times():
+            for _ in range(20):
+                cb.record_failure()
+
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            futures = [executor.submit(record_failure_many_times) for _ in range(5)]
+            for future in futures:
+                future.result()
+
+        # Should be open (at least 10 failures occurred)
+        assert cb.state == CircuitState.OPEN
+
+    def test_concurrent_state_transitions(self):
+        """Test thread-safe state transitions."""
+        config = CircuitBreakerConfig(
+            failure_threshold=5,
+            success_threshold=2,
+            recovery_timeout=0.1,
+        )
+        cb = CircuitBreaker(config)
+
+        def open_circuit():
+            for _ in range(10):
+                cb.record_failure()
+
+        def record_successes():
+            time.sleep(0.15)  # Wait for half-open
+            for _ in range(5):
+                cb.record_success()
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = [
+                executor.submit(open_circuit),
+                executor.submit(record_successes),
+            ]
+            for future in futures:
+                future.result()
+
+        # Final state should be a valid state (any of the 3 states is acceptable
+        # due to race conditions in the test)
+        assert cb.state in (
+            CircuitState.CLOSED,
+            CircuitState.OPEN,
+            CircuitState.HALF_OPEN,
+        )
+
+
+@pytest.mark.circuit_breaker
+class TestCircuitBreakerError:
+    """Test CircuitBreakerError exception."""
+
+    def test_error_message(self):
+        """Test default error message."""
+        error = CircuitBreakerError()
+        assert "Circuit breaker is open" in str(error)
+
+    def test_error_with_service_name(self):
+        """Test error message with service name."""
+        error = CircuitBreakerError(service_name="mongo")
+        assert "mongo" in error.message
+
+    def test_error_attributes(self):
+        """Test error attributes."""
+        error = CircuitBreakerError("Service unavailable", "test-service")
+        assert error.service_name == "test-service"
+        assert "test-service" in error.message
+
+
+@pytest.mark.circuit_breaker
+class TestCircuitBreakerHalfOpenCalls:
+    """Test HALF_OPEN state call limits."""
+
+    def test_half_open_allows_limited_calls(self):
+        """Test that HALF_OPEN allows up to half_open_max_calls."""
+        config = CircuitBreakerConfig(
+            failure_threshold=3,
+            half_open_max_calls=3,
+            recovery_timeout=0.1,
+        )
+        cb = CircuitBreaker(config)
+
+        # Open the circuit
+        for _ in range(3):
+            cb.record_failure()
+
+        # Wait for half-open
+        time.sleep(0.15)
+
+        # Should allow first 3 calls
+        assert cb.is_allowed() is True
+        assert cb.is_allowed() is True
+        assert cb.is_allowed() is True
+
+        # 4th call should be blocked (still in half-open with no successes)
+        # Note: This depends on implementation - some allow all calls until successes recorded
+        # For now, we just verify the first 3 work

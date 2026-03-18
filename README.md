@@ -127,7 +127,7 @@ The test suite supports different execution profiles:
 | **Slow (E2E)** | `pytest -m slow` | ~16s | Release validation |
 | **Full** | `pytest` | ~42s | Complete validation |
 
-See [TESTING.md](docs/TESTING.md) for detailed testing documentation.
+See [TESTING.md](docs/developer-guide/TESTING.md) for detailed testing documentation.
 
 ### Coverage Cleanup
 

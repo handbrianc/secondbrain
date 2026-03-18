@@ -1,7 +1,7 @@
 # License Risk Report
 
 **Project**: secondbrain
-**Generated**: 2026-03-08 22:14:01
+**Generated**: 2026-03-18 09:45:00
 **SBOM File**: sbom.json
 
 ---
@@ -10,12 +10,12 @@
 
 | Metric | Value |
 |--------|-------|
-| **Total Dependencies** | 186 |
+| **Total Dependencies** | 189 |
 | **Unique Licenses** | 15 |
 | **Unknown Licenses** | 0 |
 | **High Risk Packages** | 3 |
 | **Medium Risk Packages** | 3 |
-| **Low Risk Packages** | 180 |
+| **Low Risk Packages** | 183 |
 
 ### Overall Risk Assessment: **REQUIRES REVIEW**
 - **WARNING**: 3 packages use strong copyleft licenses (GPL/LGPL)
@@ -31,7 +31,7 @@
 | Package | Version | License | Concern |
 |---------|---------|---------|---------|
 | pyinstaller | 6.19.0 | GPL-2.0-only | Strong copyleft - GPL requires open source |
-| pyinstaller-hooks-contrib | 2026.1 | GPL-2.0-only | Strong copyleft - GPL requires open source |
+| pyinstaller-hooks-contrib | 2026.3 | GPL-2.0-only | Strong copyleft - GPL requires open source |
 | chardet | 5.2.0 | License :: OSI Approved :: GNU Lesser General Public License v2 or later (LGPLv2+) | Copyleft - may affect distribution |
 
 ### MEDIUM RISK (Weak Copyleft)
@@ -46,7 +46,7 @@
 
 ### LOW RISK (Permissive)
 
-**Count**: 180 packages
+**Count**: 183 packages
 
 Most dependencies use permissive licenses (MIT, Apache-2.0, BSD, ISC, etc.)
 
@@ -54,4 +54,4 @@ Most dependencies use permissive licenses (MIT, Apache-2.0, BSD, ISC, etc.)
 ---
 
 *Report generated from CycloneDX SBOM using automated license analysis.*
-*Review date: 2026-03-08*
+*Review date: 2026-03-18*

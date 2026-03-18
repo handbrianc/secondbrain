@@ -179,18 +179,3 @@ class TestCLI:
             assert result.exit_code == 0
             assert "All metrics reset" in result.output
             mock_reset.assert_called_once()
-
-    def test_circuit_breaker_reset_command(self) -> None:
-        """Test circuit-breaker command with reset flag."""
-        from unittest.mock import patch
-
-        with patch(
-            "secondbrain.utils.circuit_breaker.CircuitBreaker.reset"
-        ) as mock_reset:
-            runner = CliRunner()
-            result = runner.invoke(cli, ["circuit-breaker", "--reset"])
-
-            assert result.exit_code == 0
-            assert "Circuit breaker state is per-instance" in result.output
-            assert "No global circuit breaker to reset" in result.output
-            mock_reset.assert_not_called()

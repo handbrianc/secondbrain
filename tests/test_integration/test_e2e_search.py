@@ -67,6 +67,7 @@ class TestSearchE2E:
             file_type_filter=None,
         )
 
+    @pytest.mark.integration
     @patch("secondbrain.search.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_search_with_filters(
@@ -113,6 +114,7 @@ class TestSearchE2E:
 class TestSearchIntegration:
     """Test suite for search integration scenarios."""
 
+    @pytest.mark.integration
     @patch("secondbrain.search.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_search_with_custom_top_k(
@@ -135,6 +137,7 @@ class TestSearchIntegration:
         call_args = mock_storage.search.call_args
         assert call_args.kwargs["top_k"] == 20
 
+    @pytest.mark.integration
     @patch("secondbrain.search.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_search_no_results(
@@ -156,6 +159,7 @@ class TestSearchIntegration:
 
         assert results == []
 
+    @pytest.mark.integration
     @patch("secondbrain.search.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_search_empty_embed_result(

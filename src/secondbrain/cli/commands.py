@@ -320,20 +320,3 @@ def metrics(ctx: click.Context, reset: bool) -> None:
         console.print(
             "[yellow]No metrics collected yet. Run some operations first.[/yellow]"
         )
-
-
-@cli.command()
-@click.option("--reset", "-r", is_flag=True, help="Reset circuit breaker")
-@click.pass_context
-def circuit_breaker(ctx: click.Context, reset: bool) -> None:
-    """Show circuit breaker status."""
-    if reset:
-        console.print("[yellow]Circuit breaker state is per-instance[/yellow]")
-        console.print("[yellow]No global circuit breaker to reset[/yellow]")
-        return
-
-    console.print("[bold]Circuit Breaker Module Available[/bold]")
-    console.print(
-        "  The CircuitBreaker class is available in secondbrain.utils.circuit_breaker"
-    )
-    console.print("  Each service that uses circuit breaker maintains its own state")

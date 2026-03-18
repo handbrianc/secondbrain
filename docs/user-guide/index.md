@@ -39,7 +39,7 @@ See [Document Ingestion](./document-ingestion.md) for details.
 
 ## Examples
 
-Practical examples are available in the [examples directory](https://github.com/your-repo/examples) on GitHub.
+Practical examples are available in the [examples directory](../examples/README.md).
 
 ## Related Documentation
 

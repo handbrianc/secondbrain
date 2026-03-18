@@ -282,7 +282,7 @@ def migrate_vector_index(
 
 
 def main():
-    """Main entry point."""
+    """Migrate MongoDB vector index to correct dimensions."""
     parser = argparse.ArgumentParser(
         description="Migrate MongoDB vector index to correct dimensions",
         formatter_class=argparse.RawDescriptionHelpFormatter,

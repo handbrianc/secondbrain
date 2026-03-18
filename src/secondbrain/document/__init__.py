@@ -9,9 +9,11 @@ This module provides:
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 import os
+from concurrent.futures import Future
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -23,6 +25,7 @@ from typing_extensions import TypedDict
 from secondbrain.config import get_config
 from secondbrain.exceptions import DocumentExtractionError, UnsupportedFileError
 from secondbrain.utils.embedding_cache import EmbeddingCache
+from secondbrain.utils.tracing import trace_operation
 
 # Lazy import docling to avoid 2+ second import overhead in tests
 # Only import when actually needed (DocumentConverter instantiation)
@@ -44,6 +47,12 @@ warnings.filterwarnings(
 )
 
 # Memory management constant for batch sizes
+# Rationale: 100 chunks x 384-dim embeddings (float32) ~150MB RAM peak
+# - Each embedding: 384 floats x 4 bytes = 1.5KB
+# - 100 embeddings: 150KB (negligible)
+# - Main memory cost: storing full text chunks + metadata during batch processing
+# - 100 is a conservative limit that prevents OOM on large document batches
+# - Can be tuned based on available RAM and typical document sizes
 MAX_MEMORY_BATCH_SIZE = 100
 
 # Global variable for worker converter (set by ProcessPoolExecutor initializer)
@@ -392,11 +401,43 @@ class DocumentIngestor:
             raise ValueError(f"Invalid path: {path}")
 
     def _process_file_for_storage(
-        self,
-        file_path: Path,
-        embedding_gen: Any,
+        self, file_path: Path, embedding_gen: Any
     ) -> list[dict[str, Any]] | None:
-        """Process a single file - uses streaming if enabled."""
+        """Process a single file - uses streaming if enabled.
+
+        Streaming Processing Flow (when enabled):
+        -----------------------------------------
+        1. Extract text segments from document (PDF pages, docx paragraphs, etc.)
+        2. Chunk segments into manageable pieces (chunk_size characters with overlap)
+        3. Deduplicate chunks using SHA256 hash of normalized text
+        4. Generate embeddings in small batches (streaming_chunk_batch_size)
+        5. Store each batch immediately to MongoDB, then discard from memory
+        6. Repeat until all chunks processed
+
+        Why Streaming?
+        --------------
+        - Memory efficiency: Large documents (100+ pages) can be processed
+          without holding all embeddings in RAM simultaneously
+        - Scalability: Can process arbitrarily large documents with constant memory
+        - Early persistence: Data is stored incrementally, not all at once at the end
+
+        Deduplication Strategy:
+        -----------------------
+        - Normalizes text (lowercase, single spaces) before hashing
+        - SHA256 hash of normalized text serves as unique identifier
+        - Prevents storing duplicate content (e.g., repeated headers, boilerplate)
+        - Hash stored with document for future deduplication checks
+
+        Args:
+            file_path: Path to document to process.
+            embedding_gen: Embedding generator instance.
+
+        Returns
+        -------
+            Empty list if streaming used (docs stored directly),
+            list of documents if batch processing,
+            None if processing failed.
+        """
         from secondbrain.config import get_config
         from secondbrain.storage import VectorStorage
 
@@ -405,16 +446,18 @@ class DocumentIngestor:
         try:
             segments: list[Segment] = self._extract_text(file_path)
         except (OSError, DocumentExtractionError) as e:
-            logger.error(f"Failed to extract text from {file_path}: {e}")
+            logger.error("Failed to extract text from %s: %s", file_path, e)
             return None
         except Exception as e:
             logger.error(
-                f"Unexpected error extracting text from {file_path}: "
-                f"{type(e).__name__}: {e}"
+                "Unexpected error extracting text from %s: %s: %s",
+                file_path,
+                type(e).__name__,
+                e,
             )
             return None
 
-        # Use streaming if enabled
+        # Use streaming if enabled (memory-efficient batch processing)
         if config.streaming_enabled:
             storage = VectorStorage()
             docs_count = self._stream_process_chunks(
@@ -585,8 +628,33 @@ class DocumentIngestor:
     ) -> int:
         """Stream process chunks: extract -> chunk -> embed -> store per batch.
 
-        Processes chunks in configurable batches to reduce memory usage.
-        Each batch is embedded and stored before moving to the next batch.
+        Streaming Batch Processing Flow:
+        --------------------------------
+        1. Iterate through text segments (pages, paragraphs, etc.)
+        2. For each segment:
+           - Clean and normalize text
+           - Compute SHA256 hash for deduplication
+           - Skip if duplicate (hash already seen)
+           - Add to current batch
+        3. When batch reaches streaming_chunk_batch_size (default: 50):
+           - Generate embeddings for all chunks in batch
+           - Store batch to MongoDB
+           - Clear batch from memory
+           - Repeat from step 1
+        4. Process remaining chunks (< batch_size) at the end
+
+        Why Batch Size = 50 (configurable)?
+        -----------------------------------
+        - Memory: 50 chunks x ~1KB each ~50KB RAM per batch (negligible)
+        - Throughput: Batching improves embedding API efficiency
+        - Responsiveness: Frequent storage prevents data loss on crash
+        - Balance: Larger = better throughput, smaller = lower memory
+
+        Deduplication:
+        --------------
+        - SHA256 hash of normalized text (lowercase, single spaces)
+        - Prevents storing identical content (headers, boilerplate, etc.)
+        - Hash persisted with document for future dedup checks
 
         Args:
             file_path: Source file path.
@@ -601,7 +669,7 @@ class DocumentIngestor:
         from secondbrain.config import get_config
 
         config = get_config()
-        batch_size = config.streaming_chunk_batch_size
+        batch_size = config.streaming_chunk_batch_size  # Default: 50 chunks/batch
 
         # Deduplicate chunks across all segments
         seen_hashes = set()
@@ -754,7 +822,8 @@ class DocumentIngestor:
         storage = VectorStorage()
 
         # Collect and validate files
-        files = self._collect_and_validate_files(path, recursive)
+        with trace_operation("ingest_collect_files"):
+            files = self._collect_and_validate_files(path, recursive)
 
         if not files:
             return {"success": 0, "failed": 0}
@@ -775,19 +844,20 @@ class DocumentIngestor:
         if cores > 1:
             # Process files using ProcessPoolExecutor for true parallelism
             # Use initializer to create DocumentConverter once per worker
-            with ProcessPoolExecutor(
-                max_workers=cores,
-                initializer=_init_worker,  # Create converter once per worker
-            ) as executor:
-                futures = {
-                    executor.submit(
-                        _extract_and_chunk_file,
-                        str(f),  # Pass as string for cross-process serialization
-                        self.chunk_size,
-                        self.chunk_overlap,
-                    ): f
-                    for f in files
-                }
+            with trace_operation("ingest_multiprocess"):
+                with ProcessPoolExecutor(
+                    max_workers=cores,
+                    initializer=_init_worker,  # Create converter once per worker
+                ) as executor:
+                    futures = {
+                        executor.submit(
+                            _extract_and_chunk_file,
+                            str(f),  # Pass as string for cross-process serialization
+                            self.chunk_size,
+                            self.chunk_overlap,
+                        ): f
+                        for f in files
+                    }
 
                 for future in as_completed(
                     futures, timeout=3600
@@ -821,18 +891,20 @@ class DocumentIngestor:
 
                         if config.streaming_enabled:
                             # Streaming handles storage internally via _stream_process_chunks
-                            docs_count = self._stream_process_chunks(
-                                file_path, segments, embedding_gen, storage
-                            )
+                            with trace_operation("ingest_stream_process"):
+                                docs_count = self._stream_process_chunks(
+                                    file_path, segments, embedding_gen, storage
+                                )
                             if docs_count > 0:
                                 successful_files += 1
                             else:
                                 failed_files += 1
                         else:
                             # Legacy batch processing via _build_documents_with_embeddings
-                            docs_to_store = self._build_documents_with_embeddings(
-                                file_path, segments, embedding_gen
-                            )
+                            with trace_operation("ingest_batch_process"):
+                                docs_to_store = self._build_documents_with_embeddings(
+                                    file_path, segments, embedding_gen
+                                )
                             if docs_to_store:
                                 for i in range(
                                     0, len(docs_to_store), MAX_MEMORY_BATCH_SIZE
@@ -853,26 +925,29 @@ class DocumentIngestor:
                         failed_files += 1
         else:
             # Use ThreadPoolExecutor for sequential/batch processing
-            with ThreadPoolExecutor(max_workers=batch_size) as executor:
-                futures = {
-                    executor.submit(self._process_file_for_storage, f, embedding_gen): f
-                    for f in files
-                }
+            with (
+                trace_operation("ingest_thread_process"),
+                ThreadPoolExecutor(max_workers=batch_size) as executor,
+            ):
+                futures_dict: dict[Any, Path] = {}
+                for f in files:
+                    future = executor.submit(
+                        self._process_file_for_storage, f, embedding_gen
+                    )
+                    futures_dict[future] = f
 
                 for future in as_completed(
-                    futures, timeout=3600
+                    futures_dict, timeout=3600
                 ):  # 1 hour timeout per file
-                    file_path = futures[future]
+                    file_path = futures_dict[future]
                     try:
-                        docs_to_store = future.result(timeout=300)  # 5 minute timeout
-
-                        if docs_to_store is None:
+                        result = future.result(timeout=300)  # 5 minute timeout
+                        if result is None or not result:
                             failed_files += 1
                             continue
 
-                        if docs_to_store:
-                            storage.store_batch(docs_to_store)
-                            successful_files += 1
+                        storage.store_batch(result)
+                        successful_files += 1
 
                     except Exception as e:
                         logger.error(
@@ -886,44 +961,33 @@ class DocumentIngestor:
         return {"success": successful_files, "failed": failed_files}
 
     def _extract_text(self, file_path: Path) -> list[Segment]:
-        """Extract text content from a file.
-
-        Args:
-            file_path: Path to the file to extract text from.
-
-        Returns
-        -------
-            List of segments with text and page number.
-
-        Raises
-        ------
-            DocumentExtractionError: If text extraction fails.
-        """
+        """Extract text content from a file."""
         try:
-            result = self.converter.convert(file_path)
-            content = result.document
+            with trace_operation("extract_text"):
+                result = self.converter.convert(file_path)
+                content = result.document
 
-            segments: list[Segment] = []
+                segments: list[Segment] = []
 
-            if hasattr(content, "texts") and content.texts:
-                for text_item in content.texts:
-                    if not hasattr(text_item, "text") or not text_item.text:
-                        continue
+                if hasattr(content, "texts") and content.texts:
+                    for text_item in content.texts:
+                        if not hasattr(text_item, "text") or not text_item.text:
+                            continue
 
-                    page_num = 1
-                    if hasattr(text_item, "prov") and text_item.prov:
-                        prov = text_item.prov[0]
-                        if hasattr(prov, "page_no"):
-                            page_num = prov.page_no
+                        page_num = 1
+                        if hasattr(text_item, "prov") and text_item.prov:
+                            prov = text_item.prov[0]
+                            if hasattr(prov, "page_no"):
+                                page_num = prov.page_no
 
-                    segments.append({"text": text_item.text, "page": page_num})
+                        segments.append({"text": text_item.text, "page": page_num})
 
-            if not segments:
-                with file_path.open(encoding="utf-8", errors="ignore") as f:
-                    text = f.read()
-                    segments = [{"text": text, "page": 1}]
+                if not segments:
+                    with file_path.open(encoding="utf-8", errors="ignore") as f:
+                        text = f.read()
+                        segments = [{"text": text, "page": 1}]
 
-            return segments
+                return segments
 
         except DocumentExtractionError:
             raise
@@ -972,115 +1036,199 @@ class DocumentIngestor:
 
         return chunks
 
-    def _chunks_to_documents(
+
+class AsyncDocumentIngestor:
+    """Async version of DocumentIngestor for non-blocking document ingestion.
+
+    This class provides asynchronous versions of key document ingestion methods,
+    using asyncio.to_thread() to run blocking I/O operations (file reading,
+    embedding generation, storage) without blocking the event loop.
+
+    Key Features:
+    - Async context manager support (__aenter__, __aexit__)
+    - Concurrency control via asyncio.Semaphore for backpressure
+    - Streaming mode support for memory-efficient processing
+    - Follows storage.py pattern: wrap blocking ops with asyncio.to_thread()
+    """
+
+    def __init__(
         self,
-        file_path: Path,
-        chunks: list[Segment],
-        embedding_gen: LocalEmbeddingGenerator,
-    ) -> list[dict[str, Any]]:
-        """Convert chunks to documents with embeddings.
+        chunk_size: int = 4096,
+        chunk_overlap: int = 50,
+        verbose: bool = False,
+    ) -> None:
+        """Initialize async document ingestor.
 
         Args:
-            file_path: Source file path.
-            chunks: List of text chunks to process.
-            embedding_gen: Embedding generator instance.
+            chunk_size: Size of text chunks in tokens.
+            chunk_overlap: Overlap between chunks in tokens.
+            verbose: Enable verbose logging.
+        """
+        config = get_config()
+
+        if chunk_size <= 0:
+            raise ValueError("chunk_size must be positive")
+        if chunk_overlap < 0:
+            raise ValueError("chunk_overlap must be non-negative")
+        if chunk_overlap >= chunk_size:
+            raise ValueError("chunk_overlap must be less than chunk_size")
+
+        self.chunk_size = chunk_size
+        self.chunk_overlap = chunk_overlap
+        self.verbose = verbose
+        self.max_file_size_bytes: int = config.max_file_size_bytes
+
+        # Initialize embedding cache for deduplication
+        self.embedding_cache = EmbeddingCache(max_size=config.embedding_cache_size)
+
+        # Lazily import docling to avoid 2+ second import overhead
+        from docling.document_converter import DocumentConverter
+
+        self.converter = DocumentConverter()
+
+    async def __aenter__(self) -> "AsyncDocumentIngestor":
+        """Enter async context manager."""
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: Any,
+    ) -> None:
+        """Exit async context manager - cleanup if needed."""
+        # No async cleanup needed currently, but reserved for future use
+        pass
+
+    async def ingest_async(
+        self,
+        path: str,
+        recursive: bool = False,
+        batch_size: int = 10,
+        max_concurrent: int = 5,
+    ) -> dict[str, int]:
+        """Ingest documents asynchronously from a file or directory.
+
+        Args:
+            path: Path to file or directory to ingest.
+            recursive: Recursively process subdirectories.
+            batch_size: Number of files to process in parallel.
+            max_concurrent: Maximum concurrent file processing tasks (semaphore).
 
         Returns
         -------
-            List of documents ready for storage.
+            dict with 'success' and 'failed' counts.
         """
-        from uuid import uuid4
+        from secondbrain.config import get_config
+        from secondbrain.embedding import LocalEmbeddingGenerator
+        from secondbrain.storage import VectorStorage
 
-        # Deduplicate chunks by text hash
-        all_chunks: list[dict[str, Any]] = []
-        seen_hashes = set()
+        # Initialize services
+        embedding_gen = LocalEmbeddingGenerator()
+        storage = VectorStorage()
 
-        for i, chunk in enumerate(chunks):
-            cleaned = chunk["text"].strip()
-            if not cleaned:
-                continue
+        # Collect and validate files
+        files = await asyncio.to_thread(
+            self._collect_and_validate_files, path, recursive
+        )
 
-            normalized = " ".join(cleaned.lower().split())
-            text_hash = int(hashlib.sha256(normalized.encode()).hexdigest(), 16)
+        if not files:
+            return {"success": 0, "failed": 0}
 
-            if text_hash not in seen_hashes:
-                seen_hashes.add(text_hash)
-                all_chunks.append(
-                    {
-                        "file_path": file_path,
-                        "original_index": i,
-                        "text": cleaned,
-                        "page": chunk["page"],
-                        "text_hash": text_hash,
-                    }
+        # Semaphore for concurrency control (backpressure)
+        semaphore = asyncio.Semaphore(max_concurrent)
+
+        async def process_with_semaphore(file_path: Path) -> bool:
+            """Process a single file with semaphore control."""
+            async with semaphore:
+                return await self.process_file_async(file_path, embedding_gen, storage)
+
+        # Create tasks for all files
+        tasks = [process_with_semaphore(f) for f in files]
+
+        # Run all tasks concurrently (limited by semaphore)
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Count successes and failures
+        successful = sum(1 for r in results if r is True)
+        failed = len(results) - successful
+
+        return {"success": successful, "failed": failed}
+
+    async def process_file_async(
+        self,
+        file_path: Path,
+        embedding_gen: Any,
+        storage: Any,
+    ) -> bool:
+        """Process a single file asynchronously.
+
+        Args:
+            file_path: Path to file to process.
+            embedding_gen: Embedding generator instance.
+            storage: VectorStorage instance.
+
+        Returns
+        -------
+            True if processing succeeded, False otherwise.
+        """
+        try:
+            # Extract text using to_thread for blocking I/O
+            segments = await asyncio.to_thread(self._extract_text, file_path)
+
+            if not segments:
+                logger.warning(
+                    "File %s produced no segments (may be empty, image-only, or extraction failed)",
+                    file_path,
                 )
+                return False
 
-        # Generate embeddings (with cache)
-        chunk_to_embedding: dict[int, list[float]] = {}
+            # Use streaming if enabled (memory-efficient batch processing)
+            from secondbrain.config import get_config
 
-        for chunk in all_chunks:
-            # Check cache first
-            cached = self.embedding_cache.get(chunk["text"])
-            if cached is not None:
-                chunk_to_embedding[chunk["text_hash"]] = cached
-                continue
+            config = get_config()
 
-            try:
-                embedding = embedding_gen.generate(chunk["text"])
-                # Cache the embedding
-                self.embedding_cache.set(chunk["text"], embedding)
-                chunk_to_embedding[chunk["text_hash"]] = embedding
-            except Exception as e:
-                logger.error(
-                    "Failed to generate embedding for chunk: %s: %s",
-                    type(e).__name__,
-                    e,
+            if config.streaming_enabled:
+                # Streaming handles storage internally via _stream_process_chunks
+                docs_count = await asyncio.to_thread(
+                    self._stream_process_chunks,
+                    file_path,
+                    segments,
+                    embedding_gen,
+                    storage,
                 )
-                continue
+                return docs_count > 0
+            else:
+                # Legacy batch processing
+                docs_to_store = await asyncio.to_thread(
+                    self._build_documents_with_embeddings,
+                    file_path,
+                    segments,
+                    embedding_gen,
+                )
+                if docs_to_store:
+                    await asyncio.to_thread(storage.store_batch, docs_to_store)
+                    return True
+                return False
 
-        # Build final documents
-        docs_to_store: list[dict[str, Any]] = []
-        seen_doc_keys = set()
-
-        for chunk_item in all_chunks:
-            text_hash = chunk_item["text_hash"]
-
-            if text_hash not in chunk_to_embedding:
-                continue
-
-            doc_key = (
-                str(chunk_item["file_path"]),
-                chunk_item["page"],
-                text_hash,
+        except (OSError, DocumentExtractionError) as e:
+            logger.error("Failed to process %s: %s", file_path, e)
+            return False
+        except Exception as e:
+            logger.error(
+                "Unexpected error processing file %s: %s: %s",
+                file_path,
+                type(e).__name__,
+                e,
             )
-            if doc_key in seen_doc_keys:
-                continue
-            seen_doc_keys.add(doc_key)
-
-            embedding = chunk_to_embedding[text_hash]
-            file_type = get_file_type(chunk_item["file_path"])
-
-            doc = {
-                "chunk_id": str(uuid4()),
-                "source_file": str(chunk_item["file_path"]),
-                "page_number": chunk_item["page"],
-                "chunk_text": chunk_item["text"],
-                "embedding": embedding,
-                "metadata": {
-                    "file_type": file_type,
-                    "ingested_at": datetime.now(UTC).isoformat(),
-                    "chunk_index": chunk_item["original_index"],
-                },
-            }
-            docs_to_store.append(doc)
-
-        return docs_to_store
+            return False
 
 
 __all__ = [
     "SUPPORTED_EXTENSIONS",
     "DocumentExtractionError",
     "DocumentIngestor",
+    "AsyncDocumentIngestor",
     "Segment",
     "UnsupportedFileError",
     "get_file_type",

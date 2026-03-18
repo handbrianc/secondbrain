@@ -66,7 +66,7 @@ secondbrain list
 1. Read the [Quick Start Guide](./quick-start.md) for a 5-minute introduction
 2. Configure your environment using [Configuration Guide](./configuration.md)
 3. Explore the [User Guide](../user-guide/index.md) for detailed usage
-4. Check out the [examples directory](https://github.com/your-repo/examples) on GitHub for practical code examples
+4. Check out the [examples directory](../docs/examples/README.md) for practical code examples
 
 ## Need Help?
 

@@ -55,7 +55,7 @@ secondbrain --help
 
 ## Examples
 
-For practical usage examples, see the [examples directory](https://github.com/your-repo/examples) on GitHub:
+For practical usage examples, see the [examples directory](../docs/examples/README.md):
 
 - **Basic Usage**: Simple CLI-style examples
 - **Advanced**: Custom chunking, batch processing, async workflows

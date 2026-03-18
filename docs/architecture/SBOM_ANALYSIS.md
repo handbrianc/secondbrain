@@ -1,8 +1,8 @@
 # SBOM Analysis & Dependency Trade-offs
 
-**Last Updated**: 2026-03-08 22:14
+**Last Updated**: 2026-03-18 09:45
 **SBOM File**: `docs/architecture/sbom.json` (0KB, CycloneDX 1.5)
-**Total Production Dependencies**: 186
+**Total Production Dependencies**: 189
 
 ---
 
@@ -14,14 +14,14 @@ This document provides a comprehensive analysis of the Software Bill of Material
 
 | Metric | Value |
 |--------|-------|
-| **Total Dependencies** | 186 |
-| **Direct Dependencies** | 9 |
-| **Transitive Dependencies** | 177 |
+| **Total Dependencies** | 189 |
+| **Direct Dependencies** | 10 |
+| **Transitive Dependencies** | 179 |
 | **Install Size** | ~3GB (with PyTorch) |
 | **High-Risk Licenses** | 3 ⚠️ |
 | **Medium-Risk Licenses** | 3 ⚠️ |
 | **Unknown Licenses** | 0 ✅ |
-| **Low-Risk Licenses** | 180 ✅ |
+| **Low-Risk Licenses** | 183 ✅ |
 
 ---
 
@@ -57,13 +57,14 @@ This document provides a comprehensive analysis of the Software Bill of Material
 # pyproject.toml [project.dependencies]
 click>=8.1.0
 docling>=2.77.0
-docling-core>=2.68.0
+docling-core>=2.48.4
 pymongo>=4.6.0
 httpx>=0.27.0
 pydantic>=2.0.0
 pydantic-settings>=2.0.0
 rich>=14.0.0
 python-dotenv>=1.2.2
+sentence-transformers>=5.0.0
 ```
 
 ---
@@ -123,4 +124,4 @@ The following packages use weak copyleft licenses (MPL-2.0, etc.):
 
 | Date | Change |
 |------|--------|
-| 2026-03-08 22:14 | SBOM updated via automated script |
+| 2026-03-18 09:45 | SBOM updated via automated script |
