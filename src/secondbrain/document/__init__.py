@@ -1164,7 +1164,7 @@ class DocumentIngestor:
 
         with Manager() as manager:
             progress_queue = manager.Queue()
-            embedding_model_name = config.model
+            embedding_model_name = config.local_embedding_model
 
             with (
                 trace_operation("ingest_multiprocess_progress"),
