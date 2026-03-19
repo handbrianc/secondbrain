@@ -63,9 +63,11 @@ def sanitize_query(query: str) -> str:
         if re.search(pattern, query_lower, re.IGNORECASE):
             raise ValueError("Query contains invalid characters or patterns")
 
-    # Strip whitespace and control characters
+    # Strip whitespace, remove control characters, then strip again
+    # (control char removal may leave trailing spaces)
     sanitized = query.strip()
     sanitized = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", sanitized)
+    sanitized = sanitized.strip()
 
     return sanitized
 

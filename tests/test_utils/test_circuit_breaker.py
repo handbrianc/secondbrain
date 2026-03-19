@@ -135,7 +135,7 @@ class TestCircuitBreakerStateTransitions:
 
         # Wait for timeout to elapse
         time.sleep(0.07)  # 70ms > 50ms timeout
-        
+
         # Should transition to HALF_OPEN
         assert cb.is_allowed() is True
         assert cb.state == CircuitState.HALF_OPEN
@@ -230,6 +230,8 @@ class TestCircuitBreakerThreadSafety:
 
     def test_concurrent_state_transitions(self):
         """Test thread-safe state transitions."""
+        import time as time_module
+
         config = CircuitBreakerConfig(
             failure_threshold=5,
             success_threshold=2,
@@ -237,14 +239,20 @@ class TestCircuitBreakerThreadSafety:
         )
         cb = CircuitBreaker(config)
 
+        call_count = 0
+
+        def mock_monotonic():
+            nonlocal call_count
+            call_count += 1
+            # Return increasing time values to simulate time passing
+            return call_count * 0.01
+
         def open_circuit():
             for _ in range(10):
                 cb.record_failure()
 
         def record_successes():
-            # Mock time progression in thread
-            with patch("secondbrain.utils.circuit_breaker.time.monotonic") as mock_time:
-                mock_time.side_effect = [0, 0.2]  # Simulate time passing
+            with patch.object(time_module, "monotonic", side_effect=mock_monotonic):
                 for _ in range(5):
                     cb.record_success()
 
