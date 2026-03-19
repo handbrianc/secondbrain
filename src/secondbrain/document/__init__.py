@@ -57,19 +57,24 @@ MAX_MEMORY_BATCH_SIZE = 100
 
 # Global variable for worker converter (set by ProcessPoolExecutor initializer)
 _worker_converter: DocumentConverter | None = None
+_worker_progress_queue: Any = None
 
 
 def _init_worker() -> None:
-    """Initialize worker process with DocumentConverter.
-
-    This is called once per worker process in ProcessPoolExecutor to create
-    a shared DocumentConverter instance, avoiding re-initialization overhead
-    for each file processed.
-    """
+    """Initialize worker process with DocumentConverter."""
     global _worker_converter
     from docling.document_converter import DocumentConverter
 
     _worker_converter = DocumentConverter()
+
+
+def _init_worker_with_queue(queue: Any) -> None:
+    """Initialize worker process with DocumentConverter and progress queue."""
+    global _worker_converter, _worker_progress_queue
+    from docling.document_converter import DocumentConverter
+
+    _worker_converter = DocumentConverter()
+    _worker_progress_queue = queue
 
 
 def _extract_and_chunk_file(
@@ -134,6 +139,92 @@ def _extract_and_chunk_file(
             "error": None,
         }
     except Exception as e:
+        return {
+            "success": False,
+            "file_path": file_path,
+            "segments": [],
+            "error": f"{type(e).__name__}: {e}",
+        }
+
+
+def _extract_and_chunk_file_with_progress(
+    file_path_str: str,
+    chunk_size: int,
+    chunk_overlap: int,
+    progress_queue: Any,
+) -> dict[str, Any]:
+    """Worker function that extracts, chunks, and reports progress via queue.
+
+    This function runs in a separate process and returns extracted chunks.
+    Additionally sends progress updates to the main process via the queue.
+    Must be at module level to be picklable for ProcessPoolExecutor.
+
+    Args:
+        file_path_str: String path to the file to process.
+        chunk_size: Maximum chunk size in characters.
+        chunk_overlap: Overlap between consecutive chunks.
+        progress_queue: Multiprocessing Queue for progress updates.
+
+    Returns
+    -------
+        Dict with keys: 'success' (bool), 'file_path' (str),
+        'segments' (list[Segment]), 'error' (str | None).
+    """
+    file_path = Path(file_path_str)
+    try:
+        # Use pre-initialized converter if available, otherwise create one
+        converter = _worker_converter
+        if converter is None:
+            from docling.document_converter import DocumentConverter
+
+            converter = DocumentConverter()
+
+        result = converter.convert(file_path)
+        content = result.document
+
+        # Extract segments from document
+        segments: list[Segment] = []
+
+        if hasattr(content, "texts") and content.texts:
+            for text_item in content.texts:
+                if not hasattr(text_item, "text") or not text_item.text:
+                    continue
+
+                page_num = 1
+                if hasattr(text_item, "prov") and text_item.prov:
+                    prov = text_item.prov[0]
+                    if hasattr(prov, "page_no"):
+                        page_num = prov.page_no
+
+                segments.append({"text": text_item.text, "page": page_num})
+
+        # Fallback: read file directly for plain text formats
+        if not segments:
+            with file_path.open(encoding="utf-8", errors="ignore") as f:
+                text = f.read()
+            segments = [{"text": text, "page": 1}]
+
+        # Send progress update before returning
+        if _worker_progress_queue is not None:
+            try:
+                _worker_progress_queue.put_nowait((str(file_path), True))
+            except Exception:
+                pass  # Queue might be full or closed, ignore
+
+        return {
+            "success": True,
+            "file_path": file_path,
+            "segments": segments,
+            "error": None,
+        }
+    except Exception as e:
+        # Send failure progress update
+        if _worker_progress_queue is not None:
+            try:
+                _worker_progress_queue.put_nowait((str(file_path), False))
+            except Exception:
+                pass
+
         return {
             "success": False,
             "file_path": file_path,
@@ -902,70 +993,129 @@ class DocumentIngestor:
         storage: Any,
         max_workers: int,
     ) -> tuple[int, int]:
-        """Process files using ThreadPoolExecutor with progress callback support.
+        """Process files using multiprocessing with progress callback support.
 
-        Uses threads instead of processes to allow progress callbacks to update
-        the main process's progress bar. For I/O-bound work (file reading,
-        embedding generation), threads provide nearly the same performance as
-        processes without the inter-process communication overhead.
+        Uses ProcessPoolExecutor with a Queue for progress updates. Worker processes
+        send completion status via Queue, and the main process updates the progress
+        bar. This enables true CPU parallelism while maintaining real-time progress.
 
         Args:
             files: List of file paths to process.
             embedding_gen: EmbeddingGenerator instance.
             storage: VectorStorage instance.
-            max_workers: Number of worker threads.
+            max_workers: Number of worker processes.
 
         Returns
         -------
             Tuple of (successful_files, failed_files) counts.
         """
         from concurrent.futures import (
-            ThreadPoolExecutor,
+            ProcessPoolExecutor,
             as_completed,
         )
+        from multiprocessing import Manager
 
         successful_files = 0
         failed_files = 0
 
-        with (
-            trace_operation("ingest_thread_parallel"),
-            ThreadPoolExecutor(max_workers=max_workers) as executor,
-        ):
-            futures = {
-                executor.submit(
-                    self._process_file_for_storage,
-                    f,
-                    embedding_gen,
-                ): f
-                for f in files
-            }
+        # Use a Manager to create a shared Queue for progress updates
+        with Manager() as manager:
+            progress_queue = manager.Queue()
 
-            for future in as_completed(futures, timeout=3600):
-                file_path = futures[future]
-                try:
-                    result = future.result(timeout=300)
+            with (
+                trace_operation("ingest_multiprocess_progress"),
+                ProcessPoolExecutor(
+                    max_workers=max_workers,
+                    initializer=_init_worker_with_queue,
+                    initargs=(progress_queue,),
+                ) as executor,
+            ):
+                futures = {
+                    executor.submit(
+                        _extract_and_chunk_file_with_progress,
+                        str(f),
+                        self.chunk_size,
+                        self.chunk_overlap,
+                        progress_queue,
+                    ): f
+                    for f in files
+                }
 
-                    if result is None or not result:
-                        failed_files += 1
-                        if self.progress_callback:
-                            self.progress_callback(file_path, False)
-                        continue
+                # Process futures and handle progress updates from queue
+                completed = 0
+                total = len(files)
 
-                    storage.store_batch(result)
-                    successful_files += 1
-                    if self.progress_callback:
-                        self.progress_callback(file_path, True)
+                while completed < total:
+                    # Check for progress updates from workers
+                    while not progress_queue.empty():
+                        try:
+                            file_path_str, success = progress_queue.get_nowait()
+                            file_path = Path(file_path_str)
+                            if self.progress_callback:
+                                self.progress_callback(file_path, success)
+                        except Exception:
+                            break
 
-                except Exception as e:
-                    logger.error(
-                        "Unexpected error processing file %s: %s: %s",
-                        file_path,
-                        type(e).__name__,
-                        e,
-                    )
-                    failed_files += 1
-                    if self.progress_callback:
-                        self.progress_callback(file_path, False)
+                    # Wait for futures to complete
+                    for future in as_completed(futures, timeout=3600):
+                        file_path = futures[future]
+                        try:
+                            result = future.result(timeout=300)
+
+                            if not result["success"]:
+                                failed_files += 1
+                                completed += 1
+                                continue
+
+                            segments = result["segments"]
+                            if not segments:
+                                failed_files += 1
+                                completed += 1
+                                continue
+
+                            config = get_config()
+
+                            if config.streaming_enabled:
+                                with trace_operation("ingest_stream_process"):
+                                    docs_count = self._stream_process_chunks(
+                                        file_path, segments, embedding_gen, storage
+                                    )
+                                if docs_count > 0:
+                                    successful_files += 1
+                                else:
+                                    failed_files += 1
+                            else:
+                                with trace_operation("ingest_batch_process"):
+                                    docs_to_store = (
+                                        self._build_documents_with_embeddings(
+                                            file_path, segments, embedding_gen
+                                        )
+                                    )
+                                if docs_to_store:
+                                    for i in range(
+                                        0,
+                                        len(docs_to_store),
+                                        MAX_MEMORY_BATCH_SIZE,
+                                    ):
+                                        batch = docs_to_store[
+                                            i : i + MAX_MEMORY_BATCH_SIZE
+                                        ]
+                                        storage.store_batch(batch)
+                                    successful_files += 1
+                                else:
+                                    failed_files += 1
+
+                            completed += 1
+
+                        except Exception as e:
+                            logger.error(
+                                "Unexpected error processing file %s: %s: %s",
+                                file_path,
+                                type(e).__name__,
+                                e,
+                            )
+                            failed_files += 1
+                            completed += 1
 
         return successful_files, failed_files
 
