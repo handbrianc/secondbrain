@@ -895,6 +895,80 @@ class DocumentIngestor:
 
         return cores
 
+    def _process_parallel_with_progress(
+        self,
+        files: list[Path],
+        embedding_gen: Any,
+        storage: Any,
+        max_workers: int,
+    ) -> tuple[int, int]:
+        """Process files using ThreadPoolExecutor with progress callback support.
+
+        Uses threads instead of processes to allow progress callbacks to update
+        the main process's progress bar. For I/O-bound work (file reading,
+        embedding generation), threads provide nearly the same performance as
+        processes without the inter-process communication overhead.
+
+        Args:
+            files: List of file paths to process.
+            embedding_gen: EmbeddingGenerator instance.
+            storage: VectorStorage instance.
+            max_workers: Number of worker threads.
+
+        Returns
+        -------
+            Tuple of (successful_files, failed_files) counts.
+        """
+        from concurrent.futures import (
+            ThreadPoolExecutor,
+            as_completed,
+        )
+
+        successful_files = 0
+        failed_files = 0
+
+        with (
+            trace_operation("ingest_thread_parallel"),
+            ThreadPoolExecutor(max_workers=max_workers) as executor,
+        ):
+            futures = {
+                executor.submit(
+                    self._process_file_for_storage,
+                    f,
+                    embedding_gen,
+                ): f
+                for f in files
+            }
+
+            for future in as_completed(futures, timeout=3600):
+                file_path = futures[future]
+                try:
+                    result = future.result(timeout=300)
+
+                    if result is None or not result:
+                        failed_files += 1
+                        if self.progress_callback:
+                            self.progress_callback(file_path, False)
+                        continue
+
+                    storage.store_batch(result)
+                    successful_files += 1
+                    if self.progress_callback:
+                        self.progress_callback(file_path, True)
+
+                except Exception as e:
+                    logger.error(
+                        "Unexpected error processing file %s: %s: %s",
+                        file_path,
+                        type(e).__name__,
+                        e,
+                    )
+                    failed_files += 1
+                    if self.progress_callback:
+                        self.progress_callback(file_path, False)
+
+        return successful_files, failed_files
+
     def _process_multiprocessing_batch(
         self,
         files: list[Path],
@@ -1121,8 +1195,16 @@ class DocumentIngestor:
         # Resolve and validate core count
         cores = self._resolve_core_count(cores)
 
-        # Use multiprocessing if cores > 1, otherwise use ThreadPoolExecutor
-        if cores > 1:
+        # Choose processing strategy based on progress callback
+        # If progress callback is set, use ThreadPoolExecutor for shared memory access
+        # Otherwise, use ProcessPoolExecutor for CPU-bound tasks
+        if self.progress_callback:
+            # Use threads when progress tracking is needed
+            successful, failed = self._process_parallel_with_progress(
+                files, embedding_gen, storage, cores
+            )
+        elif cores > 1:
+            # Use processes for CPU-bound parallelism when no progress tracking
             successful, failed = self._process_multiprocessing_batch(
                 files, embedding_gen, storage, cores
             )

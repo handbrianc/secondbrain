@@ -144,10 +144,11 @@ def ingest(
                 progress_callback=progress_callback,
             )
 
-            # Use ThreadPoolExecutor (cores=1) when progress tracking is enabled
-            # Multiprocessing doesn't share progress bar state across processes
+            # Use ThreadPoolExecutor when progress tracking is enabled
+            # Threads share memory so callbacks can update the progress bar
+            # For I/O-bound work, threads perform nearly as well as processes
             results = ingestor.ingest(
-                path, recursive=recursive, batch_size=batch_size, cores=1
+                path, recursive=recursive, batch_size=batch_size, cores=cores
             )
     else:
         ingestor = DocumentIngestor(
