@@ -1044,20 +1044,19 @@ class DocumentIngestor:
                 # Process futures and handle progress updates from queue
                 completed = 0
                 total = len(files)
+                pending_futures = dict(futures)
 
-                while completed < total:
-                    # Check for progress updates from workers
+                while pending_futures:
+                    # Drain any pending queue messages
                     while not progress_queue.empty():
                         try:
-                            file_path_str, success = progress_queue.get_nowait()
-                            file_path = Path(file_path_str)
-                            if self.progress_callback:
-                                self.progress_callback(file_path, success)
+                            progress_queue.get_nowait()
                         except Exception:
                             break
 
-                    # Wait for futures to complete
-                    for future in as_completed(futures, timeout=3600):
+                    # Process completed futures
+                    done_futures = []
+                    for future in as_completed(pending_futures, timeout=3600):
                         file_path = futures[future]
                         try:
                             result = future.result(timeout=300)
@@ -1065,12 +1064,18 @@ class DocumentIngestor:
                             if not result["success"]:
                                 failed_files += 1
                                 completed += 1
+                                if self.progress_callback:
+                                    self.progress_callback(file_path, False)
+                                done_futures.append(future)
                                 continue
 
                             segments = result["segments"]
                             if not segments:
                                 failed_files += 1
                                 completed += 1
+                                if self.progress_callback:
+                                    self.progress_callback(file_path, False)
+                                done_futures.append(future)
                                 continue
 
                             config = get_config()
@@ -1082,8 +1087,12 @@ class DocumentIngestor:
                                     )
                                 if docs_count > 0:
                                     successful_files += 1
+                                    if self.progress_callback:
+                                        self.progress_callback(file_path, True)
                                 else:
                                     failed_files += 1
+                                    if self.progress_callback:
+                                        self.progress_callback(file_path, False)
                             else:
                                 with trace_operation("ingest_batch_process"):
                                     docs_to_store = (
@@ -1102,20 +1111,37 @@ class DocumentIngestor:
                                         ]
                                         storage.store_batch(batch)
                                     successful_files += 1
+                                    if self.progress_callback:
+                                        self.progress_callback(file_path, True)
                                 else:
                                     failed_files += 1
+                                    if self.progress_callback:
+                                        self.progress_callback(file_path, False)
 
                             completed += 1
+                            done_futures.append(future)
 
                         except Exception as e:
-                            logger.error(
-                                "Unexpected error processing file %s: %s: %s",
-                                file_path,
-                                type(e).__name__,
-                                e,
-                            )
+                            if self.verbose:
+                                logger.error(
+                                    "Unexpected error processing file %s: %s: %s",
+                                    file_path,
+                                    type(e).__name__,
+                                    e,
+                                )
                             failed_files += 1
                             completed += 1
+                            if self.progress_callback:
+                                self.progress_callback(file_path, False)
+                            done_futures.append(future)
+
+                    for future in done_futures:
+                        del pending_futures[future]
+
+                    if pending_futures:
+                        import time
+
+                        time.sleep(0.01)
 
         return successful_files, failed_files
 
@@ -1171,9 +1197,10 @@ class DocumentIngestor:
                     result = future.result(timeout=300)
 
                     if not result["success"]:
-                        logger.error(
-                            "Failed to process %s: %s", file_path, result["error"]
-                        )
+                        if self.verbose:
+                            logger.error(
+                                "Failed to process %s: %s", file_path, result["error"]
+                            )
                         failed_files += 1
                         if self.progress_callback:
                             self.progress_callback(file_path, False)
@@ -1181,10 +1208,11 @@ class DocumentIngestor:
 
                     segments = result["segments"]
                     if not segments:
-                        logger.warning(
-                            "File %s produced no segments (may be empty, image-only, or extraction failed)",
-                            file_path,
-                        )
+                        if self.verbose:
+                            logger.warning(
+                                "File %s produced no segments (may be empty, image-only, or extraction failed)",
+                                file_path,
+                            )
                         failed_files += 1
                         if self.progress_callback:
                             self.progress_callback(file_path, False)
@@ -1225,12 +1253,13 @@ class DocumentIngestor:
                                 self.progress_callback(file_path, False)
 
                 except Exception as e:
-                    logger.error(
-                        "Unexpected error processing file %s: %s: %s",
-                        file_path,
-                        type(e).__name__,
-                        e,
-                    )
+                    if self.verbose:
+                        logger.error(
+                            "Unexpected error processing file %s: %s: %s",
+                            file_path,
+                            type(e).__name__,
+                            e,
+                        )
                     failed_files += 1
                     if self.progress_callback:
                         self.progress_callback(file_path, False)
@@ -1291,12 +1320,13 @@ class DocumentIngestor:
                     self.progress_callback(file_path, True)
 
             except Exception as e:
-                logger.error(
-                    "Unexpected error processing file %s: %s: %s",
-                    file_path,
-                    type(e).__name__,
-                    e,
-                )
+                if self.verbose:
+                    logger.error(
+                        "Unexpected error processing file %s: %s: %s",
+                        file_path,
+                        type(e).__name__,
+                        e,
+                    )
                 failed_files += 1
                 if self.progress_callback:
                     self.progress_callback(file_path, False)
