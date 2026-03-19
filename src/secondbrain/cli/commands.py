@@ -64,7 +64,6 @@ MAX_LIST_LIMIT = 100000
     type=int,
     help="Number of CPU cores to use for parallel processing (default: auto-detect)",
 )
-@click.option("--verbose", "-v", is_flag=True, help="Enable verbose logging")
 @click.pass_context
 def ingest(
     ctx: click.Context,
@@ -74,7 +73,6 @@ def ingest(
     chunk_size: int | None,
     chunk_overlap: int | None,
     cores: int | None,
-    verbose: bool,
 ) -> None:
     """Ingest documents into the vector database.
 
@@ -97,10 +95,13 @@ def ingest(
             )
             cores = available_cores
 
+    # Use verbose flag from global CLI context
+    verbose = ctx.obj.get("verbose", False)
+
     ingestor = DocumentIngestor(
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
-        verbose=verbose or ctx.obj.get("verbose", False),
+        verbose=verbose,
     )
 
     console.print(f"[bold]Ingesting: {path}[/bold]")

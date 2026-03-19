@@ -72,6 +72,13 @@ def setup_logging(verbose: bool = False, json_format: bool = False) -> None:
     """
     level = logging.DEBUG if verbose else logging.INFO
 
+    # If handlers are already configured, just update the level
+    if logging.root.handlers:
+        for handler in logging.root.handlers:
+            handler.setLevel(level)
+        logging.root.setLevel(level)
+        return
+
     if json_format:
         setup_json_logging(level)
     else:
