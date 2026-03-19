@@ -12,7 +12,7 @@ Successfully implemented MongoDB storage optimizations to reduce storage by **50
 New configuration options:
 - `storage_compression_enabled` (default: True) - MongoDB collection compression
 - `embedding_dtype` (default: "float32") - Float32 vs Float64
-- `embedding_storage_format` (default: "binary") - BSON Binary vs JSON array
+- `embedding_storage_format` (default: "array") - BSON Binary vs JSON array. **Must be "array" for vector search to work**. Binary format breaks MongoDB vector search.
 - `text_compression_enabled` (default: False) - Optional text compression
 - `text_compression_algorithm` (default: "gzip") - Compression algorithm choice
 
@@ -31,10 +31,12 @@ New configuration options:
   - `_decode_embedding()`: Converts binary back to float list
   - **50% reduction** on embeddings (384 × 8 bytes → 384 × 4 bytes = 1.5KB saved per chunk)
 
-#### 4. BSON Binary Storage
-- **BSON Binary format** for embeddings using `bson.binary.Binary`
+#### 4. BSON Binary Storage (⚠️ Disabled by default)
+- **Embedding storage as BSON Binary** using `bson.binary.Binary`
 - Additional ~200 bytes saved per embedding vs JSON array
-- Total embedding savings: **~1.7KB per chunk** (55% reduction)
+- **IMPORTANT**: Binary format **breaks MongoDB vector search**. Must use "array" format for search to work.
+- To use binary: Set `SECONDBRAIN_EMBEDDING_STORAGE_FORMAT=binary` (search will not work)
+- **Default**: "array" (required for vector search functionality)
 
 #### 5. Backward Compatibility
 - `_add_ingestion_timestamps()` supports both old (nested) and new (flattened) formats

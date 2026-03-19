@@ -231,7 +231,7 @@ class TestSchemaChanges:
         config = Config()
 
         assert config.embedding_dtype == "float32"
-        assert config.embedding_storage_format == "binary"
+        assert config.embedding_storage_format == "array"  # Default for vector search
         assert config.text_compression_enabled is False
 
 

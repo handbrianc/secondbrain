@@ -207,8 +207,8 @@ class Config(BaseSettings):
     )
 
     embedding_storage_format: str = Field(
-        default="binary",
-        description="Embedding storage format: 'binary' (BSON Binary, compact) or 'array' (JSON array). Binary recommended.",
+        default="array",
+        description="Embedding storage format: 'array' (JSON array, required for vector search) or 'binary' (BSON Binary, compact but breaks vector search). Default: 'array'.",
     )
 
     text_compression_enabled: bool = Field(
