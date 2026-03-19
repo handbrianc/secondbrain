@@ -1,6 +1,7 @@
 """Tests for document ingestion module."""
 
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -67,14 +68,18 @@ def test_get_file_type_unknown() -> None:
 class TestDocumentIngestor:
     """Tests for DocumentIngestor class."""
 
-    def test_init(self) -> None:
+    def test_init(
+        self, cached_embedding_generator: MagicMock, mocked_pdf_extraction: MagicMock
+    ) -> None:
         """Test DocumentIngestor initialization."""
         ingestor = DocumentIngestor(chunk_size=256, chunk_overlap=25)
         assert ingestor.chunk_size == 256
         assert ingestor.chunk_overlap == 25
         assert ingestor.verbose is False
 
-    def test_init_defaults(self) -> None:
+    def test_init_defaults(
+        self, cached_embedding_generator: MagicMock, mocked_pdf_extraction: MagicMock
+    ) -> None:
         """Test DocumentIngestor default values."""
         ingestor = DocumentIngestor()
         assert ingestor.chunk_size == 4096

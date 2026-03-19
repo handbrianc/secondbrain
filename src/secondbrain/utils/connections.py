@@ -249,27 +249,24 @@ class ValidatableService:
         self.invalidate_connection_cache()
 
     def validate_connection_with_circuit_breaker(self, force: bool = False) -> bool:
-        """Check if service is available with circuit breaker protection.
-
-        Args:
-            force: If True, bypass cache and check connection.
-
-        Returns:
-            True if service is available, False otherwise.
+        """Validate connection with circuit breaker protection.
 
         Raises:
             CircuitBreakerError: If circuit breaker is open.
         """
-        if self._circuit_breaker_enabled and self._circuit_breaker is not None:
-            if not self._circuit_breaker.is_allowed():
-                logger.warning(
-                    "Circuit breaker open for service %s, failing fast",
-                    self.__class__.__name__,
-                )
-                raise CircuitBreakerError(
-                    "Circuit breaker is open",
-                    service_name=self.__class__.__name__,
-                )
+        if (
+            self._circuit_breaker_enabled
+            and self._circuit_breaker is not None
+            and not self._circuit_breaker.is_allowed()
+        ):
+            logger.warning(
+                "Circuit breaker open for service %s, failing fast",
+                self.__class__.__name__,
+            )
+            raise CircuitBreakerError(
+                "Circuit breaker is open",
+                service_name=self.__class__.__name__,
+            )
 
         result = self.validate_connection(force=force)
 
@@ -351,16 +348,19 @@ class ValidatableService:
         Raises:
             CircuitBreakerError: If circuit breaker is open.
         """
-        if self._circuit_breaker_enabled and self._circuit_breaker is not None:
-            if not self._circuit_breaker.is_allowed():
-                logger.warning(
-                    "Circuit breaker open for service %s, failing fast",
-                    self.__class__.__name__,
-                )
-                raise CircuitBreakerError(
-                    "Circuit breaker is open",
-                    service_name=self.__class__.__name__,
-                )
+        if (
+            self._circuit_breaker_enabled
+            and self._circuit_breaker is not None
+            and not self._circuit_breaker.is_allowed()
+        ):
+            logger.warning(
+                "Circuit breaker open for service %s, failing fast",
+                self.__class__.__name__,
+            )
+            raise CircuitBreakerError(
+                "Circuit breaker is open",
+                service_name=self.__class__.__name__,
+            )
 
         result = await self.validate_connection_async(force=force)
 

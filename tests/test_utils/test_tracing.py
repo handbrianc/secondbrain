@@ -1,17 +1,16 @@
 """Tests for OpenTelemetry tracing utilities."""
 
+import contextlib
 import os
 from unittest.mock import patch
-
-import pytest
 
 from secondbrain.utils.tracing import (
     _NoOpSpan,
     _NoOpTracer,
     get_tracer,
     is_tracing_enabled,
-    shutdown_tracing,
     setup_tracing,
+    shutdown_tracing,
     trace_operation,
 )
 
@@ -83,14 +82,14 @@ class TestSetupTracing:
 
         tracing._tracing_enabled = False
 
-        with patch("secondbrain.utils.tracing.OTTEL_AVAILABLE", True):
-            with caplog.at_level("DEBUG"):
-                setup_tracing(service_name="test", service_version="1.0")
+        with (
+            patch("secondbrain.utils.tracing.OTTEL_AVAILABLE", True),
+            caplog.at_level("DEBUG"),
+        ):
+            setup_tracing(service_name="test", service_version="1.0")
 
-                # Should log debug message
-                assert any(
-                    "tracing not enabled" in msg.lower() for msg in caplog.messages
-                )
+            # Should log debug message
+            assert any("tracing not enabled" in msg.lower() for msg in caplog.messages)
 
     def test_sets_up_tracing_when_enabled(self):
         """Should setup tracing when OpenTelemetry is available and enabled."""
@@ -104,15 +103,10 @@ class TestSetupTracing:
 
         # Just verify it doesn't raise an exception
         # Full integration testing would require actual OpenTelemetry setup
-        try:
+        with contextlib.suppress(Exception):
             setup_tracing(
                 service_name="test-service", service_version="2.0", environment="test"
             )
-            # If tracing was enabled, tracer should be set
-            # If not (e.g., OTel not actually installed), it should be a no-op
-        except Exception:
-            # Expected if OpenTelemetry is mocked but not actually available
-            pass
 
 
 class TestGetTracer:
@@ -142,9 +136,11 @@ class TestTraceOperation:
 
     def test_yields_none_when_opentelemetry_not_available(self):
         """Should yield None when OpenTelemetry is not available."""
-        with patch("secondbrain.utils.tracing.OTTEL_AVAILABLE", False):
-            with trace_operation("test_operation") as span:
-                assert span is None
+        with (
+            patch("secondbrain.utils.tracing.OTTEL_AVAILABLE", False),
+            trace_operation("test_operation") as span,
+        ):
+            assert span is None
 
     def test_yields_none_when_tracing_not_enabled(self):
         """Should yield None when tracing is not enabled."""
@@ -163,14 +159,16 @@ class TestTraceOperation:
         tracing._tracer = None
         tracing._tracing_enabled = False
 
-        with patch("secondbrain.utils.tracing.OTTEL_AVAILABLE", True):
-            with patch("secondbrain.utils.tracing.otel_trace") as mock_trace:
-                mock_span = patch("secondbrain.utils.tracing._NoOpSpan").start()
-                mock_trace.get_tracer.return_value.start_as_current_span.return_value.__enter__.return_value = mock_span
+        with (
+            patch("secondbrain.utils.tracing.OTTEL_AVAILABLE", True),
+            patch("secondbrain.utils.tracing.otel_trace") as mock_trace,
+        ):
+            mock_span = patch("secondbrain.utils.tracing._NoOpSpan").start()
+            mock_trace.get_tracer.return_value.start_as_current_span.return_value.__enter__.return_value = mock_span
 
-                with trace_operation("test_operation") as span:
-                    # Context should execute
-                    pass
+            with trace_operation("test_operation"):
+                # Context should execute
+                pass
 
                 patch.stopall()
 
@@ -248,10 +246,12 @@ class TestShutdownTracing:
         tracing._tracer = "test_tracer"
         tracing._tracing_enabled = True
 
-        with patch("secondbrain.utils.tracing.OTTEL_AVAILABLE", True):
-            with patch("secondbrain.utils.tracing.otel_trace") as mock_trace:
-                shutdown_tracing()
+        with (
+            patch("secondbrain.utils.tracing.OTTEL_AVAILABLE", True),
+            patch("secondbrain.utils.tracing.otel_trace"),
+        ):
+            shutdown_tracing()
 
-                # State should be reset
-                assert tracing._tracer is None
-                assert tracing._tracing_enabled is False
+            # State should be reset
+            assert tracing._tracer is None
+            assert tracing._tracing_enabled is False

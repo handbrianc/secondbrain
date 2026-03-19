@@ -1,9 +1,10 @@
 """Local embedding generator using sentence-transformers."""
 
+from __future__ import annotations
+
 import logging
 from time import monotonic
-
-from sentence_transformers import SentenceTransformer
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -25,16 +26,18 @@ class LocalEmbeddingGenerator:
     def __init__(self, model_name: str = "all-MiniLM-L6-v2") -> None:
         """Initialize local embedding generator."""
         self.model_name = model_name
-        self._model: SentenceTransformer | None = None
+        self._model: Any = None
         self._connection_valid: bool | None = None
         self._connection_checked_at: float = 0.0
         logger.info("Loading local embedding model: %s", model_name)
 
     @property
-    def model(self) -> SentenceTransformer:
+    def model(self) -> Any:
         """Get or create the model."""
         if self._model is None:
-            self._model = SentenceTransformer(self.model_name)
+            from sentence_transformers import SentenceTransformer
+
+            self._model = SentenceTransformer(self.model_name)  # type: ignore[operator]
             logger.info("Model loaded: %s", self.model_name)
         return self._model
 

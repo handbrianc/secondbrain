@@ -8,9 +8,9 @@ from .tracing import shutdown_tracing as shutdown_tracing
 __all__ = [
     "CircuitBreaker",
     "EmbeddingCache",
-    "setup_tracing",
     "get_tracer",
     "is_tracing_enabled",
-    "trace_operation",
+    "setup_tracing",
     "shutdown_tracing",
+    "trace_operation",
 ]

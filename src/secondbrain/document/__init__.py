@@ -473,28 +473,21 @@ class DocumentIngestor:
                 embedding_gen=embedding_gen,
             )
 
-    def _build_documents_with_embeddings(
+    def _deduplicate_and_chunk_segments(
         self,
         file_path: Path,
         segments: list[Segment],
-        embedding_gen: Any,
     ) -> list[dict[str, Any]]:
-        """Build documents with embeddings from text segments.
+        """Deduplicate and chunk text segments into processed chunks.
 
         Args:
             file_path: Source file path.
             segments: List of text segments to process.
-            embedding_gen: EmbeddingGenerator instance.
 
         Returns
         -------
-            List of documents ready for storage.
+            List of chunk dictionaries with metadata.
         """
-        from secondbrain.exceptions import (
-            EmbeddingGenerationError,
-        )
-
-        # Chunk text and deduplicate
         all_chunks: list[dict[str, Any]] = []
         seen_hashes = set()
 
@@ -518,8 +511,23 @@ class DocumentIngestor:
                     }
                 )
 
-        # Generate embeddings in batches for better performance
-        # Batch size is configurable via environment variable
+        return all_chunks
+
+    def _generate_embeddings_with_cache(
+        self,
+        chunks: list[dict[str, Any]],
+        embedding_gen: Any,
+    ) -> dict[int, list[float]]:
+        """Generate embeddings for chunks with caching and batch processing.
+
+        Args:
+            chunks: List of chunk dictionaries to process.
+            embedding_gen: EmbeddingGenerator instance.
+
+        Returns
+        -------
+            Dictionary mapping text_hash to embedding.
+        """
         from secondbrain.config import get_config
 
         config = get_config()
@@ -527,8 +535,8 @@ class DocumentIngestor:
         chunk_to_embedding: dict[int, list[float]] = {}
 
         # Process chunks in batches
-        for i in range(0, len(all_chunks), batch_size):
-            batch = all_chunks[i : i + batch_size]
+        for i in range(0, len(chunks), batch_size):
+            batch = chunks[i : i + batch_size]
             texts = [chunk["text"] for chunk in batch]
 
             try:
@@ -581,11 +589,27 @@ class DocumentIngestor:
                         )
                         continue
 
-        # Build final documents
+        return chunk_to_embedding
+
+    def _build_documents_from_chunks(
+        self,
+        chunks: list[dict[str, Any]],
+        chunk_to_embedding: dict[int, list[float]],
+    ) -> list[dict[str, Any]]:
+        """Build document dictionaries from chunks with embeddings.
+
+        Args:
+            chunks: List of chunk dictionaries with metadata.
+            chunk_to_embedding: Dictionary mapping text_hash to embedding.
+
+        Returns
+        -------
+            List of document dictionaries ready for storage.
+        """
         docs_to_store: list[dict[str, Any]] = []
         seen_doc_keys = set()
 
-        for chunk_item in all_chunks:
+        for chunk_item in chunks:
             text_hash = chunk_item["text_hash"]
 
             if text_hash not in chunk_to_embedding:
@@ -618,6 +642,34 @@ class DocumentIngestor:
             docs_to_store.append(doc)
 
         return docs_to_store
+
+    def _build_documents_with_embeddings(
+        self,
+        file_path: Path,
+        segments: list[Segment],
+        embedding_gen: Any,
+    ) -> list[dict[str, Any]]:
+        """Build documents with embeddings from text segments.
+
+        Args:
+            file_path: Source file path.
+            segments: List of text segments to process.
+            embedding_gen: EmbeddingGenerator instance.
+
+        Returns
+        -------
+            List of documents ready for storage.
+        """
+        # Deduplicate and chunk segments
+        all_chunks = self._deduplicate_and_chunk_segments(file_path, segments)
+
+        # Generate embeddings with caching
+        chunk_to_embedding = self._generate_embeddings_with_cache(
+            all_chunks, embedding_gen
+        )
+
+        # Build final documents
+        return self._build_documents_from_chunks(all_chunks, chunk_to_embedding)
 
     def _stream_process_chunks(
         self,
@@ -787,6 +839,193 @@ class DocumentIngestor:
 
         return len(docs_to_store)
 
+    def _resolve_core_count(self, cores: int | None) -> int:
+        """Resolve and validate core count for parallel processing.
+
+        Args:
+            cores: Requested core count, or None for auto-detection.
+
+        Returns
+        -------
+            Validated core count (positive integer).
+
+        Raises
+        ------
+            ValueError: If cores is non-positive after resolution.
+        """
+        config = get_config()
+        if cores is None:
+            cores = config.max_workers or os.cpu_count() or 1
+
+        if cores <= 0:
+            raise ValueError("cores must be positive")
+
+        return cores
+
+    def _process_multiprocessing_batch(
+        self,
+        files: list[Path],
+        embedding_gen: Any,
+        storage: Any,
+        cores: int,
+    ) -> tuple[int, int]:
+        """Process files using multiprocessing with ProcessPoolExecutor.
+
+        Args:
+            files: List of file paths to process.
+            embedding_gen: EmbeddingGenerator instance.
+            storage: VectorStorage instance.
+            cores: Number of CPU cores to use.
+
+        Returns
+        -------
+            Tuple of (successful_files, failed_files) counts.
+        """
+        from concurrent.futures import (
+            ProcessPoolExecutor,
+            as_completed,
+        )
+
+        from secondbrain.config import get_config
+
+        successful_files = 0
+        failed_files = 0
+
+        with (
+            trace_operation("ingest_multiprocess"),
+            ProcessPoolExecutor(
+                max_workers=cores,
+                initializer=_init_worker,
+            ) as executor,
+        ):
+            futures = {
+                executor.submit(
+                    _extract_and_chunk_file,
+                    str(f),
+                    self.chunk_size,
+                    self.chunk_overlap,
+                ): f
+                for f in files
+            }
+
+            for future in as_completed(futures, timeout=3600):
+                file_path = futures[future]
+                try:
+                    result = future.result(timeout=300)
+
+                    if not result["success"]:
+                        logger.error(
+                            "Failed to process %s: %s", file_path, result["error"]
+                        )
+                        failed_files += 1
+                        continue
+
+                    segments = result["segments"]
+                    if not segments:
+                        logger.warning(
+                            "File %s produced no segments (may be empty, image-only, or extraction failed)",
+                            file_path,
+                        )
+                        failed_files += 1
+                        continue
+
+                    config = get_config()
+
+                    if config.streaming_enabled:
+                        with trace_operation("ingest_stream_process"):
+                            docs_count = self._stream_process_chunks(
+                                file_path, segments, embedding_gen, storage
+                            )
+                        if docs_count > 0:
+                            successful_files += 1
+                        else:
+                            failed_files += 1
+                    else:
+                        with trace_operation("ingest_batch_process"):
+                            docs_to_store = self._build_documents_with_embeddings(
+                                file_path, segments, embedding_gen
+                            )
+                        if docs_to_store:
+                            for i in range(
+                                0, len(docs_to_store), MAX_MEMORY_BATCH_SIZE
+                            ):
+                                batch = docs_to_store[i : i + MAX_MEMORY_BATCH_SIZE]
+                                storage.store_batch(batch)
+                            successful_files += 1
+                        else:
+                            failed_files += 1
+
+                except Exception as e:
+                    logger.error(
+                        "Unexpected error processing file %s: %s: %s",
+                        file_path,
+                        type(e).__name__,
+                        e,
+                    )
+                    failed_files += 1
+
+        return successful_files, failed_files
+
+    def _process_threadpool_batch(
+        self,
+        files: list[Path],
+        embedding_gen: Any,
+        storage: Any,
+        batch_size: int,
+    ) -> tuple[int, int]:
+        """Process files using ThreadPoolExecutor for sequential/batch processing.
+
+        Args:
+            files: List of file paths to process.
+            embedding_gen: EmbeddingGenerator instance.
+            storage: VectorStorage instance.
+            batch_size: Number of concurrent threads.
+
+        Returns
+        -------
+            Tuple of (successful_files, failed_files) counts.
+        """
+        from concurrent.futures import (
+            ThreadPoolExecutor,
+            as_completed,
+        )
+
+        successful_files = 0
+        failed_files = 0
+
+        with (
+            trace_operation("ingest_thread_process"),
+            ThreadPoolExecutor(max_workers=batch_size) as executor,
+        ):
+            futures_dict: dict[Any, Path] = {}
+            for f in files:
+                future = executor.submit(
+                    self._process_file_for_storage, f, embedding_gen
+                )
+                futures_dict[future] = f
+
+            for future in as_completed(futures_dict, timeout=3600):
+                file_path = futures_dict[future]
+                try:
+                    result = future.result(timeout=300)
+                    if result is None or not result:
+                        failed_files += 1
+                        continue
+
+                    storage.store_batch(result)
+                    successful_files += 1
+
+                except Exception as e:
+                    logger.error(
+                        "Unexpected error processing file %s: %s: %s",
+                        file_path,
+                        type(e).__name__,
+                        e,
+                    )
+                    failed_files += 1
+
+        return successful_files, failed_files
+
     def ingest(
         self,
         path: str,
@@ -808,12 +1047,10 @@ class DocumentIngestor:
             dict with 'success' and 'failed' counts.
         """
         from concurrent.futures import (
-            ProcessPoolExecutor,
             ThreadPoolExecutor,
             as_completed,
         )
 
-        from secondbrain.config import get_config
         from secondbrain.embedding import LocalEmbeddingGenerator
         from secondbrain.storage import VectorStorage
 
@@ -828,137 +1065,20 @@ class DocumentIngestor:
         if not files:
             return {"success": 0, "failed": 0}
 
-        failed_files = 0
-        successful_files = 0
-
-        # Resolve core count
-        config = get_config()
-        if cores is None:
-            cores = config.max_workers or os.cpu_count() or 1
-
-        # Validate core count
-        if cores <= 0:
-            raise ValueError("cores must be positive")
+        # Resolve and validate core count
+        cores = self._resolve_core_count(cores)
 
         # Use multiprocessing if cores > 1, otherwise use ThreadPoolExecutor
         if cores > 1:
-            # Process files using ProcessPoolExecutor for true parallelism
-            # Use initializer to create DocumentConverter once per worker
-            with trace_operation("ingest_multiprocess"):
-                with ProcessPoolExecutor(
-                    max_workers=cores,
-                    initializer=_init_worker,  # Create converter once per worker
-                ) as executor:
-                    futures = {
-                        executor.submit(
-                            _extract_and_chunk_file,
-                            str(f),  # Pass as string for cross-process serialization
-                            self.chunk_size,
-                            self.chunk_overlap,
-                        ): f
-                        for f in files
-                    }
-
-                for future in as_completed(
-                    futures, timeout=3600
-                ):  # 1 hour timeout per file
-                    file_path = futures[future]
-                    try:
-                        result = future.result(
-                            timeout=300
-                        )  # 5 minute timeout for result retrieval
-
-                        if not result["success"]:
-                            logger.error(
-                                "Failed to process %s: %s", file_path, result["error"]
-                            )
-                            failed_files += 1
-                            continue
-
-                        segments = result["segments"]
-                        if not segments:
-                            logger.warning(
-                                "File %s produced no segments (may be empty, image-only, or extraction failed)",
-                                file_path,
-                            )
-                            failed_files += 1
-                            continue
-
-                        # Use streaming processing if enabled
-                        from secondbrain.config import get_config
-
-                        config = get_config()
-
-                        if config.streaming_enabled:
-                            # Streaming handles storage internally via _stream_process_chunks
-                            with trace_operation("ingest_stream_process"):
-                                docs_count = self._stream_process_chunks(
-                                    file_path, segments, embedding_gen, storage
-                                )
-                            if docs_count > 0:
-                                successful_files += 1
-                            else:
-                                failed_files += 1
-                        else:
-                            # Legacy batch processing via _build_documents_with_embeddings
-                            with trace_operation("ingest_batch_process"):
-                                docs_to_store = self._build_documents_with_embeddings(
-                                    file_path, segments, embedding_gen
-                                )
-                            if docs_to_store:
-                                for i in range(
-                                    0, len(docs_to_store), MAX_MEMORY_BATCH_SIZE
-                                ):
-                                    batch = docs_to_store[i : i + MAX_MEMORY_BATCH_SIZE]
-                                    storage.store_batch(batch)
-                                successful_files += 1
-                            else:
-                                failed_files += 1
-
-                    except Exception as e:
-                        logger.error(
-                            "Unexpected error processing file %s: %s: %s",
-                            file_path,
-                            type(e).__name__,
-                            e,
-                        )
-                        failed_files += 1
+            successful, failed = self._process_multiprocessing_batch(
+                files, embedding_gen, storage, cores
+            )
         else:
-            # Use ThreadPoolExecutor for sequential/batch processing
-            with (
-                trace_operation("ingest_thread_process"),
-                ThreadPoolExecutor(max_workers=batch_size) as executor,
-            ):
-                futures_dict: dict[Any, Path] = {}
-                for f in files:
-                    future = executor.submit(
-                        self._process_file_for_storage, f, embedding_gen
-                    )
-                    futures_dict[future] = f
+            successful, failed = self._process_threadpool_batch(
+                files, embedding_gen, storage, batch_size
+            )
 
-                for future in as_completed(
-                    futures_dict, timeout=3600
-                ):  # 1 hour timeout per file
-                    file_path = futures_dict[future]
-                    try:
-                        result = future.result(timeout=300)  # 5 minute timeout
-                        if result is None or not result:
-                            failed_files += 1
-                            continue
-
-                        storage.store_batch(result)
-                        successful_files += 1
-
-                    except Exception as e:
-                        logger.error(
-                            "Unexpected error processing file %s: %s: %s",
-                            file_path,
-                            type(e).__name__,
-                            e,
-                        )
-                        failed_files += 1
-
-        return {"success": successful_files, "failed": failed_files}
+        return {"success": successful, "failed": failed}
 
     def _extract_text(self, file_path: Path) -> list[Segment]:
         """Extract text content from a file."""
@@ -1086,7 +1206,7 @@ class AsyncDocumentIngestor:
 
         self.converter = DocumentConverter()
 
-    async def __aenter__(self) -> "AsyncDocumentIngestor":
+    async def __aenter__(self) -> AsyncDocumentIngestor:
         """Enter async context manager."""
         return self
 
@@ -1130,7 +1250,7 @@ class AsyncDocumentIngestor:
         # Collect and validate files
         files = await asyncio.to_thread(
             self._collect_and_validate_files, path, recursive
-        )
+        )  # type: ignore[attr-defined]
 
         if not files:
             return {"success": 0, "failed": 0}
@@ -1174,7 +1294,7 @@ class AsyncDocumentIngestor:
         """
         try:
             # Extract text using to_thread for blocking I/O
-            segments = await asyncio.to_thread(self._extract_text, file_path)
+            segments = await asyncio.to_thread(self._extract_text, file_path)  # type: ignore[attr-defined]
 
             if not segments:
                 logger.warning(
@@ -1196,8 +1316,8 @@ class AsyncDocumentIngestor:
                     segments,
                     embedding_gen,
                     storage,
-                )
-                return docs_count > 0
+                )  # type: ignore[attr-defined]
+                return docs_count > 0  # type: ignore[no-any-return]
             else:
                 # Legacy batch processing
                 docs_to_store = await asyncio.to_thread(
@@ -1205,7 +1325,7 @@ class AsyncDocumentIngestor:
                     file_path,
                     segments,
                     embedding_gen,
-                )
+                )  # type: ignore[attr-defined]
                 if docs_to_store:
                     await asyncio.to_thread(storage.store_batch, docs_to_store)
                     return True
@@ -1226,9 +1346,9 @@ class AsyncDocumentIngestor:
 
 __all__ = [
     "SUPPORTED_EXTENSIONS",
+    "AsyncDocumentIngestor",
     "DocumentExtractionError",
     "DocumentIngestor",
-    "AsyncDocumentIngestor",
     "Segment",
     "UnsupportedFileError",
     "get_file_type",

@@ -100,10 +100,14 @@ class TestCLIBatchValidation:
         mock_ingestor_class.return_value = mock_ingestor
 
         runner = CliRunner()
-        # Should handle gracefully
+        # Should fail validation due to click.IntRange(min=1)
         result = runner.invoke(cli, ["ingest", "/tmp/test_docs", "--batch-size", "0"])
-        # May fail due to validation or succeed with no processing
-        assert result.exit_code in [0, 1]
+        # Click's IntRange validation returns exit code 2
+        assert result.exit_code == 2
+        assert (
+            "must be at least 1" in result.output.lower()
+            or "invalid value" in result.output.lower()
+        )
 
 
 class TestCLIPaginationEdgeCases:
@@ -117,7 +121,7 @@ class TestCLIPaginationEdgeCases:
         mock_lister_class.return_value = mock_lister
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["list", "--limit", "10000"])
+        result = runner.invoke(cli, ["ls", "--limit", "10000"])
         # Should handle gracefully
         assert result.exit_code == 0
 
@@ -129,7 +133,7 @@ class TestCLIPaginationEdgeCases:
         mock_lister_class.return_value = mock_lister
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["list", "--limit", "0"])
+        result = runner.invoke(cli, ["ls", "--limit", "0"])
         # Should handle gracefully
         assert result.exit_code in [0, 1]
 
@@ -141,7 +145,7 @@ class TestCLIPaginationEdgeCases:
         mock_lister_class.return_value = mock_lister
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["list", "--offset", "-1"])
+        result = runner.invoke(cli, ["ls", "--offset", "-1"])
         # Should handle gracefully
         assert result.exit_code in [0, 1]
 
@@ -275,7 +279,7 @@ class TestCLIJSONFormat:
         mock_lister_class.return_value = mock_lister
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["list"])
+        result = runner.invoke(cli, ["ls"])
         assert result.exit_code == 0
 
 
@@ -294,7 +298,7 @@ class TestCLILargeResultSets:
         mock_lister_class.return_value = mock_lister
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["list"])
+        result = runner.invoke(cli, ["ls"])
         assert result.exit_code == 0
 
     @patch("secondbrain.management.Lister")
@@ -305,7 +309,7 @@ class TestCLILargeResultSets:
         mock_lister_class.return_value = mock_lister
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["list", "--limit", "200000"])
+        result = runner.invoke(cli, ["ls", "--limit", "200000"])
         assert result.exit_code in [0, 1]
 
 

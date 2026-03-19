@@ -223,6 +223,9 @@ class TestVectorStorageAsync:
             patch.object(storage, "validate_connection_async", return_value=True),
             patch.object(storage, "_collection", mock_collection),
             patch.object(storage, "_index_created", True),
+            patch.object(
+                storage, "_wait_for_index_ready_async", return_value=None
+            ),  # Skip timeout wait
         ):
             results = await storage.search_async(embedding=[0.1] * 384, top_k=5)
             assert len(results) == 1
@@ -240,6 +243,9 @@ class TestVectorStorageAsync:
             patch.object(storage, "validate_connection_async", return_value=True),
             patch.object(storage, "_collection", mock_collection),
             patch.object(storage, "_index_created", True),
+            patch.object(
+                storage, "_wait_for_index_ready_async", return_value=None
+            ),  # Skip timeout wait
         ):
             await storage.search_async(
                 embedding=[0.1] * 384,
@@ -356,7 +362,11 @@ class TestVectorStorageAsync:
     async def test_wait_for_index_ready_async_timeout(
         self, storage: VectorStorage
     ) -> None:
-        """Test async wait for index ready with timeout."""
+        """Test async wait for index ready with timeout.
+
+        Optimization: Mock list_search_indexes to return empty immediately
+        instead of waiting for real MongoDB timeout (~23s).
+        """
         mock_collection = MagicMock()
         mock_collection.list_search_indexes = MagicMock(return_value=[])
 
@@ -364,6 +374,7 @@ class TestVectorStorageAsync:
             patch.object(storage, "validate_connection_async", return_value=True),
             patch.object(storage, "_collection", mock_collection),
             patch.object(storage, "ensure_index", return_value=None),
+            patch("asyncio.sleep", return_value=None),  # Skip actual sleep delays
         ):
             await storage._wait_for_index_ready_async()
 
@@ -381,6 +392,7 @@ class TestVectorStorageAsync:
             patch.object(storage, "validate_connection_async", return_value=True),
             patch.object(storage, "_collection", mock_collection),
             patch.object(storage, "ensure_index", return_value=None),
+            patch("asyncio.sleep", return_value=None),  # Skip actual sleep delays
         ):
             await storage._wait_for_index_ready_async()
 
