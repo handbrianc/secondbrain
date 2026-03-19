@@ -135,6 +135,7 @@ def ingest(
                     task, description=f"[cyan]Ingesting... {status} {file_path.name}"
                 )
                 progress.advance(task)
+                progress.refresh()  # Force immediate refresh
 
             ingestor = DocumentIngestor(
                 chunk_size=chunk_size,
@@ -143,8 +144,10 @@ def ingest(
                 progress_callback=progress_callback,
             )
 
+            # Use ThreadPoolExecutor (cores=1) when progress tracking is enabled
+            # Multiprocessing doesn't share progress bar state across processes
             results = ingestor.ingest(
-                path, recursive=recursive, batch_size=batch_size, cores=cores
+                path, recursive=recursive, batch_size=batch_size, cores=1
             )
     else:
         ingestor = DocumentIngestor(
