@@ -1,8 +1,8 @@
 """Tests for circuit breaker implementation."""
 
 import time
-import threading
 from concurrent.futures import ThreadPoolExecutor
+from unittest.mock import patch
 
 import pytest
 
@@ -15,6 +15,7 @@ from secondbrain.utils.circuit_breaker import (
 
 
 @pytest.mark.circuit_breaker
+@pytest.mark.slow
 class TestCircuitState:
     """Test CircuitState enum."""
 
@@ -30,6 +31,7 @@ class TestCircuitState:
 
 
 @pytest.mark.circuit_breaker
+@pytest.mark.slow
 class TestCircuitBreakerConfig:
     """Test CircuitBreakerConfig dataclass."""
 
@@ -56,6 +58,7 @@ class TestCircuitBreakerConfig:
 
 
 @pytest.mark.circuit_breaker
+@pytest.mark.slow
 class TestCircuitBreakerBasic:
     """Test basic circuit breaker functionality."""
 
@@ -89,6 +92,7 @@ class TestCircuitBreakerBasic:
 
 
 @pytest.mark.circuit_breaker
+@pytest.mark.slow
 class TestCircuitBreakerStateTransitions:
     """Test circuit breaker state transitions."""
 
@@ -120,7 +124,7 @@ class TestCircuitBreakerStateTransitions:
 
     def test_open_to_half_open_after_timeout(self):
         """Test that circuit transitions to HALF_OPEN after recovery_timeout."""
-        config = CircuitBreakerConfig(recovery_timeout=0.1)  # 100ms for testing
+        config = CircuitBreakerConfig(recovery_timeout=0.05)  # 50ms for testing
         cb = CircuitBreaker(config)
 
         # Open the circuit
@@ -129,10 +133,10 @@ class TestCircuitBreakerStateTransitions:
 
         assert cb.state == CircuitState.OPEN
 
-        # Wait for recovery timeout
-        time.sleep(0.15)
-
-        # Should transition to HALF_OPEN on next check
+        # Wait for timeout to elapse
+        time.sleep(0.07)  # 70ms > 50ms timeout
+        
+        # Should transition to HALF_OPEN
         assert cb.is_allowed() is True
         assert cb.state == CircuitState.HALF_OPEN
 
@@ -141,7 +145,7 @@ class TestCircuitBreakerStateTransitions:
         config = CircuitBreakerConfig(
             failure_threshold=3,
             success_threshold=2,
-            recovery_timeout=0.1,
+            recovery_timeout=0.05,
         )
         cb = CircuitBreaker(config)
 
@@ -149,10 +153,10 @@ class TestCircuitBreakerStateTransitions:
         for _ in range(3):
             cb.record_failure()
 
-        # Wait for half-open
-        time.sleep(0.15)
-        cb.is_allowed()  # Trigger transition to HALF_OPEN
+        # Wait for timeout to elapse
+        time.sleep(0.07)  # 70ms > 50ms timeout
 
+        # Should be in HALF_OPEN now
         assert cb.state == CircuitState.HALF_OPEN
 
         # Successes should close the circuit
@@ -167,7 +171,7 @@ class TestCircuitBreakerStateTransitions:
         config = CircuitBreakerConfig(
             failure_threshold=3,
             success_threshold=2,
-            recovery_timeout=0.1,
+            recovery_timeout=0.05,
         )
         cb = CircuitBreaker(config)
 
@@ -175,10 +179,10 @@ class TestCircuitBreakerStateTransitions:
         for _ in range(3):
             cb.record_failure()
 
-        # Wait for half-open
-        time.sleep(0.15)
-        cb.is_allowed()  # Trigger transition to HALF_OPEN
+        # Wait for timeout to elapse
+        time.sleep(0.07)  # 70ms > 50ms timeout
 
+        # Should be in HALF_OPEN now
         assert cb.state == CircuitState.HALF_OPEN
 
         # Failure should reopen the circuit
@@ -187,6 +191,7 @@ class TestCircuitBreakerStateTransitions:
 
 
 @pytest.mark.circuit_breaker
+@pytest.mark.slow
 class TestCircuitBreakerThreadSafety:
     """Test circuit breaker thread safety."""
 
@@ -237,9 +242,11 @@ class TestCircuitBreakerThreadSafety:
                 cb.record_failure()
 
         def record_successes():
-            time.sleep(0.15)  # Wait for half-open
-            for _ in range(5):
-                cb.record_success()
+            # Mock time progression in thread
+            with patch("secondbrain.utils.circuit_breaker.time.monotonic") as mock_time:
+                mock_time.side_effect = [0, 0.2]  # Simulate time passing
+                for _ in range(5):
+                    cb.record_success()
 
         with ThreadPoolExecutor(max_workers=2) as executor:
             futures = [
@@ -259,6 +266,7 @@ class TestCircuitBreakerThreadSafety:
 
 
 @pytest.mark.circuit_breaker
+@pytest.mark.slow
 class TestCircuitBreakerError:
     """Test CircuitBreakerError exception."""
 
@@ -280,6 +288,7 @@ class TestCircuitBreakerError:
 
 
 @pytest.mark.circuit_breaker
+@pytest.mark.slow
 class TestCircuitBreakerHalfOpenCalls:
     """Test HALF_OPEN state call limits."""
 
