@@ -132,7 +132,7 @@ def storage_with_index(test_collection: Any) -> Any:
     os.environ["SECONDBRAIN_MONGO_DB"] = "test_secondbrain"
     os.environ["SECONDBRAIN_MONGO_COLLECTION"] = "test_embeddings"
     os.environ["SECONDBRAIN_LOCALHOST"] = "http://localhost:11434"
-    os.environ["SECONDBRAIN_MODEL"] = "embeddinggemma:latest"
+    os.environ["SECONDBRAIN_LOCAL_EMBEDDING_MODEL"] = "all-MiniLM-L6-v2"
 
     from secondbrain.config import get_config
 

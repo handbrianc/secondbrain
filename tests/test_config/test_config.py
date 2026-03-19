@@ -53,7 +53,7 @@ class TestConfig:
                 "SECONDBRAIN_MONGO_URI": "mongodb://localhost:27017",
                 "SECONDBRAIN_MONGO_DB": "secondbrain",
                 "SECONDBRAIN_MONGO_COLLECTION": "embeddings",
-                "SECONDBRAIN_MODEL": "embeddinggemma:latest",
+                "SECONDBRAIN_LOCAL_EMBEDDING_MODEL": "all-MiniLM-L6-v2",
                 "SECONDBRAIN_CHUNK_SIZE": "4096",
                 "SECONDBRAIN_CHUNK_OVERLAP": "50",
                 "SECONDBRAIN_DEFAULT_TOP_K": "5",
@@ -67,7 +67,7 @@ class TestConfig:
             assert config.mongo_uri == "mongodb://localhost:27017"
             assert config.mongo_db == "secondbrain"
             assert config.mongo_collection == "embeddings"
-            assert config.model == "embeddinggemma:latest"
+            assert config.model == "all-MiniLM-L6-v2"
             assert config.chunk_size == 4096
             assert config.chunk_overlap == 50
             assert config.default_top_k == 5
