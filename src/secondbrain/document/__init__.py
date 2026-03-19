@@ -16,7 +16,7 @@ import os
 from concurrent.futures import Future
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable
 from uuid import uuid4
 
 import typing_extensions
@@ -295,6 +295,7 @@ class DocumentIngestor:
         chunk_size: int = 4096,
         chunk_overlap: int = 50,
         verbose: bool = False,
+        progress_callback: Callable[[Path, bool], None] | None = None,
     ) -> None:
         """Initialize document ingestor.
 
@@ -302,6 +303,7 @@ class DocumentIngestor:
             chunk_size: Size of text chunks in tokens.
             chunk_overlap: Overlap between chunks in tokens.
             verbose: Enable verbose logging.
+            progress_callback: Optional callback(file_path: Path, success: bool) called after each file.
         """
         config = get_config()
 
@@ -316,6 +318,7 @@ class DocumentIngestor:
         self.chunk_overlap = chunk_overlap
         self.verbose = verbose
         self.max_file_size_bytes: int = config.max_file_size_bytes
+        self.progress_callback = progress_callback
 
         # Initialize embedding cache for deduplication
         self.embedding_cache = EmbeddingCache(max_size=config.embedding_cache_size)
@@ -774,6 +777,8 @@ class DocumentIngestor:
     ) -> int:
         """Generate embeddings and store a batch of chunks.
 
+        Uses batch embedding generation for improved throughput.
+
         Args:
             file_path: Source file path.
             chunks: List of chunk dicts to process.
@@ -784,24 +789,52 @@ class DocumentIngestor:
         -------
             Number of documents stored.
         """
-        # Generate embeddings with cache
+        # Generate embeddings with cache - use batch processing for efficiency
         chunk_to_embedding: dict[int, list[float]] = {}
+        texts_to_embed: list[str] = []
+        text_to_chunk: dict[str, dict[str, Any]] = {}
 
+        # First pass: check cache and collect uncached texts
         for chunk in chunks:
             cached = self.embedding_cache.get(chunk["text"])
             if cached is not None:
                 chunk_to_embedding[chunk["text_hash"]] = cached
                 continue
+            texts_to_embed.append(chunk["text"])
+            text_to_chunk[chunk["text"]] = chunk
 
+        # Second pass: generate embeddings in batch for uncached texts
+        if texts_to_embed:
             try:
-                embedding = embedding_gen.generate(chunk["text"])
-                self.embedding_cache.set(chunk["text"], embedding)
-                chunk_to_embedding[chunk["text_hash"]] = embedding
+                embeddings = embedding_gen.generate_batch(texts_to_embed)
+                for text, embedding in zip(texts_to_embed, embeddings, strict=True):
+                    self.embedding_cache.set(text, embedding)
+                    chunk = text_to_chunk[text]
+                    chunk_to_embedding[chunk["text_hash"]] = embedding
             except Exception as e:
                 logger.error(
-                    "Failed to generate embedding: %s: %s", type(e).__name__, e
+                    "Failed to generate batch embeddings: %s: %s",
+                    type(e).__name__,
+                    e,
                 )
-                continue
+                # Fall back to sequential for failed batch
+                for text in texts_to_embed:
+                    chunk = text_to_chunk[text]
+                    try:
+                        cached = self.embedding_cache.get(text)
+                        if cached is not None:
+                            chunk_to_embedding[chunk["text_hash"]] = cached
+                            continue
+                        embedding = embedding_gen.generate(text)
+                        self.embedding_cache.set(text, embedding)
+                        chunk_to_embedding[chunk["text_hash"]] = embedding
+                    except Exception as e2:
+                        logger.error(
+                            "Failed to generate embedding: %s: %s",
+                            type(e2).__name__,
+                            e2,
+                        )
+                        continue
 
         # Build and store documents
         docs_to_store: list[dict[str, Any]] = []
@@ -918,6 +951,8 @@ class DocumentIngestor:
                             "Failed to process %s: %s", file_path, result["error"]
                         )
                         failed_files += 1
+                        if self.progress_callback:
+                            self.progress_callback(file_path, False)
                         continue
 
                     segments = result["segments"]
@@ -927,6 +962,8 @@ class DocumentIngestor:
                             file_path,
                         )
                         failed_files += 1
+                        if self.progress_callback:
+                            self.progress_callback(file_path, False)
                         continue
 
                     config = get_config()
@@ -938,8 +975,12 @@ class DocumentIngestor:
                             )
                         if docs_count > 0:
                             successful_files += 1
+                            if self.progress_callback:
+                                self.progress_callback(file_path, True)
                         else:
                             failed_files += 1
+                            if self.progress_callback:
+                                self.progress_callback(file_path, False)
                     else:
                         with trace_operation("ingest_batch_process"):
                             docs_to_store = self._build_documents_with_embeddings(
@@ -952,8 +993,12 @@ class DocumentIngestor:
                                 batch = docs_to_store[i : i + MAX_MEMORY_BATCH_SIZE]
                                 storage.store_batch(batch)
                             successful_files += 1
+                            if self.progress_callback:
+                                self.progress_callback(file_path, True)
                         else:
                             failed_files += 1
+                            if self.progress_callback:
+                                self.progress_callback(file_path, False)
 
                 except Exception as e:
                     logger.error(
@@ -963,6 +1008,8 @@ class DocumentIngestor:
                         e,
                     )
                     failed_files += 1
+                    if self.progress_callback:
+                        self.progress_callback(file_path, False)
 
         return successful_files, failed_files
 
@@ -1004,25 +1051,31 @@ class DocumentIngestor:
                 )
                 futures_dict[future] = f
 
-            for future in as_completed(futures_dict, timeout=3600):
-                file_path = futures_dict[future]
-                try:
-                    result = future.result(timeout=300)
-                    if result is None or not result:
-                        failed_files += 1
-                        continue
-
-                    storage.store_batch(result)
-                    successful_files += 1
-
-                except Exception as e:
-                    logger.error(
-                        "Unexpected error processing file %s: %s: %s",
-                        file_path,
-                        type(e).__name__,
-                        e,
-                    )
+        for future in as_completed(futures_dict, timeout=3600):
+            file_path = futures_dict[future]
+            try:
+                result = future.result(timeout=300)
+                if result is None or not result:
                     failed_files += 1
+                    if self.progress_callback:
+                        self.progress_callback(file_path, False)
+                    continue
+
+                storage.store_batch(result)
+                successful_files += 1
+                if self.progress_callback:
+                    self.progress_callback(file_path, True)
+
+            except Exception as e:
+                logger.error(
+                    "Unexpected error processing file %s: %s: %s",
+                    file_path,
+                    type(e).__name__,
+                    e,
+                )
+                failed_files += 1
+                if self.progress_callback:
+                    self.progress_callback(file_path, False)
 
         return successful_files, failed_files
 
@@ -1157,7 +1210,7 @@ class DocumentIngestor:
         return chunks
 
 
-class AsyncDocumentIngestor:
+class AsyncDocumentIngestor(DocumentIngestor):
     """Async version of DocumentIngestor for non-blocking document ingestion.
 
     This class provides asynchronous versions of key document ingestion methods,
@@ -1169,6 +1222,7 @@ class AsyncDocumentIngestor:
     - Concurrency control via asyncio.Semaphore for backpressure
     - Streaming mode support for memory-efficient processing
     - Follows storage.py pattern: wrap blocking ops with asyncio.to_thread()
+    - Inherits all helper methods from DocumentIngestor
     """
 
     def __init__(
@@ -1184,27 +1238,11 @@ class AsyncDocumentIngestor:
             chunk_overlap: Overlap between chunks in tokens.
             verbose: Enable verbose logging.
         """
-        config = get_config()
-
-        if chunk_size <= 0:
-            raise ValueError("chunk_size must be positive")
-        if chunk_overlap < 0:
-            raise ValueError("chunk_overlap must be non-negative")
-        if chunk_overlap >= chunk_size:
-            raise ValueError("chunk_overlap must be less than chunk_size")
-
-        self.chunk_size = chunk_size
-        self.chunk_overlap = chunk_overlap
-        self.verbose = verbose
-        self.max_file_size_bytes: int = config.max_file_size_bytes
-
-        # Initialize embedding cache for deduplication
-        self.embedding_cache = EmbeddingCache(max_size=config.embedding_cache_size)
-
-        # Lazily import docling to avoid 2+ second import overhead
-        from docling.document_converter import DocumentConverter
-
-        self.converter = DocumentConverter()
+        super().__init__(
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+            verbose=verbose,
+        )
 
     async def __aenter__(self) -> AsyncDocumentIngestor:
         """Enter async context manager."""

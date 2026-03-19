@@ -191,8 +191,8 @@ class Config(BaseSettings):
         description="Enable streaming processing for memory efficiency (default: true)",
     )
     streaming_chunk_batch_size: int = Field(
-        default=50,
-        description="Number of chunks to process per streaming batch (1-200, default: 50)",
+        default=100,
+        description="Number of chunks to process per streaming batch (1-200, default: 100). Larger batches improve embedding throughput by utilizing batch API calls.",
     )
 
     @field_validator("chunk_size")

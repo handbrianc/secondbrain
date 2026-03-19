@@ -123,14 +123,35 @@ def ingest(
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
+            TextColumn("[progress.completed]{task.completed}/{task.total}"),
             console=console,
         ) as progress:
             task = progress.add_task("[cyan]Ingesting...", total=total_files)
+
+            # Create progress callback that updates the progress bar
+            def progress_callback(file_path: Path, success: bool) -> None:
+                status = "[green]✓[/green]" if success else "[red]✗[/red]"
+                progress.update(
+                    task, description=f"[cyan]Ingesting... {status} {file_path.name}"
+                )
+                progress.advance(task)
+
+            ingestor = DocumentIngestor(
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+                verbose=ctx.obj.get("verbose", False),
+                progress_callback=progress_callback,
+            )
+
             results = ingestor.ingest(
                 path, recursive=recursive, batch_size=batch_size, cores=cores
             )
-            progress.update(task, completed=total_files)
     else:
+        ingestor = DocumentIngestor(
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+            verbose=ctx.obj.get("verbose", False),
+        )
         results = ingestor.ingest(
             path, recursive=recursive, batch_size=batch_size, cores=cores
         )
