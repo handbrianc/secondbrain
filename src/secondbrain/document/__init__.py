@@ -68,13 +68,15 @@ def _init_worker() -> None:
     _worker_converter = DocumentConverter()
 
 
-def _init_worker_with_queue(queue: Any) -> None:
-    """Initialize worker process with DocumentConverter and progress queue."""
-    global _worker_converter, _worker_progress_queue
+def _init_worker_with_queue(queue: Any, embedding_model_name: str) -> None:
+    """Initialize worker process with DocumentConverter, progress queue, and embedding model."""
+    global _worker_converter, _worker_progress_queue, _worker_embedding_model
     from docling.document_converter import DocumentConverter
+    from secondbrain.embedding.local import LocalEmbeddingGenerator
 
     _worker_converter = DocumentConverter()
     _worker_progress_queue = queue
+    _worker_embedding_model = LocalEmbeddingGenerator(model_name=embedding_model_name)
 
 
 def _extract_and_chunk_file(
@@ -143,6 +145,143 @@ def _extract_and_chunk_file(
             "success": False,
             "file_path": file_path,
             "segments": [],
+            "error": f"{type(e).__name__}: {e}",
+        }
+
+
+def _extract_chunk_and_embed_file(
+    file_path_str: str,
+    chunk_size: int,
+    chunk_overlap: int,
+    progress_queue: Any,
+    embedding_model_name: str,
+) -> dict[str, Any]:
+    """Worker function that extracts, chunks, embeds, and reports progress.
+
+    This function runs in a separate process and returns documents with embeddings.
+    All CPU/GPU intensive work (extraction, chunking, embedding) happens in worker.
+    Main process only handles storage.
+
+    Args:
+        file_path_str: String path to the file to process.
+        chunk_size: Maximum chunk size in characters.
+        chunk_overlap: Overlap between consecutive chunks.
+        progress_queue: Multiprocessing Queue for progress updates.
+        embedding_model_name: Name of embedding model to use.
+
+    Returns
+    -------
+        Dict with keys: 'success' (bool), 'file_path' (str),
+        'documents' (list[dict]), 'error' (str | None).
+    """
+    file_path = Path(file_path_str)
+    try:
+        converter = _worker_converter
+        if converter is None:
+            from docling.document_converter import DocumentConverter
+
+            converter = DocumentConverter()
+
+        result = converter.convert(file_path)
+        content = result.document
+
+        # Extract segments
+        segments: list[Segment] = []
+        if hasattr(content, "texts") and content.texts:
+            for text_item in content.texts:
+                if not hasattr(text_item, "text") or not text_item.text:
+                    continue
+                page_num = 1
+                if hasattr(text_item, "prov") and text_item.prov:
+                    prov = text_item.prov[0]
+                    if hasattr(prov, "page_no"):
+                        page_num = prov.page_no
+                segments.append({"text": text_item.text, "page": page_num})
+
+        if not segments:
+            with file_path.open(encoding="utf-8", errors="ignore") as f:
+                text = f.read()
+            segments = [{"text": text, "page": 1}]
+
+        # Chunk segments
+        chunks = _chunk_segments(segments, chunk_size, chunk_overlap)
+
+        # Generate embeddings using worker's pre-loaded model
+        embedding_model = _worker_embedding_model
+        if embedding_model is None:
+            from secondbrain.embedding.local import LocalEmbeddingGenerator
+
+            embedding_model = LocalEmbeddingGenerator(model_name=embedding_model_name)
+
+        # Deduplicate chunks
+        seen_hashes = set()
+        unique_chunks = []
+        for chunk in chunks:
+            cleaned = chunk["text"].strip()
+            if not cleaned:
+                continue
+            normalized = " ".join(cleaned.lower().split())
+            text_hash = int(hashlib.sha256(normalized.encode()).hexdigest(), 16)
+            if text_hash not in seen_hashes:
+                seen_hashes.add(text_hash)
+                unique_chunks.append(
+                    {
+                        "text": cleaned,
+                        "page": chunk["page"],
+                        "text_hash": text_hash,
+                    }
+                )
+
+        # Generate embeddings in batch (GPU efficient)
+        if unique_chunks:
+            texts = [c["text"] for c in unique_chunks]
+            embeddings = embedding_model.generate_batch(texts)
+        else:
+            embeddings = []
+
+        # Build documents with embeddings
+        from datetime import UTC, datetime
+        from uuid import uuid4
+
+        documents = []
+        for chunk_item, embedding in zip(unique_chunks, embeddings, strict=True):
+            doc = {
+                "chunk_id": str(uuid4()),
+                "source_file": str(file_path),
+                "page_number": chunk_item["page"],
+                "chunk_text": chunk_item["text"],
+                "embedding": embedding,
+                "metadata": {
+                    "file_type": get_file_type(file_path),
+                    "ingested_at": datetime.now(UTC).isoformat(),
+                    "chunk_index": chunk_item["text_hash"],
+                },
+            }
+            documents.append(doc)
+
+        # Send progress update
+        if _worker_progress_queue is not None:
+            try:
+                _worker_progress_queue.put_nowait((str(file_path), len(documents) > 0))
+            except Exception:
+                pass
+
+        return {
+            "success": True,
+            "file_path": file_path,
+            "documents": documents,
+            "error": None,
+        }
+    except Exception as e:
+        if _worker_progress_queue is not None:
+            try:
+                _worker_progress_queue.put_nowait((str(file_path), False))
+            except Exception:
+                pass
+        return {
+            "success": False,
+            "file_path": file_path,
+            "documents": [],
             "error": f"{type(e).__name__}: {e}",
         }
 
@@ -1019,24 +1158,30 @@ class DocumentIngestor:
         failed_files = 0
 
         # Use a Manager to create a shared Queue for progress updates
+        from secondbrain.config import get_config
+
+        config = get_config()
+
         with Manager() as manager:
             progress_queue = manager.Queue()
+            embedding_model_name = config.model
 
             with (
                 trace_operation("ingest_multiprocess_progress"),
                 ProcessPoolExecutor(
                     max_workers=max_workers,
                     initializer=_init_worker_with_queue,
-                    initargs=(progress_queue,),
+                    initargs=(progress_queue, embedding_model_name),
                 ) as executor,
             ):
                 futures = {
                     executor.submit(
-                        _extract_and_chunk_file_with_progress,
+                        _extract_chunk_and_embed_file,
                         str(f),
                         self.chunk_size,
                         self.chunk_overlap,
                         progress_queue,
+                        embedding_model_name,
                     ): f
                     for f in files
                 }
@@ -1069,8 +1214,8 @@ class DocumentIngestor:
                                 done_futures.append(future)
                                 continue
 
-                            segments = result["segments"]
-                            if not segments:
+                            documents = result.get("documents", [])
+                            if not documents:
                                 failed_files += 1
                                 completed += 1
                                 if self.progress_callback:
@@ -1078,47 +1223,15 @@ class DocumentIngestor:
                                 done_futures.append(future)
                                 continue
 
-                            config = get_config()
+                            for i in range(0, len(documents), MAX_MEMORY_BATCH_SIZE):
+                                storage.store_batch(
+                                    documents[i : i + MAX_MEMORY_BATCH_SIZE]
+                                )
 
-                            if config.streaming_enabled:
-                                with trace_operation("ingest_stream_process"):
-                                    docs_count = self._stream_process_chunks(
-                                        file_path, segments, embedding_gen, storage
-                                    )
-                                if docs_count > 0:
-                                    successful_files += 1
-                                    if self.progress_callback:
-                                        self.progress_callback(file_path, True)
-                                else:
-                                    failed_files += 1
-                                    if self.progress_callback:
-                                        self.progress_callback(file_path, False)
-                            else:
-                                with trace_operation("ingest_batch_process"):
-                                    docs_to_store = (
-                                        self._build_documents_with_embeddings(
-                                            file_path, segments, embedding_gen
-                                        )
-                                    )
-                                if docs_to_store:
-                                    for i in range(
-                                        0,
-                                        len(docs_to_store),
-                                        MAX_MEMORY_BATCH_SIZE,
-                                    ):
-                                        batch = docs_to_store[
-                                            i : i + MAX_MEMORY_BATCH_SIZE
-                                        ]
-                                        storage.store_batch(batch)
-                                    successful_files += 1
-                                    if self.progress_callback:
-                                        self.progress_callback(file_path, True)
-                                else:
-                                    failed_files += 1
-                                    if self.progress_callback:
-                                        self.progress_callback(file_path, False)
-
+                            successful_files += 1
                             completed += 1
+                            if self.progress_callback:
+                                self.progress_callback(file_path, True)
                             done_futures.append(future)
 
                         except Exception as e:
@@ -1372,26 +1485,12 @@ class DocumentIngestor:
         if not files:
             return {"success": 0, "failed": 0}
 
-        # Resolve and validate core count
         cores = self._resolve_core_count(cores)
 
-        # Choose processing strategy based on progress callback
-        # If progress callback is set, use ThreadPoolExecutor for shared memory access
-        # Otherwise, use ProcessPoolExecutor for CPU-bound tasks
-        if self.progress_callback:
-            # Use threads when progress tracking is needed
-            successful, failed = self._process_parallel_with_progress(
-                files, embedding_gen, storage, cores
-            )
-        elif cores > 1:
-            # Use processes for CPU-bound parallelism when no progress tracking
-            successful, failed = self._process_multiprocessing_batch(
-                files, embedding_gen, storage, cores
-            )
-        else:
-            successful, failed = self._process_threadpool_batch(
-                files, embedding_gen, storage, batch_size
-            )
+        # Multiprocessing with in-worker embedding for maximum CPU/GPU utilization
+        successful, failed = self._process_parallel_with_progress(
+            files, embedding_gen, storage, cores
+        )
 
         return {"success": successful, "failed": failed}
 
