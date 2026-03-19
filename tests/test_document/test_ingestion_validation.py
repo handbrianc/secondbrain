@@ -159,7 +159,7 @@ class TestDocumentIngestorFileProcessing:
         assert len(docs) == 2
         assert all("chunk_id" in doc for doc in docs)
         assert all("embedding" in doc for doc in docs)
-        assert all("metadata" in doc for doc in docs)
+        assert all("file_type" in doc for doc in docs)  # Flattened from metadata
         assert docs[0]["page_number"] == 1
         assert docs[1]["page_number"] == 2
 

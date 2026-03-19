@@ -264,6 +264,9 @@ def _extract_chunk_and_embed_file(
         from uuid import uuid4
 
         documents = []
+        file_type = get_file_type(file_path)
+        ingested_at = datetime.now(UTC).isoformat()
+
         for chunk_item, embedding in zip(unique_chunks, embeddings, strict=True):
             doc = {
                 "chunk_id": str(uuid4()),
@@ -271,11 +274,8 @@ def _extract_chunk_and_embed_file(
                 "page_number": chunk_item["page"],
                 "chunk_text": chunk_item["text"],
                 "embedding": embedding,
-                "metadata": {
-                    "file_type": get_file_type(file_path),
-                    "ingested_at": datetime.now(UTC).isoformat(),
-                    "chunk_index": chunk_item["text_hash"],
-                },
+                "file_type": file_type,
+                "ingested_at": ingested_at,
             }
             documents.append(doc)
 
@@ -879,6 +879,7 @@ class DocumentIngestor:
 
             embedding = chunk_to_embedding[text_hash]
             file_type = get_file_type(chunk_item["file_path"])
+            ingested_at = datetime.now(UTC).isoformat()
 
             doc = {
                 "chunk_id": str(uuid4()),
@@ -886,11 +887,8 @@ class DocumentIngestor:
                 "page_number": chunk_item["page"],
                 "chunk_text": chunk_item["text"],
                 "embedding": embedding,
-                "metadata": {
-                    "file_type": file_type,
-                    "ingested_at": datetime.now(UTC).isoformat(),
-                    "chunk_index": chunk_item["original_index"],
-                },
+                "file_type": file_type,
+                "ingested_at": ingested_at,
             }
             docs_to_store.append(doc)
 
@@ -1102,6 +1100,7 @@ class DocumentIngestor:
 
             embedding = chunk_to_embedding[text_hash]
             file_type = get_file_type(chunk_item["file_path"])
+            ingested_at = datetime.now(UTC).isoformat()
 
             doc = {
                 "chunk_id": str(uuid4()),
@@ -1109,11 +1108,8 @@ class DocumentIngestor:
                 "page_number": chunk_item["page"],
                 "chunk_text": chunk_item["text"],
                 "embedding": embedding,
-                "metadata": {
-                    "file_type": file_type,
-                    "ingested_at": datetime.now(UTC).isoformat(),
-                    "chunk_index": chunk_item["original_index"],
-                },
+                "file_type": file_type,
+                "ingested_at": ingested_at,
             }
             docs_to_store.append(doc)
 

@@ -32,7 +32,7 @@ def build_search_pipeline(
         else:
             query_filter["source_file"] = {"$regex": source_filter}
     if file_type_filter:
-        query_filter["metadata.file_type"] = file_type_filter
+        query_filter["file_type"] = file_type_filter
 
     pipeline: list[dict[str, Any]] = [
         {

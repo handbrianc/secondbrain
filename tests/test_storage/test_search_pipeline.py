@@ -57,7 +57,7 @@ class TestBuildSearchPipeline:
         # Second stage should be match with file type filter
         assert "$match" in pipeline[1]
         match = pipeline[1]["$match"]
-        assert match["metadata.file_type"] == "pdf"
+        assert match["file_type"] == "pdf"
 
     def test_pipeline_with_both_filters(self) -> None:
         """Test pipeline with both source and file type filters."""
@@ -75,7 +75,7 @@ class TestBuildSearchPipeline:
         assert "$match" in pipeline[1]
         match = pipeline[1]["$match"]
         assert match["source_file"] == {"$regex": "^report.pdf"}
-        assert match["metadata.file_type"] == "pdf"
+        assert match["file_type"] == "pdf"
 
     def test_pipeline_numcandidates_scaling(self) -> None:
         """Test that numCandidates scales with top_k."""
