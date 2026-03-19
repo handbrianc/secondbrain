@@ -68,9 +68,29 @@ def _init_worker() -> None:
     _worker_converter = DocumentConverter()
 
 
-def _init_worker_with_queue(queue: Any, embedding_model_name: str) -> None:
+def _init_worker_with_queue(
+    queue: Any, embedding_model_name: str, num_workers: int
+) -> None:
     """Initialize worker process with DocumentConverter, progress queue, and embedding model."""
     global _worker_converter, _worker_progress_queue, _worker_embedding_model
+    import os
+
+    # CRITICAL: Limit PyTorch threads to prevent oversubscription
+    total_cores = os.cpu_count() or 4
+    threads_per_worker = max(1, total_cores // num_workers)
+
+    # Set thread limits for PyTorch/OpenMP
+    try:
+        import torch
+
+        torch.set_num_threads(threads_per_worker)
+    except ImportError:
+        pass
+
+    # Also set OpenMP environment variables
+    os.environ["OMP_NUM_THREADS"] = str(threads_per_worker)
+    os.environ["MKL_NUM_THREADS"] = str(threads_per_worker)
+
     from docling.document_converter import DocumentConverter
     from secondbrain.embedding.local import LocalEmbeddingGenerator
 
@@ -1171,7 +1191,7 @@ class DocumentIngestor:
                 ProcessPoolExecutor(
                     max_workers=max_workers,
                     initializer=_init_worker_with_queue,
-                    initargs=(progress_queue, embedding_model_name),
+                    initargs=(progress_queue, embedding_model_name, max_workers),
                 ) as executor,
             ):
                 futures = {
