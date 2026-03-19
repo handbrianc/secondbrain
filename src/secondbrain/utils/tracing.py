@@ -26,9 +26,10 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Any, Callable, Generator
 from functools import wraps
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -45,10 +46,7 @@ try:
     OTTEL_AVAILABLE = True
 except ImportError:
     OTTEL_AVAILABLE = False
-    otel_trace = None  # type: ignore
-
-if TYPE_CHECKING and OTTEL_AVAILABLE:
-    from opentelemetry.trace import Tracer
+    otel_trace = None
 
 # Global tracer and state
 _tracer: Any = None
@@ -73,7 +71,7 @@ def setup_tracing(
     service_version: str = "0.1.0",
     environment: str = "development",
 ) -> None:
-    """Setup OpenTelemetry tracing.
+    """Set up OpenTelemetry tracing.
 
     Must be called once at application startup before any tracing occurs.
 
@@ -179,8 +177,10 @@ def trace_operation(operation_name: str) -> Generator[Any, None, None]:
         yield span
 
 
-def trace_decorator(operation_name: str) -> Callable[[Callable], Callable]:
-    """Decorator for tracing a function.
+def trace_decorator(
+    operation_name: str,
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    """Trace a function with OpenTelemetry spans.
 
     Args:
         operation_name: Name of the operation to trace.
@@ -196,7 +196,7 @@ def trace_decorator(operation_name: str) -> Callable[[Callable], Callable]:
             pass
     """
 
-    def decorator(func: Callable) -> Callable:
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             if not OTTEL_AVAILABLE or not is_tracing_enabled():
@@ -225,7 +225,7 @@ class _NoOpTracer:
 
 
 def shutdown_tracing() -> None:
-    """Shutdown OpenTelemetry tracing and release resources.
+    """Shut down OpenTelemetry tracing and release resources.
 
     Should be called at application shutdown to ensure all spans are flushed.
 
@@ -274,6 +274,6 @@ class _NoOpSpan:
         """No-op exception recording."""
         pass
 
-    def add_event(self, name: str, attributes: dict | None = None) -> None:
+    def add_event(self, name: str, attributes: dict[str, Any] | None = None) -> None:
         """No-op event adding."""
         pass

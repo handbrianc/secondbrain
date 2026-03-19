@@ -315,60 +315,58 @@ def generate_license_risk_report(analysis: dict[str, Any]) -> None:
     print(f"✅ {output_path} generated")
 
 
-def generate_sbom_analysis_doc(analysis: dict[str, Any]) -> None:
-    """Generate/update docs/architecture/SBOM_ANALYSIS.md.
+def _parse_direct_dependencies(pyproject_path: Path) -> list[str]:
+    """Parse direct dependencies from pyproject.toml.
 
-    Creates comprehensive SBOM analysis documentation including:
-    - License risk assessment
-    - Dependency analysis
-    - Compliance notes
-    - Changelog
+    Extracts dependencies from the [project.dependencies] array.
+
+    Args:
+        pyproject_path: Path to pyproject.toml file.
+
+    Returns:
+        List of dependency strings (e.g., ["click>=8.0", "rich"]).
     """
-    print("📚 Generating SBOM_ANALYSIS.md...")
-
-    # Get direct dependencies from pyproject.toml
-    pyproject_path = Path("pyproject.toml")
     direct_deps: list[str] = []
-    if pyproject_path.exists():
-        content = pyproject_path.read_text()
-        in_deps = False
-        for line in content.split("\n"):
-            stripped = line.strip()
-            if stripped.startswith("dependencies = ["):
-                in_deps = True
+    if not pyproject_path.exists():
+        return direct_deps
+
+    content = pyproject_path.read_text()
+    in_deps = False
+    for line in content.split("\n"):
+        stripped = line.strip()
+        if stripped.startswith("dependencies = ["):
+            in_deps = True
+            continue
+        if in_deps:
+            if stripped == "]":
+                break
+            if not stripped or stripped.startswith("#"):
                 continue
-            if in_deps:
-                if stripped == "]":
-                    break
-                if not stripped or stripped.startswith("#"):
-                    continue
-                dep = stripped.rstrip(",").strip()
-                if (dep.startswith('"') and dep.endswith('"')) or (
-                    dep.startswith("'") and dep.endswith("'")
-                ):
-                    dep = dep[1:-1]
-                if dep:
-                    direct_deps.append(dep)
+            dep = stripped.rstrip(",").strip()
+            if (dep.startswith('"') and dep.endswith('"')) or (
+                dep.startswith("'") and dep.endswith("'")
+            ):
+                dep = dep[1:-1]
+            if dep:
+                direct_deps.append(dep)
 
-    # Get SBOM file size
-    sbom_path = Path("docs/architecture/sbom.json")
-    sbom_size = sbom_path.stat().st_size if sbom_path.exists() else 0
-    sbom_size_mb = sbom_size / (1024 * 1024)
+    return direct_deps
 
-    # Known license mappings for unknown packages
-    known: dict[str, str] = {
-        "antlr4-python3-runtime": "BSD-3-Clause",
-        "cryptography": "Apache-2.0",
-        "numpy": "BSD-3-Clause",
-        "packaging": "Apache-2.0",
-        "pypdfium2": "Apache-2.0",
-        "regex": "PSFL",
-        "sentinels": "MIT",
-        "torchvision": "BSD-3-Clause",
-        "tqdm": "MIT",
-    }
 
-    doc_lines = [
+def _generate_executive_summary(
+    analysis: dict[str, Any], direct_deps: list[str], sbom_size_mb: float
+) -> list[str]:
+    """Generate the executive summary section.
+
+    Args:
+        analysis: License analysis data from SBOM.
+        direct_deps: List of direct dependencies.
+        sbom_size_mb: SBOM file size in megabytes.
+
+    Returns:
+        List of markdown lines for the executive summary.
+    """
+    return [
         "# SBOM Analysis & Dependency Trade-offs",
         "",
         f"**Last Updated**: {_get_timestamp().strftime('%Y-%m-%d %H:%M')}",
@@ -398,13 +396,33 @@ def generate_sbom_analysis_doc(analysis: dict[str, Any]) -> None:
         "",
         "## License Risk Assessment",
         "",
-        "### High Risk (GPL/LGPL)",
-        "",
     ]
 
+
+def _generate_license_risk_section(
+    analysis: dict[str, Any], known: dict[str, str]
+) -> list[str]:
+    """Generate the license risk assessment subsections.
+
+    Args:
+        analysis: License analysis data from SBOM.
+        known: Dictionary mapping package names to known licenses.
+
+    Returns:
+        List of markdown lines for high/medium/unknown risk sections.
+    """
+    lines: list[str] = []
+
+    lines.extend(
+        [
+            "### High Risk (GPL/LGPL)",
+            "",
+        ]
+    )
+
     if analysis["high_risk"]:
-        doc_lines.append("| Package | License | Status | Concern |")
-        doc_lines.append("|---------|---------|--------|---------|")
+        lines.append("| Package | License | Status | Concern |")
+        lines.append("|---------|---------|--------|---------|")
         for item in sorted(analysis["high_risk"], key=lambda x: x["license"]):
             status = (
                 "Dev-only" if "pyinstaller" in item["name"].lower() else "Transitive"
@@ -414,13 +432,13 @@ def generate_sbom_analysis_doc(analysis: dict[str, Any]) -> None:
                 if "pyinstaller" in item["name"].lower()
                 else "Weak copyleft - acceptable for internal use"
             )
-            doc_lines.append(
+            lines.append(
                 f"| **{item['name']}** | {item['license']} | {status} | {concern} |"
             )
     else:
-        doc_lines.append("*No high-risk licenses found.*")
+        lines.append("*No high-risk licenses found.*")
 
-    doc_lines.extend(
+    lines.extend(
         [
             "",
             "### Medium Risk (Weak Copyleft)",
@@ -429,19 +447,19 @@ def generate_sbom_analysis_doc(analysis: dict[str, Any]) -> None:
     )
 
     if analysis["medium_risk"]:
-        doc_lines.append("| Package | License | Reason |")
-        doc_lines.append("|---------|---------|--------|")
+        lines.append("| Package | License | Reason |")
+        lines.append("|---------|---------|--------|")
         for item in sorted(analysis["medium_risk"], key=lambda x: x["license"]):
             reason = (
                 "Required by httpx for HTTPS"
                 if "certifi" in item["name"].lower()
                 else "Transitive dependency"
             )
-            doc_lines.append(f"| **{item['name']}** | {item['license']} | {reason} |")
+            lines.append(f"| **{item['name']}** | {item['license']} | {reason} |")
     else:
-        doc_lines.append("*No medium-risk licenses found.*")
+        lines.append("*No medium-risk licenses found.*")
 
-    doc_lines.extend(
+    lines.extend(
         [
             "",
             "### Unknown Licenses",
@@ -450,45 +468,44 @@ def generate_sbom_analysis_doc(analysis: dict[str, Any]) -> None:
     )
 
     if analysis["unknown_licenses"]:
-        doc_lines.append("| Package | Actual License | Risk |")
-        doc_lines.append("|---------|---------------|------|")
-        known = {
-            "antlr4-python3-runtime": "BSD-3-Clause",
-            "cryptography": "Apache-2.0",
-            "numpy": "BSD-3-Clause",
-            "packaging": "Apache-2.0",
-            "pypdfium2": "Apache-2.0",
-            "regex": "PSFL",
-            "sentinels": "MIT",
-            "torchvision": "BSD-3-Clause",
-            "tqdm": "MIT",
-        }
+        lines.append("| Package | Actual License | Risk |")
+        lines.append("|---------|---------------|------|")
         for item in analysis["unknown_licenses"]:
             name = item["name"]
             license_name = known.get(name, "Unknown")
             risk = "✅ Safe" if license_name != "Unknown" else "⚠️ Review needed"
-            doc_lines.append(f"| **{name}** | {license_name} | {risk} |")
+            lines.append(f"| **{name}** | {license_name} | {risk} |")
     else:
-        doc_lines.append("*All licenses identified.*")
+        lines.append("*All licenses identified.*")
 
-    doc_lines.extend(
-        [
-            "",
-            "---",
-            "",
-            "## Dependency Analysis",
-            "",
-            "### Direct Dependencies",
-            "",
-            "```toml",
-            "# pyproject.toml [project.dependencies]",
-        ]
-    )
+    return lines
+
+
+def _generate_dependency_analysis_section(direct_deps: list[str]) -> list[str]:
+    """Generate the dependency analysis section.
+
+    Args:
+        direct_deps: List of direct dependencies from pyproject.toml.
+
+    Returns:
+        List of markdown lines for the dependency analysis section.
+    """
+    lines = [
+        "",
+        "---",
+        "",
+        "## Dependency Analysis",
+        "",
+        "### Direct Dependencies",
+        "",
+        "```toml",
+        "# pyproject.toml [project.dependencies]",
+    ]
 
     for dep in direct_deps:
-        doc_lines.append(dep)
+        lines.append(dep)
 
-    doc_lines.extend(
+    lines.extend(
         [
             "```",
             "",
@@ -515,6 +532,28 @@ def generate_sbom_analysis_doc(analysis: dict[str, Any]) -> None:
             "",
             "## Compliance Notes",
             "",
+        ]
+    )
+
+    return lines
+
+
+def _generate_compliance_notes_section(
+    analysis: dict[str, Any], known: dict[str, str]
+) -> list[str]:
+    """Generate the compliance notes section.
+
+    Args:
+        analysis: License analysis data from SBOM.
+        known: Dictionary mapping package names to known licenses.
+
+    Returns:
+        List of markdown lines for compliance notes.
+    """
+    lines: list[str] = []
+
+    lines.extend(
+        [
             "### High-Risk Packages",
             "",
         ]
@@ -523,24 +562,24 @@ def generate_sbom_analysis_doc(analysis: dict[str, Any]) -> None:
     if analysis["high_risk"]:
         for item in analysis["high_risk"]:
             if "pyinstaller" in item["name"].lower():
-                doc_lines.extend(
+                lines.extend(
                     [
                         f"**{item['name']}** ({item['license']}): Build tool for creating distributable binaries. Not in production runtime. Safe to use for development.",
                         "",
                     ]
                 )
             elif "chardet" in item["name"].lower():
-                doc_lines.extend(
+                lines.extend(
                     [
                         f"**{item['name']}** ({item['license']}): Transitive dependency via docling-core. LGPL allows linking from proprietary code. Acceptable for internal use.",
                         "",
                     ]
                 )
     else:
-        doc_lines.append("*No high-risk packages requiring action.*")
-        doc_lines.append("")
+        lines.append("*No high-risk packages requiring action.*")
+        lines.append("")
 
-    doc_lines.extend(
+    lines.extend(
         [
             "### Medium-Risk Packages",
             "",
@@ -548,22 +587,22 @@ def generate_sbom_analysis_doc(analysis: dict[str, Any]) -> None:
     )
 
     if analysis["medium_risk"]:
-        doc_lines.extend(
+        lines.extend(
             [
                 "The following packages use weak copyleft licenses (MPL-2.0, etc.):",
                 "",
             ]
         )
         for item in analysis["medium_risk"]:
-            doc_lines.append(
+            lines.append(
                 f"- **{item['name']}** ({item['license']}): No viral effect on dependent code. Safe for MIT projects."
             )
-        doc_lines.append("")
+        lines.append("")
     else:
-        doc_lines.append("*No medium-risk packages requiring action.*")
-        doc_lines.append("")
+        lines.append("*No medium-risk packages requiring action.*")
+        lines.append("")
 
-    doc_lines.extend(
+    lines.extend(
         [
             "### Unknown License Packages",
             "",
@@ -571,42 +610,87 @@ def generate_sbom_analysis_doc(analysis: dict[str, Any]) -> None:
     )
 
     if analysis["unknown_licenses"]:
-        doc_lines.append(
+        lines.append(
             "These packages have clear licenses but metadata extraction failed:"
         )
-        doc_lines.append("")
+        lines.append("")
         for item in analysis["unknown_licenses"]:
             name = item["name"]
             license_name = known.get(name, "Unknown")
-            doc_lines.append(f"- **{name}**: {license_name} (permissive)")
-        doc_lines.append("")
-        doc_lines.append(
-            "**Action**: No action required. All are safe for MIT projects."
-        )
-        doc_lines.append("")
+            lines.append(f"- **{name}**: {license_name} (permissive)")
+        lines.append("")
+        lines.append("**Action**: No action required. All are safe for MIT projects.")
+        lines.append("")
     else:
-        doc_lines.append("*All packages have identifiable licenses.*")
-        doc_lines.append("")
+        lines.append("*All packages have identifiable licenses.*")
+        lines.append("")
 
-    doc_lines.extend(
-        [
-            "---",
-            "",
-            "## References",
-            "",
-            "- [CycloneDX SBOM Specification](https://cyclonedx.org/)",
-            "- [MPL-2.0 License](https://www.mozilla.org/en-US/MPL/2.0/)",
-            "- [docling Project](https://github.com/docling-project/docling)",
-            "",
-            "---",
-            "",
-            "## Changelog",
-            "",
-            "| Date | Change |",
-            "|------|--------|",
-            f"| {_get_timestamp().strftime('%Y-%m-%d %H:%M')} | SBOM updated via automated script |",
-        ]
-    )
+    return lines
+
+
+def _generate_changelog_section() -> list[str]:
+    """Generate the changelog section.
+
+    Returns:
+        List of markdown lines for the changelog table.
+    """
+    return [
+        "---",
+        "",
+        "## References",
+        "",
+        "- [CycloneDX SBOM Specification](https://cyclonedx.org/)",
+        "- [MPL-2.0 License](https://www.mozilla.org/en-US/MPL/2.0/)",
+        "- [docling Project](https://github.com/docling-project/docling)",
+        "",
+        "---",
+        "",
+        "## Changelog",
+        "",
+        "| Date | Change |",
+        "|------|--------|",
+        f"| {_get_timestamp().strftime('%Y-%m-%d %H:%M')} | SBOM updated via automated script |",
+    ]
+
+
+def generate_sbom_analysis_doc(analysis: dict[str, Any]) -> None:
+    """Generate/update docs/architecture/SBOM_ANALYSIS.md.
+
+    Creates comprehensive SBOM analysis documentation including:
+    - License risk assessment
+    - Dependency analysis
+    - Compliance notes
+    - Changelog
+    """
+    print("📚 Generating SBOM_ANALYSIS.md...")
+
+    # Get direct dependencies from pyproject.toml
+    pyproject_path = Path("pyproject.toml")
+    direct_deps = _parse_direct_dependencies(pyproject_path)
+
+    # Get SBOM file size
+    sbom_path = Path("docs/architecture/sbom.json")
+    sbom_size = sbom_path.stat().st_size if sbom_path.exists() else 0
+    sbom_size_mb = sbom_size / (1024 * 1024)
+
+    # Known license mappings for unknown packages
+    known: dict[str, str] = {
+        "antlr4-python3-runtime": "BSD-3-Clause",
+        "cryptography": "Apache-2.0",
+        "numpy": "BSD-3-Clause",
+        "packaging": "Apache-2.0",
+        "pypdfium2": "Apache-2.0",
+        "regex": "PSFL",
+        "sentinels": "MIT",
+        "torchvision": "BSD-3-Clause",
+        "tqdm": "MIT",
+    }
+
+    doc_lines = _generate_executive_summary(analysis, direct_deps, sbom_size_mb)
+    doc_lines.extend(_generate_license_risk_section(analysis, known))
+    doc_lines.extend(_generate_dependency_analysis_section(direct_deps))
+    doc_lines.extend(_generate_compliance_notes_section(analysis, known))
+    doc_lines.extend(_generate_changelog_section())
 
     # Ensure docs/architecture directory exists
     sbom_analysis_path = Path("docs/architecture/SBOM_ANALYSIS.md")

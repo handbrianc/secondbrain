@@ -67,26 +67,36 @@ class TestCLIBatchSizeValidation:
     """Tests for batch size validation in CLI."""
 
     @patch("secondbrain.document.DocumentIngestor")
-    def test_ingest_accepts_negative_batch_size(self, mock_ingestor: MagicMock) -> None:
-        """Test that negative batch size is accepted by Click (validated by app logic)."""
+    def test_ingest_rejects_negative_batch_size(self, mock_ingestor: MagicMock) -> None:
+        """Test that negative batch size is rejected by click.IntRange validation."""
         mock_ingestor_instance = MagicMock()
         mock_ingestor_instance.ingest.return_value = {"success": 1, "failed": 0}
         mock_ingestor.return_value = mock_ingestor_instance
 
         runner = CliRunner()
         result = runner.invoke(cli, ["ingest", TEST_PATH, "--batch-size", "-5"])
-        assert result.exit_code == 0
+        # click.IntRange(min=1) rejects negative values
+        assert result.exit_code == 2
+        assert (
+            "must be at least 1" in result.output.lower()
+            or "invalid value" in result.output.lower()
+        )
 
     @patch("secondbrain.document.DocumentIngestor")
-    def test_ingest_accepts_zero_batch_size(self, mock_ingestor: MagicMock) -> None:
-        """Test that zero batch size is accepted by Click (validated by app logic)."""
+    def test_ingest_rejects_zero_batch_size(self, mock_ingestor: MagicMock) -> None:
+        """Test that zero batch size is rejected by click.IntRange validation."""
         mock_ingestor_instance = MagicMock()
         mock_ingestor_instance.ingest.return_value = {"success": 1, "failed": 0}
         mock_ingestor.return_value = mock_ingestor_instance
 
         runner = CliRunner()
         result = runner.invoke(cli, ["ingest", TEST_PATH, "--batch-size", "0"])
-        assert result.exit_code == 0
+        # click.IntRange(min=1) rejects zero
+        assert result.exit_code == 2
+        assert (
+            "must be at least 1" in result.output.lower()
+            or "invalid value" in result.output.lower()
+        )
 
     @patch("secondbrain.document.DocumentIngestor")
     def test_ingest_accepts_large_batch_size(self, mock_ingestor: MagicMock) -> None:

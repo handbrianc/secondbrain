@@ -22,9 +22,9 @@ from secondbrain.exceptions import StorageConnectionError
 from secondbrain.storage.models import DatabaseStats
 from secondbrain.storage.pipeline import build_search_pipeline
 from secondbrain.types import ChunkInfo, SearchResult
-from secondbrain.utils.tracing import trace_operation
 from secondbrain.utils.connections import ValidatableService
 from secondbrain.utils.perf_monitor import async_timing, timing
+from secondbrain.utils.tracing import trace_operation
 
 logger = logging.getLogger(__name__)
 

@@ -44,6 +44,9 @@ class TestFilterCombinations:
             patch.object(storage_with_mock, "validate_connection", return_value=True),
             patch.object(storage_with_mock, "_collection", mock_collection),
             patch.object(storage_with_mock, "_index_created", True),
+            patch.object(
+                storage_with_mock, "_wait_for_index_ready", return_value=None
+            ),  # Skip timeout wait
         ):
             storage_with_mock.search(
                 embedding=[0.1] * 384,
@@ -89,6 +92,9 @@ class TestFilterCombinations:
             patch.object(storage_with_mock, "validate_connection", return_value=True),
             patch.object(storage_with_mock, "_collection", mock_collection),
             patch.object(storage_with_mock, "_index_created", True),
+            patch.object(
+                storage_with_mock, "_wait_for_index_ready", return_value=None
+            ),  # Skip timeout wait
         ):
             results = storage_with_mock.search(
                 embedding=[0.1] * 384,
@@ -110,6 +116,9 @@ class TestFilterCombinations:
             patch.object(storage_with_mock, "validate_connection", return_value=True),
             patch.object(storage_with_mock, "_collection", mock_collection),
             patch.object(storage_with_mock, "_index_created", True),
+            patch.object(
+                storage_with_mock, "_wait_for_index_ready", return_value=None
+            ),  # Skip timeout wait
         ):
             results = storage_with_mock.search(
                 embedding=[0.1] * 384,
@@ -189,6 +198,9 @@ class TestAggregationEdgeCases:
             patch.object(storage_with_mock, "validate_connection", return_value=True),
             patch.object(storage_with_mock, "_collection", mock_collection),
             patch.object(storage_with_mock, "_index_created", True),
+            patch.object(
+                storage_with_mock, "_wait_for_index_ready", return_value=None
+            ),  # Skip timeout wait
         ):
             storage_with_mock.search(embedding=[0.1] * 384, top_k=5)
             assert mock_collection.aggregate.called
@@ -215,6 +227,9 @@ class TestAggregationEdgeCases:
             patch.object(storage_with_mock, "validate_connection", return_value=True),
             patch.object(storage_with_mock, "_collection", mock_collection),
             patch.object(storage_with_mock, "_index_created", True),
+            patch.object(
+                storage_with_mock, "_wait_for_index_ready", return_value=None
+            ),  # Skip timeout wait
         ):
             results = storage_with_mock.search(embedding=[0.1] * 384, top_k=10)
             assert len(results) == 10
@@ -245,6 +260,9 @@ class TestAggregationEdgeCases:
             patch.object(storage_with_mock, "validate_connection", return_value=True),
             patch.object(storage_with_mock, "_collection", mock_collection),
             patch.object(storage_with_mock, "_index_created", True),
+            patch.object(
+                storage_with_mock, "_wait_for_index_ready", return_value=None
+            ),  # Skip timeout wait
         ):
             results = storage_with_mock.search(embedding=[0.1] * 384, top_k=5)
 
@@ -272,6 +290,9 @@ class TestAggregationEdgeCases:
             patch.object(storage_with_mock, "validate_connection", return_value=True),
             patch.object(storage_with_mock, "_collection", mock_collection),
             patch.object(storage_with_mock, "_index_created", True),
+            patch.object(
+                storage_with_mock, "_wait_for_index_ready", return_value=None
+            ),  # Skip timeout wait
         ):
             results = storage_with_mock.search(embedding=[0.1] * 384, top_k=5)
 

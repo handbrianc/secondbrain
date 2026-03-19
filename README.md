@@ -106,14 +106,31 @@ ruff check . && ruff format .
 # Type checking
 mypy .
 
-# Tests (fast profile - default)
-pytest -m "not integration" -n auto
+# Tests (fast profile - default, 4 workers, no coverage)
+pytest -m "not integration"
+
+# Tests with coverage (slower, for CI/release)
+pytest --cov=secondbrain --cov-report=term-missing
+
+# More parallelism (8 workers)
+pytest -n 8
 
 # Full test suite (requires MongoDB + sentence-transformers)
 pytest
 
 # All checks
-ruff check . && ruff format --check . && mypy . && pytest -m "not integration" -n auto
+ruff check . && ruff format --check . && mypy . && pytest -m "not integration"
+```
+
+### Test Performance
+
+**Default configuration** uses 4 parallel workers without coverage for fast local feedback (~5s for unit tests).
+
+**Shell aliases** (add to `~/.bashrc` or `~/.zshrc`):
+```bash
+alias pytest-fast="pytest -m 'not integration' -n 4 --no-cov"
+alias pytest-full="pytest --cov=secondbrain --cov-report=term-missing"
+alias pytest-ci="pytest -m 'not integration' -n 8 --cov=secondbrain --cov-report=xml"
 ```
 
 ### Test Profiles
@@ -122,12 +139,12 @@ The test suite supports different execution profiles:
 
 | Profile | Command | Duration | Use Case |
 |---------|---------|----------|----------|
-| **Fast** | `pytest -m "not integration" -n auto` | <5s | Pre-commit, quick feedback |
+| **Fast** | `pytest -m "not integration"` | ~5s | Pre-commit, quick feedback |
 | **Integration** | `pytest -m integration` | ~15s | Nightly builds, service testing |
 | **Slow (E2E)** | `pytest -m slow` | ~16s | Release validation |
-| **Full** | `pytest` | ~42s | Complete validation |
+| **Full** | `pytest` | ~25s | Complete validation |
 
-See [TESTING.md](docs/developer-guide/TESTING.md) for detailed testing documentation.
+See [TESTING.md](docs/developer-guide/TESTING.md) and [TESTING_OPTIMIZATION.md](tests/TESTING_OPTIMIZATION.md) for detailed testing documentation.
 
 ### Coverage Cleanup
 
@@ -143,6 +160,8 @@ To manually cleanup coverage files after test runs:
 - Adjust `chunk_size` for your document types
 - Enable verbose mode for timing info: `--verbose`
 - Use `-n auto` for parallel test execution (pytest-xdist)
+- Tests timeout after 60s to catch hangs (`--timeout=60`)
+- Mark slow tests with `@pytest.mark.slow` to exclude from fast profile
 
 ## Architecture
 
@@ -159,4 +178,27 @@ And [Schema Reference](docs/architecture/schema.md) for database structure.
 ## License
 
 This project is licensed under the MIT License. See [LICENSE](docs/license.md) for details.
+
+## Shell Completion
+
+SecondBrain supports shell completion for bash, zsh, and fish shells. Click provides this functionality automatically.
+
+To enable completion, add the following to your shell configuration file (`~/.bashrc`, `~/.zshrc`, `~/.bash_profile`):
+
+### Bash
+```bash
+eval "$(_SECONDBRAIN_COMPLETE=bash_source secondbrain)"
+```
+
+### Zsh
+```bash
+eval "$(_SECONDBRAIN_COMPLETE=zsh_source secondbrain)"
+```
+
+### Fish
+```fish
+_secondbrain_complete=fish_source secondbrain | source
+```
+
+After adding the configuration, restart your shell or run `source ~/.your_shellrc` to apply the changes.
 

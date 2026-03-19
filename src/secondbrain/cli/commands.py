@@ -37,6 +37,7 @@ from .display import (
     display_search_results,
     display_status,
 )
+from .errors import handle_cli_errors
 
 console = Console()
 logger = logging.getLogger(__name__)
@@ -44,13 +45,14 @@ logger = logging.getLogger(__name__)
 MAX_LIST_LIMIT = 100000
 
 
+@handle_cli_errors
 @cli.command()
 @click.argument("path", type=click.Path(exists=True))
 @click.option("--recursive", "-r", is_flag=True, help="Recursively process directories")
 @click.option(
     "--batch-size",
     "-b",
-    type=int,
+    type=click.IntRange(min=1),
     default=10,
     help="Batch size for ThreadPoolExecutor (used when cores=1)",
 )
@@ -100,19 +102,58 @@ def ingest(
     )
 
     console.print(f"[bold]Ingesting: {path}[/bold]")
-    results = ingestor.ingest(
-        path, recursive=recursive, batch_size=batch_size, cores=cores
-    )
+
+    # Collect files to show progress
+    from pathlib import Path
+
+    from secondbrain.document import is_supported
+
+    path_obj = Path(path)
+    if path_obj.is_file():
+        files = [path_obj]
+    else:
+        files = list(path_obj.rglob("*")) if recursive else list(path_obj.glob("*"))
+        files = [f for f in files if f.is_file() and is_supported(f)]
+
+    total_files = len(files)
+
+    if total_files > 10:  # Only show progress for larger batches
+        from rich.progress import Progress, SpinnerColumn, TextColumn
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+        ) as progress:
+            task = progress.add_task("[cyan]Ingesting...", total=total_files)
+            results = ingestor.ingest(
+                path, recursive=recursive, batch_size=batch_size, cores=cores
+            )
+            progress.update(task, completed=total_files)
+    else:
+        results = ingestor.ingest(
+            path, recursive=recursive, batch_size=batch_size, cores=cores
+        )
+
     console.print(f"[green]Successfully ingested {results['success']} files[/green]")
     if results["failed"] > 0:
         console.print(f"[yellow]Failed: {results['failed']} files[/yellow]")
 
 
+@handle_cli_errors
 @cli.command()
 @click.argument("query")
 @click.option("--top-k", type=int, help="Number of results to return")
-@click.option("--source", type=str, help="Filter by source file")
-@click.option("--file-type", type=str, help="Filter by file type")
+@click.option(
+    "--source",
+    type=str,
+    help="Filter results by source file path (e.g., '/path/to/document.pdf')",
+)
+@click.option(
+    "--file-type",
+    type=str,
+    help="Filter results by file type (e.g., 'pdf', 'docx', 'markdown')",
+)
 @click.option(
     "--format",
     type=click.Choice(["table", "json"]),
@@ -154,7 +195,8 @@ def search(
     display_search_results(results, format, min_score=min_score)
 
 
-@cli.command("list")
+@handle_cli_errors
+@cli.command("ls")
 @click.option("--source", type=str, help="Filter by source file")
 @click.option("--chunk-id", type=str, help="Filter by specific chunk ID")
 @click.option("--limit", type=int, default=100, help="Maximum number of results")
@@ -197,6 +239,7 @@ def list_cmd(
     display_list_results(results)
 
 
+@handle_cli_errors
 @cli.command()
 @click.option("--source", type=str, help="Filter by source file")
 @click.option("--chunk-id", type=str, help="Filter by specific chunk ID")
@@ -248,6 +291,7 @@ def delete(
             sys.exit(1)
 
 
+@handle_cli_errors
 @cli.command()
 @click.pass_context
 def status(ctx: click.Context) -> None:
@@ -259,6 +303,7 @@ def status(ctx: click.Context) -> None:
     display_status(stats)
 
 
+@handle_cli_errors
 @cli.command()
 @click.option(
     "--output",
@@ -276,6 +321,7 @@ def health(ctx: click.Context, output: str) -> None:
         display_health_status(health_status)
 
 
+@handle_cli_errors
 @cli.command()
 @click.option("--reset", "-r", is_flag=True, help="Reset all metrics")
 @click.pass_context

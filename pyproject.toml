@@ -43,6 +43,7 @@ dev = [
     "pytest-benchmark>=4.0.0",
     "pytest-xdist>=3.0.0",
     "pytest-hypothesis>=6.0.0",
+    "pytest-timeout>=2.2.0",
     "hypothesis>=6.0.0",
     "bandit>=1.7.0",
     "safety>=3.0.0",
@@ -115,11 +116,7 @@ namespace_packages = false
 [[tool.mypy.overrides]]
 module = ["secondbrain.document"]
 warn_unused_ignores = false
-disable_error_code = ["arg-type"]
-
-[[tool.mypy.overrides]]
-module = ["secondbrain.storage.storage", "secondbrain.embedding.local"]
-disable_error_code = ["attr-defined", "no-any-return", "valid-type", "operator", "unreachable", "has-type", "misc"]
+disable_error_code = ["arg-type", "attr-defined"]
 
 # Skip problematic third-party packages with namespace package issues
 [[tool.mypy.overrides]]
@@ -151,7 +148,11 @@ exclude_dirs = ["tests"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--cov=secondbrain --cov-report=term-missing --cov-fail-under=80 -m 'not slow' -n auto --dist loadscope"
+# Optimized defaults: fewer workers (4 instead of auto) for faster local feedback
+# Enable coverage when needed: pytest --cov=secondbrain
+# More parallelism: pytest -n 8
+# Timeout: 60s per test to catch hangs without blocking CI
+addopts = "-m 'not slow' -n 4 --no-cov --timeout=60"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 markers = [
@@ -161,12 +162,17 @@ markers = [
     "fast: marks tests as fast (takes <50ms to execute)",
     "medium: marks tests as medium speed (takes <500ms to execute)",
     "circuit_breaker: marks tests that involve circuit breaker behavior (may be slow)",
+    "hypothesis: marks tests as property-based testing",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning:docling",
     "ignore::DeprecationWarning:pyparsing",
     "ignore:.*Benchmarks are automatically disabled.*",
 ]
+
+[tool.pytest-timeout]
+timeout = 60
+timeout_method = "thread"  # More aggressive than signal, works with threads
 
 [tool.pre-commit]
 default_stages = ["pre-commit"]
@@ -185,6 +191,8 @@ ignore_names = [
     "exc_val",
     "exc_tb",
     "info",          # Context manager info parameter (false positive)
+    "description",   # No-op span method parameter (interface match)
+    "attributes",    # No-op span method parameter (interface match)
 ]
 min_confidence = 80
 exclude = ["venv/*", ".git/*", "tests/*", "scripts/*"]

@@ -51,18 +51,11 @@ def display_search_results(
     for i, result in enumerate(filtered_results, 1):
         chunk_preview = result.get("chunk_text", "")[:100]
         page_num = result.get("page_number", "N/A")
-        if format == "verbose":
-            console.print(f"\n[bold]Result {i}[/bold]")
-            console.print(f"  Source: {result.get('source_file', 'N/A')}")
-            console.print(f"  Page: {page_num}")
-            console.print(f"  Score: {result.get('score', 0):.4f}")
-            console.print(f"  Text: {result.get('chunk_text', '')[:200]}...")
-        else:
-            console.print(
-                f"{i}. {result.get('source_file', 'N/A')} "
-                f"(page {page_num}, score: {result.get('score', 0):.4f}) "
-                f"- {chunk_preview}..."
-            )
+        console.print(
+            f"{i}. {result.get('source_file', 'N/A')} "
+            f"(page {page_num}, score: {result.get('score', 0):.4f}) "
+            f"- {chunk_preview}..."
+        )
 
 
 def display_list_results(results: Sequence[ChunkInfo]) -> None:

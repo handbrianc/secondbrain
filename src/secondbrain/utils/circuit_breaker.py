@@ -10,9 +10,10 @@ when a service is consistently unavailable, and gradually testing recovery.
 import logging
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
-from typing import Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -162,7 +163,8 @@ class CircuitBreaker:
             if self._state == CircuitState.HALF_OPEN:
                 return self._half_open_calls < self.config.half_open_max_calls
 
-            return False
+            # All states covered above; raise for mypy exhaustiveness
+            raise AssertionError(f"Unhandled CircuitState: {self._state}")
 
     def record_success(self) -> None:
         """Record a successful call.
@@ -272,8 +274,8 @@ class CircuitBreaker:
             self.record_failure()
             raise
 
-    def get_state_info(self) -> dict:
-        """Get detailed state information for debugging/monitoring.
+    def get_state_info(self) -> dict[str, Any]:
+        """Get detailed state information for debugging and monitoring.
 
         Returns:
             Dictionary with current state details.
@@ -353,19 +355,32 @@ class CircuitBreakerEnabledService:
         return self._circuit_breaker_enabled
 
     def validate_connection_with_circuit_breaker(self, force: bool = False) -> bool:
-        """Validate connection with circuit breaker protection."""
-        if self._circuit_breaker_enabled and self._circuit_breaker is not None:
-            if not self._circuit_breaker.is_allowed():
-                logger.warning(
-                    "Circuit breaker open for service %s, failing fast",
-                    self.__class__.__name__,
-                )
-                raise CircuitBreakerError(
-                    "Circuit breaker is open",
-                    service_name=self.__class__.__name__,
-                )
+        """Validate connection with circuit breaker protection.
 
-        result = self.validate_connection(force=force)  # type: ignore[attr-defined]
+        Args:
+            force: Force revalidation even if cached.
+
+        Returns:
+            True if connection is valid, False otherwise.
+
+        Raises:
+            CircuitBreakerError: If circuit breaker is open.
+        """
+        if (
+            self._circuit_breaker_enabled
+            and self._circuit_breaker is not None
+            and not self._circuit_breaker.is_allowed()
+        ):
+            logger.warning(
+                "Circuit breaker open for service %s, failing fast",
+                self.__class__.__name__,
+            )
+            raise CircuitBreakerError(
+                "Circuit breaker is open",
+                service_name=self.__class__.__name__,
+            )
+
+        result: bool = self.validate_connection(force=force)  # type: ignore[attr-defined]
 
         if self._circuit_breaker_enabled and self._circuit_breaker is not None:
             if result:
@@ -378,18 +393,32 @@ class CircuitBreakerEnabledService:
     async def validate_connection_async_with_circuit_breaker(
         self, force: bool = False
     ) -> bool:
-        if self._circuit_breaker_enabled and self._circuit_breaker is not None:
-            if not self._circuit_breaker.is_allowed():
-                logger.warning(
-                    "Circuit breaker open for service %s, failing fast",
-                    self.__class__.__name__,
-                )
-                raise CircuitBreakerError(
-                    "Circuit breaker is open",
-                    service_name=self.__class__.__name__,
-                )
+        """Validate connection asynchronously with circuit breaker protection.
 
-        result = await self.validate_connection_async(force=force)  # type: ignore[attr-defined]
+        Args:
+            force: Force revalidation even if cached.
+
+        Returns:
+            True if connection is valid, False otherwise.
+
+        Raises:
+            CircuitBreakerError: If circuit breaker is open.
+        """
+        if (
+            self._circuit_breaker_enabled
+            and self._circuit_breaker is not None
+            and not self._circuit_breaker.is_allowed()
+        ):
+            logger.warning(
+                "Circuit breaker open for service %s, failing fast",
+                self.__class__.__name__,
+            )
+            raise CircuitBreakerError(
+                "Circuit breaker is open",
+                service_name=self.__class__.__name__,
+            )
+
+        result: bool = await self.validate_connection_async(force=force)  # type: ignore[attr-defined]
 
         if self._circuit_breaker_enabled and self._circuit_breaker is not None:
             if result:
