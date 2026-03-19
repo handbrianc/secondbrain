@@ -221,7 +221,7 @@ def _extract_chunk_and_embed_file(
             if not cleaned:
                 continue
             normalized = " ".join(cleaned.lower().split())
-            text_hash = int(hashlib.sha256(normalized.encode()).hexdigest(), 16)
+            text_hash = hashlib.sha256(normalized.encode()).hexdigest()
             if text_hash not in seen_hashes:
                 seen_hashes.add(text_hash)
                 unique_chunks.append(
@@ -730,7 +730,7 @@ class DocumentIngestor:
                 continue
 
             normalized = " ".join(cleaned.lower().split())
-            text_hash = int(hashlib.sha256(normalized.encode()).hexdigest(), 16)
+            text_hash = hashlib.sha256(normalized.encode()).hexdigest()
 
             if text_hash not in seen_hashes:
                 seen_hashes.add(text_hash)
@@ -967,7 +967,7 @@ class DocumentIngestor:
                 continue
 
             normalized = " ".join(cleaned.lower().split())
-            text_hash = int(hashlib.sha256(normalized.encode()).hexdigest(), 16)
+            text_hash = hashlib.sha256(normalized.encode()).hexdigest()
 
             if text_hash in seen_hashes:
                 continue
@@ -1207,6 +1207,12 @@ class DocumentIngestor:
                             result = future.result(timeout=300)
 
                             if not result["success"]:
+                                if self.verbose:
+                                    logger.error(
+                                        "Failed to process %s: %s",
+                                        file_path,
+                                        result.get("error", "Unknown error"),
+                                    )
                                 failed_files += 1
                                 completed += 1
                                 if self.progress_callback:
@@ -1216,6 +1222,10 @@ class DocumentIngestor:
 
                             documents = result.get("documents", [])
                             if not documents:
+                                if self.verbose:
+                                    logger.warning(
+                                        "No documents produced from %s", file_path
+                                    )
                                 failed_files += 1
                                 completed += 1
                                 if self.progress_callback:
