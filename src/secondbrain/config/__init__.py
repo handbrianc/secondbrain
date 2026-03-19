@@ -80,7 +80,12 @@ class Config(BaseSettings):
 
     model: str = Field(
         default="embeddinggemma:latest",
-        description="Embedding model to use",
+        description="Embedding model to use (for Ollama/remote APIs)",
+    )
+
+    local_embedding_model: str = Field(
+        default="all-MiniLM-L6-v2",
+        description="Sentence-transformers model for local embedding (e.g., all-MiniLM-L6-v2, all-mpnet-base-v2)",
     )
 
     # Chunking settings
