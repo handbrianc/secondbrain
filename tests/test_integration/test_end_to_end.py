@@ -96,7 +96,7 @@ class TestDocumentIngestion:
     def test_ingest_multiple_files_batch(
         self,
         sample_pdf_path: Path,
-        multi_page_pdf_path: Path,
+        sample_pdf_with_multiple_pages: Path,
     ) -> None:
         """Test batch ingestion of multiple PDF files."""
         mongomock_client = mongomock.MongoClient()

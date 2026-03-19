@@ -148,13 +148,11 @@ exclude_dirs = ["tests"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# Optimized defaults: fewer workers (4 instead of auto) for faster local feedback
-# Enable coverage when needed: pytest --cov=secondbrain
-# More parallelism: pytest -n 8
-# Timeout: 60s per test to catch hangs without blocking CI
-addopts = "-m 'not slow' -n 4 --no-cov --timeout=60"
+addopts = "-m 'not slow' -n 4 --no-cov --timeout=60 -p no:warnings -p no:benchmark"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+numprocesses = 4
+processes = 4
 markers = [
     "integration: marks tests as integration tests that require external services",
     "unit: marks tests as unit tests that use mocks",
@@ -168,6 +166,8 @@ filterwarnings = [
     "ignore::DeprecationWarning:docling",
     "ignore::DeprecationWarning:pyparsing",
     "ignore:.*Benchmarks are automatically disabled.*",
+    "ignore:.*This process.*is multi-threaded, use of fork.*",
+    "ignore::pytest.PytestBenchmarkWarning",
 ]
 
 [tool.pytest-timeout]

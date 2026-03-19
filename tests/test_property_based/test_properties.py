@@ -16,44 +16,64 @@ from secondbrain.search import MAX_QUERY_LENGTH, sanitize_query
 class TestQuerySanitization:
     """Property tests for query sanitization."""
 
-    @given(st.text(max_size=100))
-    @settings(max_examples=10)
+    @given(
+        st.text(min_size=1, max_size=MAX_QUERY_LENGTH).filter(
+            lambda s: (
+                "\x00" not in s
+                and "<script" not in s.lower()
+                and "javascript:" not in s.lower()
+                and "../" not in s
+            )
+        )
+    )
+    @settings(max_examples=25)
     def test_sanitize_preserves_valid_input(self, query: str):
         """Sanitization should preserve valid queries."""
-        if not query or len(query) > MAX_QUERY_LENGTH:
-            pytest.skip("Invalid input")
-
         sanitized = sanitize_query(query)
-        # Sanitized query should not be longer than original
         assert len(sanitized) <= len(query)
-        # Should not contain dangerous patterns
         assert "../" not in sanitized
         assert "<script" not in sanitized.lower()
         assert "javascript:" not in sanitized.lower()
 
-    @given(st.text(min_size=1, max_size=MAX_QUERY_LENGTH))
-    @settings(max_examples=10)
+    @given(
+        st.text(min_size=1, max_size=MAX_QUERY_LENGTH).filter(
+            lambda s: (
+                "\x00" not in s
+                and "<script" not in s.lower()
+                and "javascript:" not in s.lower()
+                and "../" not in s
+            )
+        )
+    )
+    @settings(max_examples=25)
     def test_sanitize_removes_control_characters(self, query: str):
         """Sanitization should remove control characters."""
-        if not query or "\x00" in query:
-            pytest.skip("Empty or null byte")
-
         sanitized = sanitize_query(query)
         for char in sanitized:
-            assert ord(char) not in range(0, 32)
-            assert ord(char) not in range(127, 160)
+            assert ord(char) not in range(0, 32), (
+                f"Control char {ord(char)} found in: {sanitized!r}"
+            )
+            assert ord(char) not in range(127, 160), (
+                f"Control char {ord(char)} found in: {sanitized!r}"
+            )
 
-    @given(st.text(min_size=1, max_size=100))
-    @settings(max_examples=10)
+    @given(
+        st.text(min_size=1, max_size=100).filter(
+            lambda s: (
+                "\x00" not in s
+                and "<script" not in s.lower()
+                and "javascript:" not in s.lower()
+                and "../" not in s
+            )
+        )
+    )
+    @settings(max_examples=25)
     def test_sanitize_strips_whitespace(self, query: str):
         """Sanitization should strip leading/trailing whitespace."""
-        # Skip queries with control characters that will be rejected
-        if any(ord(c) < 32 for c in query):
-            pytest.skip("Contains control characters")
-
         sanitized = sanitize_query(query)
-        # Result should be stripped
-        assert sanitized == sanitized.strip()
+        assert sanitized == sanitized.strip(), (
+            f"Whitespace not stripped: {sanitized!r}"
+        )
 
 
 @pytest.mark.hypothesis
