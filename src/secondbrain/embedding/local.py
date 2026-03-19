@@ -29,6 +29,8 @@ class LocalEmbeddingGenerator:
         self._model: Any = None
         self._connection_valid: bool | None = None
         self._connection_checked_at: float = 0.0
+
+        # Suppress third-party logs
         logging.getLogger("sentence_transformers").setLevel(logging.WARNING)
 
     @property

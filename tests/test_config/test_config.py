@@ -67,7 +67,7 @@ class TestConfig:
             assert config.mongo_uri == "mongodb://localhost:27017"
             assert config.mongo_db == "secondbrain"
             assert config.mongo_collection == "embeddings"
-            assert config.model == "all-MiniLM-L6-v2"
+            assert config.local_embedding_model == "all-MiniLM-L6-v2"
             assert config.chunk_size == 4096
             assert config.chunk_overlap == 50
             assert config.default_top_k == 5
@@ -79,7 +79,7 @@ class TestConfig:
             mongo_uri="mongodb://custom:27017",
             mongo_db="custom_db",
             mongo_collection="custom_collection",
-            model="custom-model:latest",
+            local_embedding_model="custom-model:latest",
             chunk_size=2048,
             chunk_overlap=100,
             default_top_k=10,
@@ -89,7 +89,7 @@ class TestConfig:
         assert config.mongo_uri == "mongodb://custom:27017"
         assert config.mongo_db == "custom_db"
         assert config.mongo_collection == "custom_collection"
-        assert config.model == "custom-model:latest"
+        assert config.local_embedding_model == "custom-model:latest"
         assert config.chunk_size == 2048
         assert config.chunk_overlap == 100
         assert config.default_top_k == 10

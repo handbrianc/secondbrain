@@ -3,12 +3,14 @@
 import asyncio
 import contextlib
 import logging
+import struct
 import time
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any
 
 import httpx
+from bson.binary import Binary
 from pymongo import MongoClient
 from pymongo.collection import Collection
 from pymongo.database import Database
@@ -81,7 +83,9 @@ class VectorStorage(ValidatableService):
             )
 
     def _add_ingestion_timestamp(self, doc: dict[str, Any]) -> dict[str, Any]:
-        """Add ingestion timestamp to document metadata.
+        """Add ingestion timestamp to document.
+
+        Supports both old (nested metadata) and new (flattened) formats.
 
         Args:
             doc: Document to add timestamp to.
@@ -91,14 +95,24 @@ class VectorStorage(ValidatableService):
             Document with updated timestamp (copy).
         """
         result = doc.copy()
-        if "metadata" in result and "ingested_at" in result["metadata"]:
-            result["metadata"]["ingested_at"] = datetime.now(UTC).isoformat()
+        now = datetime.now(UTC).isoformat()
+
+        # Support new flattened format
+        if "ingested_at" in result:
+            result["ingested_at"] = now
+        # Support old nested format for backward compatibility
+        elif "metadata" in result and "ingested_at" in result["metadata"]:
+            result["metadata"]["ingested_at"] = now
+
         return result
 
     def _add_ingestion_timestamps(
         self, documents: list[dict[str, Any]]
     ) -> list[dict[str, Any]]:
         """Add ingestion timestamps to multiple documents.
+
+        Supports both old (nested metadata) and new (flattened) formats.
+        All documents in batch get the same timestamp for consistency.
 
         Args:
             documents: List of documents to add timestamps to.
@@ -112,12 +126,80 @@ class VectorStorage(ValidatableService):
 
         for doc in documents:
             doc_copy = doc.copy()
-            if "metadata" not in doc_copy:
-                doc_copy["metadata"] = {}
-            doc_copy["metadata"]["ingested_at"] = now
+
+            # Support new flattened format
+            if "ingested_at" in doc_copy:
+                doc_copy["ingested_at"] = now
+            # Support old nested format for backward compatibility
+            elif "metadata" in doc_copy:
+                doc_copy.setdefault("metadata", {})
+                doc_copy["metadata"]["ingested_at"] = now
+
             docs_with_timestamps.append(doc_copy)
 
         return docs_with_timestamps
+
+    def _encode_embedding(self, embedding: list[float]) -> bytes:
+        """Convert float list to binary float32 array.
+
+        Args:
+            embedding: List of floats (float64 or float32).
+
+        Returns
+        -------
+            Binary data packed as float32 array.
+        """
+        # Convert to float32 if needed and pack
+        return struct.pack(f"{len(embedding)}f", *embedding)
+
+    def _decode_embedding(
+        self, binary: bytes, dimensions: int | None = None
+    ) -> list[float]:
+        """Convert binary float32 array back to float list.
+
+        Args:
+            binary: Binary data from float32 array.
+            dimensions: Expected dimensions (auto-detected if None).
+
+        Returns
+        -------
+            List of floats decoded from binary.
+        """
+        if dimensions is None:
+            dimensions = len(binary) // 4  # 4 bytes per float32
+        return list(struct.unpack(f"{dimensions}f", binary))
+
+    def _prepare_embedding_for_storage(
+        self, embedding: list[float]
+    ) -> bytes | list[float]:
+        """Prepare embedding for storage based on config.
+
+        Args:
+            embedding: List of floats to store.
+
+        Returns
+        -------
+            Binary data if binary format enabled, otherwise original list.
+        """
+        if self._config.embedding_storage_format == "binary":
+            return Binary(self._encode_embedding(embedding))
+        return embedding
+
+    def _normalize_embedding(self, embedding: bytes | list[float]) -> list[float]:
+        """Normalize embedding to list format for use.
+
+        Args:
+            embedding: Binary data or list of floats.
+
+        Returns
+        -------
+            List of floats.
+        """
+        if isinstance(embedding, Binary):
+            return self._decode_embedding(bytes(embedding))
+        if isinstance(embedding, bytes):
+            return self._decode_embedding(embedding)
+        return embedding
 
     def _wait_for_index_ready(self) -> None:
         """Wait for MongoDB vector search index to be ready.
@@ -446,22 +528,45 @@ class VectorStorage(ValidatableService):
         """Store a document with embedding."""
         self._require_connection("store document")
 
-        # Add timestamp and store
-        doc = self._add_ingestion_timestamp(document)
+        # Prepare document for storage
+        doc = self._prepare_document_for_storage(document)
         with trace_operation("storage_insert_one"):
             result = self.collection.insert_one(doc)
         return str(result.inserted_id)
+
+    def _prepare_document_for_storage(self, doc: dict[str, Any]) -> dict[str, Any]:
+        """Prepare document for storage with optimizations.
+
+        Args:
+            doc: Document to prepare.
+
+        Returns
+        -------
+            Document with optimized embedding format.
+        """
+        result = doc.copy()
+        # Convert embedding to optimized format
+        if "embedding" in result:
+            result["embedding"] = self._prepare_embedding_for_storage(
+                result["embedding"]
+            )
+        return result
 
     @timing("storage_store_batch")
     def store_batch(self, documents: list[dict[str, Any]]) -> int:
         """Store multiple documents."""
         self._require_connection("store batch")
 
-        # Add timestamps to all documents
+        # Add timestamps to all documents (supports both old and new formats)
         docs_with_timestamps = self._add_ingestion_timestamps(documents)
 
+        # Prepare documents for storage
+        docs_prepared = [
+            self._prepare_document_for_storage(doc) for doc in docs_with_timestamps
+        ]
+
         with trace_operation("storage_insert_many"):
-            result = self.collection.insert_many(docs_with_timestamps)
+            result = self.collection.insert_many(docs_prepared)
         return len(result.inserted_ids)
 
     @timing("storage_search")
@@ -628,8 +733,8 @@ class VectorStorage(ValidatableService):
         """
         await self._require_connection_async("store document")
 
-        # Add timestamp and store
-        doc = self._add_ingestion_timestamp(document)
+        # Prepare document for storage
+        doc = self._prepare_document_for_storage(document)
         result = await asyncio.to_thread(lambda: self.collection.insert_one(doc))
         return str(result.inserted_id)
 
@@ -646,11 +751,16 @@ class VectorStorage(ValidatableService):
         """
         await self._require_connection_async("store batch")
 
-        # Add timestamps to all documents
+        # Add timestamps to all documents (supports both old and new formats)
         docs_with_timestamps = self._add_ingestion_timestamps(documents)
 
+        # Prepare documents for storage
+        docs_prepared = [
+            self._prepare_document_for_storage(doc) for doc in docs_with_timestamps
+        ]
+
         result = await asyncio.to_thread(
-            lambda: self.collection.insert_many(docs_with_timestamps)
+            lambda: self.collection.insert_many(docs_prepared)
         )
         return len(result.inserted_ids)
 

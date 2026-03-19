@@ -188,7 +188,7 @@ class TestDocumentIngestorBuildDocumentsEdgeCases:
         )
 
         assert len(docs) == 1
-        assert docs[0]["metadata"]["file_type"] == "pdf"
+        assert docs[0]["file_type"] == "pdf"
 
     def test_build_documents_with_large_number_of_chunks(self, tmp_path: Path) -> None:
         """Test building documents with many chunks."""

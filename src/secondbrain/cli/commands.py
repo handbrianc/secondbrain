@@ -98,12 +98,6 @@ def ingest(
     # Use verbose flag from global CLI context
     verbose = ctx.obj.get("verbose", False)
 
-    ingestor = DocumentIngestor(
-        chunk_size=chunk_size,
-        chunk_overlap=chunk_overlap,
-        verbose=verbose,
-    )
-
     console.print(f"[bold]Ingesting: {path}[/bold]")
 
     # Collect files to show progress
@@ -143,7 +137,7 @@ def ingest(
             ingestor = DocumentIngestor(
                 chunk_size=chunk_size,
                 chunk_overlap=chunk_overlap,
-                verbose=ctx.obj.get("verbose", False),
+                verbose=verbose,
                 progress_callback=progress_callback,
             )
 
@@ -157,7 +151,7 @@ def ingest(
         ingestor = DocumentIngestor(
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
-            verbose=ctx.obj.get("verbose", False),
+            verbose=verbose,
         )
         results = ingestor.ingest(
             path, recursive=recursive, batch_size=batch_size, cores=cores

@@ -195,6 +195,32 @@ class Config(BaseSettings):
         description="Number of chunks to process per streaming batch (1-200, default: 100). Larger batches improve embedding throughput by utilizing batch API calls.",
     )
 
+    # Storage optimization settings
+    storage_compression_enabled: bool = Field(
+        default=True,
+        description="Enable MongoDB collection-level compression (zstd). Reduces storage by 40-60%.",
+    )
+
+    embedding_dtype: str = Field(
+        default="float32",
+        description="Embedding data type: 'float32' (50% smaller) or 'float64' (default MongoDB). float32 recommended for most use cases.",
+    )
+
+    embedding_storage_format: str = Field(
+        default="binary",
+        description="Embedding storage format: 'binary' (BSON Binary, compact) or 'array' (JSON array). Binary recommended.",
+    )
+
+    text_compression_enabled: bool = Field(
+        default=False,
+        description="Enable text compression for chunk_text (gzip/brotli). Opt-in initially, reduces text storage by 60-80%.",
+    )
+
+    text_compression_algorithm: str = Field(
+        default="gzip",
+        description="Text compression algorithm: 'gzip', 'brotli', or 'zstd'. gzip is fastest, brotli has best ratio.",
+    )
+
     @field_validator("chunk_size")
     @classmethod
     def validate_chunk_size(cls, v: int) -> int:
@@ -324,6 +350,14 @@ class Config(BaseSettings):
             or self.streaming_chunk_batch_size > 200
         ):
             raise ValueError("streaming_chunk_batch_size must be between 1 and 200")
+        if self.embedding_dtype not in ("float32", "float64"):
+            raise ValueError("embedding_dtype must be 'float32' or 'float64'")
+        if self.embedding_storage_format not in ("binary", "array"):
+            raise ValueError("embedding_storage_format must be 'binary' or 'array'")
+        if self.text_compression_algorithm not in ("gzip", "brotli", "zstd"):
+            raise ValueError(
+                "text_compression_algorithm must be 'gzip', 'brotli', or 'zstd'"
+            )
         return self
 
     @property
