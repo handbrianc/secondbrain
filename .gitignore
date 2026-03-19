@@ -50,6 +50,7 @@ htmlcov/
 .tox/
 .hypothesis/
 .benchmarks/
+.coverage*
 
 # Lockfile (keep for reproducibility)
 # requirements.txt is tracked for reproducible installs
