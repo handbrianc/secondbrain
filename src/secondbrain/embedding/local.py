@@ -29,7 +29,7 @@ class LocalEmbeddingGenerator:
         self._model: Any = None
         self._connection_valid: bool | None = None
         self._connection_checked_at: float = 0.0
-        logger.info("Loading local embedding model: %s", model_name)
+        logging.getLogger("sentence_transformers").setLevel(logging.WARNING)
 
     @property
     def model(self) -> Any:
@@ -38,7 +38,6 @@ class LocalEmbeddingGenerator:
             from sentence_transformers import SentenceTransformer
 
             self._model = SentenceTransformer(self.model_name)  # type: ignore[operator]
-            logger.info("Model loaded: %s", self.model_name)
         return self._model
 
     def generate(self, text: str) -> list[float]:
