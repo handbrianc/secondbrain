@@ -42,7 +42,7 @@ secondbrain ingest /path/to/your/documents/
 secondbrain search "what is this about?"
 
 # List your documents
-secondbrain list
+secondbrain ls
 ```
 
 ## Documentation Navigation

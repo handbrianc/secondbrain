@@ -68,10 +68,10 @@ secondbrain search "data pipelines" --verbose
 
 ```bash
 # List all documents
-secondbrain list
+secondbrain ls
 
 # List with details
-secondbrain list --details
+secondbrain ls --details
 
 # Delete a document
 secondbrain delete <document-id>
@@ -90,7 +90,7 @@ secondbrain ingest ./research-papers/
 secondbrain search "neural network architectures"
 
 # 3. List results
-secondbrain list --details
+secondbrain ls --details
 
 # 4. Delete outdated documents
 secondbrain delete doc-12345

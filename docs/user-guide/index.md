@@ -19,7 +19,7 @@ This section covers how to use SecondBrain for common tasks:
 |------|---------|-------|
 | Add documents | `secondbrain ingest` | [Ingestion Guide](document-ingestion.md) |
 | Search | `secondbrain search` | [Search Guide](search-guide.md) |
-| List documents | `secondbrain list` | [Document Management](document-management.md) |
+| List documents | `secondbrain ls` | [Document Management](document-management.md) |
 | Delete documents | `secondbrain delete` | [Document Management](document-management.md) |
 | Check health | `secondbrain health` | [CLI Reference](cli-reference.md) |
 

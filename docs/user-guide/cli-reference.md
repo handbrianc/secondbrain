@@ -90,12 +90,12 @@ secondbrain search "data pipeline" --threshold 0.8
 secondbrain search "report" --fields content,metadata
 ```
 
-### `list`
+### `ls`
 
 List ingested documents.
 
 ```bash
-secondbrain list [OPTIONS]
+secondbrain ls [OPTIONS]
 ```
 
 **Options:**
@@ -109,16 +109,16 @@ secondbrain list [OPTIONS]
 **Examples:**
 ```bash
 # List all documents (summary)
-secondbrain list
+secondbrain ls
 
 # List with full details
-secondbrain list --details
+secondbrain ls --details
 
 # Export as JSON
-secondbrain list --format json
+secondbrain ls --format json
 
 # Filter by file type
-secondbrain list --file-type pdf
+secondbrain ls --file-type pdf
 ```
 
 ### `delete`

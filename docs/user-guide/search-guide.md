@@ -254,7 +254,7 @@ secondbrain search "backpropagation algorithm explanation"
 **Solutions**:
 ```bash
 # Check if documents exist
-secondbrain list
+secondbrain ls
 
 # Lower threshold
 secondbrain search "query" --threshold 0.2

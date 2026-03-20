@@ -46,7 +46,7 @@ secondbrain ingest /path/to/documents/
 secondbrain search "what is this about?"
 
 # List documents
-secondbrain list
+secondbrain ls
 
 # Check health
 secondbrain health
@@ -70,7 +70,7 @@ secondbrain health
 |---------|-------------|
 | `ingest` | Add documents to the vector database |
 | `search` | Perform semantic search queries |
-| `list` | List ingested documents/chunks |
+| `ls` | List ingested documents/chunks |
 | `delete` | Remove documents |
 | `status` | Display database statistics |
 | `health` | Check service health |

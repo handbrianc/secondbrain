@@ -8,7 +8,7 @@ Learn how to manage your document database with SecondBrain.
 
 ```bash
 # Show all documents (summary)
-secondbrain list
+secondbrain ls
 ```
 
 Output:
@@ -24,7 +24,7 @@ doc-c3d4e5f6g7h8                      presentation.pptx 120KB   28
 
 ```bash
 # Show full document details
-secondbrain list --details
+secondbrain ls --details
 ```
 
 Output:
@@ -44,27 +44,27 @@ Metadata:
 
 ```bash
 # List only PDF documents
-secondbrain list --file-type pdf
+secondbrain ls --file-type pdf
 
 # List only markdown files
-secondbrain list --file-type md
+secondbrain ls --file-type md
 ```
 
 ### Limit Results
 
 ```bash
 # Show only recent documents
-secondbrain list --limit 10
+secondbrain ls --limit 10
 
 # Combine with details
-secondbrain list --details --limit 5
+secondbrain ls --details --limit 5
 ```
 
 ### JSON Output
 
 ```bash
 # Export document list as JSON
-secondbrain list --format json
+secondbrain ls --format json
 ```
 
 ## Database Statistics
@@ -146,7 +146,7 @@ secondbrain delete doc-3 --force
 
 ```bash
 # See metadata for all documents
-secondbrain list --details | grep -A 5 "Metadata:"
+secondbrain ls --details | grep -A 5 "Metadata:"
 ```
 
 ### Metadata Fields
@@ -192,7 +192,7 @@ After listing documents, you can search within specific files:
 
 ```bash
 # First, get document ID
-secondbrain list --file-type pdf
+secondbrain ls --file-type pdf
 
 # Then search with context
 secondbrain search "specific topic" --top-k 10
@@ -217,7 +217,7 @@ secondbrain search "topic B" --top-k 5
 secondbrain status
 
 # Monthly: Review and clean up
-secondbrain list --details
+secondbrain ls --details
 ```
 
 ### Document Organization
@@ -243,10 +243,10 @@ For important documents:
 
 ```bash
 # Verify document exists
-secondbrain list | grep "doc-id"
+secondbrain ls | grep "doc-id"
 
 # Check for typos in ID
-secondbrain list --details
+secondbrain ls --details
 ```
 
 ### Duplicate Documents
