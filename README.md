@@ -4,11 +4,11 @@ A local document intelligence CLI tool that ingests documents, generates embeddi
 
 ## Documentation
 
-- **[Full Documentation](docs/)** - Complete documentation index
+- **[Full Documentation](docs/index.md)** - Complete documentation index
 - **[Quick Start](#quick-start)** - Get started in 5 minutes
-- **[Getting Started](docs/getting-started/)** - Installation and setup
-- **[User Guide](docs/user-guide/)** - Complete usage guide
-- **[Developer Guide](docs/developer-guide/)** - Development setup and workflow
+- **[Getting Started](docs/getting-started/index.md)** - Installation and setup
+- **[User Guide](docs/user-guide/index.md)** - Complete usage guide
+- **[Developer Guide](docs/developer-guide/index.md)** - Development setup and workflow
 - **[Configuration](docs/getting-started/configuration.md)** - Configuration reference
 - **[Async Guide](docs/developer-guide/async-api.md)** - Asynchronous API usage
 - **[Docker Setup](docs/developer-guide/docker.md)** - Containerized deployment
@@ -168,7 +168,7 @@ To manually cleanup coverage files after test runs:
 
 ## Architecture
 
-See the [Architecture Documentation](docs/architecture/) for:
+See the [Architecture Documentation](docs/architecture/index.md) for:
 - High-level system architecture
 - Component details and responsibilities
 - Data flow diagrams
@@ -177,15 +177,15 @@ See the [Architecture Documentation](docs/architecture/) for:
 - Error handling strategies
 - Circuit breaker pattern implementation
 
-And [Schema Reference](docs/architecture/schema.md) for database structure.
+And [Schema Reference](docs/architecture/SCHEMA.md) for database structure.
 
 ## Examples
 
-Check out the [examples/](examples/) directory for usage examples:
+Check out the [docs/examples/](docs/examples/README.md) directory for usage examples:
 
-- **[Circuit Breaker Usage](examples/circuit_breaker_usage.py)** - Resilience patterns
-- **[Async Ingestion](examples/async_ingestion_example.py)** - Async API usage
-- **[Tracing Example](examples/tracing_example.py)** - OpenTelemetry integration
+- **[Circuit Breaker Usage](docs/examples/README.md)** - See examples overview
+- **[Async Ingestion](docs/developer-guide/async-api.md)** - Async API usage guide
+- **[Tracing Example](docs/developer-guide/development.md)** - Development setup with tracing
 
 ## Security
 
@@ -205,7 +205,7 @@ See [docs/migration.md](docs/migration.md) for upgrade notes and [docs/getting-s
 
 ## License
 
-This project is licensed under the MIT License. See [LICENSE](docs/license.md) for details.
+This project is licensed under the MIT License. See [LICENSE](docs/LICENSE.md) for details.
 
 ## Shell Completion
 
