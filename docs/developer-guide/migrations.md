@@ -1,166 +1,211 @@
-# Migration Strategy
+# Migrations Guide
 
-This document describes how schema changes are handled in SecondBrain.
+Schema migration strategies for SecondBrain.
 
-## Versioning
+## Overview
 
-### Current Schema Version
-- **Version**: 1
-- **Introduced**: Initial implementation
+SecondBrain uses MongoDB, which has a flexible schema. However, migrations may be needed for:
 
-### Version Tracking
-- Each document in the database includes a `version` field
-- The schema version is tracked in `../architecture/SCHEMA.md`
-- Migration scripts are stored in `migrations/` directory
+- New required fields
+- Data transformations
+- Index changes
+- Collection restructuring
 
-## Migration Categories
+## Migration Strategies
 
-### 1. Backward Compatible Changes
-No migration required. Examples:
-- Adding optional fields
-- Adding new indexes
-- Changing default values
+### 1. Forward Compatibility
 
-### 2. Non-Breaking Upgrades
-No migration needed but migration script provided:
-- Adding new metadata fields with defaults
-- Adding new search indexes
-- Refactoring internal code
-
-### 3. Breaking Changes
-Require migration script:
-- Removing fields
-- Changing field types
-- Renaming fields
-- Modifying vector dimension requirements
-
-## Migration Script Structure
-
-Migration scripts are located in `migrations/` directory:
-
-```
-migrations/
-├── v1__initial_schema.sql          # Initial schema
-├── v2__add_version_field.sql      # Add version field to all documents
-└── v3__optimize_indexes.sql       # Optimize index configuration
-```
-
-### Script Naming Convention
-```
-v<version>__<description>.<extension>
-```
-
-- `<version>`: Target schema version
-- `<description>`: Brief description
-- `<extension>`: `.sql` for database migrations, `.py` for data migrations
-
-## Migration Process
-
-### For Development/Testing
-1. Run migrations before starting the application
-2. Check `migrations_applied` collection for applied migrations
-3. Rollback is not supported - restore from backup if needed
-
-### For Production
-1. Stop all application instances
-2. Backup the database
-3. Run migration scripts
-4. Verify migration succeeded
-5. Restart application instances
-
-## Automated Migration
-
-The application checks schema version on startup:
+Design schemas to be forward-compatible:
 
 ```python
-# Pseudocode
-if schema_version < current_version:
-    run_migration(schema_version)
-    update_schema_version(current_version)
+class Document(BaseModel):
+    id: str
+    content: str
+    # New fields optional
+    metadata: Optional[Dict] = None
 ```
 
-### Migration Check Flow
-1. Connect to MongoDB
-2. Check `schema_versions` collection for current version
-3. Compare with `current_version` constant
-4. If newer version needed:
-   - Check `schema_migrations_lock` collection
-   - If lock acquired, run migration
-   - Release lock and update version
-5. If migration fails, log error and exit
+### 2. Versioned Documents
 
-## Manual Migration
+Add schema version to documents:
 
-To run migrations manually:
+```python
+{
+    "_id": "...",
+    "schema_version": "1.0",
+    "content": "...",
+    "metadata": {...}
+}
+```
+
+### 3. Migration Scripts
+
+Create migration scripts for data transformations:
+
+```python
+async def migrate_v1_to_v2():
+    """Migrate documents from schema v1 to v2."""
+    async for doc in collection.find({"schema_version": "1.0"}):
+        # Transform document
+        doc["new_field"] = transform(doc["old_field"])
+        doc["schema_version"] = "2.0"
+        await collection.replace_one({"_id": doc["_id"]}, doc)
+```
+
+## Migration Workflow
+
+### 1. Plan Migration
+
+- Document schema changes
+- Estimate data volume
+- Plan rollback strategy
+- Test on subset of data
+
+### 2. Create Migration Script
+
+```python
+async def run_migration():
+    # Backup first
+    await backup_collection()
+    
+    # Run migration
+    await migrate_v1_to_v2()
+    
+    # Verify
+    await verify_migration()
+```
+
+### 3. Backup Data
 
 ```bash
-# Apply all pending migrations
-python -m secondbrain migrations apply
-
-# Check migration status
-python -m secondbrain migrations status
-
-# Rollback last migration (development only!)
-python -m secondbrain migrations rollback
+mongodump --db secondbrain --out ./backup/
 ```
 
-## Version History
+### 4. Run Migration
 
-### v1 (Current)
-- Initial schema
-- Embedding storage with MongoDB vector search
-- Chunk metadata with ingestion timestamps
+```bash
+python -m secondbrain.management.migrate --from 1.0 --to 2.0
+```
 
-### Upcoming Versions
+### 5. Verify
 
-#### v2 (Planned)
-- Add `version` field to all documents
-- Add `source_hash` for content deduplication
-- Optimize index configuration
+```python
+def verify_migration():
+    # Check document count
+    # Validate new fields
+    # Test queries
+    pass
+```
 
-#### v3 (Planned)
-- Support for custom embedding dimensions
-- Add full-text search metadata
-- Improve pagination performance
+### 6. Rollback (if needed)
 
-## Migration Guidelines
+```bash
+mongorestore --db secondbrain ./backup/secondbrain/
+```
 
-### Best Practices
-1. Always version documents
-2. Provide migration scripts for breaking changes
-3. Test migrations on full dataset before production
-4. Document all changes in `../architecture/SCHEMA.md`
-5. Update this migration guide with new patterns
+## Common Migration Patterns
 
-### Avoid
-- Modifying existing data without migration
-- Removing fields without backward compatibility
-- Changing vector dimensions without warning
-- Migration scripts that take hours to run
+### Adding Required Field
+
+```python
+async def add_required_field():
+    default_value = "default"
+    
+    async for doc in collection.find({"new_field": {"$exists": False}}):
+        doc["new_field"] = default_value
+        await collection.update_one(
+            {"_id": doc["_id"]},
+            {"$set": {"new_field": default_value}}
+        )
+```
+
+### Renaming Field
+
+```python
+async def rename_field():
+    async for doc in collection.find({"old_field": {"$exists": True}}):
+        doc["new_field"] = doc["old_field"]
+        del doc["old_field"]
+        await collection.replace_one({"_id": doc["_id"]}, doc)
+```
+
+### Splitting Field
+
+```python
+async def split_field():
+    async for doc in collection.find({"combined": {"$exists": True}}):
+        parts = doc["combined"].split("|")
+        doc["field1"] = parts[0]
+        doc["field2"] = parts[1]
+        del doc["combined"]
+        await collection.replace_one({"_id": doc["_id"]}, doc)
+```
+
+## Index Management
+
+### Create Index
+
+```python
+await collection.create_index([("new_field", 1)])
+```
+
+### Drop Index
+
+```python
+await collection.drop_index("index_name")
+```
+
+### Background Index Creation
+
+```python
+await collection.create_index(
+    [("field", 1)],
+    background=True  # Don't block operations
+)
+```
+
+## Best Practices
+
+1. **Always backup** before migrations
+2. **Test on small dataset** first
+3. **Run in stages** for large datasets
+4. **Monitor performance** during migration
+5. **Have rollback plan** ready
+6. **Document changes** in migration notes
+
+## Migration Commands
+
+```bash
+# List available migrations
+secondbrain migrate --list
+
+# Run specific migration
+secondbrain migrate --to 2.0
+
+# Dry run (preview changes)
+secondbrain migrate --dry-run
+```
 
 ## Troubleshooting
 
-### Migration Stuck
-If migration fails and leaves the database in an inconsistent state:
-1. Stop the application
-2. Restore from backup
-3. Fix migration script
-4. Re-run migration
+### Migration Failed
 
-### Version Mismatch
-If application version doesn't match database schema version:
-1. Check `../architecture/SCHEMA.md` for current version
-2. Run migrations
-3. Check logs for migration errors
+```bash
+# Check logs
+secondbrain migrate --verbose
 
-## Support
+# Restore from backup
+mongorestore --db secondbrain ./backup/
+```
 
-For migration issues:
-1. Check logs for detailed error messages
-2. Verify database backup exists
-3. Contact development team with migration ID
+### Incomplete Migration
 
-## Related Documentation
+```bash
+# Resume migration
+secondbrain migrate --resume
+```
 
-- [Schema Reference](../architecture/SCHEMA.md) - Database schema
-- [Development Guide](./development.md) - Development workflow
+## Next Steps
+
+- [Schema Reference](../architecture/SCHEMA.md) - Current schema
+- [Changelog](changelog.md) - Version history

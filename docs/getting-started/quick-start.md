@@ -20,7 +20,7 @@ Create a `.env` file in your project root:
 ```bash
 # Core settings
 SECONDBRAIN_MONGO_URI=mongodb://localhost:27017
-SECONDBRAIN_SENTENCE_TRANSFORMERS_URL=http://localhost:local embedding
+SECONDBRAIN_SENTENCE_TRANSFORMERS_URL=http://localhost:11434
 SECONDBRAIN_MODEL=embeddinggemma:latest
 
 # Optional: adjust chunk size
@@ -125,9 +125,9 @@ See [Async Guide](../developer-guide/async-api.md) for details.
 
 ## Next Steps
 
-- [Configuration Guide](./configuration.md) - Deep dive into configuration
+- [Configuration Guide](configuration.md) - Deep dive into configuration
 - [User Guide](../user-guide/index.md) - Complete usage reference
-- [CLI Reference](../api-reference/cli.md) - All commands and options
+- [CLI Reference](../user-guide/cli-reference.md) - All commands and options
 - [Developer Guide](../developer-guide/index.md) - If you want to contribute
 
 ## Common Commands

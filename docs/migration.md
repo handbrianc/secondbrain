@@ -10,7 +10,7 @@ This release adds extensive resilience, security, and documentation improvements
 
 - **Circuit Breaker Pattern**: Automatic service failure handling with MongoDB and sentence-transformers
 - **Async API**: Full asynchronous document ingestion and search
-- **Chaost Testing**: Comprehensive chaos and concurrency test suites
+- **Chaos Testing**: Comprehensive chaos and concurrency test suites
 - **Security Scanning**: Integrated pip-audit, cyclonedx SBOM generation
 - **Enhanced Logging**: Structured JSON logging with OpenTelemetry tracing
 
@@ -143,6 +143,6 @@ mongorestore --uri="mongodb://localhost:27017" backup_directory/
 ## Support
 
 For migration issues:
-1. Check troubleshooting guide: `docs/getting-started/troubleshooting.md`
+1. Check troubleshooting guide: [troubleshooting.md](getting-started/troubleshooting.md)
 2. Review logs: `secondbrain health --verbose`
 3. Open an issue with migration details

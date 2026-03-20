@@ -1,518 +1,194 @@
-# Building and Distribution
+# Building & Distribution
 
-Guide to building single executables and distributing SecondBrain.
+Create distributable binaries and packages for SecondBrain.
 
-## Overview
+## Building Options
 
-SecondBrain can be distributed as:
-- Python package (pip install)
-- Single executable binary
-- Docker container
-
-## Building Single Executable
-
-### Using PyInstaller
-
-PyInstaller creates standalone executables for Windows, macOS, and Linux.
-
-#### Installation
+### Install from Source
 
 ```bash
-# Install PyInstaller
-pip install pyinstaller
-
-# Or with dev dependencies
+# Development installation
 pip install -e ".[dev]"
+
+# Production installation
+pip install -e "."
 ```
 
-#### Basic Build
+### Build Wheel
 
 ```bash
-# Build for current platform
-pyinstaller --onefile src/secondbrain/cli/__init__.py
+# Build wheel distribution
+python -m build --wheel
 
-# Output: dist/cli
+# Output: dist/secondbrain-0.1.0-py3-none-any.whl
 ```
 
-#### Advanced Build Options
+### Build Source Distribution
 
 ```bash
-# Build with custom name
-pyinstaller --onefile --name secondbrain src/secondbrain/cli/__init__.py
+# Build source distribution
+python -m build --sdist
 
-# Include data files
-pyinstaller --onefile \
-    --add-data "src/secondbrain/config/default.env:secondbrain/config" \
-    src/secondbrain/cli/__init__.py
-
-# Hide console window (Windows/macOS GUI)
-pyinstaller --onefile --noconsole src/secondbrain/cli/__init__.py
-
-# Add icon (Windows/macOS)
-pyinstaller --onefile --icon=icon.ico src/secondbrain/cli/__init__.py
+# Output: dist/secondbrain-0.1.0.tar.gz
 ```
 
-#### Build for Multiple Platforms
-
-Use `pyinstaller` with Docker for cross-platform builds:
-
-```dockerfile
-# Dockerfile.pyinstaller
-FROM python:3.12-slim
-
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /app
-COPY . .
-
-RUN pip install -e ".[dev]"
-RUN pyinstaller --onefile src/secondbrain/cli/__init__.py
-
-# Output: /app/dist/secondbrain
-```
-
-Build for different platforms:
+### Build Both
 
 ```bash
-# Linux
-docker build -t secondbrain-linux -f Dockerfile.pyinstaller .
-docker run --rm -v $(pwd)/dist:/app/dist secondbrain-linux
-
-# macOS (using osx-cross)
-docker run --rm -v $(pwd):/src osxcross/target/bin/pyinstaller \
-    --onefile /src/src/secondbrain/cli/__init__.py
-
-# Windows (using wine)
-docker run --rm -v $(pwd):/src wine pyinstaller \
-    --onefile /src/src/secondbrain/cli/__init__.py
-```
-
-### Build Configuration File
-
-Create `secondbrain.spec` for advanced configuration:
-
-```python
-# secondbrain.spec
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
-
-block_cipher = None
-
-a = Analysis(
-    ['src/secondbrain/cli/__init__.py'],
-    pathex=[],
-    binaries=[],
-    datas=[
-        ('src/secondbrain/config', 'secondbrain/config'),
-    ],
-    hiddenimports=[
-        'pymongo',
-        'httpx',
-        'pydantic',
-        'rich',
-        'click',
-        'docling',
-    ],
-    hookspath=[],
-    hooksconfig={},
-    runtime_hooks=[],
-    excludes=[],
-    win_no_prefer_redirects=False,
-    win_private_assemblies=False,
-    cipher=block_cipher,
-    noarchive=False,
-)
-
-pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
-
-exe = EXE(
-    pyz,
-    a.scripts,
-    [],
-    exclude_binaries=True,
-    name='secondbrain',
-    debug=False,
-    bootloader_ignore_signals=False,
-    strip=False,
-    upx=True,
-    console=True,
-    disable_windowed_traceback=False,
-    argv_emulation=False,
-    target_arch=None,
-    codesign_identity=None,
-    entitlements_file=None,
-)
-
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    strip=False,
-    upx=True,
-    upx_exclude=[],
-    name='secondbrain',
-)
-```
-
-Build with spec file:
-
-```bash
-pyinstaller secondbrain.spec
-```
-
-## Docker Build
-
-### Development Image
-
-```dockerfile
-# Dockerfile
-FROM python:3.12-slim
-
-WORKDIR /app
-
-# Install dependencies from pyproject.toml
-COPY pyproject.toml .
-RUN pip install --no-cache-dir -e ".[dev]"
-
-# Copy source code
-COPY src/ ./src/
-
-# Set entrypoint
-ENTRYPOINT ["secondbrain"]
-```
-
-Build:
-
-```bash
-docker build -t secondbrain:latest .
-
-# Run
-docker run --rm -v $(pwd):/data secondbrain:latest --help
-```
-
-### Production Image
-
-```dockerfile
-# Dockerfile.production
-FROM python:3.12-slim AS builder
-
-WORKDIR /app
-COPY pyproject.toml .
-RUN pip install --user --no-cache-dir -e ".[dev]"
-
-FROM python:3.12-slim
-
-WORKDIR /app
-
-# Copy installed packages
-COPY --from=builder /root/.local /root/.local
-
-# Copy application
-COPY src/ ./src/
-RUN pip install --no-cache-dir -e .
-
-# Non-root user
-RUN useradd -m secondbrain
-USER secondbrain
-
-ENTRYPOINT ["secondbrain"]
-```
-
-Build:
-
-```bash
-docker build -f Dockerfile.production -t secondbrain:prod .
-```
-
-## Distribution
-
-### PyPI Package
-
-#### Prepare for PyPI
-
-```bash
-# Install build tools
-pip install build twine
-
-# Build distribution
+# Build wheel and sdist
 python -m build
 
-# Output:
-# dist/
+# Output: dist/
 #   secondbrain-0.1.0-py3-none-any.whl
 #   secondbrain-0.1.0.tar.gz
 ```
 
-#### Test on TestPyPI
+## Installation Methods
+
+### From PyPI
+
+```bash
+pip install secondbrain
+```
+
+### From Wheel
+
+```bash
+pip install dist/secondbrain-0.1.0-py3-none-any.whl
+```
+
+### From Source
+
+```bash
+pip install .
+```
+
+### Development Mode
+
+```bash
+pip install -e ".[dev]"
+```
+
+## Distribution Channels
+
+### PyPI (Recommended)
 
 ```bash
 # Upload to TestPyPI
 twine upload --repository testpypi dist/*
 
-# Install from TestPyPI
-pip install --index-url https://test.pypi.org/simple/ secondbrain
-```
-
-#### Upload to PyPI
-
-```bash
 # Upload to PyPI
 twine upload dist/*
-
-# Install from PyPI
-pip install secondbrain
-```
-
-#### pyproject.toml Configuration
-
-```toml
-[project]
-name = "secondbrain"
-version = "0.1.0"
-description = "A local document intelligence CLI tool"
-authors = [{name = "Your Name", email = "your.email@example.com"}]  # TODO: Replace with actual author info
-license = {text = "MIT"}
-readme = "README.md"
-requires-python = ">=3.11"
-dependencies = [
-    "click>=8.1.0",
-    "pymongo>=4.6.0",
-    "httpx>=0.27.0",
-    "pydantic>=2.0.0",
-    "rich>=14.0.0",
-]
-
-[project.optional-dependencies]
-dev = [
-    "ruff>=0.4.0",
-    "mypy>=1.8.0",
-    "pytest>=8.0.0",
-]
-
-[project.scripts]
-secondbrain = "secondbrain.cli:main"
-
-[build-system]
-requires = ["setuptools>=65.0", "wheel"]
-build-backend = "setuptools.build_meta"
 ```
 
 ### GitHub Releases
 
-#### Create Release
-
 ```bash
-# Tag release
-git tag -a v0.1.0 -m "Release v0.1.0"
-git push origin v0.1.0
-
-# Build binaries
-pyinstaller --onefile --name secondbrain src/secondbrain/cli/__init__.py
-
-# Create release artifacts
-cp dist/secondbrain secondbrain-macos-arm64
-# Repeat for other platforms
-
-# Upload to GitHub Releases
-gh release create v0.1.0 \
-    secondbrain-macos-arm64 \
-    secondbrain-linux-amd64 \
-    secondbrain-windows-amd64.exe
+# Create GitHub release
+gh release create v0.1.0 dist/*
 ```
 
-#### GitHub Actions (Optional)
+## Build Configuration
 
-Note: Per project policy, GitHub Actions is prohibited. Use local builds instead.
+### pyproject.toml
 
-## Installation Methods
+```toml
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
 
-### From Source
+[project]
+name = "secondbrain"
+version = "0.1.0"
+description = "Local document intelligence CLI"
+requires-python = ">=3.11"
+dependencies = [
+    "click>=8.0.0",
+    "pydantic>=2.0.0",
+    "pymongo>=4.0.0",
+]
 
-```bash
-# Clone repository
-git clone <repository-url>
-cd secondbrain
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
+]
 
-# Install in editable mode
-pip install -e .
-
-# Or with dev dependencies
-pip install -e ".[dev]"
+[project.scripts]
+secondbrain = "secondbrain.cli:cli"
 ```
 
-### From PyPI
+## Docker Distribution
 
 ```bash
-# Latest release
-pip install secondbrain
+# Build Docker image
+docker build -t secondbrain:latest .
 
-# Specific version
-pip install secondbrain==0.1.0
-
-# Pre-release
-pip install secondbrain==0.2.0a1
+# Push to registry
+docker push your-registry/secondbrain:latest
 ```
 
-### From Binary
+## Verification
+
+### Check Package
 
 ```bash
-# Download from releases page
-# Add to PATH or run directly
+# Verify wheel
+python -m pip install --upgrade pip
+pip install dist/secondbrain-0.1.0-py3-none-any.whl --force-reinstall
+
+# Test installation
+secondbrain --help
 ```
 
-### From Docker
+### Test Distribution
 
 ```bash
-# Pull from Docker Hub (when published)
-docker pull <docker-image>:latest
+# Create test environment
+python -m venv test-env
+source test-env/bin/activate
 
-# Run
-docker run --rm -v $(pwd):/data <docker-image>:latest --help
+# Install from distribution
+pip install dist/secondbrain-0.1.0-py3-none-any.whl
+
+# Run tests
+pytest
 ```
 
-## Platform-Specific Instructions
+## Release Checklist
 
-### macOS
-
-#### Install via Homebrew (if published)
-
-```bash
-brew install <tap>/secondbrain
-```
-
-#### Code Signing (for distribution)
-
-```bash
-# Sign the executable
-codesign --sign - dist/secondbrain
-
-# Notarize for macOS (requires Apple Developer account)
-xcrun notarytool submit dist/secondbrain --apple-id ... --team-id ... --password ...
-```
-
-### Linux
-
-#### AppImage
-
-```bash
-# Create AppImage
-pip install appimagebuilder
-appimage-builder --recipe AppImage.yml
-
-# Distribute
-secondbrain-x86_64.AppImage
-```
-
-#### Snap
-
-```bash
-# Create snap package
-snapcraft
-
-# Publish
-snapcraft push secondbrain_0.1.0_amd64.snap --release stable
-```
-
-### Windows
-
-#### NSIS Installer
-
-```bash
-# Install NSIS
-choco install nsis
-
-# Create installer
-makensis secondbrain.nsis
-
-# Output: secondbrain-installer.exe
-```
-
-#### MSIX
-
-```bash
-# Create MSIX package
-python -m pip install msixsdk
-# Follow Microsoft MSIX packaging guide
-```
+- [ ] Update version in pyproject.toml
+- [ ] Update CHANGELOG.md
+- [ ] Run all tests
+- [ ] Build distributions
+- [ ] Test installation from wheel
+- [ ] Upload to TestPyPI
+- [ ] Test from TestPyPI
+- [ ] Upload to PyPI
+- [ ] Create GitHub release
+- [ ] Update documentation
 
 ## Troubleshooting
 
-### PyInstaller Issues
+### Build Failures
 
-**Problem**: Missing modules in executable
-
-**Solution**: Add to hidden imports in spec file:
-```python
-hiddenimports=[
-    'pymongo',
-    'httpx',
-    # Add missing modules
-]
-```
-
-**Problem**: Large executable size
-
-**Solution**: Enable UPX compression:
 ```bash
-pyinstaller --onefile --upx-dir=/path/to/upx src/secondbrain/cli/__init__.py
+# Clean build artifacts
+rm -rf dist/ build/ *.egg-info
+
+# Rebuild
+python -m build
 ```
 
-### Docker Build Issues
+### Dependency Issues
 
-**Problem**: Build fails with memory error
-
-**Solution**: Increase Docker memory limit:
 ```bash
-docker build --build-arg BUILDKIT_STEP_LOG_MAX_SIZE=-1 -t secondbrain .
-```
-
-### Distribution Issues
-
-**Problem**: Executable won't run on target system
-
-**Solution**: 
-1. Check glibc version compatibility
-2. Use statically linked build (musl)
-3. Provide Docker container as alternative
-
-## Versioning
-
-### Semantic Versioning
-
-SecondBrain uses semantic versioning:
-
-- **MAJOR** (0.x.y): Breaking changes
-- **MINOR** (x.0.y): New features, backward-compatible
-- **PATCH** (x.y.0): Bug fixes, backward-compatible
-
-### Changelog
-
-Update `docs/developer-guide/changelog.md` for each release:
-
-```markdown
-## [0.2.0] - 2026-03-15
-
-### Added
-- Async search API
-- JSON output format
-
-### Changed
-- Improved error messages
-
-### Fixed
-- Connection timeout handling
+# Upgrade build tools
+pip install --upgrade build twine setuptools wheel
 ```
 
 ## Next Steps
 
-- [Deployment Guide](./docker.md#production-deployment) - Production deployment
-- [Configuration](./configuration.md) - Environment configuration
-- [Contributing](./contributing.md) - How to contribute
-
-## Related Documentation
-
-- [Deployment Guide](./docker.md#production-deployment) - Production deployment
-- [Configuration](./configuration.md) - Environment configuration
-- [Contributing](./contributing.md) - How to contribute
+- [Development Setup](development.md) - Development workflow
+- [Testing Guide](TESTING.md) - Test before release

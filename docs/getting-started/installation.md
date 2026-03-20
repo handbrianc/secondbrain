@@ -87,7 +87,7 @@ secondbrain --version
 secondbrain health
 
 # Check sentence-transformers connection
-curl http://localhost:local embedding/api/tags
+curl http://localhost:11434/api/tags
 ```
 
 ## Configuration
@@ -99,7 +99,7 @@ After installation, create a `.env` file:
 cp .env.example .env
 
 # Edit with your settings
-# See [Configuration Guide](./configuration.md) for details
+# See [Configuration Guide](configuration.md) for details
 ```
 
 ## Troubleshooting
@@ -141,6 +141,6 @@ brew install python@3.11  # macOS
 
 ## Next Steps
 
-- [Quick Start Guide](./quick-start.md) - Get started in 5 minutes
-- [Configuration Guide](./configuration.md) - Configure your environment
+- [Quick Start Guide](quick-start.md) - Get started in 5 minutes
+- [Configuration Guide](configuration.md) - Configure your environment
 - [User Guide](../user-guide/index.md) - Learn how to use SecondBrain

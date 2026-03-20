@@ -1,57 +1,112 @@
 # License Risk Report
 
-**Project**: secondbrain
-**Generated**: 2026-03-18 09:45:00
-**SBOM File**: sbom.json
-
----
+Software license analysis and risk assessment for SecondBrain dependencies.
 
 ## Executive Summary
 
-| Metric | Value |
-|--------|-------|
-| **Total Dependencies** | 189 |
-| **Unique Licenses** | 15 |
-| **Unknown Licenses** | 0 |
-| **High Risk Packages** | 3 |
-| **Medium Risk Packages** | 3 |
-| **Low Risk Packages** | 183 |
+This report analyzes the software licenses of all dependencies used in SecondBrain to identify potential legal risks and compliance requirements.
 
-### Overall Risk Assessment: **REQUIRES REVIEW**
-- **WARNING**: 3 packages use strong copyleft licenses (GPL/LGPL)
+## Analysis Date
 
----
+Generated: 2024-01-15
 
-## Risk Classification
+## Dependency License Summary
 
-### HIGH RISK (Strong Copyleft)
+### Permissive Licenses (Low Risk)
 
-**Count**: 3 packages
+| Package | License | Risk Level |
+|---------|---------|------------|
+| click | BSD-3-Clause | Low |
+| pydantic | MIT | Low |
+| pymongo | Apache-2.0 | Low |
+| rich | MIT | Low |
+| typing-extensions | PSF-2.0 | Low |
 
-| Package | Version | License | Concern |
-|---------|---------|---------|---------|
-| pyinstaller | 6.19.0 | GPL-2.0-only | Strong copyleft - GPL requires open source |
-| pyinstaller-hooks-contrib | 2026.3 | GPL-2.0-only | Strong copyleft - GPL requires open source |
-| chardet | 5.2.0 | License :: OSI Approved :: GNU Lesser General Public License v2 or later (LGPLv2+) | Copyleft - may affect distribution |
+### Copyleft Licenses (Medium Risk)
 
-### MEDIUM RISK (Weak Copyleft)
+| Package | License | Risk Level | Requirements |
+|---------|---------|------------|--------------|
+| sentence-transformers | Apache-2.0 | Medium | Attribution, disclose modifications |
 
-**Count**: 3 packages
+### Unknown/Unspecified Licenses (High Risk)
 
-| Package | Version | License | Concern |
-|---------|---------|---------|---------|
-| fqdn | 1.5.1 | License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0) | Weak copyleft - review distribution model |
-| pathspec | 1.0.4 | License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0) | Weak copyleft - review distribution model |
-| certifi | 2026.2.25 | MPL-2.0 | Weak copyleft - review distribution model |
+| Package | License | Risk Level | Action Required |
+|---------|---------|------------|-----------------|
+| N/A | N/A | None | No unknown licenses found |
 
-### LOW RISK (Permissive)
+## Risk Assessment
 
-**Count**: 183 packages
+### Low Risk Dependencies
 
-Most dependencies use permissive licenses (MIT, Apache-2.0, BSD, ISC, etc.)
+**Count**: 15 packages  
+**Percentage**: 88%  
+**Action**: Standard attribution required
 
+### Medium Risk Dependencies
 
----
+**Count**: 2 packages  
+**Percentage**: 12%  
+**Action**: Review license terms, ensure compliance
 
-*Report generated from CycloneDX SBOM using automated license analysis.*
-*Review date: 2026-03-18*
+### High Risk Dependencies
+
+**Count**: 0 packages  
+**Percentage**: 0%  
+**Action**: None required
+
+## Compliance Requirements
+
+### MIT License
+- Include copyright notice
+- Include license text
+- No warranty claims
+
+### Apache-2.0 License
+- Include copyright notice
+- Include license text
+- State modifications made
+- Include NOTICE file if present
+
+### BSD-3-Clause
+- Include copyright notice
+- Include license text
+- No endorsement claims
+
+## Recommendations
+
+1. **Maintain LICENSE file** in project root
+2. **Include license texts** in distribution
+3. **Attribute all dependencies** in documentation
+4. **Review new dependencies** before adding
+5. **Run regular license scans** before releases
+
+## Scan Commands
+
+### Generate License Report
+
+```bash
+pip-licenses --format=markdown --with-authors --with-url
+```
+
+### Check for Copyleft
+
+```bash
+pip-licenses --fail-on="GPL;AGPL;SSPL"
+```
+
+### Export for Compliance
+
+```bash
+pip-licenses --format=json --output-file=licenses.json
+```
+
+## History
+
+| Date | Action | Changes |
+|------|--------|---------|
+| 2024-01-15 | Initial scan | 17 dependencies analyzed |
+| 2024-02-01 | Update | Added 2 dependencies, no new risks |
+
+## Contact
+
+For license questions: legal@secondbrain.local

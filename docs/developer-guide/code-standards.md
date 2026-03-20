@@ -1,29 +1,18 @@
 # Code Standards
 
-This document outlines the coding standards and best practices for the SecondBrain project.
+Coding standards and best practices for SecondBrain.
 
-## Python Version
+## Code Style
 
-- **Minimum**: Python 3.11
-- **Recommended**: Python 3.12
+### Formatting
 
-## Code Quality Tools
-
-The project uses the following tools:
-
-| Tool | Purpose | Configuration |
-|------|---------|------------------|
-| ruff | Linting & Formatting | `pyproject.toml` |
-| mypy | Type Checking | `pyproject.toml` |
-| pytest | Testing | `pyproject.toml` |
-| bandit | Security Scanning | `pyproject.toml` |
-| safety | Dependency Vulnerabilities | `pyproject.toml` |
-
-## Style Guidelines
+- **Line Length**: 88 characters (ruff default)
+- **Indentation**: 4 spaces
+- **No trailing whitespace**
+- **Two blank lines** between top-level definitions
+- **One blank line** between methods
 
 ### Imports
-
-Order imports alphabetically within groups:
 
 ```python
 # Standard library first
@@ -31,85 +20,220 @@ import os
 import sys
 from pathlib import Path
 
-# Third-party imports
+# Third-party
 import click
-from pydantic import Field
+from typing_extensions import Protocol
 
-# Local imports
-from secondbrain.config import Config
+# Local imports last
+from . import utils
+from .core import BaseClass
 ```
 
-### Type Hints
-
-Always use type hints:
+### Type Annotations
 
 ```python
-def process_data(users: List[Dict[str, str]]) -> Optional[Dict[str, Any]]:
+from typing import Any, Dict, List, Optional
+
+def process_data(
+    users: List[Dict[str, str]],
+    max_count: Optional[int] = None
+) -> Dict[str, Any]:
     ...
 ```
 
-### Naming Conventions
+## Naming Conventions
 
 | Element | Convention | Example |
-|---------|----------|--------|
-| Variables | snake_case | `user_name` |
+|---------|------------|---------|
+| Variables | snake_case | `user_name`, `max_count` |
 | Functions | snake_case | `get_user_by_id()` |
-| Classes | PascalCase | `UserManager` |
-| Constants | UPPER_SNAKE | `MAX_RETRIES` |
+| Classes | PascalCase | `UserManager`, `ConfigLoader` |
+| Constants | UPPER_SNAKE | `MAX_RETRIES`, `DEFAULT_TIMEOUT` |
 | Modules | snake_case | `user_service.py` |
-
-### Formatting
-
-- Line length: 88 characters (ruff default)
-- Indentation: 4 spaces
-- No trailing whitespace
-- Blank lines: Two between top-level definitions
 
 ## Error Handling
 
-- Use specific exception types
-- Never use bare `except`
-- Provide context in error messages
+### Use Specific Exceptions
 
 ```python
 # Good
-raise ValueError(f"Invalid timeout value '{value}'. Expected positive integer.")
+raise ValueError("Invalid email format")
+raise FileNotFoundError(f"Config not found: {path}")
 
 # Avoid
 raise Exception("Something went wrong")
 ```
 
+### Handle Exceptions Explicitly
+
+```python
+try:
+    result = process()
+except ProcessingError as e:
+    logger.warning(f"Processing failed: {e}")
+    raise
+```
+
+### Never Use Bare Except
+
+```python
+# Good
+except (ValueError, TypeError) as e:
+    logger.error(f"Invalid input: {e}")
+
+# Avoid
+except:
+    pass
+```
+
+## Documentation
+
+### Docstrings
+
+```python
+def process_document(
+    path: Path,
+    chunk_size: int = 4096
+) -> List[Document]:
+    """Process a document into chunks.
+
+    Args:
+        path: Path to document file
+        chunk_size: Size of each chunk in characters
+
+    Returns:
+        List of document chunks
+
+    Raises:
+        FileNotFoundError: If document doesn't exist
+        ValueError: If chunk_size is invalid
+    """
+```
+
+### Type Hints
+
+Always use type hints for function signatures.
+
 ## Testing
 
-- Use pytest fixtures for setup
-- Test behavior, not implementation
-- Use `pytest.mark.parametrize` for multiple test cases
-- Maintain >= 80% code coverage
+### Test Structure
 
-## CLI Design (Click)
+```python
+def test_document_ingestion(tmp_path):
+    """Test that documents are ingested correctly."""
+    # Arrange
+    doc_path = tmp_path / "test.pdf"
+    doc_path.write_bytes(sample_pdf)
+    
+    # Act
+    result = ingest_document(doc_path)
+    
+    # Assert
+    assert result is not None
+    assert len(result.chunks) > 0
+```
 
-- Use Click decorators
-- Group related commands
-- Provide help text for all options
+### Test Naming
+
+```python
+# Good
+def test_ingest_returns_correct_chunk_count()
+def test_search_with_invalid_query_raises_error()
+
+# Avoid
+def test_stuff()
+def test_1()
+```
+
+## Performance
+
+### Use Async for I/O
+
+```python
+# Good
+async def ingest_async(path: Path):
+    await storage.ingest(path)
+
+# Avoid (blocking I/O in async context)
+def ingest_sync(path: Path):
+    storage.ingest(path)  # Blocks event loop
+```
+
+### Batch Operations
+
+```python
+# Good
+for batch in chunked(documents, 10):
+    await storage.insert_many(batch)
+
+# Avoid
+for doc in documents:
+    await storage.insert(doc)
+```
 
 ## Security
 
-- No hardcoded secrets
-- Use environment variables for sensitive data
-- Run security scans regularly
+### Input Validation
 
-## Git Conventions
+```python
+from pydantic import BaseModel, Field
 
-Use conventional commits:
-
-```
-feat: add user authentication
-fix: resolve timeout issue in CLI
-docs: update README
-refactor: simplify config loading
+class IngestRequest(BaseModel):
+    path: str = Field(..., min_length=1)
+    chunk_size: int = Field(default=4096, ge=512, le=8192)
 ```
 
-## Related Documentation
+### Never Trust User Input
 
-- [Development Guide](./development.md) - Development workflow
-- [Contributing](./contributing.md) - Contribution guidelines
+```python
+# Good
+safe_path = Path(user_input).resolve()
+if not safe_path.is_relative_to(base_dir):
+    raise ValueError("Invalid path")
+
+# Avoid
+path = Path(user_input)  # Vulnerable to path traversal
+```
+
+## Tools
+
+### Linting
+
+```bash
+ruff check .
+```
+
+### Formatting
+
+```bash
+ruff format .
+```
+
+### Type Checking
+
+```bash
+mypy .
+```
+
+### Pre-commit
+
+```bash
+pre-commit install
+pre-commit run --all-files
+```
+
+## Code Review Checklist
+
+- [ ] Code follows style guidelines
+- [ ] Type hints are complete
+- [ ] Docstrings are present for public APIs
+- [ ] Tests are included
+- [ ] No security vulnerabilities
+- [ ] Performance is acceptable
+- [ ] Error handling is appropriate
+
+## Next Steps
+
+- [Development Setup](development.md) - Get started
+- [Testing Guide](TESTING.md) - Write tests
+- [Contributing](contributing.md) - Contribute code

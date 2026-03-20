@@ -32,7 +32,7 @@ secondbrain --help
 |---------|-------------|
 | [Getting Started](getting-started/index.md) | Installation, quick start, and basic configuration |
 | [User Guide](user-guide/index.md) | Complete usage guide for all features |
-| [CLI Reference](api-reference/cli.md) | All CLI commands and options |
+| [CLI Reference](user-guide/cli-reference.md) | All CLI commands and options |
 
 ### For Developers
 
@@ -40,7 +40,7 @@ secondbrain --help
 |---------|-------------|
 | [Developer Guide](developer-guide/index.md) | Development setup, workflows, and contributions |
 | [Architecture](architecture/index.md) | System design and data flow |
-| [API Reference](api-reference/index.md) | Code-level API documentation |
+| [API Reference](api/index.md) | Code-level API documentation |
 
 ### Quick Links
 
@@ -55,7 +55,7 @@ secondbrain --help
 
 ## Examples
 
-For practical usage examples, see the [examples directory](../docs/examples/README.md):
+For practical usage examples, see the [examples directory](examples/README.md):
 
 - **Basic Usage**: Simple CLI-style examples
 - **Advanced**: Custom chunking, batch processing, async workflows

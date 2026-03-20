@@ -31,6 +31,7 @@ nav:
       - Installation: getting-started/installation.md
       - Quick Start: getting-started/quick-start.md
       - Configuration: getting-started/configuration.md
+      - Troubleshooting: getting-started/troubleshooting.md
   - User Guide:
       - User Guide: user-guide/index.md
       - CLI Reference: user-guide/cli-reference.md
@@ -57,12 +58,13 @@ nav:
       - Data Flow: architecture/DATA_FLOW.md
       - Schema Reference: architecture/SCHEMA.md
       - Integration Test Evaluation: architecture/INTEGRATION_TEST_EVALUATION.md
-      - Security Risk Report: architecture/LICENSE-RISK-REPORT.md
+      - License Risk Report: architecture/LICENSE-RISK-REPORT.md
       - SBOM Analysis: architecture/SBOM_ANALYSIS.md
   - API Reference:
       - API Reference: api/index.md
   - Security:
       - Security Guide: security/index.md
+  - Migration: migration.md
   - License: LICENSE.md
 
 markdown_extensions:

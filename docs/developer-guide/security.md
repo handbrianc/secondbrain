@@ -1,67 +1,198 @@
-# Security Policy
+# Security Guidelines
 
-## Supported Versions
+Security best practices for SecondBrain development.
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 0.1.x   | :white_check_mark: |
+## Secure Coding Practices
 
-## Reporting a Vulnerability
+### Input Validation
 
-If you discover a security vulnerability in SecondBrain, please report it responsibly:
+Always validate user input:
 
-1. **DO NOT** create a public GitHub issue for security vulnerabilities
-2. Email security@secondbrain.local with:
-   - Description of the vulnerability
-   - Steps to reproduce
-   - Potential impact
-   - Any known mitigations
+```python
+from pydantic import BaseModel, Field, validator
 
-## Security Features
+class IngestRequest(BaseModel):
+    path: str = Field(..., min_length=1)
+    chunk_size: int = Field(default=4096, ge=512, le=8192)
+    
+    @validator("path")
+    def validate_path(cls, v):
+        # Prevent path traversal
+        path = Path(v).resolve()
+        if not path.is_absolute():
+            raise ValueError("Path must be absolute")
+        return str(path)
+```
 
-- **Environment-driven configuration**: Sensitive settings via environment variables
-- **Input validation**: All user inputs validated before processing
-- **Error handling**: Granular error types prevent information leakage
-- **Rate limiting**: sentence-transformers API rate limiting prevents abuse
-- **Connection validation**: Service health checks with TTL caching
+### Error Handling
 
-## Security Best Practices
+Don't expose internal details:
 
-1. Never commit API keys or credentials
-2. Use the `.env` file for local configuration
-3. Set strong credentials for MongoDB in production
-4. Enable TLS for MongoDB connections
-5. Keep dependencies updated (`pip install -U .`)
+```python
+try:
+    result = process()
+except Exception as e:
+    logger.error(f"Processing failed: {e}", exc_info=True)
+    raise CLIError("Failed to process document")
+```
 
-## Known Vulnerabilities & Mitigations
+### Secrets Management
 
-### Critical: docling-core CVE-2026-24009
-- **Issue**: Remote Code Execution via unsafe YAML deserialization
-- **Affected Versions**: docling-core < 2.48.4
-- **Mitigation**: Upgrade to `docling-core>=2.48.4` (minimum version in pyproject.toml)
-- **Status**: Fixed in current dependency specification
+Never hardcode secrets:
 
-### Critical: MongoDB Server CVE-2025-14847 ("MongoBleed")
-- **Issue**: Server-side vulnerability allowing unauthorized access
-- **Affected MongoDB Server Versions**:
-  - MongoDB 7.0: Upgrade to 7.0.28+
-  - MongoDB 8.0: Upgrade to 8.0.17+
-  - MongoDB 8.2: Upgrade to 8.2.3+
-- **Note**: This is a MongoDB **server** vulnerability, not pymongo client
-- **Action Required**: Ensure your MongoDB server instance is patched
-- **Verification**: Check MongoDB server version with `mongod --version`
+```python
+# Good
+from secondbrain.config import Config
+config = Config()
+mongo_uri = config.mongo_uri  # From environment
 
-### Bandit Skips
-The following bandit checks are intentionally skipped in `pyproject.toml`:
-- **B101** (assert_used): CLI tools use assertions for development-time checks; not a security risk in this context
-- **B602** (subprocess_with_shell): No subprocess calls with shell=True in codebase; skip is precautionary
+# Avoid
+mongo_uri = "mongodb://admin:password@localhost:27017"
+```
 
-## Acknowledgments
+## Dependency Security
 
-We thank the following for their security research:
-- [Your Name Here]
+### Regular Scans
 
-## Related Documentation
+```bash
+# Check for vulnerabilities
+pip-audit
 
-- [Development Guide](./development.md) - Development workflow
-- [Docker Setup](./docker.md) - Docker security
+# Security scan
+bandit -r src/
+
+# SBOM generation
+cyclonedx-py environment -o sbom.json
+```
+
+### Update Dependencies
+
+```bash
+# Check for updates
+pip list --outdated
+
+# Update safely
+pip install --upgrade <package>
+```
+
+## Configuration Security
+
+### Environment Variables
+
+```bash
+# .env (add to .gitignore)
+SECONDBRAIN_MONGO_URI=mongodb://user:strong_password@localhost:27017
+SECONDBRAIN_SENTENCE_TRANSFORMERS_URL=http://localhost:11434
+```
+
+### Secure Defaults
+
+```python
+class Config(BaseSettings):
+    # Secure by default
+    rate_limit_enabled: bool = True
+    circuit_breaker_enabled: bool = True
+    log_level: str = "INFO"  # Not DEBUG in production
+```
+
+## API Security
+
+### Rate Limiting
+
+```python
+from secondbrain.utils.circuit_breaker import CircuitBreaker
+
+@CircuitBreaker(
+    failure_threshold=5,
+    recovery_timeout=60
+)
+async def call_embedding_api(text: str):
+    ...
+```
+
+### Authentication (Future)
+
+```python
+# Plan for API authentication
+# JWT tokens, API keys, etc.
+```
+
+## Data Security
+
+### Encryption at Rest
+
+MongoDB supports encryption:
+
+```bash
+# Enable MongoDB encryption
+# Configure in MongoDB settings
+```
+
+### Encryption in Transit
+
+```bash
+# Use TLS for MongoDB connections
+SECONDBRAIN_MONGO_URI=mongodb+srv://user:pass@cluster/?ssl=true
+```
+
+## Logging Security
+
+### Don't Log Sensitive Data
+
+```python
+# Good
+logger.info(f"Processed document: {doc_id}")
+
+# Avoid
+logger.info(f"Processed document with URI: {mongo_uri}")
+```
+
+### Sanitize Logs
+
+```python
+def sanitize_log(message: str) -> str:
+    # Remove credentials, tokens, etc.
+    return re.sub(r"password=[^&]+", "password=***", message)
+```
+
+## Security Checklist
+
+Before release:
+
+- [ ] All inputs validated
+- [ ] No hardcoded secrets
+- [ ] Error messages sanitized
+- [ ] Dependencies scanned
+- [ ] Rate limiting enabled
+- [ ] Circuit breakers configured
+- [ ] Logs don't expose secrets
+- [ ] TLS enabled in production
+- [ ] Security tests pass
+
+## Incident Response
+
+### If Vulnerability Found
+
+1. **Assess** impact
+2. **Disclose** responsibly
+3. **Patch** quickly
+4. **Document** in changelog
+5. **Notify** users if needed
+
+### Reporting
+
+Email: security@secondbrain.local
+
+## Security Tools
+
+| Tool | Purpose | Command |
+|------|---------|---------|
+| pip-audit | Dependency vulnerabilities | `pip-audit` |
+| bandit | Code security | `bandit -r src/` |
+| safety | Dependency check | `safety check` |
+| cyclonedx | SBOM generation | `cyclonedx-py environment` |
+
+## Next Steps
+
+- [Security Guide](../security/index.md) - User security
+- [Configuration](configuration.md) - Secure configuration
