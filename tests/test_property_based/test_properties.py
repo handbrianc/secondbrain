@@ -71,9 +71,7 @@ class TestQuerySanitization:
     def test_sanitize_strips_whitespace(self, query: str):
         """Sanitization should strip leading/trailing whitespace."""
         sanitized = sanitize_query(query)
-        assert sanitized == sanitized.strip(), (
-            f"Whitespace not stripped: {sanitized!r}"
-        )
+        assert sanitized == sanitized.strip(), f"Whitespace not stripped: {sanitized!r}"
 
 
 @pytest.mark.hypothesis

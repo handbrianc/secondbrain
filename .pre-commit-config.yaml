@@ -36,6 +36,13 @@ repos:
       - id: detect-secrets
         args: [--baseline, .secrets.baseline]
 
+  - repo: https://github.com/CycloneDX/cyclonedx-python
+    rev: v7.6.2
+    hooks:
+      - id: cyclonedx-bom
+        args: [--format, JSON, --output-file, sbom.json, -o, sbom.json]
+        pass_filenames: false
+
   - repo: local
     hooks:
       - id: pytest

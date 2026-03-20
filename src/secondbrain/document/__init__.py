@@ -13,10 +13,11 @@ import asyncio
 import hashlib
 import logging
 import os
+from collections.abc import Callable
 from concurrent.futures import Future
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 import typing_extensions
@@ -37,6 +38,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # Suppress docling deprecation warnings (upstream library issue)
+import contextlib  # noqa: E402
 import warnings  # noqa: E402
 
 warnings.filterwarnings(
@@ -55,9 +57,10 @@ warnings.filterwarnings(
 # - Can be tuned based on available RAM and typical document sizes
 MAX_MEMORY_BATCH_SIZE = 100
 
-# Global variable for worker converter (set by ProcessPoolExecutor initializer)
+# Global variables for worker processes (set by ProcessPoolExecutor initializers)
 _worker_converter: DocumentConverter | None = None
 _worker_progress_queue: Any = None
+_worker_embedding_model: Any = None
 
 
 def _init_worker() -> None:
@@ -92,6 +95,7 @@ def _init_worker_with_queue(
     os.environ["MKL_NUM_THREADS"] = str(threads_per_worker)
 
     from docling.document_converter import DocumentConverter
+
     from secondbrain.embedding.local import LocalEmbeddingGenerator
 
     _worker_converter = DocumentConverter()
@@ -281,10 +285,8 @@ def _extract_chunk_and_embed_file(
 
         # Send progress update
         if _worker_progress_queue is not None:
-            try:
+            with contextlib.suppress(Exception):
                 _worker_progress_queue.put_nowait((str(file_path), len(documents) > 0))
-            except Exception:
-                pass
 
         return {
             "success": True,
@@ -294,10 +296,8 @@ def _extract_chunk_and_embed_file(
         }
     except Exception as e:
         if _worker_progress_queue is not None:
-            try:
+            with contextlib.suppress(Exception):
                 _worker_progress_queue.put_nowait((str(file_path), False))
-            except Exception:
-                pass
         return {
             "success": False,
             "file_path": file_path,
@@ -365,10 +365,10 @@ def _extract_and_chunk_file_with_progress(
 
         # Send progress update before returning
         if _worker_progress_queue is not None:
-            try:
-                _worker_progress_queue.put_nowait((str(file_path), True))
-            except Exception:
-                pass  # Queue might be full or closed, ignore
+            with contextlib.suppress(Exception):
+                _worker_progress_queue.put_nowait(
+                    (str(file_path), True)
+                )  # Queue might be full or closed, ignore
 
         return {
             "success": True,
@@ -379,10 +379,8 @@ def _extract_and_chunk_file_with_progress(
     except Exception as e:
         # Send failure progress update
         if _worker_progress_queue is not None:
-            try:
+            with contextlib.suppress(Exception):
                 _worker_progress_queue.put_nowait((str(file_path), False))
-            except Exception:
-                pass
 
         return {
             "success": False,
@@ -396,6 +394,56 @@ def _chunk_segments(
     segments: list[Segment], chunk_size: int, chunk_overlap: int
 ) -> list[Segment]:
     """Chunk segments into smaller pieces respecting size limits.
+
+    WHY STREAMING CHUNKING ALGORITHM:
+    ---------------------------------
+    This function implements a streaming chunking strategy designed for memory
+    efficiency when processing large documents. The algorithm processes text
+    in a single pass, creating chunks that respect both size constraints and
+    word boundaries.
+
+    DESIGN DECISIONS:
+
+    1. Word-Boundary Splitting (rfind(" ")):
+       - Why: Prevents breaking words mid-token
+       - Impact: Better semantic coherence for embeddings
+       - Trade-off: Slight size variance (< chunk_size) acceptable
+
+    2. Overlap Strategy (chunk_end - chunk_overlap):
+       - Why: Maintains context across chunk boundaries
+       - Impact: Prevents information loss at boundaries
+       - Critical for: Semantic search continuity
+       - Typical overlap: 50-200 chars (10-20% of chunk_size)
+
+    3. Single-Pass Processing:
+       - Why: Memory efficiency for large documents
+       - Impact: O(n) time complexity, O(1) space per chunk
+       - Alternative considered: Two-pass (count then split) - rejected
+         due to memory overhead
+
+    4. Empty Text Skipping:
+       - Why: Avoid creating useless chunks from whitespace
+       - Impact: Reduces storage, improves search quality
+       - Check: text.strip() before processing
+
+    5. Page Number Preservation:
+       - Why: Maintain document structure metadata
+       - Impact: Enables page-aware search and filtering
+       - Used in: Source attribution, debugging
+
+    BATCH PROCESSING RATIONALE:
+    ---------------------------
+    Chunks are processed in batches (streaming_chunk_batch_size) for:
+    - Embedding API efficiency (batch requests reduce overhead)
+    - MongoDB write efficiency (batch inserts)
+    - Memory management (bounded batch size prevents OOM)
+    - Typical batch: 100 chunks (~400KB text, 1.5MB embeddings)
+
+    BOUNDARY CONDITIONS:
+    --------------------
+    - start <= new_start: Prevents infinite loops
+    - chunk_end <= len(text): Prevents index errors
+    - Empty chunks: Filtered before appending
 
     Args:
         segments: List of extracted text segments.
@@ -929,45 +977,44 @@ class DocumentIngestor:
         embedding_gen: Any,
         storage: Any,
     ) -> int:
-        """Stream process chunks: extract -> chunk -> embed -> store per batch.
+        """Stream process chunks for memory efficiency.
 
-        Streaming Batch Processing Flow:
-        --------------------------------
-        1. Iterate through text segments (pages, paragraphs, etc.)
-        2. For each segment:
-           - Clean and normalize text
-           - Compute SHA256 hash for deduplication
-           - Skip if duplicate (hash already seen)
-           - Add to current batch
-        3. When batch reaches streaming_chunk_batch_size (default: 50):
-           - Generate embeddings for all chunks in batch
-           - Store batch to MongoDB
-           - Clear batch from memory
-           - Repeat from step 1
-        4. Process remaining chunks (< batch_size) at the end
+        WHY STREAMING PROCESSING?
+        -------------------------
+        Traditional batch processing loads ALL chunks into memory, generates ALL
+        embeddings, THEN stores everything. This causes memory issues for large
+        documents (100+ pages) where thousands of embeddings might consume GBs of RAM.
 
-        Why Batch Size = 50 (configurable)?
-        -----------------------------------
-        - Memory: 50 chunks x ~1KB each ~50KB RAM per batch (negligible)
-        - Throughput: Batching improves embedding API efficiency
-        - Responsiveness: Frequent storage prevents data loss on crash
-        - Balance: Larger = better throughput, smaller = lower memory
+        Streaming processes in small batches:
+        1. Collect chunks until batch is full (streaming_chunk_batch_size)
+        2. Generate embeddings for batch only
+        3. Store batch immediately to MongoDB
+        4. Discard batch from memory, repeat
 
-        Deduplication:
-        --------------
-        - SHA256 hash of normalized text (lowercase, single spaces)
-        - Prevents storing identical content (headers, boilerplate, etc.)
-        - Hash persisted with document for future dedup checks
+        Memory Impact:
+        - Batch processing (1000 chunks): 1000 embeddings in RAM simultaneously
+          1000 x 384 floats x 8 bytes = ~3MB per document
+          100 documents = 300MB+ RAM
+        - Streaming (batch=50): Only 50 embeddings in RAM at once
+          50 x 384 floats x 8 bytes = ~150KB per batch
+          100 documents = constant ~150KB RAM usage
 
-        Args:
-            file_path: Source file path.
-            segments: List of text segments to process.
-            embedding_gen: EmbeddingGenerator instance.
-            storage: VectorStorage instance.
+        Trade-offs:
+        - Pros: Constant memory usage regardless of document size
+        - Pros: Early persistence (data saved incrementally)
+        - Cons: More MongoDB write operations (mitigated by batching)
+        - Cons: Slightly more complex code
 
-        Returns
-        -------
-            Number of documents successfully stored.
+        When to Enable:
+        - Large documents (100+ pages)
+        - Memory-constrained environments (<8GB RAM)
+        - Batch processing many files
+        - Production systems requiring stability
+
+        When to Disable:
+        - Small documents (<10 pages)
+        - Memory is abundant
+        - Need all embeddings in memory for post-processing
         """
         from secondbrain.config import get_config
 
@@ -1204,7 +1251,8 @@ class DocumentIngestor:
 
                 # Process futures and handle progress updates from queue
                 completed = 0
-                total = len(files)
+                # Process futures and handle progress updates from queue
+                completed = 0
                 pending_futures = dict(futures)
 
                 while pending_futures:
