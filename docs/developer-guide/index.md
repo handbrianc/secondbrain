@@ -28,26 +28,26 @@ pre-commit install
 
 ### Development Environment
 
-- [Environment Setup](./development.md) - Prerequisites and installation
-- [Docker Setup](./docker.md) - Containerized development
-- [Testing](./development.md) - Running and writing tests
-- [Code Standards](./code-standards.md) - Coding guidelines
+- [Environment Setup](development.md) - Prerequisites and installation
+- [Docker Setup](docker.md) - Containerized development
+- [Testing](development.md) - Running and writing tests
+- [Code Standards](code-standards.md) - Coding guidelines
 
 ## Examples
 
 For practical usage examples, see the [examples directory](../examples/README.md).
 
 ### Setup & Configuration
-- [Development Setup](./development.md) - Full development workflow
-- [Docker Setup](./docker.md) - Containerized development and deployment
-- [Configuration](./configuration.md) - Environment variables and settings
-- [Building & Distribution](./building.md) - Create distributable binaries
+- [Development Setup](development.md) - Full development workflow
+- [Docker Setup](docker.md) - Containerized development and deployment
+- [Configuration](configuration.md) - Environment variables and settings
+- [Building & Distribution](building.md) - Create distributable binaries
 
 ### Development Practices
-- [Code Standards](./code-standards.md) - Coding guidelines and best practices
-- [Async API Guide](./async-api.md) - Asynchronous programming patterns
-- [Testing](./development.md) - Test structure and coverage
-- [Contributing](./contributing.md) - How to contribute to the project
+- [Code Standards](code-standards.md) - Coding guidelines and best practices
+- [Async API Guide](async-api.md) - Asynchronous programming patterns
+- [Testing](TESTING.md) - Test structure and coverage
+- [Contributing](contributing.md) - How to contribute to the project
 
 ### Architecture & Design
 - [Architecture Overview](../architecture/index.md) - System design and data flow
@@ -55,29 +55,21 @@ For practical usage examples, see the [examples directory](../examples/README.md
 - [Data Flow](../architecture/DATA_FLOW.md) - Component interactions
 
 ### Maintenance
-- [Migrations](./migrations.md) - Schema migration strategies
-- [Security](./security.md) - Security guidelines and practices
-- [Changelog](./changelog.md) - Version history and changes
+- [Migrations](migrations.md) - Schema migration strategies
+- [Security](security.md) - Security guidelines and practices
+- [Changelog](changelog.md) - Version history and changes
 
 ## API Documentation
 
-- [API Reference](../api-reference/index.md) - Auto-generated API documentation
-- [CLI Reference](../api-reference/cli.md) - Command-line interface
-- [Types](../api-reference/types.md) - Type definitions and data models
-
-## Examples
-
-Check the [examples directory](../examples/README.md) for:
-- Basic CLI usage
-- Advanced async workflows
-- REST API integrations (Flask, FastAPI)
-- Utility scripts
+- [API Reference](../api/index.md) - Auto-generated API documentation
+- [CLI Reference](../user-guide/cli-reference.md) - Command-line interface
+- [Types](../api/index.md) - Type definitions and data models
 
 ## Contributing
 
-Interested in contributing? Read our [Contributing Guide](./contributing.md) to get started.
+Interested in contributing? Read our [Contributing Guide](contributing.md) to get started.
 
 ## Support
 
-- [Open an Issue](#) - Bug reports and feature requests
-- [Discussions](#) - Community discussions (coming soon)
+- [Open an Issue](https://github.com/your-repo/issues) - Bug reports and feature requests
+- [Discussions](https://github.com/your-repo/discussions) - Community discussions

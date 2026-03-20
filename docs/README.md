@@ -14,7 +14,11 @@ docs/
 │   ├── quick-start.md       # Quick start tutorial
 │   └── configuration.md     # Essential configuration
 ├── user-guide/              # User-facing documentation
-│   └── index.md             # User guide overview
+│   ├── index.md             # User guide overview
+│   ├── cli-reference.md     # CLI commands reference
+│   ├── document-ingestion.md # Document ingestion guide
+│   ├── search-guide.md      # Search guide
+│   └── document-management.md # Document management
 ├── developer-guide/         # Developer documentation
 │   ├── index.md             # Developer guide overview
 │   ├── development.md       # Development setup and workflow
@@ -23,29 +27,28 @@ docs/
 │   ├── building.md          # Create distributable binaries
 │   ├── async-api.md         # Asynchronous API usage
 │   ├── code-standards.md    # Coding standards and best practices
+│   ├── TESTING.md           # Testing guide
+│   ├── TEST_PERFORMANCE_OPTIMIZATION.md # Test performance
+│   ├── python-cli-best-practices-checklist.md # CLI best practices
 │   ├── contributing.md      # How to contribute to the project
 │   ├── migrations.md        # Schema migration strategies
 │   ├── security.md          # Security guidelines
 │   └── changelog.md         # Version history and changes
 ├── architecture/            # Architecture documentation
 │   ├── index.md             # Architecture overview
-│   ├── data-flow.md         # Data flow and component interactions
-│   └── SCHEMA.md            # Database schema reference
-├── api-reference/           # Auto-generated API docs
-│   ├── index.md             # API reference overview
-│   ├── cli.md               # CLI module
-│   ├── config.md            # Configuration module
-│   ├── document.md          # Document ingestion
-│   ├── storage.md           # Storage layer
-│   ├── search.md            # Search functionality
-│   ├── embedding.md         # Embedding generation
-│   ├── logging.md           # Logging utilities
-│   ├── exceptions.md        # Exception classes
-│   └── types.md             # Type definitions
+│   ├── DATA_FLOW.md         # Data flow and component interactions
+│   ├── SCHEMA.md            # Database schema reference
+│   ├── INTEGRATION_TEST_EVALUATION.md # Integration testing
+│   ├── LICENSE-RISK-REPORT.md # License risk analysis
+│   └── SBOM_ANALYSIS.md     # SBOM analysis
+├── api/                     # Auto-generated API docs
+│   └── index.md             # API reference overview
 ├── security/                # Security reports
-│   ├── bandit_report.json   # Security scan results
-│   └── bom.json             # Software bill of materials
-└── LICENSE.md               # License information
+│   └── index.md             # Security guide
+├── examples/                # Code examples
+│   └── README.md            # Examples overview
+├── LICENSE.md               # License information
+└── migration.md             # Migration guide
 ```
 
 ## Quick Links
@@ -57,12 +60,12 @@ docs/
 - [Configuration](getting-started/configuration.md) - Essential configuration
 
 ### For Users
-- [User Guide](user-guide/) - Complete usage guide
-- [CLI Reference](api-reference/cli.md) - All CLI commands
-- [Examples](examples/) - Practical code examples
+- [User Guide](user-guide/index.md) - Complete usage guide
+- [CLI Reference](user-guide/cli-reference.md) - All CLI commands
+- [Examples](examples/README.md) - Practical code examples
 
 ### For Developers
-- [Developer Guide](developer-guide/) - Development setup and workflows
+- [Developer Guide](developer-guide/index.md) - Development setup and workflows
 - [Docker Setup](developer-guide/docker.md) - Containerized deployment
 - [Configuration Reference](developer-guide/configuration.md) - Full config guide
 - [Async API Guide](developer-guide/async-api.md) - Asynchronous programming
@@ -70,31 +73,23 @@ docs/
 - [Code Standards](developer-guide/code-standards.md) - Coding guidelines
 - [Contributing](developer-guide/contributing.md) - How to contribute
 - [Schema Reference](architecture/SCHEMA.md) - Database schema
-- [Data Flow](architecture/data-flow.md) - Component interactions
-- [Migration Guide](developer-guide/migrations.md) - Schema migration strategies
+- [Data Flow](architecture/DATA_FLOW.md) - Component interactions
+- [Migration Guide](migration.md) - Schema migration strategies
 - [Security Guidelines](developer-guide/security.md) - Security best practices
 
 ### Project Information
 - [Changelog](developer-guide/changelog.md) - Version history
-- [Architecture Overview](architecture/) - System design
-- [API Reference](api-reference/) - Code-level documentation
-
-## OpenSpec Documentation
-
-Technical specifications and design documents are maintained separately in the `openspec/` directory:
-
-- [Design Documents](../openspec/changes/archive/2026-03-06-secondbrain/design.md)
-- [Specifications](../openspec/changes/archive/2026-03-06-secondbrain/specs/)
-- [Task Tracking](../openspec/changes/archive/2026-03-06-secondbrain/tasks.md)
+- [Architecture Overview](architecture/index.md) - System design
+- [API Reference](api/index.md) - Code-level documentation
 
 ## Getting Started
 
 1. **New to SecondBrain?** Start with the [Quick Start](getting-started/quick-start.md)
-2. **Want to contribute?** Read [CONTRIBUTING.md](developer-guide/contributing.md)
-3. **Setting up development?** Follow [DEVELOPMENT.md](developer-guide/development.md)
-4. **Need Docker setup?** Check [DOCKER.md](developer-guide/docker.md)
+2. **Want to contribute?** Read [Contributing Guide](developer-guide/contributing.md)
+3. **Setting up development?** Follow [Development Guide](developer-guide/development.md)
+4. **Need Docker setup?** Check [Docker Guide](developer-guide/docker.md)
 5. **Need schema info?** Check [SCHEMA.md](architecture/SCHEMA.md)
-6. **Need data flow docs?** See [DATA_FLOW.md](architecture/data-flow.md)
+6. **Need data flow docs?** See [DATA_FLOW.md](architecture/DATA_FLOW.md)
 
 ## Documentation Standards
 

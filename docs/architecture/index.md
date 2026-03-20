@@ -6,8 +6,8 @@ Technical architecture and system design for SecondBrain.
 
 This section provides deep technical documentation for developers and architects:
 
-- [Data Flow](./DATA_FLOW.md) - System architecture and data pipelines
-- [Schema Reference](./SCHEMA.md) - Database structure
+- [Data Flow](DATA_FLOW.md) - System architecture and data pipelines
+- [Schema Reference](SCHEMA.md) - Database structure
 
 ## System Components
 
@@ -25,7 +25,7 @@ This section provides deep technical documentation for developers and architects
 Documents → Ingestor → Chunking → Embeddings → MongoDB → Search
 ```
 
-See [Data Flow Documentation](./DATA_FLOW.md) for detailed diagrams.
+See [Data Flow Documentation](DATA_FLOW.md) for detailed diagrams.
 
 ## Database Schema
 
@@ -34,7 +34,7 @@ SecondBrain uses MongoDB for vector storage:
 - **embeddings** collection - Document chunks and vectors
 - Indexes on: `document_id`, `file_type`, `chunk_index`
 
-See [Schema Reference](./SCHEMA.md) for complete schema details.
+See [Schema Reference](SCHEMA.md) for complete schema details.
 
 ## Design Decisions
 
@@ -73,6 +73,6 @@ See [Security Guide](../developer-guide/security.md) for details.
 ## Related Documentation
 
 - [Developer Guide](../developer-guide/index.md) - Development workflows
-- [API Reference](../api-reference/index.md) - Code-level documentation
+- [API Reference](../api/index.md) - Code-level documentation
 - [Getting Started](../getting-started/index.md) - New users
 - [Async API Guide](../developer-guide/async-api.md) - Asynchronous programming

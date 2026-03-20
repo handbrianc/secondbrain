@@ -1,25 +1,33 @@
-# Document Ingestion
+# Document Ingestion Guide
 
-Learn how to ingest documents into SecondBrain.
+Learn how to add documents to your SecondBrain vector database.
 
 ## Supported Formats
 
 SecondBrain supports a wide range of document formats:
 
-### Text Documents
-- **PDF** (.pdf) - Portable Document Format
-- **Word** (.docx) - Microsoft Word documents
-- **PowerPoint** (.pptx) - Microsoft PowerPoint presentations
-- **Excel** (.xlsx) - Microsoft Excel spreadsheets
-- **HTML** (.html, .htm) - Web pages
-- **Markdown** (.md) - Markdown files
-- **Text** (.txt) - Plain text files
+### Documents
+- **PDF** (.pdf) - Text extraction with layout preservation
+- **Word** (.docx) - Full formatting support
+- **PowerPoint** (.pptx) - Slide-by-slide extraction
+- **Excel** (.xlsx) - Cell data with formatting
 
-### Media Files
-- **Images** (.jpg, .png, .tiff) - Requires OCR
-- **Audio** (.mp3, .wav) - Requires transcription
+### Web & Text
+- **HTML** (.html, .htm) - Content extraction, strips tags
+- **Markdown** (.md) - Preserves structure
+- **Text** (.txt) - Plain text
+
+### Media
+- **Images** (.png, .jpg, .jpeg) - OCR extraction (requires Tesseract)
+- **Audio** (.wav, .mp3) - Transcription (requires Whisper)
 
 ## Basic Ingestion
+
+### Ingest a Single File
+
+```bash
+secondbrain ingest document.pdf
+```
 
 ### Ingest a Directory
 
@@ -27,167 +35,188 @@ SecondBrain supports a wide range of document formats:
 secondbrain ingest ./documents/
 ```
 
-This will recursively process all supported files in the directory.
-
-### Ingest a Single File
-
-```bash
-secondbrain ingest report.pdf
-```
+All supported files in the directory will be processed recursively.
 
 ## Advanced Options
 
-### Custom Chunking
+### Chunk Configuration
 
-Adjust chunk size and overlap for your document type:
-
-```bash
-# For long technical documents
-secondbrain ingest ./papers/ --chunk-size 8192 --chunk-overlap 200
-
-# For short documents
-secondbrain ingest ./notes/ --chunk-size 1024 --chunk-overlap 50
-```
-
-### Batch Processing
-
-Process multiple documents in parallel:
+Documents are split into chunks for embedding:
 
 ```bash
-# Process 10 documents at a time
-secondbrain ingest ./documents/ --batch-size 10
+# Smaller chunks for better precision
+secondbrain ingest ./docs/ --chunk-size 1024 --chunk-overlap 100
+
+# Larger chunks for better context
+secondbrain ingest ./docs/ --chunk-size 8192 --chunk-overlap 500
 ```
+
+| Parameter | Description | Recommended Range |
+|-----------|-------------|-------------------|
+| `--chunk-size` | Characters per chunk | 512 - 8192 |
+| `--chunk-overlap` | Overlap between chunks | 50 - 500 |
+
+### Performance Tuning
+
+```bash
+# Use more CPU cores (default: 4)
+secondbrain ingest ./docs/ --cores 8
+
+# Process in larger batches
+secondbrain ingest ./docs/ --batch-size 20
+
+# Disable rate limiting (development only)
+SECONDBRAIN_RATE_LIMIT_ENABLED=false secondbrain ingest ./docs/
+```
+
+### Re-ingestion
+
+By default, SecondBrain skips existing documents:
+
+```bash
+# Force re-ingestion of all documents
+secondbrain ingest ./docs/ --force
+```
+
+Useful when:
+- Changing chunk configuration
+- Updating embedding model
+- Fixing corrupted documents
+
+## Best Practices
+
+### Optimal Chunk Size
+
+| Use Case | Chunk Size | Overlap |
+|----------|------------|---------|
+| Q&A tasks | 512-1024 | 100-200 |
+| General search | 2048-4096 | 200-300 |
+| Full document context | 4096-8192 | 300-500 |
+
+### Directory Organization
+
+```
+documents/
+├── research/
+│   ├── papers/
+│   └── notes/
+├── projects/
+│   ├── project-a/
+│   └── project-b/
+└── personal/
+```
+
+Ingest by category:
+```bash
+secondbrain ingest ./documents/research/ --chunk-size 2048
+secondbrain ingest ./documents/projects/ --chunk-size 4096
+```
+
+### Large Datasets
+
+For large document collections:
+
+```bash
+# Process in stages
+secondbrain ingest ./docs/part1/ --cores 8
+secondbrain ingest ./docs/part2/ --cores 8
+
+# Monitor progress
+secondbrain status
+```
+
+## Monitoring Progress
 
 ### Verbose Mode
 
-Get detailed progress and timing information:
+```bash
+secondbrain ingest ./docs/ --verbose
+```
+
+Output:
+```
+Processing: document1.pdf (45KB)
+  - Extracted 12,345 characters
+  - Created 4 chunks
+  - Generated embeddings
+  ✓ Complete (2.3s)
+
+Processing: document2.docx (89KB)
+  ...
+```
+
+### Progress Tracking
 
 ```bash
-secondbrain ingest ./documents/ --verbose
+# Check ingestion status
+secondbrain status
+
+# List recently added documents
+secondbrain list --limit 10
 ```
-
-## Chunking Strategy
-
-### How Chunking Works
-
-1. Documents are split into chunks based on `chunk_size`
-2. Chunks overlap by `chunk_overlap` tokens for context
-3. Each chunk is embedded separately
-4. Metadata is preserved for each chunk
-
-### Choosing Chunk Size
-
-| Document Type | Recommended Chunk Size |
-|--------------|------------------------|
-| Short notes | 512-1024 tokens |
-| Articles | 2048-4096 tokens |
-| Technical docs | 4096-8192 tokens |
-| Books/Papers | 8192+ tokens |
-
-### Choosing Chunk Overlap
-
-| Use Case | Recommended Overlap |
-|----------|---------------------|
-| General | 50-100 tokens |
-| Technical | 100-200 tokens |
-| Narrative | 200-500 tokens |
-
-## Processing Pipeline
-
-```
-File → Text Extraction → Chunking → Embedding → Storage
-```
-
-### Step 1: Text Extraction
-
-- PDF: Extract text and metadata
-- DOCX: Extract text, headings, and structure
-- HTML: Strip tags and extract content
-- Images: OCR (if enabled)
-- Audio: Transcription (if enabled)
-
-### Step 2: Chunking
-
-- Split text into overlapping chunks
-- Preserve document metadata
-- Generate unique chunk IDs
-
-### Step 3: Embedding
-
-- Send chunks to sentence-transformers
-- Generate vector embeddings
-- Apply rate limiting
-
-### Step 4: Storage
-
-- Store vectors in MongoDB
-- Index for fast retrieval
-- Preserve metadata
-
-## Duplicate Detection
-
-SecondBrain automatically detects duplicate documents using:
-
-1. Text hashing
-2. Content comparison
-3. Metadata matching
-
-Duplicates are skipped with a warning.
 
 ## Error Handling
 
-### Common Errors
+### Failed Documents
 
-**File too large:**
-```
-Error: File exceeds maximum size (100MB)
-```
-**Solution:** Split file or increase `SECONDBRAIN_MAX_FILE_SIZE_BYTES`
+If a document fails to process:
 
-**Unsupported format:**
-```
-Error: Unsupported file format: .xyz
-```
-**Solution:** Convert to supported format
+```bash
+# Continue processing other documents
+secondbrain ingest ./docs/  # Skips failed files
 
-**OCR required:**
-```
-Warning: Image file requires OCR configuration
-```
-**Solution:** Configure OCR engine or skip image files
-
-## Performance Tips
-
-1. **Use batch processing** for large directories
-2. **Adjust chunk size** for your document type
-3. **Enable verbose mode** to monitor progress
-4. **Use parallel processing** with `--batch-size`
-
-## Programmatic Ingestion
-
-For Python API usage:
-
-```python
-from secondbrain.client import SecondBrainClient
-
-client = SecondBrainClient()
-
-# Ingest directory
-client.ingest("./documents/")
-
-# Ingest with custom options
-client.ingest(
-    "./papers/",
-    chunk_size=2048,
-    chunk_overlap=100,
-    batch_size=10
-)
+# See detailed errors
+secondbrain ingest ./docs/ --verbose
 ```
 
-See [Async API Guide](../developer-guide/async-api.md) for async examples.
+Common errors:
+- **Corrupted file**: Try repairing or re-saving
+- **Unsupported format**: Convert to supported format
+- **Permission denied**: Check file permissions
 
-## Related Documentation
+### Retry Strategy
 
-- [Quick Start](../getting-started/quick-start.md) - Get started
-- [Configuration](../getting-started/configuration.md) - Chunk settings
-- [Search Guide](./search-guide.md) - Search ingested documents
+```bash
+# Re-ingest only failed documents
+secondbrain ingest ./failed-docs/ --force
+```
+
+## Examples
+
+### Ingest Research Papers
+
+```bash
+# Optimize for academic papers
+secondbrain ingest ./papers/ \
+  --chunk-size 2048 \
+  --chunk-overlap 200 \
+  --cores 4
+```
+
+### Ingest Project Documentation
+
+```bash
+# Larger chunks for technical docs
+secondbrain ingest ./project-docs/ \
+  --chunk-size 4096 \
+  --chunk-overlap 300 \
+  --batch-size 15
+```
+
+### Continuous Ingestion
+
+```bash
+# Watch directory for new files (requires watchman)
+watchman watch ./documents/
+# Then run ingestion periodically
+while true; do
+  secondbrain ingest ./documents/
+  sleep 3600  # Every hour
+done
+```
+
+## Next Steps
+
+- [Search Guide](search-guide.md) - Learn to query your documents
+- [Document Management](document-management.md) - Manage your database
+- [CLI Reference](cli-reference.md) - Complete command reference

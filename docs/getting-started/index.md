@@ -48,28 +48,28 @@ secondbrain list
 ## Documentation Navigation
 
 ### For New Users
-- [Installation Guide](./installation.md) - Detailed installation steps
-- [Quick Start](./quick-start.md) - Get started in 5 minutes
-- [Configuration](./configuration.md) - Essential configuration options
+- [Installation Guide](installation.md) - Detailed installation steps
+- [Quick Start](quick-start.md) - Get started in 5 minutes
+- [Configuration](configuration.md) - Essential configuration options
 
 ### For Users
 - [User Guide](../user-guide/index.md) - Complete usage guide
-- [CLI Reference](../api-reference/cli.md) - All CLI commands
+- [CLI Reference](../user-guide/cli-reference.md) - All CLI commands
 
 ### For Developers
 - [Developer Guide](../developer-guide/index.md) - Development setup and workflows
 - [Architecture](../architecture/index.md) - System design and data flow
-- [API Reference](../api-reference/index.md) - Code-level API documentation
+- [API Reference](../api/index.md) - Code-level API documentation
 
 ## Next Steps
 
-1. Read the [Quick Start Guide](./quick-start.md) for a 5-minute introduction
-2. Configure your environment using [Configuration Guide](./configuration.md)
+1. Read the [Quick Start Guide](quick-start.md) for a 5-minute introduction
+2. Configure your environment using [Configuration Guide](configuration.md)
 3. Explore the [User Guide](../user-guide/index.md) for detailed usage
-4. Check out the [examples directory](../docs/examples/README.md) for practical code examples
+4. Check out the [examples directory](../examples/README.md) for practical code examples
 
 ## Need Help?
 
-- [FAQ](#) - Frequently asked questions (coming soon)
+- [Troubleshooting](troubleshooting.md) - Frequently asked questions and common issues
 - [Contributing](../developer-guide/contributing.md) - How to contribute
-- [Report an Issue](#) - Bug reports and feature requests (coming soon)
+- [Report an Issue](https://github.com/your-repo/issues) - Bug reports and feature requests

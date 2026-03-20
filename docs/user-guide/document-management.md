@@ -1,166 +1,270 @@
-# Document Management
+# Document Management Guide
 
-Manage your ingested documents in SecondBrain.
+Learn how to manage your document database with SecondBrain.
 
 ## Listing Documents
 
-### List All Documents
+### Basic List
 
 ```bash
+# Show all documents (summary)
 secondbrain list
 ```
 
-Shows a summary of all ingested documents.
+Output:
+```
+ID                                    Filename          Size    Chunks
+-------------------------------------------------------------------
+doc-a1b2c3d4e5f6                      report.pdf        45KB    12
+doc-b2c3d4e5f6g7                      notes.md          8KB     3
+doc-c3d4e5f6g7h8                      presentation.pptx 120KB   28
+```
 
-### List with Details
+### Detailed List
 
 ```bash
+# Show full document details
 secondbrain list --details
 ```
 
-Shows detailed information including:
-- Document ID
-- Source file path
-- Number of chunks
-- Ingestion timestamp
-- File type
+Output:
+```
+ID: doc-a1b2c3d4e5f6
+Filename: report.pdf
+Size: 45KB
+Chunks: 12
+Type: pdf
+Ingested: 2024-01-15 14:30:22
+Metadata:
+  author: John Doe
+  department: Engineering
+```
+
+### Filter by File Type
+
+```bash
+# List only PDF documents
+secondbrain list --file-type pdf
+
+# List only markdown files
+secondbrain list --file-type md
+```
+
+### Limit Results
+
+```bash
+# Show only recent documents
+secondbrain list --limit 10
+
+# Combine with details
+secondbrain list --details --limit 5
+```
+
+### JSON Output
+
+```bash
+# Export document list as JSON
+secondbrain list --format json
+```
+
+## Database Statistics
+
+### Status Command
+
+```bash
+# View database statistics
+secondbrain status
+```
+
+Output:
+```
+Database: secondbrain
+Collection: embeddings
+Total Documents: 150
+Total Chunks: 2,340
+Total Content Size: 45.2 MB
+Vector Index Size: 12.8 MB
+Average Chunk Size: 19,316 characters
+```
+
+### Verbose Status
+
+```bash
+# Detailed statistics
+secondbrain status --verbose
+```
+
+Includes:
+- Breakdown by file type
+- Ingestion timeline
+- Search performance metrics
+- Index health
 
 ## Deleting Documents
 
 ### Delete Single Document
 
 ```bash
-secondbrain delete <document-id>
+# Delete by ID
+secondbrain delete doc-a1b2c3d4e5f6
 ```
 
-You'll be prompted to confirm before deletion.
-
-### Delete Without Confirmation
-
-```bash
-secondbrain delete <document-id> --force
+You'll be prompted to confirm:
+```
+Delete document doc-a1b2c3d4e5f6 (report.pdf)? [y/N]: y
+✓ Document deleted successfully
 ```
 
-### Delete Multiple Documents
+### Force Delete (Skip Confirmation)
 
 ```bash
-# Delete each one individually
-secondbrain delete doc-12345
-secondbrain delete doc-67890
+# Delete without confirmation
+secondbrain delete doc-a1b2c3d4e5f6 --force
 ```
 
-## Viewing Document Status
-
-### Database Statistics
+### Delete All Documents
 
 ```bash
+# WARNING: Delete all documents
+secondbrain delete --all --force
+```
+
+**Warning**: This action cannot be undone!
+
+### Batch Delete
+
+```bash
+# Delete multiple documents (manual)
+secondbrain delete doc-1 --force
+secondbrain delete doc-2 --force
+secondbrain delete doc-3 --force
+```
+
+## Document Metadata
+
+### Viewing Metadata
+
+```bash
+# See metadata for all documents
+secondbrain list --details | grep -A 5 "Metadata:"
+```
+
+### Metadata Fields
+
+Documents can have custom metadata:
+- `filename`: Original file name
+- `file_type`: Extension (pdf, md, etc.)
+- `size`: File size in bytes
+- `ingested_at`: Timestamp
+- `custom fields`: Any user-defined metadata
+
+## Maintenance
+
+### Find Orphaned Chunks
+
+```bash
+# Check for database inconsistencies
+secondbrain status --verbose
+```
+
+### Rebuild Index
+
+```bash
+# Re-ingest all documents to rebuild
+secondbrain ingest ./documents/ --force
+```
+
+### Backup Database
+
+```bash
+# MongoDB backup
+mongodump --db secondbrain --out ./backup/
+
+# Restore from backup
+mongorestore --db secondbrain ./backup/secondbrain/
+```
+
+## Search Within Results
+
+### Filter by Content
+
+After listing documents, you can search within specific files:
+
+```bash
+# First, get document ID
+secondbrain list --file-type pdf
+
+# Then search with context
+secondbrain search "specific topic" --top-k 10
+```
+
+### Cross-Reference Documents
+
+```bash
+# Find related documents
+secondbrain search "topic A" --top-k 5
+secondbrain search "topic B" --top-k 5
+
+# Compare results to find overlap
+```
+
+## Best Practices
+
+### Regular Maintenance
+
+```bash
+# Weekly: Check database health
 secondbrain status
+
+# Monthly: Review and clean up
+secondbrain list --details
 ```
 
-Shows:
-- Total documents
-- Total chunks
-- Database size
-- Index statistics
-
-### Health Check
+### Document Organization
 
 ```bash
-secondbrain health
+# Ingest by category
+secondbrain ingest ./documents/research/
+secondbrain ingest ./documents/projects/
+
+# Keep track with metadata
 ```
 
-Verifies:
-- MongoDB connectivity
-- sentence-transformers availability
-- Configuration validity
+### Version Control
 
-## Organizing Documents
-
-### Best Practices
-
-1. **Use descriptive file names** - Easier to identify documents
-2. **Group by project** - Organize into directories
-3. **Use consistent formats** - Prefer PDF/DOCX over images
-4. **Regular cleanup** - Remove outdated documents
-
-### Document Naming
-
-Recommended naming convention:
-```
-project-name_document-type_date.pdf
-example-project_report_2024-03-01.pdf
-```
-
-## Batch Operations
-
-### Process Multiple Directories
-
-```bash
-# Ingest multiple directories
-secondbrain ingest ./project-a/
-secondbrain ingest ./project-b/
-```
-
-### Batch Deletion Script
-
-```bash
-#!/bin/bash
-# delete-old-docs.sh
-
-# List documents older than X days and delete
-secondbrain list --details | grep "2024-01" | awk '{print $1}' | while read id; do
-    secondbrain delete $id --force
-done
-```
-
-## Monitoring
-
-### Verbose Ingestion
-
-```bash
-secondbrain ingest ./documents/ --verbose
-```
-
-Shows progress and timing for each document.
-
-### Check Progress
-
-```bash
-# Monitor database growth
-secondbrain status
-```
+For important documents:
+1. Keep source files in version control
+2. Track document IDs externally
+3. Document ingestion history
 
 ## Troubleshooting
 
 ### Document Not Found
 
-**Problem:** Can't find a document in search results
+```bash
+# Verify document exists
+secondbrain list | grep "doc-id"
 
-**Solutions:**
-1. Verify it was ingested: `secondbrain list`
-2. Check ingestion logs for errors
-3. Re-ingest if necessary
+# Check for typos in ID
+secondbrain list --details
+```
 
 ### Duplicate Documents
 
-**Problem:** Same document appears multiple times
+```bash
+# Re-ingest with --force to deduplicate
+secondbrain ingest ./docs/ --force
+```
 
-**Solutions:**
-1. SecondBrain has built-in duplicate detection
-2. Check if files have different metadata
-3. Delete duplicates manually
+### Missing Metadata
 
-### Corrupted Documents
+```bash
+# Re-ingest to add missing metadata
+secondbrain ingest ./docs/ --force
+```
 
-**Problem:** Document shows errors
+## Next Steps
 
-**Solutions:**
-1. Delete and re-ingest
-2. Check file integrity
-3. Try converting to different format
-
-## Related Documentation
-
-- [Document Ingestion](./document-ingestion.md) - Add documents
-- [Search Guide](./search-guide.md) - Search documents
-- [CLI Reference](./cli-reference.md) - All commands
+- [Search Guide](search-guide.md) - Learn to query documents
+- [CLI Reference](cli-reference.md) - Complete command reference
+- [Troubleshooting](../getting-started/troubleshooting.md) - Common issues

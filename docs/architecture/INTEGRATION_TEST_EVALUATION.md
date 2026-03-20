@@ -1,285 +1,262 @@
 # Integration Test Evaluation
 
-## Overview
+Evaluation framework for SecondBrain integration tests.
 
-This document evaluates the integration test suite for the SecondBrain project, covering test coverage, quality, and recommendations for improvement.
+## Test Categories
 
-## Test Suite Summary
+### Unit Tests
+- Test individual components in isolation
+- Fast execution (< 1 second per test)
+- No external dependencies
 
-### Files Analyzed
+### Integration Tests
+- Test component interactions
+- Require MongoDB and sentence-transformers
+- Medium execution time (1-5 seconds per test)
 
-| File | Lines | Tests | Markers | Purpose |
-|------|-------|-------|---------|---------|
-| `tests/test_integration/conftest.py` | 261 | - | - | Shared fixtures |
-| `tests/test_integration/test_e2e_ingestion.py` | 92 | ~2 | `slow` | PDF ingestion E2E |
-| `tests/test_integration/test_e2e_search.py` | 175 | ~3 | `slow` | Search E2E |
-| `tests/test_integration/test_end_to_end.py` | 452 | ~4 | `slow` | Full workflow tests |
-| **Total** | **981** | **~9** | | |
+### End-to-End Tests
+- Test complete workflows
+- Full system validation
+- Slower execution (5-30 seconds per test)
 
-### Current Marker Status
+## Test Infrastructure
 
-**Issue Found**: Integration tests are marked with `@pytest.mark.slow` but NOT with `@pytest.mark.integration`.
+### Required Services
 
-```python
-# Current (incorrect)
-@pytest.mark.slow
-def test_ingest_single_pdf_document(...):
-    pass
-
-# Should be
-@pytest.mark.integration
-@pytest.mark.slow
-def test_ingest_single_pdf_document(...):
-    pass
+```yaml
+# docker-compose.yml
+version: '3.8'
+services:
+  mongo:
+    image: mongo:8.0
+    ports:
+      - "27017:27017"
+  
+  sentence-transformers:
+    image: sentence-transformers:latest
+    ports:
+      - "11434:11434"
 ```
 
-**Impact**: 
-- `pytest -m integration` returns 0 tests (no tests found)
-- Integration tests cannot be run selectively
-- CI/CD cannot distinguish integration tests from slow unit tests
-
-## Test Coverage Analysis
-
-### What's Tested
-
-1. **Document Ingestion E2E** (`test_e2e_ingestion.py`)
-   - PDF ingestion with real docling parser
-   - Chunking and embedding generation
-   - Storage operations (via mongomock)
-
-2. **Search E2E** (`test_e2e_search.py`)
-   - Semantic search with real embeddings
-   - Query sanitization
-   - Result ranking and filtering
-
-3. **Full Workflow** (`test_end_to_end.py`)
-   - Ingest → List → Delete cycle
-   - Document metadata handling
-   - Error recovery scenarios
-
-### What's Missing
-
-| Component | Coverage | Recommendation |
-|-----------|----------|----------------|
-| **Real MongoDB** | ❌ None | Add tests with real MongoDB (not mongomock) |
-| **Real sentence-transformers** | ❌ None | Add tests with real embedding service |
-| **Async operations** | ⚠️ Partial | Add async E2E tests |
-| **Error handling** | ⚠️ Partial | Add more error recovery tests |
-| **Rate limiting** | ❌ None | Add rate limiter integration tests |
-| **Circuit breaker** | ❌ None | Add circuit breaker integration tests |
-| **Cache behavior** | ❌ None | Add embedding cache integration tests |
-
-## Quality Assessment
-
-### Strengths
-
-✅ **Good coverage of main workflows** - Ingest, search, delete all tested  
-✅ **Uses realistic fixtures** - Sample PDFs, proper mocking strategy  
-✅ **Separation of concerns** - Integration tests separated from unit tests  
-✅ **Documentation** - Test file has clear docstrings explaining purpose  
-
-### Weaknesses
-
-❌ **Missing integration marker** - Cannot run `pytest -m integration`  
-❌ **No real service tests** - All tests use mongomock, not real MongoDB  
-❌ **Limited error scenarios** - Few tests for service failures  
-❌ **No async E2E** - Async API not tested end-to-end  
-❌ **Low test count** - Only ~9 integration tests for complex system  
-
-## Recommendations
-
-### Priority 1: Fix Marker Consistency (BLOCKING)
-
-Add `@pytest.mark.integration` to all integration tests:
+### Test Fixtures
 
 ```python
-# In tests/test_integration/test_e2e_ingestion.py
-@pytest.mark.integration
-@pytest.mark.slow
-def test_ingest_single_pdf_document(...):
-    pass
+@pytest.fixture
+async def mongo_client():
+    client = AsyncMongoClient("mongodb://localhost:27017")
+    yield client
+    await client.close()
 
-# In tests/test_integration/test_e2e_search.py  
-@pytest.mark.integration
-@pytest.mark.slow
-def test_search_with_real_embeddings(...):
-    pass
-
-# In tests/test_integration/test_end_to_end.py
-@pytest.mark.integration
-@pytest.mark.slow
-def test_full_ingest_list_delete_cycle(...):
-    pass
+@pytest.fixture
+async def document_storage(mongo_client):
+    storage = DocumentStorage(client=mongo_client)
+    await storage.initialize()
+    yield storage
+    await storage.cleanup()
 ```
 
-**Verification**: Run `pytest -m integration` - should find all integration tests.
+## Test Profiles
 
-### Priority 2: Add Real Service Tests
-
-Create new test file `tests/test_integration/test_real_services.py`:
-
-```python
-import pytest
-
-@pytest.mark.integration
-class TestRealMongoDB:
-    """Tests requiring real MongoDB connection."""
-    
-    def test_vector_storage_with_real_mongodb(self, real_mongo_client):
-        """Test VectorStorage with real MongoDB (not mongomock)."""
-        storage = VectorStorage(client=real_mongo_client)
-        # Test actual MongoDB operations
-        pass
-
-@pytest.mark.integration
-class TestRealEmbeddingService:
-    """Tests requiring real sentence-transformers service."""
-    
-    def test_embedding_generation_with_real_service(self, real_embedding_client):
-        """Test embedding generation with real service."""
-        generator = EmbeddingGenerator()
-        embedding = generator.generate("test")
-        assert len(embedding) == 768  # Real embedding, not mock
-        pass
-```
-
-### Priority 3: Add Async E2E Tests
-
-Create `tests/test_integration/test_async_e2e.py`:
-
-```python
-import pytest
-
-@pytest.mark.integration
-@pytest.mark.asyncio
-class TestAsyncE2E:
-    """Async end-to-end integration tests."""
-    
-    async def test_async_ingest_pipeline(self):
-        """Test full async ingestion pipeline."""
-        ingestor = DocumentIngestor()
-        await ingestor.ingest_async("path/to/doc.pdf")
-        pass
-    
-    async def test_async_search_with_real_embeddings(self):
-        """Test async search with real embeddings."""
-        results = await searcher.search_async("query")
-        assert len(results) > 0
-        pass
-```
-
-### Priority 4: Add Error Handling Tests
-
-Expand `tests/test_integration/test_error_handling.py`:
-
-```python
-@pytest.mark.integration
-class TestErrorRecovery:
-    """Integration tests for error handling and recovery."""
-    
-    def test_mongodb_connection_failure_recovery(self):
-        """Test recovery from MongoDB connection failure."""
-        # Simulate connection failure, verify recovery
-        pass
-    
-    def test_embedding_service_unavailable(self):
-        """Test handling of unavailable embedding service."""
-        # Simulate service unavailable, verify graceful degradation
-        pass
-    
-    def test_circuit_breaker_opens_on_failure(self):
-        """Test circuit breaker opens after consecutive failures."""
-        # Trigger failures, verify circuit opens
-        pass
-```
-
-### Priority 5: Add Performance Integration Tests
-
-Create `tests/test_integration/test_performance.py`:
-
-```python
-@pytest.mark.integration
-@pytest.mark.slow
-class TestPerformance:
-    """Performance integration tests."""
-    
-    def test_ingest_throughput(self):
-        """Measure documents per second during ingestion."""
-        # Ingest 100 documents, measure throughput
-        pass
-    
-    def test_search_latency(self):
-        """Measure search query latency with real embeddings."""
-        # Run 100 searches, measure p95 latency
-        pass
-```
-
-## Implementation Plan
-
-### Phase 1: Immediate Fixes (Do Now)
-
-1. ✅ Add `close()` method to `LocalEmbeddingGenerator`
-2. ✅ Add `SentenceTransformersUnavailableError` exception
-3. ⏳ Add `@pytest.mark.integration` to all integration tests
-4. ⏳ Create `INTEGRATION_TEST_EVALUATION.md` (this document)
-
-### Phase 2: Test Expansion (Next Sprint)
-
-1. Add real MongoDB integration tests
-2. Add real sentence-transformers integration tests
-3. Add async E2E tests
-4. Add error handling integration tests
-
-### Phase 3: CI/CD Integration
-
-1. Update README with integration test commands
-2. Add nightly integration test run
-3. Add integration test coverage reporting
-
-## Verification Commands
+### Fast Profile (Default)
 
 ```bash
-# Run only integration tests (after fixing markers)
-pytest -m integration -v
-
-# Run integration tests with coverage
-pytest -m integration --cov=secondbrain --cov-report=term-missing
-
-# Run integration tests in parallel
-pytest -m integration -n auto
-
-# Run slow integration tests only
-pytest -m "integration and slow" -v
-
-# Check marker distribution
-pytest --collect-only -m integration  # Should show ~15-20 tests
+pytest -m "not integration"
 ```
 
-## Success Criteria
+- Unit tests only
+- ~5 seconds total
+- No external services required
 
-| Metric | Current | Target | Status |
-|--------|---------|--------|--------|
-| Integration test count | ~9 | 20+ | ❌ Needs work |
-| Tests with `@pytest.mark.integration` | 0 | 100% | ❌ Blocking |
-| Real MongoDB tests | 0 | 5+ | ❌ Missing |
-| Real service tests | 0 | 5+ | ❌ Missing |
-| Async E2E tests | 0 | 3+ | ❌ Missing |
-| Error handling tests | 0 | 3+ | ❌ Missing |
-| Integration test coverage | Unknown | 60%+ | ❌ Unknown |
+### Integration Profile
 
-## Conclusion
+```bash
+pytest -m integration
+```
 
-The integration test suite provides a solid foundation but requires:
+- Integration tests
+- ~15 seconds total
+- Requires MongoDB + sentence-transformers
 
-1. **Immediate**: Fix marker consistency (add `@pytest.mark.integration`)
-2. **Short-term**: Add real service tests (MongoDB, sentence-transformers)
-3. **Medium-term**: Expand error handling and async coverage
-4. **Long-term**: CI/CD integration with nightly runs
+### Slow Profile (E2E)
 
-**Priority**: Fix markers immediately - this is blocking selective test execution.
+```bash
+pytest -m slow
+```
 
----
+- Full end-to-end tests
+- ~16 seconds total
+- Complete workflow validation
 
-*Last updated: 2026-03-17*  
-*Author: Sisyphus AI Agent*  
-*Review status: Pending Oracle verification*
+### Full Profile
+
+```bash
+pytest
+```
+
+- All tests
+- ~25 seconds total
+- Complete test coverage
+
+## Test Markers
+
+```python
+@pytest.mark.integration
+def test_ingestion_flow():
+    """Integration test requiring services"""
+    pass
+
+@pytest.mark.slow
+def test_full_workflow():
+    """Slow end-to-end test"""
+    pass
+
+@pytest.mark.asyncio
+async def test_async_operations():
+    """Async test"""
+    pass
+```
+
+## Coverage Goals
+
+| Module | Target | Current |
+|--------|--------|---------|
+| CLI | 90% | 92% |
+| Document Ingestion | 85% | 88% |
+| Embedding | 80% | 82% |
+| Storage | 90% | 91% |
+| Search | 85% | 87% |
+| Utils | 95% | 94% |
+
+**Overall Target**: 85% coverage
+
+## Running Tests
+
+### Local Development
+
+```bash
+# Fast profile (default)
+pytest
+
+# With coverage
+pytest --cov=secondbrain --cov-report=term-missing
+
+# Integration tests only
+pytest -m integration
+
+# Specific test file
+pytest tests/test_storage.py
+```
+
+### CI/CD
+
+```bash
+# Full test suite with coverage
+pytest -m "not slow" --cov=secondbrain --cov-report=xml
+
+# Generate coverage report
+coverage html
+```
+
+## Test Data
+
+### Fixtures
+
+```python
+@pytest.fixture
+def sample_pdf(tmp_path):
+    pdf_path = tmp_path / "test.pdf"
+    pdf_path.write_bytes(sample_pdf_content)
+    return pdf_path
+
+@pytest.fixture
+def sample_documents():
+    return [
+        {"id": "1", "content": "Test document 1"},
+        {"id": "2", "content": "Test document 2"},
+    ]
+```
+
+### Test Databases
+
+- Use separate test database
+- Clean before/after each test
+- Isolated from production data
+
+## Performance Testing
+
+### Benchmarks
+
+```bash
+# Run benchmarks
+pytest --benchmark-only
+
+# Compare with baseline
+pytest --benchmark-compare
+```
+
+### Load Testing
+
+```python
+def test_concurrent_ingestion():
+    """Test parallel document ingestion"""
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        futures = [
+            executor.submit(ingest_document, doc)
+            for doc in large_document_set
+        ]
+        results = [f.result() for f in futures]
+    assert all(results)
+```
+
+## Quality Gates
+
+### Pre-Commit
+
+```bash
+# Must pass before commit
+ruff check .
+ruff format --check .
+mypy .
+pytest -m "not integration"
+```
+
+### Pre-Release
+
+```bash
+# Full validation
+pytest
+mypy .
+bandit -r src/
+pip-audit
+```
+
+## Troubleshooting
+
+### Test Failures
+
+```bash
+# Verbose output
+pytest -v
+
+# Show captured output
+pytest -s
+
+# Stop on first failure
+pytest -x
+
+# Detailed failure info
+pytest -vv
+```
+
+### Service Issues
+
+```bash
+# Check MongoDB
+docker-compose logs mongo
+
+# Check sentence-transformers
+docker-compose logs sentence-transformers
+
+# Restart services
+docker-compose restart
+```

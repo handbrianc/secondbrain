@@ -1,28 +1,42 @@
 # CLI Reference
 
-Complete reference for SecondBrain CLI commands.
+Complete reference for all SecondBrain CLI commands.
 
-## Overview
+## Global Options
 
-SecondBrain provides a comprehensive CLI for document management and semantic search.
+```bash
+secondbrain [GLOBAL OPTIONS] [COMMAND] [COMMAND OPTIONS]
+```
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--help` | Show help message | - |
+| `--version` | Show version | - |
+| `--verbose` | Enable verbose output | false |
+| `--config` | Path to config file | `.env` |
 
 ## Commands
 
 ### `ingest`
 
-Add documents to the vector database.
+Ingest documents into the vector database.
 
 ```bash
 secondbrain ingest PATH [OPTIONS]
 ```
 
+**Arguments:**
+- `PATH` - Path to file or directory to ingest
+
 **Options:**
-- `PATH` - Path to file or directory (required)
-- `--chunk-size INTEGER` - Chunk size in tokens (default: 4096)
-- `--chunk-overlap INTEGER` - Chunk overlap in tokens (default: 50)
-- `--batch-size INTEGER` - Batch size for parallel processing
-- `--verbose` - Enable verbose output with timing info
-- `--help` - Show help message
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--chunk-size` | Size of text chunks | 4096 |
+| `--chunk-overlap` | Overlap between chunks | 200 |
+| `--batch-size` | Batch size for processing | 10 |
+| `--cores` | Number of CPU cores | 4 |
+| `--force` | Re-ingest existing documents | false |
+| `--verbose` | Show detailed progress | false |
 
 **Examples:**
 ```bash
@@ -32,23 +46,15 @@ secondbrain ingest document.pdf
 # Ingest a directory
 secondbrain ingest ./documents/
 
-# Custom chunking
-secondbrain ingest ./papers/ --chunk-size 2048 --chunk-overlap 100
+# Ingest with custom chunk size
+secondbrain ingest ./docs/ --chunk-size 2048
 
-# Batch processing with verbose output
-secondbrain ingest ./reports/ --batch-size 10 --verbose
+# Ingest with 8 CPU cores
+secondbrain ingest ./docs/ --cores 8
+
+# Force re-ingestion
+secondbrain ingest ./docs/ --force
 ```
-
-**Supported Formats:**
-- PDF (.pdf)
-- Word (.docx)
-- PowerPoint (.pptx)
-- Excel (.xlsx)
-- HTML (.html, .htm)
-- Markdown (.md)
-- Text (.txt)
-- Images (OCR required)
-- Audio (transcription required)
 
 ### `search`
 
@@ -58,22 +64,30 @@ Perform semantic search queries.
 secondbrain search QUERY [OPTIONS]
 ```
 
+**Arguments:**
+- `QUERY` - Natural language search query
+
 **Options:**
-- `QUERY` - Search query in natural language (required)
-- `--top-k INTEGER` - Number of results to return (default: 5)
-- `--verbose` - Enable verbose output with scores
-- `--help` - Show help message
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--top-k` | Number of results | 5 |
+| `--threshold` | Minimum similarity score | 0.0 |
+| `--fields` | Fields to return | content |
+| `--verbose` | Show timing info | false |
 
 **Examples:**
 ```bash
 # Simple search
-secondbrain search "what is this about?"
+secondbrain search "machine learning algorithms"
 
-# Get more results
-secondbrain search "machine learning algorithms" --top-k 10
+# Get 10 results
+secondbrain search "python best practices" --top-k 10
 
-# Verbose output with scores
-secondbrain search "data processing pipelines" --verbose
+# High-confidence results only
+secondbrain search "data pipeline" --threshold 0.8
+
+# Include metadata in results
+secondbrain search "report" --fields content,metadata
 ```
 
 ### `list`
@@ -85,82 +99,136 @@ secondbrain list [OPTIONS]
 ```
 
 **Options:**
-- `--details` - Show detailed information including chunks
-- `--help` - Show help message
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--details` | Show full details | false |
+| `--format` | Output format (table/json) | table |
+| `--file-type` | Filter by file type | - |
+| `--limit` | Maximum results | 100 |
 
 **Examples:**
 ```bash
-# List all documents
+# List all documents (summary)
 secondbrain list
 
-# Show detailed information
+# List with full details
 secondbrain list --details
+
+# Export as JSON
+secondbrain list --format json
+
+# Filter by file type
+secondbrain list --file-type pdf
 ```
 
 ### `delete`
 
-Remove documents from the database.
+Delete documents from the database.
 
 ```bash
 secondbrain delete DOCUMENT_ID [OPTIONS]
 ```
 
+**Arguments:**
+- `DOCUMENT_ID` - ID of document to delete
+
 **Options:**
-- `DOCUMENT_ID` - ID of document to delete (required)
-- `--force` - Skip confirmation prompt
-- `--help` - Show help message
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--force` | Skip confirmation | false |
+| `--all` | Delete all documents | false |
 
 **Examples:**
 ```bash
-# Delete with confirmation
+# Delete a single document
 secondbrain delete doc-12345
 
 # Delete without confirmation
 secondbrain delete doc-12345 --force
+
+# Delete all documents (warning!)
+secondbrain delete --all --force
 ```
 
 ### `status`
 
-Display database statistics.
+Show database statistics.
 
 ```bash
 secondbrain status [OPTIONS]
 ```
 
+**Options:**
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--verbose` | Show detailed stats | false |
+| `--format` | Output format | table |
+
 **Output:**
-- Total documents
-- Total chunks
-- Database size
-- Index statistics
+```
+Database: secondbrain
+Collection: embeddings
+Total Documents: 150
+Total Chunks: 2,340
+Total Size: 45.2 MB
+Index Size: 12.8 MB
+```
 
 ### `health`
 
-Check service health.
+Check system health and connectivity.
 
 ```bash
 secondbrain health [OPTIONS]
 ```
 
-**Checks:**
-- MongoDB connectivity
-- sentence-transformers availability
-- Configuration validity
+**Options:**
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--verbose` | Show detailed info | false |
+| `--check-sentence-transformers` | Check service | true |
+| `--check-mongo` | Check MongoDB | true |
 
-## Global Options
-
-- `--version` - Show version
-- `--verbose` - Enable verbose output
-- `--help` - Show help message
+**Output:**
+```
+✓ MongoDB: Connected (27017)
+✓ sentence-transformers: Available (11434)
+✓ Configuration: Valid
+```
 
 ## Exit Codes
 
-- `0` - Success
-- `1` - General error
-- `2` - Configuration error
-- `3` - Service unavailable
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 1 | General error |
+| 2 | Configuration error |
+| 3 | Connection error |
+| 4 | Document not found |
+| 5 | Permission error |
 
-## Related Documentation
+## Environment Variables
 
-- [Quick Start](../getting-started/quick-start.md) - Get started quickly
-- [User Guide](../user-guide/index.md) - Complete usage guide
-- [Configuration](../getting-started/configuration.md) - Setup options
+All CLI options can be set via environment variables:
+
+| Option | Environment Variable |
+|--------|---------------------|
+| `--chunk-size` | `SECONDBRAIN_CHUNK_SIZE` |
+| `--cores` | `SECONDBRAIN_MAX_WORKERS` |
+| `--verbose` | `SECONDBRAIN_VERBOSE` |
+
+Example:
+```bash
+SECONDBRAIN_CHUNK_SIZE=2048 secondbrain ingest ./docs/
+```
+
+## Help
+
+```bash
+# Show all commands
+secondbrain --help
+
+# Show command-specific help
+secondbrain ingest --help
+secondbrain search --help
+```

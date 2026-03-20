@@ -1,157 +1,185 @@
-# MongoDB Schema Documentation
+# Database Schema Reference
 
-This document describes the database schema used by SecondBrain.
+MongoDB schema structure for SecondBrain.
 
-## Database Structure
+## Collections
 
-### Database Name
-- Default: `secondbrain`
-- Configurable via `SECONDBRAIN_MONGO_DB` environment variable
+### `embeddings`
 
-### Collection Name
-- Default: `embeddings`
-- Configurable via `SECONDBRAIN_MONGO_COLLECTION` environment variable
+Main collection storing document chunks and their vector embeddings.
 
-## Document Structure
-
-Each document in the `embeddings` collection stores a single chunk of text with its embedding vector.
+#### Document Structure
 
 ```json
 {
-  "_id": ObjectId,
-  "chunk_id": "uuid-string",
-  "source_file": "/path/to/source/document.pdf",
-  "page_number": 1,
-  "chunk_text": "The actual text content of this chunk...",
+  "_id": ObjectId("..."),
+  "document_id": "uuid-v4-string",
+  "chunk_index": 0,
+  "content": "Text content of this chunk...",
   "embedding": [0.123, -0.456, 0.789, ...],
   "metadata": {
+    "filename": "document.pdf",
     "file_type": "pdf",
-    "ingested_at": "2024-03-01T12:00:00+00:00",
-    "chunk_index": 0
-  },
-  "version": 1
+    "source_path": "/absolute/path/to/document.pdf",
+    "file_size": 45678,
+    "ingested_at": "2024-01-15T10:30:00Z",
+    "chunk_size": 4096,
+    "model_used": "all-MiniLM-L6-v2"
+  }
 }
 ```
 
-### Field Details
+#### Fields
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `_id` | ObjectId | Auto-generated | MongoDB internal document ID |
-| `chunk_id` | string (UUID) | Yes | Unique identifier for the chunk |
-| `source_file` | string | Yes | Path to the source file |
-| `page_number` | integer | Yes | Page number in the source document (1-indexed) |
-| `chunk_text` | string | Yes | The text content of this chunk |
-| `embedding` | float array | Yes | Vector embedding (384 dimensions for all-MiniLM-L6-v2) |
-| `metadata.file_type` | string | Yes | Document type (pdf, docx, image, etc.) |
-| `metadata.ingested_at` | string (ISO8601) | Yes | Timestamp of ingestion |
-| `metadata.chunk_index` | integer | Yes | Original chunk index in the document |
-| `version` | integer | Yes | Schema version for migrations |
+| `_id` | ObjectId | Yes | MongoDB auto-generated ID |
+| `document_id` | string | Yes | UUID identifying source document |
+| `chunk_index` | int | Yes | Zero-based index within document |
+| `content` | string | Yes | Text content of the chunk |
+| `embedding` | array[float] | Yes | Vector embedding (384 or 768 dims) |
+| `metadata.filename` | string | Yes | Original file name |
+| `metadata.file_type` | string | Yes | File extension (pdf, md, etc.) |
+| `metadata.source_path` | string | Yes | Absolute path to source file |
+| `metadata.file_size` | int | No | File size in bytes |
+| `metadata.ingested_at` | datetime | Yes | ISO 8601 timestamp |
+| `metadata.chunk_size` | int | No | Chunk size used for this chunk |
+| `metadata.model_used` | string | No | Embedding model identifier |
 
-## Indexes
+#### Indexes
 
-### Vector Search Index
-Named: `embedding_index`
+```javascript
+// Compound index for document queries
+db.embeddings.createIndex({ document_id: 1, chunk_index: 1 })
 
-```json
-{
-  "fields": [
-    {
-      "type": "vector",
-      "path": "embedding",
-      "numDimensions": 384,
-      "similarity": "cosine"
-    }
-  ]
-}
+// Index for file type filtering
+db.embeddings.createIndex({ "metadata.file_type": 1 })
+
+// Index for ingestion date
+db.embeddings.createIndex({ "metadata.ingested_at": -1 })
+
+// Text index for keyword search (fallback)
+db.embeddings.createIndex({ content: "text" })
 ```
 
-This index enables efficient cosine similarity search on embedding vectors.
+## Query Examples
 
-### Regular Indexes
-No additional regular indexes are created by default. For query optimization, consider adding indexes on:
-- `source_file` - for file-based filtering
-- `metadata.file_type` - for file type filtering
+### Find All Chunks for a Document
 
-## Schema Versioning
-
-### Current Version
-- Version: `1`
-
-### Version Field Usage
-The `version` field allows for incremental schema evolution. When upgrading the schema:
-
-1. New documents are written with the incremented version number
-2. Existing documents retain their original version
-3. Migration scripts can process documents by version
-
-### Migration Process
-See `../guide/MIGRATIONS.md` for migration procedures.
-
-## Data Types
-
-| Python Type | MongoDB Type | Notes |
-|-------------|--------------|-------|
-| `str` | String | UUID strings, file paths, text content |
-| `int` | Integer | Page numbers, chunk indices |
-| `float` | Double | Embedding vector components |
-| `datetime` | String | ISO8601 formatted timestamps |
-
-## Constraints
-
-- `embedding` vector must have exactly 384 dimensions (matches all-MiniLM-L6-v2 model)
-- `source_file` should be an absolute path for consistent lookups
-- `chunk_id` must be unique (UUIDv4 format)
-
-## Query Patterns
-
-### Vector Search
 ```javascript
+db.embeddings.find({
+  document_id: "uuid-v4-string"
+}).sort({ chunk_index: 1 })
+```
+
+### Search by File Type
+
+```javascript
+db.embeddings.find({
+  "metadata.file_type": "pdf"
+})
+```
+
+### Find Recent Documents
+
+```javascript
+db.embeddings.find({
+  "metadata.ingested_at": {
+    $gte: new Date("2024-01-01")
+  }
+}).sort({ "metadata.ingested_at": -1 })
+```
+
+### Vector Similarity Search
+
+```javascript
+// Using MongoDB vector search (7.0+)
 db.embeddings.aggregate([
   {
     $vectorSearch: {
-      queryVector: [0.1, 0.2, ...],
+      queryVector: [0.123, -0.456, ...],
       path: "embedding",
       numCandidates: 100,
-      limit: 5,
-      index: "embedding_index"
+      limit: 10
     }
-  },
-  { $match: { source_file: { $regex: ".*.pdf" } } }
+  }
 ])
 ```
 
-### Filter by Source File
+## Data Lifecycle
+
+### Ingestion
+
+1. Generate UUID for document
+2. Split document into chunks
+3. Generate embeddings for each chunk
+4. Insert all chunks with same `document_id`
+
+### Deletion
+
 ```javascript
-db.embeddings.find({ source_file: "/path/to/document.pdf" })
+// Delete all chunks for a document
+db.embeddings.deleteMany({
+  document_id: "uuid-v4-string"
+})
 ```
 
-### List All Chunks
+### Update
+
 ```javascript
-db.embeddings.find(
-  {},
-  { _id: 0, chunk_id: 1, source_file: 1, page_number: 1, chunk_text: 1 }
-).skip(0).limit(50)
+// Re-ingest document (delete + insert)
+db.embeddings.deleteMany({ document_id: "uuid" })
+// Then insert new chunks
 ```
 
-## Storage Estimates
+## Size Estimates
 
-For a typical document:
-- Chunk size: ~4096 characters
-- Embedding size: 384 floats × 8 bytes = 3072 bytes
-- Overhead: ~1KB per document
+### Per-Chunk Storage
 
-Estimate: ~1.5KB per chunk × 100,000 chunks = ~150MB
+- **Content**: ~2KB average
+- **Embedding**: 1.5KB (384 dims × 4 bytes)
+- **Metadata**: ~500 bytes
+- **MongoDB overhead**: ~1KB
 
-## Backward Compatibility
+**Total**: ~5KB per chunk
 
-Breaking changes to the schema should be avoided. When changes are necessary:
-1. Increment the `version` field
-2. Provide migration scripts
-3. Maintain backward-compatible read logic
+### Database Size
 
-## Related Documentation
+```
+100 documents × 10 chunks × 5KB = 5MB
+1,000 documents × 10 chunks × 5KB = 50MB
+10,000 documents × 10 chunks × 5KB = 500MB
+```
 
-- [Architecture Overview](./index.md) - System architecture
-- [Data Flow](./DATA_FLOW.md) - Data flow documentation
-- [Development Guide](../developer-guide/development.md) - Development workflow
+## Backup & Restore
+
+### Backup
+
+```bash
+mongodump --db secondbrain --out ./backup/
+```
+
+### Restore
+
+```bash
+mongorestore --db secondbrain ./backup/secondbrain/
+```
+
+## Migration Notes
+
+### Schema Versioning
+
+Current schema version: 1.0
+
+Future migrations may include:
+- Additional metadata fields
+- Optimized index structures
+- Partitioning strategies
+
+## Best Practices
+
+1. **Use UUIDs** for `document_id` to avoid conflicts
+2. **Index frequently queried fields**
+3. **Monitor collection size** for performance
+4. **Regular backups** before bulk operations
+5. **Use projection** to limit returned fields
