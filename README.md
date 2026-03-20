@@ -59,6 +59,9 @@ secondbrain health
 - **Async support**: Full async API for embedding generation and storage
 - **Multicore processing**: Parallel document ingestion with configurable CPU core count
 - **Rate limiting**: Protects sentence-transformers API from overload
+- **Circuit breaker**: Automatic service failure handling with automatic recovery
+- **Structured logging**: JSON logs with OpenTelemetry tracing support
+- **Security scanning**: Integrated vulnerability detection and SBOM generation
 - **12-factor app**: Environment-driven configuration
 
 ## CLI Reference
@@ -172,8 +175,33 @@ See the [Architecture Documentation](docs/architecture/) for:
 - Processing pipelines
 - Performance considerations
 - Error handling strategies
+- Circuit breaker pattern implementation
 
 And [Schema Reference](docs/architecture/schema.md) for database structure.
+
+## Examples
+
+Check out the [examples/](examples/) directory for usage examples:
+
+- **[Circuit Breaker Usage](examples/circuit_breaker_usage.py)** - Resilience patterns
+- **[Async Ingestion](examples/async_ingestion_example.py)** - Async API usage
+- **[Tracing Example](examples/tracing_example.py)** - OpenTelemetry integration
+
+## Security
+
+Run security scans before commits:
+
+```bash
+# Full security scan
+./scripts/security_scan.sh all
+
+# Individual checks
+./scripts/security_scan.sh audit    # pip-audit
+./scripts/security_scan.sh sbom     # Generate SBOM
+./scripts/security_scan.sh bandit   # Code security
+```
+
+See [docs/migration.md](docs/migration.md) for upgrade notes and [docs/getting-started/troubleshooting.md](docs/getting-started/troubleshooting.md) for common issues.
 
 ## License
 

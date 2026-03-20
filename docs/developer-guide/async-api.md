@@ -90,7 +90,7 @@ async def ensure_model():
 
 ## Async Storage Operations
 
-### Basic Storage
+### Basic Storage with VectorStorage (to_thread wrapper)
 
 ```python
 import asyncio
@@ -130,6 +130,92 @@ async def store_documents():
         await storage.aclose()
 
 asyncio.run(store_documents())
+```
+
+### Native Async Storage with Motor (AsyncVectorStorage)
+
+For better performance with concurrent operations, use `AsyncVectorStorage` which uses Motor, the official async MongoDB driver:
+
+```python
+import asyncio
+from secondbrain.storage.storage import AsyncVectorStorage
+
+async def store_documents_motor():
+    """Store documents using native Motor async operations."""
+    storage = AsyncVectorStorage()
+    
+    try:
+        # Validate connection
+        if not await storage.validate_connection_async():
+            print("MongoDB not available")
+            return
+        
+        # Store single document - native async, no to_thread wrapper
+        doc = {
+            "chunk_id": "uuid-123",
+            "source_file": "document.pdf",
+            "page_number": 1,
+            "chunk_text": "Sample text",
+            "embedding": [0.1, 0.2, 0.3, ...],  # 768 dimensions
+        }
+        
+        doc_id = await storage.store_async(doc)
+        print(f"Stored document: {doc_id}")
+        
+        # Store batch - all operations are native async
+        docs = [doc.copy() for _ in range(10)]
+        count = await storage.store_batch_async(docs)
+        print(f"Stored {count} documents")
+        
+        # Search with native async
+        results = await storage.search_async(
+            embedding=[0.1] * 768,
+            top_k=5
+        )
+        print(f"Found {len(results)} results")
+        
+        # List chunks
+        chunks = await storage.list_chunks_async(limit=10)
+        print(f"Found {len(chunks)} chunks")
+        
+        # Delete operations
+        deleted = await storage.delete_by_source_async("document.pdf")
+        print(f"Deleted {deleted} documents")
+        
+        # Get stats
+        stats = await storage.get_stats_async()
+        print(f"Total chunks: {stats['total_chunks']}")
+        
+    finally:
+        await storage.aclose()
+
+asyncio.run(store_documents_motor())
+```
+
+### Async Context Manager with Motor
+
+```python
+import asyncio
+from secondbrain.storage.storage import AsyncVectorStorage
+
+async def with_context_manager():
+    # Async context manager for automatic cleanup
+    async with AsyncVectorStorage() as storage:
+        # All operations within this block
+        docs = await storage.list_chunks_async(limit=10)
+        print(f"Found {len(docs)} chunks")
+        
+        # Store and search
+        doc = {
+            "chunk_id": "test-123",
+            "embedding": [0.1] * 768,
+            "chunk_text": "Test content"
+        }
+        await storage.store_async(doc)
+        
+        results = await storage.search_async(embedding=[0.1] * 768)
+        print(f"Search returned {len(results)} results")
+    # Automatically closed
 ```
 
 ### Async Search
@@ -254,6 +340,77 @@ async def ingest_documents():
     
     for file_path, result in results:
         print(f"{file_path}: {result['success']} successful, {result['failed']} failed")
+```
+
+## Performance Comparison: Motor vs to_thread
+
+### When to Use Each
+
+**AsyncVectorStorage (Motor)** - Use for:
+- High-concurrency workloads (many simultaneous operations)
+- Production deployments with multiple concurrent users
+- Operations that need true non-blocking I/O
+- Better performance under load
+
+**VectorStorage with async methods (to_thread)** - Use for:
+- Simple async integration without adding Motor dependency
+- Lower concurrency requirements
+- Backward compatibility with existing sync code
+- Simpler testing setup
+
+### Performance Benefits
+
+Motor provides better performance for concurrent operations because:
+
+1. **No thread blocking**: Native async/await vs. thread pool
+2. **Better connection pooling**: Motor's async connection pool
+3. **Lower overhead**: No context switching between threads
+4. **True concurrency**: Multiple operations can run simultaneously
+
+```python
+import asyncio
+import time
+from secondbrain.storage import VectorStorage
+from secondbrain.storage.storage import AsyncVectorStorage
+
+async def benchmark_storage():
+    """Compare performance of to_thread vs Motor."""
+    
+    # Simulate concurrent document storage
+    docs = [
+        {
+            "chunk_id": f"chunk-{i}",
+            "embedding": [0.1] * 768,
+            "chunk_text": f"Document {i}"
+        }
+        for i in range(100)
+    ]
+    
+    # Benchmark to_thread version
+    storage_sync = VectorStorage()
+    start = time.time()
+    
+    tasks = [storage_sync.store_async(doc) for doc in docs[:10]]
+    await asyncio.gather(*tasks)
+    
+    to_thread_time = time.time() - start
+    await storage_sync.aclose()
+    
+    # Benchmark Motor version
+    storage_motor = AsyncVectorStorage()
+    start = time.time()
+    
+    tasks = [storage_motor.store_async(doc) for doc in docs[:10]]
+    await asyncio.gather(*tasks)
+    
+    motor_time = time.time() - start
+    await storage_motor.aclose()
+    
+    print(f"to_thread version: {to_thread_time:.3f}s")
+    print(f"Motor version: {motor_time:.3f}s")
+    print(f"Speedup: {to_thread_time / motor_time:.2f}x")
+
+asyncio.run(benchmark_storage())
 ```
 
 ## Best Practices
