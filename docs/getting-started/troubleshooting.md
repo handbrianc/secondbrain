@@ -123,7 +123,7 @@ find /path/to/documents/ -type f -name "*.pdf" -o -name "*.docx"
 **Solution**:
 ```bash
 # Check if documents exist
-secondbrain list
+secondbrain ls
 
 # Try a broader search
 secondbrain search "general topic"

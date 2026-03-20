@@ -152,7 +152,7 @@ Processing: document2.docx (89KB)
 secondbrain status
 
 # List recently added documents
-secondbrain list --limit 10
+secondbrain ls --limit 10
 ```
 
 ## Error Handling
