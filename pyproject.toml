@@ -110,7 +110,7 @@ warn_unused_ignores = true
 warn_no_return = true
 warn_unreachable = true
 strict_equality = true
-exclude = ["venv/", ".git/", "tests/", "docs/examples/", ".*\\.egg-info/", "scripts/"]
+exclude = ["venv/", ".git/", "tests/", ".*\\.egg-info/", "scripts/", "docs/examples/integrations/"]
 ignore_missing_imports = true
 namespace_packages = false
 
@@ -135,7 +135,18 @@ disable_error_code = ["attr-defined", "no-any-return", "valid-type", "operator",
 module = ["pymongo", "pymongo.*", "motor", "motor.*"]
 follow_imports = "skip"
 ignore_missing_imports = true
-disable_error_code = ["attr-defined", "no-any-return", "valid-type", "operator", "unreachable", "has-type", "misc", "return-value", "type-arg"]
+disable_error_code = ["attr-defined", "no-any-return", "valid-type", "operator", "unreachable", "has-type", "misc", "return-value"]
+
+[[tool.mypy.overrides]]
+module = ["docling", "docling.*"]
+follow_imports = "skip"
+ignore_missing_imports = true
+disable_error_code = ["attr-defined", "no-any-return", "valid-type", "operator", "unreachable", "has-type", "misc"]
+
+# Integration examples may have untyped decorators from Flask/FastAPI
+[[tool.mypy.overrides]]
+module = ["docs.examples.*"]
+disable_error_code = ["misc"]
 
 [[tool.mypy.overrides]]
 module = ["docling", "docling.*"]

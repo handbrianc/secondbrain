@@ -15,7 +15,8 @@ from pydantic import BaseModel
 from secondbrain.document import DocumentIngestor
 from secondbrain.logging import setup_logging
 from secondbrain.search import Searcher
-from secondbrain.storage import VectorStorage
+
+app = FastAPI(title="SecondBrain API")
 
 setup_logging(verbose=False)
 
@@ -82,13 +83,13 @@ class DocumentsResponse(BaseModel):
 
 
 @app.get("/health")
-async def health():  # type: ignore
+async def health() -> dict[str, str]:
     """Health check."""
     return {"status": "healthy", "service": "secondbrain"}
 
 
 @app.post("/ingest", response_model=IngestResponse)
-async def ingest(request: IngestRequest):  # type: ignore
+async def ingest(request: IngestRequest) -> IngestResponse:
     """Ingest documents from a directory."""
     try:
         ingestor = DocumentIngestor()
@@ -107,7 +108,7 @@ async def ingest(request: IngestRequest):  # type: ignore
 
 
 @app.post("/search", response_model=SearchResponse)
-async def search(request: SearchRequest):  # type: ignore
+async def search(request: SearchRequest) -> SearchResponse:
     """Search documents semantically."""
     try:
         searcher = Searcher()
@@ -128,29 +129,6 @@ async def search(request: SearchRequest):  # type: ignore
                     text=r["chunk_text"][:200],
                 )
                 for r in results
-            ],
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
-
-
-@app.get("/documents", response_model=DocumentsResponse)
-async def list_documents(limit: int = 10, offset: int = 0):  # type: ignore
-    """List ingested documents."""
-    try:
-        storage = VectorStorage()
-        chunks = storage.list_chunks(limit=limit, offset=offset)
-
-        return DocumentsResponse(
-            status="success",
-            total=len(chunks),
-            documents=[
-                DocumentList(
-                    source=c["source_file"],
-                    page=c["page_number"],
-                    size=len(c["chunk_text"]),
-                )
-                for c in chunks
             ],
         )
     except Exception as e:

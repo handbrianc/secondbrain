@@ -21,9 +21,9 @@ setup_logging(verbose=False)
 
 
 @app.route("/health", methods=["GET"])
-def health() -> str:
+def health() -> tuple[dict[str, str], int]:
     """Health check endpoint."""
-    return jsonify({"status": "healthy", "service": "secondbrain"})
+    return jsonify({"status": "healthy", "service": "secondbrain"}), 200
 
 
 @app.route("/ingest", methods=["POST"])
