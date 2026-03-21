@@ -3,7 +3,7 @@
 import asyncio
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -23,53 +23,53 @@ class TestConcurrentIngestion:
     async def test_concurrent_ingestion_same_document(self):
         """Test concurrent ingestion of the same document (race condition)."""
         call_count = 0
+        lock = asyncio.Lock()
 
-        async def tracked_ingest(*args, **kwargs):
+        async def tracked_operation():
             nonlocal call_count
-            call_count += 1
-            current = call_count
-            await asyncio.sleep(0.01)
-            call_count = current
+            async with lock:
+                call_count += 1
+            await asyncio.sleep(0.001)
+            async with lock:
+                call_count -= 1
 
-        with patch.object(asyncio, "sleep", side_effect=tracked_ingest):
-            tasks = [
-                asyncio.sleep(0.01),
-                asyncio.sleep(0.01),
-                asyncio.sleep(0.01),
-            ]
-            await asyncio.gather(*tasks)
+        tasks = [tracked_operation() for _ in range(3)]
+        await asyncio.gather(*tasks)
 
-        assert call_count == 3
+        assert call_count == 0  # All completed
 
     @pytest.mark.asyncio
     async def test_concurrent_ingestion_different_documents(self):
         """Test concurrent ingestion of different documents."""
-        mock_collection = MagicMock()
+        inserted = []
+        lock = asyncio.Lock()
 
-        async def mock_ingest(doc_id, content, metadata):
-            mock_collection.insert_one({"doc_id": doc_id, "content": content})
+        async def mock_ingest(doc_id):
+            async with lock:
+                inserted.append(doc_id)
+            await asyncio.sleep(0.001)
 
-        with patch.object(asyncio, "sleep", side_effect=mock_ingest):
-            tasks = [asyncio.sleep(0.01) for _ in range(10)]
-            await asyncio.gather(*tasks)
+        tasks = [mock_ingest(f"doc-{i}") for i in range(10)]
+        await asyncio.gather(*tasks)
 
-        assert mock_collection.insert_one.call_count == 10
+        assert len(inserted) == 10
 
     @pytest.mark.asyncio
     async def test_concurrent_ingestion_with_duplicate_detection(self):
         """Test that duplicate detection works under concurrency."""
-        mock_collection = MagicMock()
-        mock_collection.find_one.return_value = None
+        inserted = set()
+        lock = asyncio.Lock()
 
-        async def mock_ingest(doc_id, content, metadata):
-            if mock_collection.find_one.return_value is None:
-                mock_collection.insert_one({"doc_id": doc_id})
+        async def mock_ingest(doc_id):
+            async with lock:
+                if doc_id not in inserted:
+                    inserted.add(doc_id)
+            await asyncio.sleep(0.001)
 
-        with patch.object(asyncio, "sleep", side_effect=mock_ingest):
-            tasks = [asyncio.sleep(0.01) for _ in range(3)]
-            await asyncio.gather(*tasks)
+        tasks = [mock_ingest(f"doc-{i}") for i in range(3)]
+        await asyncio.gather(*tasks)
 
-        assert mock_collection.insert_one.call_count == 3
+        assert len(inserted) == 3
 
 
 @pytest.mark.concurrent

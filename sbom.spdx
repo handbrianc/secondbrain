@@ -1,0 +1,3696 @@
+SPDXVersion: SPDX-2.3
+DataLicense: CC0-1.0
+SPDXID: SPDXRef-DOCUMENT
+DocumentName: secondbrain
+DocumentNamespace: https://spdx.example.com/secondbrain
+Creator: Tool: cyclonedx-py
+Created: 2026-03-21T05:16:45Z
+
+
+PackageName: Authlib
+SPDXID: SPDXRef-Package-1
+PackageVersion: 1.6.9
+PackageLicenseConcluded: BSD-3-Clause
+PackageLicenseDeclared: BSD-3-Clause
+DownloadLocation: NOASSERTION
+
+
+PackageName: Automat
+SPDXID: SPDXRef-Package-2
+PackageVersion: 22.10.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: Automat
+SPDXID: SPDXRef-Package-3
+PackageVersion: 25.4.16
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: Babel
+SPDXID: SPDXRef-Package-4
+PackageVersion: 2.10.3
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: Brlapi
+SPDXID: SPDXRef-Package-5
+PackageVersion: 0.8.5
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: CacheControl
+SPDXID: SPDXRef-Package-6
+PackageVersion: 0.14.4
+PackageLicenseConcluded: Apache-2.0
+PackageLicenseDeclared: Apache-2.0
+DownloadLocation: NOASSERTION
+
+
+PackageName: Faker
+SPDXID: SPDXRef-Package-7
+PackageVersion: 40.11.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: Incremental
+SPDXID: SPDXRef-Package-8
+PackageVersion: 24.11.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: Jinja2
+SPDXID: SPDXRef-Package-9
+PackageVersion: 3.1.2
+PackageLicenseConcluded: BSD-3-Clause
+PackageLicenseDeclared: BSD-3-Clause
+DownloadLocation: NOASSERTION
+
+
+PackageName: Jinja2
+SPDXID: SPDXRef-Package-10
+PackageVersion: 3.1.6
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: Mako
+SPDXID: SPDXRef-Package-11
+PackageVersion: 1.3.2.dev0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: Markdown
+SPDXID: SPDXRef-Package-12
+PackageVersion: 3.10.2
+PackageLicenseConcluded: BSD-3-Clause
+PackageLicenseDeclared: BSD-3-Clause
+DownloadLocation: NOASSERTION
+
+
+PackageName: Markdown
+SPDXID: SPDXRef-Package-13
+PackageVersion: 3.5.2
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: MarkupSafe
+SPDXID: SPDXRef-Package-14
+PackageVersion: 2.1.5
+PackageLicenseConcluded: BSD-3-Clause
+PackageLicenseDeclared: BSD-3-Clause
+DownloadLocation: NOASSERTION
+
+
+PackageName: PyGObject
+SPDXID: SPDXRef-Package-15
+PackageVersion: 3.48.2
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: PyHamcrest
+SPDXID: SPDXRef-Package-16
+PackageVersion: 2.1.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: PyJWT
+SPDXID: SPDXRef-Package-17
+PackageVersion: 2.12.1
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: PyJWT
+SPDXID: SPDXRef-Package-18
+PackageVersion: 2.7.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: PyNaCl
+SPDXID: SPDXRef-Package-19
+PackageVersion: 1.5.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: PyNaCl
+SPDXID: SPDXRef-Package-20
+PackageVersion: 1.6.2
+PackageLicenseConcluded: Apache-2.0
+PackageLicenseDeclared: Apache-2.0
+DownloadLocation: NOASSERTION
+
+
+PackageName: PyYAML
+SPDXID: SPDXRef-Package-21
+PackageVersion: 6.0.1
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: Pygments
+SPDXID: SPDXRef-Package-22
+PackageVersion: 2.17.2
+PackageLicenseConcluded: BSD-2-Clause
+PackageLicenseDeclared: BSD-2-Clause
+DownloadLocation: NOASSERTION
+
+
+PackageName: Twisted
+SPDXID: SPDXRef-Package-23
+PackageVersion: 24.3.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: Twisted
+SPDXID: SPDXRef-Package-24
+PackageVersion: 25.5.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: accelerate
+SPDXID: SPDXRef-Package-25
+PackageVersion: 1.13.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: altgraph
+SPDXID: SPDXRef-Package-26
+PackageVersion: 0.17.5
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: annotated-doc
+SPDXID: SPDXRef-Package-27
+PackageVersion: 0.0.4
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: annotated-types
+SPDXID: SPDXRef-Package-28
+PackageVersion: 0.7.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: antlr4-python3-runtime
+SPDXID: SPDXRef-Package-29
+PackageVersion: 4.9.3
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: anyio
+SPDXID: SPDXRef-Package-30
+PackageVersion: 4.12.1
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: apturl
+SPDXID: SPDXRef-Package-31
+PackageVersion: 0.5.2
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: argcomplete
+SPDXID: SPDXRef-Package-32
+PackageVersion: 3.1.4
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: arrow
+SPDXID: SPDXRef-Package-33
+PackageVersion: 1.4.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: attrs
+SPDXID: SPDXRef-Package-34
+PackageVersion: 23.2.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: backrefs
+SPDXID: SPDXRef-Package-35
+PackageVersion: 6.2
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: bandit
+SPDXID: SPDXRef-Package-36
+PackageVersion: 1.9.4
+PackageLicenseConcluded: Apache-2.0
+PackageLicenseDeclared: Apache-2.0
+DownloadLocation: NOASSERTION
+
+
+PackageName: bcc
+SPDXID: SPDXRef-Package-37
+PackageVersion: 0.29.1
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: bcrypt
+SPDXID: SPDXRef-Package-38
+PackageVersion: 3.2.2
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: beautifulsoup4
+SPDXID: SPDXRef-Package-39
+PackageVersion: 4.12.3
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: blinker
+SPDXID: SPDXRef-Package-40
+PackageVersion: 1.7.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: boolean.py
+SPDXID: SPDXRef-Package-41
+PackageVersion: 5.0
+PackageLicenseConcluded: BSD-2-Clause
+PackageLicenseDeclared: BSD-2-Clause
+DownloadLocation: NOASSERTION
+
+
+PackageName: boto3
+SPDXID: SPDXRef-Package-42
+PackageVersion: 1.34.46
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: botocore
+SPDXID: SPDXRef-Package-43
+PackageVersion: 1.34.46
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: certifi
+SPDXID: SPDXRef-Package-44
+PackageVersion: 2023.11.17
+PackageLicenseConcluded: MPL-2.0
+PackageLicenseDeclared: MPL-2.0
+DownloadLocation: NOASSERTION
+
+
+PackageName: certifi
+SPDXID: SPDXRef-Package-45
+PackageVersion: 2026.2.25
+PackageLicenseConcluded: MPL-2.0
+PackageLicenseDeclared: MPL-2.0
+DownloadLocation: NOASSERTION
+
+
+PackageName: cffi
+SPDXID: SPDXRef-Package-46
+PackageVersion: 2.0.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: cfgv
+SPDXID: SPDXRef-Package-47
+PackageVersion: 3.5.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: chardet
+SPDXID: SPDXRef-Package-48
+PackageVersion: 5.2.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: charset-normalizer
+SPDXID: SPDXRef-Package-49
+PackageVersion: 3.4.5
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: click
+SPDXID: SPDXRef-Package-50
+PackageVersion: 8.1.6
+PackageLicenseConcluded: BSD-3-Clause
+PackageLicenseDeclared: BSD-3-Clause
+DownloadLocation: NOASSERTION
+
+
+PackageName: cloud-init
+SPDXID: SPDXRef-Package-51
+PackageVersion: 25.3
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: colorama
+SPDXID: SPDXRef-Package-52
+PackageVersion: 0.4.6
+PackageLicenseConcluded: BSD-3-Clause
+PackageLicenseDeclared: BSD-3-Clause
+DownloadLocation: NOASSERTION
+
+
+PackageName: colorlog
+SPDXID: SPDXRef-Package-53
+PackageVersion: 6.10.1
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: command-not-found
+SPDXID: SPDXRef-Package-54
+PackageVersion: 0.3
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: configobj
+SPDXID: SPDXRef-Package-55
+PackageVersion: 5.0.8
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: configobj
+SPDXID: SPDXRef-Package-56
+PackageVersion: 5.0.9
+PackageLicenseConcluded: BSD-3-Clause
+PackageLicenseDeclared: BSD-3-Clause
+DownloadLocation: NOASSERTION
+
+
+PackageName: constantly
+SPDXID: SPDXRef-Package-57
+PackageVersion: 23.10.4
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: coverage
+SPDXID: SPDXRef-Package-58
+PackageVersion: 7.13.4
+PackageLicenseConcluded: Apache-2.0
+PackageLicenseDeclared: Apache-2.0
+DownloadLocation: NOASSERTION
+
+
+PackageName: cryptography
+SPDXID: SPDXRef-Package-59
+PackageVersion: 41.0.7
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: cryptography
+SPDXID: SPDXRef-Package-60
+PackageVersion: 46.0.5
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: cssselect
+SPDXID: SPDXRef-Package-61
+PackageVersion: 1.2.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: cupshelpers
+SPDXID: SPDXRef-Package-62
+PackageVersion: 1.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: cyclonedx-bom
+SPDXID: SPDXRef-Package-63
+PackageVersion: 7.2.2
+PackageLicenseConcluded: Apache-2.0
+PackageLicenseDeclared: Apache-2.0
+DownloadLocation: NOASSERTION
+
+
+PackageName: cyclonedx-python-lib
+SPDXID: SPDXRef-Package-64
+PackageVersion: 11.6.0
+PackageLicenseConcluded: Apache-2.0
+PackageLicenseDeclared: Apache-2.0
+DownloadLocation: NOASSERTION
+
+
+PackageName: dbus-python
+SPDXID: SPDXRef-Package-65
+PackageVersion: 1.3.2
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: defer
+SPDXID: SPDXRef-Package-66
+PackageVersion: 1.0.6
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: defusedxml
+SPDXID: SPDXRef-Package-67
+PackageVersion: 0.7.1
+PackageLicenseConcluded: Python-2.0
+PackageLicenseDeclared: Python-2.0
+DownloadLocation: NOASSERTION
+
+
+PackageName: dill
+SPDXID: SPDXRef-Package-68
+PackageVersion: 0.4.1
+PackageLicenseConcluded: BSD-3-Clause
+PackageLicenseDeclared: BSD-3-Clause
+DownloadLocation: NOASSERTION
+
+
+PackageName: distlib
+SPDXID: SPDXRef-Package-69
+PackageVersion: 0.4.0
+PackageLicenseConcluded: PSF-2.0
+PackageLicenseDeclared: PSF-2.0
+DownloadLocation: NOASSERTION
+
+
+PackageName: distro
+SPDXID: SPDXRef-Package-70
+PackageVersion: 1.9.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: distro-info
+SPDXID: SPDXRef-Package-71
+PackageVersion: 1.7+build1
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: dnspython
+SPDXID: SPDXRef-Package-72
+PackageVersion: 2.6.1
+PackageLicenseConcluded: ISC
+PackageLicenseDeclared: ISC
+DownloadLocation: NOASSERTION
+
+
+PackageName: docling
+SPDXID: SPDXRef-Package-73
+PackageVersion: 2.81.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: docling-core
+SPDXID: SPDXRef-Package-74
+PackageVersion: 2.70.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: docling-ibm-models
+SPDXID: SPDXRef-Package-75
+PackageVersion: 3.12.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: docling-parse
+SPDXID: SPDXRef-Package-76
+PackageVersion: 5.5.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: dparse
+SPDXID: SPDXRef-Package-77
+PackageVersion: 0.6.4
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: duplicity
+SPDXID: SPDXRef-Package-78
+PackageVersion: 2.1.4
+PackageLicenseConcluded: GPL-2.0-only
+PackageLicenseDeclared: GPL-2.0-only
+DownloadLocation: NOASSERTION
+
+
+PackageName: et_xmlfile
+SPDXID: SPDXRef-Package-79
+PackageVersion: 2.0.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: execnet
+SPDXID: SPDXRef-Package-80
+PackageVersion: 2.1.2
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: fasteners
+SPDXID: SPDXRef-Package-81
+PackageVersion: 0.18
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: filelock
+SPDXID: SPDXRef-Package-82
+PackageVersion: 3.25.2
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: filetype
+SPDXID: SPDXRef-Package-83
+PackageVersion: 1.2.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: fqdn
+SPDXID: SPDXRef-Package-84
+PackageVersion: 1.5.1
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: freetype-py
+SPDXID: SPDXRef-Package-85
+PackageVersion: 2.4.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: fsspec
+SPDXID: SPDXRef-Package-86
+PackageVersion: 2026.2.0
+PackageLicenseConcluded: BSD-3-Clause
+PackageLicenseDeclared: BSD-3-Clause
+DownloadLocation: NOASSERTION
+
+
+PackageName: ghp-import
+SPDXID: SPDXRef-Package-87
+PackageVersion: 2.1.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: griffelib
+SPDXID: SPDXRef-Package-88
+PackageVersion: 2.0.0
+PackageLicenseConcluded: ISC
+PackageLicenseDeclared: ISC
+DownloadLocation: NOASSERTION
+
+
+PackageName: gyp
+SPDXID: SPDXRef-Package-89
+PackageVersion: 0.1
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: h11
+SPDXID: SPDXRef-Package-90
+PackageVersion: 0.16.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: hf-xet
+SPDXID: SPDXRef-Package-91
+PackageVersion: 1.4.2
+PackageLicenseConcluded: Apache-2.0
+PackageLicenseDeclared: Apache-2.0
+DownloadLocation: NOASSERTION
+
+
+PackageName: html5lib
+SPDXID: SPDXRef-Package-92
+PackageVersion: 1.1
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: httpcore
+SPDXID: SPDXRef-Package-93
+PackageVersion: 1.0.9
+PackageLicenseConcluded: BSD-3-Clause
+PackageLicenseDeclared: BSD-3-Clause
+DownloadLocation: NOASSERTION
+
+
+PackageName: httplib2
+SPDXID: SPDXRef-Package-94
+PackageVersion: 0.20.4
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: httpx
+SPDXID: SPDXRef-Package-95
+PackageVersion: 0.28.1
+PackageLicenseConcluded: BSD-3-Clause
+PackageLicenseDeclared: BSD-3-Clause
+DownloadLocation: NOASSERTION
+
+
+PackageName: huggingface_hub
+SPDXID: SPDXRef-Package-96
+PackageVersion: 0.36.2
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: hyperlink
+SPDXID: SPDXRef-Package-97
+PackageVersion: 21.0.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: hypothesis
+SPDXID: SPDXRef-Package-98
+PackageVersion: 6.151.9
+PackageLicenseConcluded: MPL-2.0
+PackageLicenseDeclared: MPL-2.0
+DownloadLocation: NOASSERTION
+
+
+PackageName: identify
+SPDXID: SPDXRef-Package-99
+PackageVersion: 2.6.17
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: idna
+SPDXID: SPDXRef-Package-100
+PackageVersion: 3.11
+PackageLicenseConcluded: BSD-3-Clause
+PackageLicenseDeclared: BSD-3-Clause
+DownloadLocation: NOASSERTION
+
+
+PackageName: idna
+SPDXID: SPDXRef-Package-101
+PackageVersion: 3.6
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: importlib_metadata
+SPDXID: SPDXRef-Package-102
+PackageVersion: 8.7.1
+PackageLicenseConcluded: Apache-2.0
+PackageLicenseDeclared: Apache-2.0
+DownloadLocation: NOASSERTION
+
+
+PackageName: incremental
+SPDXID: SPDXRef-Package-103
+PackageVersion: 22.10.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: iniconfig
+SPDXID: SPDXRef-Package-104
+PackageVersion: 1.1.1
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: invoke
+SPDXID: SPDXRef-Package-105
+PackageVersion: 2.2.1
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: isoduration
+SPDXID: SPDXRef-Package-106
+PackageVersion: 20.11.0
+PackageLicenseConcluded: ISC
+PackageLicenseDeclared: ISC
+DownloadLocation: NOASSERTION
+
+
+PackageName: jmespath
+SPDXID: SPDXRef-Package-107
+PackageVersion: 1.0.1
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: joblib
+SPDXID: SPDXRef-Package-108
+PackageVersion: 1.5.3
+PackageLicenseConcluded: BSD-3-Clause
+PackageLicenseDeclared: BSD-3-Clause
+DownloadLocation: NOASSERTION
+
+
+PackageName: jsonlines
+SPDXID: SPDXRef-Package-109
+PackageVersion: 4.0.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: jsonpatch
+SPDXID: SPDXRef-Package-110
+PackageVersion: 1.32
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: jsonpointer
+SPDXID: SPDXRef-Package-111
+PackageVersion: 2.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: jsonref
+SPDXID: SPDXRef-Package-112
+PackageVersion: 1.1.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: jsonschema
+SPDXID: SPDXRef-Package-113
+PackageVersion: 4.10.3
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: jsonschema
+SPDXID: SPDXRef-Package-114
+PackageVersion: 4.26.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: jsonschema-specifications
+SPDXID: SPDXRef-Package-115
+PackageVersion: 2025.9.1
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: language-selector
+SPDXID: SPDXRef-Package-116
+PackageVersion: 0.1
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: lark
+SPDXID: SPDXRef-Package-117
+PackageVersion: 1.3.1
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: latex2mathml
+SPDXID: SPDXRef-Package-118
+PackageVersion: 3.79.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: launchpadlib
+SPDXID: SPDXRef-Package-119
+PackageVersion: 1.11.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: lazr.restfulclient
+SPDXID: SPDXRef-Package-120
+PackageVersion: 0.14.6
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: lazr.uri
+SPDXID: SPDXRef-Package-121
+PackageVersion: 1.0.6
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: libevdev
+SPDXID: SPDXRef-Package-122
+PackageVersion: 0.5
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: license-expression
+SPDXID: SPDXRef-Package-123
+PackageVersion: 30.4.4
+PackageLicenseConcluded: Apache-2.0
+PackageLicenseDeclared: Apache-2.0
+DownloadLocation: NOASSERTION
+
+
+PackageName: louis
+SPDXID: SPDXRef-Package-124
+PackageVersion: 3.29.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: lxml
+SPDXID: SPDXRef-Package-125
+PackageVersion: 5.2.1
+PackageLicenseConcluded: BSD-3-Clause
+PackageLicenseDeclared: BSD-3-Clause
+DownloadLocation: NOASSERTION
+
+
+PackageName: markdown-it-py
+SPDXID: SPDXRef-Package-126
+PackageVersion: 3.0.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: marko
+SPDXID: SPDXRef-Package-127
+PackageVersion: 2.2.2
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: marshmallow
+SPDXID: SPDXRef-Package-128
+PackageVersion: 4.2.2
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: mdurl
+SPDXID: SPDXRef-Package-129
+PackageVersion: 0.1.2
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: mergedeep
+SPDXID: SPDXRef-Package-130
+PackageVersion: 1.3.4
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: mkdocs
+SPDXID: SPDXRef-Package-131
+PackageVersion: 1.6.1
+PackageLicenseConcluded: BSD-2-Clause
+PackageLicenseDeclared: BSD-2-Clause
+DownloadLocation: NOASSERTION
+
+
+PackageName: mkdocs-autorefs
+SPDXID: SPDXRef-Package-132
+PackageVersion: 1.4.4
+PackageLicenseConcluded: ISC
+PackageLicenseDeclared: ISC
+DownloadLocation: NOASSERTION
+
+
+PackageName: mkdocs-get-deps
+SPDXID: SPDXRef-Package-133
+PackageVersion: 0.2.2
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: mkdocs-material
+SPDXID: SPDXRef-Package-134
+PackageVersion: 9.7.5
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: mkdocs-material-extensions
+SPDXID: SPDXRef-Package-135
+PackageVersion: 1.3.1
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: mkdocstrings
+SPDXID: SPDXRef-Package-136
+PackageVersion: 1.0.3
+PackageLicenseConcluded: ISC
+PackageLicenseDeclared: ISC
+DownloadLocation: NOASSERTION
+
+
+PackageName: mkdocstrings-python
+SPDXID: SPDXRef-Package-137
+PackageVersion: 2.0.3
+PackageLicenseConcluded: ISC
+PackageLicenseDeclared: ISC
+DownloadLocation: NOASSERTION
+
+
+PackageName: mlnx-tools
+SPDXID: SPDXRef-Package-138
+PackageVersion: 23.04
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: mongomock
+SPDXID: SPDXRef-Package-139
+PackageVersion: 4.3.0
+PackageLicenseConcluded: ISC
+PackageLicenseDeclared: ISC
+DownloadLocation: NOASSERTION
+
+
+PackageName: monotonic
+SPDXID: SPDXRef-Package-140
+PackageVersion: 1.6
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: motor
+SPDXID: SPDXRef-Package-141
+PackageVersion: 3.7.1
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: mpire
+SPDXID: SPDXRef-Package-142
+PackageVersion: 2.10.2
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: mpmath
+SPDXID: SPDXRef-Package-143
+PackageVersion: 1.3.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: msgpack
+SPDXID: SPDXRef-Package-144
+PackageVersion: 1.1.2
+PackageLicenseConcluded: Apache-2.0
+PackageLicenseDeclared: Apache-2.0
+DownloadLocation: NOASSERTION
+
+
+PackageName: multiprocess
+SPDXID: SPDXRef-Package-145
+PackageVersion: 0.70.19
+PackageLicenseConcluded: BSD-3-Clause
+PackageLicenseDeclared: BSD-3-Clause
+DownloadLocation: NOASSERTION
+
+
+PackageName: mypy
+SPDXID: SPDXRef-Package-146
+PackageVersion: 1.9.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: mypy-extensions
+SPDXID: SPDXRef-Package-147
+PackageVersion: 1.0.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: netaddr
+SPDXID: SPDXRef-Package-148
+PackageVersion: 0.8.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: netifaces
+SPDXID: SPDXRef-Package-149
+PackageVersion: 0.11.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: networkx
+SPDXID: SPDXRef-Package-150
+PackageVersion: 3.6.1
+PackageLicenseConcluded: BSD-3-Clause
+PackageLicenseDeclared: BSD-3-Clause
+DownloadLocation: NOASSERTION
+
+
+PackageName: nodeenv
+SPDXID: SPDXRef-Package-151
+PackageVersion: 1.10.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: numpy
+SPDXID: SPDXRef-Package-152
+PackageVersion: 2.4.3
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: oauthlib
+SPDXID: SPDXRef-Package-153
+PackageVersion: 3.2.2
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: olefile
+SPDXID: SPDXRef-Package-154
+PackageVersion: 0.46
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: ollama
+SPDXID: SPDXRef-Package-155
+PackageVersion: 0.6.1
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: omegaconf
+SPDXID: SPDXRef-Package-156
+PackageVersion: 2.3.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: opencv-python
+SPDXID: SPDXRef-Package-157
+PackageVersion: 4.13.0.92
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: openpyxl
+SPDXID: SPDXRef-Package-158
+PackageVersion: 3.1.5
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: opentelemetry-api
+SPDXID: SPDXRef-Package-159
+PackageVersion: 1.40.0
+PackageLicenseConcluded: Apache-2.0
+PackageLicenseDeclared: Apache-2.0
+DownloadLocation: NOASSERTION
+
+
+PackageName: opentelemetry-sdk
+SPDXID: SPDXRef-Package-160
+PackageVersion: 1.40.0
+PackageLicenseConcluded: Apache-2.0
+PackageLicenseDeclared: Apache-2.0
+DownloadLocation: NOASSERTION
+
+
+PackageName: opentelemetry-semantic-conventions
+SPDXID: SPDXRef-Package-161
+PackageVersion: 0.61b0
+PackageLicenseConcluded: Apache-2.0
+PackageLicenseDeclared: Apache-2.0
+DownloadLocation: NOASSERTION
+
+
+PackageName: packageurl-python
+SPDXID: SPDXRef-Package-162
+PackageVersion: 0.17.6
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: packaging
+SPDXID: SPDXRef-Package-163
+PackageVersion: 24.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: paginate
+SPDXID: SPDXRef-Package-164
+PackageVersion: 0.5.7
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: pandas
+SPDXID: SPDXRef-Package-165
+PackageVersion: 3.0.1
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: paramiko
+SPDXID: SPDXRef-Package-166
+PackageVersion: 2.12.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: paramiko
+SPDXID: SPDXRef-Package-167
+PackageVersion: 4.0.0
+PackageLicenseConcluded: LGPL-2.1
+PackageLicenseDeclared: LGPL-2.1
+DownloadLocation: NOASSERTION
+
+
+PackageName: pathspec
+SPDXID: SPDXRef-Package-168
+PackageVersion: 1.0.4
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: pexpect
+SPDXID: SPDXRef-Package-169
+PackageVersion: 4.9.0
+PackageLicenseConcluded: ISC
+PackageLicenseDeclared: ISC
+DownloadLocation: NOASSERTION
+
+
+PackageName: pillow
+SPDXID: SPDXRef-Package-170
+PackageVersion: 10.2.0
+PackageLicenseConcluded: HPND
+PackageLicenseDeclared: HPND
+DownloadLocation: NOASSERTION
+
+
+PackageName: pillow
+SPDXID: SPDXRef-Package-171
+PackageVersion: 12.1.1
+PackageLicenseConcluded: MIT-CMU
+PackageLicenseDeclared: MIT-CMU
+DownloadLocation: NOASSERTION
+
+
+PackageName: pip
+SPDXID: SPDXRef-Package-172
+PackageVersion: 24.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: pip
+SPDXID: SPDXRef-Package-173
+PackageVersion: 26.0.1
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: pip-api
+SPDXID: SPDXRef-Package-174
+PackageVersion: 0.0.34
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: pip-requirements-parser
+SPDXID: SPDXRef-Package-175
+PackageVersion: 32.0.1
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: pip_audit
+SPDXID: SPDXRef-Package-176
+PackageVersion: 2.10.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: pipx
+SPDXID: SPDXRef-Package-177
+PackageVersion: 1.4.3
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: platformdirs
+SPDXID: SPDXRef-Package-178
+PackageVersion: 4.2.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: platformdirs
+SPDXID: SPDXRef-Package-179
+PackageVersion: 4.9.4
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: pluggy
+SPDXID: SPDXRef-Package-180
+PackageVersion: 1.4.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: pluggy
+SPDXID: SPDXRef-Package-181
+PackageVersion: 1.6.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: polyfactory
+SPDXID: SPDXRef-Package-182
+PackageVersion: 3.3.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: pre_commit
+SPDXID: SPDXRef-Package-183
+PackageVersion: 4.5.1
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: psutil
+SPDXID: SPDXRef-Package-184
+PackageVersion: 5.9.8
+PackageLicenseConcluded: BSD-3-Clause
+PackageLicenseDeclared: BSD-3-Clause
+DownloadLocation: NOASSERTION
+
+
+PackageName: ptyprocess
+SPDXID: SPDXRef-Package-185
+PackageVersion: 0.7.0
+PackageLicenseConcluded: ISC
+PackageLicenseDeclared: ISC
+DownloadLocation: NOASSERTION
+
+
+PackageName: py-cpuinfo
+SPDXID: SPDXRef-Package-186
+PackageVersion: 9.0.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: py-serializable
+SPDXID: SPDXRef-Package-187
+PackageVersion: 2.1.0
+PackageLicenseConcluded: Apache-2.0
+PackageLicenseDeclared: Apache-2.0
+DownloadLocation: NOASSERTION
+
+
+PackageName: pyOpenSSL
+SPDXID: SPDXRef-Package-188
+PackageVersion: 23.2.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: pyOpenSSL
+SPDXID: SPDXRef-Package-189
+PackageVersion: 26.0.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: pyasn1
+SPDXID: SPDXRef-Package-190
+PackageVersion: 0.4.8
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: pyasn1
+SPDXID: SPDXRef-Package-191
+PackageVersion: 0.6.3
+PackageLicenseConcluded: BSD-2-Clause
+PackageLicenseDeclared: BSD-2-Clause
+DownloadLocation: NOASSERTION
+
+
+PackageName: pyasn1-modules
+SPDXID: SPDXRef-Package-192
+PackageVersion: 0.2.8
+PackageLicenseConcluded: BSD-2-Clause
+PackageLicenseDeclared: BSD-2-Clause
+DownloadLocation: NOASSERTION
+
+
+PackageName: pycairo
+SPDXID: SPDXRef-Package-193
+PackageVersion: 1.25.1
+PackageLicenseConcluded: MPL-1.1
+PackageLicenseDeclared: MPL-1.1
+DownloadLocation: NOASSERTION
+
+
+PackageName: pyclipper
+SPDXID: SPDXRef-Package-194
+PackageVersion: 1.4.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: pycparser
+SPDXID: SPDXRef-Package-195
+PackageVersion: 3.0
+PackageLicenseConcluded: BSD-3-Clause
+PackageLicenseDeclared: BSD-3-Clause
+DownloadLocation: NOASSERTION
+
+
+PackageName: pycups
+SPDXID: SPDXRef-Package-196
+PackageVersion: 2.0.1
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: pydantic
+SPDXID: SPDXRef-Package-197
+PackageVersion: 2.12.5
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: pydantic-settings
+SPDXID: SPDXRef-Package-198
+PackageVersion: 2.13.1
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: pydantic_core
+SPDXID: SPDXRef-Package-199
+PackageVersion: 2.41.5
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: pygame
+SPDXID: SPDXRef-Package-200
+PackageVersion: 2.6.1
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: pyinstaller
+SPDXID: SPDXRef-Package-201
+PackageVersion: 6.19.0
+PackageLicenseConcluded: GPL-2.0-only
+PackageLicenseDeclared: GPL-2.0-only
+DownloadLocation: NOASSERTION
+
+
+PackageName: pyinstaller-hooks-contrib
+SPDXID: SPDXRef-Package-202
+PackageVersion: 2026.3
+PackageLicenseConcluded: GPL-2.0-only
+PackageLicenseDeclared: GPL-2.0-only
+DownloadLocation: NOASSERTION
+
+
+PackageName: pylatexenc
+SPDXID: SPDXRef-Package-203
+PackageVersion: 2.10
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: pymdown-extensions
+SPDXID: SPDXRef-Package-204
+PackageVersion: 10.21
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: pymongo
+SPDXID: SPDXRef-Package-205
+PackageVersion: 4.16.0
+PackageLicenseConcluded: Apache-2.0
+PackageLicenseDeclared: Apache-2.0
+DownloadLocation: NOASSERTION
+
+
+PackageName: pyparsing
+SPDXID: SPDXRef-Package-206
+PackageVersion: 3.1.1
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: pypdfium2
+SPDXID: SPDXRef-Package-207
+PackageVersion: 5.6.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: pyrsistent
+SPDXID: SPDXRef-Package-208
+PackageVersion: 0.20.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: pyserial
+SPDXID: SPDXRef-Package-209
+PackageVersion: 3.5
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: pytest
+SPDXID: SPDXRef-Package-210
+PackageVersion: 7.4.4
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: pytest
+SPDXID: SPDXRef-Package-211
+PackageVersion: 9.0.2
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: pytest-asyncio
+SPDXID: SPDXRef-Package-212
+PackageVersion: 1.3.0
+PackageLicenseConcluded: Apache-2.0
+PackageLicenseDeclared: Apache-2.0
+DownloadLocation: NOASSERTION
+
+
+PackageName: pytest-benchmark
+SPDXID: SPDXRef-Package-213
+PackageVersion: 5.2.3
+PackageLicenseConcluded: BSD-2-Clause
+PackageLicenseDeclared: BSD-2-Clause
+DownloadLocation: NOASSERTION
+
+
+PackageName: pytest-cov
+SPDXID: SPDXRef-Package-214
+PackageVersion: 7.0.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: pytest-hypothesis
+SPDXID: SPDXRef-Package-215
+PackageVersion: 10.0.3
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: pytest-timeout
+SPDXID: SPDXRef-Package-216
+PackageVersion: 2.4.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: pytest-xdist
+SPDXID: SPDXRef-Package-217
+PackageVersion: 3.8.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: python-apt
+SPDXID: SPDXRef-Package-218
+PackageVersion: 2.7.7+ubuntu5.2
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: python-dateutil
+SPDXID: SPDXRef-Package-219
+PackageVersion: 2.8.2
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: python-debian
+SPDXID: SPDXRef-Package-220
+PackageVersion: 0.1.49+ubuntu2
+PackageLicenseConcluded: GPL-2.0-or-later
+PackageLicenseDeclared: GPL-2.0-or-later
+DownloadLocation: NOASSERTION
+
+
+PackageName: python-discovery
+SPDXID: SPDXRef-Package-221
+PackageVersion: 1.1.3
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: python-docx
+SPDXID: SPDXRef-Package-222
+PackageVersion: 1.2.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: python-dotenv
+SPDXID: SPDXRef-Package-223
+PackageVersion: 1.2.2
+PackageLicenseConcluded: BSD-3-Clause
+PackageLicenseDeclared: BSD-3-Clause
+DownloadLocation: NOASSERTION
+
+
+PackageName: python-magic
+SPDXID: SPDXRef-Package-224
+PackageVersion: 0.4.27
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: python-pptx
+SPDXID: SPDXRef-Package-225
+PackageVersion: 1.0.2
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: pytz
+SPDXID: SPDXRef-Package-226
+PackageVersion: 2024.1
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: pyudev
+SPDXID: SPDXRef-Package-227
+PackageVersion: 0.24.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: pyxdg
+SPDXID: SPDXRef-Package-228
+PackageVersion: 0.28
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: pyyaml_env_tag
+SPDXID: SPDXRef-Package-229
+PackageVersion: 1.1
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: rapidocr
+SPDXID: SPDXRef-Package-230
+PackageVersion: 3.7.0
+PackageLicenseConcluded: Apache-2.0
+PackageLicenseDeclared: Apache-2.0
+DownloadLocation: NOASSERTION
+
+
+PackageName: referencing
+SPDXID: SPDXRef-Package-231
+PackageVersion: 0.37.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: regex
+SPDXID: SPDXRef-Package-232
+PackageVersion: 2026.2.28
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: reportlab
+SPDXID: SPDXRef-Package-233
+PackageVersion: 4.1.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: requests
+SPDXID: SPDXRef-Package-234
+PackageVersion: 2.31.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: requests
+SPDXID: SPDXRef-Package-235
+PackageVersion: 2.32.5
+PackageLicenseConcluded: Apache-2.0
+PackageLicenseDeclared: Apache-2.0
+DownloadLocation: NOASSERTION
+
+
+PackageName: rfc3339-validator
+SPDXID: SPDXRef-Package-236
+PackageVersion: 0.1.4
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: rfc3986-validator
+SPDXID: SPDXRef-Package-237
+PackageVersion: 0.1.1
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: rfc3987-syntax
+SPDXID: SPDXRef-Package-238
+PackageVersion: 1.1.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: rich
+SPDXID: SPDXRef-Package-239
+PackageVersion: 13.7.1
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: rich
+SPDXID: SPDXRef-Package-240
+PackageVersion: 14.3.3
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: rlPyCairo
+SPDXID: SPDXRef-Package-241
+PackageVersion: 0.3.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: rpds-py
+SPDXID: SPDXRef-Package-242
+PackageVersion: 0.30.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: rtree
+SPDXID: SPDXRef-Package-243
+PackageVersion: 1.4.1
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: ruamel.yaml
+SPDXID: SPDXRef-Package-244
+PackageVersion: 0.19.1
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: ruff
+SPDXID: SPDXRef-Package-245
+PackageVersion: 0.15.6
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: s3transfer
+SPDXID: SPDXRef-Package-246
+PackageVersion: 0.10.1
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: safetensors
+SPDXID: SPDXRef-Package-247
+PackageVersion: 0.7.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: safety
+SPDXID: SPDXRef-Package-248
+PackageVersion: 3.7.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: safety-schemas
+SPDXID: SPDXRef-Package-249
+PackageVersion: 0.0.16
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: scikit-learn
+SPDXID: SPDXRef-Package-250
+PackageVersion: 1.8.0
+PackageLicenseConcluded: BSD-3-Clause
+PackageLicenseDeclared: BSD-3-Clause
+DownloadLocation: NOASSERTION
+
+
+PackageName: scipy
+SPDXID: SPDXRef-Package-251
+PackageVersion: 1.17.1
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: screen-resolution-extra
+SPDXID: SPDXRef-Package-252
+PackageVersion: 0.0.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: secondbrain
+SPDXID: SPDXRef-Package-253
+PackageVersion: 0.1.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: secondbrain
+SPDXID: SPDXRef-Package-254
+PackageVersion: 0.1.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: semchunk
+SPDXID: SPDXRef-Package-255
+PackageVersion: 3.2.5
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: sentence-transformers
+SPDXID: SPDXRef-Package-256
+PackageVersion: 5.3.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: sentinels
+SPDXID: SPDXRef-Package-257
+PackageVersion: 1.1.1
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: service-identity
+SPDXID: SPDXRef-Package-258
+PackageVersion: 24.1.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: setuptools
+SPDXID: SPDXRef-Package-259
+PackageVersion: 68.1.2
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: setuptools
+SPDXID: SPDXRef-Package-260
+PackageVersion: 82.0.1
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: shapely
+SPDXID: SPDXRef-Package-261
+PackageVersion: 2.1.2
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: shellingham
+SPDXID: SPDXRef-Package-262
+PackageVersion: 1.5.4
+PackageLicenseConcluded: ISC
+PackageLicenseDeclared: ISC
+DownloadLocation: NOASSERTION
+
+
+PackageName: six
+SPDXID: SPDXRef-Package-263
+PackageVersion: 1.16.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: sortedcontainers
+SPDXID: SPDXRef-Package-264
+PackageVersion: 2.4.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: sos
+SPDXID: SPDXRef-Package-265
+PackageVersion: 4.10.2
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: soupsieve
+SPDXID: SPDXRef-Package-266
+PackageVersion: 2.5
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: ssh-import-id
+SPDXID: SPDXRef-Package-267
+PackageVersion: 5.11
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: stevedore
+SPDXID: SPDXRef-Package-268
+PackageVersion: 5.7.0
+PackageLicenseConcluded: Apache-2.0
+PackageLicenseDeclared: Apache-2.0
+DownloadLocation: NOASSERTION
+
+
+PackageName: sympy
+SPDXID: SPDXRef-Package-269
+PackageVersion: 1.14.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: systemd-python
+SPDXID: SPDXRef-Package-270
+PackageVersion: 235
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: tabulate
+SPDXID: SPDXRef-Package-271
+PackageVersion: 0.10.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: tenacity
+SPDXID: SPDXRef-Package-272
+PackageVersion: 9.1.4
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: threadpoolctl
+SPDXID: SPDXRef-Package-273
+PackageVersion: 3.6.0
+PackageLicenseConcluded: BSD-3-Clause
+PackageLicenseDeclared: BSD-3-Clause
+DownloadLocation: NOASSERTION
+
+
+PackageName: tokenizers
+SPDXID: SPDXRef-Package-274
+PackageVersion: 0.22.2
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: tomli
+SPDXID: SPDXRef-Package-275
+PackageVersion: 2.4.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: tomli_w
+SPDXID: SPDXRef-Package-276
+PackageVersion: 1.2.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: tomlkit
+SPDXID: SPDXRef-Package-277
+PackageVersion: 0.14.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: torch
+SPDXID: SPDXRef-Package-278
+PackageVersion: 2.10.0
+PackageLicenseConcluded: BSD-3-Clause
+PackageLicenseDeclared: BSD-3-Clause
+DownloadLocation: NOASSERTION
+
+
+PackageName: torchvision
+SPDXID: SPDXRef-Package-279
+PackageVersion: 0.25.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: tqdm
+SPDXID: SPDXRef-Package-280
+PackageVersion: 4.67.3
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: transformers
+SPDXID: SPDXRef-Package-281
+PackageVersion: 4.57.6
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: tree-sitter
+SPDXID: SPDXRef-Package-282
+PackageVersion: 0.25.2
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: tree-sitter-c
+SPDXID: SPDXRef-Package-283
+PackageVersion: 0.24.1
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: tree-sitter-javascript
+SPDXID: SPDXRef-Package-284
+PackageVersion: 0.25.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: tree-sitter-python
+SPDXID: SPDXRef-Package-285
+PackageVersion: 0.25.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: tree-sitter-typescript
+SPDXID: SPDXRef-Package-286
+PackageVersion: 0.23.2
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: typer
+SPDXID: SPDXRef-Package-287
+PackageVersion: 0.21.2
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-Deprecated
+SPDXID: SPDXRef-Package-288
+PackageVersion: 1.2
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-ExifRead
+SPDXID: SPDXRef-Package-289
+PackageVersion: 3.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-Flask-Cors
+SPDXID: SPDXRef-Package-290
+PackageVersion: 4.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-Flask-Migrate
+SPDXID: SPDXRef-Package-291
+PackageVersion: 4.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-Flask-SocketIO
+SPDXID: SPDXRef-Package-292
+PackageVersion: 5.3
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-JACK-Client
+SPDXID: SPDXRef-Package-293
+PackageVersion: 0.5
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-Markdown
+SPDXID: SPDXRef-Package-294
+PackageVersion: 3.5
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-Pillow
+SPDXID: SPDXRef-Package-295
+PackageVersion: 10.1
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-PyAutoGUI
+SPDXID: SPDXRef-Package-296
+PackageVersion: 0.9
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-PyMySQL
+SPDXID: SPDXRef-Package-297
+PackageVersion: 1.1
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-PyScreeze
+SPDXID: SPDXRef-Package-298
+PackageVersion: 0.1.29
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-PyYAML
+SPDXID: SPDXRef-Package-299
+PackageVersion: 6.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-Pygments
+SPDXID: SPDXRef-Package-300
+PackageVersion: 2.16
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-Send2Trash
+SPDXID: SPDXRef-Package-301
+PackageVersion: 1.8
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-WTForms
+SPDXID: SPDXRef-Package-302
+PackageVersion: 3.1
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-WebOb
+SPDXID: SPDXRef-Package-303
+PackageVersion: 1.8
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-aiofiles
+SPDXID: SPDXRef-Package-304
+PackageVersion: 23.2
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-aws-xray-sdk
+SPDXID: SPDXRef-Package-305
+PackageVersion: 2.12
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-beautifulsoup4
+SPDXID: SPDXRef-Package-306
+PackageVersion: 4.12
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-bleach
+SPDXID: SPDXRef-Package-307
+PackageVersion: 6.1
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-boltons
+SPDXID: SPDXRef-Package-308
+PackageVersion: 23.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-boto
+SPDXID: SPDXRef-Package-309
+PackageVersion: 2.49
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-braintree
+SPDXID: SPDXRef-Package-310
+PackageVersion: 4.24
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-cachetools
+SPDXID: SPDXRef-Package-311
+PackageVersion: 5.3
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-caldav
+SPDXID: SPDXRef-Package-312
+PackageVersion: 1.3
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-cffi
+SPDXID: SPDXRef-Package-313
+PackageVersion: 1.16
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-chevron
+SPDXID: SPDXRef-Package-314
+PackageVersion: 0.14
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-click-default-group
+SPDXID: SPDXRef-Package-315
+PackageVersion: 1.2
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-click-spinner
+SPDXID: SPDXRef-Package-316
+PackageVersion: 0.1
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-colorama
+SPDXID: SPDXRef-Package-317
+PackageVersion: 0.4
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-commonmark
+SPDXID: SPDXRef-Package-318
+PackageVersion: 0.9
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-console-menu
+SPDXID: SPDXRef-Package-319
+PackageVersion: 0.8
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-croniter
+SPDXID: SPDXRef-Package-320
+PackageVersion: 2.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-dateparser
+SPDXID: SPDXRef-Package-321
+PackageVersion: 1.1
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-decorator
+SPDXID: SPDXRef-Package-322
+PackageVersion: 5.1
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-dockerfile-parse
+SPDXID: SPDXRef-Package-323
+PackageVersion: 2.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-docopt
+SPDXID: SPDXRef-Package-324
+PackageVersion: 0.6
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-docutils
+SPDXID: SPDXRef-Package-325
+PackageVersion: 0.20
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-editdistance
+SPDXID: SPDXRef-Package-326
+PackageVersion: 0.6
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-entrypoints
+SPDXID: SPDXRef-Package-327
+PackageVersion: 0.4
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-first
+SPDXID: SPDXRef-Package-328
+PackageVersion: 2.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-flake8-2020
+SPDXID: SPDXRef-Package-329
+PackageVersion: 1.8
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-flake8-bugbear
+SPDXID: SPDXRef-Package-330
+PackageVersion: 23.9.16
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-flake8-builtins
+SPDXID: SPDXRef-Package-331
+PackageVersion: 2.2
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-flake8-docstrings
+SPDXID: SPDXRef-Package-332
+PackageVersion: 1.7
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-flake8-plugin-utils
+SPDXID: SPDXRef-Package-333
+PackageVersion: 1.3
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-flake8-rst-docstrings
+SPDXID: SPDXRef-Package-334
+PackageVersion: 0.3
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-flake8-simplify
+SPDXID: SPDXRef-Package-335
+PackageVersion: 0.21
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-flake8-typing-imports
+SPDXID: SPDXRef-Package-336
+PackageVersion: 1.15
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-fpdf2
+SPDXID: SPDXRef-Package-337
+PackageVersion: 2.7.4
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-gdb
+SPDXID: SPDXRef-Package-338
+PackageVersion: 12.1
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-google-cloud-ndb
+SPDXID: SPDXRef-Package-339
+PackageVersion: 2.2
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-greenlet
+SPDXID: SPDXRef-Package-340
+PackageVersion: 3.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-hdbcli
+SPDXID: SPDXRef-Package-341
+PackageVersion: 2.18
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-html5lib
+SPDXID: SPDXRef-Package-342
+PackageVersion: 1.1
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-httplib2
+SPDXID: SPDXRef-Package-343
+PackageVersion: 0.22
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-humanfriendly
+SPDXID: SPDXRef-Package-344
+PackageVersion: 10.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-ibm-db
+SPDXID: SPDXRef-Package-345
+PackageVersion: 3.2
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-influxdb-client
+SPDXID: SPDXRef-Package-346
+PackageVersion: 1.38
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-inifile
+SPDXID: SPDXRef-Package-347
+PackageVersion: 0.4
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-jmespath
+SPDXID: SPDXRef-Package-348
+PackageVersion: 1.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-jsonschema
+SPDXID: SPDXRef-Package-349
+PackageVersion: 4.19
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-keyboard
+SPDXID: SPDXRef-Package-350
+PackageVersion: 0.13
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-ldap3
+SPDXID: SPDXRef-Package-351
+PackageVersion: 2.9
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-libsass
+SPDXID: SPDXRef-Package-352
+PackageVersion: 0.22
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-mock
+SPDXID: SPDXRef-Package-353
+PackageVersion: 5.1
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-mypy-extensions
+SPDXID: SPDXRef-Package-354
+PackageVersion: 1.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-mysqlclient
+SPDXID: SPDXRef-Package-355
+PackageVersion: 2.2
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-netaddr
+SPDXID: SPDXRef-Package-356
+PackageVersion: 0.9
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-oauthlib
+SPDXID: SPDXRef-Package-357
+PackageVersion: 3.2
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-openpyxl
+SPDXID: SPDXRef-Package-358
+PackageVersion: 3.1
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-opentracing
+SPDXID: SPDXRef-Package-359
+PackageVersion: 2.4
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-paho-mqtt
+SPDXID: SPDXRef-Package-360
+PackageVersion: 1.6
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-paramiko
+SPDXID: SPDXRef-Package-361
+PackageVersion: 3.3
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-parsimonious
+SPDXID: SPDXRef-Package-362
+PackageVersion: 0.10
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-passlib
+SPDXID: SPDXRef-Package-363
+PackageVersion: 1.7
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-passpy
+SPDXID: SPDXRef-Package-364
+PackageVersion: 1.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-peewee
+SPDXID: SPDXRef-Package-365
+PackageVersion: 3.17
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-pep8-naming
+SPDXID: SPDXRef-Package-366
+PackageVersion: 0.13
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-pexpect
+SPDXID: SPDXRef-Package-367
+PackageVersion: 4.8
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-pika-ts
+SPDXID: SPDXRef-Package-368
+PackageVersion: 1.3
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-playsound
+SPDXID: SPDXRef-Package-369
+PackageVersion: 1.3
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-pluggy
+SPDXID: SPDXRef-Package-370
+PackageVersion: 1.2.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-polib
+SPDXID: SPDXRef-Package-371
+PackageVersion: 1.2
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-portpicker
+SPDXID: SPDXRef-Package-372
+PackageVersion: 1.6
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-protobuf
+SPDXID: SPDXRef-Package-373
+PackageVersion: 4.24
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-psutil
+SPDXID: SPDXRef-Package-374
+PackageVersion: 5.9
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-psycopg2
+SPDXID: SPDXRef-Package-375
+PackageVersion: 2.9
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-pyOpenSSL
+SPDXID: SPDXRef-Package-376
+PackageVersion: 23.3
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-pyRFC3339
+SPDXID: SPDXRef-Package-377
+PackageVersion: 1.1
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-pyasn1
+SPDXID: SPDXRef-Package-378
+PackageVersion: 0.5
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-pyaudio
+SPDXID: SPDXRef-Package-379
+PackageVersion: 0.2
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-pycocotools
+SPDXID: SPDXRef-Package-380
+PackageVersion: 2.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-pycurl
+SPDXID: SPDXRef-Package-381
+PackageVersion: 7.45.2
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-pyfarmhash
+SPDXID: SPDXRef-Package-382
+PackageVersion: 0.3
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-pyflakes
+SPDXID: SPDXRef-Package-383
+PackageVersion: 3.1
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-pyinstaller
+SPDXID: SPDXRef-Package-384
+PackageVersion: 6.1
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-pyjks
+SPDXID: SPDXRef-Package-385
+PackageVersion: 20.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-pynput
+SPDXID: SPDXRef-Package-386
+PackageVersion: 1.7
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-pyserial
+SPDXID: SPDXRef-Package-387
+PackageVersion: 3.5
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-pysftp
+SPDXID: SPDXRef-Package-388
+PackageVersion: 0.2
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-pytest-lazy-fixture
+SPDXID: SPDXRef-Package-389
+PackageVersion: 0.6
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-python-crontab
+SPDXID: SPDXRef-Package-390
+PackageVersion: 3.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-python-datemath
+SPDXID: SPDXRef-Package-391
+PackageVersion: 1.5
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-python-dateutil
+SPDXID: SPDXRef-Package-392
+PackageVersion: 2.8
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-python-gflags
+SPDXID: SPDXRef-Package-393
+PackageVersion: 3.1
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-python-jose
+SPDXID: SPDXRef-Package-394
+PackageVersion: 3.3
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-python-nmap
+SPDXID: SPDXRef-Package-395
+PackageVersion: 0.7
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-python-slugify
+SPDXID: SPDXRef-Package-396
+PackageVersion: 8.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-python-xlib
+SPDXID: SPDXRef-Package-397
+PackageVersion: 0.33
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-pytz
+SPDXID: SPDXRef-Package-398
+PackageVersion: 2023.3.post1
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-pywin32
+SPDXID: SPDXRef-Package-399
+PackageVersion: 306
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-pyxdg
+SPDXID: SPDXRef-Package-400
+PackageVersion: 0.28
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-qrcode
+SPDXID: SPDXRef-Package-401
+PackageVersion: 7.4
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-redis
+SPDXID: SPDXRef-Package-402
+PackageVersion: 4.6.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-regex
+SPDXID: SPDXRef-Package-403
+PackageVersion: 2023.10.3
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-requests
+SPDXID: SPDXRef-Package-404
+PackageVersion: 2.31
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-requests-oauthlib
+SPDXID: SPDXRef-Package-405
+PackageVersion: 1.3
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-retry
+SPDXID: SPDXRef-Package-406
+PackageVersion: 0.9
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-s2clientprotocol
+SPDXID: SPDXRef-Package-407
+PackageVersion: 5
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-seaborn
+SPDXID: SPDXRef-Package-408
+PackageVersion: 0.13
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-setuptools
+SPDXID: SPDXRef-Package-409
+PackageVersion: 68.2
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-simplejson
+SPDXID: SPDXRef-Package-410
+PackageVersion: 3.19
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-singledispatch
+SPDXID: SPDXRef-Package-411
+PackageVersion: 4.1
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-six
+SPDXID: SPDXRef-Package-412
+PackageVersion: 1.16
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-slumber
+SPDXID: SPDXRef-Package-413
+PackageVersion: 0.7
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-stdlib-list
+SPDXID: SPDXRef-Package-414
+PackageVersion: 0.8
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-stripe
+SPDXID: SPDXRef-Package-415
+PackageVersion: 3.5
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-tabulate
+SPDXID: SPDXRef-Package-416
+PackageVersion: 0.9
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-tensorflow
+SPDXID: SPDXRef-Package-417
+PackageVersion: 2.12
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-toml
+SPDXID: SPDXRef-Package-418
+PackageVersion: 0.10
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-toposort
+SPDXID: SPDXRef-Package-419
+PackageVersion: 1.10
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-tqdm
+SPDXID: SPDXRef-Package-420
+PackageVersion: 4.66
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-translationstring
+SPDXID: SPDXRef-Package-421
+PackageVersion: 1.4
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-tree-sitter
+SPDXID: SPDXRef-Package-422
+PackageVersion: 0.20.1
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-tree-sitter-languages
+SPDXID: SPDXRef-Package-423
+PackageVersion: 1.8
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-ttkthemes
+SPDXID: SPDXRef-Package-424
+PackageVersion: 3.2
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-tzlocal
+SPDXID: SPDXRef-Package-425
+PackageVersion: 5.1
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-uWSGI
+SPDXID: SPDXRef-Package-426
+PackageVersion: 2.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-ujson
+SPDXID: SPDXRef-Package-427
+PackageVersion: 5.8
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-untangle
+SPDXID: SPDXRef-Package-428
+PackageVersion: 1.2
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-usersettings
+SPDXID: SPDXRef-Package-429
+PackageVersion: 1.1
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-vobject
+SPDXID: SPDXRef-Package-430
+PackageVersion: 0.9
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-waitress
+SPDXID: SPDXRef-Package-431
+PackageVersion: 2.1
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-whatthepatch
+SPDXID: SPDXRef-Package-432
+PackageVersion: 1.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-workalendar
+SPDXID: SPDXRef-Package-433
+PackageVersion: 17.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-xmltodict
+SPDXID: SPDXRef-Package-434
+PackageVersion: 0.13
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-zstd
+SPDXID: SPDXRef-Package-435
+PackageVersion: 1.5
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: types-zxcvbn
+SPDXID: SPDXRef-Package-436
+PackageVersion: 4.4
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: typing-inspection
+SPDXID: SPDXRef-Package-437
+PackageVersion: 0.4.2
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: typing_extensions
+SPDXID: SPDXRef-Package-438
+PackageVersion: 4.10.0
+PackageLicenseConcluded: Python-2.0
+PackageLicenseDeclared: Python-2.0
+DownloadLocation: NOASSERTION
+
+
+PackageName: typing_extensions
+SPDXID: SPDXRef-Package-439
+PackageVersion: 4.15.0
+PackageLicenseConcluded: PSF-2.0
+PackageLicenseDeclared: PSF-2.0
+DownloadLocation: NOASSERTION
+
+
+PackageName: tzdata
+SPDXID: SPDXRef-Package-440
+PackageVersion: 2025.3
+PackageLicenseConcluded: Apache-2.0
+PackageLicenseDeclared: Apache-2.0
+DownloadLocation: NOASSERTION
+
+
+PackageName: ubuntu-drivers-common
+SPDXID: SPDXRef-Package-441
+PackageVersion: 0.0.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: ubuntu-pro-client
+SPDXID: SPDXRef-Package-442
+PackageVersion: 8001
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: ufw
+SPDXID: SPDXRef-Package-443
+PackageVersion: 0.36.2
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: uri-template
+SPDXID: SPDXRef-Package-444
+PackageVersion: 1.3.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: urllib3
+SPDXID: SPDXRef-Package-445
+PackageVersion: 2.0.7
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: urllib3
+SPDXID: SPDXRef-Package-446
+PackageVersion: 2.6.3
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: usb-creator
+SPDXID: SPDXRef-Package-447
+PackageVersion: 0.3.16
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: userpath
+SPDXID: SPDXRef-Package-448
+PackageVersion: 1.9.1
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: virtualenv
+SPDXID: SPDXRef-Package-449
+PackageVersion: 21.2.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: vulture
+SPDXID: SPDXRef-Package-450
+PackageVersion: 2.15
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: wadllib
+SPDXID: SPDXRef-Package-451
+PackageVersion: 1.3.6
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: watchdog
+SPDXID: SPDXRef-Package-452
+PackageVersion: 6.0.0
+PackageLicenseConcluded: Apache-2.0
+PackageLicenseDeclared: Apache-2.0
+DownloadLocation: NOASSERTION
+
+
+PackageName: webcolors
+SPDXID: SPDXRef-Package-453
+PackageVersion: 25.10.0
+PackageLicenseConcluded: BSD-3-Clause
+PackageLicenseDeclared: BSD-3-Clause
+DownloadLocation: NOASSERTION
+
+
+PackageName: webencodings
+SPDXID: SPDXRef-Package-454
+PackageVersion: 0.5.1
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: wheel
+SPDXID: SPDXRef-Package-455
+PackageVersion: 0.42.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: wheel
+SPDXID: SPDXRef-Package-456
+PackageVersion: 0.46.3
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: xdg
+SPDXID: SPDXRef-Package-457
+PackageVersion: 5
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: xkit
+SPDXID: SPDXRef-Package-458
+PackageVersion: 0.0.0
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+
+
+PackageName: xlsxwriter
+SPDXID: SPDXRef-Package-459
+PackageVersion: 3.2.9
+PackageLicenseConcluded: BSD-2-Clause
+PackageLicenseDeclared: BSD-2-Clause
+DownloadLocation: NOASSERTION
+
+
+PackageName: zipp
+SPDXID: SPDXRef-Package-460
+PackageVersion: 3.23.0
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+DownloadLocation: NOASSERTION
+
+
+PackageName: zope.interface
+SPDXID: SPDXRef-Package-461
+PackageVersion: 6.1
+PackageLicenseConcluded: NOASSERTION
+PackageLicenseDeclared: NOASSERTION
+DownloadLocation: NOASSERTION
+

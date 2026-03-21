@@ -55,15 +55,33 @@ mongo_uri = "mongodb://admin:password@localhost:27017"
 ### Regular Scans
 
 ```bash
-# Check for vulnerabilities
-pip-audit
+# Full security scan (automatically cleans old reports)
+./scripts/security_scan.sh all
 
-# Security scan
-bandit -r src/
+# Individual security checks
+./scripts/security_scan.sh audit    # pip-audit dependency scan
+./scripts/security_scan.sh safety   # Safety vulnerability check
+./scripts/security_scan.sh bandit   # Code security scan
+./scripts/security_scan.sh sbom     # Generate SBOM
 
-# SBOM generation
-cyclonedx-py environment -o sbom.json
+# Generate SBOM separately
+./scripts/generate-sbom.sh
+
+# Clean up old reports manually
+./scripts/cleanup_reports.sh
 ```
+
+### Report Management
+
+Security and SBOM reports are automatically cleaned before each scan. The cleanup script removes:
+
+- JSON report files (`*report*.json`, `*security*.json`, `*sbom*.json`, etc.)
+- Markdown report files (`*report*.md`, `*security*.md`, `*vulnerability*.md`, etc.)
+- Old SBOM files (`sbom.json`, `sbom.spdx`)
+
+Reports are generated in:
+- `docs/security/` - Security scan reports and analysis
+- `site/security/` - Published security documentation
 
 ### Update Dependencies
 

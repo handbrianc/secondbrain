@@ -4,10 +4,24 @@
 
 set -e
 
+# Get script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
 echo "=========================================="
 echo "SecondBrain Security Scan"
 echo "=========================================="
 echo ""
+
+# Clean up old reports before generating new ones
+echo "Cleaning up old security reports..."
+if [ -x "$SCRIPT_DIR/cleanup_reports.sh" ]; then
+    "$SCRIPT_DIR/cleanup_reports.sh"
+    echo ""
+else
+    echo "Warning: cleanup_reports.sh not found or not executable. Skipping cleanup."
+    echo ""
+fi
 
 # Colors for output
 RED='\033[0;31m'
@@ -28,13 +42,13 @@ run_pip_audit() {
     echo ""
     
     if command -v pip-audit &> /dev/null; then
-        pip-audit --desc on --quiet
+        pip-audit --desc on
         echo ""
         echo -e "${GREEN}pip-audit completed successfully${NC}"
     else
         echo -e "${YELLOW}pip-audit not installed. Installing...${NC}"
         pip install pip-audit
-        pip-audit --desc on --quiet
+        pip-audit --desc on
         echo ""
         echo -e "${GREEN}pip-audit completed successfully${NC}"
     fi
@@ -77,14 +91,14 @@ generate_sbom() {
     echo ""
     
     if command -v cyclonedx-py &> /dev/null; then
-        cyclonedx-py -r -o sbom.json
+        cyclonedx-py env -o sbom.json
         echo ""
         echo -e "${GREEN}SBOM generated: sbom.json${NC}"
         echo "SBOM format: SPDX JSON"
     else
         echo -e "${YELLOW}cyclonedx-py not installed. Installing...${NC}"
         pip install cyclonedx-bom
-        cyclonedx-py -r -o sbom.json
+        cyclonedx-py env -o sbom.json
         echo ""
         echo -e "${GREEN}SBOM generated: sbom.json${NC}"
     fi
