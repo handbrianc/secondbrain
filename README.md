@@ -13,6 +13,7 @@ A local document intelligence CLI tool that ingests documents, generates embeddi
 - **[Async Guide](docs/developer-guide/async-api.md)** - Asynchronous API usage
 - **[Docker Setup](docs/developer-guide/docker.md)** - Containerized deployment
 - **[Building](docs/developer-guide/building.md)** - Create distributable binaries
+- **[SBOM & Security](docs/architecture/SBOM_ANALYSIS.md)** - Dependency analysis and license compliance
 
 ## Quick Start
 
@@ -176,6 +177,8 @@ See the [Architecture Documentation](docs/architecture/index.md) for:
 - Performance considerations
 - Error handling strategies
 - Circuit breaker pattern implementation
+- **SBOM Analysis** - Complete dependency inventory and risk assessment
+- **License Compliance** - License risk classification and approval status
 
 And [Schema Reference](docs/architecture/SCHEMA.md) for database structure.
 
