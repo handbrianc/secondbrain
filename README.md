@@ -189,17 +189,23 @@ Check out the [docs/examples/](docs/examples/README.md) directory for usage exam
 
 ## Security
 
-Run security scans before commits:
+Run security scans before commits (automatically cleans old reports):
 
 ```bash
 # Full security scan
 ./scripts/security_scan.sh all
 
 # Individual checks
-./scripts/security_scan.sh audit    # pip-audit
+./scripts/security_scan.sh audit    # pip-audit dependency scan
+./scripts/security_scan.sh safety   # Safety vulnerability check
+./scripts/security_scan.sh bandit   # Code security scan
 ./scripts/security_scan.sh sbom     # Generate SBOM
-./scripts/security_scan.sh bandit   # Code security
+
+# Manual report cleanup
+./scripts/cleanup_reports.sh
 ```
+
+All security and SBOM reports are automatically cleaned before generating new ones. See [docs/developer-guide/security.md](docs/developer-guide/security.md) for detailed security guidelines.
 
 See [docs/migration.md](docs/migration.md) for upgrade notes and [docs/getting-started/troubleshooting.md](docs/getting-started/troubleshooting.md) for common issues.
 

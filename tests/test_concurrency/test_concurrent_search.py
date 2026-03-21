@@ -1,7 +1,7 @@
 """Tests for concurrent search scenarios."""
 
 import asyncio
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -20,19 +20,17 @@ class TestConcurrentSearch:
     @pytest.mark.asyncio
     async def test_concurrent_search_queries(self):
         """Test multiple concurrent search queries."""
-        mock_collection = MagicMock()
-        mock_collection.find.return_value.to_list = asyncio.coroutine(
-            lambda: [{"doc_id": f"doc-{i}", "score": 0.9 - i * 0.1} for i in range(5)]
-        )()
+        results = []
+        lock = asyncio.Lock()
 
-        async def mock_search(query_embedding, top_k):
-            return [
-                {"doc_id": f"doc-{i}", "score": 0.9 - i * 0.1} for i in range(top_k)
-            ]
+        async def mock_search(query):
+            result = [{"doc_id": f"doc-{i}", "score": 0.9 - i * 0.1} for i in range(5)]
+            async with lock:
+                results.append(result)
+            await asyncio.sleep(0.001)
 
-        with patch.object(asyncio, "sleep", side_effect=mock_search):
-            tasks = [asyncio.sleep(0.01) for _ in range(10)]
-            results = await asyncio.gather(*tasks)
+        tasks = [mock_search(f"query-{i}") for i in range(10)]
+        await asyncio.gather(*tasks)
 
         assert len(results) == 10
 
