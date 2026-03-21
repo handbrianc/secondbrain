@@ -210,7 +210,13 @@ Email: security@secondbrain.local
 | safety | Dependency check | `safety check` |
 | cyclonedx | SBOM generation | `cyclonedx-py environment` |
 
+## SBOM & Dependency Analysis
+
+- [SBOM Analysis](../architecture/SBOM_ANALYSIS.md) - Complete dependency inventory
+- [License Risk Report](../architecture/LICENSE-RISK-REPORT.md) - License compliance status
+
 ## Next Steps
 
 - [Security Guide](../security/index.md) - User security
+- [Security Reports](../security/index.md#security-reports) - Latest scan results
 - [Configuration](configuration.md) - Secure configuration
