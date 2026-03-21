@@ -8341,7 +8341,7 @@
       "version": "0.1.0"
     },
     {
-      "bom-ref": "BomRef.7822171730597431.16248664293919857",
+      "bom-ref": "BomRef.42417344555272984.15735485012373773",
       "description": "A local document intelligence CLI tool for semantic search",
       "externalReferences": [
         {
@@ -19087,7 +19087,7 @@
     }
   ],
   "metadata": {
-    "timestamp": "2026-03-21T05:19:12.322334+00:00",
+    "timestamp": "2026-03-21T21:45:18.319666+00:00",
     "tools": {
       "components": [
         {
@@ -19191,7 +19191,7 @@
       ]
     }
   },
-  "serialNumber": "urn:uuid:208f150c-75f4-483d-9e91-fbddf13f1a90",
+  "serialNumber": "urn:uuid:26fb91cf-29f7-48f5-af3b-8ea989dc6d66",
   "version": 1,
   "$schema": "http://cyclonedx.org/schema/bom-1.6.schema.json",
   "bomFormat": "CycloneDX",

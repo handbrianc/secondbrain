@@ -1,7 +1,7 @@
 # License Risk Report
 
 **Project**: secondbrain
-**Generated**: 2026-03-21 00:25:33
+**Generated**: 2026-03-21 16:46:58
 **SBOM File**: sbom.json
 
 ---
