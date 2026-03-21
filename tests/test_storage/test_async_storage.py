@@ -484,9 +484,7 @@ class TestAsyncVectorStorage:
         """Test get_stats_async returns statistics."""
         mock_collection = MagicMock()
         mock_collection.count_documents = AsyncMock(return_value=100)
-        mock_cursor = MagicMock()
-        mock_cursor.to_list = AsyncMock(return_value=["file1.pdf", "file2.pdf"])
-        mock_collection.distinct = MagicMock(return_value=mock_cursor)
+        mock_collection.distinct = AsyncMock(return_value=["file1.pdf", "file2.pdf"])
 
         with (
             patch.object(async_storage, "validate_connection_async", return_value=True),

@@ -988,8 +988,8 @@ class AsyncVectorStorage(ValidatableService):
         self.collection_name: str = collection_name or config.mongo_collection
         self._config: Config = config
         self._async_client: AsyncIOMotorClient | None = None
-        self._async_db: Database | None = None
-        self._async_collection: Collection | None = None
+        self._async_db: Any = None
+        self._async_collection: Any = None
         self._index_created: bool = False
         self._index_ready_retry_count: int = config.index_ready_retry_count
         self._index_ready_retry_delay: float = config.index_ready_retry_delay
@@ -1016,9 +1016,8 @@ class AsyncVectorStorage(ValidatableService):
 
         for attempt in range(self._index_ready_retry_count):
             try:
-                indexes = await self.async_collection.list_search_indexes(
-                    "embedding_index"
-                ).to_list(length=None)
+                cursor = self.async_collection.list_search_indexes("embedding_index")
+                indexes = await cursor.to_list(length=None)
                 for idx in indexes:
                     if (
                         idx.get("name") == "embedding_index"
@@ -1048,9 +1047,8 @@ class AsyncVectorStorage(ValidatableService):
         try:
             from pymongo.operations import SearchIndexModel
 
-            existing_indexes = await self.async_collection.list_search_indexes(
-                "embedding_index"
-            ).to_list(length=None)
+            cursor = self.async_collection.list_search_indexes("embedding_index")
+            existing_indexes = await cursor.to_list(length=None)
 
             if existing_indexes:
                 existing_index = existing_indexes[0]
@@ -1075,7 +1073,10 @@ class AsyncVectorStorage(ValidatableService):
                             current_dims,
                         )
                     try:
-                        await self.async_collection.drop_search_index("embedding_index")
+                        drop_cursor = self.async_collection.drop_search_index(
+                            "embedding_index"
+                        )
+                        await drop_cursor
                         logger.info("Dropped old index successfully")
                     except Exception as drop_err:
                         logger.error(
@@ -1099,7 +1100,10 @@ class AsyncVectorStorage(ValidatableService):
                 name="embedding_index",
                 type="vectorSearch",
             )
-            await self.async_collection.create_search_index(model=search_index_model)
+            create_cursor = self.async_collection.create_search_index(
+                model=search_index_model
+            )
+            await create_cursor
             logger.info(
                 "Created vector index with dimensions=%d",
                 self._config.embedding_dimensions,
@@ -1123,14 +1127,14 @@ class AsyncVectorStorage(ValidatableService):
         return self._async_client
 
     @property
-    def async_db(self) -> Database:
+    def async_db(self) -> Any:
         """Get or create async database instance."""
         if self._async_db is None:
             self._async_db = self.async_client[self.db_name]
         return self._async_db
 
     @property
-    def async_collection(self) -> Collection:
+    def async_collection(self) -> Any:
         """Get or create async collection instance."""
         if self._async_collection is None:
             self._async_collection = self.async_db[self.collection_name]
@@ -1264,7 +1268,8 @@ class AsyncVectorStorage(ValidatableService):
         doc_with_timestamp = self._add_ingestion_timestamp(document)
         doc = self._prepare_document_for_storage(doc_with_timestamp)
 
-        result = await self.async_collection.insert_one(doc)
+        insert_cursor = self.async_collection.insert_one(doc)
+        result = await insert_cursor
         return str(result.inserted_id)
 
     @async_timing("async_storage_store_batch")
@@ -1278,7 +1283,8 @@ class AsyncVectorStorage(ValidatableService):
             self._prepare_document_for_storage(doc) for doc in docs_with_timestamps
         ]
 
-        result = await self.async_collection.insert_many(docs_prepared)
+        insert_cursor = self.async_collection.insert_many(docs_prepared)
+        result = await insert_cursor
         return len(result.inserted_ids)
 
     @async_timing("async_storage_search")
@@ -1301,7 +1307,8 @@ class AsyncVectorStorage(ValidatableService):
             file_type_filter=file_type_filter,
         )
 
-        results = await self.async_collection.aggregate(pipeline).to_list(length=None)
+        agg_cursor = self.async_collection.aggregate(pipeline)
+        results = await agg_cursor.to_list(length=None)
         return results  # type: ignore[no-any-return]
 
     async def list_chunks_async(
@@ -1342,21 +1349,24 @@ class AsyncVectorStorage(ValidatableService):
         """Delete all chunks from a source file using native Motor async."""
         await self._require_connection_async("delete by source")
 
-        result = await self.async_collection.delete_many({"source_file": source})
+        delete_cursor = self.async_collection.delete_many({"source_file": source})
+        result = await delete_cursor
         return int(result.deleted_count)
 
     async def delete_by_chunk_id_async(self, chunk_id: str) -> int:
         """Delete a specific chunk using native Motor async."""
         await self._require_connection_async("delete by chunk ID")
 
-        result = await self.async_collection.delete_one({"chunk_id": chunk_id})
+        delete_cursor = self.async_collection.delete_one({"chunk_id": chunk_id})
+        result = await delete_cursor
         return int(result.deleted_count)
 
     async def delete_all_async(self) -> int:
         """Delete all documents using native Motor async."""
         await self._require_connection_async("delete all")
 
-        result = await self.async_collection.delete_many({})
+        delete_cursor = self.async_collection.delete_many({})
+        result = await delete_cursor
         return int(result.deleted_count)
 
     async def get_stats_async(self) -> DatabaseStats:
@@ -1364,9 +1374,7 @@ class AsyncVectorStorage(ValidatableService):
         await self._require_connection_async("get stats")
 
         total = await self.async_collection.count_documents({})
-        unique_sources = await self.async_collection.distinct("source_file").to_list(
-            length=None
-        )
+        unique_sources = await self.async_collection.distinct("source_file")
 
         return {
             "total_chunks": total,
