@@ -83,6 +83,32 @@ class Config(BaseSettings):
         description="Sentence-transformers model for local embedding (e.g., all-MiniLM-L6-v2, all-mpnet-base-v2)",
     )
 
+    # Local LLM settings (Ollama)
+    ollama_host: str = Field(
+        default="http://localhost:11434",
+        description="Ollama API endpoint",
+    )
+    llm_model: str = Field(
+        default="llama3.2",
+        description="Default LLM model for RAG",
+    )
+    llm_temperature: float = Field(
+        default=0.1,
+        description="LLM generation temperature (0.0-2.0)",
+    )
+    llm_max_tokens: int = Field(
+        default=2048,
+        description="Maximum tokens for LLM responses",
+    )
+    llm_timeout: int = Field(
+        default=120,
+        description="Request timeout in seconds for LLM",
+    )
+    rag_context_window: int = Field(
+        default=10,
+        description="Number of recent messages to keep in context",
+    )
+
     # Chunking settings
     chunk_size: int = Field(
         default=4096,
@@ -319,6 +345,86 @@ class Config(BaseSettings):
         """
         if v <= 0 or v > 200:
             raise ValueError("streaming_chunk_batch_size must be between 1 and 200")
+        return v
+
+    @field_validator("llm_temperature")
+    @classmethod
+    def validate_llm_temperature(cls, v: float) -> float:
+        """Validate LLM temperature is between 0.0 and 2.0.
+
+        Args:
+            v: Temperature value to validate.
+
+        Returns
+        -------
+            Validated temperature value.
+
+        Raises
+        ------
+            ValueError: If temperature is not in range [0.0, 2.0].
+        """
+        if v < 0.0 or v > 2.0:
+            raise ValueError("llm_temperature must be between 0.0 and 2.0")
+        return v
+
+    @field_validator("llm_max_tokens")
+    @classmethod
+    def validate_llm_max_tokens(cls, v: int) -> int:
+        """Validate LLM max tokens is positive.
+
+        Args:
+            v: Max tokens value to validate.
+
+        Returns
+        -------
+            Validated max tokens value.
+
+        Raises
+        ------
+            ValueError: If max tokens is not positive.
+        """
+        if v <= 0:
+            raise ValueError("llm_max_tokens must be positive")
+        return v
+
+    @field_validator("llm_timeout")
+    @classmethod
+    def validate_llm_timeout(cls, v: int) -> int:
+        """Validate LLM timeout is positive.
+
+        Args:
+            v: Timeout value to validate.
+
+        Returns
+        -------
+            Validated timeout value.
+
+        Raises
+        ------
+            ValueError: If timeout is not positive.
+        """
+        if v <= 0:
+            raise ValueError("llm_timeout must be positive")
+        return v
+
+    @field_validator("rag_context_window")
+    @classmethod
+    def validate_rag_context_window(cls, v: int) -> int:
+        """Validate RAG context window is positive.
+
+        Args:
+            v: Context window value to validate.
+
+        Returns
+        -------
+            Validated context window value.
+
+        Raises
+        ------
+            ValueError: If context window is not positive.
+        """
+        if v <= 0:
+            raise ValueError("rag_context_window must be positive")
         return v
 
     @model_validator(mode="after")
