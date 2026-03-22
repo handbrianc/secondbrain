@@ -128,6 +128,13 @@ def ingestor_with_mock_embedder(sample_embedding: list[float]) -> Any:
 @pytest.fixture
 def storage_with_index(test_collection: Any) -> Any:
     """Create a VectorStorage instance for integration testing."""
+    # Save original environment variables
+    original_mongo_uri = os.environ.get("SECONDBRAIN_MONGO_URI")
+    original_mongo_db = os.environ.get("SECONDBRAIN_MONGO_DB")
+    original_mongo_collection = os.environ.get("SECONDBRAIN_MONGO_COLLECTION")
+    original_localhost = os.environ.get("SECONDBRAIN_LOCALHOST")
+    original_embedding_model = os.environ.get("SECONDBRAIN_LOCAL_EMBEDDING_MODEL")
+
     os.environ["SECONDBRAIN_MONGO_URI"] = "mongodb://localhost:27017"
     os.environ["SECONDBRAIN_MONGO_DB"] = "test_secondbrain"
     os.environ["SECONDBRAIN_MONGO_COLLECTION"] = "test_embeddings"
@@ -152,6 +159,34 @@ def storage_with_index(test_collection: Any) -> Any:
         storage._client = None
         storage._db = None
         storage._collection = None
+        # Restore original environment variables
+        if original_mongo_uri is not None:
+            os.environ["SECONDBRAIN_MONGO_URI"] = original_mongo_uri
+        elif "SECONDBRAIN_MONGO_URI" in os.environ:
+            del os.environ["SECONDBRAIN_MONGO_URI"]
+
+        if original_mongo_db is not None:
+            os.environ["SECONDBRAIN_MONGO_DB"] = original_mongo_db
+        elif "SECONDBRAIN_MONGO_DB" in os.environ:
+            del os.environ["SECONDBRAIN_MONGO_DB"]
+
+        if original_mongo_collection is not None:
+            os.environ["SECONDBRAIN_MONGO_COLLECTION"] = original_mongo_collection
+        elif "SECONDBRAIN_MONGO_COLLECTION" in os.environ:
+            del os.environ["SECONDBRAIN_MONGO_COLLECTION"]
+
+        if original_localhost is not None:
+            os.environ["SECONDBRAIN_LOCALHOST"] = original_localhost
+        elif "SECONDBRAIN_LOCALHOST" in os.environ:
+            del os.environ["SECONDBRAIN_LOCALHOST"]
+
+        if original_embedding_model is not None:
+            os.environ["SECONDBRAIN_LOCAL_EMBEDDING_MODEL"] = original_embedding_model
+        elif "SECONDBRAIN_LOCAL_EMBEDDING_MODEL" in os.environ:
+            del os.environ["SECONDBRAIN_LOCAL_EMBEDDING_MODEL"]
+
+        # Clear and re-cache config to pick up restored env vars
+        get_config.cache_clear()
 
 
 @pytest.fixture

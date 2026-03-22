@@ -196,6 +196,95 @@ secondbrain health [OPTIONS]
 ✓ Configuration: Valid
 ```
 
+### `chat`
+
+Conversational Q&A with your documents using local LLM.
+
+```bash
+secondbrain chat [QUERY] [OPTIONS]
+```
+
+**Arguments:**
+- `QUERY` - Optional query text. If omitted, enters interactive mode.
+
+**Options:**
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--session`, `-s` | Session ID to use or create | `default` |
+| `--top-k`, `-k` | Number of chunks to retrieve | 5 |
+| `--temperature`, `-t` | LLM temperature | 0.1 |
+| `--model`, `-m` | LLM model name | (from config) |
+| `--show-sources` | Show retrieved sources | false |
+| `--list-sessions` | List all sessions | false |
+| `--history` | Show session history | false |
+| `--delete-session`, `-d` | Delete a session | - |
+| `--check-llm` | Check if Ollama is available | false |
+
+**Interactive Mode Commands:**
+When running in interactive mode (no query provided), you can use:
+- `/quit` or `/exit` - Exit the chat
+- `/clear` - Clear conversation history
+- `/help` - Show available commands
+
+**Examples:**
+
+Single-turn chat:
+```bash
+# Simple question
+secondbrain chat "What is secondbrain?"
+
+# With custom session
+secondbrain chat --session my-session "Explain the architecture"
+
+# Show sources
+secondbrain chat --show-sources "How does ingestion work?"
+
+# Use specific model
+secondbrain chat --model llama3 "Summarize this"
+
+# Adjust temperature for more creative responses
+secondbrain chat --temperature 0.7 "Generate ideas"
+```
+
+Interactive chat:
+```bash
+# Start interactive mode with default session
+secondbrain chat
+
+# Resume specific session
+secondbrain chat --session my-session
+
+# Interactive mode with custom settings
+secondbrain chat --session research --top-k 10 --temperature 0.5
+```
+
+Session management:
+```bash
+# List all sessions
+secondbrain chat --list-sessions
+
+# View session history
+secondbrain chat --session my-session --history
+
+# Delete a session
+secondbrain chat --delete-session old-session
+
+# Check LLM availability
+secondbrain chat --check-llm
+```
+
+**Output:**
+```
+Answer:
+SecondBrain is a local document intelligence CLI tool that ingests documents,
+generates embeddings using sentence-transformers, and stores vectors in MongoDB
+for semantic search.
+
+Sources:
+  [1] README.md (page -): SecondBrain - Local Document Intelligence CLI Tool
+  [2] docs/index.md (page -): Project Overview and Documentation Index
+```
+
 ## Exit Codes
 
 | Code | Meaning |

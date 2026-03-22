@@ -17,7 +17,10 @@ class TestVectorStorage:
 
     def test_init_default(self) -> None:
         """Test initialization with defaults."""
-        with patch("secondbrain.storage.get_config") as mock_config:
+        from secondbrain.config import get_config
+
+        get_config.cache_clear()
+        with patch("secondbrain.storage.storage.get_config") as mock_config:
             mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
             mock_config.return_value.mongo_db = "secondbrain"
             mock_config.return_value.mongo_collection = "embeddings"
@@ -215,7 +218,10 @@ class TestVectorStorage:
 
     def test_get_stats_success(self) -> None:
         """Test getting database statistics."""
-        with patch("secondbrain.storage.get_config") as mock_config:
+        from secondbrain.config import get_config
+
+        get_config.cache_clear()
+        with patch("secondbrain.storage.storage.get_config") as mock_config:
             mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
             mock_config.return_value.mongo_db = "secondbrain"
             mock_config.return_value.mongo_collection = "embeddings"
@@ -359,7 +365,10 @@ class TestStatisticsAndMetadata:
 
     def test_get_stats_empty_database(self) -> None:
         """Test getting statistics from empty database."""
-        with patch("secondbrain.storage.get_config") as mock_config:
+        from secondbrain.config import get_config
+
+        get_config.cache_clear()
+        with patch("secondbrain.storage.storage.get_config") as mock_config:
             mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
             mock_config.return_value.mongo_db = "secondbrain"
             mock_config.return_value.mongo_collection = "embeddings"

@@ -19,6 +19,21 @@ from secondbrain.storage import VectorStorage
 T = TypeVar("T")
 
 
+# Function-scoped fixture to clear config cache before each test
+@pytest.fixture(autouse=True, scope="function")
+def _clear_config_cache_per_test():
+    """Clear config cache before each test to prevent test pollution.
+
+    The get_config() function uses @lru_cache which persists across tests.
+    This fixture ensures each test starts with a clean cache.
+    """
+    from secondbrain.config import get_config
+
+    get_config.cache_clear()
+    yield
+    get_config.cache_clear()
+
+
 @pytest.fixture
 def storage_config_mock() -> MagicMock:
     """Provide storage configuration mock for tests."""
@@ -474,14 +489,19 @@ def _cleanup_embedding() -> None:
         pass
 
 
-@pytest.fixture(scope="module", autouse=True)
+@pytest.fixture(scope="session", autouse=True)
 def mock_config_defaults() -> None:
-    """Mock configuration defaults for test environment."""
+    """Mock configuration defaults for test environment.
+
+    Note: Does NOT set SECONDBRAIN_MONGO_DB to allow tests to use their own
+    database names. Unit tests expect "secondbrain", integration tests use
+    "test_secondbrain" via their own fixtures.
+    """
     import os
 
     test_config = {
         "SECONDBRAIN_MONGO_URI": "mongodb://localhost:27017",
-        "SECONDBRAIN_MONGO_DB": "test_secondbrain",
+        # NOTE: Not setting SECONDBRAIN_MONGO_DB - tests control their own db name
         "SECONDBRAIN_MONGO_COLLECTION": "test_embeddings",
         "SECONDBRAIN_LOCALHOST": "http://localhost:11434",
         "SECONDBRAIN_LOCAL_EMBEDDING_MODEL": "all-MiniLM-L6-v2",

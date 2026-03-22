@@ -10,6 +10,7 @@ This section covers how to use SecondBrain for common tasks:
 - [Document Ingestion](document-ingestion.md) - Adding documents
 - [Semantic Search](search-guide.md) - Finding documents
 - [Document Management](document-management.md) - Listing and deleting
+- [Conversational Q&A](conversational-qa.md) - Multi-turn conversations
 
 ## Quick Navigation
 
