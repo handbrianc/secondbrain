@@ -93,7 +93,22 @@ The system SHALL support interactive multi-turn conversation in a single CLI inv
 - **AND** prompts for new input without saving
 
 ### Requirement: Configuration options
-The system SHALL support configuration via environment variables and CLI flags.
+The system SHALL support configuration via environment variables and CLI flags following 12-factor principles.
+
+#### Scenario: Set local LLM provider
+- **WHEN** user sets `SECONDBRAIN_LLM_PROVIDER=ollama`
+- **THEN** system uses Ollama as the LLM backend
+- **AND** defaults to endpoint `http://localhost:11434`
+
+#### Scenario: Set custom LLM endpoint
+- **WHEN** user sets `SECONDBRAIN_LLM_ENDPOINT=http://localhost:8000/v1`
+- **THEN** system connects to custom endpoint (e.g., vLLM)
+- **AND** overrides default Ollama endpoint
+
+#### Scenario: Set LLM model
+- **WHEN** user sets `SECONDBRAIN_LLM_MODEL=llama3.2`
+- **THEN** system uses specified model for generation
+- **AND** defaults to `llama3.2` if not set
 
 #### Scenario: Set context window size
 - **WHEN** user sets `SECONDBRAIN_RAG_CONTEXT_WINDOW=10`
@@ -105,6 +120,12 @@ The system SHALL support configuration via environment variables and CLI flags.
 - **THEN** system stores sessions in specified database
 - **AND** defaults to `secondbrain.conversations` if not set
 
+#### Scenario: Set LLM generation parameters
+- **WHEN** user sets `SECONDBRAIN_LLM_TEMPERATURE=0.8`
+- **AND** `SECONDBRAIN_LLM_MAX_TOKENS=2048`
+- **THEN** system uses these parameters for generation
+- **AND** defaults to 0.7 temperature and 4096 max tokens
+
 ### Requirement: Error handling
 The system SHALL handle errors gracefully and provide actionable feedback.
 
@@ -113,10 +134,16 @@ The system SHALL handle errors gracefully and provide actionable feedback.
 - **THEN** system displays error: "Session not found: <id>"
 - **AND** suggests creating new session with `--create` flag
 
-#### Scenario: LLM API failure
-- **WHEN** LLM provider returns error
-- **THEN** system displays: "LLM service unavailable: <error message>"
+#### Scenario: Local LLM server unavailable
+- **WHEN** local LLM server at configured endpoint is unreachable
+- **THEN** system displays: "Local LLM server unavailable at <endpoint>"
+- **AND** provides instructions: "Start your LLM server (e.g., 'ollama serve') and ensure SECONDBRAIN_LLM_ENDPOINT is correct"
 - **AND** offers retry option or graceful exit
+
+#### Scenario: Model not found
+- **WHEN** configured model is not available on local server
+- **THEN** system displays: "Model '<model>' not found on LLM server"
+- **AND** suggests: "Pull the model: ollama pull <model>" or "Set SECONDBRAIN_LLM_MODEL to available model"
 
 #### Scenario: MongoDB connection failure
 - **WHEN** cannot connect to MongoDB for session storage

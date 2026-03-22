@@ -57,21 +57,46 @@ Retrieval Layer (existing Searcher + Storage)
 
 **Reference**: LangChain's LCEL (LangChain Expression Language) pattern - retriever is independent chain component.
 
-### 2. LLM Provider Abstraction
+### 2. Local LLM Provider Abstraction
 
-**Decision**: Define `LLMProvider` protocol with `generate(prompt: str) -> str` method. Start with OpenAI API as default implementation, but design for pluggable backends.
+**Decision**: Define `LocalLLMProvider` protocol with `generate(prompt: str) -> str` method. Default to Ollama, but design for any OpenAI-compatible local server.
 
 **Rationale**:
-- **Why**: Allows swapping LLM providers without changing RAG logic. Supports future local models (Ollama, vLLM) or other APIs (Anthropic, Cohere).
-- **Alternative considered**: Tightly couple to LangChain's LLM abstraction
-- **Why rejected**: Adds heavy dependency for simple use case; custom protocol is lighter and more explicit
+- **Why**: Local models align with 12-factor principles (backing service), work offline, no API costs, data privacy.
+- **Supported backends**: Ollama, vLLM, llama.cpp server, LM Studio, Text-Generation-WebUI
+- **Alternative considered**: Cloud APIs (OpenAI, Anthropic)
+- **Why rejected**: Requires internet, ongoing costs, data leaves system, vendor lock-in
 
 **Interface**:
 ```python
-class LLMProvider(Protocol):
-    def generate(self, prompt: str, temperature: float = 0.7) -> str: ...
-    async def agenerate(self, prompt: str, temperature: float = 0.7) -> str: ...
+class LocalLLMProvider(Protocol):
+    def generate(self, prompt: str, temperature: float = 0.7, max_tokens: int = 4096) -> str: ...
+    async def agenerate(self, prompt: str, temperature: float = 0.7, max_tokens: int = 4096) -> str: ...
+    
+    # Health check for 12-factor backing service pattern
+    def health_check(self) -> bool: ...
 ```
+
+**12-Factor Configuration**:
+```python
+# All configuration via environment variables
+config = {
+    "provider": os.getenv("SECONDBRAIN_LLM_PROVIDER", "ollama"),
+    "endpoint": os.getenv("SECONDBRAIN_LLM_ENDPOINT", "http://localhost:11434"),
+    "model": os.getenv("SECONDBRAIN_LLM_MODEL", "llama3.2"),
+    "temperature": float(os.getenv("SECONDBRAIN_LLM_TEMPERATURE", "0.7")),
+    "max_tokens": int(os.getenv("SECONDBRAIN_LLM_MAX_TOKENS", "4096")),
+    "timeout": int(os.getenv("SECONDBRAIN_LLM_TIMEOUT", "120")),  # Local models can be slow
+}
+```
+
+**Provider-Specific Endpoints**:
+| Provider | Default Endpoint | Notes |
+|----------|-----------------|-------|
+| Ollama | `http://localhost:11434` | Most popular, easy setup |
+| vLLM | `http://localhost:8000/v1` | High throughput, production |
+| llama.cpp | `http://localhost:8080` | Lightweight, CPU-friendly |
+| LM Studio | `http://localhost:1234` | GUI + API, Windows/Mac |
 
 ### 3. Conversation Storage Schema
 
@@ -143,28 +168,49 @@ Rewrite as standalone question that preserves context:
 
 ### 7. Dependency Strategy
 
-**Decision**: v1 uses minimal dependencies (direct HTTP API calls for LLM). v2 can adopt LangChain if advanced features needed.
+**Decision**: v1 uses minimal dependencies (direct HTTP API calls for local LLM). No cloud SDK required. v2 can adopt LangChain if advanced features needed.
 
 **Rationale**:
-- **Why**: Keeps initial implementation lightweight. LangChain adds 50+ transitive dependencies; not needed for basic RAG.
-- **Alternative considered**: Start with LangChain for future-proofing
-- **Why rejected**: Over-engineering for v1; can migrate to LangChain if advanced features (agents, chains) become necessary
+- **Why**: Local LLM APIs are HTTP-based and OpenAI-compatible. No SDK needed beyond httpx (already a dependency).
+- **Alternative considered**: Cloud LLM SDKs (openai, anthropic)
+- **Why rejected**: Violates 12-factor (tightly coupled to backing service), requires internet, incurs costs
 
 **Dependencies to add**:
-- `openai>=1.0.0` (or alternative LLM provider SDK)
-- `uuid` (stdlib, no addition)
+- **None new** - httpx already available for async HTTP calls
+- **Optional**: `langchain-community` if advanced features needed later
+- **Local LLM server**: Ollama/vLLM/etc. runs as separate process (12-factor backing service)
+
+**No vendor lock-in**:
+```python
+# Works with ANY OpenAI-compatible local server
+# Just change SECONDBRAIN_LLM_ENDPOINT environment variable
+# No code changes required
+```
 
 ## Risks / Trade-offs
 
-**[Risk] LLM costs and latency** → **Mitigation**: 
-- Configurable context window size to control token usage
-- Caching layer for repeated prompts (extension point)
-- Support for cheaper/faster models via provider abstraction
+**[Risk] Local model hardware requirements** → **Mitigation**: 
+- Minimum: 8GB RAM for 7B parameter models (quantized)
+- Recommended: 16GB+ RAM or GPU for larger models
+- Configurable model selection via `SECONDBRAIN_LLM_MODEL`
+- Support for quantized models (GGUF format) to reduce memory
+
+**[Risk] Local model latency vs cloud APIs** → **Mitigation**:
+- Configurable timeout: `SECONDBRAIN_LLM_TIMEOUT=120` (default, higher than cloud)
+- Streaming responses (future enhancement)
+- Model selection guidance in documentation
+- Async support for concurrent requests
 
 **[Risk] Conversation quality depends on retrieval quality** → **Mitigation**:
 - v1: Use existing semantic search (proven in production)
 - v2: Add multi-query retrieval, reranking if needed
 - Clear user feedback mechanism for bad answers
+
+**[Risk] Local LLM server availability** → **Mitigation**:
+- Health check before queries: `provider.health_check()`
+- Graceful degradation: "Local LLM server unavailable at {endpoint}"
+- Automatic retry with exponential backoff
+- Clear error messages with startup instructions
 
 **[Risk] Context window limits may truncate important history** → **Mitigation**:
 - Configurable window size (default conservative at 5 turns)
@@ -189,7 +235,7 @@ Rewrite as standalone question that preserves context:
 
 **Phase 1: Core Infrastructure** (Week 1)
 1. Create `src/secondbrain/conversation/` module with `ConversationSession` class
-2. Create `src/secondbrain/rag/` module with `RAGPipeline` and `LLMProvider` protocol
+2. Create `src/secondbrain/rag/` module with `RAGPipeline` and `LocalLLMProvider` protocol
 3. Add MongoDB `conversations` collection schema and storage logic
 4. Write unit tests for session management and RAG pipeline
 
@@ -200,11 +246,12 @@ Rewrite as standalone question that preserves context:
 4. Add `--list-sessions` and `--delete-session` commands
 5. Integration tests for CLI workflow
 
-**Phase 3: LLM Provider Integration** (Week 2)
-1. Implement `OpenAILLMProvider` with environment variable configuration
-2. Add configuration options (model, temperature, max tokens)
+**Phase 3: Local LLM Provider Integration** (Week 2)
+1. Implement `OllamaLLMProvider` with environment variable configuration
+2. Add configuration options (endpoint, model, temperature, max tokens, timeout)
 3. Implement prompt templates for RAG context formatting
-4. End-to-end tests with real LLM API
+4. Implement health check for local LLM server
+5. End-to-end tests with local LLM (Ollama)
 
 **Phase 4: MCP Service Preparation** (Week 2-3)
 1. Extract RAG service into standalone callable interface
@@ -220,12 +267,16 @@ Rewrite as standalone question that preserves context:
 
 ## Open Questions
 
-1. **Which LLM provider to default to?** OpenAI is most common, but users may prefer local models (Ollama) or other APIs (Anthropic, Groq). Decision: Default to OpenAI, but document how to switch providers.
+1. **Which local LLM backend to default to?** Ollama is most popular and easiest to set up. Decision: Default to Ollama (`http://localhost:11434`), but support any OpenAI-compatible endpoint via `SECONDBRAIN_LLM_ENDPOINT`.
 
-2. **Should we support multiple concurrent sessions?** v1: Single active session per CLI invocation. Future: Multi-session management via session ID parameter.
+2. **What model to recommend?** llama3.2 (7B) offers good quality/performance balance. Alternatives: mistral, codellama, phi3. Decision: Default to `llama3.2`, document alternatives in README.
 
-3. **How to handle long conversations?** v1: Fixed context window. Future: Add summarization or hierarchical memory.
+3. **Should we support multiple concurrent sessions?** v1: Single active session per CLI invocation. Future: Multi-session management via session ID parameter.
 
-4. **Should retrieved chunks be shown to users?** Decision: Yes, with `--show-sources` flag (similar to existing `search` command).
+4. **How to handle long conversations?** v1: Fixed context window. Future: Add summarization or hierarchical memory.
 
-5. **When to trigger MCP service conversion?** After CLI validation proves the RAG approach works. Separate spec change will define MCP protocol implementation.
+5. **Should retrieved chunks be shown to users?** Decision: Yes, with `--show-sources` flag (similar to existing `search` command).
+
+6. **When to trigger MCP service conversion?** After CLI validation proves the RAG approach works. Separate spec change will define MCP protocol implementation.
+
+7. **How to handle model downloads?** Ollama handles this automatically (`ollama pull llama3.2`). Other backends require manual model setup. Decision: Document setup for each backend, prioritize Ollama for simplicity.
