@@ -9,12 +9,12 @@ This module provides:
 
 from .interfaces import LocalLLMProvider
 from .pipeline import RAGPipeline
-from .providers.ollama import OllamaLLMProvider
 from .providers.factory import LLMProviderFactory
+from .providers.ollama import OllamaLLMProvider
 
 __all__ = [
-    "LocalLLMProvider",
-    "RAGPipeline",
-    "OllamaLLMProvider",
     "LLMProviderFactory",
+    "LocalLLMProvider",
+    "OllamaLLMProvider",
+    "RAGPipeline",
 ]

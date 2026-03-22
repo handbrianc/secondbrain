@@ -3,7 +3,6 @@
 Defines the protocol that all local LLM providers must implement.
 """
 
-from abc import ABC, abstractmethod
 from typing import Protocol
 
 

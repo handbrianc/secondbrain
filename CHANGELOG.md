@@ -5,6 +5,45 @@ All notable changes to SecondBrain will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-03-22
+
+### Added
+
+#### Conversational RAG
+- **Conversational RAG with Local LLM**: Integration with Ollama for context-aware conversations
+  - Query rewriting using conversation history for improved context
+  - Local LLM processing with Ollama backend
+  - Configurable model selection via `LLM_MODEL` environment variable
+
+- **Chat Command**: `secondbrain chat` for interactive conversations
+  - Natural language queries with conversation history
+  - Session persistence with MongoDB for continuity
+  - Context-aware responses based on ingested documents
+
+- **Session Persistence**: MongoDB-backed conversation state management
+  - Persistent chat sessions across restarts
+  - Session ID management for multi-user support
+  - Automatic session cleanup and expiration
+
+#### Configuration
+- **New Environment Variables**:
+  - `OLLAMA_HOST`: Ollama API endpoint (default: `http://localhost:11434`)
+  - `LLM_MODEL`: LLM model name for RAG (default: `llama3.2`)
+  - `SECONDBRAIN_CHAT_HISTORY_COLLECTION`: MongoDB collection for chat history
+  - `SECONDBRAIN_SESSION_TTL`: Session expiration time in seconds
+
+#### Dependencies
+- **RAG Optional Dependency Group**: `rag` extra for RAG features
+  - Install with: `pip install -e ".[rag]"`
+  - Isolates RAG dependencies from core functionality
+
+### Changed
+
+- Updated README.md with RAG features and chat command documentation
+- Enhanced configuration documentation with new RAG-related settings
+
+---
+
 ## [0.3.0] - 2026-03-19
 
 ### Added

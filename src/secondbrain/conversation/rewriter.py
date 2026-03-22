@@ -6,9 +6,10 @@ conversation history for better context and search results.
 
 import logging
 import re
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
-from secondbrain.rag.providers.ollama import OllamaLLMProvider
+if TYPE_CHECKING:
+    from secondbrain.rag.providers.ollama import OllamaLLMProvider
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +84,7 @@ class QueryRewriter:
 
     def __init__(
         self,
-        llm_provider: OllamaLLMProvider,
+        llm_provider: "OllamaLLMProvider",
         context_window: int = 5,
     ) -> None:
         """Initialize rewriter with LLM provider.

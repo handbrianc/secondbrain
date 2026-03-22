@@ -46,9 +46,11 @@ secondbrain --help
 
 - [Installation Guide](getting-started/installation.md) - Detailed installation steps
 - [Quick Start Guide](getting-started/quick-start.md) - Get started in 5 minutes
+- [RAG Quick Start](getting-started/rag-quickstart.md) - RAG implementation guide
 - [Configuration Guide](getting-started/configuration.md) - Essential configuration
 - [Document Ingestion](user-guide/document-ingestion.md) - How to add documents
 - [Semantic Search](user-guide/search-guide.md) - How to search
+- [Conversational Q&A](user-guide/conversational-qa.md) - Multi-turn conversations
 - [Development Setup](developer-guide/development.md) - Get started with development
 - [Docker Setup](developer-guide/docker.md) - Containerized deployment
 - [Async API Guide](developer-guide/async-api.md) - Asynchronous programming
