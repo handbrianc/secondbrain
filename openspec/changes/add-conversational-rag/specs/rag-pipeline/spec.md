@@ -12,19 +12,30 @@ The system SHALL orchestrate retrieval and generation in a single pipeline.
 - **AND** returns answer with optional sources
 
 ### Requirement: Pluggable LLM provider
-The system SHALL support multiple LLM providers through a common interface.
+The system SHALL support multiple local LLM providers through a common interface.
 
-#### Scenario: Use OpenAI provider
-- **WHEN** `SECONDBRAIN_LLM_PROVIDER=openai`
-- **AND** `SECONDBRAIN_OPENAI_API_KEY` is set
-- **THEN** system uses OpenAI API for generation
-- **AND** defaults to `gpt-4o-mini` model
+#### Scenario: Use Ollama provider (default)
+- **WHEN** `SECONDBRAIN_LLM_PROVIDER=ollama` (or not set)
+- **AND** `SECONDBRAIN_LLM_ENDPOINT` is not set
+- **THEN** system uses Ollama at `http://localhost:11434`
+- **AND** defaults to model `llama3.2`
 
-#### Scenario: Use alternative provider
-- **WHEN** `SECONDBRAIN_LLM_PROVIDER=anthropic`
-- **AND** `SECONDBRAIN_ANTHROPIC_API_KEY` is set
-- **THEN** system uses Anthropic API for generation
-- **AND** defaults to `claude-3-haiku` model
+#### Scenario: Use vLLM provider
+- **WHEN** `SECONDBRAIN_LLM_ENDPOINT=http://localhost:8000/v1`
+- **THEN** system uses vLLM-compatible endpoint
+- **AND** treats it as OpenAI-compatible API
+
+#### Scenario: Use custom local endpoint
+- **WHEN** `SECONDBRAIN_LLM_ENDPOINT=http://localhost:8080`
+- **THEN** system connects to custom local server
+- **AND** supports any OpenAI-compatible local LLM server (llama.cpp, LM Studio, etc.)
+
+#### Scenario: Configure model and parameters
+- **WHEN** `SECONDBRAIN_LLM_MODEL=llama3.2`
+- **AND** `SECONDBRAIN_LLM_TEMPERATURE=0.7`
+- **AND** `SECONDBRAIN_LLM_MAX_TOKENS=4096`
+- **THEN** system uses these parameters for all generation
+- **AND** allows per-request overrides via CLI flags
 
 ### Requirement: Context formatting for LLM
 The system SHALL format retrieved chunks and conversation history into LLM prompts.
