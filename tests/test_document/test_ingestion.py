@@ -72,6 +72,7 @@ class TestDocumentIngestor:
         self, cached_embedding_generator: MagicMock, mocked_pdf_extraction: MagicMock
     ) -> None:
         """Test DocumentIngestor initialization."""
+        del mocked_pdf_extraction  # Unused fixture - sets up mocks
         ingestor = DocumentIngestor(chunk_size=256, chunk_overlap=25)
         assert ingestor.chunk_size == 256
         assert ingestor.chunk_overlap == 25
@@ -81,6 +82,7 @@ class TestDocumentIngestor:
         self, cached_embedding_generator: MagicMock, mocked_pdf_extraction: MagicMock
     ) -> None:
         """Test DocumentIngestor default values."""
+        del mocked_pdf_extraction  # Unused fixture - sets up mocks
         ingestor = DocumentIngestor()
         assert ingestor.chunk_size == 4096
         assert ingestor.chunk_overlap == 50
@@ -312,7 +314,7 @@ class TestChunkTextEdgeCases:
         """Test page numbers preserved across all chunks."""
         ingestor = DocumentIngestor(chunk_size=50, chunk_overlap=10)
         text = "Word " * 20
-        segments = [{"text": text, "page": 7}]
+        segments: list[Segment] = [Segment(text=text, page=7)]
         chunks = ingestor._chunk_text(segments)
         assert len(chunks) > 1
         assert all(chunk["page"] == 7 for chunk in chunks)
@@ -321,7 +323,7 @@ class TestChunkTextEdgeCases:
         """Test chunking with larger overlap."""
         text = "Word " * 30
         ingestor = DocumentIngestor(chunk_size=50, chunk_overlap=30)
-        segments = [{"text": text, "page": 1}]
+        segments: list[Segment] = [Segment(text=text, page=1)]
         chunks = ingestor._chunk_text(segments)
         assert len(chunks) >= 2
 

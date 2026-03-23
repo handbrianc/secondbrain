@@ -101,10 +101,11 @@ class Searcher:
         Asynchronously closes the embedding generator and storage resources,
         checking for async support before calling.
         """
+        # Dynamic check for async support - these methods may not exist on all versions
         if hasattr(self.embedding_gen, "aclose"):
-            await self.embedding_gen.aclose()
+            await self.embedding_gen.aclose()  # pyright: ignore[reportAttributeAccessIssue]
         if hasattr(self.storage, "aclose"):
-            await self.storage.aclose()
+            await self.storage.aclose()  # pyright: ignore[reportAttributeAccessIssue]
 
     def __enter__(self) -> "Searcher":
         """Enter runtime context manager."""

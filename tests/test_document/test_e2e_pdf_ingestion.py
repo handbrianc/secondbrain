@@ -42,7 +42,11 @@ class TestPDFIngestionE2E:
         mocked_pdf_extraction: MagicMock,
     ) -> None:
         """Mock external services to speed up E2E tests."""
-        pass
+        del (
+            monkeypatch,
+            cached_embedding_generator,
+            mocked_pdf_extraction,
+        )  # Unused but sets up mocks
 
     @pytest.mark.slow
     def test_pdf_text_extraction(self, sample_pdf_path: Path) -> None:
@@ -114,6 +118,7 @@ class TestPDFIngestionE2E:
         3. Embedding generation
         4. Vector storage in MongoDB
         """
+        del mocked_pdf_extraction  # Unused fixture - sets up mocks
         # Perform ingestion with mocked services
         ingestor = DocumentIngestor(chunk_size=256, chunk_overlap=50)
         result = ingestor.ingest(str(sample_pdf_path))
@@ -127,6 +132,7 @@ class TestPDFIngestionE2E:
         self, sample_pdf_with_multiple_pages: Path, mocked_pdf_extraction: MagicMock
     ) -> None:
         """Test ingestion of a multi-page PDF document."""
+        del mocked_pdf_extraction  # Unused fixture - sets up mocks
         # Perform ingestion with mocked services
         ingestor = DocumentIngestor()
         result = ingestor.ingest(str(sample_pdf_with_multiple_pages))
@@ -140,6 +146,7 @@ class TestPDFIngestionE2E:
         self, sample_pdf_path: Path, mocked_pdf_extraction: MagicMock
     ) -> None:
         """Test ingestion with custom chunk size and overlap."""
+        del mocked_pdf_extraction  # Unused fixture - sets up mocks
         # Test with custom chunk settings
         custom_chunk_size = 100
         custom_overlap = 25
@@ -179,6 +186,7 @@ class TestPDFSearchIntegration:
         cached_embedding_generator: MagicMock,
     ) -> None:
         """Test that semantic search works after PDF ingestion."""
+        del mocked_pdf_extraction  # Unused fixture - sets up mocks
         # Clean up before test
         storage = VectorStorage()
         storage.delete_by_source(str(sample_pdf_path))
@@ -206,6 +214,7 @@ class TestPDFSearchIntegration:
         self, sample_pdf_path: Path, mocked_pdf_extraction: MagicMock
     ) -> None:
         """Test search with source and file type filters."""
+        del mocked_pdf_extraction  # Unused fixture - sets up mocks
         # Clean up before test
         storage = VectorStorage()
         storage.delete_by_source(str(sample_pdf_path))

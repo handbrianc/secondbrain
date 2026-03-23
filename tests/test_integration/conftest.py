@@ -55,7 +55,6 @@ def sample_embedding() -> list[float]:
 def mock_embedder(sample_embedding: list[float]) -> Any:
     """Create a mock embedding generator that returns predictable embeddings."""
     original_gen = LocalEmbeddingGenerator.generate
-    original_gen_async = LocalEmbeddingGenerator.generate_async
 
     def mock_generate(self: LocalEmbeddingGenerator, text: str) -> list[float]:
         text_hash = hash(text.strip().lower())
@@ -64,19 +63,12 @@ def mock_embedder(sample_embedding: list[float]) -> Any:
         random.seed(text_hash)
         return [random.random() for _ in range(EMBEDDING_DIMENSIONS)]
 
-    async def mock_generate_async(
-        self: LocalEmbeddingGenerator, text: str
-    ) -> list[float]:
-        return mock_generate(self, text)
-
     LocalEmbeddingGenerator.generate = mock_generate
-    LocalEmbeddingGenerator.generate_async = mock_generate_async
 
     try:
         yield mock_generate
     finally:
         LocalEmbeddingGenerator.generate = original_gen
-        LocalEmbeddingGenerator.generate_async = original_gen_async
 
 
 @pytest.fixture

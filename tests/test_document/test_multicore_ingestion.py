@@ -156,7 +156,7 @@ class TestWorkerFunction:
         long_text = "# Title\n\n" + " ".join(["word"] * 200)  # 200 words
         test_file.write_text(long_text)
 
-        result = _extract_and_chunk_file(test_file, chunk_size=50, chunk_overlap=5)
+        result = _extract_and_chunk_file(str(test_file), chunk_size=50, chunk_overlap=5)
 
         assert result["success"] is True
         assert len(result["segments"]) > 0
