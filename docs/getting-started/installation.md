@@ -16,7 +16,7 @@ The easiest way to get started is using Docker Compose:
 
 ```bash
 # Clone the repository
-git clone <repository-url>
+git clone https://github.com/your-username/secondbrain.git
 cd secondbrain
 
 # Start MongoDB and sentence-transformers services
@@ -67,7 +67,7 @@ Download from [sentence-transformers Website](https://sentence-transformers.ai)
 
 ```bash
 # Clone repository
-git clone <repository-url>
+git clone https://github.com/your-username/secondbrain.git
 cd secondbrain
 
 # Install with dev dependencies

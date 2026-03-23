@@ -1,6 +1,6 @@
 # SecondBrain Documentation
 
-Welcome to the SecondBrain documentation. This folder contains comprehensive guides, architecture documentation, and reference materials.
+Welcome to the comprehensive documentation for SecondBrain - your local document intelligence CLI.
 
 ## Documentation Structure
 
@@ -51,45 +51,75 @@ docs/
 └── migration.md             # Migration guide
 ```
 
-## Quick Links
+## Quick Navigation
 
 ### For New Users
-- [Getting Started](index.md) - Main documentation index
-- [Installation Guide](getting-started/installation.md) - Detailed installation steps
-- [Quick Start](getting-started/quick-start.md) - Get started in 5 minutes
-- [Configuration](getting-started/configuration.md) - Essential configuration
+
+| Guide | Description |
+|-------|-------------|
+| [Getting Started](getting-started/index.md) | Installation and setup overview |
+| [Quick Start](getting-started/quick-start.md) | Get running in 5 minutes |
+| [Installation Guide](getting-started/installation.md) | Detailed installation steps |
+| [Configuration](getting-started/configuration.md) | Essential configuration options |
 
 ### For Users
-- [User Guide](user-guide/index.md) - Complete usage guide
-- [CLI Reference](user-guide/cli-reference.md) - All CLI commands
-- [Examples](examples/README.md) - Practical code examples
+
+| Guide | Description |
+|-------|-------------|
+| [User Guide](user-guide/index.md) | Complete usage reference |
+| [CLI Reference](user-guide/cli-reference.md) | All commands and options |
+| [Document Ingestion](user-guide/document-ingestion.md) | Adding documents |
+| [Semantic Search](user-guide/search-guide.md) | Finding documents |
+| [Document Management](user-guide/document-management.md) | List and delete |
+| [Conversational Q&A](user-guide/conversational-qa.md) | Multi-turn chat |
 
 ### For Developers
-- [Developer Guide](developer-guide/index.md) - Development setup and workflows
-- [Docker Setup](developer-guide/docker.md) - Containerized deployment
-- [Configuration Reference](developer-guide/configuration.md) - Full config guide
-- [Async API Guide](developer-guide/async-api.md) - Asynchronous programming
-- [Building & Distribution](developer-guide/building.md) - Create binaries
-- [Code Standards](developer-guide/code-standards.md) - Coding guidelines
-- [Contributing](developer-guide/contributing.md) - How to contribute
-- [Schema Reference](architecture/SCHEMA.md) - Database schema
-- [Data Flow](architecture/DATA_FLOW.md) - Component interactions
-- [Migration Guide](migration.md) - Schema migration strategies
-- [Security Guidelines](developer-guide/security.md) - Security best practices
 
-### Project Information
-- [Changelog](developer-guide/changelog.md) - Version history
-- [Architecture Overview](architecture/index.md) - System design
-- [API Reference](api/index.md) - Code-level documentation
+| Guide | Description |
+|-------|-------------|
+| [Developer Guide](developer-guide/index.md) | Development setup and workflows |
+| [Development Setup](developer-guide/development.md) | Get started with code |
+| [Testing Guide](developer-guide/TESTING.md) | Test structure and strategies |
+| [Code Standards](developer-guide/code-standards.md) | Coding guidelines |
+| [Contributing](developer-guide/contributing.md) | How to contribute |
+| [Async API](developer-guide/async-api.md) | Asynchronous programming |
+| [Docker Setup](developer-guide/docker.md) | Containerized deployment |
+| [Building](developer-guide/building.md) | Create distributable binaries |
 
-## Getting Started
+### Architecture & Technical
 
-1. **New to SecondBrain?** Start with the [Quick Start](getting-started/quick-start.md)
-2. **Want to contribute?** Read [Contributing Guide](developer-guide/contributing.md)
-3. **Setting up development?** Follow [Development Guide](developer-guide/development.md)
-4. **Need Docker setup?** Check [Docker Guide](developer-guide/docker.md)
-5. **Need schema info?** Check [SCHEMA.md](architecture/SCHEMA.md)
-6. **Need data flow docs?** See [DATA_FLOW.md](architecture/DATA_FLOW.md)
+| Guide | Description |
+|-------|-------------|
+| [Architecture Overview](architecture/index.md) | System design and components |
+| [Data Flow](architecture/DATA_FLOW.md) | Processing pipelines |
+| [Schema Reference](architecture/SCHEMA.md) | Database structure |
+| [SBOM Analysis](architecture/SBOM_ANALYSIS.md) | Dependency inventory |
+| [License Risk Report](architecture/LICENSE-RISK-REPORT.md) | License compliance |
+
+### Examples & Reference
+
+| Resource | Description |
+|----------|-------------|
+| [Examples Overview](examples/README.md) | All code examples |
+| [Troubleshooting](getting-started/troubleshooting.md) | Common issues and solutions |
+| [Migration Guide](migration.md) | Schema migration strategies |
+| [Security Guide](developer-guide/security.md) | Security best practices |
+| [Changelog](developer-guide/changelog.md) | Version history |
+
+## Contributing to Documentation
+
+We welcome documentation improvements! See [Contributing Guide](developer-guide/contributing.md) for details.
+
+### Quick Documentation Contributions
+
+- Fix typos or broken links
+- Improve clarity or add examples
+- Add missing commands or options
+- Update outdated information
+
+## License
+
+This project is licensed under the MIT License. See [LICENSE](LICENSE.md) for details.
 
 ## Documentation Standards
 

@@ -171,8 +171,8 @@ Include:
 
 ## Questions?
 
-- [GitHub Discussions](https://github.com/your-repo/discussions)
-- [Open an Issue](https://github.com/your-repo/issues)
+- [GitHub Discussions](https://github.com/your-username/secondbrain/discussions)
+- [Open an Issue](https://github.com/your-username/secondbrain/issues)
 
 ## Code of Conduct
 

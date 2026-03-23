@@ -1,105 +1,136 @@
 # SecondBrain - Local Document Intelligence CLI
 
-A local document intelligence CLI tool that ingests documents, generates embeddings using sentence-transformers, and stores vectors in MongoDB for semantic search.
+A powerful local document intelligence CLI tool that enables semantic search over your documents using state-of-the-art embedding models and MongoDB vector search.
 
-## Documentation
+![Python Version](https://img.shields.io/badge/python-3.11+-blue.svg)
+![License](https://img.shields.io/badge/license-MIT-green.svg)
 
-- **[Full Documentation](docs/index.md)** - Complete documentation index
-- **[Quick Start](#quick-start)** - Get started in 5 minutes
-- **[Getting Started](docs/getting-started/index.md)** - Installation and setup
-- **[User Guide](docs/user-guide/index.md)** - Complete usage guide
-- **[Developer Guide](docs/developer-guide/index.md)** - Development setup and workflow
-- **[Configuration](docs/getting-started/configuration.md)** - Configuration reference
-- **[Async Guide](docs/developer-guide/async-api.md)** - Asynchronous API usage
-- **[Docker Setup](docs/developer-guide/docker.md)** - Containerized deployment
-- **[Building](docs/developer-guide/building.md)** - Create distributable binaries
-- **[SBOM & Security](docs/architecture/SBOM_ANALYSIS.md)** - Dependency analysis and license compliance
+## Why SecondBrain?
+
+- **🔒 Privacy-First**: All processing happens locally - no data leaves your machine
+- **📄 Multi-Format Support**: PDF, DOCX, PPTX, XLSX, HTML, Markdown, images, and audio
+- **🚀 Fast & Scalable**: Multicore ingestion, async API, and optimized vector search
+- **🎯 Semantic Search**: Natural language queries with intelligent relevance ranking
+- **🛠️ Production-Ready**: Circuit breaker, rate limiting, structured logging, and OpenTelemetry tracing
+- **🐳 Docker Support**: Easy deployment with MongoDB and sentence-transformers services
 
 ## Quick Start
 
-### Prerequisites
-
-- Python 3.11+
-- MongoDB 8.0+ (via Docker or local)
-- sentence-transformers (via Docker or local)
-
-### Installation
+Get up and running in 5 minutes:
 
 ```bash
-# Start services (Docker)
-docker-compose up -d  # MongoDB
-sentence-transformers serve          # sentence-transformers (macOS/Linux)
-
-# Install SecondBrain
+# 1. Install SecondBrain
 pip install -e ".[dev]"
 
-# Verify
-secondbrain --help
-```
+# 2. Start services (Docker)
+docker-compose up -d  # MongoDB
+sentence-transformers serve  # Embedding service
 
-### Basic Usage
-
-```bash
-# Ingest documents
+# 3. Ingest your first documents
 secondbrain ingest /path/to/documents/
 
-# Search semantically
+# 4. Search semantically
 secondbrain search "what is this about?"
-
-# List documents
-secondbrain ls
-
-# Check health
-secondbrain health
 ```
 
 ## Features
 
-- **Multi-format ingestion**: PDF, DOCX, PPTX, XLSX, HTML, Markdown, images, audio
-- **Semantic search**: Natural language queries with cosine similarity
-- **Async support**: Full async API for embedding generation and storage
-- **Multicore processing**: Parallel document ingestion with configurable CPU core count
-- **Rate limiting**: Protects sentence-transformers API from overload
-- **Circuit breaker**: Automatic service failure handling with automatic recovery
-- **Structured logging**: JSON logs with OpenTelemetry tracing support
-- **Security scanning**: Integrated vulnerability detection and SBOM generation
-- **12-factor app**: Environment-driven configuration
+### Document Processing
+- **Multi-format ingestion**: Automatically parse PDF, Word, PowerPoint, Excel, HTML, Markdown, and more
+- **Smart chunking**: Configurable chunk sizes with overlap for context preservation
+- **Multicore processing**: Parallel document ingestion with configurable CPU cores
+- **Async support**: Full async API for high-throughput scenarios
 
-## CLI Reference
+### Search & Retrieval
+- **Semantic search**: Natural language queries using cosine similarity
+- **Configurable results**: Adjust top-k, similarity thresholds, and returned fields
+- **Conversational Q&A**: Multi-turn chat with context-aware responses using local LLMs
+- **Session management**: Persistent conversation sessions with history
 
-| Command | Description |
+### Production Features
+- **Circuit breaker**: Automatic failure handling with self-recovery
+- **Rate limiting**: Protect downstream services from overload
+- **Structured logging**: JSON logs with configurable verbosity
+- **OpenTelemetry**: Distributed tracing for observability
+- **Health checks**: Comprehensive service connectivity validation
+
+### Developer Experience
+- **Type-safe**: Full type hints with mypy strict mode
+- **Well-tested**: Comprehensive test suite with unit, integration, and property-based tests
+- **Secure**: Integrated vulnerability scanning and SBOM generation
+- **Extensible**: Clean architecture with pluggable components
+
+## Documentation
+
+| Section | Description |
 |---------|-------------|
-| `ingest` | Add documents to the vector database |
-| `search` | Perform semantic search queries |
-| `ls` | List ingested documents/chunks |
-| `delete` | Remove documents |
-| `status` | Display database statistics |
-| `health` | Check service health |
+| [Getting Started](docs/getting-started/index.md) | Installation, quick start, and configuration |
+| [User Guide](docs/user-guide/index.md) | Complete usage guide for all features |
+| [CLI Reference](docs/user-guide/cli-reference.md) | All commands and options |
+| [Developer Guide](docs/developer-guide/index.md) | Development setup and workflows |
+| [Architecture](docs/architecture/index.md) | System design and data flow |
+| [Examples](docs/examples/README.md) | Practical code examples |
+
+## CLI Commands
 
 ```bash
-# See all options
-secondbrain --help
-secondbrain ingest --help
-secondbrain search --help
+# Ingest documents
+secondbrain ingest /path/to/documents/ --cores 4
 
-# Ingest with multicore support (4 CPU cores)
-secondbrain ingest /path/to/documents --cores 4
+# Semantic search
+secondbrain search "machine learning best practices" --top-k 10
 
-# Use config default (set SECONDBRAIN_MAX_WORKERS=4 in .env)
-secondbrain ingest /path/to/documents
+# Interactive chat with your documents
+secondbrain chat
+# Or single query: secondbrain chat "What is the architecture?"
+
+# List documents
+secondbrain ls --details
+
+# Check system health
+secondbrain health
+
+# View database statistics
+secondbrain status
 ```
+
+Run `secondbrain --help` for full command reference.
 
 ## Configuration
 
-Key environment variables (see [Full Config](docs/getting-started/configuration.md)):
+SecondBrain uses environment variables prefixed with `SECONDBRAIN_`:
 
 ```bash
-# .env file
+# Core configuration
 SECONDBRAIN_MONGO_URI=mongodb://localhost:27017
+SECONDBRAIN_LOCAL_EMBEDDING_MODEL=all-MiniLM-L6-v2
 SECONDBRAIN_CHUNK_SIZE=4096
+
+# Performance tuning
+SECONDBRAIN_MAX_WORKERS=4
+SECONDBRAIN_RATE_LIMIT_ENABLED=true
+SECONDBRAIN_CIRCUIT_BREAKER_ENABLED=true
+
+# Logging
+SECONDBRAIN_LOG_LEVEL=INFO
+SECONDBRAIN_LOG_FORMAT=pretty
 ```
 
+See [Configuration Reference](docs/getting-started/configuration.md) for complete options.
+
 ## Development
+
+### Setup
+
+```bash
+# Clone and setup
+git clone https://github.com/your-username/secondbrain.git
+cd secondbrain
+python -m venv venv
+source venv/bin/activate
+pip install -e ".[dev]"
+pre-commit install
+```
 
 ### Quality Checks
 
@@ -110,132 +141,81 @@ ruff check . && ruff format .
 # Type checking
 mypy .
 
-# Tests (fast profile - default, 4 workers, no coverage)
-pytest -m "not integration"
-
-# Tests with coverage (slower, for CI/release)
-pytest --cov=secondbrain --cov-report=term-missing
-
-# More parallelism (8 workers)
-pytest -n 8
-
-# Full test suite (requires MongoDB + sentence-transformers)
-pytest
-
-# All checks
-ruff check . && ruff format --check . && mypy . && pytest -m "not integration"
-```
-
-### Test Performance
-
-**Default configuration** uses 4 parallel workers without coverage for fast local feedback (~5s for unit tests).
-
-**Shell aliases** (add to `~/.bashrc` or `~/.zshrc`):
-```bash
-alias pytest-fast="pytest -m 'not integration' -n 4 --no-cov"
-alias pytest-full="pytest --cov=secondbrain --cov-report=term-missing"
-alias pytest-ci="pytest -m 'not integration' -n 8 --cov=secondbrain --cov-report=xml"
+# Run tests
+pytest -m "not integration"  # Fast tests
+pytest                         # All tests including integration
 ```
 
 ### Test Profiles
 
-The test suite supports different execution profiles:
+| Profile | Command | Use Case |
+|---------|---------|----------|
+| Fast | `pytest -m "not integration"` | Pre-commit, quick feedback |
+| Integration | `pytest -m integration` | Service testing |
+| Full | `pytest` | Complete validation |
 
-| Profile | Command | Duration | Use Case |
-|---------|---------|----------|----------|
-| **Fast** | `pytest -m "not integration"` | ~5s | Pre-commit, quick feedback |
-| **Integration** | `pytest -m integration` | ~15s | Nightly builds, service testing |
-| **Slow (E2E)** | `pytest -m slow` | ~16s | Release validation |
-| **Full** | `pytest` | ~25s | Complete validation |
+See [Testing Guide](docs/developer-guide/TESTING.md) for details.
 
-See [TESTING.md](docs/developer-guide/TESTING.md) and [TESTING_OPTIMIZATION.md](tests/TESTING_OPTIMIZATION.md) for detailed testing documentation.
-
-### Coverage Cleanup
-
-To manually cleanup coverage files after test runs:
-
-```bash
-./scripts/cleanup_coverage.sh
-```
-
-### Performance Tips
-
-- Use `--batch-size` for parallel processing
-- Adjust `chunk_size` for your document types
-- Enable verbose mode for timing info: `--verbose`
-- Use `-n auto` for parallel test execution (pytest-xdist)
-- Tests timeout after 60s to catch hangs (`--timeout=60`)
-- Mark slow tests with `@pytest.mark.slow` to exclude from fast profile
-
-## Architecture
-
-See the [Architecture Documentation](docs/architecture/index.md) for:
-- High-level system architecture
-- Component details and responsibilities
-- Data flow diagrams
-- Processing pipelines
-- Performance considerations
-- Error handling strategies
-- Circuit breaker pattern implementation
-- **SBOM Analysis** - Complete dependency inventory and risk assessment
-- **License Compliance** - License risk classification and approval status
-
-And [Schema Reference](docs/architecture/SCHEMA.md) for database structure.
-
-## Examples
-
-Check out the [docs/examples/](docs/examples/README.md) directory for usage examples:
-
-- **[Circuit Breaker Usage](docs/examples/README.md)** - See examples overview
-- **[Async Ingestion](docs/developer-guide/async-api.md)** - Async API usage guide
-- **[Tracing Example](docs/developer-guide/development.md)** - Development setup with tracing
-
-## Security
-
-Run security scans before commits (automatically cleans old reports):
+### Security Scanning
 
 ```bash
 # Full security scan
 ./scripts/security_scan.sh all
 
 # Individual checks
-./scripts/security_scan.sh audit    # pip-audit dependency scan
-./scripts/security_scan.sh safety   # Safety vulnerability check
-./scripts/security_scan.sh bandit   # Code security scan
-./scripts/security_scan.sh sbom     # Generate SBOM
-
-# Manual report cleanup
-./scripts/cleanup_reports.sh
+./scripts/security_scan.sh audit   # Dependency vulnerabilities
+./scripts/security_scan.sh bandit  # Code security
+./scripts/security_scan.sh sbom    # Generate SBOM
 ```
 
-All security and SBOM reports are automatically cleaned before generating new ones. See [docs/developer-guide/security.md](docs/developer-guide/security.md) for detailed security guidelines.
+## Architecture Overview
 
-See [docs/migration.md](docs/migration.md) for upgrade notes and [docs/getting-started/troubleshooting.md](docs/getting-started/troubleshooting.md) for common issues.
+```
+┌─────────────┐     ┌──────────────┐     ┌──────────────┐
+│  Documents  │ ──▶ │   Ingestor   │ ──▶ │  Chunking    │
+└─────────────┘     └──────────────┘     └──────────────┘
+                                                   │
+                                                   ▼
+┌─────────────┐     ┌──────────────┐     ┌──────────────┐
+│   Search    │ ◀── │   MongoDB    │ ◀── │  Embeddings  │
+└─────────────┘     └──────────────┘     └──────────────┘
+```
+
+Key components:
+- **CLI Layer**: Click-based command interface
+- **Document Ingestor**: Multi-format parsing with Docling
+- **Embedding Engine**: sentence-transformers for vector generation
+- **Storage Layer**: MongoDB with vector search
+- **Resilience**: Circuit breaker and rate limiting
+
+See [Architecture Documentation](docs/architecture/index.md) for details.
+
+## Examples
+
+Practical examples in [docs/examples/](docs/examples/README.md):
+
+- **Basic Usage**: Simple CLI-style examples
+- **Advanced**: Custom chunking, batch processing, async workflows
+- **Integrations**: Flask and FastAPI REST APIs
+- **Scripts**: Utility scripts for bulk operations
+
+## Contributing
+
+Contributions are welcome! See [Contributing Guide](docs/developer-guide/contributing.md) for details.
+
+### Quick Contribution Ideas
+- Fix bugs or typos
+- Improve documentation
+- Add tests for edge cases
+- Suggest new features via issues
 
 ## License
 
-This project is licensed under the MIT License. See [LICENSE](docs/LICENSE.md) for details.
+MIT License - See [LICENSE](docs/LICENSE.md) for details.
 
-## Shell Completion
+## Support
 
-SecondBrain supports shell completion for bash, zsh, and fish shells. Click provides this functionality automatically.
-
-To enable completion, add the following to your shell configuration file (`~/.bashrc`, `~/.zshrc`, `~/.bash_profile`):
-
-### Bash
-```bash
-eval "$(_SECONDBRAIN_COMPLETE=bash_source secondbrain)"
-```
-
-### Zsh
-```bash
-eval "$(_SECONDBRAIN_COMPLETE=zsh_source secondbrain)"
-```
-
-### Fish
-```fish
-_secondbrain_complete=fish_source secondbrain | source
-```
-
-After adding the configuration, restart your shell or run `source ~/.your_shellrc` to apply the changes.
-
+- **Documentation**: [docs/index.md](docs/index.md)
+- **Troubleshooting**: [Troubleshooting Guide](docs/getting-started/troubleshooting.md)
+- **Bug Reports**: [GitHub Issues](https://github.com/your-username/secondbrain/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/your-username/secondbrain/discussions)
