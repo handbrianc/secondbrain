@@ -125,7 +125,8 @@ class TestRaceConditionDetection:
         index_created = []
         lock = threading.Lock()
 
-        async def create_index(collection_name, index_spec):
+        async def create_index(collection_name, _index_spec):
+            del _index_spec  # Unused but part of interface
             await asyncio.sleep(0.01)
             with lock:
                 if collection_name not in index_created:
@@ -152,7 +153,8 @@ class TestThreadSafety:
         call_count = 0
         lock = threading.Lock()
 
-        def insert_many_times(thread_id):
+        def insert_many_times(_thread_id):
+            del _thread_id  # Unused but part of interface
             nonlocal call_count
             for _i in range(20):
                 with lock:
@@ -171,7 +173,8 @@ class TestThreadSafety:
         call_count = 0
         lock = asyncio.Lock()
 
-        async def insert_many_async(thread_id):
+        async def insert_many_async(_thread_id):
+            del _thread_id  # Unused but part of interface
             nonlocal call_count
             for _i in range(20):
                 async with lock:

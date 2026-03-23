@@ -36,11 +36,13 @@ logger = logging.getLogger(__name__)
 # Check if OpenTelemetry is available
 try:
     from opentelemetry import trace as otel_trace
-    from opentelemetry.sdk.resources import Resource as OTelResource
-    from opentelemetry.sdk.trace import TracerProvider as OTelTracerProvider
+    from opentelemetry.sdk.resources import Resource as OTelResource  # noqa: F401
+    from opentelemetry.sdk.trace import (
+        TracerProvider as OTelTracerProvider,  # noqa: F401
+    )
     from opentelemetry.sdk.trace.export import (
-        BatchSpanProcessor,
-        ConsoleSpanExporter,
+        BatchSpanProcessor,  # noqa: F401
+        ConsoleSpanExporter,  # noqa: F401
     )
 
     OTTEL_AVAILABLE = True
@@ -99,6 +101,13 @@ def setup_tracing(
 
     try:
         # Create resource with service metadata
+        from opentelemetry.sdk.resources import Resource as OTelResource
+        from opentelemetry.sdk.trace import TracerProvider as OTelTracerProvider
+        from opentelemetry.sdk.trace.export import (
+            BatchSpanProcessor,
+            ConsoleSpanExporter,
+        )
+
         resource = OTelResource.create(
             {
                 "service.name": service_name,
@@ -114,10 +123,11 @@ def setup_tracing(
         tracer_provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))
 
         # Set as global tracer provider
-        otel_trace.set_tracer_provider(tracer_provider)
+        if otel_trace is not None:
+            otel_trace.set_tracer_provider(tracer_provider)
 
-        # Get tracer
-        _tracer = otel_trace.get_tracer(service_name, service_version)
+            # Get tracer
+            _tracer = otel_trace.get_tracer(service_name, service_version)
 
         logger.info(
             "OpenTelemetry tracing enabled for %s v%s", service_name, service_version
@@ -238,6 +248,8 @@ def shutdown_tracing() -> None:
         return
 
     if _tracer is not None:
+        if otel_trace is None:
+            return
         try:
             # Shutdown the tracer provider to flush all spans
             from opentelemetry.sdk.trace import TracerProvider

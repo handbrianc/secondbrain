@@ -1,0 +1,229 @@
+"""Pytest fixtures for integration tests with real services."""
+
+from __future__ import annotations
+
+import asyncio
+import os
+import time
+from collections.abc import AsyncGenerator, Generator
+from typing import TYPE_CHECKING, Any
+
+import httpx
+import pytest
+from pymongo import MongoClient
+from pymongo.errors import ConnectionFailure
+
+from secondbrain.config import get_config
+from secondbrain.embedding import LocalEmbeddingGenerator
+from secondbrain.storage import VectorStorage
+
+if TYPE_CHECKING:
+    pass
+
+# Test service URLs (different from dev ports)
+TEST_MONGO_URI = "mongodb://testuser:testpass@localhost:27018/secondbrain_test"
+TEST_EMBEDDING_URL = "http://localhost:11435"
+
+# Test database/collection names
+TEST_DB_NAME = "secondbrain_test"
+TEST_COLLECTION_NAME = "test_embeddings"
+
+# Health check timeout
+SERVICE_HEALTH_TIMEOUT = 60  # seconds
+
+
+def _check_mongodb_healthy() -> bool:
+    """Check if MongoDB test service is healthy."""
+    try:
+        client = MongoClient(TEST_MONGO_URI, serverSelectionTimeoutMS=5000)
+        client.admin.command("ping")
+        client.close()
+        return True
+    except Exception:
+        return False
+
+
+def _check_embedding_service_healthy() -> bool:
+    """Check if sentence-transformers service is healthy."""
+    try:
+        response = httpx.get(f"{TEST_EMBEDDING_URL}/health", timeout=5.0)
+        return response.status_code == 200
+    except Exception:
+        return False
+
+
+@pytest.fixture(scope="session")
+def mongo_test_uri() -> str:
+    """MongoDB test URI fixture.
+
+    Returns the test MongoDB URI configured for docker-compose test services.
+    """
+    return TEST_MONGO_URI
+
+
+@pytest.fixture(scope="session")
+def embedding_service_url() -> str:
+    """Sentence-transformers service URL fixture.
+
+    Returns the test embedding service URL configured for docker-compose.
+    """
+    return TEST_EMBEDDING_URL
+
+
+@pytest.fixture(scope="session")
+def wait_for_services() -> Generator[None, None, None]:
+    """Wait for test services to be healthy before running tests.
+
+    This session-scoped fixture ensures both MongoDB and sentence-transformers
+    services are healthy before tests run. It waits up to SERVICE_HEALTH_TIMEOUT
+    seconds for services to become available.
+
+    Raises:
+        RuntimeError: If services don't become healthy within timeout.
+    """
+    print("\nWaiting for test services to be healthy...")
+
+    # Wait for MongoDB
+    start_time = time.time()
+    while time.time() - start_time < SERVICE_HEALTH_TIMEOUT:
+        if _check_mongodb_healthy():
+            print("MongoDB is healthy")
+            break
+        print(".", end="", flush=True)
+        time.sleep(2)
+    else:
+        raise RuntimeError(
+            f"MongoDB did not become healthy within {SERVICE_HEALTH_TIMEOUT}s"
+        )
+
+    # Wait for sentence-transformers
+    start_time = time.time()
+    while time.time() - start_time < SERVICE_HEALTH_TIMEOUT:
+        if _check_embedding_service_healthy():
+            print("Sentence-transformers is healthy")
+            break
+        print(".", end="", flush=True)
+        time.sleep(2)
+    else:
+        raise RuntimeError(
+            f"Sentence-transformers did not become healthy within {SERVICE_HEALTH_TIMEOUT}s"
+        )
+
+    print("All services are healthy\n")
+    yield
+
+
+@pytest.fixture(scope="session")
+def real_storage(wait_for_services: None) -> Generator[VectorStorage, None, None]:
+    """VectorStorage with real MongoDB connection.
+
+    Creates a VectorStorage instance connected to the test MongoDB database.
+    Ensures the vector search index is created and waits for it to be ready.
+
+    Yields:
+        VectorStorage: Connected storage instance.
+    """
+    storage = VectorStorage(
+        mongo_uri=TEST_MONGO_URI,
+        db_name=TEST_DB_NAME,
+        collection_name=TEST_COLLECTION_NAME,
+    )
+
+    try:
+        # Ensure index exists
+        storage.ensure_index()
+        storage._wait_for_index_ready()
+        print(f"VectorStorage initialized: {TEST_DB_NAME}/{TEST_COLLECTION_NAME}")
+        yield storage
+    finally:
+        # Cleanup: delete all test data
+        try:
+            storage.delete_all()
+            print("Cleaned up test data")
+        except Exception as e:
+            print(f"Warning: Failed to cleanup test data: {e}")
+        storage.close()
+
+
+@pytest.fixture(scope="session")
+def real_embedding_generator(
+    wait_for_services: None,
+) -> Generator[LocalEmbeddingGenerator, None, None]:
+    """Real embedding generator using sentence-transformers service.
+
+    Creates a LocalEmbeddingGenerator instance connected to the test
+    sentence-transformers service.
+
+    Yields:
+        LocalEmbeddingGenerator: Connected embedding generator.
+    """
+    generator = LocalEmbeddingGenerator(model_name="all-MiniLM-L6-v2")
+
+    try:
+        # Validate connection
+        if not generator.validate_connection(force=True):
+            raise RuntimeError("Failed to validate embedding generator connection")
+
+        print("EmbeddingGenerator initialized")
+        yield generator
+    finally:
+        generator.close()
+
+
+@pytest.fixture
+async def clean_test_database(
+    real_storage: VectorStorage,
+) -> AsyncGenerator[None, None]:
+    """Clean test database before and after each test.
+
+    Ensures a clean slate for each test by deleting all documents
+    before the test runs and after the test completes.
+
+    Yields:
+        None: Control point for test execution.
+    """
+    # Cleanup before test
+    try:
+        real_storage.delete_all()
+    except Exception:
+        pass
+
+    yield
+
+    # Cleanup after test
+    try:
+        real_storage.delete_all()
+    except Exception as e:
+        print(f"Warning: Failed to cleanup after test: {e}")
+
+
+@pytest.fixture
+def sample_test_document() -> dict[str, Any]:
+    """Sample document for testing ingestion and search.
+
+    Returns:
+        dict: Sample document with text and metadata.
+    """
+    return {
+        "chunk_id": "test-chunk-001",
+        "source_file": "test_document.pdf",
+        "page_number": 1,
+        "chunk_text": "This is a sample document chunk for integration testing.",
+        "metadata": {
+            "file_type": "pdf",
+            "test": True,
+        },
+    }
+
+
+@pytest.fixture
+def health_check_utils() -> dict[str, Any]:
+    """Utility functions for health checking services.
+
+    Returns:
+        dict: Dictionary with health check functions.
+    """
+    return {
+        "mongodb_healthy": _check_mongodb_healthy,
+        "embedding_healthy": _check_embedding_service_healthy,
+    }

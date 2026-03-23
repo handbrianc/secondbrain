@@ -21,7 +21,7 @@ T = TypeVar("T")
 
 # Function-scoped fixture to clear config cache before each test
 @pytest.fixture(autouse=True, scope="function")
-def _clear_config_cache_per_test():
+def _clear_config_cache_per_test() -> Generator[None, None, None]:
     """Clear config cache before each test to prevent test pollution.
 
     The get_config() function uses @lru_cache which persists across tests.
@@ -176,15 +176,15 @@ def cleanup_resources(request: Any) -> Generator[None, None, None]:
 
     def track_storage_init(self: Any, *args: Any, **kwargs: Any) -> None:
         clients_to_cleanup.append(("storage", self))
-        original_init.get("storage", lambda *a, **k: None)(self, *args, **kwargs)
+        original_init.get("storage", lambda *_: None)(self)
 
     def track_generator_init(self: Any, *args: Any, **kwargs: Any) -> None:
         clients_to_cleanup.append(("generator", self))
-        original_init.get("generator", lambda *a, **k: None)(self, *args, **kwargs)
+        original_init.get("generator", lambda *_: None)(self)
 
     def track_searcher_init(self: Any, *args: Any, **kwargs: Any) -> None:
         clients_to_cleanup.append(("searcher", self))
-        original_init.get("searcher", lambda *a, **k: None)(self, *args, **kwargs)
+        original_init.get("searcher", lambda *_: None)(self)
 
     from secondbrain.embedding import LocalEmbeddingGenerator
     from secondbrain.search import Searcher
@@ -387,9 +387,9 @@ def sample_pdf_path(tmp_path_factory: pytest.TempPathFactory) -> Path:
     the document ingestion pipeline.
     Cached at session scope to avoid repeated PDF generation.
     """
-    from reportlab.lib.pagesizes import A4  # type: ignore[import-untyped]
-    from reportlab.lib.units import mm  # type: ignore[import-untyped]
-    from reportlab.pdfgen import canvas  # type: ignore[import-untyped]
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import mm
+    from reportlab.pdfgen import canvas
 
     tmp_path = tmp_path_factory.mktemp("data")
     pdf_path = tmp_path / "test_document.pdf"
@@ -555,6 +555,7 @@ def _cleanup_mongodb() -> None:
 
 def pytest_sessionfinish(session: Any, exitstatus: int) -> None:
     """Cleanup after test session finishes."""
+    del session, exitstatus  # Unused but required for interface
     _cleanup_mongodb()
     _cleanup_storage()
     _cleanup_embedding()
@@ -565,7 +566,7 @@ def pytest_terminal_summary(
     terminalreporter: Any, exitstatus: int, config: Any
 ) -> None:
     """Provide terminal summary after test run."""
-    pass
+    del terminalreporter, exitstatus, config  # Unused but required for interface
 
 
 # Register cleanup handlers for atexit to catch any remaining resources

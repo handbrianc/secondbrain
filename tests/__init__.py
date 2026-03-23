@@ -21,8 +21,8 @@ def test_config_default_values() -> None:
         assert config.mongo_uri == "mongodb://localhost:27017"
         assert config.mongo_db == "secondbrain"
         assert config.mongo_collection == "embeddings"
-        assert config.model == "all-MiniLM-L6-v2"
-        assert config.chunk_size == 512
+        assert config.local_embedding_model == "all-MiniLM-L6-v2"
+        assert config.chunk_size == 4096
         assert config.chunk_overlap == 50
         assert config.default_top_k == 5
     finally:
@@ -44,7 +44,7 @@ def test_config_from_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     assert config.mongo_uri == "mongodb://custom:27017"
     assert config.mongo_db == "custom_db"
     assert config.mongo_collection == "custom_collection"
-    assert config.model == "custom-model:latest"
+    assert config.local_embedding_model == "custom-model:latest"
     assert config.chunk_size == 1024
     assert config.chunk_overlap == 100
     assert config.default_top_k == 10

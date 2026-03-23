@@ -50,6 +50,7 @@ class TestOfficeFormats:
         self, mock_docling_converter: MagicMock, tmp_path: Path
     ) -> None:
         """Test DOCX document ingestion."""
+        del mock_docling_converter  # Unused fixture - sets up mocks
         test_file = tmp_path / "test.docx"
         test_file.write_text("Mock DOCX content")
 
@@ -83,6 +84,7 @@ class TestOfficeFormats:
         self, mock_docling_converter: MagicMock, tmp_path: Path
     ) -> None:
         """Test PPTX document ingestion."""
+        del mock_docling_converter  # Unused fixture - sets up mocks
         test_file = tmp_path / "test.pptx"
         test_file.write_text("Mock PPTX content")
 
@@ -115,6 +117,7 @@ class TestOfficeFormats:
         self, mock_docling_converter: MagicMock, tmp_path: Path
     ) -> None:
         """Test XLSX document ingestion."""
+        del mock_docling_converter  # Unused fixture - sets up mocks
         test_file = tmp_path / "test.xlsx"
         test_file.write_text("Mock XLSX content")
 
