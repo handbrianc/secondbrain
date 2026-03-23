@@ -6,10 +6,12 @@ Technical architecture and system design for SecondBrain.
 
 This section provides deep technical documentation for developers and architects:
 
-- [Data Flow](DATA_FLOW.md) - System architecture and data pipelines
-- [Schema Reference](SCHEMA.md) - Database structure
-- [SBOM Analysis](SBOM_ANALYSIS.md) - Software Bill of Materials & dependency analysis
-- [License Risk Report](LICENSE-RISK-REPORT.md) - License compliance & risk assessment
+| Document | Description |
+|----------|-------------|
+| [Data Flow](DATA_FLOW.md) | System architecture and data pipelines |
+| [Schema Reference](SCHEMA.md) | Database structure and models |
+| [SBOM Analysis](SBOM_ANALYSIS.md) | Software Bill of Materials & dependency analysis |
+| [License Risk Report](LICENSE-RISK-REPORT.md) | License compliance & risk assessment |
 
 ## System Components
 

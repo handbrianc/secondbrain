@@ -278,7 +278,7 @@ If you can't find your issue here:
 1. **Check logs**: Enable verbose/debug logging
 2. **Verify setup**: Run `secondbrain health` to check services
 3. **Review documentation**: [Configuration Guide](configuration.md)
-4. **Search issues**: [GitHub Issues](https://github.com/your-repo/issues)
+4. **Search issues**: [GitHub Issues](https://github.com/your-username/secondbrain/issues)
 5. **Open an issue**: Include error message, logs, and reproduction steps
 
 ## Common Error Codes
