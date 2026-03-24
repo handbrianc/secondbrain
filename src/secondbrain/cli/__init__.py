@@ -24,7 +24,8 @@ def _ensure_mongodb(
     try:
         from secondbrain.utils.docker_manager import DockerManager
 
-        DockerManager().ensure_mongo_running(verbose=True)
+        verbose = ctx.obj.get("verbose", False)
+        DockerManager().ensure_mongo_running(verbose=verbose)
     except Exception as e:
         ctx.obj.setdefault("mongo_auto_start_failed", True)
         ctx.obj.setdefault("mongo_auto_start_error", str(e))

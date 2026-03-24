@@ -349,7 +349,7 @@ class DockerManager:
 
     def ensure_mongo_running(
         self,
-        verbose: bool = True,
+        verbose: bool = False,
     ) -> None:
         """Ensure MongoDB is running, start it if necessary.
 
