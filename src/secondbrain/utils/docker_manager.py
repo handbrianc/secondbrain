@@ -21,12 +21,15 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from rich.console import Console
+
 from secondbrain.config import get_config
 
 if TYPE_CHECKING:
     pass
 
 logger = logging.getLogger(__name__)
+console = Console()
 
 
 class DockerNotInstalledError(Exception):
@@ -378,7 +381,7 @@ class DockerManager:
         # Check if already running
         if self.check_mongo_running():
             if verbose:
-                print("[green]✓ MongoDB is already running[/green]")
+                console.print("[green]✓ MongoDB is already running[/green]")
             return
 
         # Docker not installed check
@@ -395,7 +398,7 @@ class DockerManager:
 
         # Try to start MongoDB
         if verbose:
-            print("[cyan]Starting MongoDB via Docker...[/cyan]")
+            console.print("[cyan]Starting MongoDB via Docker...[/cyan]")
 
         try:
             self.start_mongo()
