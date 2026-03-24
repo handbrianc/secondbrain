@@ -39,7 +39,7 @@ from .display import (
 )
 from .errors import handle_cli_errors
 
-console = Console()
+console = Console(markup=True)
 logger = logging.getLogger(__name__)
 
 MAX_LIST_LIMIT = 100000

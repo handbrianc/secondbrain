@@ -12,7 +12,7 @@ from rich.console import Console
 
 from secondbrain.logging import setup_logging
 
-console = Console()
+console = Console(markup=True)
 
 
 def _ensure_mongodb(

@@ -12,7 +12,7 @@ from typing_extensions import ParamSpec
 
 from secondbrain.exceptions import CLIValidationError
 
-console = Console()
+console = Console(markup=True)
 logger = logging.getLogger(__name__)
 
 P = ParamSpec("P")
