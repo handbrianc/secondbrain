@@ -67,10 +67,10 @@ def setup_logging(verbose: bool = False, json_format: bool = False) -> None:
     """Configure logging with the specified options.
 
     Args:
-        verbose: Enable DEBUG level if True, INFO otherwise.
+        verbose: Enable DEBUG level if True, WARNING (no logs) otherwise.
         json_format: Use JSON format if True, rich text otherwise.
     """
-    level = logging.DEBUG if verbose else logging.INFO
+    level = logging.DEBUG if verbose else logging.WARNING
 
     # If handlers are already configured, just update the level
     if logging.root.handlers:
