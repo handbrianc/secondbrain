@@ -207,13 +207,14 @@ def search(
     config = get_config()
     top_k = top_k or config.default_top_k
 
-    with Searcher(verbose=ctx.obj.get("verbose", False)) as searcher:
-        results: list[dict[str, Any]] = searcher.search(
-            query=query,
-            top_k=top_k,
-            source_filter=source,
-            file_type_filter=file_type,
-        )
+    with console.status("[cyan]Searching...", spinner="dots"):
+        with Searcher(verbose=ctx.obj.get("verbose", False)) as searcher:
+            results: list[dict[str, Any]] = searcher.search(
+                query=query,
+                top_k=top_k,
+                source_filter=source,
+                file_type_filter=file_type,
+            )
     display_search_results(results, format, min_score=min_score)
 
 
@@ -249,15 +250,16 @@ def list_cmd(
     if offset < 0:
         raise CLIValidationError("Offset must be non-negative")
 
-    with Lister(verbose=ctx.obj.get("verbose", False)) as lister:
-        if all:
-            limit = MAX_LIST_LIMIT
-        results: list[ChunkInfo] = lister.list_chunks(
-            source_filter=source,
-            chunk_id=chunk_id,
-            limit=limit,
-            offset=offset,
-        )
+    with console.status("[cyan]Loading...", spinner="dots"):
+        with Lister(verbose=ctx.obj.get("verbose", False)) as lister:
+            if all:
+                limit = MAX_LIST_LIMIT
+            results: list[ChunkInfo] = lister.list_chunks(
+                source_filter=source,
+                chunk_id=chunk_id,
+                limit=limit,
+                offset=offset,
+            )
     display_list_results(results)
 
 
@@ -300,17 +302,18 @@ def delete(
                 console.print("Cancelled.")
                 return
 
-    with Deleter(verbose=ctx.obj.get("verbose", False)) as deleter:
-        try:
-            count = deleter.delete(source=source, chunk_id=chunk_id, all=all)
-            console.print(f"[green]Deleted {count} document(s)[/green]")
-        except (
-            ServiceUnavailableError,
-            StorageConnectionError,
-            CLIValidationError,
-        ) as e:
-            console.print(f"[red]Error: {e}[/red]")
-            sys.exit(1)
+    with console.status("[cyan]Deleting...", spinner="dots"):
+        with Deleter(verbose=ctx.obj.get("verbose", False)) as deleter:
+            try:
+                count = deleter.delete(source=source, chunk_id=chunk_id, all=all)
+                console.print(f"[green]Deleted {count} document(s)[/green]")
+            except (
+                ServiceUnavailableError,
+                StorageConnectionError,
+                CLIValidationError,
+            ) as e:
+                console.print(f"[red]Error: {e}[/red]")
+                sys.exit(1)
 
 
 @handle_cli_errors
@@ -320,8 +323,9 @@ def status(ctx: click.Context) -> None:
     """Show statistics about the vector database."""
     from secondbrain.management import StatusChecker
 
-    with StatusChecker(verbose=ctx.obj.get("verbose", False)) as status_checker:
-        stats = status_checker.get_status()
+    with console.status("[cyan]Loading status...", spinner="dots"):
+        with StatusChecker(verbose=ctx.obj.get("verbose", False)) as status_checker:
+            stats = status_checker.get_status()
     display_status(stats)
 
 
@@ -336,7 +340,8 @@ def status(ctx: click.Context) -> None:
 @click.pass_context
 def health(ctx: click.Context, output: str) -> None:
     """Check health status of all services."""
-    health_status = get_health_status()
+    with console.status("[cyan]Checking health...", spinner="dots"):
+        health_status = get_health_status()
     if output == "json":
         console.print(json.dumps(health_status, indent=2))
     else:
@@ -356,38 +361,39 @@ def metrics(ctx: click.Context, reset: bool) -> None:
         console.print("[green]All metrics reset[/green]")
         return
 
-    all_metrics = [
-        "embedding_generate",
-        "embedding_generate_async",
-        "embedding_generate_batch",
-        "embedding_generate_batch_async",
-        "storage_store",
-        "storage_store_batch",
-        "storage_search",
-        "storage_store_async",
-        "storage_store_batch_async",
-        "storage_search_async",
-    ]
+    with console.status("[cyan]Loading metrics...", spinner="dots"):
+        all_metrics = [
+            "embedding_generate",
+            "embedding_generate_async",
+            "embedding_generate_batch",
+            "embedding_generate_batch_async",
+            "storage_store",
+            "storage_store_batch",
+            "storage_search",
+            "storage_store_async",
+            "storage_store_batch_async",
+            "storage_search_async",
+        ]
 
-    console.print("[bold]Performance Metrics[/bold]")
-    console.print("=" * 60)
+        console.print("[bold]Performance Metrics[/bold]")
+        console.print("=" * 60)
 
-    has_data = False
-    for metric_name in all_metrics:
-        stats = perf_metrics.get_stats(metric_name)
-        if stats and stats["count"] > 0:
-            has_data = True
-            console.print(f"\n[bold]{metric_name}[/bold]")
-            console.print(f"  Count: {stats['count']}")
-            console.print(f"  Total: {stats['total_seconds']:.3f}s")
-            console.print(f"  Avg: {stats['avg_seconds']:.3f}s")
-            console.print(f"  Min: {stats['min_seconds']:.3f}s")
-            console.print(f"  Max: {stats['max_seconds']:.3f}s")
+        has_data = False
+        for metric_name in all_metrics:
+            stats = perf_metrics.get_stats(metric_name)
+            if stats and stats["count"] > 0:
+                has_data = True
+                console.print(f"\n[bold]{metric_name}[/bold]")
+                console.print(f"  Count: {stats['count']}")
+                console.print(f"  Total: {stats['total_seconds']:.3f}s")
+                console.print(f"  Avg: {stats['avg_seconds']:.3f}s")
+                console.print(f"  Min: {stats['min_seconds']:.3f}s")
+                console.print(f"  Max: {stats['max_seconds']:.3f}s")
 
-    if not has_data:
-        console.print(
-            "[yellow]No metrics collected yet. Run some operations first.[/yellow]"
-        )
+        if not has_data:
+            console.print(
+                "[yellow]No metrics collected yet. Run some operations first.[/yellow]"
+            )
 
 
 @handle_cli_errors
@@ -558,10 +564,11 @@ def _single_turn_chat(
         context_window=config.rag_context_window,
     )
 
-    # Perform chat
-    result = pipeline.chat(query, session_obj, top_k=top_k, show_sources=show_sources)
+    with console.status("[cyan]Thinking...", spinner="dots"):
+        result = pipeline.chat(
+            query, session_obj, top_k=top_k, show_sources=show_sources
+        )
 
-    # Display answer
     console.print("\n[bold green]Answer:[/bold green]")
     console.print(result["answer"])
 
@@ -651,12 +658,11 @@ def _interactive_chat(
                     console.print(f"[yellow]Unknown command: {user_input}[/yellow]")
                     continue
 
-            # Perform chat
-            result = pipeline.chat(
-                user_input, session_obj, top_k=top_k, show_sources=show_sources
-            )
+            with console.status("[cyan]Thinking...", spinner="dots"):
+                result = pipeline.chat(
+                    user_input, session_obj, top_k=top_k, show_sources=show_sources
+                )
 
-            # Display answer
             console.print("\n[bold green]Assistant:[/bold green]")
             console.print(result["answer"])
 
