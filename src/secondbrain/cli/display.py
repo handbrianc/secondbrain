@@ -10,7 +10,7 @@ from rich.table import Table
 from secondbrain.logging import HealthStatus
 from secondbrain.storage import ChunkInfo, DatabaseStats
 
-console = Console()
+console = Console(markup=True)
 
 # Minimum similarity threshold for displaying search results
 # Results below this score are considered irrelevant
