@@ -51,7 +51,7 @@ class Config(BaseSettings):
 
     # MongoDB settings
     mongo_uri: str = Field(
-        default="mongodb://localhost:27017",
+        default="mongodb://admin:admin123@localhost:27017",
         description="MongoDB connection URI",
     )
 
