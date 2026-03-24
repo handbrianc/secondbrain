@@ -35,7 +35,7 @@ def _ensure_mongodb(
 @click.option(
     "--verbose", "-v", is_flag=True, help="Enable verbose output", is_eager=True
 )
-@click.version_option(version="0.1.0", prog_name="secondbrain")
+@click.version_option(version="0.4.0", prog_name="secondbrain")
 @click.pass_context
 def cli(ctx: click.Context, verbose: bool) -> None:
     """SecondBrain - A local document intelligence CLI tool.
