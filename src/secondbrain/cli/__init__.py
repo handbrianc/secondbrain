@@ -8,12 +8,32 @@ Commands are now organized in separate modules:
 """
 
 import click
+from rich.console import Console
 
 from secondbrain.logging import setup_logging
 
+console = Console()
+
+
+def _ensure_mongodb(
+    ctx: click.Context, param: click.Parameter | None, value: bool
+) -> None:
+    if ctx.invoked_subcommand is None or ctx.invoked_subcommand == "help":
+        return
+
+    try:
+        from secondbrain.utils.docker_manager import DockerManager
+
+        DockerManager().ensure_mongo_running(verbose=True)
+    except Exception as e:
+        ctx.obj.setdefault("mongo_auto_start_failed", True)
+        ctx.obj.setdefault("mongo_auto_start_error", str(e))
+
 
 @click.group()
-@click.option("--verbose", "-v", is_flag=True, help="Enable verbose output")
+@click.option(
+    "--verbose", "-v", is_flag=True, help="Enable verbose output", is_eager=True
+)
 @click.version_option(version="0.1.0", prog_name="secondbrain")
 @click.pass_context
 def cli(ctx: click.Context, verbose: bool) -> None:
@@ -25,6 +45,8 @@ def cli(ctx: click.Context, verbose: bool) -> None:
     ctx.ensure_object(dict)
     ctx.obj["verbose"] = verbose
     setup_logging(verbose=verbose)
+
+    _ensure_mongodb(ctx, None, False)
 
 
 # Import and register commands after cli group is defined
