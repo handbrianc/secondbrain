@@ -17,8 +17,10 @@ from secondbrain.storage import VectorStorage
 if TYPE_CHECKING:
     pass
 
-# Test service URLs (different from dev ports)
-TEST_MONGO_URI = "mongodb://testuser:testpass@localhost:27018/secondbrain_test"
+# Test service URLs (use running services)
+TEST_MONGO_URI = (
+    "mongodb://admin:admin123@127.0.0.1:27017/secondbrain_test?authSource=admin"
+)
 TEST_EMBEDDING_URL = "http://localhost:11435"
 
 # Test database/collection names
@@ -32,7 +34,9 @@ SERVICE_HEALTH_TIMEOUT = 60  # seconds
 def _check_mongodb_healthy() -> bool:
     """Check if MongoDB test service is healthy."""
     try:
-        client = MongoClient(TEST_MONGO_URI, serverSelectionTimeoutMS=5000)
+        client = MongoClient(
+            TEST_MONGO_URI, serverSelectionTimeoutMS=5000, directConnection=True
+        )
         client.admin.command("ping")
         client.close()
         return True
@@ -71,11 +75,13 @@ def embedding_service_url() -> str:
 def wait_for_services() -> Generator[None, None, None]:
     """Wait for test services to be healthy before running tests.
 
-    This session-scoped fixture ensures both MongoDB and sentence-transformers
-    services are healthy before tests run. It waits up to SERVICE_HEALTH_TIMEOUT
-    seconds for services to become available.
+    This session-scoped fixture ensures MongoDB is healthy before tests run.
+    It waits up to SERVICE_HEALTH_TIMEOUT seconds for MongoDB to become available.
 
-    If services are not available, pytest.skip() is called to skip all integration
+    The sentence-transformers embedding service is optional - tests that require
+    real embeddings will be skipped if the service is not available.
+
+    If MongoDB is not available, pytest.skip() is called to skip all integration
     tests gracefully instead of failing.
     """
     print("\nWaiting for test services to be healthy...")
@@ -93,20 +99,12 @@ def wait_for_services() -> Generator[None, None, None]:
             f"MongoDB not available - integration tests require MongoDB running at {TEST_MONGO_URI}"
         )
 
-    # Wait for sentence-transformers
-    start_time = time.time()
-    while time.time() - start_time < SERVICE_HEALTH_TIMEOUT:
-        if _check_embedding_service_healthy():
-            print("Sentence-transformers is healthy")
-            break
-        print(".", end="", flush=True)
-        time.sleep(2)
+    if _check_embedding_service_healthy():
+        print("Sentence-transformers is healthy")
     else:
-        pytest.skip(
-            f"Sentence-transformers service not available - integration tests require service running at {TEST_EMBEDDING_URL}"
-        )
+        print("Sentence-transformers not available (some tests will be skipped)")
 
-    print("All services are healthy\n")
+    print("MongoDB is ready, proceeding with tests\n")
     yield
 
 

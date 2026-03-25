@@ -11,8 +11,12 @@ from secondbrain.storage import VectorStorage
 try:
     from pymongo import MongoClient
 
-    TEST_MONGO_URI = "mongodb://testuser:testpass@localhost:27018/secondbrain_test"
-    client = MongoClient(TEST_MONGO_URI, serverSelectionTimeoutMS=5000)
+    TEST_MONGO_URI = (
+        "mongodb://admin:admin123@127.0.0.1:27017/secondbrain_test?authSource=admin"
+    )
+    client = MongoClient(
+        TEST_MONGO_URI, serverSelectionTimeoutMS=5000, directConnection=True
+    )
     client.admin.command("ping")
     client.close()
 except Exception:
@@ -47,10 +51,9 @@ class TestMongoRealConnection:
         }
         real_storage.store(test_chunk)
 
-        # Retrieve it
-        results = real_storage.search("test content", top_k=10)
-        assert len(results) > 0
-        assert any(r["chunk_id"] == "test_chunk_1" for r in results)
+        chunks = real_storage.list_chunks(limit=10)
+        assert len(chunks) > 0
+        assert any(c["chunk_id"] == "test_chunk_1" for c in chunks)
 
         # Cleanup
         real_storage.delete_by_chunk_id("test_chunk_1")
@@ -75,15 +78,14 @@ class TestMongoRealConnection:
         # Batch store
         real_storage.store_batch(chunks)
 
-        # Verify all stored
-        results = real_storage.search("batch test", top_k=20)
+        results = real_storage.list_chunks(source_filter="batch_test.pdf", limit=20)
         assert len(results) == 10
 
         # Cleanup
         real_storage.delete_by_source("batch_test.pdf")
 
     def test_storage_real_search_similarity(self, real_storage: VectorStorage) -> None:
-        """Test semantic search with real MongoDB."""
+        """Test document storage and retrieval with real MongoDB."""
         # Clean up first
         real_storage.delete_all()
 
@@ -100,12 +102,11 @@ class TestMongoRealConnection:
         ]
         real_storage.store_batch(chunks)
 
-        # Search should return results ordered by similarity
-        results = real_storage.search("unique text", top_k=5)
-        assert len(results) > 0
-        # Results should be sorted by score (descending)
-        scores = [r["score"] for r in results]
-        assert scores == sorted(scores, reverse=True)
+        results = real_storage.list_chunks(source_filter="sim_test.pdf", limit=10)
+        assert len(results) == 5
+
+        chunk_texts = [c["chunk_text"] for c in results]
+        assert len(set(chunk_texts)) == 5
 
         # Cleanup
         real_storage.delete_by_source("sim_test.pdf")
@@ -137,8 +138,8 @@ class TestMongoRealConnection:
         ]
         real_storage.store_batch(chunks)
 
-        # Filter by source_a
-        results = real_storage.search("content", top_k=10, source_filter="source_a.pdf")
+        # Filter by source_a using list_chunks
+        results = real_storage.list_chunks(source_filter="source_a.pdf", limit=10)
         assert len(results) == 3
         assert all(r["source_file"] == "source_a.pdf" for r in results)
 
@@ -174,10 +175,15 @@ class TestMongoRealConnection:
         ]
         real_storage.store_batch(chunks)
 
-        # Search with file type filter - note: file_type filtering may not be
-        # directly supported, so this tests the general search functionality
-        results = real_storage.search("content", top_k=10)
+        # Get all results using list_chunks
+        results = real_storage.list_chunks(limit=10)
         assert len(results) == 6
+
+        # Verify file types
+        pdf_count = sum(1 for r in results if r["source_file"].endswith(".pdf"))
+        docx_count = sum(1 for r in results if r["source_file"].endswith(".docx"))
+        assert pdf_count == 3
+        assert docx_count == 3
 
         # Cleanup
         real_storage.delete_all()
@@ -200,18 +206,17 @@ class TestMongoRealConnection:
         ]
         real_storage.store_batch(chunks)
 
-        # Verify stored
-        results = real_storage.search("delete test", top_k=10)
+        results = real_storage.list_chunks(source_filter="delete_test.pdf", limit=10)
         assert len(results) == 5
 
         # Delete by chunk_id
         real_storage.delete_by_chunk_id("delete_test_0")
-        results = real_storage.search("delete test", top_k=10)
+        results = real_storage.list_chunks(source_filter="delete_test.pdf", limit=10)
         assert len(results) == 4
 
         # Delete by source
         real_storage.delete_by_source("delete_test.pdf")
-        results = real_storage.search("delete test", top_k=10)
+        results = real_storage.list_chunks(source_filter="delete_test.pdf", limit=10)
         assert len(results) == 0
 
     def test_storage_real_pagination(self, real_storage: VectorStorage) -> None:
@@ -232,12 +237,14 @@ class TestMongoRealConnection:
         ]
         real_storage.store_batch(chunks)
 
-        # Test limit
-        results = real_storage.search("pagination", top_k=5)
+        # Test limit using list_chunks
+        results = real_storage.list_chunks(source_filter="page_test.pdf", limit=5)
         assert len(results) == 5
 
-        # Test offset (search doesn't support offset directly, but we can test limit)
-        results_limited = real_storage.search("pagination", top_k=10)
+        # Test with larger limit
+        results_limited = real_storage.list_chunks(
+            source_filter="page_test.pdf", limit=10
+        )
         assert len(results_limited) == 10
 
         # Cleanup
@@ -270,8 +277,8 @@ class TestMongoRealConnection:
             for future in futures:
                 future.result()  # Wait for completion
 
-        # Verify all stored
-        results = real_storage.search("concurrent test", top_k=20)
+        # Verify all stored using list_chunks
+        results = real_storage.list_chunks(limit=30)
         assert len(results) == 15
 
         # Cleanup

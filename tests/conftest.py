@@ -569,6 +569,35 @@ def pytest_terminal_summary(
     del terminalreporter, exitstatus, config  # Unused but required for interface
 
 
+@pytest.fixture
+def mock_ollama_provider() -> MagicMock:
+    mock = MagicMock()
+    mock.health_check.return_value = True
+    mock.generate.return_value = "Mock response for testing"
+    mock.generate_stream.return_value = iter(["mock ", "response"])
+    return mock
+
+
+@pytest.fixture
+def mongomock_client() -> Any:
+    import mongomock
+
+    return mongomock.MongoClient()
+
+
+@pytest.fixture
+def auto_mongomock(monkeypatch: pytest.MonkeyPatch) -> Any:
+    import mongomock
+
+    mock_client = mongomock.MongoClient()
+    monkeypatch.setattr("pymongo.MongoClient", lambda *args, **kwargs: mock_client)
+    monkeypatch.setattr(
+        "motor.motor_asyncio.AsyncIOMotorClient", lambda *args, **kwargs: mock_client
+    )
+
+    return mock_client
+
+
 # Register cleanup handlers for atexit to catch any remaining resources
 atexit.register(_cleanup_storage)
 atexit.register(_cleanup_embedding)

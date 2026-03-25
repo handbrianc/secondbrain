@@ -14,6 +14,7 @@ import pytest
 class TestBasicUsageExamples:
     """Tests for basic_usage example scripts."""
 
+    @pytest.mark.slow
     def test_example_basic_usage_ingest(
         self, example_runner: Any, create_test_pdf: Any, tmp_path: Path
     ) -> None:
@@ -38,6 +39,7 @@ class TestBasicUsageExamples:
         )
         assert "Ingested:" in result["stdout"] or "chunks" in result["stdout"].lower()
 
+    @pytest.mark.slow
     def test_example_basic_usage_search(
         self, example_runner: Any, fast_test_config: Any
     ) -> None:
@@ -62,6 +64,7 @@ class TestBasicUsageExamples:
             or "Error" in result["stderr"]
         )
 
+    @pytest.mark.slow
     def test_example_basic_usage_list(
         self, example_runner: Any, fast_test_config: Any
     ) -> None:
@@ -94,6 +97,7 @@ class TestBasicUsageExamples:
 class TestAdvancedExamples:
     """Tests for advanced example scripts."""
 
+    @pytest.mark.slow
     def test_example_circuit_breaker(self, example_runner: Any) -> None:
         """Test circuit breaker usage example.
 
@@ -112,6 +116,7 @@ class TestAdvancedExamples:
         assert "Circuit Breaker" in result["stdout"]
         assert "CLOSED" in result["stdout"] or "OPEN" in result["stdout"]
 
+    @pytest.mark.slow
     def test_example_tracing(self, example_runner: Any) -> None:
         """Test tracing example with OpenTelemetry.
 
@@ -129,6 +134,7 @@ class TestAdvancedExamples:
         assert result["success"], f"Tracing example failed: {result['stderr']}"
         assert "Tracing" in result["stdout"] or "span" in result["stdout"].lower()
 
+    @pytest.mark.slow
     def test_example_async_workflow(
         self, example_runner: Any, tmp_path: Path, fast_test_config: Any
     ) -> None:
@@ -165,6 +171,7 @@ class TestAdvancedExamples:
         )
         assert result["success"] or has_service_error
 
+    @pytest.mark.slow
     def test_example_batch_ingestion(
         self, example_runner: Any, tmp_path: Path, fast_test_config: Any
     ) -> None:
@@ -191,6 +198,7 @@ class TestAdvancedExamples:
         # Should process files or handle errors gracefully
         assert result["success"] or "No files found" in result["stdout"]
 
+    @pytest.mark.slow
     def test_example_custom_chunking(
         self, example_runner: Any, create_test_pdf: Any, tmp_path: Path
     ) -> None:
@@ -223,6 +231,7 @@ class TestAdvancedExamples:
 class TestIntegrationExamples:
     """Tests for integration example scripts."""
 
+    @pytest.mark.slow
     def test_example_flask_api(
         self, example_runner: Any, fast_test_config: Any
     ) -> None:
@@ -274,6 +283,7 @@ class TestIntegrationExamples:
             if server_process and server_process.get("command"):
                 pass
 
+    @pytest.mark.slow
     def test_example_fastapi_endpoint(
         self, example_runner: Any, fast_test_config: Any
     ) -> None:
