@@ -21,10 +21,7 @@ class TestIngestTool:
         """Test ingest with valid path."""
         with patch("secondbrain.document.DocumentIngestor") as mock_ingestor:
             mock_instance = MagicMock()
-            mock_instance.ingest.return_value = [
-                {"success": True, "file": "test.pdf"},
-                {"success": True, "file": "test2.pdf"},
-            ]
+            mock_instance.ingest.return_value = {"success": 2, "failed": 0}
             mock_ingestor.return_value = mock_instance
 
             result = await handle_ingest({"path": "/tmp/test.pdf"})
@@ -37,7 +34,7 @@ class TestIngestTool:
         """Test ingest with custom options."""
         with patch("secondbrain.document.DocumentIngestor") as mock_ingestor:
             mock_instance = MagicMock()
-            mock_instance.ingest.return_value = [{"success": True}]
+            mock_instance.ingest.return_value = {"success": 1, "failed": 0}
             mock_ingestor.return_value = mock_instance
 
             await handle_ingest(
@@ -57,10 +54,7 @@ class TestIngestTool:
         """Test ingest handles failures."""
         with patch("secondbrain.document.DocumentIngestor") as mock_ingestor:
             mock_instance = MagicMock()
-            mock_instance.ingest.return_value = [
-                {"success": True},
-                {"success": False},
-            ]
+            mock_instance.ingest.return_value = {"success": 1, "failed": 1}
             mock_ingestor.return_value = mock_instance
 
             result = await handle_ingest({"path": "/tmp/test.pdf"})

@@ -1,4 +1,5 @@
 """MCP chat tool implementation."""
+
 from typing import Any
 
 import logging
@@ -22,6 +23,9 @@ async def handle_chat(arguments: dict[str, Any]) -> str:
     from secondbrain.search import Searcher
 
     query = arguments.get("query")
+    if not query:
+        return "Error: query is required"
+
     session_id = arguments.get("session_id", "default")
     top_k = arguments.get("top_k", 5)
     temperature = arguments.get("temperature", 0.7)

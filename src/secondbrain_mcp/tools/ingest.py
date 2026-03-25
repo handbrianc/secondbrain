@@ -1,4 +1,5 @@
 """MCP ingest tool implementation."""
+
 from typing import Any
 
 import logging
@@ -43,10 +44,8 @@ async def handle_ingest(arguments: dict[str, Any]) -> str:
             cores=cores,
         )
 
-        success_count = sum(
-            1 for r in results if isinstance(r, dict) and r.get("success")
-        )
-        fail_count = len(results) - success_count
+        success_count = results.get("success", 0)
+        fail_count = results.get("failed", 0)
 
         return (
             f"Ingestion complete: {success_count} files succeeded, "

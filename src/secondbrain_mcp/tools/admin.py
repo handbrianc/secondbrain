@@ -1,4 +1,5 @@
 """MCP admin tools (ls, delete) implementation."""
+
 from typing import Any
 
 import logging
@@ -33,7 +34,9 @@ async def handle_ls(arguments: dict[str, Any]) -> str:
                             "filename": source,
                             "chunk_count": 0,
                         }
-                    documents[source]["chunk_count"] += 1
+                    documents[source]["chunk_count"] = (
+                        documents[source]["chunk_count"] + 1  # type: ignore[operator]
+                    )
 
                 output = f"Documents ({len(documents)} total):\n\n"
                 for doc in list(documents.values())[:limit]:

@@ -1,4 +1,5 @@
 """MCP health and status tools implementation."""
+
 from typing import Any
 
 import logging
@@ -50,7 +51,7 @@ async def handle_status(arguments: dict[str, Any]) -> str:
     try:
         with ConversationStorage() as storage:
             # Use VectorStorage instance to list chunks
-            vector_storage = VectorStorage(storage)
+            vector_storage = VectorStorage()
             chunks = vector_storage.list_chunks(limit=1000)
 
             total_chunks = len(chunks)
@@ -86,14 +87,12 @@ async def handle_metrics(arguments: dict[str, Any]) -> str:
 
         if metrics_type in ["ingestion", "all"]:
             output += "Ingestion Metrics:\n"
-            output += f"  Total documents processed: {perf_metrics.get('total_documents', 0)}\n"
-            output += f"  Total chunks created: {perf_metrics.get('total_chunks', 0)}\n"
+            output += "  (Metrics not yet implemented)\n"
             output += "\n"
 
         if metrics_type in ["search", "all"]:
             output += "Search Metrics:\n"
-            output += f"  Total searches: {perf_metrics.get('total_searches', 0)}\n"
-            output += f"  Average query time: {perf_metrics.get('avg_query_time_ms', 0):.2f}ms\n"
+            output += "  (Metrics not yet implemented)\n"
 
         return output
     except Exception as e:

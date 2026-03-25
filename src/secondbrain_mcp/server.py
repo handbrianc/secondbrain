@@ -45,7 +45,7 @@ TOOL_HANDLERS = {
 }
 
 
-@app.list_tools()  # type: ignore[misc]
+@app.list_tools()  # type: ignore[no-untyped-call,misc]
 async def list_tools() -> list[Tool]:
     """List all available MCP tools."""
     return [
