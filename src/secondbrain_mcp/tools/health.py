@@ -1,11 +1,12 @@
 """MCP health and status tools implementation."""
+from typing import Any
 
 import logging
 
 logger = logging.getLogger(__name__)
 
 
-async def handle_health(arguments: dict) -> str:
+async def handle_health(arguments: dict[str, Any]) -> str:
     """Handle health tool call.
 
     Args:
@@ -14,7 +15,7 @@ async def handle_health(arguments: dict) -> str:
     Returns:
         Health status of all services.
     """
-    from secondbrain_common.logging import get_health_status
+    from secondbrain.logging import get_health_status
 
     try:
         status = get_health_status()
@@ -34,7 +35,7 @@ async def handle_health(arguments: dict) -> str:
         return f"Error: {e!s}"
 
 
-async def handle_status(arguments: dict) -> str:
+async def handle_status(arguments: dict[str, Any]) -> str:
     """Handle status tool call.
 
     Args:
@@ -43,8 +44,8 @@ async def handle_status(arguments: dict) -> str:
     Returns:
         Database statistics.
     """
-    from secondbrain_common.conversation.storage import ConversationStorage
-    from secondbrain_common.storage.storage import VectorStorage
+    from secondbrain.conversation.storage import ConversationStorage
+    from secondbrain.storage.storage import VectorStorage
 
     try:
         with ConversationStorage() as storage:
@@ -66,7 +67,7 @@ async def handle_status(arguments: dict) -> str:
         return f"Error: {e!s}"
 
 
-async def handle_metrics(arguments: dict) -> str:
+async def handle_metrics(arguments: dict[str, Any]) -> str:
     """Handle metrics tool call.
 
     Args:
@@ -75,7 +76,7 @@ async def handle_metrics(arguments: dict) -> str:
     Returns:
         Performance metrics.
     """
-    from secondbrain_common.utils.perf_monitor import metrics as perf_metrics
+    from secondbrain.utils.perf_monitor import metrics as perf_metrics
 
     try:
         metrics_type = arguments.get("type", "all")

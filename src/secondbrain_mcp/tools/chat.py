@@ -1,11 +1,12 @@
 """MCP chat tool implementation."""
+from typing import Any
 
 import logging
 
 logger = logging.getLogger(__name__)
 
 
-async def handle_chat(arguments: dict) -> str:
+async def handle_chat(arguments: dict[str, Any]) -> str:
     """Handle chat tool call.
 
     Args:
@@ -14,11 +15,11 @@ async def handle_chat(arguments: dict) -> str:
     Returns:
         Chat response with optional sources.
     """
-    from secondbrain_common.config import get_config
-    from secondbrain_common.conversation import ConversationSession, ConversationStorage
-    from secondbrain_common.rag import RAGPipeline
-    from secondbrain_common.rag.providers import OllamaLLMProvider
-    from secondbrain_common.search import Searcher
+    from secondbrain.config import get_config
+    from secondbrain.conversation import ConversationSession, ConversationStorage
+    from secondbrain.rag import RAGPipeline
+    from secondbrain.rag.providers import OllamaLLMProvider
+    from secondbrain.search import Searcher
 
     query = arguments.get("query")
     session_id = arguments.get("session_id", "default")

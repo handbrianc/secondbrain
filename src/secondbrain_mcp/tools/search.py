@@ -1,11 +1,12 @@
 """MCP search tool implementation."""
+from typing import Any
 
 import logging
 
 logger = logging.getLogger(__name__)
 
 
-async def handle_search(arguments: dict) -> str:
+async def handle_search(arguments: dict[str, Any]) -> str:
     """Handle search tool call.
 
     Args:
@@ -14,7 +15,7 @@ async def handle_search(arguments: dict) -> str:
     Returns:
         Search results formatted as text.
     """
-    from secondbrain_common.search import Searcher
+    from secondbrain.search import Searcher
 
     query = arguments.get("query")
     if not query:

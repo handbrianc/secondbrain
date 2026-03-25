@@ -10,7 +10,7 @@ Commands are now organized in separate modules:
 import click
 from rich.console import Console
 
-from secondbrain_common.logging import setup_logging
+from secondbrain.logging import setup_logging
 
 console = Console(markup=True)
 
@@ -22,7 +22,7 @@ def _ensure_mongodb(
         return
 
     try:
-        from secondbrain_common.utils.docker_manager import DockerManager
+        from secondbrain.utils.docker_manager import DockerManager
 
         verbose = ctx.obj.get("verbose", False)
         DockerManager().ensure_mongo_running(verbose=verbose)

@@ -19,7 +19,7 @@ class TestIngestTool:
     @pytest.mark.asyncio
     async def test_ingest_with_valid_path(self):
         """Test ingest with valid path."""
-        with patch("secondbrain_common.document.DocumentIngestor") as mock_ingestor:
+        with patch("secondbrain.document.DocumentIngestor") as mock_ingestor:
             mock_instance = MagicMock()
             mock_instance.ingest.return_value = [
                 {"success": True, "file": "test.pdf"},
@@ -35,7 +35,7 @@ class TestIngestTool:
     @pytest.mark.asyncio
     async def test_ingest_with_options(self):
         """Test ingest with custom options."""
-        with patch("secondbrain_common.document.DocumentIngestor") as mock_ingestor:
+        with patch("secondbrain.document.DocumentIngestor") as mock_ingestor:
             mock_instance = MagicMock()
             mock_instance.ingest.return_value = [{"success": True}]
             mock_ingestor.return_value = mock_instance
@@ -55,7 +55,7 @@ class TestIngestTool:
     @pytest.mark.asyncio
     async def test_ingest_with_failures(self):
         """Test ingest handles failures."""
-        with patch("secondbrain_common.document.DocumentIngestor") as mock_ingestor:
+        with patch("secondbrain.document.DocumentIngestor") as mock_ingestor:
             mock_instance = MagicMock()
             mock_instance.ingest.return_value = [
                 {"success": True},
@@ -71,7 +71,7 @@ class TestIngestTool:
     @pytest.mark.asyncio
     async def test_ingest_handles_exceptions(self):
         """Test ingest handles exceptions gracefully."""
-        with patch("secondbrain_common.document.DocumentIngestor") as mock_ingestor:
+        with patch("secondbrain.document.DocumentIngestor") as mock_ingestor:
             mock_ingestor.side_effect = Exception("Test error")
 
             result = await handle_ingest({"path": "/tmp/test.pdf"})

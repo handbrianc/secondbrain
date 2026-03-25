@@ -10,7 +10,7 @@ import click
 from rich.console import Console
 from typing_extensions import ParamSpec
 
-from secondbrain_common.exceptions import CLIValidationError
+from secondbrain.exceptions import CLIValidationError
 
 console = Console(markup=True)
 logger = logging.getLogger(__name__)

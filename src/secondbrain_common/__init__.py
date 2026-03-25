@@ -1,1 +1,0 @@
-"""SecondBrain common utilities package."""

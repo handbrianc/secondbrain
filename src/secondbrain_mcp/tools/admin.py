@@ -1,11 +1,12 @@
 """MCP admin tools (ls, delete) implementation."""
+from typing import Any
 
 import logging
 
 logger = logging.getLogger(__name__)
 
 
-async def handle_ls(arguments: dict) -> str:
+async def handle_ls(arguments: dict[str, Any]) -> str:
     """Handle ls tool call.
 
     Args:
@@ -14,7 +15,7 @@ async def handle_ls(arguments: dict) -> str:
     Returns:
         List of documents or chunks.
     """
-    from secondbrain_common.management import Lister
+    from secondbrain.management import Lister
 
     doc_type = arguments.get("type", "document")
     limit = arguments.get("limit", 100)
@@ -53,7 +54,7 @@ async def handle_ls(arguments: dict) -> str:
         return f"Error: {e!s}"
 
 
-async def handle_delete(arguments: dict) -> str:
+async def handle_delete(arguments: dict[str, Any]) -> str:
     """Handle delete tool call.
 
     Args:
@@ -64,7 +65,7 @@ async def handle_delete(arguments: dict) -> str:
     """
     import re
 
-    from secondbrain_common.storage.storage import VectorStorage
+    from secondbrain.storage.storage import VectorStorage
 
     doc_type = arguments.get("type", "document")
     doc_id = arguments.get("id")

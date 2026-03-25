@@ -1,11 +1,12 @@
 """MCP ingest tool implementation."""
+from typing import Any
 
 import logging
 
 logger = logging.getLogger(__name__)
 
 
-async def handle_ingest(arguments: dict) -> str:
+async def handle_ingest(arguments: dict[str, Any]) -> str:
     """Handle ingest tool call.
 
     Args:
@@ -14,8 +15,8 @@ async def handle_ingest(arguments: dict) -> str:
     Returns:
         Result message with ingestion statistics.
     """
-    from secondbrain_common.config import get_config
-    from secondbrain_common.document import DocumentIngestor
+    from secondbrain.config import get_config
+    from secondbrain.document import DocumentIngestor
 
     path = arguments.get("path")
     if not path:

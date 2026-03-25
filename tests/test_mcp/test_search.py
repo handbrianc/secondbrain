@@ -19,7 +19,7 @@ class TestSearchTool:
     @pytest.mark.asyncio
     async def test_search_with_valid_query(self):
         """Test search with valid query."""
-        with patch("secondbrain_common.search.Searcher") as mock_searcher:
+        with patch("secondbrain.search.Searcher") as mock_searcher:
             mock_instance = MagicMock()
             mock_instance.search.return_value = [
                 {
@@ -39,7 +39,7 @@ class TestSearchTool:
     @pytest.mark.asyncio
     async def test_search_with_top_k(self):
         """Test search with custom top_k."""
-        with patch("secondbrain_common.search.Searcher") as mock_searcher:
+        with patch("secondbrain.search.Searcher") as mock_searcher:
             mock_instance = MagicMock()
             mock_instance.search.return_value = []
             mock_searcher.return_value = mock_instance
@@ -53,7 +53,7 @@ class TestSearchTool:
     @pytest.mark.asyncio
     async def test_search_with_min_score_filter(self):
         """Test search filters by min_score."""
-        with patch("secondbrain_common.search.Searcher") as mock_searcher:
+        with patch("secondbrain.search.Searcher") as mock_searcher:
             mock_instance = MagicMock()
             mock_instance.search.return_value = [
                 {"score": 0.9},
@@ -70,7 +70,7 @@ class TestSearchTool:
     @pytest.mark.asyncio
     async def test_search_no_results(self):
         """Test search with no results."""
-        with patch("secondbrain_common.search.Searcher") as mock_searcher:
+        with patch("secondbrain.search.Searcher") as mock_searcher:
             mock_instance = MagicMock()
             mock_instance.search.return_value = []
             mock_searcher.return_value = mock_instance
@@ -82,7 +82,7 @@ class TestSearchTool:
     @pytest.mark.asyncio
     async def test_search_handles_exceptions(self):
         """Test search handles exceptions gracefully."""
-        with patch("secondbrain_common.search.Searcher") as mock_searcher:
+        with patch("secondbrain.search.Searcher") as mock_searcher:
             mock_searcher.side_effect = Exception("Test error")
 
             result = await handle_search({"query": "test"})

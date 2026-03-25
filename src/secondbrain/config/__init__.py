@@ -51,8 +51,8 @@ class Config(BaseSettings):
 
     # MongoDB settings
     mongo_uri: str = Field(
-        default="mongodb://admin:password@localhost:27017",
-        description="MongoDB connection URI",
+        default=...,
+        description="MongoDB connection URI (required, set via SECONDBRAIN_MONGO_URI)",
     )
 
     @field_validator("mongo_uri")

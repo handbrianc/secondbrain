@@ -7,8 +7,8 @@ from typing import Any
 from rich.console import Console
 from rich.table import Table
 
-from secondbrain_common.logging import HealthStatus
-from secondbrain_common.storage import ChunkInfo, DatabaseStats
+from secondbrain.logging import HealthStatus
+from secondbrain.storage import ChunkInfo, DatabaseStats
 
 console = Console(markup=True)
 

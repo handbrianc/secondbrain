@@ -21,14 +21,14 @@ from typing import Any
 import click
 from rich.console import Console
 
-from secondbrain_common.config import get_config
-from secondbrain_common.exceptions import (
+from secondbrain.config import get_config
+from secondbrain.exceptions import (
     CLIValidationError,
     ServiceUnavailableError,
     StorageConnectionError,
 )
-from secondbrain_common.logging import get_health_status
-from secondbrain_common.storage import ChunkInfo
+from secondbrain.logging import get_health_status
+from secondbrain.storage import ChunkInfo
 
 from . import cli
 from .display import (
@@ -78,7 +78,7 @@ def ingest(
 
     PATH: Path to file or directory to ingest.
     """
-    from secondbrain_common.document import DocumentIngestor
+    from secondbrain.document import DocumentIngestor
 
     config = get_config()
     chunk_size = chunk_size or config.chunk_size
@@ -103,7 +103,7 @@ def ingest(
     # Collect files to show progress
     from pathlib import Path
 
-    from secondbrain_common.document import is_supported
+    from secondbrain.document import is_supported
 
     path_obj = Path(path)
     if path_obj.is_file():
@@ -202,7 +202,7 @@ def search(
 
     QUERY: Search query text.
     """
-    from secondbrain_common.search import Searcher
+    from secondbrain.search import Searcher
 
     config = get_config()
     top_k = top_k or config.default_top_k
@@ -237,7 +237,7 @@ def list_cmd(
     all: bool = False,
 ) -> None:
     """List ingested documents/chunks."""
-    from secondbrain_common.management import Lister
+    from secondbrain.management import Lister
 
     if limit < 0:
         raise CLIValidationError("Limit must be non-negative")
@@ -282,7 +282,7 @@ def delete(
     yes: bool,
 ) -> None:
     """Delete documents from the vector database."""
-    from secondbrain_common.management import Deleter
+    from secondbrain.management import Deleter
 
     # Validate options
     if not any([source, chunk_id, all]):
@@ -327,7 +327,7 @@ def delete(
 @click.pass_context
 def status(ctx: click.Context) -> None:
     """Show statistics about the vector database."""
-    from secondbrain_common.management import StatusChecker
+    from secondbrain.management import StatusChecker
 
     with (
         console.status("[cyan]Loading status...", spinner="dots"),
@@ -362,7 +362,7 @@ def health(ctx: click.Context, output: str) -> None:
 @click.pass_context
 def metrics(ctx: click.Context, reset: bool) -> None:
     """Show performance metrics and statistics."""
-    from secondbrain_common.utils.perf_monitor import metrics as perf_metrics
+    from secondbrain.utils.perf_monitor import metrics as perf_metrics
 
     if reset:
         perf_metrics.reset()
@@ -438,9 +438,9 @@ def chat(
         secondbrain chat --list-sessions
         secondbrain chat --check-llm
     """
-    from secondbrain_common.config import get_config
-    from secondbrain_common.conversation import ConversationStorage
-    from secondbrain_common.rag.providers import OllamaLLMProvider
+    from secondbrain.config import get_config
+    from secondbrain.conversation import ConversationStorage
+    from secondbrain.rag.providers import OllamaLLMProvider
 
     config = get_config()
 
@@ -546,11 +546,11 @@ def _single_turn_chat(
     show_sources: bool,
 ) -> None:
     """Handle single-turn chat with a query."""
-    from secondbrain_common.config import get_config
-    from secondbrain_common.conversation import ConversationSession, ConversationStorage
-    from secondbrain_common.rag import RAGPipeline
-    from secondbrain_common.rag.providers import OllamaLLMProvider
-    from secondbrain_common.search import Searcher
+    from secondbrain.config import get_config
+    from secondbrain.conversation import ConversationSession, ConversationStorage
+    from secondbrain.rag import RAGPipeline
+    from secondbrain.rag.providers import OllamaLLMProvider
+    from secondbrain.search import Searcher
 
     config = get_config()
 
@@ -600,11 +600,11 @@ def _interactive_chat(
     show_sources: bool,
 ) -> None:
     """Handle interactive REPL mode for chat."""
-    from secondbrain_common.config import get_config
-    from secondbrain_common.conversation import ConversationSession, ConversationStorage
-    from secondbrain_common.rag import RAGPipeline
-    from secondbrain_common.rag.providers import OllamaLLMProvider
-    from secondbrain_common.search import Searcher
+    from secondbrain.config import get_config
+    from secondbrain.conversation import ConversationSession, ConversationStorage
+    from secondbrain.rag import RAGPipeline
+    from secondbrain.rag.providers import OllamaLLMProvider
+    from secondbrain.search import Searcher
 
     config = get_config()
 
