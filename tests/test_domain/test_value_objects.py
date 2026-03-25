@@ -1,4 +1,3 @@
-import math
 import uuid
 
 import pytest

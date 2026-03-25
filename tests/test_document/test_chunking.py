@@ -6,9 +6,6 @@ large documents, multiline handling, Unicode, and deduplication.
 """
 
 from pathlib import Path
-from unittest.mock import MagicMock
-
-import pytest
 
 from secondbrain.document import DocumentIngestor, Segment
 

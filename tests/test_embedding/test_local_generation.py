@@ -8,11 +8,7 @@ Target coverage: 90%+ for secondbrain.embedding.local module.
 
 from __future__ import annotations
 
-import random
 from unittest.mock import MagicMock, patch
-
-import pytest
-from sentence_transformers import SentenceTransformer
 
 from secondbrain.embedding import LocalEmbeddingGenerator
 from secondbrain.embedding.local import TARGET_EMBEDDING_DIMENSIONS
@@ -138,7 +134,7 @@ class TestEmbeddingGenerate:
         # Include empty strings in input
         texts = ["valid text", "", "  ", "\n", "another valid"]
 
-        embeddings = gen.generate_batch(texts)
+        _ = gen.generate_batch(texts)
 
         # Verify encode was called only with non-empty strings
         call_args = mock_model.encode.call_args

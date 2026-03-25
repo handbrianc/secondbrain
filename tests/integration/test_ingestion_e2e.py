@@ -108,7 +108,7 @@ class TestIngestionE2E:
         temp_test_dir: Path,
         real_embedding_generator: LocalEmbeddingGenerator,
         real_storage: VectorStorage,
-        clean_database: None,
+        _clean_database: None,
     ) -> None:
         """Test full ingestion pipeline with PDF: create → ingest → verify → search."""
         # Create test PDF with specific content
@@ -189,7 +189,7 @@ class TestIngestionE2E:
         temp_test_dir: Path,
         real_embedding_generator: LocalEmbeddingGenerator,
         real_storage: VectorStorage,
-        clean_database: None,
+        _clean_database: None,
     ) -> None:
         """Test full ingestion pipeline with DOCX: create → ingest → verify chunks → check embeddings."""
         # Create test DOCX
@@ -259,7 +259,7 @@ class TestIngestionE2E:
         temp_test_dir: Path,
         real_embedding_generator: LocalEmbeddingGenerator,
         real_storage: VectorStorage,
-        clean_database: None,
+        _clean_database: None,
     ) -> None:
         """Test full ingestion pipeline with Markdown: create → ingest → verify text extraction → check chunking."""
         # Create test Markdown with structured content
@@ -329,7 +329,7 @@ and consistent response formats.
         temp_test_dir: Path,
         real_embedding_generator: LocalEmbeddingGenerator,
         real_storage: VectorStorage,
-        clean_database: None,
+        _clean_database: None,
     ) -> None:
         """Test batch ingestion of 10+ documents: create → batch ingest → verify all stored → check performance."""
         # Create 12 test documents of mixed types
@@ -416,7 +416,7 @@ and consistent response formats.
         temp_test_dir: Path,
         real_embedding_generator: LocalEmbeddingGenerator,
         real_storage: VectorStorage,
-        clean_database: None,
+        _clean_database: None,
     ) -> None:
         """Test parallel ingestion with cores=4: verify parallelism → check speedup → validate correctness."""
         # Create 8 test documents
@@ -464,7 +464,7 @@ and consistent response formats.
                 # Measure multicore ingestion time
                 start_time = time.time()
                 result = ingestor.ingest(str(temp_test_dir), cores=num_cores)
-                multicore_time = time.time() - start_time
+                _ = time.time() - start_time
 
         # Verify correctness - all files processed
         assert result["success"] >= 8, (
@@ -488,7 +488,7 @@ and consistent response formats.
         temp_test_dir: Path,
         real_embedding_generator: LocalEmbeddingGenerator,
         real_storage: VectorStorage,
-        clean_database: None,
+        _clean_database: None,
     ) -> None:
         """Test semantic search: ingest documents → run semantic search → verify relevant results → check similarity scores."""
         # Ingest diverse documents
@@ -581,7 +581,7 @@ and consistent response formats.
         temp_test_dir: Path,
         real_embedding_generator: LocalEmbeddingGenerator,
         real_storage: VectorStorage,
-        clean_database: None,
+        _clean_database: None,
     ) -> None:
         """Test search with filters: ingest mixed document types → search with filters → verify filtered results → check filter combinations."""
         # Ingest mixed document types
@@ -628,9 +628,6 @@ and consistent response formats.
                 ),
             ):
                 ingestor.ingest(str(temp_test_dir))
-
-        # Get all chunks first
-        all_chunks = real_storage.list_chunks(limit=500)
 
         # Test 1: Search with source file filter
         md_files = [f for f in mixed_docs if f[0].endswith(".md")]

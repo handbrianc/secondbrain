@@ -5,9 +5,9 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
-import tempfile
+from collections.abc import Generator
 from pathlib import Path
-from typing import Any, Generator
+from typing import Any
 
 import pytest
 

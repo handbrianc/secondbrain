@@ -1,0 +1,1 @@
+"""SecondBrain CLI package."""

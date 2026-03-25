@@ -70,9 +70,7 @@ class TestDocumentMetadataImmutability:
             file_type="pdf",
             ingested_at=datetime(2024, 1, 1, 12, 0, 0),
         )
-        with pytest.raises(
-            frozen_error := getattr(dataclasses, "FrozenInstanceError", TypeError)
-        ):
+        with pytest.raises(getattr(dataclasses, "FrozenInstanceError", TypeError)):
             metadata.chunk_count = 10  # type: ignore
 
 

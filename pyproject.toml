@@ -33,6 +33,7 @@ dependencies = [
     "opentelemetry-api>=1.20.0",
     "opentelemetry-sdk>=1.20.0",
     "ollama>=0.1.0",
+    "mcp>=1.0.0",
 ]
 
 [project.optional-dependencies]
@@ -79,7 +80,8 @@ opentelemetry = [
 ]
 
 [project.scripts]
-secondbrain = "secondbrain.cli:main"
+secondbrain = "secondbrain_cli.cli:main"
+secondbrain-mcp = "secondbrain_mcp.server:main"
 
 [build-system]
 requires = ["setuptools>=65.0", "wheel"]
@@ -108,7 +110,7 @@ convention = "numpy"
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
-"tests/**" = ["BLE001", "D103"]  # Tests may catch generic exceptions; fixtures/hooks don't need docstrings
+"tests/**" = ["BLE001", "D100", "D101", "D102", "D103", "D104", "SIM117", "N806", "PTH123", "SIM105", "B017"]  # Tests: style conventions differ from production code
 
 [tool.mypy]
 python_version = "3.11"
@@ -250,7 +252,7 @@ timeout_method = "thread"  # More aggressive than signal, works with threads
 default_stages = ["pre-commit"]
 
 [tool.vulture]
-paths = ["src"]
+paths = ["src", "tests"]
 ignore_decorators = ["@pytest.*"]
 ignore_names = [
     "test_*",
@@ -265,8 +267,10 @@ ignore_names = [
     "info",          # Context manager info parameter (false positive)
     "description",   # No-op span method parameter (interface match)
     "attributes",    # No-op span method parameter (interface match)
+    "fast_test_config",  # Pytest fixture with side effects (env setup via monkeypatch)
+    "wait_for_services",  # Pytest fixture dependency (unused parameter, dependency is what matters)
 ]
 min_confidence = 80
-exclude = ["venv/*", ".git/*", "tests/*", "scripts/*"]
+exclude = ["venv/*", ".git/*", "scripts/*"]
 sort_by_size = true
 verbose = false

@@ -7,6 +7,20 @@ import pytest
 
 from secondbrain.storage import VectorStorage
 
+# Skip all tests in this module if MongoDB is not available
+try:
+    from pymongo import MongoClient
+
+    TEST_MONGO_URI = "mongodb://testuser:testpass@localhost:27018/secondbrain_test"
+    client = MongoClient(TEST_MONGO_URI, serverSelectionTimeoutMS=5000)
+    client.admin.command("ping")
+    client.close()
+except Exception:
+    pytest.skip(
+        "MongoDB not available - integration tests require MongoDB running",
+        allow_module_level=True,
+    )
+
 
 @pytest.mark.integration
 class TestMongoRealConnection:
@@ -231,7 +245,6 @@ class TestMongoRealConnection:
 
     def test_storage_real_concurrent_writes(self, real_storage: VectorStorage) -> None:
         """Test concurrent batch operations."""
-        import threading
         from concurrent.futures import ThreadPoolExecutor
 
         # Clean up first

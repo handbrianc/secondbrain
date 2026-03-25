@@ -11,9 +11,11 @@ Usage:
 import argparse
 import sys
 
+from pymongo.errors import PyMongoError
 from rich.console import Console
 from rich.table import Table
 
+from secondbrain.exceptions import StorageConnectionError
 from secondbrain.logging import setup_logging
 from secondbrain.storage import VectorStorage
 
@@ -101,6 +103,14 @@ def main() -> None:
         console.print(f"  Total chunks: {stats['total_chunks']}")
         console.print(f"  Unique sources: {stats['unique_sources']}")
 
+    except StorageConnectionError as e:
+        console.print(f"[red]Database connection error: {e}[/red]")
+        console.print("[yellow]Make sure MongoDB is running and accessible.[/yellow]")
+        sys.exit(1)
+    except PyMongoError as e:
+        console.print(f"[red]MongoDB error: {e}[/red]")
+        console.print("[yellow]Check MongoDB connection and authentication.[/yellow]")
+        sys.exit(1)
     except (OSError, RuntimeError) as e:
         console.print(f"[red]Error listing documents: {e}[/red]")
         sys.exit(1)

@@ -16,7 +16,7 @@ console = Console(markup=True)
 
 
 def _ensure_mongodb(
-    ctx: click.Context, param: click.Parameter | None, value: bool
+    ctx: click.Context, _param: click.Parameter | None, _value: bool
 ) -> None:
     if ctx.invoked_subcommand is None or ctx.invoked_subcommand == "help":
         return

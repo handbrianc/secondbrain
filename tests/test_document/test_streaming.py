@@ -52,7 +52,7 @@ class TestStreamingProcessing:
 
     def test_streaming_disabled_fallback(self) -> None:
         """Test fallback to batch processing when streaming disabled."""
-        ingestor = DocumentIngestor(chunk_size=100, chunk_overlap=10)
+        _ = DocumentIngestor(chunk_size=100, chunk_overlap=10)
 
         mock_embedding_gen = MagicMock()
         mock_embedding_gen.generate.return_value = [0.1] * 384
@@ -83,7 +83,7 @@ class TestStreamingProcessing:
         with patch("secondbrain.document.get_config") as mock_config:
             mock_config.return_value.streaming_chunk_batch_size = 3
 
-            docs_count = ingestor._stream_process_chunks(
+            _ = ingestor._stream_process_chunks(
                 Path("test.pdf"), segments, mock_embedding_gen, mock_storage
             )
 
@@ -237,9 +237,7 @@ class TestEmbeddingBatchGeneration:
         with patch("secondbrain.document.get_config") as mock_config:
             mock_config.return_value.embedding_batch_size = 10
 
-            result = ingestor._generate_embeddings_with_cache(
-                chunks, mock_embedding_gen
-            )
+            _ = ingestor._generate_embeddings_with_cache(chunks, mock_embedding_gen)
 
             # Should respect batch size (50 chunks / 10 batch = 5 calls)
             assert mock_embedding_gen.generate_batch.call_count >= 1

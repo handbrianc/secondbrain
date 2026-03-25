@@ -18,8 +18,6 @@ from queue import Queue
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from secondbrain.document import (
     Segment,
     _chunk_segments,
@@ -56,10 +54,8 @@ class TestWorkerInitialization:
 
         mock_queue = MagicMock()
 
-        with patch("docling.document_converter.DocumentConverter") as mock_converter:
-            with patch(
-                "secondbrain.embedding.local.LocalEmbeddingGenerator"
-            ) as mock_model:
+        with patch("docling.document_converter.DocumentConverter"):
+            with patch("secondbrain.embedding.local.LocalEmbeddingGenerator"):
                 with patch.object(os, "cpu_count", return_value=4):
                     with patch("torch.set_num_threads"):
                         _init_worker_with_queue(mock_queue, "all-MiniLM-L6-v2", 2)

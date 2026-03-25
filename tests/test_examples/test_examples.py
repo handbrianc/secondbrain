@@ -5,7 +5,6 @@ These tests validate that example scripts work correctly with real services.
 
 from __future__ import annotations
 
-import time
 from pathlib import Path
 from typing import Any
 
@@ -81,10 +80,14 @@ class TestBasicUsageExamples:
         )
 
         # Should not crash, may return empty if no docs
+        # Can also gracefully handle database connection errors
+        stdout_lower = result["stdout"].lower()
+        stderr_lower = result["stderr"].lower()
         assert (
             result["success"]
-            or "No documents found" in result["stdout"]
-            or "Error" in result["stderr"]
+            or "no documents found" in stdout_lower
+            or "error" in stdout_lower  # Rich console outputs to stdout
+            or "error" in stderr_lower
         )
 
 
@@ -227,7 +230,6 @@ class TestIntegrationExamples:
 
         Validates docs/examples/integrations/flask_api.py
         """
-        import threading
         import time
 
         import requests

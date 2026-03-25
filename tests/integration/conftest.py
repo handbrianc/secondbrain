@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-import asyncio
-import os
+import contextlib
 import time
 from collections.abc import AsyncGenerator, Generator
 from typing import TYPE_CHECKING, Any
@@ -11,9 +10,7 @@ from typing import TYPE_CHECKING, Any
 import httpx
 import pytest
 from pymongo import MongoClient
-from pymongo.errors import ConnectionFailure
 
-from secondbrain.config import get_config
 from secondbrain.embedding import LocalEmbeddingGenerator
 from secondbrain.storage import VectorStorage
 
@@ -78,8 +75,8 @@ def wait_for_services() -> Generator[None, None, None]:
     services are healthy before tests run. It waits up to SERVICE_HEALTH_TIMEOUT
     seconds for services to become available.
 
-    Raises:
-        RuntimeError: If services don't become healthy within timeout.
+    If services are not available, pytest.skip() is called to skip all integration
+    tests gracefully instead of failing.
     """
     print("\nWaiting for test services to be healthy...")
 
@@ -92,8 +89,8 @@ def wait_for_services() -> Generator[None, None, None]:
         print(".", end="", flush=True)
         time.sleep(2)
     else:
-        raise RuntimeError(
-            f"MongoDB did not become healthy within {SERVICE_HEALTH_TIMEOUT}s"
+        pytest.skip(
+            f"MongoDB not available - integration tests require MongoDB running at {TEST_MONGO_URI}"
         )
 
     # Wait for sentence-transformers
@@ -105,8 +102,8 @@ def wait_for_services() -> Generator[None, None, None]:
         print(".", end="", flush=True)
         time.sleep(2)
     else:
-        raise RuntimeError(
-            f"Sentence-transformers did not become healthy within {SERVICE_HEALTH_TIMEOUT}s"
+        pytest.skip(
+            f"Sentence-transformers service not available - integration tests require service running at {TEST_EMBEDDING_URL}"
         )
 
     print("All services are healthy\n")
@@ -146,9 +143,7 @@ def real_storage(wait_for_services: None) -> Generator[VectorStorage, None, None
 
 
 @pytest.fixture(scope="session")
-def real_embedding_generator(
-    wait_for_services: None,
-) -> Generator[LocalEmbeddingGenerator, None, None]:
+def real_embedding_generator() -> Generator[LocalEmbeddingGenerator, None, None]:
     """Real embedding generator using sentence-transformers service.
 
     Creates a LocalEmbeddingGenerator instance connected to the test
@@ -183,18 +178,15 @@ async def clean_test_database(
         None: Control point for test execution.
     """
     # Cleanup before test
-    try:
+    with contextlib.suppress(Exception):
         real_storage.delete_all()
-    except Exception:
-        pass
 
     yield
 
     # Cleanup after test
-    try:
-        real_storage.delete_all()
-    except Exception as e:
-        print(f"Warning: Failed to cleanup after test: {e}")
+    with contextlib.suppress(Exception) as e:
+        if e:
+            print(f"Warning: Failed to cleanup after test: {e}")
 
 
 @pytest.fixture
@@ -218,7 +210,7 @@ def sample_test_document() -> dict[str, Any]:
 
 @pytest.fixture
 def health_check_utils() -> dict[str, Any]:
-    """Utility functions for health checking services.
+    """Provide utility functions for checking service health.
 
     Returns:
         dict: Dictionary with health check functions.

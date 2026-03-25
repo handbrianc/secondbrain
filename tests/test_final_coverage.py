@@ -2,7 +2,6 @@
 
 from unittest.mock import MagicMock, patch
 
-import pytest
 from click.testing import CliRunner
 
 from secondbrain.cli import cli, main
@@ -106,8 +105,6 @@ class TestFinalCoverage:
 
     def test_status_command_with_metrics(self) -> None:
         """Test status command with performance metrics (lines 379-385)."""
-        from secondbrain.management import StatusChecker
-
         mock_stats = MagicMock()
         mock_stats.total_documents = 100
         mock_stats.total_chunks = 500
@@ -170,14 +167,17 @@ class TestFinalCoverage:
         mock_storage_instance.create.return_value = mock_session
         mock_storage_class.return_value = mock_storage_instance
 
-        with patch(
-            "secondbrain.conversation.storage.ConversationStorage", mock_storage_class
+        with (
+            patch(
+                "secondbrain.conversation.storage.ConversationStorage",
+                mock_storage_class,
+            ),
+            patch("secondbrain.cli.commands._interactive_chat"),
         ):
-            with patch("secondbrain.cli.commands._interactive_chat"):
-                runner = CliRunner()
-                result = runner.invoke(cli, ["chat"])
+            runner = CliRunner()
+            result = runner.invoke(cli, ["chat"])
 
-                assert result.exit_code == 0
+            assert result.exit_code == 0
 
     def test_chat_command_show_sources(self) -> None:
         """Test chat command with show-sources flag (lines 570-577)."""

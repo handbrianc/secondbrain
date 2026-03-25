@@ -207,14 +207,16 @@ def search(
     config = get_config()
     top_k = top_k or config.default_top_k
 
-    with console.status("[cyan]Searching...", spinner="dots"):
-        with Searcher(verbose=ctx.obj.get("verbose", False)) as searcher:
-            results: list[dict[str, Any]] = searcher.search(
-                query=query,
-                top_k=top_k,
-                source_filter=source,
-                file_type_filter=file_type,
-            )
+    with (
+        console.status("[cyan]Searching...", spinner="dots"),
+        Searcher(verbose=ctx.obj.get("verbose", False)) as searcher,
+    ):
+        results: list[dict[str, Any]] = searcher.search(
+            query=query,
+            top_k=top_k,
+            source_filter=source,
+            file_type_filter=file_type,
+        )
     display_search_results(results, format, min_score=min_score)
 
 
@@ -250,16 +252,18 @@ def list_cmd(
     if offset < 0:
         raise CLIValidationError("Offset must be non-negative")
 
-    with console.status("[cyan]Loading...", spinner="dots"):
-        with Lister(verbose=ctx.obj.get("verbose", False)) as lister:
-            if all:
-                limit = MAX_LIST_LIMIT
-            results: list[ChunkInfo] = lister.list_chunks(
-                source_filter=source,
-                chunk_id=chunk_id,
-                limit=limit,
-                offset=offset,
-            )
+    with (
+        console.status("[cyan]Loading...", spinner="dots"),
+        Lister(verbose=ctx.obj.get("verbose", False)) as lister,
+    ):
+        if all:
+            limit = MAX_LIST_LIMIT
+        results: list[ChunkInfo] = lister.list_chunks(
+            source_filter=source,
+            chunk_id=chunk_id,
+            limit=limit,
+            offset=offset,
+        )
     display_list_results(results)
 
 
@@ -302,18 +306,20 @@ def delete(
                 console.print("Cancelled.")
                 return
 
-    with console.status("[cyan]Deleting...", spinner="dots"):
-        with Deleter(verbose=ctx.obj.get("verbose", False)) as deleter:
-            try:
-                count = deleter.delete(source=source, chunk_id=chunk_id, all=all)
-                console.print(f"[green]Deleted {count} document(s)[/green]")
-            except (
-                ServiceUnavailableError,
-                StorageConnectionError,
-                CLIValidationError,
-            ) as e:
-                console.print(f"[red]Error: {e}[/red]")
-                sys.exit(1)
+    with (
+        console.status("[cyan]Deleting...", spinner="dots"),
+        Deleter(verbose=ctx.obj.get("verbose", False)) as deleter,
+    ):
+        try:
+            count = deleter.delete(source=source, chunk_id=chunk_id, all=all)
+            console.print(f"[green]Deleted {count} document(s)[/green]")
+        except (
+            ServiceUnavailableError,
+            StorageConnectionError,
+            CLIValidationError,
+        ) as e:
+            console.print(f"[red]Error: {e}[/red]")
+            sys.exit(1)
 
 
 @handle_cli_errors
@@ -323,9 +329,11 @@ def status(ctx: click.Context) -> None:
     """Show statistics about the vector database."""
     from secondbrain.management import StatusChecker
 
-    with console.status("[cyan]Loading status...", spinner="dots"):
-        with StatusChecker(verbose=ctx.obj.get("verbose", False)) as status_checker:
-            stats = status_checker.get_status()
+    with (
+        console.status("[cyan]Loading status...", spinner="dots"),
+        StatusChecker(verbose=ctx.obj.get("verbose", False)) as status_checker,
+    ):
+        stats = status_checker.get_status()
     display_status(stats)
 
 
