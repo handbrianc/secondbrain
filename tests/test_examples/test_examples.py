@@ -230,9 +230,12 @@ class TestIntegrationExamples:
 
         Validates docs/examples/integrations/flask_api.py
         """
-        import time
+        try:
+            import time
 
-        import requests
+            import requests
+        except ImportError:
+            pytest.skip("Flask or requests not installed")
 
         from secondbrain.logging import setup_logging
 
