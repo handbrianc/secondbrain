@@ -1,5 +1,18 @@
-# SecondBrain MCP Server Docker Image
+# SecondBrain Docker Image (CLI + MCP Server)
 # Multi-stage build for minimal production image
+#
+# This image includes both:
+# - CLI tool: `secondbrain` - for document ingestion, search, etc.
+# - MCP server: `secondbrain-mcp` - for Model Context Protocol integration
+#
+# Usage:
+#   # Run MCP server (default)
+#   docker run secondbrain
+#
+#   # Run CLI commands
+#   docker run secondbrain secondbrain --help
+#   docker run -v $(pwd)/docs:/docs secondbrain secondbrain ingest /docs
+#   docker run secondbrain secondbrain search "query"
 
 # Stage 1: Build stage
 FROM python:3.12-slim AS builder
@@ -45,7 +58,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Create non-root user for security
 RUN useradd --create-home --shell /bin/bash secondbrain
 
-# Install the package from wheel
+# Install the package from wheel (includes both CLI and MCP server)
 COPY --from=builder /build/dist/*.whl /tmp/
 RUN pip install --no-cache-dir /tmp/*.whl && rm /tmp/*.whl
 
@@ -66,8 +79,12 @@ USER secondbrain
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "from secondbrain.config import get_config; get_config()" || exit 1
 
-# Entry point - runs the MCP server via stdio
+# Default entry point - runs the MCP server via stdio
+# Override with: docker run image secondbrain <command>
 CMD ["secondbrain-mcp"]
 
-# Alternative: Run with explicit python command
-# CMD ["python", "-m", "secondbrain_mcp.server"]
+# Alternative entry points:
+# - MCP server: CMD ["secondbrain-mcp"]
+# - CLI help:     CMD ["secondbrain", "--help"]
+# - CLI ingest:   CMD ["secondbrain", "ingest", "/path"]
+# - CLI search:   CMD ["secondbrain", "search", "query"]

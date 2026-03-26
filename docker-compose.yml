@@ -32,6 +32,13 @@ services:
       - secondbrain-network
     # MCP servers typically run via stdio, so no ports exposed
     # The MCP client connects via stdin/stdout
+    # Override CMD to run CLI commands:
+    # docker-compose run --rm mcp secondbrain --help
+    # docker-compose run --rm mcp secondbrain ingest /path/to/docs
+    # docker-compose run --rm mcp secondbrain search "your query"
+    volumes:
+      # Mount local documents directory for ingestion
+      - ./docs:/docs:ro
 
 volumes:
   mongodb-data:
