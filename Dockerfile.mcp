@@ -1,0 +1,73 @@
+# SecondBrain MCP Server Docker Image
+# Multi-stage build for minimal production image
+
+# Stage 1: Build stage
+FROM python:3.12-slim AS builder
+
+WORKDIR /build
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    g++ \
+    make \
+    cmake \
+    pkg-config \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python build tools
+RUN pip install --no-cache-dir build wheel setuptools
+
+# Copy project files
+COPY pyproject.toml ./
+COPY src/ ./src/
+
+# Build the package
+RUN python -m build --wheel
+
+# Stage 2: Production runtime
+FROM python:3.12-slim AS production
+
+WORKDIR /app
+
+# Install runtime dependencies only
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # Required for sentence-transformers and MongoDB
+    libgomp1 \
+    libssl3 \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean \
+    && find /var/cache/apt -type f -delete \
+    && find /var/lib/apt/lists -type f -delete
+
+# Create non-root user for security
+RUN useradd --create-home --shell /bin/bash secondbrain
+
+# Install the package from wheel
+COPY --from=builder /build/dist/*.whl /tmp/
+RUN pip install --no-cache-dir /tmp/*.whl && rm /tmp/*.whl
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    # Required environment variables (must be provided at runtime)
+    SECONDBRAIN_MONGO_URI="" \
+    SECONDBRAIN_LOCAL_EMBEDDING_MODEL="all-MiniLM-L6-v2" \
+    SECONDBRAIN_CHUNK_SIZE=512 \
+    SECONDBRAIN_CHUNK_OVERLAP=50
+
+# Switch to non-root user
+USER secondbrain
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "from secondbrain.config import get_config; get_config()" || exit 1
+
+# Entry point - runs the MCP server via stdio
+CMD ["secondbrain-mcp"]
+
+# Alternative: Run with explicit python command
+# CMD ["python", "-m", "secondbrain_mcp.server"]

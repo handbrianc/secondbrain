@@ -15,6 +15,24 @@ services:
     networks:
       - secondbrain-network
 
+  mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile.mcp
+    container_name: secondbrain-mcp
+    environment:
+      - SECONDBRAIN_MONGO_URI=mongodb://admin:${MONGODB_INITDB_ROOT_PASSWORD:-password}@mongodb:27017/
+      - SECONDBRAIN_LOCAL_EMBEDDING_MODEL=${SECONDBRAIN_LOCAL_EMBEDDING_MODEL:-all-MiniLM-L6-v2}
+      - SECONDBRAIN_CHUNK_SIZE=${SECONDBRAIN_CHUNK_SIZE:-512}
+      - SECONDBRAIN_CHUNK_OVERLAP=${SECONDBRAIN_CHUNK_OVERLAP:-50}
+    depends_on:
+      mongodb:
+        condition: service_started
+    networks:
+      - secondbrain-network
+    # MCP servers typically run via stdio, so no ports exposed
+    # The MCP client connects via stdin/stdout
+
 volumes:
   mongodb-data:
   mongodb-configdb:
