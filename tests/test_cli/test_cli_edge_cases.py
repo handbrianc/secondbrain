@@ -1,11 +1,19 @@
 """Tests for CLI edge cases and validation."""
 
+import tempfile
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 from click.testing import CliRunner
 
 from secondbrain.cli import cli
+
+
+def _create_test_dir() -> str:
+    tmpdir = tempfile.mkdtemp()
+    Path(tmpdir, ".gitkeep").touch()
+    return tmpdir
 
 
 class TestCLIChunkValidation:
@@ -22,7 +30,7 @@ class TestCLIChunkValidation:
 
         runner = CliRunner()
         result = runner.invoke(
-            cli, ["ingest", "/tmp/test_docs", "--chunk-size", "2048"]
+            cli, ["ingest", _create_test_dir(), "--chunk-size", "2048"]
         )
         assert result.exit_code == 0
 
@@ -37,7 +45,7 @@ class TestCLIChunkValidation:
 
         runner = CliRunner()
         result = runner.invoke(
-            cli, ["ingest", "/tmp/test_docs", "--chunk-overlap", "100"]
+            cli, ["ingest", _create_test_dir(), "--chunk-overlap", "100"]
         )
         assert result.exit_code == 0
 
@@ -55,7 +63,7 @@ class TestCLIChunkValidation:
             cli,
             [
                 "ingest",
-                "/tmp/test_docs",
+                _create_test_dir(),
                 "--chunk-size",
                 "2048",
                 "--chunk-overlap",
@@ -426,8 +434,6 @@ class TestCLISearchValidation:
     @pytest.mark.timeout(10)
     def test_search_with_unicode_query(self) -> None:
         """Test search with unicode characters in query."""
-        from secondbrain.search import Searcher
-
         mock_config = MagicMock()
         mock_config.default_top_k = 5
 

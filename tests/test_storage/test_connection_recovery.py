@@ -12,7 +12,7 @@ class TestConnectionRecovery:
 
     def test_connection_failure_recovery(self) -> None:
         """Test recovery after connection failure."""
-        with patch("secondbrain.storage.get_config") as mock_config:
+        with patch("secondbrain.storage.sync.get_config") as mock_config:
             mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
             mock_config.return_value.mongo_db = "secondbrain"
             mock_config.return_value.mongo_collection = "embeddings"
@@ -37,7 +37,7 @@ class TestConnectionRecovery:
 
     def test_connection_cache_invalidation(self) -> None:
         """Test cache invalidation on failure."""
-        with patch("secondbrain.storage.get_config") as mock_config:
+        with patch("secondbrain.storage.sync.get_config") as mock_config:
             mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
             mock_config.return_value.mongo_db = "secondbrain"
             mock_config.return_value.mongo_collection = "embeddings"
@@ -63,7 +63,7 @@ class TestConnectionRecovery:
         """Test async connection recovery patterns."""
         import asyncio
 
-        with patch("secondbrain.storage.get_config") as mock_config:
+        with patch("secondbrain.storage.sync.get_config") as mock_config:
             mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
             mock_config.return_value.mongo_db = "secondbrain"
             mock_config.return_value.mongo_collection = "embeddings"
@@ -90,7 +90,7 @@ class TestConnectionRecovery:
 
     def test_connection_pool_exhaustion(self) -> None:
         """Test handling of connection pool exhaustion."""
-        with patch("secondbrain.storage.get_config") as mock_config:
+        with patch("secondbrain.storage.sync.get_config") as mock_config:
             mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
             mock_config.return_value.mongo_db = "secondbrain"
             mock_config.return_value.mongo_collection = "embeddings"
@@ -114,7 +114,7 @@ class TestConnectionRecovery:
 
     def test_reconnection_after_close(self) -> None:
         """Test reconnection after explicit close."""
-        with patch("secondbrain.storage.get_config") as mock_config:
+        with patch("secondbrain.storage.sync.get_config") as mock_config:
             mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
             mock_config.return_value.mongo_db = "secondbrain"
             mock_config.return_value.mongo_collection = "embeddings"
@@ -140,7 +140,7 @@ class TestConnectionRecovery:
 
     def test_context_manager_connection(self) -> None:
         """Test context manager patterns."""
-        with patch("secondbrain.storage.get_config") as mock_config:
+        with patch("secondbrain.storage.sync.get_config") as mock_config:
             mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
             mock_config.return_value.mongo_db = "secondbrain"
             mock_config.return_value.mongo_collection = "embeddings"
@@ -149,7 +149,7 @@ class TestConnectionRecovery:
             mock_client = MagicMock()
             mock_client.admin.command.return_value = {"ok": 1}
 
-            with patch("secondbrain.storage.MongoClient", return_value=mock_client):
+            with patch("secondbrain.storage.sync.MongoClient", return_value=mock_client):
                 with VectorStorage() as storage:
                     # Connection should be established
                     assert storage.client is not None
@@ -161,7 +161,7 @@ class TestConnectionRecovery:
 
     def test_validate_connection_caching(self) -> None:
         """Test that connection validation is cached."""
-        with patch("secondbrain.storage.get_config") as mock_config:
+        with patch("secondbrain.storage.sync.get_config") as mock_config:
             mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
             mock_config.return_value.mongo_db = "secondbrain"
             mock_config.return_value.mongo_collection = "embeddings"
@@ -196,7 +196,7 @@ class TestConnectionRecovery:
 
     def test_connection_error_message_includes_context(self) -> None:
         """Test that connection errors include helpful context."""
-        with patch("secondbrain.storage.get_config") as mock_config:
+        with patch("secondbrain.storage.sync.get_config") as mock_config:
             mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
             mock_config.return_value.mongo_db = "secondbrain"
             mock_config.return_value.mongo_collection = "embeddings"

@@ -7,12 +7,13 @@ connection strings.
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Any, Optional
 from urllib.parse import urlparse
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-__all__ = ["Config", "config", "get_config"]
+__all__ = ["Config", "config", "get_config", "get_config_instance"]
 
 
 def _validate_mongo_uri(value: str) -> str:
@@ -493,5 +494,25 @@ def get_config() -> Config:
     return Config()
 
 
-# Convenience function for direct access
-config = get_config()
+_config: Config | None = None
+
+
+def get_config_instance() -> Config:  # noqa: D103
+    global _config
+    if _config is None:
+        _config = get_config()
+    return _config
+
+
+class _ConfigProxy:
+    def __getattr__(self, name: str) -> Any:
+        return getattr(get_config_instance(), name)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name in ("_config",):
+            super().__setattr__(name, value)
+        else:
+            setattr(get_config_instance(), name, value)
+
+
+config: Config = _ConfigProxy()  # type: ignore

@@ -15,7 +15,7 @@ import pytest
 from bson.binary import Binary
 
 from secondbrain.config import Config
-from secondbrain.storage.storage import VectorStorage
+from secondbrain.storage import VectorStorage
 
 
 class TestEmbeddingEncoding:

@@ -12,7 +12,6 @@ from unittest.mock import MagicMock, patch
 from click.testing import CliRunner
 
 from secondbrain.cli import cli
-from secondbrain.config import Config
 
 
 class TestIngestProgressCallback:

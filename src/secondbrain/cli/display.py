@@ -8,7 +8,7 @@ from rich.console import Console
 from rich.table import Table
 
 from secondbrain.logging import HealthStatus
-from secondbrain.storage import ChunkInfo, DatabaseStats
+from secondbrain.storage import ChunkInfo
 
 console = Console(markup=True)
 
@@ -83,11 +83,11 @@ def display_list_results(results: Sequence[ChunkInfo]) -> None:
     console.print(table)
 
 
-def display_status(stats: DatabaseStats) -> None:
+def display_status(stats: dict[str, Any]) -> None:
     """Display database status statistics.
 
     Args:
-        stats: DatabaseStats dictionary with chunk and collection info.
+        stats: Database statistics TypedDict.
     """
     console.print("[bold]Database Status[/bold]")
     console.print(f"  Total chunks: {stats['total_chunks']}")

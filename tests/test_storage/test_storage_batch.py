@@ -28,7 +28,7 @@ def mock_storage_config():
 @pytest.fixture(scope="module")
 def storage_with_mock(mock_storage_config):
     """Module-scoped VectorStorage instance to avoid 1s+ overhead per test."""
-    with patch("secondbrain.storage.get_config", return_value=mock_storage_config):
+    with patch("secondbrain.storage.sync.get_config", return_value=mock_storage_config):
         storage = VectorStorage()
         yield storage
 

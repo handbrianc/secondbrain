@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 import pytest
 
 from secondbrain.exceptions import StorageConnectionError
-from secondbrain.storage.storage import AsyncVectorStorage
+from secondbrain.storage import AsyncVectorStorage
 
 
 class TestAsyncVectorStorage:
@@ -15,7 +15,7 @@ class TestAsyncVectorStorage:
     @pytest.fixture
     def async_storage(self) -> Generator[AsyncVectorStorage, None, None]:
         """Create an AsyncVectorStorage instance with mocked config."""
-        with patch("secondbrain.storage.storage.get_config") as mock_config:
+        with patch("secondbrain.storage.async_storage.get_config") as mock_config:
             mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
             mock_config.return_value.mongo_db = "secondbrain_test"
             mock_config.return_value.mongo_collection = "embeddings_test"
@@ -39,7 +39,7 @@ class TestAsyncVectorStorage:
     @pytest.mark.asyncio
     async def test_init_with_overrides(self) -> None:
         """Test initialization with custom parameters."""
-        with patch("secondbrain.storage.storage.get_config") as mock_config:
+        with patch("secondbrain.storage.async_storage.get_config") as mock_config:
             mock_config.return_value.mongo_uri = "mongodb://default:27017"
             mock_config.return_value.mongo_db = "default_db"
             mock_config.return_value.mongo_collection = "default_collection"

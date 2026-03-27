@@ -17,7 +17,7 @@ class TestVectorStorageBatchOperations:
 
     def test_store_batch_empty_list(self) -> None:
         """Test store_batch with empty document list."""
-        with patch("secondbrain.storage.get_config") as mock_config:
+        with patch("secondbrain.storage.sync.get_config") as mock_config:
             mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
             mock_config.return_value.mongo_db = "secondbrain"
             mock_config.return_value.mongo_collection = "embeddings"
@@ -41,7 +41,7 @@ class TestVectorStorageBatchOperations:
 
     def test_store_batch_single_document(self) -> None:
         """Test store_batch with single document."""
-        with patch("secondbrain.storage.get_config") as mock_config:
+        with patch("secondbrain.storage.sync.get_config") as mock_config:
             mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
             mock_config.return_value.mongo_db = "secondbrain"
             mock_config.return_value.mongo_collection = "embeddings"
@@ -73,7 +73,7 @@ class TestVectorStorageBatchOperations:
 
     def test_store_batch_large_batch(self) -> None:
         """Test store_batch with 100+ documents."""
-        with patch("secondbrain.storage.get_config") as mock_config:
+        with patch("secondbrain.storage.sync.get_config") as mock_config:
             mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
             mock_config.return_value.mongo_db = "secondbrain"
             mock_config.return_value.mongo_collection = "embeddings"
@@ -108,7 +108,7 @@ class TestVectorStorageBatchOperations:
 
     def test_store_batch_timestamps_consistent(self) -> None:
         """Test that all documents in batch get the same timestamp."""
-        with patch("secondbrain.storage.get_config") as mock_config:
+        with patch("secondbrain.storage.sync.get_config") as mock_config:
             mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
             mock_config.return_value.mongo_db = "secondbrain"
             mock_config.return_value.mongo_collection = "embeddings"
@@ -157,7 +157,7 @@ class TestVectorStorageBatchOperations:
 
     def test_store_batch_preserves_metadata(self) -> None:
         """Test that metadata is preserved during batch insert."""
-        with patch("secondbrain.storage.get_config") as mock_config:
+        with patch("secondbrain.storage.sync.get_config") as mock_config:
             mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
             mock_config.return_value.mongo_db = "secondbrain"
             mock_config.return_value.mongo_collection = "embeddings"
@@ -215,7 +215,7 @@ class TestVectorStorageBatchOperations:
 
     def test_store_batch_connection_error(self) -> None:
         """Test store_batch raises error when connection is invalid."""
-        with patch("secondbrain.storage.get_config") as mock_config:
+        with patch("secondbrain.storage.sync.get_config") as mock_config:
             mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
             mock_config.return_value.mongo_db = "secondbrain"
             mock_config.return_value.mongo_collection = "embeddings"
@@ -240,7 +240,7 @@ class TestVectorStorageBatchOperations:
 
     def test_store_batch_returns_correct_count(self) -> None:
         """Test that store_batch returns the correct count of inserted documents."""
-        with patch("secondbrain.storage.get_config") as mock_config:
+        with patch("secondbrain.storage.sync.get_config") as mock_config:
             mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
             mock_config.return_value.mongo_db = "secondbrain"
             mock_config.return_value.mongo_collection = "embeddings"
@@ -273,7 +273,7 @@ class TestVectorStorageBatchOperations:
 
     def test_store_batch_with_missing_metadata(self) -> None:
         """Test store_batch handles documents without metadata field."""
-        with patch("secondbrain.storage.get_config") as mock_config:
+        with patch("secondbrain.storage.sync.get_config") as mock_config:
             mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
             mock_config.return_value.mongo_db = "secondbrain"
             mock_config.return_value.mongo_collection = "embeddings"
@@ -320,7 +320,7 @@ class TestVectorStorageBatchOperations:
 
     def test_store_batch_preserves_original_documents(self) -> None:
         """Test that original documents are not modified during batch insert."""
-        with patch("secondbrain.storage.get_config") as mock_config:
+        with patch("secondbrain.storage.sync.get_config") as mock_config:
             mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
             mock_config.return_value.mongo_db = "secondbrain"
             mock_config.return_value.mongo_collection = "embeddings"

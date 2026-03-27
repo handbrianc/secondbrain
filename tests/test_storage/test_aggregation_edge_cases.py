@@ -21,7 +21,7 @@ def mock_storage_config():
 @pytest.fixture(scope="module")
 def storage_with_mock(mock_storage_config):
     """Provide module-scoped VectorStorage instance for aggregation tests."""
-    with patch("secondbrain.storage.get_config", return_value=mock_storage_config):
+    with patch("secondbrain.storage.sync.get_config", return_value=mock_storage_config):
         storage = VectorStorage()
         yield storage
 

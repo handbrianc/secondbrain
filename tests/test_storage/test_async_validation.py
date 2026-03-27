@@ -13,7 +13,7 @@ class TestAsyncValidation:
     @pytest.fixture
     def storage(self):
         """Create a VectorStorage instance with mocked config."""
-        with patch("secondbrain.storage.get_config") as mock_config:
+        with patch("secondbrain.storage.sync.get_config") as mock_config:
             mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
             mock_config.return_value.mongo_db = "secondbrain"
             mock_config.return_value.mongo_collection = "embeddings"

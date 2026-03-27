@@ -149,11 +149,11 @@ class StatusChecker(BaseManager):
         """
         super().__init__(verbose=verbose)
 
-    def get_status(self) -> DatabaseStats:
+    def get_status(self) -> dict[str, Any]:
         """Get database statistics.
 
         Returns
         -------
-            Dictionary of database statistics.
+            DatabaseStats: Database statistics TypedDict.
         """
         return self.storage.get_stats()

@@ -1,13 +1,19 @@
 """Tests for CLI validation edge cases."""
 
 import json
+import tempfile
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from click.testing import CliRunner
 
 from secondbrain.cli import cli
 
-TEST_PATH = "/tmp/test_docs"
+
+def _create_test_dir() -> str:
+    tmpdir = tempfile.mkdtemp()
+    Path(tmpdir, ".gitkeep").touch()
+    return tmpdir
 
 
 class TestCLIChunkSizeValidation:
@@ -15,9 +21,6 @@ class TestCLIChunkSizeValidation:
 
     def test_ingest_rejects_negative_chunk_size(self) -> None:
         """Test that negative chunk size is rejected."""
-        import tempfile
-        from pathlib import Path
-
         with tempfile.TemporaryDirectory() as tmpdir:
             test_file = Path(tmpdir) / "test.txt"
             test_file.write_text("test content")
@@ -34,7 +37,7 @@ class TestCLIChunkSizeValidation:
         mock_ingestor.return_value = mock_ingestor_instance
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["ingest", TEST_PATH, "--chunk-size", "0"])
+        result = runner.invoke(cli, [_create_test_dir(), "--chunk-size", "0"])
         assert result.exit_code == 0
 
     @patch("secondbrain.document.DocumentIngestor")
@@ -45,7 +48,7 @@ class TestCLIChunkSizeValidation:
         mock_ingestor.return_value = mock_ingestor_instance
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["ingest", TEST_PATH, "--chunk-size", "2048"])
+        result = runner.invoke(cli, [_create_test_dir(), "--chunk-size", "2048"])
         assert result.exit_code == 0 or "Validation error" not in result.output
 
     @patch("secondbrain.document.DocumentIngestor")
@@ -56,18 +59,19 @@ class TestCLIChunkSizeValidation:
         mock_ingestor.return_value = mock_ingestor_instance
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["ingest", TEST_PATH, "--chunk-size", "1"])
+        result = runner.invoke(cli, [_create_test_dir(), "--chunk-size", "1"])
         assert result.exit_code == 0 or "Validation error" not in result.output
 
-        result = runner.invoke(cli, ["ingest", TEST_PATH, "--chunk-size", "10000"])
+        result = runner.invoke(cli, [_create_test_dir(), "--chunk-size", "10000"])
         assert result.exit_code == 0 or "Validation error" not in result.output
 
     def test_ingest_chunk_size_with_non_integer(self) -> None:
         """Test that non-integer chunk size is rejected."""
-        runner = CliRunner()
-        result = runner.invoke(cli, ["ingest", "/tmp/test", "--chunk-size", "abc"])
-        assert result.exit_code != 0
-        assert "Invalid value" in result.output or "UsageError" in result.output
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runner = CliRunner()
+            result = runner.invoke(cli, ["ingest", tmpdir, "--chunk-size", "abc"])
+            assert result.exit_code != 0
+            assert "Invalid value" in result.output or "UsageError" in result.output
 
 
 class TestCLIBatchSizeValidation:
@@ -81,8 +85,9 @@ class TestCLIBatchSizeValidation:
         mock_ingestor.return_value = mock_ingestor_instance
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["ingest", TEST_PATH, "--batch-size", "-5"])
-        # click.IntRange(min=1) rejects negative values
+        result = runner.invoke(
+            cli, ["ingest", _create_test_dir(), "--batch-size", "-5"]
+        )
         assert result.exit_code == 2
         assert (
             "must be at least 1" in result.output.lower()
@@ -97,8 +102,7 @@ class TestCLIBatchSizeValidation:
         mock_ingestor.return_value = mock_ingestor_instance
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["ingest", TEST_PATH, "--batch-size", "0"])
-        # click.IntRange(min=1) rejects zero
+        result = runner.invoke(cli, ["ingest", _create_test_dir(), "--batch-size", "0"])
         assert result.exit_code == 2
         assert (
             "must be at least 1" in result.output.lower()
@@ -113,7 +117,9 @@ class TestCLIBatchSizeValidation:
         mock_ingestor.return_value = mock_ingestor_instance
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["ingest", TEST_PATH, "--batch-size", "100"])
+        result = runner.invoke(
+            cli, ["ingest", _create_test_dir(), "--batch-size", "100"]
+        )
         assert result.exit_code == 0 or "Validation error" not in result.output
 
     @patch("secondbrain.document.DocumentIngestor")
@@ -124,7 +130,7 @@ class TestCLIBatchSizeValidation:
         mock_ingestor.return_value = mock_ingestor_instance
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["ingest", TEST_PATH])
+        result = runner.invoke(cli, ["ingest", _create_test_dir()])
         assert result.exit_code == 0 or "Validation error" not in result.output
 
 

@@ -1,8 +1,7 @@
 """MCP health and status tools implementation."""
 
-from typing import Any
-
 import logging
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -46,10 +45,10 @@ async def handle_status(arguments: dict[str, Any]) -> str:
         Database statistics.
     """
     from secondbrain.conversation.storage import ConversationStorage
-    from secondbrain.storage.storage import VectorStorage
+    from secondbrain.storage import VectorStorage
 
     try:
-        with ConversationStorage() as storage:
+        with ConversationStorage():
             # Use VectorStorage instance to list chunks
             vector_storage = VectorStorage()
             chunks = vector_storage.list_chunks(limit=1000)
@@ -77,8 +76,6 @@ async def handle_metrics(arguments: dict[str, Any]) -> str:
     Returns:
         Performance metrics.
     """
-    from secondbrain.utils.perf_monitor import metrics as perf_metrics
-
     try:
         metrics_type = arguments.get("type", "all")
 

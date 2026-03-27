@@ -334,7 +334,7 @@ def status(ctx: click.Context) -> None:
         StatusChecker(verbose=ctx.obj.get("verbose", False)) as status_checker,
     ):
         stats = status_checker.get_status()
-    display_status(stats)
+    display_status(stats)  # type: ignore[arg-type]
 
 
 @handle_cli_errors

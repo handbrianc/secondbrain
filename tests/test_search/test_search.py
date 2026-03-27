@@ -28,7 +28,7 @@ class TestVectorStorage:
 
         mock_client.__getitem__ = lambda self, key: mock_db
         # Patch the MongoClient constructor to return our mock client
-        patcher = patch("secondbrain.storage.MongoClient", return_value=mock_client)
+        patcher = patch("secondbrain.storage.sync.MongoClient", return_value=mock_client)
         patcher.start()
         try:
             storage = VectorStorage()
@@ -53,7 +53,7 @@ class TestVectorStorage:
         mock_db.__getitem__ = lambda self, key: mock_collection
 
         mock_client.__getitem__ = lambda self, key: mock_db
-        patcher = patch("secondbrain.storage.MongoClient", return_value=mock_client)
+        patcher = patch("secondbrain.storage.sync.MongoClient", return_value=mock_client)
         patcher.start()
         try:
             storage = VectorStorage()

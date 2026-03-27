@@ -1,8 +1,7 @@
 """MCP chat tool implementation."""
 
-from typing import Any
-
 import logging
+from typing import Any
 
 logger = logging.getLogger(__name__)
 

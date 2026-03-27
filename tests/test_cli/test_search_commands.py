@@ -5,6 +5,7 @@ including filters, JSON output, empty results, and timeout handling.
 """
 
 from unittest.mock import MagicMock, patch
+import pytest
 
 from click.testing import CliRunner
 
@@ -329,3 +330,34 @@ class TestSearchTimeoutHandling:
             result = runner.invoke(cli, ["search", "test query"])
 
         assert result.exit_code == 1
+
+
+class TestSearchFilterParametrization:
+    """Parametrized tests for search filters to reduce test duplication."""
+
+    @pytest.mark.parametrize(
+        "filter_arg,filter_value",
+        [
+            ("--source", "report.pdf"),
+            ("--file-type", "pdf"),
+        ],
+    )
+    def test_search_filters_parametrized(
+        self, filter_arg, filter_value, monkeypatch
+    ) -> None:
+        """Test search filters using parametrization to reduce duplication.
+        
+        QA: Verify each filter type is accepted by the CLI without errors.
+        """
+        from unittest.mock import MagicMock, patch
+
+        mock_instance = MagicMock()
+        mock_instance.search.return_value = []
+        mock_instance.__enter__ = MagicMock(return_value=mock_instance)
+        mock_instance.__exit__ = MagicMock(return_value=False)
+
+        with patch("secondbrain.search.Searcher", return_value=mock_instance):
+            runner = CliRunner()
+            result = runner.invoke(cli, ["search", "test", filter_arg, filter_value])
+            
+            assert result.exit_code == 0, f"Filter {filter_arg} failed: {result.output}"

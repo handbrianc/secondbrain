@@ -33,6 +33,6 @@ def storage_with_mock(mock_storage_config: MagicMock) -> Generator[Any, None, No
             with patch.object(storage_with_mock, "_collection", mock_collection):
                 # test code
     """
-    with patch("secondbrain.storage.get_config", return_value=mock_storage_config):
+    with patch("secondbrain.storage.sync.get_config", return_value=mock_storage_config):
         storage = VectorStorage()
         yield storage

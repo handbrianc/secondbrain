@@ -12,9 +12,9 @@ Run excluded from fast tests: pytest -m "not integration"
 """
 
 import warnings
-from typing import Any
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 

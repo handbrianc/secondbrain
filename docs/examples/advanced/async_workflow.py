@@ -70,8 +70,8 @@ async def main_async(path: str, queries: list[str]) -> None:
             console.print(f"  Score: {r['score']:.3f} | {r['source_file']}")
 
     # Cleanup
-    await storage.aclose()
-    await searcher.aclose()
+    storage.close()
+    searcher.close()
 
     console.print("\n[blue]Async workflow complete![/blue]")
 
