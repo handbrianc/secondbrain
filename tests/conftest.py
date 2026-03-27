@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import atexit
 import contextlib
+import os
 import shutil
 from collections.abc import Generator
 from pathlib import Path
@@ -11,6 +12,25 @@ from typing import Any, TypeVar
 from unittest.mock import MagicMock
 
 import pytest
+
+# Set test environment variables BEFORE any imports happen.
+# This must happen at module load time to prevent Config validation errors.
+for _k, _v in {
+    "SECONDBRAIN_MONGO_URI": "mongodb://localhost:27017",
+    "SECONDBRAIN_MONGO_COLLECTION": "test_embeddings",
+    "SECONDBRAIN_LOCALHOST": "http://localhost:11434",
+    "SECONDBRAIN_LOCAL_EMBEDDING_MODEL": "all-MiniLM-L6-v2",
+    "SECONDBRAIN_CHUNK_SIZE": 512,
+    "SECONDBRAIN_CHUNK_OVERLAP": 50,
+    "SECONDBRAIN_DEFAULT_TOP_K": 5,
+    "SECONDBRAIN_EMBEDDING_DIMENSIONS": 384,
+    "SECONDBRAIN_RATE_LIMIT_MAX_REQUESTS": 10,
+    "SECONDBRAIN_RATE_LIMIT_WINDOW_SECONDS": 1.0,
+    "SECONDBRAIN_CONNECTION_CACHE_TTL": 60.0,
+    "SECONDBRAIN_CIRCUIT_BREAKER_RECOVERY_TIMEOUT": 0.5,
+    "SECONDBRAIN_CIRCUIT_BREAKER_FAILURE_THRESHOLD": 3,
+}.items():
+    os.environ.setdefault(_k, str(_v))
 
 from secondbrain.config import Config
 from secondbrain.embedding import LocalEmbeddingGenerator
@@ -602,3 +622,17 @@ def auto_mongomock(monkeypatch: pytest.MonkeyPatch) -> Any:
 atexit.register(_cleanup_storage)
 atexit.register(_cleanup_embedding)
 atexit.register(_cleanup_mongodb)
+
+
+@pytest.fixture(autouse=True)
+def _patch_ensure_mongodb() -> Generator[None, None, None]:
+    """Patch _ensure_mongodb to prevent MongoDB connection attempts in CLI tests.
+
+    The CLI's _ensure_mongodb function tries to connect to MongoDB before each
+    command is executed, causing timeouts in tests. This fixture patches it to
+    prevent those connection attempts.
+    """
+    from unittest.mock import patch
+
+    with patch("secondbrain.cli._ensure_mongodb"):
+        yield

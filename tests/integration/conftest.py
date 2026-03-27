@@ -18,9 +18,7 @@ if TYPE_CHECKING:
     pass
 
 # Test service URLs (use running services)
-TEST_MONGO_URI = (
-    "mongodb://admin:admin123@127.0.0.1:27017/secondbrain_test?authSource=admin"
-)
+TEST_MONGO_URI = "mongodb://127.0.0.1:27017/secondbrain_test"
 TEST_EMBEDDING_URL = "http://localhost:11435"
 
 # Test database/collection names
@@ -102,7 +100,10 @@ def wait_for_services() -> Generator[None, None, None]:
     if _check_embedding_service_healthy():
         print("Sentence-transformers is healthy")
     else:
-        print("Sentence-transformers not available (some tests will be skipped)")
+        pytest.skip(
+            "Sentence-transformers service not available - integration tests require embedding service running at "
+            f"{TEST_EMBEDDING_URL}. Start with: sentence-transformers serve"
+        )
 
     print("MongoDB is ready, proceeding with tests\n")
     yield

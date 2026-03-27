@@ -19,7 +19,11 @@ class TestIngestTool:
     @pytest.mark.asyncio
     async def test_ingest_with_valid_path(self):
         """Test ingest with valid path."""
-        with patch("secondbrain.document.DocumentIngestor") as mock_ingestor:
+        with (
+            patch("secondbrain.document.DocumentIngestor") as mock_ingestor,
+            patch("pathlib.Path.is_file", return_value=True),
+            patch("secondbrain.document.is_supported", return_value=True),
+        ):
             mock_instance = MagicMock()
             mock_instance.ingest.return_value = {"success": 2, "failed": 0}
             mock_ingestor.return_value = mock_instance
@@ -32,7 +36,11 @@ class TestIngestTool:
     @pytest.mark.asyncio
     async def test_ingest_with_options(self):
         """Test ingest with custom options."""
-        with patch("secondbrain.document.DocumentIngestor") as mock_ingestor:
+        with (
+            patch("secondbrain.document.DocumentIngestor") as mock_ingestor,
+            patch("pathlib.Path.is_file", return_value=True),
+            patch("secondbrain.document.is_supported", return_value=True),
+        ):
             mock_instance = MagicMock()
             mock_instance.ingest.return_value = {"success": 1, "failed": 0}
             mock_ingestor.return_value = mock_instance
@@ -52,7 +60,11 @@ class TestIngestTool:
     @pytest.mark.asyncio
     async def test_ingest_with_failures(self):
         """Test ingest handles failures."""
-        with patch("secondbrain.document.DocumentIngestor") as mock_ingestor:
+        with (
+            patch("secondbrain.document.DocumentIngestor") as mock_ingestor,
+            patch("pathlib.Path.is_file", return_value=True),
+            patch("secondbrain.document.is_supported", return_value=True),
+        ):
             mock_instance = MagicMock()
             mock_instance.ingest.return_value = {"success": 1, "failed": 1}
             mock_ingestor.return_value = mock_instance
@@ -65,7 +77,11 @@ class TestIngestTool:
     @pytest.mark.asyncio
     async def test_ingest_handles_exceptions(self):
         """Test ingest handles exceptions gracefully."""
-        with patch("secondbrain.document.DocumentIngestor") as mock_ingestor:
+        with (
+            patch("secondbrain.document.DocumentIngestor") as mock_ingestor,
+            patch("pathlib.Path.is_file", return_value=True),
+            patch("secondbrain.document.is_supported", return_value=True),
+        ):
             mock_ingestor.side_effect = Exception("Test error")
 
             result = await handle_ingest({"path": "/tmp/test.pdf"})

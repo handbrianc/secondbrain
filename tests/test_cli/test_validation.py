@@ -15,9 +15,16 @@ class TestCLIChunkSizeValidation:
 
     def test_ingest_rejects_negative_chunk_size(self) -> None:
         """Test that negative chunk size is rejected."""
-        runner = CliRunner()
-        result = runner.invoke(cli, ["ingest", TEST_PATH, "--chunk-size", "-100"])
-        assert result.exit_code != 0
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            test_file = Path(tmpdir) / "test.txt"
+            test_file.write_text("test content")
+
+            runner = CliRunner()
+            result = runner.invoke(cli, ["ingest", tmpdir, "--chunk-size", "-100"])
+            assert result.exit_code != 0
 
     @patch("secondbrain.document.DocumentIngestor")
     def test_ingest_accepts_zero_chunk_size(self, mock_ingestor: MagicMock) -> None:

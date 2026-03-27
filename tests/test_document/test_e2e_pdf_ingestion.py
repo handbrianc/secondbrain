@@ -12,8 +12,9 @@ Run excluded from fast tests: pytest -m "not integration"
 """
 
 import warnings
+from typing import Any
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -35,18 +36,37 @@ class TestPDFIngestionE2E:
     """End-to-end tests for PDF ingestion pipeline."""
 
     @pytest.fixture(autouse=True)
-    def mock_external_services(
+    def mock_storage_and_services(
         self,
         monkeypatch: pytest.MonkeyPatch,
         cached_embedding_generator: MagicMock,
         mocked_pdf_extraction: MagicMock,
+        auto_mongomock: Any,
     ) -> None:
-        """Mock external services to speed up E2E tests."""
+        """Mock external services and MongoDB to speed up E2E tests."""
+        mock_storage_instance = MagicMock()
+        mock_storage_instance.validate_connection.return_value = True
+        mock_storage_instance.delete_by_source.return_value = 0
+        mock_storage_instance.list_chunks.return_value = []
+        mock_storage_instance.store_batch.return_value = 1
+        mock_storage_instance.store.return_value = "mock_id"
+        mock_storage_instance.search.return_value = []
+        mock_storage_instance.ensure_index.return_value = True
+
+        def mock_storage_constructor(*args, **kwargs):
+            return mock_storage_instance
+
+        monkeypatch.setattr(
+            "secondbrain.storage.VectorStorage",
+            mock_storage_constructor,
+        )
+
         del (
             monkeypatch,
             cached_embedding_generator,
             mocked_pdf_extraction,
-        )  # Unused but sets up mocks
+            auto_mongomock,
+        )
 
     @pytest.mark.slow
     def test_pdf_text_extraction(self, sample_pdf_path: Path) -> None:
@@ -166,17 +186,38 @@ class TestPDFIngestionE2E:
 class TestPDFSearchIntegration:
     """Integration tests for search functionality after ingestion."""
 
-    @pytest.fixture(autouse=True)
-    def setup_search_index(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Set up test environment with mocked services."""
+    @pytest.fixture(autouse=True, scope="function")
+    def mock_storage_for_search_tests(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        auto_mongomock: Any,
+    ) -> None:
+        """Mock MongoDB storage for search tests."""
         from secondbrain.config import get_config
 
-        # Override the autouse mock_config_defaults which sets 384 dimensions
-        # The E2E tests need 768 dimensions to match the actual SentenceTransformers model
         monkeypatch.setenv("SECONDBRAIN_EMBEDDING_DIMENSIONS", "768")
-
-        # Clear config cache to pick up the new value
         get_config.cache_clear()
+
+        mock_storage_instance = MagicMock()
+        mock_storage_instance.validate_connection.return_value = True
+        mock_storage_instance.delete_by_source.return_value = 0
+        mock_storage_instance.list_chunks.return_value = [
+            {"chunk_text": "mock chunk", "source_file": "test_document.pdf"}
+        ]
+
+        from secondbrain import storage
+
+        monkeypatch.setattr(
+            storage, "VectorStorage", MagicMock(return_value=mock_storage_instance)
+        )
+        import sys
+
+        this_module = sys.modules[__name__]
+        monkeypatch.setattr(
+            this_module, "VectorStorage", MagicMock(return_value=mock_storage_instance)
+        )
+
+        del monkeypatch, auto_mongomock
 
     @pytest.mark.slow
     def test_search_after_ingestion(

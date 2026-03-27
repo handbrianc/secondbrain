@@ -4,11 +4,11 @@ import os
 
 import pytest
 
-from secondbrain.config import Config, get_config
-
 
 def test_config_default_values() -> None:
     """Test configuration default values."""
+    from secondbrain.config import Config
+
     # Set environment variables to test defaults aren't picked up
     env_backup = os.environ.copy()
     try:
@@ -32,6 +32,8 @@ def test_config_default_values() -> None:
 
 def test_config_from_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test configuration from environment variables."""
+    from secondbrain.config import Config
+
     monkeypatch.setenv("SECONDBRAIN_MONGO_URI", "mongodb://custom:27017")
     monkeypatch.setenv("SECONDBRAIN_MONGO_DB", "custom_db")
     monkeypatch.setenv("SECONDBRAIN_MONGO_COLLECTION", "custom_collection")
@@ -52,6 +54,8 @@ def test_config_from_environment(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_get_config_cached() -> None:
     """Test that get_config returns cached instance."""
+    from secondbrain.config import get_config
+
     config1 = get_config()
     config2 = get_config()
     assert config1 is config2

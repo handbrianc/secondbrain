@@ -100,7 +100,10 @@ class TestListWithLimitParameter:
             ]
         )
 
-        with patch("secondbrain.management.Lister", mock_lister_class):
+        with (
+            patch("secondbrain.cli._ensure_mongodb"),
+            patch("secondbrain.management.Lister", mock_lister_class),
+        ):
             runner = CliRunner()
             result = runner.invoke(cli, ["ls", "--limit", "2"])
 

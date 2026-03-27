@@ -104,7 +104,10 @@ class TestSearchFilters:
             ]
         )
 
-        with patch("secondbrain.search.Searcher", mock_searcher_class):
+        with (
+            patch("secondbrain.cli._ensure_mongodb"),
+            patch("secondbrain.search.Searcher", mock_searcher_class),
+        ):
             runner = CliRunner()
             result = runner.invoke(
                 cli,

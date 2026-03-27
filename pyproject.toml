@@ -30,6 +30,7 @@ dependencies = [
     "rich>=14.0.0",
     "python-dotenv>=1.2.2",
     "sentence-transformers>=5.0.0",
+    "torch>=2.0.0",  # GPU acceleration support
     "opentelemetry-api>=1.20.0",
     "opentelemetry-sdk>=1.20.0",
     "ollama>=0.1.0",
@@ -223,7 +224,7 @@ ignore = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-m 'not slow' -n auto --no-cov --timeout=60 -p no:warnings -p no:benchmark"
+addopts = "-n auto --no-cov --timeout=60 -p no:warnings -p no:benchmark"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 numprocesses = "auto"

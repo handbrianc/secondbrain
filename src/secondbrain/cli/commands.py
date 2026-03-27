@@ -114,47 +114,47 @@ def ingest(
 
     total_files = len(files)
 
-    if total_files > 10:  # Only show progress for larger batches
-        from rich.progress import Progress, SpinnerColumn, TextColumn
+    # Handle edge case: no files to process
+    if total_files == 0:
+        console.print("[yellow]No supported files found[/yellow]")
+        console.print("[green]Successfully ingested 0 files[/green]")
+        return
 
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            TextColumn("[progress.completed]{task.completed}/{task.total}"),
-            console=console,
-        ) as progress:
-            task = progress.add_task("[cyan]Ingesting...", total=total_files)
+    from rich.progress import Progress, SpinnerColumn, TextColumn
 
-            # Create progress callback that updates the progress bar
-            def progress_callback(file_path: Path, success: bool) -> None:
-                status = "[green]✓[/green]" if success else "[red]✗[/red]"
-                progress.update(
-                    task, description=f"[cyan]Ingesting... {status} {file_path.name}"
-                )
-                progress.advance(task)
-                progress.refresh()  # Force immediate refresh
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        TextColumn("[progress.completed]{task.completed}/{task.total}"),
+        console=console,
+    ) as progress:
+        task = progress.add_task("[cyan]Ingesting...", total=total_files)
 
-            ingestor = DocumentIngestor(
-                chunk_size=chunk_size,
-                chunk_overlap=chunk_overlap,
-                verbose=verbose,
-                progress_callback=progress_callback,
+        # Create progress callback that updates the progress bar
+        def progress_callback(file_path: Path, success: bool) -> None:
+            status = "[green]✓[/green]" if success else "[red]✗[/red]"
+            progress.update(
+                task, description=f"[cyan]Ingesting... {status} {file_path.name}"
             )
+            progress.advance(task, 1)
+            progress.refresh()  # Force immediate refresh
 
-            # Use ThreadPoolExecutor when progress tracking is enabled
-            # Threads share memory so callbacks can update the progress bar
-            # For I/O-bound work, threads perform nearly as well as processes
-            results = ingestor.ingest(
-                path, recursive=recursive, batch_size=batch_size, cores=cores
-            )
-    else:
         ingestor = DocumentIngestor(
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
             verbose=verbose,
+            progress_callback=progress_callback,
         )
+
+        # Use ThreadPoolExecutor when progress tracking is enabled
+        # Threads share memory so callbacks can update the progress bar
+        # For I/O-bound work, threads perform nearly as well as processes
         results = ingestor.ingest(
-            path, recursive=recursive, batch_size=batch_size, cores=cores
+            path,
+            recursive=recursive,
+            batch_size=batch_size,
+            cores=cores,
+            progress_callback=progress_callback,
         )
 
     console.print(f"[green]Successfully ingested {results['success']} files[/green]")

@@ -93,9 +93,10 @@ class TestStatusHealthMetrics:
         """
         runner = CliRunner()
 
-        with patch(
-            "secondbrain.utils.perf_monitor.metrics.get_stats"
-        ) as mock_get_stats:
+        with (
+            patch("secondbrain.cli._ensure_mongodb"),
+            patch("secondbrain.utils.perf_monitor.metrics.get_stats") as mock_get_stats,
+        ):
             # Return None for all metric queries (no data collected)
             mock_get_stats.return_value = None
 

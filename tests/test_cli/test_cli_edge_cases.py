@@ -423,14 +423,28 @@ class TestCLISearchValidation:
         # Should handle gracefully
         assert result.exit_code in [0, 1]
 
-    @patch("secondbrain.search.Searcher")
-    def test_search_with_unicode_query(self, mock_searcher_class: MagicMock) -> None:
+    @pytest.mark.timeout(10)
+    def test_search_with_unicode_query(self) -> None:
         """Test search with unicode characters in query."""
-        mock_searcher = MagicMock()
-        mock_searcher.search.return_value = []
-        mock_searcher_class.return_value = mock_searcher
+        from secondbrain.search import Searcher
 
-        runner = CliRunner()
-        result = runner.invoke(cli, ["search", "搜索测试 émojis 日本語"])
-        # Should handle gracefully
-        assert result.exit_code == 0
+        mock_config = MagicMock()
+        mock_config.default_top_k = 5
+
+        mock_searcher = MagicMock()
+        mock_searcher.config = mock_config
+        mock_searcher.search.return_value = []
+        mock_searcher.__enter__ = MagicMock(return_value=mock_searcher)
+        mock_searcher.__exit__ = MagicMock(return_value=False)
+
+        with (
+            patch("secondbrain.cli._ensure_mongodb"),
+            patch("secondbrain.search.Searcher", return_value=mock_searcher),
+            patch("secondbrain.cli.commands.get_config") as mock_get_config,
+        ):
+            mock_get_config.return_value = mock_config
+
+            runner = CliRunner()
+            result = runner.invoke(cli, ["search", "搜索测试 émojis 日本語"])
+            # Should handle gracefully
+            assert result.exit_code == 0

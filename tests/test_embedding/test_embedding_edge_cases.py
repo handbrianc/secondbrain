@@ -112,3 +112,68 @@ class TestLocalEmbeddingGeneratorEdgeCases:
         gen = LocalEmbeddingGenerator(model_name="all-mpnet-base-v2")
         assert gen.model_name == "all-mpnet-base-v2"
         assert gen._model is None
+
+    def test_detect_device_returns_valid_string(self) -> None:
+        """Test _detect_device returns a valid device string."""
+        gen = LocalEmbeddingGenerator()
+        device = gen._detect_device()
+        assert isinstance(device, str)
+        assert device in ("cuda", "mps", "cpu")
+
+    def test_detect_device_cuda_returns_cuda(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test _detect_device returns 'cuda' when CUDA is available."""
+        import torch
+
+        # Mock torch.cuda.is_available to return True
+        monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+
+        gen = LocalEmbeddingGenerator()
+        device = gen._detect_device()
+        assert device == "cuda"
+
+    def test_detect_device_mps_returns_mps(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test _detect_device returns 'mps' when Apple Silicon is available."""
+        import torch
+
+        # Mock CUDA as unavailable and MPS as available
+        monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+
+        # Mock torch.backends.mps
+        mps_backend = MagicMock()
+        mps_backend.is_available.return_value = True
+        monkeypatch.setattr(torch.backends, "mps", mps_backend)
+
+        gen = LocalEmbeddingGenerator()
+        device = gen._detect_device()
+        assert device == "mps"
+
+    def test_detect_device_cpu_fallback(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test _detect_device returns 'cpu' when no GPU is available."""
+        import torch
+
+        # Mock both CUDA and MPS as unavailable
+        monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+
+        # Mock torch.backends.mps as unavailable
+        mps_backend = MagicMock()
+        mps_backend.is_available.return_value = False
+        monkeypatch.setattr(torch.backends, "mps", mps_backend)
+
+        gen = LocalEmbeddingGenerator()
+        device = gen._detect_device()
+        assert device == "cpu"
+
+    def test_init_with_explicit_device(self) -> None:
+        """Test initialization with explicit device parameter."""
+        gen = LocalEmbeddingGenerator(device="cpu")
+        assert gen.device == "cpu"
+
+    def test_init_auto_detects_device(self) -> None:
+        """Test initialization auto-detects device when not specified."""
+        gen = LocalEmbeddingGenerator()
+        # Should auto-detect to one of the valid devices
+        assert gen.device in ("cuda", "mps", "cpu")

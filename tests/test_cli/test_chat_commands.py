@@ -240,9 +240,10 @@ class TestChatCommands:
         - Non-existent sessions show error message
         - Deletion confirmation is displayed
         """
-        with patch(
-            "secondbrain.conversation.ConversationStorage"
-        ) as mock_storage_class:
+        with (
+            patch("secondbrain.cli._ensure_mongodb"),
+            patch("secondbrain.conversation.ConversationStorage") as mock_storage_class,
+        ):
             # Mock storage
             mock_storage = MagicMock()
             mock_storage.delete_session.return_value = True

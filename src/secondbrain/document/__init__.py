@@ -1251,8 +1251,6 @@ class DocumentIngestor:
 
                 # Process futures and handle progress updates from queue
                 completed = 0
-                # Process futures and handle progress updates from queue
-                completed = 0
                 pending_futures = dict(futures)
 
                 while pending_futures:
@@ -1526,6 +1524,7 @@ class DocumentIngestor:
         recursive: bool = False,
         batch_size: int = 10,
         cores: int | None = None,
+        progress_callback: Callable[[Path, bool], None] | None = None,
     ) -> dict[str, int]:
         """Ingest documents from a file or directory.
 
@@ -1535,6 +1534,7 @@ class DocumentIngestor:
             batch_size: Number of files to process in parallel (ThreadPool).
             cores: Number of CPU cores for multiprocessing. If None, uses
                 config.max_workers or auto-detects CPU count.
+            progress_callback: Optional callback(file_path: Path, success: bool) called after each file.
 
         Returns
         -------
@@ -1547,6 +1547,10 @@ class DocumentIngestor:
 
         from secondbrain.embedding import LocalEmbeddingGenerator
         from secondbrain.storage import VectorStorage
+
+        # Use provided callback or fall back to instance variable
+        if progress_callback is not None:
+            self.progress_callback = progress_callback
 
         # Initialize services
         embedding_gen = LocalEmbeddingGenerator()
@@ -1699,14 +1703,16 @@ class AsyncDocumentIngestor(DocumentIngestor):
         recursive: bool = False,
         batch_size: int = 10,
         max_concurrent: int = 5,
+        progress_callback: Callable[[Path, bool], None] | None = None,
     ) -> dict[str, int]:
-        """Ingest documents asynchronously from a file or directory.
+        """Ingest asynchronously from a file or directory.
 
         Args:
             path: Path to file or directory to ingest.
             recursive: Recursively process subdirectories.
             batch_size: Number of files to process in parallel.
             max_concurrent: Maximum concurrent file processing tasks (semaphore).
+            progress_callback: Optional callback(file_path: Path, success: bool) called after each file.
 
         Returns
         -------
@@ -1734,7 +1740,17 @@ class AsyncDocumentIngestor(DocumentIngestor):
         async def process_with_semaphore(file_path: Path) -> bool:
             """Process a single file with semaphore control."""
             async with semaphore:
-                return await self.process_file_async(file_path, embedding_gen, storage)
+                try:
+                    result = await self.process_file_async(
+                        file_path, embedding_gen, storage
+                    )
+                    if progress_callback:
+                        progress_callback(file_path, result)
+                    return result
+                except Exception:
+                    if progress_callback:
+                        progress_callback(file_path, False)
+                    return False
 
         # Create tasks for all files
         tasks = [process_with_semaphore(f) for f in files]

@@ -29,7 +29,7 @@ class TestEmbeddingModelLoading:
         assert gen_custom.model_name == "all-mpnet-base-v2"
 
     def test_model_property_loads_sentence_transformers(self) -> None:
-        """Test that model property loads SentenceTransformer."""
+        """Test that model property loads SentenceTransformer with device parameter."""
         gen = LocalEmbeddingGenerator()
 
         with patch("sentence_transformers.SentenceTransformer") as mock_st:
@@ -39,8 +39,8 @@ class TestEmbeddingModelLoading:
             # Access model property
             model = gen.model
 
-            # Verify SentenceTransformer was called with correct model name
-            mock_st.assert_called_once_with("all-MiniLM-L6-v2")
+            # Verify SentenceTransformer was called with model name and device
+            mock_st.assert_called_once_with("all-MiniLM-L6-v2", device=gen.device)
             assert model is mock_model
 
     def test_model_property_reuses_loaded_model(self) -> None:
