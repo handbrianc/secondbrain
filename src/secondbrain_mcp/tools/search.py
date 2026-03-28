@@ -1,4 +1,5 @@
 """MCP search tool implementation."""
+
 import logging
 from typing import Any
 

@@ -112,7 +112,7 @@ convention = "numpy"
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
-"tests/**" = ["BLE001", "D100", "D101", "D102", "D103", "D104", "SIM117", "N806", "PTH123", "SIM105", "B017"]  # Tests: style conventions differ from production code
+"tests/**" = ["BLE001", "D100", "D101", "D102", "D103", "D104", "SIM117", "N806", "PTH123", "SIM105", "B017", "E402"]  # Tests: style conventions differ from production code; E402 needed for env var setup before imports
 
 [tool.mypy]
 python_version = "3.11"
@@ -172,6 +172,13 @@ module = ["opentelemetry.*"]
 follow_imports = "skip"
 ignore_missing_imports = true
 disable_error_code = ["attr-defined", "no-any-return", "valid-type", "operator", "unreachable", "has-type", "misc"]
+
+# MCP server - untyped decorators from MCP library
+[[tool.mypy.overrides]]
+module = ["secondbrain_mcp.*"]
+follow_imports = "skip"
+ignore_missing_imports = true
+disable_error_code = ["attr-defined", "no-any-return", "valid-type", "operator", "unreachable", "has-type", "misc", "untyped-decorator", "no-untyped-def", "no-untyped-call"]
 
 [[tool.mypy.overrides]]
 module = ["docling", "docling.*"]

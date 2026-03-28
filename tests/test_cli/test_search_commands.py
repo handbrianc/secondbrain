@@ -5,8 +5,8 @@ including filters, JSON output, empty results, and timeout handling.
 """
 
 from unittest.mock import MagicMock, patch
-import pytest
 
+import pytest
 from click.testing import CliRunner
 
 from secondbrain.cli import cli
@@ -346,7 +346,7 @@ class TestSearchFilterParametrization:
         self, filter_arg, filter_value, monkeypatch
     ) -> None:
         """Test search filters using parametrization to reduce duplication.
-        
+
         QA: Verify each filter type is accepted by the CLI without errors.
         """
         from unittest.mock import MagicMock, patch
@@ -359,5 +359,5 @@ class TestSearchFilterParametrization:
         with patch("secondbrain.search.Searcher", return_value=mock_instance):
             runner = CliRunner()
             result = runner.invoke(cli, ["search", "test", filter_arg, filter_value])
-            
+
             assert result.exit_code == 0, f"Filter {filter_arg} failed: {result.output}"

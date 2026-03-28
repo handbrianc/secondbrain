@@ -34,7 +34,7 @@ async def handle_ls(arguments: dict[str, Any]) -> str:
                             "chunk_count": 0,
                         }
                     documents[source]["chunk_count"] = (
-                        documents[source]["chunk_count"] + 1  # type: ignore[operator]
+                        documents[source]["chunk_count"] + 1
                     )
 
                 output = f"Documents ({len(documents)} total):\n\n"

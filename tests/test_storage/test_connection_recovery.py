@@ -149,7 +149,9 @@ class TestConnectionRecovery:
             mock_client = MagicMock()
             mock_client.admin.command.return_value = {"ok": 1}
 
-            with patch("secondbrain.storage.sync.MongoClient", return_value=mock_client):
+            with patch(
+                "secondbrain.storage.sync.MongoClient", return_value=mock_client
+            ):
                 with VectorStorage() as storage:
                     # Connection should be established
                     assert storage.client is not None

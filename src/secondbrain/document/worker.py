@@ -84,7 +84,18 @@ def send_progress_update(file_path: str, success: bool) -> None:
             _worker_progress_queue.put_nowait((file_path, success))
 
 
-__all__ = ["extract_and_chunk_file", "extract_and_chunk_file_with_progress", "extract_chunk_and_embed_file", "get_worker_converter", "get_worker_embedding_model", "get_worker_progress_queue", "init_worker", "init_worker_with_queue", "send_progress_update"]
+__all__ = [
+    "extract_and_chunk_file",
+    "extract_and_chunk_file_with_progress",
+    "extract_chunk_and_embed_file",
+    "get_worker_converter",
+    "get_worker_embedding_model",
+    "get_worker_progress_queue",
+    "init_worker",
+    "init_worker_with_queue",
+    "send_progress_update",
+]
+
 
 def extract_and_chunk_file(
     file_path_str: str, chunk_size: int, chunk_overlap: int
@@ -243,7 +254,18 @@ def extract_chunk_and_embed_file(
         }
 
 
-__all__ = ["extract_and_chunk_file", "extract_and_chunk_file_with_progress", "extract_chunk_and_embed_file", "get_worker_converter", "get_worker_embedding_model", "get_worker_progress_queue", "init_worker", "init_worker_with_queue", "send_progress_update"]
+__all__ = [
+    "extract_and_chunk_file",
+    "extract_and_chunk_file_with_progress",
+    "extract_chunk_and_embed_file",
+    "get_worker_converter",
+    "get_worker_embedding_model",
+    "get_worker_progress_queue",
+    "init_worker",
+    "init_worker_with_queue",
+    "send_progress_update",
+]
+
 
 def extract_and_chunk_file_with_progress(
     file_path_str: str, chunk_size: int, chunk_overlap: int, progress_queue: Any

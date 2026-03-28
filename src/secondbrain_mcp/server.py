@@ -45,7 +45,7 @@ TOOL_HANDLERS = {
 }
 
 
-@app.list_tools()  # type: ignore[no-untyped-call,misc]
+@app.list_tools()
 async def list_tools() -> list[Tool]:
     """List all available MCP tools."""
     return [
@@ -235,7 +235,7 @@ async def list_tools() -> list[Tool]:
     ]
 
 
-@app.call_tool()  # type: ignore[misc]
+@app.call_tool()
 async def call_tool(name: str, arguments: dict[str, Any]) -> CallToolResult:
     """Call an MCP tool by name with arguments."""
     logger.info(f"Calling tool: {name} with arguments: {arguments}")

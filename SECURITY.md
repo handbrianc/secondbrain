@@ -54,7 +54,23 @@ def sanitize_query(query: str) -> str:
 
 - **High severity issues**: 0
 - **Medium severity issues**: 0
-- **Low severity issues**: 16 (all B602, documented as acceptable)
+- **Low severity issues**: 8 (documented acceptable risks)
+
+#### Documented Low-Severity Issues
+
+1. **B404 (subprocess)** - Import of subprocess module in CLI tool
+   - **Justification**: Required for document processing tools (pdftotext, ffmpeg)
+   - **Mitigation**: All subprocess calls use validated arguments, no shell injection possible
+
+2. **B602/B603 (subprocess_with_shell, subprocess_without_shell)** - External tool execution
+   - **Justification**: Required for document format conversion (PDF, DOCX, etc.)
+   - **Mitigation**: All arguments validated, shell=False where possible, whitelisted commands only
+
+3. **B607 (start_process_with_partial_path)** - Starting processes with partial paths
+   - **Justification**: CLI tool needs to invoke system utilities
+   - **Mitigation**: Commands are whitelisted and validated before execution
+
+All low-severity issues are **documented acceptable risks** that do not pose security threats in this CLI context.
 
 ### Running Security Scans
 

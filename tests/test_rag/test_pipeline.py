@@ -693,4 +693,3 @@ class TestRAGPipelineThreeLayerArchitecture:
 
         assert "Source: file.pdf (page 3)" in prompt
         assert "Text" in prompt
-

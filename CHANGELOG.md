@@ -5,173 +5,83 @@ All notable changes to SecondBrain will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.4.0] - 2026-03-22
+## [Unreleased]
 
 ### Added
-
-#### Conversational RAG
-- **Conversational RAG with Local LLM**: Integration with Ollama for context-aware conversations
-  - Query rewriting using conversation history for improved context
-  - Local LLM processing with Ollama backend
-  - Configurable model selection via `LLM_MODEL` environment variable
-
-- **Chat Command**: `secondbrain chat` for interactive conversations
-  - Natural language queries with conversation history
-  - Session persistence with MongoDB for continuity
-  - Context-aware responses based on ingested documents
-
-- **Session Persistence**: MongoDB-backed conversation state management
-  - Persistent chat sessions across restarts
-  - Session ID management for multi-user support
-  - Automatic session cleanup and expiration
-
-#### Configuration
-- **New Environment Variables**:
-  - `OLLAMA_HOST`: Ollama API endpoint (default: `http://localhost:11434`)
-  - `LLM_MODEL`: LLM model name for RAG (default: `llama3.2`)
-  - `SECONDBRAIN_CHAT_HISTORY_COLLECTION`: MongoDB collection for chat history
-  - `SECONDBRAIN_SESSION_TTL`: Session expiration time in seconds
-
-#### Dependencies
-- **RAG Optional Dependency Group**: `rag` extra for RAG features
-  - Install with: `pip install -e ".[rag]"`
-  - Isolates RAG dependencies from core functionality
+- Property-based testing with Hypothesis for query sanitization and config validation
+- Comprehensive security scanning with Bandit, Safety, and pip-audit
+- SBOM generation with CycloneDX
+- Circuit breaker pattern for resilience
+- Rate limiting for service protection
+- OpenTelemetry tracing support
+- MCP (Model Context Protocol) server integration
+- Conversational Q&A with session management
 
 ### Changed
-
-- Updated README.md with RAG features and chat command documentation
-- Enhanced configuration documentation with new RAG-related settings
-
----
-
-## [0.3.0] - 2026-03-19
-
-### Added
-
-#### Resilience & Reliability
-- **Circuit Breaker Pattern**: Automatic service failure handling for MongoDB and sentence-transformers
-  - Configurable failure and success thresholds
-  - Automatic recovery with half-open state
-  - Prevents cascade failures during service outages
-  - See `examples/circuit_breaker_usage.py` for usage
-
-- **Enhanced Error Handling**: 
-  - CircuitBreakerError exception for open circuit state
-  - Graceful degradation with fallback strategies
-  - Retry logic with exponential backoff support
-
-#### Testing
-- **Chaos Testing Suite** (`tests/test_chaos/`):
-  - Service failure scenarios (MongoDB, sentence-transformers)
-  - Network partition simulation and recovery
-  - Circuit breaker response testing
-  - Graceful degradation validation
-
-- **Concurrency Testing Suite** (`tests/test_concurrency/`):
-  - Concurrent ingestion race condition detection
-  - Concurrent search under load
-  - Thread safety validation
-  - Batch operation concurrency
-
-#### Security
-- **Security Scanning Infrastructure**:
-  - `scripts/security_scan.sh` for comprehensive security checks
-  - pip-audit integration for dependency vulnerability detection
-  - cyclonedx SBOM generation for supply chain security
-  - pre-commit hook for cyclonedx-bom
-
-- **Documentation**:
-  - `requirements-dev.txt` with pinned versions
-  - SBOM generation and scanning procedures
-
-#### Documentation
-- **Migration Guide** (`docs/migration.md`):
-  - Version upgrade instructions
-  - Breaking changes documentation
-  - Migration checklist
-  - Rollback procedures
-
-- **Troubleshooting Guide** (`docs/getting-started/troubleshooting.md`):
-  - Common installation issues
-  - Runtime error resolution
-  - Performance optimization tips
-  - Security scanning issues
-
-- **Examples** (`examples/`):
-  - `circuit_breaker_usage.py` - Circuit breaker patterns
-  - `async_ingestion_example.py` - Async API usage
-  - `tracing_example.py` - OpenTelemetry integration
-
-### Changed
-
-- Updated README.md with new features (circuit breaker, async API, structured logging)
-- Enhanced development dependencies with pip-audit
-- Added cyclonedx pre-commit hook for SBOM generation
-
-### Security
-
-- Added pip-audit to dev dependencies
-- Integrated cyclonedx-bom for SBOM generation
-- Created security scanning workflow
-
-### Development
-
-- Added chaos and concurrency test suites
-- Enhanced test coverage for resilience patterns
-- Updated pre-commit configuration
-
----
-
-## [0.2.0] - 2025-12-01
-
-### Added
-
-- **Async API**: Full asynchronous document ingestion and search
-  - `AsyncDocumentStorage` for non-blocking operations
-  - `AsyncEmbeddingGenerator` for async embedding generation
-  - See `docs/developer-guide/async-api.md` for details
-
-- **Multicore Processing**: Parallel document ingestion
-  - Configurable CPU core count via `--cores` flag
-  - Environment variable `SECONDBRAIN_MAX_WORKERS`
-  - Significant performance improvements for large document sets
-
-- **Rate Limiting**: Protection for sentence-transformers API
-  - Automatic request throttling
-  - Configurable rate limits
-
-### Changed
-
-- Improved error messages with more context
-- Enhanced logging with timestamps and structured format
+- Upgraded all security-critical dependencies to latest patched versions
+- Improved error handling with proper logging in exception handlers
+- Enhanced test coverage with edge case testing
 
 ### Fixed
+- CLI batch size validation tests using proper temporary directories
+- Silent exception handling in embedding generation (Bandit B112)
+- Missing pytest-timeout dependency in development environment
 
-- Fixed MongoDB connection recovery issues
-- Improved handling of duplicate documents
-
----
-
-## [0.1.0] - 2024-06-15
+## [0.4.0] - 2026-03-27
 
 ### Added
+- Async document ingestion API
+- Multi-format document support (PDF, DOCX, PPTX, XLSX, HTML, Markdown, images, audio)
+- Smart chunking with configurable sizes and overlap
+- Multicore processing for parallel ingestion
+- Semantic search with cosine similarity
+- Conversational chat with local LLMs (Ollama)
+- Session persistence for multi-turn conversations
+- Health checks for service connectivity
+- Status and metrics commands
+- JSON output format for all commands
+- Progress indicators for long-running operations
 
-- Initial release
-- Multi-format document ingestion (PDF, DOCX, PPTX, XLSX, HTML, Markdown)
-- Semantic search with sentence-transformers embeddings
+### Changed
+- Migrated to PEP 621 compliant pyproject.toml
+- Improved type annotations with mypy strict mode
+- Enhanced documentation with 40+ markdown files
+- Reorganized CLI into modular structure
+
+### Fixed
+- Memory efficiency with streaming chunk processing
+- Connection pooling for MongoDB
+- Embedding cache for performance optimization
+
+## [0.3.0] - 2026-02-15
+
+### Added
+- Initial document ingestion with sentence-transformers
 - MongoDB vector storage
-- CLI interface with Click
-- Basic health checks
-- Docker Compose setup for local development
+- Basic semantic search
+- Click-based CLI
+- Docker Compose setup
 
-### Features
+### Changed
+- Improved error messages
+- Better logging configuration
 
-- Document ingestion with chunking
-- Vector embedding generation
-- Cosine similarity search
-- Document listing and deletion
-- Database statistics
+## [0.2.0] - 2026-01-20
 
-[0.3.0]: https://github.com/your-org/secondbrain/compare/v0.2.0...v0.3.0
-[0.2.0]: https://github.com/your-org/secondbrain/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/your-org/secondbrain/releases/tag/v0.1.0
+### Added
+- Document converter with Docling
+- Chunking strategies
+- Basic testing infrastructure
+
+## [0.1.0] - 2026-01-01
+
+### Added
+- Project scaffolding
+- Basic configuration system
+- Development setup guidelines
+
+[Unreleased]: https://github.com/your-username/secondbrain/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/your-username/secondbrain/releases/tag/v0.4.0
+[0.3.0]: https://github.com/your-username/secondbrain/releases/tag/v0.3.0
+[0.2.0]: https://github.com/your-username/secondbrain/releases/tag/v0.2.0
+[0.1.0]: https://github.com/your-username/secondbrain/releases/tag/v0.1.0

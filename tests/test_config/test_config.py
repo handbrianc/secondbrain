@@ -269,4 +269,3 @@ class TestConfig:
                 default_top_k=8,
                 embedding_batch_size=101,
             )
-

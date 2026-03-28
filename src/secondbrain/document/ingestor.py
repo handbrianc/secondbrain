@@ -151,12 +151,14 @@ class DocumentIngestor:
             cleaned = chunk["text"].strip()
             normalized = " ".join(cleaned.lower().split())
             text_hash = hashlib.sha256(normalized.encode()).hexdigest()
-            result.append({
-                "text": cleaned,
-                "page": chunk["page"],
-                "file_path": file_path,
-                "text_hash": text_hash,
-            })
+            result.append(
+                {
+                    "text": cleaned,
+                    "page": chunk["page"],
+                    "file_path": file_path,
+                    "text_hash": text_hash,
+                }
+            )
 
         return result
 
@@ -167,7 +169,6 @@ class DocumentIngestor:
         # get_config imported at runtime
 
         from secondbrain.document import get_config
-
 
         config = get_config()
         batch_size = config.embedding_batch_size
@@ -204,7 +205,8 @@ class DocumentIngestor:
                         embedding = embedding_gen.generate(chunk["text"])
                         self.embedding_cache.set(chunk["text"], embedding)
                         chunk_to_embedding[chunk["text_hash"]] = embedding
-                    except Exception:
+                    except Exception as e:
+                        logger.warning("Failed to generate embedding for chunk: {e}")
                         continue
         return chunk_to_embedding
 
@@ -258,7 +260,6 @@ class DocumentIngestor:
         # get_config imported at runtime
 
         from secondbrain.document import get_config
-
 
         config = get_config()
         batch_size = config.streaming_chunk_batch_size
@@ -333,7 +334,10 @@ class DocumentIngestor:
                         embedding = embedding_gen.generate(text)
                         self.embedding_cache.set(text, embedding)
                         chunk_to_embedding[chunk["text_hash"]] = embedding
-                    except Exception:
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to generate embedding for chunk in streaming: {e}"
+                        )
                         continue
         docs_to_store: list[dict[str, Any]] = []
         seen_doc_keys = set()
@@ -369,7 +373,6 @@ class DocumentIngestor:
         # get_config imported at runtime
 
         from secondbrain.document import get_config
-
 
         config = get_config()
         try:

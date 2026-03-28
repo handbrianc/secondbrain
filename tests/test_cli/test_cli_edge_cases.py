@@ -83,9 +83,11 @@ class TestCLIBatchValidation:
         mock_ingestor.ingest.return_value = {"success": 10, "failed": 0}
         mock_ingestor_class.return_value = mock_ingestor
 
-        runner = CliRunner()
-        result = runner.invoke(cli, ["ingest", "/tmp/test_docs", "--batch-size", "20"])
-        assert result.exit_code == 0
+        # Create temp directory since click.Path(exists=True) requires it
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runner = CliRunner()
+            result = runner.invoke(cli, ["ingest", tmpdir, "--batch-size", "20"])
+            assert result.exit_code == 0
 
     @patch("secondbrain.document.DocumentIngestor")
     def test_ingest_with_batch_size_short_flag(
@@ -96,9 +98,11 @@ class TestCLIBatchValidation:
         mock_ingestor.ingest.return_value = {"success": 10, "failed": 0}
         mock_ingestor_class.return_value = mock_ingestor
 
-        runner = CliRunner()
-        result = runner.invoke(cli, ["ingest", "/tmp/test_docs", "-b", "15"])
-        assert result.exit_code == 0
+        # Create temp directory since click.Path(exists=True) requires it
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runner = CliRunner()
+            result = runner.invoke(cli, ["ingest", tmpdir, "-b", "15"])
+            assert result.exit_code == 0
 
     @patch("secondbrain.document.DocumentIngestor")
     def test_ingest_batch_size_zero(self, mock_ingestor_class: MagicMock) -> None:
