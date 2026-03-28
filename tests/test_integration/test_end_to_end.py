@@ -172,24 +172,6 @@ class TestIntegrationDataFlow:
     """Tests validating data flows between modules."""
 
     @pytest.mark.integration
-    @pytest.mark.slow
-    @pytest.mark.skip(
-        reason="Cannot mock multiprocessing-based ingestion; requires real MongoDB and embedding service"
-    )
-    def test_ingestion_creates_proper_chunks(
-        self,
-        sample_pdf_path: Path,
-    ) -> None:
-        """Verify ingestion creates properly structured chunks.
-
-        SKIPPED: The current architecture uses ProcessPoolExecutor for parallel
-        ingestion, which makes it impossible to mock VectorStorage and
-        LocalEmbeddingGenerator in worker processes.
-        """
-        # Test skipped - see docstring
-        pass
-
-    @pytest.mark.integration
     def test_list_pagination_works(
         self,
         mongomock_client: mongomock.MongoClient,
