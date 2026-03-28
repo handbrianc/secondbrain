@@ -43,48 +43,6 @@ def mongomock_client() -> Generator[mongomock.MongoClient[Any], None, None]:
 class TestDocumentIngestion:
     """Tests for document ingestion end-to-end workflow."""
 
-    @pytest.mark.integration
-    @pytest.mark.slow
-    @pytest.mark.skip(
-        reason="Cannot mock multiprocessing-based ingestion; requires real MongoDB and embedding service"
-    )
-    def test_ingest_single_pdf_document(
-        self,
-        sample_pdf_path: Path,
-    ) -> None:
-        """Test ingesting a single PDF document.
-
-        SKIPPED: The current architecture uses ProcessPoolExecutor for parallel
-        ingestion, which makes it impossible to mock VectorStorage and
-        LocalEmbeddingGenerator in worker processes.
-        """
-        # Test skipped - see docstring
-        pass
-
-    @pytest.mark.integration
-    @pytest.mark.slow
-    @pytest.mark.skip(
-        reason="Cannot mock multiprocessing-based ingestion; requires real MongoDB and embedding service"
-    )
-    def test_ingest_multiple_files_batch(
-        self,
-        sample_pdf_path: Path,
-        sample_pdf_with_multiple_pages: Path,
-    ) -> None:
-        """Test batch ingestion of multiple PDF files.
-
-        SKIPPED: The current architecture uses ProcessPoolExecutor for parallel
-        ingestion, which makes it impossible to mock VectorStorage and
-        LocalEmbeddingGenerator in worker processes. This test requires
-        either:
-        1. Real MongoDB and embedding service running
-        2. Architecture change to support testable multiprocessing
-
-        See: https://github.com/python/cpython/issues/91351
-        """
-        # Test skipped - see docstring for rationale
-        pass
-
 
 class TestFullWorkflow:
     """Tests for complete workflow: ingest -> list -> delete."""
