@@ -16,20 +16,6 @@ build/
 
 # OpenCode
 .opencode/
-venv/
-.venv/
-env/
-*.pyc
-__pycache__/
-.mypy_cache/
-.pytest_cache/
-.ruff_cache/
-.coverage
-*.egg-info/
-dist/
-build/
-*.egg
-.eggs/
 
 # IDE
 .idea/
@@ -52,8 +38,15 @@ htmlcov/
 .benchmarks/
 .coverage*
 
-# Lockfile (keep for reproducibility)
-# requirements.txt is tracked for reproducible installs
+# Build artifacts
+site/
+docs/site/
+secondbrain.spec
+
+# Lockfiles - managed via pyproject.toml
+requirements.txt
+requirements-dev.txt
+requirements.in
 
 # Local config
 config.yaml
@@ -62,22 +55,12 @@ config.yml
 
 # Sisyphus Loop
 .sisyphus/
-venv/
-.mypy_cache/
-.pytest_cache/
-.ruff_cache/
-.coverage
-
-# IDE
-.idea/
-.vscode/
-
-# Environment
-.env
-
-# Build artifacts
-site/
-docs/site/
 
 # Secrets baseline
 .secrets.baseline
+
+# Test artifacts
+test_output.txt
+
+# SBOM - keep only one format
+sbom.spdx
