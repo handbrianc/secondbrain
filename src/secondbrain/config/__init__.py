@@ -213,6 +213,24 @@ class Config(BaseSettings):
         description="Maximum number of worker processes for parallel processing (default: auto-detect CPU count)",
     )
 
+    # Memory management settings
+    memory_limit_percent: float = Field(
+        default=0.8,
+        description=(
+            "Percentage of available RAM to use for processing (0.0-1.0). "
+            "Default is 0.8 (80%) to leave headroom for OS and other processes. "
+            "Affects worker count calculation during ingestion and test runs."
+        ),
+    )
+    estimated_memory_per_worker_mb: int = Field(
+        default=512,
+        description=(
+            "Estimated memory usage per worker process in MB (default: 512MB). "
+            "Used to calculate safe worker count based on memory limit. "
+            "Adjust based on document size and embedding model requirements."
+        ),
+    )
+
     streaming_enabled: bool = Field(
         default=True,
         description="Enable streaming processing for memory efficiency (default: true)",

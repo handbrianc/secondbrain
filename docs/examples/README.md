@@ -1,81 +1,87 @@
-# SecondBrain Examples
+# Examples
 
-This directory contains practical examples demonstrating how to use the SecondBrain document intelligence CLI tool.
+Code examples and tutorials for SecondBrain.
 
-## Directory Structure
-
-```
-examples/
-├── basic_usage/          # Simple CLI-style examples
-│   ├── ingest_documents.py
-│   ├── semantic_search.py
-│   └── list_documents.py
-├── advanced/             # Advanced workflows
-│   ├── custom_chunking.py
-│   ├── batch_ingestion.py
-│   └── async_workflow.py
-├── integrations/         # API integrations
-│   ├── flask_api.py
-│   └── fastapi_endpoint.py
-└── scripts/              # Utility scripts
-    ├── ingest_entire_directory.sh
-    └── export_to_json.py
-```
-
-## Quick Start
-
-### Prerequisites
-
-```bash
-# Install SecondBrain with dependencies
-pip install -e ".[dev]"
-
-# Start MongoDB (if using Docker)
-docker-compose up -d
-
-# Ensure sentence-transformers is running
-sentence-transformers serve
-```
-
-### Running Examples
-
-```bash
-# Basic usage examples
-python examples/basic_usage/ingest_documents.py /path/to/documents
-
-# Advanced examples
-python examples/advanced/batch_ingestion.py --batch-size 10 /path/to/docs
-
-# Integration examples
-python examples/integrations/flask_api.py --port 8000
-```
-
-## Examples Overview
+## Quick Examples
 
 ### Basic Usage
 
-- **ingest_documents.py**: Simple document ingestion with progress reporting
-- **semantic_search.py**: Perform semantic searches with filters
-- **list_documents.py**: List and inspect ingested documents
+```python
+from secondbrain import SecondBrain
+
+# Initialize
+sb = SecondBrain()
+
+# Ingest document
+sb.ingest("document.pdf")
+
+# Search
+results = sb.search("machine learning")
+
+for doc in results:
+    print(doc.title, doc.score)
+```
+
+### Async Usage
+
+```python
+import asyncio
+from secondbrain import AsyncSecondBrain
+
+async def main():
+    sb = AsyncSecondBrain()
+    
+    # Batch ingest
+    await sb.ingest_batch(["doc1.pdf", "doc2.pdf"])
+    
+    # Parallel search
+    results = await asyncio.gather(
+        sb.search("query 1"),
+        sb.search("query 2")
+    )
+
+asyncio.run(main())
+```
+
+## Example Categories
+
+### Basic Usage
+- [Ingest Documents](basic_usage/ingest_documents.py)
+- [Semantic Search](basic_usage/semantic_search.py)
+- [List Documents](basic_usage/list_documents.py)
 
 ### Advanced
-
-- **custom_chunking.py**: Configure custom chunk sizes and overlap
-- **batch_ingestion.py**: Parallel ingestion of large directories
-- **async_workflow.py**: Full async workflow for high-throughput scenarios
+- [Custom Chunking](advanced/custom_chunking.py)
+- [Batch Ingestion](advanced/batch_ingestion.py)
+- [Async Workflow](advanced/async_workflow.py)
 
 ### Integrations
-
-- **flask_api.py**: Flask REST API wrapper
-- **fastapi_endpoint.py**: FastAPI async API with Pydantic models
+- [FastAPI Endpoint](integrations/fastapi_endpoint.py)
+- [Flask API](integrations/flask_api.py)
 
 ### Scripts
+- [Export to JSON](scripts/export_to_json.py)
+- [Ingest Directory](scripts/ingest_entire_directory.sh)
 
-- **ingest_entire_directory.sh**: Bash script for bulk ingestion
-- **export_to_json.py**: Export documents to JSON format
+## Tutorials
 
-## Tips
+### Getting Started Tutorial
 
-- Use `--help` flag on each example to see available options
-- Examples use the same `.env` configuration as the CLI
-- Set `SECONDBRAIN_VERBOSE=1` for detailed logging
+1. Install SecondBrain
+2. Configure MongoDB
+3. Ingest your first document
+4. Perform semantic search
+5. Explore results
+
+### Advanced Tutorial
+
+1. Custom embedding models
+2. Batch processing
+3. Performance optimization
+4. Integration with LLMs
+
+## See Also
+
+- [User Guide](../user-guide/index.md)
+- [Getting Started](../getting-started/index.md)
+- [API Reference](../api/index.md)

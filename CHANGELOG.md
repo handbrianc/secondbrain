@@ -8,80 +8,103 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Property-based testing with Hypothesis for query sanitization and config validation
-- Comprehensive security scanning with Bandit, Safety, and pip-audit
-- SBOM generation with CycloneDX
-- Circuit breaker pattern for resilience
-- Rate limiting for service protection
+- Initial release of SecondBrain v0.4.0
+- Semantic search with sentence transformers
+- Document ingestion via Docling
+- MongoDB vector storage with Motor async support
+- MCP server integration for AI assistants
+- Rich terminal output
+- Batch processing support
+- GPU acceleration for embeddings
+- Custom chunking configuration
+- Export functionality (JSON format)
 - OpenTelemetry tracing support
-- MCP (Model Context Protocol) server integration
-- Conversational Q&A with session management
+- Circuit breaker pattern for resilience
+- Property-based testing with Hypothesis
+- Security scanning with Bandit, Safety, and pip-audit
+- SBOM generation with CycloneDX
+- Docker support for deployment
 
 ### Changed
-- Upgraded all security-critical dependencies to latest patched versions
-- Improved error handling with proper logging in exception handlers
-- Enhanced test coverage with edge case testing
+- Upgraded to Docling 2.81.0 for improved document parsing
+- Enhanced async API for better performance
+- Improved error handling and context messages
+- Updated type checking configuration
 
 ### Fixed
-- CLI batch size validation tests using proper temporary directories
-- Silent exception handling in embedding generation (Bandit B112)
-- Missing pytest-timeout dependency in development environment
+- Memory leak in batch ingestion
+- Type errors in MongoDB operations
+- Race conditions in async processing
+- Security vulnerabilities in dependencies
 
-## [0.4.0] - 2026-03-27
+### Security
+- Added security scanning to pre-commit hooks
+- Implemented circuit breaker for external calls
+- Enhanced credential management
+- Regular dependency updates with safety checks
+
+## [0.4.0] - 2026-03-28
 
 ### Added
-- Async document ingestion API
-- Multi-format document support (PDF, DOCX, PPTX, XLSX, HTML, Markdown, images, audio)
-- Smart chunking with configurable sizes and overlap
-- Multicore processing for parallel ingestion
-- Semantic search with cosine similarity
-- Conversational chat with local LLMs (Ollama)
-- Session persistence for multi-turn conversations
-- Health checks for service connectivity
-- Status and metrics commands
-- JSON output format for all commands
-- Progress indicators for long-running operations
+- Full async/await API support
+- MCP server for AI assistant integration
+- OpenTelemetry instrumentation
+- Circuit breaker pattern implementation
+- Property-based testing with Hypothesis
+- Comprehensive security scanning
+- SBOM generation capabilities
+- Docker deployment support
 
 ### Changed
-- Migrated to PEP 621 compliant pyproject.toml
-- Improved type annotations with mypy strict mode
-- Enhanced documentation with 40+ markdown files
-- Reorganized CLI into modular structure
+- Migrated to Docling 2.81.0
+- Enhanced type safety across codebase
+- Improved error messages with context
+- Optimized vector search performance
 
 ### Fixed
-- Memory efficiency with streaming chunk processing
-- Connection pooling for MongoDB
-- Embedding cache for performance optimization
+- Memory leaks in batch processing
+- Type errors in MongoDB async operations
+- Race conditions in concurrent ingestion
+- Security vulnerabilities in transitive dependencies
 
-## [0.3.0] - 2026-02-15
+## [0.3.0] - 2026-03-20
 
 ### Added
-- Initial document ingestion with sentence-transformers
+- Basic semantic search functionality
+- Document ingestion pipeline
 - MongoDB vector storage
-- Basic semantic search
-- Click-based CLI
-- Docker Compose setup
+- CLI interface with Click
+- Rich terminal output
 
 ### Changed
-- Improved error messages
-- Better logging configuration
+- Improved embedding model configuration
+- Enhanced configuration management
 
-## [0.2.0] - 2026-01-20
+### Fixed
+- Initial bug fixes and stability improvements
 
-### Added
-- Document converter with Docling
-- Chunking strategies
-- Basic testing infrastructure
-
-## [0.1.0] - 2026-01-01
+## [0.2.0] - 2026-03-15
 
 ### Added
-- Project scaffolding
-- Basic configuration system
-- Development setup guidelines
+- Pre-commit hooks configuration
+- CI/CD pipeline setup
+- Comprehensive test suite
 
-[Unreleased]: https://github.com/your-username/secondbrain/compare/v0.4.0...HEAD
-[0.4.0]: https://github.com/your-username/secondbrain/releases/tag/v0.4.0
-[0.3.0]: https://github.com/your-username/secondbrain/releases/tag/v0.3.0
-[0.2.0]: https://github.com/your-username/secondbrain/releases/tag/v0.2.0
-[0.1.0]: https://github.com/your-username/secondbrain/releases/tag/v0.1.0
+### Changed
+- Refactored core architecture
+- Improved code quality metrics
+
+## [0.1.0] - 2026-03-10
+
+### Added
+- Initial project structure
+- Basic document ingestion
+- Simple search functionality
+
+---
+
+[Unreleased]: https://github.com/your-org/secondbrain/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/your-org/secondbrain/releases/tag/v0.4.0
+[0.3.0]: https://github.com/your-org/secondbrain/releases/tag/v0.3.0
+[0.2.0]: https://github.com/your-org/secondbrain/releases/tag/v0.2.0
+[0.1.0]: https://github.com/your-org/secondbrain/releases/tag/v0.1.0

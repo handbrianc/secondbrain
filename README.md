@@ -1,221 +1,209 @@
-# SecondBrain - Local Document Intelligence CLI
+# SecondBrain
 
-A powerful local document intelligence CLI tool that enables semantic search over your documents using state-of-the-art embedding models and MongoDB vector search.
+A local document intelligence CLI tool for semantic search and document management.
 
-![Python Version](https://img.shields.io/badge/python-3.11+-blue.svg)
-![License](https://img.shields.io/badge/license-MIT-green.svg)
+[![Python Version](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://python.org)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Code Style](https://img.shields.io/badge/code%20style-ruff-orange.svg)](https://github.com/astral-sh/ruff)
 
-## Why SecondBrain?
+## Overview
 
-- **🔒 Privacy-First**: All processing happens locally - no data leaves your machine
-- **📄 Multi-Format Support**: PDF, DOCX, PPTX, XLSX, HTML, Markdown, images, and audio
-- **🚀 Fast & Scalable**: Multicore ingestion, async API, and optimized vector search
-- **🎯 Semantic Search**: Natural language queries with intelligent relevance ranking
-- **🛠️ Production-Ready**: Circuit breaker, rate limiting, structured logging, and OpenTelemetry tracing
-- **🐳 Docker Support**: Easy deployment with MongoDB and sentence-transformers services
+SecondBrain is a powerful command-line tool that enables:
 
-## Quick Start
-
-Get up and running in 5 minutes:
-
-```bash
-# 1. Install SecondBrain
-pip install -e ".[dev]"
-
-# 2. Start services (Docker)
-docker-compose up -d  # MongoDB
-sentence-transformers serve  # Embedding service
-
-# 3. Ingest your first documents
-secondbrain ingest /path/to/documents/
-
-# 4. Search semantically
-secondbrain search "what is this about?"
-```
+- **Semantic Search**: Find documents based on meaning, not just keywords
+- **Document Ingestion**: Automatically process and index PDFs, Word docs, and more
+- **Vector Storage**: Leverage MongoDB for efficient vector-based storage and retrieval
+- **Local Processing**: All operations happen locally for privacy and security
+- **RAG Pipeline**: Retrieval-Augmented Generation for intelligent document understanding
 
 ## Features
 
-### Document Processing
-- **Multi-format ingestion**: Automatically parse PDF, Word, PowerPoint, Excel, HTML, Markdown, and more
-- **Smart chunking**: Configurable chunk sizes with overlap for context preservation
-- **Multicore processing**: Parallel document ingestion with configurable CPU cores
-- **Async support**: Full async API for high-throughput scenarios
+- 🚀 **Fast Ingestion**: Batch processing with GPU acceleration support
+- 🔍 **Semantic Search**: Sentence transformer embeddings for accurate results
+- 📄 **Multi-format Support**: PDF, DOCX, TXT, and more via Docling
+- 🛡️ **Privacy-First**: Everything runs locally, no cloud dependencies
+- 🔌 **Extensible**: MCP server integration for AI assistants
+- 📊 **Rich Output**: Beautiful terminal UI with Rich library
+- ⚡ **Async Support**: Full async/await API for high-performance applications
 
-### Search & Retrieval
-- **Semantic search**: Natural language queries using cosine similarity
-- **Configurable results**: Adjust top-k, similarity thresholds, and returned fields
-- **Conversational Q&A**: Multi-turn chat with context-aware responses using local LLMs
-- **Session management**: Persistent conversation sessions with history
-
-### Production Features
-- **Circuit breaker**: Automatic failure handling with self-recovery
-- **Rate limiting**: Protect downstream services from overload
-- **Structured logging**: JSON logs with configurable verbosity
-- **OpenTelemetry**: Distributed tracing for observability
-- **Health checks**: Comprehensive service connectivity validation
-
-### Developer Experience
-- **Type-safe**: Full type hints with mypy strict mode
-- **Well-tested**: Comprehensive test suite with unit, integration, and property-based tests
-- **Secure**: Integrated vulnerability scanning and SBOM generation
-- **Extensible**: Clean architecture with pluggable components
-
-## Documentation
-
-| Section | Description |
-|---------|-------------|
-| [Getting Started](docs/getting-started/index.md) | Installation, quick start, and configuration |
-| [User Guide](docs/user-guide/index.md) | Complete usage guide for all features |
-| [CLI Reference](docs/user-guide/cli-reference.md) | All commands and options |
-| [Developer Guide](docs/developer-guide/index.md) | Development setup and workflows |
-| [Architecture](docs/architecture/index.md) | System design and data flow |
-| [Examples](docs/examples/README.md) | Practical code examples |
-
-## CLI Commands
+## Quick Start
 
 ```bash
-# Ingest documents
-secondbrain ingest /path/to/documents/ --cores 4
+# Install
+pip install -e .
 
-# Semantic search
-secondbrain search "machine learning best practices" --top-k 10
+# Ingest a document
+secondbrain ingest /path/to/document.pdf
 
-# Interactive chat with your documents
-secondbrain chat
-# Or single query: secondbrain chat "What is the architecture?"
+# Search for information
+secondbrain search "what is machine learning?"
 
-# List documents
-secondbrain ls --details
-
-# Check system health
-secondbrain health
-
-# View database statistics
-secondbrain status
+# List all documents
+secondbrain list
 ```
 
-Run `secondbrain --help` for full command reference.
+## Installation
 
-## Configuration
+### Prerequisites
 
-SecondBrain uses environment variables prefixed with `SECONDBRAIN_`:
+- Python 3.11 or higher
+- MongoDB 6.0+ (local or remote)
+- GPU (optional, for faster embeddings)
+
+### Quick Install
 
 ```bash
-# Core configuration
-SECONDBRAIN_MONGO_URI=mongodb://localhost:27017
-SECONDBRAIN_LOCAL_EMBEDDING_MODEL=all-MiniLM-L6-v2
-SECONDBRAIN_CHUNK_SIZE=4096
+# Clone the repository
+git clone https://github.com/your-org/secondbrain.git
+cd secondbrain
 
-# Performance tuning
-SECONDBRAIN_MAX_WORKERS=4
-SECONDBRAIN_RATE_LIMIT_ENABLED=true
-SECONDBRAIN_CIRCUIT_BREAKER_ENABLED=true
+# Install with pip
+pip install -e .
 
-# Logging
-SECONDBRAIN_LOG_LEVEL=INFO
-SECONDBRAIN_LOG_FORMAT=pretty
+# Or with dev dependencies
+pip install -e ".[dev]"
 ```
 
-See [Configuration Reference](docs/getting-started/configuration.md) for complete options.
+### Configuration
+
+Create a `.env` file in your project root:
+
+```env
+# MongoDB connection
+MONGODB_URI=mongodb://localhost:27017
+MONGODB_DB=secondbrain
+
+# Embedding model (optional, defaults to sentence-transformers/all-MiniLM-L6-v2)
+EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+
+# Optional: Ollama for LLM integration
+OLLAMA_BASE_URL=http://localhost:11434
+```
+
+## Usage
+
+### Document Ingestion
+
+```bash
+# Ingest a single document
+secondbrain ingest /path/to/document.pdf
+
+# Ingest entire directory
+secondbrain ingest /path/to/documents/ --recursive
+
+# Custom chunking
+secondbrain ingest /path/to/document.pdf --chunk-size 500 --chunk-overlap 50
+```
+
+### Semantic Search
+
+```bash
+# Basic search
+secondbrain search "machine learning applications"
+
+# Search with filters
+secondbrain search "quarterly report" --collection finance --limit 5
+
+# Export results
+secondbrain search "project timeline" --format json --output results.json
+```
+
+### Document Management
+
+```bash
+# List all documents
+secondbrain list
+
+# Get document details
+secondbrain info document-id
+
+# Delete a document
+secondbrain delete document-id
+
+# Export all documents
+secondbrain export --format json --output all-documents.json
+```
+
+## Architecture
+
+SecondBrain is built with:
+
+- **Docling**: Advanced document parsing and conversion
+- **Sentence Transformers**: High-quality text embeddings
+- **MongoDB + Motor**: Vector storage with async support
+- **Click**: CLI framework with rich command structure
+- **Rich**: Beautiful terminal output
+- **Pydantic**: Data validation and settings management
+
+See [Architecture Guide](docs/architecture/index.md) for detailed technical documentation.
 
 ## Development
 
-### Setup
-
 ```bash
-# Clone and setup
-git clone https://github.com/your-username/secondbrain.git
-cd secondbrain
-python -m venv venv
-source venv/bin/activate
+# Install dev dependencies
 pip install -e ".[dev]"
-pre-commit install
-```
 
-### Quality Checks
+# Run tests
+pytest
 
-```bash
-# Linting and formatting
-ruff check . && ruff format .
+# Lint code
+ruff check .
+ruff format .
 
 # Type checking
 mypy .
-
-# Run tests
-pytest -m "not integration"  # Fast tests
-pytest                         # All tests including integration
 ```
 
-### Test Profiles
+See [Developer Guide](docs/developer-guide/index.md) for setup instructions and contribution guidelines.
 
-| Profile | Command | Use Case |
-|---------|---------|----------|
-| Fast | `pytest -m "not integration"` | Pre-commit, quick feedback |
-| Integration | `pytest -m integration` | Service testing |
-| Full | `pytest` | Complete validation |
+## Documentation
 
-See [Testing Guide](docs/developer-guide/TESTING.md) for details.
+- [Getting Started](docs/getting-started/index.md)
+- [User Guide](docs/user-guide/index.md)
+- [Developer Guide](docs/developer-guide/index.md)
+- [API Reference](docs/api/index.md)
+- [Architecture](docs/architecture/index.md)
 
-### Security Scanning
+## Integrations
 
-```bash
-# Full security scan
-./scripts/security_scan.sh all
+- **MCP Server**: Connect with AI assistants like Cursor, Cline, and others
+- **FastAPI/Flask**: Use the async API for web applications
+- **Custom Scripts**: Python SDK for programmatic access
 
-# Individual checks
-./scripts/security_scan.sh audit   # Dependency vulnerabilities
-./scripts/security_scan.sh bandit  # Code security
-./scripts/security_scan.sh sbom    # Generate SBOM
-```
+See [Examples](docs/examples/) for integration patterns.
 
-## Architecture Overview
+## Security
 
-```
-┌─────────────┐     ┌──────────────┐     ┌──────────────┐
-│  Documents  │ ──▶ │   Ingestor   │ ──▶ │  Chunking    │
-└─────────────┘     └──────────────┘     └──────────────┘
-                                                   │
-                                                   ▼
-┌─────────────┐     ┌──────────────┐     ┌──────────────┐
-│   Search    │ ◀── │   MongoDB    │ ◀── │  Embeddings  │
-└─────────────┘     └──────────────┘     └──────────────┘
-```
+SecondBrain prioritizes security:
 
-Key components:
-- **CLI Layer**: Click-based command interface
-- **Document Ingestor**: Multi-format parsing with Docling
-- **Embedding Engine**: sentence-transformers for vector generation
-- **Storage Layer**: MongoDB with vector search
-- **Resilience**: Circuit breaker and rate limiting
+- All data stays local
+- No external API calls for document processing
+- Secure credential management via python-dotenv
+- Regular security audits with Bandit and Safety
 
-See [Architecture Documentation](docs/architecture/index.md) for details.
-
-## Examples
-
-Practical examples in [docs/examples/](docs/examples/README.md):
-
-- **Basic Usage**: Simple CLI-style examples
-- **Advanced**: Custom chunking, batch processing, async workflows
-- **Integrations**: Flask and FastAPI REST APIs
-- **Scripts**: Utility scripts for bulk operations
+See [Security Guide](docs/security/index.md) for details.
 
 ## Contributing
 
-Contributions are welcome! See [Contributing Guide](docs/developer-guide/contributing.md) for details.
-
-### Quick Contribution Ideas
-- Fix bugs or typos
-- Improve documentation
-- Add tests for edge cases
-- Suggest new features via issues
+We welcome contributions! See [Contributing Guide](CONTRIBUTING.md) for guidelines.
 
 ## License
 
-MIT License - See [LICENSE](docs/LICENSE.md) for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE.md) file for details.
 
 ## Support
 
-- **Documentation**: [docs/index.md](docs/index.md)
-- **Troubleshooting**: [Troubleshooting Guide](docs/getting-started/troubleshooting.md)
-- **Bug Reports**: [GitHub Issues](https://github.com/your-username/secondbrain/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/your-username/secondbrain/discussions)
+- 📖 Documentation: [docs/](docs/)
+- 🐛 Issues: [GitHub Issues](https://github.com/your-org/secondbrain/issues)
+- 💬 Discussions: [GitHub Discussions](https://github.com/your-org/secondbrain/discussions)
+
+## Acknowledgments
+
+- [Docling](https://github.com/DS4SD/docling) for document parsing
+- [Sentence Transformers](https://www.sbert.net/) for embeddings
+- [MongoDB](https://www.mongodb.com/) for vector storage
+- [Rich](https://github.com/Textualize/rich) for terminal UI
+
+---
+
+Built with ❤️ using Python, Click, and MongoDB

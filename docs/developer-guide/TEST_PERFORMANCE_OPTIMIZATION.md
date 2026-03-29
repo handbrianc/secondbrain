@@ -1,147 +1,244 @@
-# Test Performance Optimization
+# Performance Testing Guide
 
-Optimize test execution speed for SecondBrain.
+Performance testing and benchmarking guide for SecondBrain.
 
-## Current Performance
+## Overview
 
-| Profile | Duration | Workers |
-|---------|----------|---------|
-| Fast | ~5s | 4 |
-| Integration | ~15s | 4 |
-| Full | ~25s | 4 |
+This guide covers performance testing strategies and benchmarking tools for SecondBrain.
 
-## Optimization Strategies
+## Benchmarking Tools
 
-### Parallel Execution
-
-```bash
-# Use all available cores
-pytest -n auto
-
-# Specific worker count
-pytest -n 8
-```
-
-### Test Selection
-
-```bash
-# Run only failed tests from last run
-pytest --last-failed
-
-# Run specific test file
-pytest tests/test_config.py
-
-# Run tests matching pattern
-pytest -k "test_chunk"
-```
-
-### Skip Unnecessary Tests
-
-```bash
-# Exclude integration tests
-pytest -m "not integration"
-
-# Exclude slow tests
-pytest -m "not slow"
-```
-
-### Caching
-
-```bash
-# Enable pytest cache
-pytest --cache-clear  # Clear cache
-
-# Show cached values
-pytest --cache-show
-```
-
-## Test Configuration
-
-### pyproject.toml
-
-```toml
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-addopts = "-v --tb=short"
-markers = [
-    "slow: marks tests as slow",
-    "integration: marks integration tests",
-]
-timeout = 60
-```
-
-### conftest.py
+### pytest-benchmark
 
 ```python
 import pytest
 
-def pytest_configure(config):
-    config.addinivalue_line(
-        "markers", "slow: mark test as slow to run"
-    )
+@pytest.mark.benchmark
+def test_search_latency(benchmark):
+    """Benchmark search latency."""
+    
+    def search():
+        results = storage.search("test query", limit=10)
+        return len(results)
+    
+    stats = benchmark(search)
+    
+    assert stats.mean < 0.1  # < 100ms
+    assert stats.min > 0.001  # > 1ms
 ```
 
-## Benchmarking
-
-### Setup
+### Running Benchmarks
 
 ```bash
-pip install pytest-benchmark
+# Run benchmarks
+pytest --benchmark-only
+
+# Save benchmark data
+pytest --benchmark-save=baseline
+
+# Compare with baseline
+pytest --benchmark-compare
 ```
 
-### Usage
+## Performance Metrics
+
+### Ingestion Performance
 
 ```python
-def test_performance(benchmark):
-    result = benchmark(function_to_test)
-    assert result is not None
+import time
+from secondbrain.ingestor import DocumentIngestor
+
+def benchmark_ingestion(pdf_path: str):
+    """Benchmark document ingestion."""
+    ingestor = DocumentIngestor(storage=storage)
+    
+    start = time.perf_counter()
+    doc_ids = ingestor.ingest_file(pdf_path)
+    elapsed = time.perf_counter() - start
+    
+    print(f"Ingestion time: {elapsed:.2f}s")
+    print(f"Documents ingested: {len(doc_ids)}")
 ```
 
-### Run Benchmarks
+### Search Performance
 
-```bash
-pytest --benchmark-only
+```python
+def benchmark_search(queries: List[str]):
+    """Benchmark search performance."""
+    times = []
+    
+    for query in queries:
+        start = time.perf_counter()
+        results = storage.search(query, limit=10)
+        elapsed = time.perf_counter() - start
+        times.append(elapsed)
+    
+    print(f"Avg latency: {sum(times)/len(times):.3f}s")
+    print(f"Min latency: {min(times):.3f}s")
+    print(f"Max latency: {max(times):.3f}s")
+```
+
+## Load Testing
+
+### Concurrent Users
+
+```python
+import asyncio
+import aiohttp
+
+async def simulate_user(session, query):
+    """Simulate a user making a search."""
+    start = time.perf_counter()
+    async with session.post('/search', json={'query': query}) as resp:
+        await resp.json()
+    return time.perf_counter() - start
+
+async def load_test(num_users: int, queries: List[str]):
+    """Load test with concurrent users."""
+    async with aiohttp.ClientSession() as session:
+        tasks = [
+            simulate_user(session, query)
+            for query in queries * num_users
+        ]
+        results = await asyncio.gather(*tasks)
+    
+    print(f"Throughput: {len(results)/sum(results):.2f} req/s")
+```
+
+### Stress Testing
+
+```python
+def stress_test(duration: int = 60):
+    """Stress test for given duration."""
+    import threading
+    
+    start_time = time.time()
+    requests = 0
+    
+    def worker():
+        nonlocal requests
+        while time.time() - start_time < duration:
+            storage.search("test query", limit=10)
+            requests += 1
+    
+    threads = [threading.Thread(target=worker) for _ in range(10)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    
+    print(f"Total requests: {requests}")
+    print(f"RPS: {requests/duration:.2f}")
 ```
 
 ## Profiling
 
-### CPU Profiling
+### cProfile
 
-```bash
-python -m cProfile -o profile.out -m pytest
+```python
+import cProfile
+import pstats
+
+def profile_search():
+    """Profile search operation."""
+    profiler = cProfile.Profile()
+    profiler.enable()
+    
+    storage.search("test query", limit=10)
+    
+    profiler.disable()
+    stats = pstats.Stats(profiler)
+    stats.sort_stats('cumulative')
+    stats.print_stats(20)
 ```
 
 ### Memory Profiling
 
-```bash
-pytest --memray
+```python
+from memory_profiler import profile
+
+@profile
+def memory_test():
+    """Test memory usage."""
+    documents = []
+    for i in range(1000):
+        doc = create_document(i)
+        documents.append(doc)
+    return documents
 ```
 
-## Best Practices
+## Optimization Strategies
 
-1. **Keep tests fast** - Target < 1s per test
-2. **Use fixtures efficiently** - Cache expensive setup
-3. **Parallelize** - Use pytest-xdist
-4. **Skip when possible** - Mark slow tests
-5. **Mock external services** - Don't rely on network
+### Batch Processing
 
-## Troubleshooting
+```python
+# Before: Individual processing
+for doc in documents:
+    embeddings.append(model.encode(doc.content))
 
-### Slow Tests
-
-```bash
-# Find slowest tests
-pytest --durations=10
+# After: Batch processing
+embeddings = model.encode([doc.content for doc in documents], batch_size=32)
 ```
 
-### Memory Leaks
+### Caching
 
-```bash
-# Track memory usage
-pytest --memray --memray-bind=host
+```python
+from functools import lru_cache
+
+@lru_cache(maxsize=1000)
+def get_embedding(text: str):
+    return model.encode(text)
 ```
 
-## Next Steps
+### Connection Pooling
 
-- [Testing Guide](TESTING.md) - Complete testing guide
-- [Code Standards](code-standards.md) - Performance-aware coding
+```python
+# Optimize MongoDB connection
+client = AsyncMongoClient(
+    uri,
+    maxPoolSize=50,
+    minPoolSize=10,
+    maxIdleTimeMS=300000
+)
+```
+
+## Performance Budgets
+
+### Targets
+
+| Metric | Target | Measurement |
+|--------|--------|-------------|
+| Search latency | < 100ms | p95 |
+| Ingestion rate | > 100 docs/min | docs/minute |
+| Memory usage | < 2GB | Resident set size |
+| CPU usage | < 50% | Average |
+
+### CI Integration
+
+```yaml
+# .github/workflows/performance.yml
+name: Performance
+
+on: [push]
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Run benchmarks
+        run: pytest --benchmark-only --benchmark-json=output.json
+      
+      - name: Store benchmarks
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          tool: 'pytest'
+          output-file-path: output.json
+```
+
+## See Also
+
+- [Testing Guide](TESTING.md)
+- [Async API](async-api.md)
+- [Configuration](configuration.md)

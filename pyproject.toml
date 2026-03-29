@@ -199,6 +199,7 @@ exclude_lines = [
     "if TYPE_CHECKING:",
     "@abstractmethod",
 ]
+fail_under = 90
 
 [tool.bandit]
 skips = ["B101", "B602"]
@@ -231,7 +232,7 @@ ignore = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-n auto --no-cov --timeout=60 -p no:warnings -p no:benchmark"
+addopts = "-n auto --timeout=60 -p no:warnings -p no:benchmark"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 numprocesses = "auto"

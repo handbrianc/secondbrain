@@ -1,222 +1,212 @@
-# Security Guidelines
+# Security Guide
 
-Security best practices for SecondBrain development.
+Security best practices and guidelines for SecondBrain.
 
-## Secure Coding Practices
+## Security Principles
 
-### Input Validation
+### Local-First
 
-Always validate user input:
+- All document processing happens locally
+- No data sent to external services
+- User-controlled MongoDB connection
+- Privacy by design
+
+### Defense in Depth
+
+- Input validation at all layers
+- Type safety with Pydantic
+- Secure default configuration
+- Regular security audits
+
+## Input Validation
+
+### Document Validation
 
 ```python
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, constr
 
-class IngestRequest(BaseModel):
-    path: str = Field(..., min_length=1)
-    chunk_size: int = Field(default=4096, ge=512, le=8192)
+class DocumentInput(BaseModel):
+    title: constr(max_length=500)
+    content: constr(max_length=1000000)
+    metadata: dict = Field(default_factory=dict)
+```
+
+### Path Validation
+
+```python
+from pathlib import Path
+
+def safe_path(base: Path, user_path: str) -> Path:
+    """Prevent path traversal."""
+    full_path = (base / user_path).resolve()
+    if not str(full_path).startswith(str(base)):
+        raise ValueError("Path traversal detected")
+    return full_path
+```
+
+## Credential Management
+
+### Environment Variables
+
+```env
+# .env (never commit!)
+MONGODB_URI=mongodb://user:password@localhost:27017
+JWT_SECRET=super-secret-key
+```
+
+### Loading Secrets
+
+```python
+from pydantic_settings import BaseSettings
+from pathlib import Path
+
+class Settings(BaseSettings):
+    mongodb_uri: str
+    jwt_secret: str
     
-    @validator("path")
-    def validate_path(cls, v):
-        # Prevent path traversal
-        path = Path(v).resolve()
-        if not path.is_absolute():
-            raise ValueError("Path must be absolute")
-        return str(path)
-```
-
-### Error Handling
-
-Don't expose internal details:
-
-```python
-try:
-    result = process()
-except Exception as e:
-    logger.error(f"Processing failed: {e}", exc_info=True)
-    raise CLIError("Failed to process document")
-```
-
-### Secrets Management
-
-Never hardcode secrets:
-
-```python
-# Good
-from secondbrain.config import Config
-config = Config()
-mongo_uri = config.mongo_uri  # From environment
-
-# Avoid
-mongo_uri = "mongodb://admin:password@localhost:27017"
+    class Config:
+        env_file = ".env"
+        extra = "forbid"  # Prevent unknown env vars
 ```
 
 ## Dependency Security
 
-### Regular Scans
+### Scanning Tools
 
 ```bash
-# Full security scan (automatically cleans old reports)
-./scripts/security_scan.sh all
+# Install security tools
+pip install safety pip-audit bandit
 
-# Individual security checks
-./scripts/security_scan.sh audit    # pip-audit dependency scan
-./scripts/security_scan.sh safety   # Safety vulnerability check
-./scripts/security_scan.sh bandit   # Code security scan
-./scripts/security_scan.sh sbom     # Generate SBOM
-
-# Generate SBOM separately
-./scripts/generate-sbom.sh
-
-# Clean up old reports manually
-./scripts/cleanup_reports.sh
+# Run scans
+safety check
+pip-audit
+bandit -r src/
 ```
 
-### Report Management
+### Pre-commit Hooks
 
-Security and SBOM reports are automatically cleaned before each scan. The cleanup script removes:
-
-- JSON report files (`*report*.json`, `*security*.json`, `*sbom*.json`, etc.)
-- Markdown report files (`*report*.md`, `*security*.md`, `*vulnerability*.md`, etc.)
-- Old SBOM files (`sbom.json`, `sbom.spdx`)
-
-Reports are generated in:
-- `docs/security/` - Security scan reports and analysis
-- `site/security/` - Published security documentation
-
-### Update Dependencies
-
-```bash
-# Check for updates
-pip list --outdated
-
-# Update safely
-pip install --upgrade <package>
+```yaml
+# .pre-commit-config.yaml
+repos:
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.5
+    hooks:
+      - id: bandit
+        args: ["-r", "src/"]
 ```
 
-## Configuration Security
+## MongoDB Security
 
-### Environment Variables
-
-```bash
-# .env (add to .gitignore)
-SECONDBRAIN_MONGO_URI=mongodb://user:strong_password@localhost:27017
-SECONDBRAIN_SENTENCE_TRANSFORMERS_URL=http://localhost:11434
-```
-
-### Secure Defaults
+### Authentication
 
 ```python
-class Config(BaseSettings):
-    # Secure by default
-    rate_limit_enabled: bool = True
-    circuit_breaker_enabled: bool = True
-    log_level: str = "INFO"  # Not DEBUG in production
-```
+from pymongo import MongoClient
 
-## API Security
-
-### Rate Limiting
-
-```python
-from secondbrain.utils.circuit_breaker import CircuitBreaker
-
-@CircuitBreaker(
-    failure_threshold=5,
-    recovery_timeout=60
+client = MongoClient(
+    "mongodb://username:password@localhost:27017",
+    authSource="admin"
 )
-async def call_embedding_api(text: str):
-    ...
 ```
 
-### Authentication (Future)
+### TLS/SSL
 
 ```python
-# Plan for API authentication
-# JWT tokens, API keys, etc.
+client = MongoClient(
+    "mongodb://localhost:27017",
+    tls=True,
+    tlsCAFile="/path/to/ca.pem",
+    tlsCertificateKeyFile="/path/to/client.pem"
+)
 ```
 
-## Data Security
+### Network Security
 
-### Encryption at Rest
+- Use private networks
+- Restrict IP access
+- Enable firewall rules
+- Use VPN for remote access
 
-MongoDB supports encryption:
+## Error Handling
 
-```bash
-# Enable MongoDB encryption
-# Configure in MongoDB settings
-```
-
-### Encryption in Transit
-
-```bash
-# Use TLS for MongoDB connections
-SECONDBRAIN_MONGO_URI=mongodb+srv://user:pass@cluster/?ssl=true
-```
-
-## Logging Security
-
-### Don't Log Sensitive Data
+### Don't Leak Information
 
 ```python
 # Good
-logger.info(f"Processed document: {doc_id}")
+try:
+    doc = storage.get_document(doc_id)
+except DocumentNotFoundError:
+    raise HTTPException(status_code=404, detail="Document not found")
 
 # Avoid
-logger.info(f"Processed document with URI: {mongo_uri}")
+try:
+    doc = storage.get_document(doc_id)
+except Exception as e:
+    raise HTTPException(status_code=500, detail=str(e))  # Leaks internals
 ```
 
-### Sanitize Logs
+## Audit Logging
+
+### Security Events
 
 ```python
-def sanitize_log(message: str) -> str:
-    # Remove credentials, tokens, etc.
-    return re.sub(r"password=[^&]+", "password=***", message)
+import logging
+
+security_logger = logging.getLogger("security")
+
+def log_auth_attempt(user_id: str, success: bool):
+    security_logger.warning(
+        f"Auth attempt: user={user_id} success={success}"
+    )
+
+def log_data_access(user_id: str, doc_id: str):
+    security_logger.info(
+        f"Data access: user={user_id} doc={doc_id}"
+    )
 ```
 
-## Security Checklist
-
-Before release:
-
-- [ ] All inputs validated
-- [ ] No hardcoded secrets
-- [ ] Error messages sanitized
-- [ ] Dependencies scanned
-- [ ] Rate limiting enabled
-- [ ] Circuit breakers configured
-- [ ] Logs don't expose secrets
-- [ ] TLS enabled in production
-- [ ] Security tests pass
-
-## Incident Response
-
-### If Vulnerability Found
-
-1. **Assess** impact
-2. **Disclose** responsibly
-3. **Patch** quickly
-4. **Document** in changelog
-5. **Notify** users if needed
+## Vulnerability Response
 
 ### Reporting
 
-Email: security@secondbrain.local
+Report vulnerabilities to:
+- Email: security@example.com
+- GitHub Security Advisories
 
-## Security Tools
+### Response Timeline
 
-| Tool | Purpose | Command |
-|------|---------|---------|
-| pip-audit | Dependency vulnerabilities | `pip-audit` |
-| bandit | Code security | `bandit -r src/` |
-| safety | Dependency check | `safety check` |
-| cyclonedx | SBOM generation | `cyclonedx-py environment` |
+- 24 hours: Acknowledgment
+- 72 hours: Initial assessment
+- 7 days: Patch development
+- 14 days: Release
 
-## SBOM & Dependency Analysis
+## Security Checklist
 
-- [SBOM Analysis](../architecture/SBOM_ANALYSIS.md) - Complete dependency inventory
-- [License Risk Report](../architecture/LICENSE-RISK-REPORT.md) - License compliance status
+### Development
 
-## Next Steps
+- [ ] Input validation implemented
+- [ ] No hardcoded secrets
+- [ ] Error messages don't leak info
+- [ ] Dependencies up to date
+- [ ] Security scans pass
 
-- [Security Guide](../security/index.md) - User security
-- [Security Reports](../security/index.md#security-reports) - Latest scan results
-- [Configuration](configuration.md) - Secure configuration
+### Deployment
+
+- [ ] MongoDB authentication enabled
+- [ ] TLS/SSL configured
+- [ ] Firewall rules set
+- [ ] Secrets managed securely
+- [ ] Monitoring enabled
+
+## Compliance
+
+### Data Protection
+
+- GDPR: Data stays local
+- HIPAA: Not recommended for PHI
+- SOC2: Audit logging available
+
+## See Also
+
+- [Security Policy](../SECURITY.md)
+- [Vulnerability Reporting](security/vulnerability_report.md)
+- [Dependency Management](../architecture/SBOM_ANALYSIS.md)

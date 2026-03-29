@@ -1,211 +1,235 @@
 # Migrations Guide
 
-Schema migration strategies for SecondBrain.
+Database migration guide for SecondBrain.
 
 ## Overview
 
-SecondBrain uses MongoDB, which has a flexible schema. However, migrations may be needed for:
+SecondBrain provides migration tools for schema updates and data transformations.
 
-- New required fields
-- Data transformations
-- Index changes
-- Collection restructuring
+## Migration Strategy
 
-## Migration Strategies
+### Version Control
 
-### 1. Forward Compatibility
+Migrations are version-controlled and applied sequentially.
 
-Design schemas to be forward-compatible:
-
-```python
-class Document(BaseModel):
-    id: str
-    content: str
-    # New fields optional
-    metadata: Optional[Dict] = None
+```
+migrations/
+├── 001_initial_schema.py
+├── 002_add_embeddings_index.py
+├── 003_add_collections.py
+└── 004_add_metadata_fields.py
 ```
 
-### 2. Versioned Documents
-
-Add schema version to documents:
+### Migration Registry
 
 ```python
-{
-    "_id": "...",
-    "schema_version": "1.0",
-    "content": "...",
-    "metadata": {...}
-}
+from secondbrain.migrations import MigrationRegistry
+
+registry = MigrationRegistry()
+registry.register("001_initial_schema", initial_migration)
+registry.register("002_add_embeddings_index", add_index_migration)
 ```
 
-### 3. Migration Scripts
+## Running Migrations
 
-Create migration scripts for data transformations:
-
-```python
-async def migrate_v1_to_v2():
-    """Migrate documents from schema v1 to v2."""
-    async for doc in collection.find({"schema_version": "1.0"}):
-        # Transform document
-        doc["new_field"] = transform(doc["old_field"])
-        doc["schema_version"] = "2.0"
-        await collection.replace_one({"_id": doc["_id"]}, doc)
-```
-
-## Migration Workflow
-
-### 1. Plan Migration
-
-- Document schema changes
-- Estimate data volume
-- Plan rollback strategy
-- Test on subset of data
-
-### 2. Create Migration Script
-
-```python
-async def run_migration():
-    # Backup first
-    await backup_collection()
-    
-    # Run migration
-    await migrate_v1_to_v2()
-    
-    # Verify
-    await verify_migration()
-```
-
-### 3. Backup Data
+### CLI Command
 
 ```bash
-mongodump --db secondbrain --out ./backup/
+# Apply all pending migrations
+secondbrain migrate
+
+# Apply specific migration
+secondbrain migrate --target 003_add_collections
+
+# Show migration status
+secondbrain migrate --status
+
+# Rollback last migration
+secondbrain migrate --rollback
 ```
 
-### 4. Run Migration
-
-```bash
-python -m secondbrain.management.migrate --from 1.0 --to 2.0
-```
-
-### 5. Verify
+### Programmatic
 
 ```python
-def verify_migration():
-    # Check document count
-    # Validate new fields
-    # Test queries
-    pass
-```
+from secondbrain.migrations import run_migrations
 
-### 6. Rollback (if needed)
+# Run all migrations
+run_migrations()
 
-```bash
-mongorestore --db secondbrain ./backup/secondbrain/
-```
-
-## Common Migration Patterns
-
-### Adding Required Field
-
-```python
-async def add_required_field():
-    default_value = "default"
-    
-    async for doc in collection.find({"new_field": {"$exists": False}}):
-        doc["new_field"] = default_value
-        await collection.update_one(
-            {"_id": doc["_id"]},
-            {"$set": {"new_field": default_value}}
-        )
-```
-
-### Renaming Field
-
-```python
-async def rename_field():
-    async for doc in collection.find({"old_field": {"$exists": True}}):
-        doc["new_field"] = doc["old_field"]
-        del doc["old_field"]
-        await collection.replace_one({"_id": doc["_id"]}, doc)
-```
-
-### Splitting Field
-
-```python
-async def split_field():
-    async for doc in collection.find({"combined": {"$exists": True}}):
-        parts = doc["combined"].split("|")
-        doc["field1"] = parts[0]
-        doc["field2"] = parts[1]
-        del doc["combined"]
-        await collection.replace_one({"_id": doc["_id"]}, doc)
-```
-
-## Index Management
-
-### Create Index
-
-```python
-await collection.create_index([("new_field", 1)])
-```
-
-### Drop Index
-
-```python
-await collection.drop_index("index_name")
-```
-
-### Background Index Creation
-
-```python
-await collection.create_index(
-    [("field", 1)],
-    background=True  # Don't block operations
+# Run with options
+run_migrations(
+    target_version="003_add_collections",
+    dry_run=True,
+    verbose=True
 )
 ```
 
-## Best Practices
+## Writing Migrations
 
-1. **Always backup** before migrations
-2. **Test on small dataset** first
-3. **Run in stages** for large datasets
-4. **Monitor performance** during migration
-5. **Have rollback plan** ready
-6. **Document changes** in migration notes
+### Basic Migration
 
-## Migration Commands
+```python
+from secondbrain.migrations import Migration
+
+class AddEmbeddingsIndex(Migration):
+    name = "002_add_embeddings_index"
+    
+    async def up(self, db):
+        """Apply migration."""
+        await db.documents.create_index(
+            [("embeddings", "vector")],
+            options={"numDimensions": 384}
+        )
+    
+    async def down(self, db):
+        """Rollback migration."""
+        await db.documents.drop_index("embeddings_vector_idx")
+```
+
+### Data Migration
+
+```python
+class MigrateMetadata(Migration):
+    name = "004_add_metadata_fields"
+    
+    async def up(self, db):
+        """Add new metadata fields."""
+        async for doc in db.documents.find({}):
+            if "author" not in doc.get("metadata", {}):
+                await db.documents.update_one(
+                    {"_id": doc["_id"]},
+                    {"$set": {"metadata.author": "Unknown"}}
+                )
+```
+
+## Migration Best Practices
+
+### Idempotency
+
+```python
+# Good - Safe to run multiple times
+async def up(self, db):
+    index_name = "embeddings_vector_idx"
+    indexes = await db.documents.list_indexes().to_list()
+    if not any(idx["name"] == index_name for idx in indexes):
+        await db.documents.create_index(...)
+
+# Avoid - Will fail if run twice
+async def up(self, db):
+    await db.documents.create_index(...)  # Fails if exists
+```
+
+### Backwards Compatibility
+
+```python
+# Support old and new schema during transition
+async def search(self, query):
+    # Handle both old and new metadata format
+    if "metadata.author" in doc:
+        author = doc["metadata.author"]
+    else:
+        author = doc["metadata"].get("author", "Unknown")
+```
+
+### Testing
+
+```python
+import pytest
+from secondbrain.migrations import MigrationRunner
+
+@pytest.mark.asyncio
+async def test_migration_002():
+    """Test migration 002."""
+    db = get_test_db()
+    migration = AddEmbeddingsIndex()
+    
+    # Apply
+    await migration.up(db)
+    
+    # Verify
+    indexes = await db.documents.list_indexes().to_list()
+    assert any(idx["name"] == "embeddings_vector_idx" for idx in indexes)
+    
+    # Rollback
+    await migration.down(db)
+```
+
+## Rollback Strategy
+
+### Automatic Rollback
+
+```python
+from secondbrain.migrations import Migration
+
+class SafeMigration(Migration):
+    async def up(self, db):
+        try:
+            await self._apply_changes(db)
+        except Exception as e:
+            await self._rollback(db)
+            raise MigrationError(f"Migration failed: {e}")
+```
+
+### Manual Rollback
 
 ```bash
-# List available migrations
-secondbrain migrate --list
+# Rollback to specific version
+secondbrain migrate --rollback-to 002_add_embeddings_index
 
-# Run specific migration
-secondbrain migrate --to 2.0
+# Rollback one step
+secondbrain migrate --rollback
+```
 
-# Dry run (preview changes)
-secondbrain migrate --dry-run
+## Migration Status
+
+### Check Status
+
+```python
+from secondbrain.migrations import MigrationStatus
+
+status = MigrationStatus.get_current()
+print(f"Current version: {status.current_version}")
+print(f"Pending migrations: {status.pending}")
+print(f"Applied migrations: {status.applied}")
+```
+
+### Migration History
+
+```python
+from secondbrain.migrations import get_migration_history
+
+history = get_migration_history()
+for migration in history:
+    print(f"{migration.name}: {migration.applied_at}")
 ```
 
 ## Troubleshooting
 
-### Migration Failed
+### Failed Migration
 
 ```bash
-# Check logs
+# Check error logs
 secondbrain migrate --verbose
 
-# Restore from backup
-mongorestore --db secondbrain ./backup/
+# Inspect database state
+mongosh secondbrain --eval "db.migrations.find()"
+
+# Manual fix then continue
+secondbrain migrate --continue
 ```
 
-### Incomplete Migration
+### Schema Mismatch
 
 ```bash
-# Resume migration
-secondbrain migrate --resume
+# Reset migrations (dangerous!)
+secondbrain migrate --reset
+
+# Or fix schema manually
+mongosh secondbrain --eval "db.documents.dropIndex('...')"
 ```
 
-## Next Steps
+## See Also
 
-- [Schema Reference](../architecture/SCHEMA.md) - Current schema
-- [Changelog](changelog.md) - Version history
+- [Migration Guide](../migration.md)
+- [Schema](../architecture/SCHEMA.md)
+- [Configuration](configuration.md)

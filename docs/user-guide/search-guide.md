@@ -1,297 +1,129 @@
 # Semantic Search Guide
 
-Learn how to perform semantic search queries with SecondBrain.
+Learn how to search documents semantically with SecondBrain.
 
 ## Basic Search
 
 ### Simple Query
 
 ```bash
-secondbrain search "what is machine learning?"
+secondbrain search "machine learning"
 ```
-
-SecondBrain will:
-1. Convert your query to an embedding
-2. Find similar embeddings in the database
-3. Return the most relevant document chunks
-
-### Results Format
-
-```
-[Score: 0.89] From: report.pdf (chunk 3)
-Machine learning is a subset of artificial intelligence that enables systems to learn and improve from experience without being explicitly programmed.
-
-[Score: 0.82] From: notes.md (chunk 1)
-Key concepts in ML: supervised learning, unsupervised learning, reinforcement learning...
-```
-
-## Search Options
 
 ### Limit Results
 
 ```bash
-# Get top 10 results
-secondbrain search "python best practices" --top-k 10
+secondbrain search "neural networks" --limit 5
 ```
 
-### Confidence Threshold
+### Output Format
 
 ```bash
-# Only high-confidence matches (0.0 - 1.0)
-secondbrain search "data pipeline" --threshold 0.75
+# JSON output
+secondbrain search "deep learning" --format json
+
+# CSV output
+secondbrain search "AI" --format csv
+
+# Text (default)
+secondbrain search "data science" --format text
 ```
 
-Results below the threshold are filtered out.
+## Advanced Search
 
-### Custom Fields
+### Collection Filter
 
 ```bash
-# Include metadata in results
-secondbrain search "report" --fields content,metadata,filename
+# Search specific collection
+secondbrain search "python" --collection "programming"
 ```
 
-### Verbose Mode
+### Metadata Filter
 
 ```bash
-# Show timing and statistics
-secondbrain search "query" --verbose
+# Filter by author
+secondbrain search "machine learning" --filter '{"author": "John Doe"}'
 ```
 
-Output:
-```
-Query embedding: 45ms
-Vector search: 12ms
-Result ranking: 3ms
-Total: 60ms
-
-Found 15 matching chunks
-Returning top 5
-```
-
-## Query Optimization
-
-### Natural Language
-
-Use natural language queries:
+### Export Results
 
 ```bash
-# Good: Natural language
-secondbrain search "How do I configure MongoDB?"
-
-# Also good: Question format
-secondbrain search "What are the best practices for chunking?"
+# Export to file
+secondbrain search "research" --output results.json --format json
 ```
 
-### Keywords vs. Semantics
+## Search Tips
 
-SecondBrain understands semantics, not just keywords:
+### Effective Queries
+
+- **Be specific**: "neural network architectures" vs "AI"
+- **Use natural language**: "How does backpropagation work?"
+- **Include context**: "machine learning for computer vision"
+
+### Result Ranking
+
+Results are ranked by:
+1. Semantic similarity to query
+2. Relevance score
+3. Metadata matches
+
+### Iterative Search
 
 ```bash
-# These will find similar results:
-secondbrain search "car"
-secondbrain search "automobile"
-secondbrain search "vehicle transportation"
+# Broad search
+secondbrain search "machine learning"
+
+# Narrow down
+secondbrain search "transformer models in machine learning"
+
+# Specific question
+secondbrain search "attention mechanism in transformers"
 ```
 
-### Context-Rich Queries
-
-```bash
-# More context = better results
-secondbrain search "How to handle errors in async Python code?"
-
-# Rather than:
-secondbrain search "async error"
-```
-
-## Advanced Search Patterns
-
-### Multi-Concept Search
-
-Search for documents covering multiple concepts:
-
-```bash
-# Find docs about both topics
-secondbrain search "machine learning AND data preprocessing"
-```
-
-### Exclusion Queries
-
-SecondBrain doesn't support explicit negation yet, but you can:
-
-```bash
-# Be specific about what you want
-secondbrain search "python async without threading"
-```
-
-### Search by Metadata
-
-```bash
-# Search within specific file types
-secondbrain search "configuration"  # Then filter results manually
-
-# Or search and check metadata
-secondbrain search "database" --fields content,metadata
-```
-
-## Understanding Scores
-
-### Similarity Score
-
-- **Range**: 0.0 to 1.0
-- **Interpretation**:
-  - 0.8-1.0: Very high relevance
-  - 0.6-0.8: High relevance
-  - 0.4-0.6: Moderate relevance
-  - < 0.4: Low relevance
-
-### Score Adjustment
-
-```bash
-# Strict matching
-secondbrain search "exact term" --threshold 0.85
-
-# Broad matching
-secondbrain search "general concept" --threshold 0.3
-```
-
-## Search Strategies
-
-### Iterative Refinement
-
-```bash
-# Start broad
-secondbrain search "python"
-
-# Narrow down based on results
-secondbrain search "python async programming"
-
-# Even more specific
-secondbrain search "python asyncio best practices"
-```
-
-### Exploratory Search
-
-```bash
-# Discover related topics
-secondbrain search "database optimization" --top-k 20
-
-# Review results to find patterns
-# Then refine query based on common themes
-```
-
-### Comparative Search
-
-```bash
-# Compare different approaches
-secondbrain search "approach A versus approach B"
-secondbrain search "benefits of approach A"
-secondbrain search "benefits of approach B"
-```
-
-## Performance Tips
+## Performance
 
 ### Fast Search
 
 ```bash
 # Limit results
-secondbrain search "query" --top-k 5
+secondbrain search "query" --limit 5
 
-# Use appropriate threshold
-secondbrain search "specific term" --threshold 0.6
+# Use cached embeddings
+secondbrain search "query" --use-cache
 ```
 
-### Comprehensive Search
+### Batch Search
 
 ```bash
-# Get more results
-secondbrain search "broad topic" --top-k 50 --threshold 0.3
-
-# Include all metadata
-secondbrain search "query" --fields content,metadata,filename,source
-```
-
-## Common Use Cases
-
-### Code Search
-
-```bash
-# Find code examples
-secondbrain search "how to implement singleton pattern"
-
-# Search for specific functionality
-secondbrain search "error handling async python"
-```
-
-### Documentation Lookup
-
-```bash
-# Find configuration examples
-secondbrain search "MongoDB connection string example"
-
-# Troubleshooting help
-secondbrain search "connection timeout error solution"
-```
-
-### Research Assistance
-
-```bash
-# Summarize topic coverage
-secondbrain search "neural network architectures" --top-k 20
-
-# Find specific concepts
-secondbrain search "backpropagation algorithm explanation"
+# Multiple queries
+secondbrain search --file queries.txt --output results.json
 ```
 
 ## Troubleshooting
 
-### No Results Found
-
-**Causes**:
-- No documents in database
-- Query is too specific
-- Threshold too high
+### No Results
 
 **Solutions**:
-```bash
-# Check if documents exist
-secondbrain ls
-
-# Lower threshold
-secondbrain search "query" --threshold 0.2
-
-# Broaden query
-secondbrain search "general topic"
-```
+1. Try broader query
+2. Check documents are ingested
+3. Verify embedding model
 
 ### Irrelevant Results
 
-**Causes**:
-- Query too broad
-- Chunk size inappropriate
-- Wrong embedding model
-
 **Solutions**:
-```bash
-# Be more specific
-secondbrain search "specific aspect of topic"
-
-# Re-ingest with different chunk size
-secondbrain ingest ./docs/ --chunk-size 1024 --force
-```
+1. Refine query
+2. Adjust result limit
+3. Use metadata filters
 
 ### Slow Search
 
 **Solutions**:
-```bash
-# Reduce result count
-secondbrain search "query" --top-k 5
+1. Reduce result limit
+2. Check MongoDB performance
+3. Verify vector index
 
-# Check database size
-secondbrain status
-```
+## See Also
 
-## Next Steps
-
-- [Document Management](document-management.md) - Manage your database
-- [CLI Reference](cli-reference.md) - Complete command reference
-- [Async Guide](../developer-guide/async-api.md) - Programmatic search
+- [Document Ingestion](document-ingestion.md)
+- [Document Management](document-management.md)
+- [CLI Reference](cli-reference.md)

@@ -1,238 +1,260 @@
-# Data Flow Architecture
+# Data Flow
 
-Detailed data flow and component interactions in SecondBrain.
-
-## High-Level Architecture
-
-```
-┌─────────────┐     ┌──────────────┐     ┌─────────────┐
-│  Documents  │────▶│   Ingestor   │────▶│  Chunker    │
-└─────────────┘     └──────────────┘     └─────────────┘
-                                               │
-                                               ▼
-┌─────────────┐     ┌──────────────┐     ┌─────────────┐
-│   Search    │◀────│   Storage    │◀────│ Embeddings  │
-└─────────────┘     └──────────────┘     └─────────────┘
-```
+This document describes how data flows through the SecondBrain system.
 
 ## Ingestion Pipeline
 
-### Step 1: Document Loading
+### Step-by-Step Flow
 
-```python
-# Input: File path or directory
-# Output: Raw text content
-
-Parser Selection:
-├── PDF → PDFParser
-├── DOCX → DocxParser
-├── PPTX → PptxParser
-├── XLSX → XlsxParser
-├── HTML → HTMLParser
-├── Markdown → MarkdownParser
-├── Image → OCRParser (Tesseract)
-└── Audio → TranscriptionParser (Whisper)
+```
+┌──────────────┐
+│  Input File  │
+└──────┬───────┘
+       │
+       ▼
+┌──────────────┐
+│   Parser     │ (Docling)
+│ - PDF        │
+│ - DOCX       │
+│ - TXT        │
+└──────┬───────┘
+       │
+       ▼
+┌──────────────┐
+│   Chunker    │
+│ - Split text │
+│ - Overlap    │
+└──────┬───────┘
+       │
+       ▼
+┌──────────────┐
+│   Embedder   │ (Sentence Transformers)
+│ - Encode     │
+│ - Batch      │
+└──────┬───────┘
+       │
+       ▼
+┌──────────────┐
+│   Storage    │ (MongoDB)
+│ - Index      │
+│ - Persist    │
+└──────────────┘
 ```
 
-### Step 2: Text Chunking
+### Detailed Steps
+
+#### 1. File Parsing
+
+```python
+# Input: File path
+# Output: Raw text
+
+from docling.document_converter import DocumentConverter
+
+converter = DocumentConverter()
+result = converter.convert("document.pdf")
+text = result.text
+```
+
+**Processing:**
+- Detect file format
+- Extract text content
+- Preserve structure (headings, lists)
+- Handle encoding
+
+#### 2. Text Chunking
 
 ```python
 # Input: Raw text
-# Output: List of text chunks
+# Output: List of chunks
 
-Chunking Strategy:
-1. Split by chunk_size (default: 4096 chars)
-2. Apply overlap (default: 200 chars)
-3. Preserve document metadata
-4. Generate unique chunk IDs
+def chunk_text(text: str, chunk_size: int = 500, overlap: int = 50) -> List[str]:
+    chunks = []
+    start = 0
+    while start < len(text):
+        end = start + chunk_size
+        chunk = text[start:end]
+        chunks.append(chunk)
+        start += chunk_size - overlap
+    return chunks
 ```
 
-### Step 3: Embedding Generation
+**Parameters:**
+- `chunk_size`: Target chunk length (default: 500 tokens)
+- `overlap`: Overlap between chunks (default: 50 tokens)
+
+#### 3. Embedding Generation
 
 ```python
-# Input: Text chunks
-# Output: Vector embeddings
+# Input: List of text chunks
+# Output: List of embeddings
 
-Process:
-1. Batch chunks (default: 10 per batch)
-2. Rate limit API calls (default: 10/sec)
-3. Cache embeddings (LRU cache, default: 1000)
-4. Call sentence-transformers API
-5. Store embeddings with metadata
+from sentence_transformers import SentenceTransformer
+
+model = SentenceTransformer("all-MiniLM-L6-v2")
+embeddings = model.encode(chunks, batch_size=32)
 ```
 
-### Step 4: Storage
+**Optimization:**
+- Batch processing for speed
+- GPU acceleration when available
+- Model caching
+
+#### 4. Storage
 
 ```python
-# Input: Chunks + Embeddings + Metadata
-# Output: MongoDB documents
+# Input: Documents with embeddings
+# Output: Stored in MongoDB
 
-Document Structure:
-{
-  "_id": ObjectId,
-  "document_id": "uuid",
-  "chunk_index": 0,
-  "content": "text...",
-  "embedding": [0.1, 0.2, ...],
-  "metadata": {
-    "filename": "doc.pdf",
-    "file_type": "pdf",
-    "source_path": "/path/to/doc.pdf",
-    "ingested_at": "2024-01-15T10:30:00Z"
-  }
+document = {
+    "id": uuid.uuid4(),
+    "content": chunk,
+    "embeddings": embedding.tolist(),
+    "metadata": {...}
 }
+collection.insert_one(document)
 ```
+
+**Indexing:**
+- Create vector index
+- Build metadata indexes
+- Optimize for search
 
 ## Search Pipeline
 
-### Step 1: Query Processing
+### Query Flow
+
+```
+┌──────────────┐
+│   User Query │
+└──────┬───────┘
+       │
+       ▼
+┌──────────────┐
+│   Embedder   │
+│ - Encode     │
+└──────┬───────┘
+       │
+       ▼
+┌──────────────┐
+│ Vector Search│
+│ - Similarity │
+│ - Ranking    │
+└──────┬───────┘
+       │
+       ▼
+┌──────────────┐
+│   Results    │
+│ - Top-K      │
+│ - Scoring    │
+└──────────────┘
+```
+
+### Search Steps
+
+#### 1. Query Embedding
 
 ```python
-# Input: Natural language query
-# Output: Query embedding
-
-1. Generate embedding for query
-2. Use same model as ingestion
-3. Apply same preprocessing
+query_embedding = model.encode(["user question"])
 ```
 
-### Step 2: Vector Search
+#### 2. Vector Search
 
 ```python
-# Input: Query embedding
-# Output: Ranked results
-
-Process:
-1. MongoDB vector similarity search
-2. Calculate cosine similarity
-3. Filter by threshold (optional)
-4. Sort by similarity score
-5. Limit to top-k results
+pipeline = [
+    {"$vectorSearch": {
+        "queryVector": query_embedding[0].tolist(),
+        "path": "embeddings",
+        "limit": 10
+    }}
+]
+results = list(collection.aggregate(pipeline))
 ```
 
-### Step 3: Result Formatting
+#### 3. Result Processing
 
 ```python
-# Input: Raw results
-# Output: User-friendly display
-
-1. Extract content and metadata
-2. Format similarity scores
-3. Add source references
-4. Apply output format (table/json)
+# Format results
+formatted = [
+    {
+        "id": doc["_id"],
+        "content": doc["content"],
+        "score": doc["score"],
+        "metadata": doc["metadata"]
+    }
+    for doc in results
+]
 ```
 
-## Component Interactions
+## RAG Pipeline
 
-### CLI ↔ Core API
+### Retrieval-Augmented Generation
 
 ```
-User Command
-    ↓
-CLI Parser (Click)
-    ↓
-Command Handler
-    ↓
-Service Layer
-    ↓
-Storage/Embedding APIs
+┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+│   Query      │────▶│  Search      │────▶│  Context     │
+└──────────────┘     └──────────────┘     └──────┬───────┘
+                                                  │
+                                                  ▼
+                                    ┌──────────────────────┐
+                                    │   LLM Generation     │
+                                    └──────────┬───────────┘
+                                               │
+                                               ▼
+                                    ┌──────────────────────┐
+                                    │   Response           │
+                                    └──────────────────────┘
 ```
 
-### Async Flow
+## Async Processing
+
+### Event-Driven Architecture
 
 ```python
-async def ingest_documents(path: Path):
-    # 1. Load documents asynchronously
-    documents = await load_documents_async(path)
+import asyncio
+from motor.motor_asyncio import AsyncMongoCollection
+
+async def ingest_document(file_path: str):
+    # Parse
+    text = await parse_file_async(file_path)
     
-    # 2. Chunk in parallel
-    chunks = await chunk_documents_async(documents)
+    # Chunk
+    chunks = chunk_text(text)
     
-    # 3. Generate embeddings in parallel
+    # Embed
     embeddings = await generate_embeddings_async(chunks)
     
-    # 4. Store in parallel batches
-    await store_async(embeddings)
+    # Store
+    await collection.insert_many([...])
 ```
 
-## Error Handling Flow
-
-```
-Operation Start
-    ↓
-Try Block
-    ↓
-Circuit Breaker Check
-    ↓
-Execute Operation
-    ↓
-Success → Return Result
-    ↓
-Failure → Record Failure
-    ↓
-Circuit Breaker Update
-    ↓
-Retry or Fail
-```
-
-## Performance Bottlenecks
-
-### Common Bottlenecks
-
-1. **Embedding API** - Rate limited to protect service
-2. **MongoDB Writes** - Batch size limits
-3. **File I/O** - Sequential reading
-4. **Memory** - Embedding cache size
-
-### Optimization Strategies
+### Connection Pooling
 
 ```python
-# Parallel processing
-with ThreadPoolExecutor(max_workers=8) as executor:
-    results = list(executor.map(process, documents))
-
-# Batch operations
-for batch in chunked(documents, batch_size=20):
-    await store_batch(batch)
-
-# Connection pooling
-mongo_client = MongoClient(maxPoolSize=50, minPoolSize=10)
+# MongoDB connection pool
+client = AsyncMongoClient(
+    "mongodb://localhost:27017",
+    maxPoolSize=10,
+    minPoolSize=5
+)
 ```
 
-## Monitoring Points
+## Performance Metrics
 
-### Key Metrics
+### Ingestion Speed
 
-- **Ingestion Rate**: Documents/minute
-- **Embedding Latency**: ms per chunk
-- **Search Latency**: ms per query
-- **Cache Hit Rate**: % of cached embeddings
-- **Circuit Breaker State**: Open/Closed/Half-Open
+- **Parsing**: ~100-500 pages/minute (PDF)
+- **Embedding**: ~1000-5000 chunks/second (GPU)
+- **Storage**: ~1000-10000 docs/second
 
-### Logging
+### Search Latency
 
-```python
-# Structured JSON logs
-{
-  "timestamp": "2024-01-15T10:30:00Z",
-  "level": "INFO",
-  "event": "document_ingested",
-  "document_id": "uuid",
-  "chunks": 12,
-  "duration_ms": 2345
-}
-```
+- **Query Embedding**: ~10-50ms
+- **Vector Search**: ~5-20ms
+- **Total**: ~20-100ms
 
-## Scalability
+## See Also
 
-### Horizontal Scaling
-
-- **Stateless CLI** - Can run on multiple machines
-- **Shared MongoDB** - Central storage
-- **Distributed Embeddings** - Multiple sentence-transformers instances
-
-### Vertical Scaling
-
-- **Increase workers** - More CPU cores
-- **Larger batch size** - More throughput
-- **Larger cache** - Fewer API calls
+- [Schema](SCHEMA.md) - Database structure
+- [API Reference](../api/index.md) - Programmatic access
+- [Async API](../developer-guide/async-api.md) - Async operations

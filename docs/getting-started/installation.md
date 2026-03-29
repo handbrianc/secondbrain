@@ -1,41 +1,61 @@
 # Installation Guide
 
-This guide covers installing SecondBrain on your system.
+Complete installation guide for SecondBrain.
 
-## Prerequisites
+## System Requirements
 
-Before installing SecondBrain, ensure you have:
+### Minimum Requirements
 
-- **Python 3.11+** - Check with `python --version`
-- **MongoDB 8.0+** - Can run via Docker or local installation
-- **sentence-transformers** - For embedding generation (can run via Docker or local)
+- **Python**: 3.11 or higher
+- **RAM**: 4GB
+- **Storage**: 2GB free space
+- **MongoDB**: 6.0 or higher
 
-## Option 1: Docker (Recommended)
+### Recommended
 
-The easiest way to get started is using Docker Compose:
+- **RAM**: 8GB+
+- **GPU**: NVIDIA GPU (for faster embeddings)
+- **Storage**: SSD
+
+## Installation Methods
+
+### pip Installation
 
 ```bash
-# Clone the repository
-git clone https://github.com/your-username/secondbrain.git
-cd secondbrain
+# Install from PyPI
+pip install secondbrain
 
-# Start MongoDB and sentence-transformers services
-docker-compose up -d
-
-# Install SecondBrain
-pip install -e ".[dev]"
-
-# Verify installation
-secondbrain --help
+# Install with dev dependencies
+pip install secondbrain[dev]
 ```
 
-### Docker Setup Details
+### From Source
 
-See [Docker Guide](../developer-guide/docker.md) for advanced Docker configuration.
+```bash
+# Clone repository
+git clone https://github.com/your-org/secondbrain.git
+cd secondbrain
 
-## Option 2: Local Installation
+# Install
+pip install -e .
 
-### 1. Install MongoDB
+# Or with dev dependencies
+pip install -e ".[dev]"
+```
+
+### Docker Installation
+
+```bash
+# Pull image
+docker pull secondbrain/secondbrain:latest
+
+# Run
+docker run -it secondbrain/secondbrain:latest
+```
+
+## MongoDB Setup
+
+### Option 1: Local MongoDB
 
 **macOS:**
 ```bash
@@ -43,104 +63,106 @@ brew install mongodb-community
 brew services start mongodb-community
 ```
 
-**Linux:**
+**Ubuntu/Debian:**
 ```bash
-# Follow MongoDB official installation guide for your distribution
-# https://www.mongodb.com/docs/manual/administration/install-community/
+wget -qO - https://www.mongodb.org/static/pgp/server-6.0.asc | sudo apt-key add -
+echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu $(lsb_release -cs)/mongodb-org/6.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-6.0.list
+sudo apt-get update
+sudo apt-get install -y mongodb-org
+sudo systemctl start mongod
 ```
 
 **Windows:**
-Download from [MongoDB Download Center](https://www.mongodb.com/try/download/community)
+1. Download MongoDB Community Server
+2. Run installer
+3. Start MongoDB service
 
-### 2. Install sentence-transformers
+### Option 2: MongoDB Atlas (Cloud)
 
-**macOS/Linux:**
+1. Create account at [MongoDB Atlas](https://www.mongodb.com/cloud/atlas)
+2. Create free cluster
+3. Get connection string
+4. Add to `.env`:
+   ```env
+   MONGODB_URI=mongodb+srv://user:password@cluster.mongodb.net
+   ```
+
+### Option 3: Docker MongoDB
+
 ```bash
-curl -fsSL https://sentence-transformers.ai/install.sh | sh
-sentence-transformers serve
+docker run -d -p 27017:27017 --name secondbrain-mongo mongo:6.0
 ```
 
-**Windows:**
-Download from [sentence-transformers Website](https://sentence-transformers.ai)
+## Verification
 
-### 3. Install SecondBrain
-
-```bash
-# Clone repository
-git clone https://github.com/your-username/secondbrain.git
-cd secondbrain
-
-# Install with dev dependencies
-pip install -e ".[dev]"
-
-# Install sentence-transformers model
-sentence-transformers pull embeddinggemma:latest
-```
-
-## Verify Installation
+### Check Installation
 
 ```bash
-# Check SecondBrain version
+# Check version
 secondbrain --version
 
 # Check MongoDB connection
-secondbrain health
-
-# Check sentence-transformers connection
-curl http://localhost:11434/api/tags
+secondbrain health-check
 ```
 
-## Configuration
-
-After installation, create a `.env` file:
+### Run Tests
 
 ```bash
-# Copy example environment file
-cp .env.example .env
+# Install dev dependencies
+pip install -e ".[dev]"
 
-# Edit with your settings
-# See [Configuration Guide](configuration.md) for details
+# Run tests
+pytest
 ```
 
 ## Troubleshooting
 
+### Installation Fails
+
+**Issue**: pip install fails
+
+**Solution**:
+```bash
+# Upgrade pip
+python -m pip install --upgrade pip
+
+# Clear cache
+pip cache purge
+
+# Try again
+pip install secondbrain
+```
+
 ### MongoDB Connection Failed
 
-```bash
-# Check if MongoDB is running
-docker ps | grep mongo  # If using Docker
-brew services list | grep mongodb  # macOS with Homebrew
+**Issue**: Can't connect to MongoDB
 
-# Start MongoDB
-docker-compose up -d  # Docker
-brew services start mongodb-community  # macOS
+**Solution**:
+1. Verify MongoDB is running
+2. Check connection string
+3. Test connection: `mongosh`
+
+### Import Errors
+
+**Issue**: ModuleNotFoundError
+
+**Solution**:
+```bash
+pip install -e . --force-reinstall
 ```
 
-### sentence-transformers Not Responding
+## Uninstallation
 
 ```bash
-# Check sentence-transformers status
-sentence-transformers list
+# Remove package
+pip uninstall secondbrain
 
-# Start sentence-transformers
-sentence-transformers serve
-
-# Pull required model
-sentence-transformers pull embeddinggemma:latest
-```
-
-### Python Version Issues
-
-```bash
-# Check Python version
-python --version  # Should be 3.11+
-
-# If needed, install Python 3.11+
-brew install python@3.11  # macOS
+# Remove MongoDB data (optional)
+rm -rf ~/.mongodb
 ```
 
 ## Next Steps
 
-- [Quick Start Guide](quick-start.md) - Get started in 5 minutes
-- [Configuration Guide](configuration.md) - Configure your environment
-- [User Guide](../user-guide/index.md) - Learn how to use SecondBrain
+- [Quick Start](quick-start.md)
+- [Configuration](configuration.md)
+- [User Guide](../user-guide/index.md)

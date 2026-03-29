@@ -1,185 +1,198 @@
-# Database Schema Reference
+# Database Schema
 
-MongoDB schema structure for SecondBrain.
+SecondBrain uses MongoDB for vector storage and document management.
 
 ## Collections
 
-### `embeddings`
+### documents
 
-Main collection storing document chunks and their vector embeddings.
-
-#### Document Structure
+Main collection for storing documents and their embeddings.
 
 ```json
 {
-  "_id": ObjectId("..."),
-  "document_id": "uuid-v4-string",
-  "chunk_index": 0,
-  "content": "Text content of this chunk...",
-  "embedding": [0.123, -0.456, 0.789, ...],
+  "_id": "unique-document-id",
+  "title": "Document Title",
+  "content": "Document text content...",
   "metadata": {
-    "filename": "document.pdf",
-    "file_type": "pdf",
-    "source_path": "/absolute/path/to/document.pdf",
-    "file_size": 45678,
-    "ingested_at": "2024-01-15T10:30:00Z",
-    "chunk_size": 4096,
-    "model_used": "all-MiniLM-L6-v2"
+    "source": "file.pdf",
+    "author": "John Doe",
+    "created_at": "2026-03-28T12:00:00Z",
+    "file_size": 1024,
+    "mime_type": "application/pdf"
+  },
+  "embeddings": [0.1, 0.2, 0.3, ...],
+  "chunks": [
+    {
+      "chunk_id": "chunk-1",
+      "text": "First chunk text...",
+      "embedding": [0.1, 0.2, 0.3, ...],
+      "start_offset": 0,
+      "end_offset": 500
+    }
+  ],
+  "created_at": "2026-03-28T12:00:00Z",
+  "updated_at": "2026-03-28T12:00:00Z"
+}
+```
+
+**Indexes:**
+- `_id`: Primary key
+- `embeddings`: Vector index for similarity search
+- `metadata.source`: For filtering by source
+- `created_at`: For time-based queries
+
+### collections
+
+Logical grouping of documents.
+
+```json
+{
+  "_id": "collection-id",
+  "name": "finance-docs",
+  "description": "Financial documents",
+  "document_ids": ["doc-1", "doc-2", ...],
+  "created_at": "2026-03-28T12:00:00Z",
+  "metadata": {
+    "owner": "user@example.com",
+    "tags": ["finance", "reports"]
   }
 }
 ```
 
-#### Fields
+## Vector Index Configuration
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `_id` | ObjectId | Yes | MongoDB auto-generated ID |
-| `document_id` | string | Yes | UUID identifying source document |
-| `chunk_index` | int | Yes | Zero-based index within document |
-| `content` | string | Yes | Text content of the chunk |
-| `embedding` | array[float] | Yes | Vector embedding (384 or 768 dims) |
-| `metadata.filename` | string | Yes | Original file name |
-| `metadata.file_type` | string | Yes | File extension (pdf, md, etc.) |
-| `metadata.source_path` | string | Yes | Absolute path to source file |
-| `metadata.file_size` | int | No | File size in bytes |
-| `metadata.ingested_at` | datetime | Yes | ISO 8601 timestamp |
-| `metadata.chunk_size` | int | No | Chunk size used for this chunk |
-| `metadata.model_used` | string | No | Embedding model identifier |
+### MongoDB Vector Index
 
-#### Indexes
+```json
+{
+  "fields": [
+    {
+      "type": "vector",
+      "path": "embeddings",
+      "numDimensions": 384,
+      "similarity": "cosine"
+    }
+  ]
+}
+```
 
-```javascript
-// Compound index for document queries
-db.embeddings.createIndex({ document_id: 1, chunk_index: 1 })
+**Parameters:**
+- `numDimensions`: Embedding dimension (384 for all-MiniLM-L6-v2)
+- `similarity`: Cosine similarity for semantic search
 
-// Index for file type filtering
-db.embeddings.createIndex({ "metadata.file_type": 1 })
+### Performance Tuning
 
-// Index for ingestion date
-db.embeddings.createIndex({ "metadata.ingested_at": -1 })
+```python
+# Create vector index
+collection.create_index(
+    [("embeddings", "vector")],
+    options={
+        "numDimensions": 384,
+        "similarity": "cosine"
+    }
+)
+```
 
-// Text index for keyword search (fallback)
-db.embeddings.createIndex({ content: "text" })
+## Data Types
+
+### Document Metadata
+
+Standard metadata fields:
+
+```python
+from pydantic import BaseModel
+
+class DocumentMetadata(BaseModel):
+    source: str
+    author: Optional[str] = None
+    created_at: datetime
+    file_size: Optional[int] = None
+    mime_type: Optional[str] = None
+    tags: List[str] = []
+    custom: Dict[str, Any] = {}
+```
+
+### Embedding Configuration
+
+```python
+class EmbeddingConfig(BaseModel):
+    model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
+    dimension: int = 384
+    device: str = "cpu"
+    batch_size: int = 32
 ```
 
 ## Query Examples
 
-### Find All Chunks for a Document
-
-```javascript
-db.embeddings.find({
-  document_id: "uuid-v4-string"
-}).sort({ chunk_index: 1 })
-```
-
-### Search by File Type
-
-```javascript
-db.embeddings.find({
-  "metadata.file_type": "pdf"
-})
-```
-
-### Find Recent Documents
-
-```javascript
-db.embeddings.find({
-  "metadata.ingested_at": {
-    $gte: new Date("2024-01-01")
-  }
-}).sort({ "metadata.ingested_at": -1 })
-```
-
 ### Vector Similarity Search
 
-```javascript
-// Using MongoDB vector search (7.0+)
-db.embeddings.aggregate([
-  {
-    $vectorSearch: {
-      queryVector: [0.123, -0.456, ...],
-      path: "embedding",
-      numCandidates: 100,
-      limit: 10
+```python
+pipeline = [
+    {
+        "$vectorSearch": {
+            "index": "vector_index",
+            "queryVector": [0.1, 0.2, ...],
+            "path": "embeddings",
+            "limit": 10,
+            "numCandidates": 100
+        }
+    },
+    {
+        "$project": {
+            "_id": 1,
+            "title": 1,
+            "content": 1,
+            "score": {"$meta": "vectorSearchScore"}
+        }
     }
-  }
-])
+]
 ```
 
-## Data Lifecycle
+### Metadata Filtering
 
-### Ingestion
-
-1. Generate UUID for document
-2. Split document into chunks
-3. Generate embeddings for each chunk
-4. Insert all chunks with same `document_id`
-
-### Deletion
-
-```javascript
-// Delete all chunks for a document
-db.embeddings.deleteMany({
-  document_id: "uuid-v4-string"
-})
+```python
+pipeline = [
+    {
+        "$match": {
+            "metadata.source": {"$regex": "\\.pdf$"}
+        }
+    },
+    {
+        "$vectorSearch": {
+            "index": "vector_index",
+            "queryVector": [...],
+            "path": "embeddings",
+            "limit": 10
+        }
+    }
+]
 ```
 
-### Update
+## Data Retention
 
-```javascript
-// Re-ingest document (delete + insert)
-db.embeddings.deleteMany({ document_id: "uuid" })
-// Then insert new chunks
+### Automatic Cleanup
+
+Configure TTL indexes for automatic document expiration:
+
+```python
+collection.create_index(
+    [("expires_at", 1)],
+    expireAfterSeconds=0
+)
 ```
 
-## Size Estimates
-
-### Per-Chunk Storage
-
-- **Content**: ~2KB average
-- **Embedding**: 1.5KB (384 dims × 4 bytes)
-- **Metadata**: ~500 bytes
-- **MongoDB overhead**: ~1KB
-
-**Total**: ~5KB per chunk
-
-### Database Size
-
-```
-100 documents × 10 chunks × 5KB = 5MB
-1,000 documents × 10 chunks × 5KB = 50MB
-10,000 documents × 10 chunks × 5KB = 500MB
-```
-
-## Backup & Restore
-
-### Backup
+### Backup Strategy
 
 ```bash
-mongodump --db secondbrain --out ./backup/
+# MongoDB backup
+mongodump --db secondbrain --out /backup/
+
+# Restore
+mongorestore --db secondbrain /backup/secondbrain
 ```
 
-### Restore
+## See Also
 
-```bash
-mongorestore --db secondbrain ./backup/secondbrain/
-```
-
-## Migration Notes
-
-### Schema Versioning
-
-Current schema version: 1.0
-
-Future migrations may include:
-- Additional metadata fields
-- Optimized index structures
-- Partitioning strategies
-
-## Best Practices
-
-1. **Use UUIDs** for `document_id` to avoid conflicts
-2. **Index frequently queried fields**
-3. **Monitor collection size** for performance
-4. **Regular backups** before bulk operations
-5. **Use projection** to limit returned fields
+- [Data Flow](DATA_FLOW.md) - How data moves through the system
+- [API Reference](../api/index.md) - Programmatic access
+- [Configuration](../developer-guide/configuration.md) - Database setup

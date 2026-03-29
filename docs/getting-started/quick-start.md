@@ -1,141 +1,87 @@
-# Quick Start Guide
+# Quick Start
 
-Get up and running with SecondBrain in 5 minutes.
+Get started with SecondBrain in 5 minutes.
 
-## Step 1: Installation
+## Prerequisites
+
+- Python 3.11+
+- MongoDB running locally or remote
+
+## Step 1: Install
 
 ```bash
-# Install SecondBrain
-pip install -e ".[dev]"
-
-# Start services (Docker)
-docker-compose up -d  # MongoDB
-sentence-transformers serve          # sentence-transformers
+pip install secondbrain
 ```
 
 ## Step 2: Configure
 
-Create a `.env` file in your project root:
+Create a `.env` file:
 
 ```bash
-# Core settings
-SECONDBRAIN_MONGO_URI=mongodb://localhost:27017
-SECONDBRAIN_SENTENCE_TRANSFORMERS_URL=http://localhost:11434
-SECONDBRAIN_MODEL=embeddinggemma:latest
-
-# Optional: adjust chunk size
-SECONDBRAIN_CHUNK_SIZE=4096
+echo "MONGODB_URI=mongodb://localhost:27017" > .env
 ```
 
-## Step 3: Ingest Documents
+## Step 3: Ingest a Document
 
 ```bash
-# Ingest a directory of documents
-secondbrain ingest /path/to/documents/
+# Ingest a PDF
+secondbrain ingest path/to/document.pdf
 
-# Ingest with custom options
-secondbrain ingest /path/to/documents/ \
-  --chunk-size 2048 \
-  --batch-size 10 \
-  --verbose
+# Or a text file
+secondbrain ingest path/to/document.txt
+
+# Or entire directory
+secondbrain ingest path/to/documents/ --recursive
 ```
-
-Supported formats:
-- PDF (.pdf)
-- Word (.docx)
-- PowerPoint (.pptx)
-- Excel (.xlsx)
-- HTML (.html, .htm)
-- Markdown (.md)
-- Text (.txt)
-- Images (requires OCR)
-- Audio (requires transcription)
 
 ## Step 4: Search
 
 ```bash
-# Simple semantic search
-secondbrain search "what is this about?"
+# Basic search
+secondbrain search "machine learning"
 
 # Limit results
-secondbrain search "machine learning" --top-k 10
+secondbrain search "machine learning" --limit 5
 
-# Search with verbose output
-secondbrain search "data pipelines" --verbose
+# Export to JSON
+secondbrain search "data science" --format json --output results.json
 ```
 
-## Step 5: Manage Documents
+## Step 5: List Documents
 
 ```bash
 # List all documents
-secondbrain ls
+secondbrain list
 
-# List with details
-secondbrain ls --details
-
-# Delete a document
-secondbrain delete <document-id>
-
-# Check database status
-secondbrain status
+# Detailed view
+secondbrain list --verbose
 ```
 
 ## Example Workflow
 
 ```bash
-# 1. Ingest research papers
-secondbrain ingest ./research-papers/
+# 1. Install
+pip install secondbrain
 
-# 2. Search for relevant content
-secondbrain search "neural network architectures"
+# 2. Configure
+echo "MONGODB_URI=mongodb://localhost:27017" > .env
 
-# 3. List results
-secondbrain ls --details
+# 3. Ingest research papers
+secondbrain ingest ./research-papers/ --recursive
 
-# 4. Delete outdated documents
-secondbrain delete doc-12345
+# 4. Search for specific topics
+secondbrain search "neural networks in computer vision"
+
+# 5. Export results
+secondbrain search "deep learning" --limit 10 --format json --output papers.json
 ```
-
-## Async API (Advanced)
-
-For programmatic usage:
-
-```python
-import asyncio
-from secondbrain.client import SecondBrainClient
-
-async def main():
-    client = SecondBrainClient()
-    
-    # Ingest documents
-    await client.ingest("./documents/")
-    
-    # Search
-    results = await client.search("semantic query")
-    for result in results:
-        print(result)
-    
-    # Close client
-    await client.close()
-
-asyncio.run(main())
-```
-
-See [Async Guide](../developer-guide/async-api.md) for details.
 
 ## Next Steps
 
-- [Configuration Guide](configuration.md) - Deep dive into configuration
-- [User Guide](../user-guide/index.md) - Complete usage reference
-- [CLI Reference](../user-guide/cli-reference.md) - All commands and options
-- [Developer Guide](../developer-guide/index.md) - If you want to contribute
+- Read the [User Guide](../user-guide/index.md)
+- Explore [Advanced Features](../examples/README.md)
+- Check [Configuration Options](configuration.md)
 
-## Common Commands
+## Troubleshooting
 
-| Command | Description |
-|---------|-------------|
-| `secondbrain --help` | Show all commands |
-| `secondbrain ingest --help` | Ingest options |
-| `secondbrain search --help` | Search options |
-| `secondbrain health` | Check system health |
-| `secondbrain status` | Database statistics |
+See [Troubleshooting Guide](troubleshooting.md) for common issues.

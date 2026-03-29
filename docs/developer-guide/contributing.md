@@ -1,191 +1,229 @@
 # Contributing Guide
 
-How to contribute to SecondBrain.
+Detailed contribution guidelines for SecondBrain developers.
 
-## Getting Started
+## Code Review Process
 
-### Prerequisites
+### Pull Request Workflow
 
-- Python 3.11+
-- Git
-- MongoDB 8.0+ (via Docker or local)
-- sentence-transformers (via Docker or local)
+1. **Fork & Branch**
+   ```bash
+   git checkout -b feature/your-feature-name
+   ```
 
-### Setup
+2. **Make Changes**
+   - Follow code standards
+   - Add tests
+   - Update documentation
 
-```bash
-# Fork the repository
-git clone https://github.com/your-username/secondbrain.git
-cd secondbrain
+3. **Run Checks**
+   ```bash
+   ruff check .
+   ruff format .
+   mypy .
+   pytest
+   ```
 
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate
+4. **Commit**
+   ```bash
+   git commit -m "feat: add your feature"
+   ```
 
-# Install dependencies
-pip install -e ".[dev]"
+5. **Push & Create PR**
+   ```bash
+   git push origin feature/your-feature-name
+   ```
 
-# Install pre-commit hooks
-pre-commit install
+## Code Style
+
+### Formatting
+
+- **Line Length**: 88 characters
+- **Indentation**: 4 spaces
+- **Quotes**: Double quotes
+- **Imports**: Sorted alphabetically
+
+### Type Hints
+
+```python
+from typing import List, Optional, Dict, Any
+
+def process_documents(
+    documents: List[Dict[str, Any]],
+    max_results: Optional[int] = None
+) -> List[Document]:
+    ...
 ```
 
-## Development Workflow
+### Docstrings
 
-### 1. Create Branch
-
-```bash
-git checkout -b feature/your-feature-name
+```python
+def search_documents(
+    query: str,
+    limit: int = 10
+) -> List[Document]:
+    """Search documents by semantic similarity.
+    
+    Args:
+        query: Search query text
+        limit: Maximum number of results
+    
+    Returns:
+        List of matching documents
+    
+    Raises:
+        ValueError: If query is empty
+    """
+    ...
 ```
 
-### 2. Make Changes
+## Testing Guidelines
 
-- Follow [Code Standards](code-standards.md)
-- Write tests for new functionality
-- Update documentation
+### Write Tests For
 
-### 3. Run Tests
+- New features
+- Bug fixes
+- Edge cases
+- Public APIs
 
-```bash
-# Fast tests
-pytest
+### Test Structure
 
-# All tests
-pytest
+```python
+import pytest
+from secondbrain import Document
 
-# With coverage
-pytest --cov=secondbrain
+def test_document_creation():
+    """Test document can be created."""
+    doc = Document(id="1", title="Test", content="Content")
+    assert doc.id == "1"
+    assert doc.title == "Test"
 ```
 
-### 4. Run Linting
+### Test Coverage
 
-```bash
-ruff check .
-ruff format .
-mypy .
+- Aim for 90%+ coverage
+- Test both success and failure paths
+- Use fixtures for setup
+
+## Documentation Standards
+
+### Docstrings
+
+All public functions and classes must have docstrings.
+
+### README Updates
+
+Update README.md for:
+- New features
+- API changes
+- Configuration changes
+
+### Examples
+
+Provide code examples for:
+- New CLI commands
+- API usage patterns
+- Common workflows
+
+## Commit Messages
+
+### Format
+
+```
+<type>(<scope>): <subject>
+
+<body>
+
+<footer>
 ```
 
-### 5. Commit Changes
+### Types
 
-```bash
-git add .
-git commit -m "feat: add your feature"
+- `feat`: New feature
+- `fix`: Bug fix
+- `docs`: Documentation
+- `refactor`: Code restructuring
+- `test`: Tests
+- `chore`: Maintenance
+
+### Examples
+
+```
+feat(search): add fuzzy search support
+
+Add Levenshtein distance calculation for 
+fuzzy matching of search terms.
+
+Closes #123
 ```
 
-### Commit Message Format
+## Review Checklist
 
-Use conventional commits:
-
-```
-feat: Add new feature
-fix: Fix bug
-docs: Update documentation
-refactor: Refactor code
-test: Add tests
-chore: Maintenance
-```
-
-### 6. Push & Create PR
-
-```bash
-git push origin feature/your-feature-name
-```
-
-Create a pull request on GitHub.
-
-## Code Review
-
-### PR Checklist
+### For Authors
 
 - [ ] Code follows style guidelines
-- [ ] Tests added/updated
+- [ ] Tests added for new features
 - [ ] Documentation updated
-- [ ] No linting errors
-- [ ] All tests pass
-- [ ] Descriptive PR title
+- [ ] No type errors (`mypy .`)
+- [ ] All tests pass (`pytest`)
+- [ ] Linting passes (`ruff check .`)
 
-### Review Process
+### For Reviewers
 
-1. Automated checks run
-2. Maintainer reviews code
-3. Address feedback
-4. Merge when approved
+- [ ] Code is correct
+- [ ] Tests are adequate
+- [ ] Documentation is clear
+- [ ] No security issues
+- [ ] Performance is acceptable
+- [ ] Follows project conventions
 
-## Reporting Issues
+## Common Tasks
 
-### Bug Reports
+### Adding a New Feature
 
-Include:
-- Description of the bug
-- Steps to reproduce
-- Expected behavior
-- Actual behavior
-- Environment details
-- Logs/error messages
+```bash
+# Create feature branch
+git checkout -b feature/new-feature
 
-### Feature Requests
+# Make changes
+# Write tests
+# Update docs
 
-Include:
-- Problem statement
-- Proposed solution
-- Use cases
-- Alternatives considered
+# Commit
+git commit -m "feat: add new feature"
 
-## Code Guidelines
+# Push
+git push origin feature/new-feature
+```
 
-### Style
+### Fixing a Bug
 
-- Follow [Code Standards](code-standards.md)
-- Use type hints
-- Write docstrings
-- Keep functions small
+```bash
+# Create bugfix branch
+git checkout -b fix/bug-description
 
-### Testing
+# Fix the bug
+# Add test for the bug
+# Verify test fails without fix
 
-- Write unit tests
-- Test edge cases
-- Use fixtures
-- Aim for >85% coverage
+# Commit
+git commit -m "fix: resolve bug description"
 
-### Documentation
+# Push
+git push origin fix/bug-description
+```
 
-- Update README if needed
-- Add docstrings
-- Update CLI help text
-- Add examples
+## Getting Help
 
-## Areas of Contribution
-
-### Good First Issues
-
-- Documentation improvements
-- Bug fixes
-- Test additions
-- CLI enhancements
-
-### Advanced Topics
-
-- Performance optimization
-- New document parsers
-- Storage backends
-- Integration features
-
-## Questions?
-
-- [GitHub Discussions](https://github.com/your-username/secondbrain/discussions)
-- [Open an Issue](https://github.com/your-username/secondbrain/issues)
+- 📖 Read documentation
+- 💬 Ask in GitHub Discussions
+- 🐛 Open issue for bugs
+- 📧 Email maintainers
 
 ## Code of Conduct
 
-- Be respectful and inclusive
-- Provide constructive feedback
-- Accept constructive criticism
-- Focus on what's best for the community
+Please follow our [Code of Conduct](../CODE_OF_CONDUCT.md) in all interactions.
 
-## Recognition
+## License
 
-Contributors are recognized in:
-- GitHub contributor list
-- Release notes
-- Documentation credits
-
-Thank you for contributing to SecondBrain!
+By contributing, you agree that your contributions will be licensed under the MIT License.

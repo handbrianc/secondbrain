@@ -66,8 +66,8 @@ class DocumentConverterWrapper:
             try:
                 with file_path.open(encoding="utf-8", errors="ignore") as f:
                     text = f.read()
-                    if True:  # Always create segment, even for empty text
-                        segments = [{"text": text, "page": 1}]
+                    # Create segment even for empty text
+                    segments = [{"text": text, "page": 1}]
             except Exception as e:
                 raise DocumentExtractionError(
                     f"Failed to extract text from {file_path}: {e}"

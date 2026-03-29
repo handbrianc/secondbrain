@@ -1,148 +1,123 @@
 # Migration Guide
 
-This guide provides migration instructions for upgrading SecondBrain across major versions.
+This guide helps you migrate between SecondBrain versions and handle data migration scenarios.
 
-## Version 0.2.0 → 0.3.0
+## Version Migration
 
-### New Features in 0.3.0
+### v0.4.0 Migration Notes
 
-This release adds extensive resilience, security, and documentation improvements:
+#### Breaking Changes
+- None - This is a backward-compatible release
 
-- **Circuit Breaker Pattern**: Automatic service failure handling with MongoDB and sentence-transformers
-- **Async API**: Full asynchronous document ingestion and search
-- **Chaos Testing**: Comprehensive chaos and concurrency test suites
-- **Security Scanning**: Integrated pip-audit, cyclonedx SBOM generation
-- **Enhanced Logging**: Structured JSON logging with OpenTelemetry tracing
+#### New Features
+- Async API support
+- MCP server integration
+- OpenTelemetry tracing
+- Circuit breaker pattern
 
-### Breaking Changes
-
-**None** - This release maintains full backward compatibility with the existing API.
-
-### Migration Steps
-
-#### 1. Update Dependencies
-
+#### Upgrade Steps
 ```bash
-pip install -e ".[dev]"
+# Upgrade to latest version
+pip install --upgrade secondbrain
+
+# Verify installation
+secondbrain --version
+
+# Run health check
+secondbrain health-check
 ```
 
-Or with pinned versions:
+### Database Schema Changes
+
+SecondBrain v0.4.0 maintains database compatibility with previous versions. No manual migration is required.
+
+## Data Migration
+
+### Exporting Data
 
 ```bash
-pip install -r requirements-dev.txt
+# Export all documents to JSON
+secondbrain export --format json --output backup.json
+
+# Export specific collection
+secondbrain export --collection my-docs --format json --output backup.json
 ```
 
-#### 2. Enable Circuit Breaker (Optional)
+### Importing Data
 
-Circuit breaker is enabled by default. To customize thresholds:
+```bash
+# Import from JSON
+secondbrain import --input backup.json
+```
+
+### Manual Migration
+
+For custom migration scenarios:
 
 ```python
-from secondbrain.utils.circuit_breaker import CircuitBreakerConfig
+from secondbrain.document import Document
+from secondbrain.storage import MongoDBStorage
 
-# Custom configuration
-config = CircuitBreakerConfig(
-    failure_threshold=10,      # Failures before opening circuit
-    success_threshold=5,       # Successes before closing circuit
-    recovery_timeout=60.0,     # Seconds before half-open state
-    half_open_max_calls=10     # Max calls in half-open state
-)
+# Connect to old database
+old_storage = MongoDBStorage(uri="mongodb://old-host:27017")
+
+# Connect to new database  
+new_storage = MongoDBStorage(uri="mongodb://new-host:27017")
+
+# Migrate documents
+for doc in old_storage.list_documents():
+    content = old_storage.get_document(doc.id)
+    new_storage.store_document(doc, content)
 ```
 
-#### 3. Migrate to Async API (Optional)
+## Configuration Migration
 
-The sync API remains fully supported. To use async:
+### Environment Variables
 
-```python
-import asyncio
-from secondbrain.storage.async_storage import AsyncDocumentStorage
-
-async def main():
-    storage = AsyncDocumentStorage()
-    
-    # Async ingestion
-    await storage.ingest_document(
-        doc_id="doc-1",
-        content="Document content",
-        metadata={"source": "test"}
-    )
-    
-    # Async search
-    results = await storage.search(
-        query_embedding=[0.1] * 768,
-        top_k=5
-    )
-
-asyncio.run(main())
-```
-
-#### 4. Configure Security Scanning
-
-Run initial security scan:
-
+Old format (deprecated):
 ```bash
-./scripts/security_scan.sh all
+MONGO_URI=mongodb://localhost:27017
+DB_NAME=secondbrain
 ```
 
-Generate SBOM:
-
+New format (v0.4.0+):
 ```bash
-./scripts/security_scan.sh sbom
+MONGODB_URI=mongodb://localhost:27017
+MONGODB_DB=secondbrain
+EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
 ```
 
-#### 5. Enable Structured Logging
+The system automatically migrates old environment variables to the new format.
 
-Set environment variable:
+## Troubleshooting
 
-```bash
-export SECONDBRAIN_LOG_FORMAT=json
-```
+### Migration Fails
 
-## Version 0.1.0 → 0.2.0
+**Issue**: Import fails with connection error
 
-### Breaking Changes
+**Solution**:
+1. Verify MongoDB is running
+2. Check connection string format
+3. Ensure network connectivity
+4. Check MongoDB logs
 
-None. This was an additive release.
+### Data Loss After Upgrade
 
-### New Features
+**Issue**: Documents missing after upgrade
 
-- Async embedding generation
-- Circuit breaker for service resilience
-- Multicore document ingestion
-- Comprehensive test coverage
-
-## Migration Checklist
-
-Before upgrading:
-
-- [ ] Review changelog for breaking changes
-- [ ] Backup MongoDB database
-- [ ] Test in staging environment
-- [ ] Verify MongoDB compatibility (8.0+)
-- [ ] Ensure Python version (3.11+)
-
-After upgrading:
-
-- [ ] Run `secondbrain health` to verify services
-- [ ] Run security scan: `./scripts/security_scan.sh all`
-- [ ] Run tests: `pytest -m "not slow"`
-- [ ] Verify document ingestion works
-- [ ] Verify search functionality
-
-## Rollback Procedure
-
-If you need to rollback:
-
-```bash
-# Install previous version
-pip install secondbrain==0.2.0
-
-# Restore database from backup if needed
-mongorestore --uri="mongodb://localhost:27017" backup_directory/
-```
+**Solution**:
+1. Check MongoDB connection
+2. Verify correct database name
+3. Restore from backup if needed
+4. Check application logs for errors
 
 ## Support
 
-For migration issues:
-1. Check troubleshooting guide: [troubleshooting.md](getting-started/troubleshooting.md)
-2. Review logs: `secondbrain health --verbose`
-3. Open an issue with migration details
+If you encounter migration issues:
+- Check [Troubleshooting Guide](../getting-started/troubleshooting.md)
+- Open an issue on GitHub
+- Review application logs
+
+---
+
+Last updated: March 2026

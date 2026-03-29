@@ -1,16 +1,8 @@
 # Code Standards
 
-Coding standards and best practices for SecondBrain.
+Coding standards and conventions for SecondBrain development.
 
-## Code Style
-
-### Formatting
-
-- **Line Length**: 88 characters (ruff default)
-- **Indentation**: 4 spaces
-- **No trailing whitespace**
-- **Two blank lines** between top-level definitions
-- **One blank line** between methods
+## Python Style Guide
 
 ### Imports
 
@@ -22,68 +14,230 @@ from pathlib import Path
 
 # Third-party
 import click
-from typing_extensions import Protocol
+import pymongo
+from typing import List, Optional
 
-# Local imports last
-from . import utils
-from .core import BaseClass
+# Local imports
+from secondbrain.document import Document
+from secondbrain.storage import MongoDBStorage
 ```
 
-### Type Annotations
+### Naming Conventions
 
 ```python
-from typing import Any, Dict, List, Optional
+# Variables: snake_case
+document_count = 0
+user_name = "John"
 
-def process_data(
-    users: List[Dict[str, str]],
-    max_count: Optional[int] = None
-) -> Dict[str, Any]:
+# Functions: snake_case
+def get_document_by_id(doc_id: str) -> Optional[Document]:
+    ...
+
+# Classes: PascalCase
+class DocumentProcessor:
+    ...
+
+# Constants: UPPER_SNAKE_CASE
+MAX_CHUNK_SIZE = 500
+DEFAULT_TIMEOUT = 30
+
+# Private: leading underscore
+def _internal_helper():
     ...
 ```
 
-## Naming Conventions
+### Function Design
 
-| Element | Convention | Example |
-|---------|------------|---------|
-| Variables | snake_case | `user_name`, `max_count` |
-| Functions | snake_case | `get_user_by_id()` |
-| Classes | PascalCase | `UserManager`, `ConfigLoader` |
-| Constants | UPPER_SNAKE | `MAX_RETRIES`, `DEFAULT_TIMEOUT` |
-| Modules | snake_case | `user_service.py` |
+```python
+# Clear parameter names
+def process_document(
+    document: Document,
+    chunk_size: int = 500,
+    include_metadata: bool = True
+) -> List[Chunk]:
+    """Process document into chunks.
+    
+    Args:
+        document: Document to process
+        chunk_size: Target chunk size in tokens
+        include_metadata: Include document metadata in chunks
+    
+    Returns:
+        List of document chunks
+    """
+    ...
+```
 
 ## Error Handling
 
-### Use Specific Exceptions
+### Specific Exceptions
 
 ```python
 # Good
-raise ValueError("Invalid email format")
-raise FileNotFoundError(f"Config not found: {path}")
-
-# Avoid
-raise Exception("Something went wrong")
-```
-
-### Handle Exceptions Explicitly
-
-```python
 try:
-    result = process()
-except ProcessingError as e:
-    logger.warning(f"Processing failed: {e}")
+    doc = storage.get_document(doc_id)
+except DocumentNotFoundError:
+    logger.warning(f"Document {doc_id} not found")
+except StorageError as e:
+    logger.error(f"Storage error: {e}")
     raise
+
+# Avoid
+try:
+    doc = storage.get_document(doc_id)
+except Exception:
+    pass
 ```
 
-### Never Use Bare Except
+### Custom Exceptions
+
+```python
+class SecondBrainError(Exception):
+    """Base exception for SecondBrain."""
+    pass
+
+class DocumentNotFoundError(SecondBrainError):
+    """Raised when document is not found."""
+    pass
+
+class StorageError(SecondBrainError):
+    """Raised when storage operation fails."""
+    pass
+```
+
+## Type Annotations
+
+### Complete Type Hints
+
+```python
+from typing import List, Dict, Optional, Any, Union
+
+def process_data(
+    items: List[Dict[str, Any]],
+    threshold: Optional[float] = None
+) -> Dict[str, List[Any]]:
+    ...
+```
+
+### Type Aliases
+
+```python
+# Complex types
+UserDict = Dict[str, Dict[str, Any]]
+DocumentList = List[Document]
+Embedding = List[float]
+
+# Use type aliases
+def embed_documents(
+    docs: DocumentList
+) -> List[Embedding]:
+    ...
+```
+
+## Async/Await
+
+### Async Functions
+
+```python
+import asyncio
+from motor.motor_asyncio import AsyncMongoCollection
+
+async def fetch_documents(
+    collection: AsyncMongoCollection,
+    limit: int = 10
+) -> List[Document]:
+    """Fetch documents asynchronously."""
+    cursor = collection.find().limit(limit)
+    return await cursor.to_list(length=limit)
+```
+
+### Parallel Async Operations
+
+```python
+async def process_batch(documents: List[Document]) -> List[Result]:
+    """Process documents in parallel."""
+    tasks = [process_document(doc) for doc in documents]
+    return await asyncio.gather(*tasks)
+```
+
+## Logging
+
+### Log Levels
+
+```python
+import logging
+
+logger = logging.getLogger(__name__)
+
+logger.debug("Debug message")      # Detailed debugging
+logger.info("Info message")         # General info
+logger.warning("Warning message")   # Warning
+logger.error("Error message")       # Error
+logger.critical("Critical message") # Critical
+```
+
+### Contextual Logging
 
 ```python
 # Good
-except (ValueError, TypeError) as e:
-    logger.error(f"Invalid input: {e}")
+logger.info(f"Processed document {doc_id} with {len(chunks)} chunks")
 
 # Avoid
-except:
-    pass
+logger.info("Processed document")
+```
+
+## Performance
+
+### Efficient Data Structures
+
+```python
+# Use set for membership testing
+document_ids = set(doc.id for doc in documents)
+if doc_id in document_ids:  # O(1) lookup
+    ...
+
+# Use generator for large datasets
+def stream_documents():
+    for doc in large_collection:
+        yield doc
+```
+
+### Batch Operations
+
+```python
+# Good: Batch insert
+collection.insert_many(documents, ordered=False)
+
+# Avoid: Individual inserts
+for doc in documents:
+    collection.insert_one(doc)
+```
+
+## Testing
+
+### Test Organization
+
+```python
+import pytest
+from secondbrain.document import Document
+
+class TestDocument:
+    """Test Document class."""
+    
+    def test_creation(self):
+        """Test document creation."""
+        doc = Document(id="1", title="Test", content="Content")
+        assert doc.id == "1"
+    
+    def test_metadata(self):
+        """Test metadata handling."""
+        doc = Document(
+            id="1",
+            title="Test",
+            content="Content",
+            metadata={"author": "John"}
+        )
+        assert doc.metadata["author"] == "John"
 ```
 
 ## Documentation
@@ -91,84 +245,24 @@ except:
 ### Docstrings
 
 ```python
-def process_document(
-    path: Path,
-    chunk_size: int = 4096
+def search(
+    query: str,
+    limit: int = 10
 ) -> List[Document]:
-    """Process a document into chunks.
-
+    """Search documents by semantic similarity.
+    
     Args:
-        path: Path to document file
-        chunk_size: Size of each chunk in characters
-
+        query: Search query text
+        limit: Maximum number of results
+    
     Returns:
-        List of document chunks
-
+        List of matching documents sorted by similarity
+    
     Raises:
-        FileNotFoundError: If document doesn't exist
-        ValueError: If chunk_size is invalid
+        ValueError: If query is empty
+        SearchError: If search fails
     """
-```
-
-### Type Hints
-
-Always use type hints for function signatures.
-
-## Testing
-
-### Test Structure
-
-```python
-def test_document_ingestion(tmp_path):
-    """Test that documents are ingested correctly."""
-    # Arrange
-    doc_path = tmp_path / "test.pdf"
-    doc_path.write_bytes(sample_pdf)
-    
-    # Act
-    result = ingest_document(doc_path)
-    
-    # Assert
-    assert result is not None
-    assert len(result.chunks) > 0
-```
-
-### Test Naming
-
-```python
-# Good
-def test_ingest_returns_correct_chunk_count()
-def test_search_with_invalid_query_raises_error()
-
-# Avoid
-def test_stuff()
-def test_1()
-```
-
-## Performance
-
-### Use Async for I/O
-
-```python
-# Good
-async def ingest_async(path: Path):
-    await storage.ingest(path)
-
-# Avoid (blocking I/O in async context)
-def ingest_sync(path: Path):
-    storage.ingest(path)  # Blocks event loop
-```
-
-### Batch Operations
-
-```python
-# Good
-for batch in chunked(documents, 10):
-    await storage.insert_many(batch)
-
-# Avoid
-for doc in documents:
-    await storage.insert(doc)
+    ...
 ```
 
 ## Security
@@ -178,62 +272,25 @@ for doc in documents:
 ```python
 from pydantic import BaseModel, Field
 
-class IngestRequest(BaseModel):
-    path: str = Field(..., min_length=1)
-    chunk_size: int = Field(default=4096, ge=512, le=8192)
+class SearchRequest(BaseModel):
+    query: str = Field(..., min_length=1, max_length=1000)
+    limit: int = Field(default=10, ge=1, le=100)
 ```
 
-### Never Trust User Input
+### No Hardcoded Secrets
 
 ```python
 # Good
-safe_path = Path(user_input).resolve()
-if not safe_path.is_relative_to(base_dir):
-    raise ValueError("Invalid path")
+from dotenv import load_dotenv
+load_dotenv()
+MONGODB_URI = os.getenv("MONGODB_URI")
 
 # Avoid
-path = Path(user_input)  # Vulnerable to path traversal
+MONGODB_URI = "mongodb://user:password@localhost:27017"
 ```
 
-## Tools
+## See Also
 
-### Linting
-
-```bash
-ruff check .
-```
-
-### Formatting
-
-```bash
-ruff format .
-```
-
-### Type Checking
-
-```bash
-mypy .
-```
-
-### Pre-commit
-
-```bash
-pre-commit install
-pre-commit run --all-files
-```
-
-## Code Review Checklist
-
-- [ ] Code follows style guidelines
-- [ ] Type hints are complete
-- [ ] Docstrings are present for public APIs
-- [ ] Tests are included
-- [ ] No security vulnerabilities
-- [ ] Performance is acceptable
-- [ ] Error handling is appropriate
-
-## Next Steps
-
-- [Development Setup](development.md) - Get started
-- [Testing Guide](TESTING.md) - Write tests
-- [Contributing](contributing.md) - Contribute code
+- [Development Setup](development.md)
+- [Contributing Guide](contributing.md)
+- [Testing Guide](TESTING.md)

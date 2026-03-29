@@ -5,7 +5,6 @@ due to multiprocessing architecture. See test_integration/test_end_to_end.py for
 workflow tests using mongomock.
 """
 
-from pathlib import Path
 
 
 class TestEndToEndIngestion:

@@ -122,7 +122,7 @@ class DockerManager:
                 capture_output=True,
                 check=True,
                 timeout=5,
-            )
+            )  # nosec B603, B607 - safe: checking Docker availability, no user input in command
             return True
         except (
             subprocess.CalledProcessError,
@@ -156,7 +156,7 @@ class DockerManager:
                 capture_output=True,
                 check=True,
                 timeout=5,
-            )
+            )  # nosec B603, B607 - safe: hardcoded docker command, no user input
             return True
         except (
             subprocess.CalledProcessError,
@@ -194,7 +194,7 @@ class DockerManager:
                 capture_output=True,
                 text=True,
                 timeout=10,
-            )
+            )  # nosec B603, B607 - safe: hardcoded docker ps, container_name from validated config
             running_containers = result.stdout.strip().split("\n")
             return self.container_name in running_containers
         except (
@@ -261,7 +261,7 @@ class DockerManager:
                 capture_output=True,
                 text=True,
                 timeout=120,  # 2 minute timeout for compose up
-            )
+            )  # nosec B603, B607 - safe: docker compose with validated compose_file path from config
 
             if result.returncode != 0:
                 error_msg = result.stderr or result.stdout or "Unknown error"

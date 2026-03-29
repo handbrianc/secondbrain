@@ -1,292 +1,223 @@
-# Troubleshooting Guide
+# Troubleshooting
 
 Common issues and solutions for SecondBrain.
 
+## Installation Issues
+
+### pip Install Fails
+
+**Symptom**: `pip install secondbrain` fails with errors
+
+**Solutions**:
+```bash
+# Upgrade pip
+python -m pip install --upgrade pip
+
+# Clear cache
+pip cache purge
+
+# Try again
+pip install secondbrain
+```
+
+### Dependency Conflicts
+
+**Symptom**: `ResolutionImpossible` error
+
+**Solutions**:
+```bash
+# Create fresh virtual environment
+python -m venv venv
+source venv/bin/activate
+pip install secondbrain
+```
+
 ## MongoDB Connection Issues
 
-### Error: "MongoServerSelectionError: connect ECONNREFUSED"
+### Can't Connect to MongoDB
 
-**Cause**: MongoDB is not running or unreachable.
+**Symptom**: `MongoServerSelectionError`
 
-**Solution**:
+**Checklist**:
+1. Is MongoDB running?
+   ```bash
+   mongosh
+   ```
+2. Is connection string correct?
+   ```env
+   MONGODB_URI=mongodb://localhost:27017
+   ```
+3. Is firewall blocking port 27017?
+   ```bash
+   netstat -an | grep 27017
+   ```
+
+### Authentication Failed
+
+**Symptom**: `Authentication failed`
+
+**Solutions**:
+1. Verify credentials in connection string
+2. Check user has proper permissions
+3. Verify authentication database
+
+## Embedding Issues
+
+### Model Download Fails
+
+**Symptom**: `HTTPError` when loading model
+
+**Solutions**:
 ```bash
-# Check if MongoDB is running
-docker ps | grep mongo  # Docker
-brew services list | grep mongodb  # macOS Homebrew
+# Download manually
+python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
 
-# Start MongoDB
-docker-compose up -d  # Docker
-brew services start mongodb-community  # macOS
+# Check internet connection
+ping huggingface.co
 ```
 
-### Error: "Authentication failed"
+### GPU Not Detected
 
-**Cause**: Incorrect MongoDB credentials.
+**Symptom**: "CUDA not available"
 
-**Solution**:
+**Solutions**:
 ```bash
-# Verify credentials in .env
-cat .env | grep SECONDBRAIN_MONGO_URI
+# Check CUDA installation
+nvidia-smi
 
-# Test connection
-mongosh "mongodb://localhost:27017" -u your_user -p your_password
-```
+# Verify PyTorch CUDA support
+python -c "import torch; print(torch.cuda.is_available())"
 
-## sentence-transformers Issues
-
-### Error: "Connection refused to sentence-transformers API"
-
-**Cause**: sentence-transformers service is not running.
-
-**Solution**:
-```bash
-# Check if service is running
-curl http://localhost:11434/api/tags
-
-# Start sentence-transformers
-sentence-transformers serve
-
-# Pull required model if not present
-sentence-transformers pull embeddinggemma:latest
-```
-
-### Error: "Model not found"
-
-**Cause**: Required embedding model is not downloaded.
-
-**Solution**:
-```bash
-# List available models
-sentence-transformers list
-
-# Pull the model
-sentence-transformers pull embeddinggemma:latest
-
-# Or specify a different model in .env
-SECONDBRAIN_MODEL=all-MiniLM-L6-v2
-```
-
-## Ingestion Issues
-
-### Error: "File format not supported"
-
-**Cause**: Attempting to ingest an unsupported file type.
-
-**Supported formats**:
-- PDF (.pdf)
-- Word (.docx)
-- PowerPoint (.pptx)
-- Excel (.xlsx)
-- HTML (.html, .htm)
-- Markdown (.md)
-- Text (.txt)
-- Images (.png, .jpg, .jpeg) - requires OCR
-- Audio (.wav, .mp3) - requires transcription
-
-**Solution**: Convert file to supported format or install required dependencies.
-
-### Error: "Permission denied"
-
-**Cause**: Insufficient file system permissions.
-
-**Solution**:
-```bash
-# Check file permissions
-ls -la /path/to/documents/
-
-# Fix permissions if needed
-chmod +r /path/to/documents/*
-```
-
-### Error: "No documents found in directory"
-
-**Cause**: Directory is empty or contains no supported files.
-
-**Solution**:
-```bash
-# Check directory contents
-ls -la /path/to/documents/
-
-# Verify file extensions
-find /path/to/documents/ -type f -name "*.pdf" -o -name "*.docx"
+# Install CUDA version
+pip install torch --index-url https://download.pytorch.org/whl/cu118
 ```
 
 ## Search Issues
 
-### Error: "No results found"
+### No Results Found
 
-**Cause**: 
-- No documents in database
-- Query is too specific
-- Embedding model mismatch
+**Symptom**: Search returns empty results
 
-**Solution**:
-```bash
-# Check if documents exist
-secondbrain ls
+**Checklist**:
+1. Are documents ingested?
+   ```bash
+   secondbrain list
+   ```
+2. Is query too specific?
+   ```bash
+   secondbrain search "broader topic"
+   ```
+3. Check embedding model matches
 
-# Try a broader search
-secondbrain search "general topic"
+### Slow Search
 
-# Verify embedding dimensions match
-cat .env | grep SECONDBRAIN_EMBEDDING_DIMENSIONS
-```
+**Symptom**: Search takes > 5 seconds
 
-### Error: "Vector dimension mismatch"
-
-**Cause**: Query embedding dimensions don't match stored embeddings.
-
-**Solution**:
-```bash
-# Ensure same model is used for ingestion and search
-cat .env | grep SECONDBRAIN_MODEL
-
-# Re-ingest with correct model if needed
-SECONDBRAIN_MODEL=all-MiniLM-L6-v2 secondbrain ingest ./docs/
-```
+**Solutions**:
+1. Check MongoDB performance
+2. Verify vector index exists
+3. Reduce result limit
+4. Check network latency
 
 ## Performance Issues
 
-### Slow ingestion
+### High Memory Usage
 
-**Causes**:
-- Large documents
-- Small chunk size
-- Rate limiting enabled
+**Symptom**: Process uses > 4GB RAM
 
 **Solutions**:
 ```bash
-# Increase chunk size
-SECONDBRAIN_CHUNK_SIZE=8192 secondbrain ingest ./docs/
+# Reduce batch size
+export CHUNK_SIZE=250
 
-# Increase workers (if system has resources)
-SECONDBRAIN_MAX_WORKERS=8 secondbrain ingest ./docs/
-
-# Disable rate limiting (development only)
-SECONDBRAIN_RATE_LIMIT_ENABLED=false secondbrain ingest ./docs/
+# Use smaller model
+export EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
 ```
 
-### Slow search
+### Slow Ingestion
 
-**Causes**:
-- Large database
-- High top-k value
-- No indexes
+**Symptom**: Ingestion takes too long
+
+**Solutions**:
+1. Enable GPU acceleration
+2. Increase batch size
+3. Use multiple workers
+4. Check disk I/O
+
+## CLI Issues
+
+### Command Not Found
+
+**Symptom**: `secondbrain: command not found`
 
 **Solutions**:
 ```bash
-# Limit results
-secondbrain search "query" --top-k 10
+# Reinstall
+pip install --force-reinstall secondbrain
 
-# Check database size
-secondbrain status
+# Check PATH
+which secondbrain
+
+# Use full path
+python -m secondbrain_cli
 ```
 
-## Configuration Issues
+### Permission Denied
 
-### Error: "Invalid configuration"
+**Symptom**: `PermissionError`
 
-**Cause**: Malformed .env file or invalid environment variables.
-
-**Solution**:
+**Solutions**:
 ```bash
-# Check .env syntax
-cat .env
+# Run without sudo
+pip install --user secondbrain
 
-# Validate with SecondBrain
-secondbrain health --verbose
-
-# Reset to defaults (backup first!)
-cp .env .env.backup
-rm .env
-cp .env.example .env
+# Or fix permissions
+sudo chmod -R 755 /usr/local/bin
 ```
 
-### Environment variables not loading
+## Error Messages
 
-**Cause**: .env file not in working directory or not loaded.
+### Document Parsing Error
 
-**Solution**:
-```bash
-# Ensure .env is in current directory
-pwd
-ls -la .env
+**Error**: `ParsingError: Unsupported format`
 
-# Or specify explicitly
-export $(cat .env | xargs)
-secondbrain ingest ./docs/
-```
+**Solution**: Check file format is supported (PDF, DOCX, TXT)
 
-## Docker-Specific Issues
+### Vector Dimension Mismatch
 
-### Container won't start
+**Error**: `ValueError: Dimension mismatch`
 
-**Solution**:
-```bash
-# Check Docker logs
-docker-compose logs mongo
+**Solution**: Ensure embedding model hasn't changed
 
-# Remove and recreate containers
-docker-compose down
-docker-compose up -d
+### Timeout Error
 
-# Check Docker resources
-docker system df
-```
+**Error**: `AsyncTimeoutError`
 
-### Port conflicts
+**Solution**: Increase timeout in configuration
 
-**Solution**:
-```bash
-# Check what's using the port
-lsof -i :27017  # MongoDB
-lsof -i :11434  # sentence-transformers
-
-# Change port in docker-compose.yml or stop conflicting service
-```
-
-## Logging & Debugging
-
-### Enable verbose logging
-
-```bash
-# CLI flag
-secondbrain ingest ./docs/ --verbose
-
-# Environment variable
-SECONDBRAIN_VERBOSE=true secondbrain ingest ./docs/
-
-# Debug log level
-SECONDBRAIN_LOG_LEVEL=DEBUG secondbrain ingest ./docs/
-```
-
-### Check logs
-
-```bash
-# Docker logs
-docker-compose logs -f mongo
-docker-compose logs -f sentence-transformers
-
-# Application logs (if configured to file)
-tail -f /path/to/logs/secondbrain.log
-```
-
-## Getting More Help
+## Getting Help
 
 If you can't find your issue here:
 
-1. **Check logs**: Enable verbose/debug logging
-2. **Verify setup**: Run `secondbrain health` to check services
-3. **Review documentation**: [Configuration Guide](configuration.md)
-4. **Search issues**: [GitHub Issues](https://github.com/your-username/secondbrain/issues)
-5. **Open an issue**: Include error message, logs, and reproduction steps
+1. Check [GitHub Issues](https://github.com/your-org/secondbrain/issues)
+2. Ask in [GitHub Discussions](https://github.com/your-org/secondbrain/discussions)
+3. Open a new issue with:
+   - Error message
+   - Steps to reproduce
+   - Environment details
+   - Logs
 
-## Common Error Codes
+## Logs
 
-| Error | Likely Cause | Solution |
-|-------|--------------|----------|
-| ECONNREFUSED | Service not running | Start the service |
-| AUTH_FAILED | Wrong credentials | Check .env credentials |
-| NOT_FOUND | Resource missing | Verify path/resource exists |
-| TIMEOUT | Service slow/unreachable | Check service health |
-| INVALID_FORMAT | Wrong file type | Use supported format |
+### Enable Debug Logging
+
+```env
+LOG_LEVEL=DEBUG
+LOG_FILE=secondbrain.log
+```
+
+### View Logs
+
+```bash
+tail -f secondbrain.log
+```

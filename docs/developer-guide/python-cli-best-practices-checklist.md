@@ -1,62 +1,86 @@
 # Python CLI Best Practices Checklist
 
-Checklist for building production-ready Python CLIs with Click.
+Best practices for building Python CLI applications with Click.
 
 ## Command Structure
 
-- [ ] Use Click for CLI framework
-- [ ] Organize commands with groups
-- [ ] Provide helpful help text
-- [ ] Use subcommands for related functionality
-- [ ] Support `--help` on all commands
-
-## Options & Arguments
-
-- [ ] Use appropriate types for options
-- [ ] Provide default values
-- [ ] Validate user input
-- [ ] Use enums for fixed choices
-- [ ] Support environment variables
-
-### Example
+### Command Organization
 
 ```python
-@click.command()
-@click.option("--chunk-size", type=int, default=4096, help="Chunk size in characters")
-@click.option("--verbose", is_flag=True, help="Enable verbose output")
-@click.argument("path", type=click.Path(exists=True))
-def ingest(path: str, chunk_size: int, verbose: bool):
-    """Ingest documents from PATH."""
+import click
+
+@click.group()
+@click.option('--verbose', '-v', is_flag=True, help='Enable verbose output')
+@click.pass_context
+def cli(ctx, verbose: bool):
+    """SecondBrain CLI."""
+    ctx.ensure_object(dict)
+    ctx.obj['verbose'] = verbose
+
+@cli.command()
+@click.argument('path', type=click.Path(exists=True))
+@click.option('--recursive', '-r', is_flag=True, help='Process directories')
+@click.pass_context
+def ingest(ctx, path: str, recursive: bool):
+    """Ingest documents."""
+    if ctx.obj['verbose']:
+        click.echo(f"Ingesting {path}")
+    # Implementation...
 ```
 
-## Error Handling
-
-- [ ] Use specific exception types
-- [ ] Provide clear error messages
-- [ ] Exit with appropriate codes
-- [ ] Don't expose stack traces in production
-- [ ] Log errors appropriately
-
-### Example
+### Command Groups
 
 ```python
-class CLIError(click.ClickException):
-    """Base CLI exception."""
-    exit_code = 1
-    
-    def show(self, file=None):
-        click.echo(f"Error: {self.format_message()}", err=True)
+# Logical grouping
+@cli.group()
+def document():
+    """Document management commands."""
+    pass
+
+@document.command()
+def list():
+    """List all documents."""
+    pass
+
+@document.command()
+@click.argument('id')
+def delete(id: str):
+    """Delete a document."""
+    pass
+```
+
+## Options and Arguments
+
+### Argument Types
+
+```python
+# Path with validation
+@click.argument('path', type=click.Path(exists=True, file_okay=True, dir_okay=False))
+
+# Multiple values
+@click.option('--tags', '-t', multiple=True, help='Document tags')
+
+# Choice options
+@click.option('--format', '-f', type=click.Choice(['json', 'csv', 'text']))
+
+# File handling
+@click.option('--output', '-o', type=click.File('w'), default='-')  # stdout
+```
+
+### Validation
+
+```python
+def validate_positive(ctx, param, value):
+    if value is not None and value <= 0:
+        raise click.BadParameter("Must be positive")
+    return value
+
+@click.option('--limit', '-l', callback=validate_positive, default=10)
 ```
 
 ## Output Formatting
 
-- [ ] Use Rich for terminal output
-- [ ] Support multiple output formats (table, json)
-- [ ] Provide progress indicators for long operations
-- [ ] Use colors appropriately
-- [ ] Support quiet mode
-
-### Example
+### Rich Integration
 
 ```python
 from rich.console import Console
@@ -64,102 +88,196 @@ from rich.table import Table
 
 console = Console()
 
-def display_results(results):
-    table = Table(title="Results")
+def display_documents(documents):
+    table = Table(title="Documents")
     table.add_column("ID")
-    table.add_column("Score")
-    for result in results:
-        table.add_row(result.id, f"{result.score:.3f}")
+    table.add_column("Title")
+    table.add_column("Created")
+    
+    for doc in documents:
+        table.add_row(doc.id, doc.title, doc.created_at.isoformat())
+    
     console.print(table)
+```
+
+### Progress Bars
+
+```python
+@click.command()
+@click.argument('files', nargs=-1)
+def process_files(files):
+    """Process multiple files."""
+    with click.progressbar(files, label='Processing files') as bar:
+        for file in bar:
+            process_file(file)
+```
+
+## Error Handling
+
+### Custom Exceptions
+
+```python
+class SecondBrainError(click.ClickException):
+    exit_code = 1
+
+class DocumentNotFoundError(SecondBrainError):
+    def __init__(self, doc_id):
+        super().__init__(f"Document not found: {doc_id}")
+```
+
+### Error Messages
+
+```python
+try:
+    doc = storage.get_document(doc_id)
+except DocumentNotFoundError as e:
+    click.echo(click.style(str(e), fg='red'), err=True)
+    ctx.exit(1)
 ```
 
 ## Configuration
 
-- [ ] Support `.env` files
-- [ ] Use environment variables
-- [ ] Provide sensible defaults
-- [ ] Validate configuration
-- [ ] Document all options
+### Config File Support
 
-## Testing
+```python
+import yaml
 
-- [ ] Use Click's CliRunner
-- [ ] Test all commands
-- [ ] Test error cases
-- [ ] Mock external dependencies
-- [ ] Test output formatting
+def load_config(ctx, param, value):
+    if value:
+        with open(value) as f:
+            config = yaml.safe_load(f)
+        ctx.obj.update(config)
+    return value
 
-### Example
+@click.option('--config', '-c', callback=load_config, expose_value=False)
+```
+
+### Environment Variables
+
+```python
+@click.command()
+@click.option('--uri', envvar='MONGODB_URI', help='MongoDB connection string')
+def connect(uri: str):
+    """Connect to MongoDB."""
+    pass
+```
+
+## Help Text
+
+### Comprehensive Help
+
+```python
+@click.command()
+@click.option(
+    '--limit', '-l',
+    default=10,
+    show_default=True,
+    help='Maximum number of results to return'
+)
+@click.option(
+    '--format', '-f',
+    type=click.Choice(['json', 'text', 'csv']),
+    default='text',
+    help='Output format'
+)
+def search(limit: int, format: str):
+    """Search documents by semantic similarity.
+    
+    Search for documents matching the query using semantic similarity.
+    Results are ranked by relevance.
+    
+    Examples:
+    
+        secondbrain search "machine learning"
+        secondbrain search "python tutorials" --limit 20
+        secondbrain search "data science" --format json
+    """
+    pass
+```
+
+## Testing CLI
+
+### CliRunner
 
 ```python
 from click.testing import CliRunner
 
 def test_ingest_command():
     runner = CliRunner()
-    result = runner.invoke(ingest, ["./docs/"])
+    result = runner.invoke(cli, ['ingest', 'test.pdf'])
+    
     assert result.exit_code == 0
-    assert "Successfully ingested" in result.output
+    assert "Ingested" in result.output
 ```
 
-## Documentation
+### Testing with Files
 
-- [ ] Document all commands
-- [ ] Provide examples
-- [ ] Explain options clearly
-- [ ] Update docs with changes
-- [ ] Include troubleshooting
+```python
+def test_ingest_with_temp_file():
+    runner = CliRunner()
+    
+    with runner.isolated_filesystem():
+        # Create test file
+        with open('test.pdf', 'w') as f:
+            f.write('dummy content')
+        
+        result = runner.invoke(cli, ['ingest', 'test.pdf'])
+        assert result.exit_code == 0
+```
 
-## Performance
+## Performance Tips
 
-- [ ] Use async for I/O operations
-- [ ] Support parallel processing
-- [ ] Provide progress feedback
-- [ ] Handle large inputs gracefully
-- [ ] Cache where appropriate
+### Lazy Loading
 
-## Security
+```python
+@click.command()
+@click.option('--lazy', is_flag=True, help='Lazy load models')
+def search(lazy: bool):
+    """Search with optional lazy loading."""
+    if not lazy:
+        load_models()  # Eager load
+    # Otherwise, models load on first use
+```
 
-- [ ] Validate all inputs
-- [ ] Sanitize file paths
-- [ ] Don't expose sensitive data
-- [ ] Use secure defaults
-- [ ] Handle errors securely
+### Batch Operations
 
-## Release Checklist
-
-- [ ] All tests pass
-- [ ] Documentation updated
-- [ ] Version bumped
-- [ ] Changelog updated
-- [ ] Help text reviewed
-- [ ] Examples tested
+```python
+@click.command()
+@click.argument('files', nargs=-1)
+def batch_ingest(files):
+    """Ingest multiple files efficiently."""
+    if len(files) > 10:
+        click.echo(f"Batch ingesting {len(files)} files...")
+        # Use batch API
+```
 
 ## Common Patterns
 
-### Progress Indicator
+### Interactive Prompts
 
 ```python
-from rich.progress import Progress
-
-with Progress() as progress:
-    task = progress.add_task("Ingesting...", total=len(documents))
-    for doc in documents:
-        process(doc)
-        progress.update(task, advance=1)
+@click.command()
+def delete_all():
+    """Delete all documents (interactive)."""
+    if not click.confirm('Are you sure you want to delete all documents?'):
+        click.echo('Aborted.')
+        return
+    # Proceed with deletion
 ```
 
-### JSON Output
+### Confirmation
 
 ```python
-@click.option("--format", type=click.Choice(["table", "json"]), default="table")
-def list_docs(format: str):
-    if format == "json":
-        click.echo(json.dumps(results))
-    else:
-        display_table(results)
+@click.command()
+def reset():
+    """Reset database."""
+    click.echo('This will delete all data.')
+    if not click.confirm('Continue?', abort=True):
+        click.echo('Aborted.')
 ```
 
-## Next Steps
+## See Also
 
+- [CLI Reference](../user-guide/cli-reference.md)
 - [Click Documentation](https://click.palletsprojects.com/)
-- [Rich Documentation](https://rich.readthedocs.io/)
+- [Code Standards](code-standards.md)

@@ -410,6 +410,49 @@ class DocumentIngestor:
             raise ValueError("cores must be positive")
         return cores
 
+    def _get_safe_worker_count(self, cores: int) -> int:
+        """Calculate safe worker count based on memory constraints.
+
+        Args:
+            cores: CPU cores available.
+
+        Returns:
+            Safe number of worker processes considering memory limits.
+        """
+        from secondbrain.config import get_config
+        from secondbrain.utils.memory_utils import (
+            calculate_safe_worker_count,
+            get_memory_limit_gb,
+        )
+
+        config = get_config()
+
+        # Calculate memory limit in GB
+        memory_limit_gb = get_memory_limit_gb(config.memory_limit_percent)
+
+        # Convert per-worker estimate to GB
+        memory_per_worker_gb = config.estimated_memory_per_worker_mb / 1024
+
+        # Calculate safe worker count based on memory
+        safe_workers = calculate_safe_worker_count(
+            memory_limit_gb=memory_limit_gb,
+            estimated_memory_per_worker_gb=memory_per_worker_gb,
+            min_workers=1,
+            max_workers=cores,
+        )
+
+        logger.info(
+            "Worker count: %d (CPU cores: %d, memory limit: %.2fGB, "
+            "memory per worker: %.2fGB, limit: %.0f%%)",
+            safe_workers,
+            cores,
+            memory_limit_gb,
+            memory_per_worker_gb,
+            config.memory_limit_percent * 100,
+        )
+
+        return safe_workers
+
     def _process_parallel_with_progress(
         self, files: list[Path], embedding_gen: Any, storage: Any, max_workers: int
     ) -> tuple[int, int]:
@@ -525,7 +568,9 @@ class DocumentIngestor:
         if not files:
             return {"success": 0, "failed": 0}
         cores = self._resolve_core_count(cores)
+        # Calculate safe worker count based on memory constraints
+        safe_workers = self._get_safe_worker_count(cores)
         successful, failed = self._process_parallel_with_progress(
-            files, embedding_gen, storage, cores
+            files, embedding_gen, storage, safe_workers
         )
         return {"success": successful, "failed": failed}

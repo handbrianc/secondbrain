@@ -1,151 +1,137 @@
 # Security Policy
 
-## Security Screening
+## Security First
 
-This project uses multiple security screening tools:
+SecondBrain prioritizes the security of your data and system. This document outlines our approach to security and how to report vulnerabilities.
 
-- **Bandit**: Static analysis for Python security issues
-- **Safety**: Dependency vulnerability scanning
-- **Detect-secrets**: Secrets detection in code
+## Reporting a Vulnerability
 
-## Acceptable Security Risks
+We take all security vulnerabilities seriously. If you discover a security issue, please report it responsibly:
 
-### Subprocess Calls (Bandit B602)
+### Responsible Disclosure
 
-The project uses subprocess calls for external tool execution (e.g., `pdftotext`, `ffmpeg`). These are flagged by Bandit as B602 (subprocess_with_shell) but are **documented acceptable risks** because:
+**DO NOT** create public GitHub issues for security vulnerabilities.
 
-1. **All arguments are validated before use** - File paths are normalized and validated
-2. **No user input reaches shell directly** - User input is sanitized and validated
-3. **Only runs on user-provided file paths** - Files must exist and be accessible
-4. **Commands are whitelisted** - Only known-safe external tools are executed
+Instead, report via:
+- **GitHub Security Advisory**: [Report a vulnerability](https://github.com/your-org/secondbrain/security/advisories/new)
+- **Email**: [INSERT SECURITY EMAIL]
 
-**Example justification in code:**
-```python
-def _call_external_tool(self, cmd: list[str]) -> str:
-    """Call external tool with validated arguments.
-    
-    SECURITY: Shell=True is acceptable here because:
-    1. All arguments are validated before use
-    2. No user input reaches shell directly
-    3. Only runs on user-provided file paths
-    4. Command is whitelisted (docling, pdftotext, etc.)
-    """
-    # bandit: B602 - acceptable risk (see docstring)
-    result = subprocess.run(cmd, capture_output=True, text=True, check=False)
-    return result.stdout
-```
+Please include:
+- Description of the vulnerability
+- Steps to reproduce
+- Potential impact
+- Suggested fix (if you have one)
 
-### Input Sanitization
+We will acknowledge your report within 48 hours and provide a timeline for resolution.
 
-User input is sanitized before use in queries:
+## Security Measures
 
-```python
-def sanitize_query(query: str) -> str:
-    """Remove potentially dangerous characters from user query.
-    
-    Removes MongoDB injection patterns: $, {, }, [, ]
-    """
-    return re.sub(r'[\$\{\}\[\]\\]', '', query.strip())
-```
+### Local-First Architecture
 
-## Security Scan Results
+- All document processing happens locally
+- No data is sent to external services
+- MongoDB connection is user-controlled
+- Embedding models run locally via Sentence Transformers
 
-### Current Status (as of last scan)
+### Dependency Management
 
-- **High severity issues**: 0
-- **Medium severity issues**: 0
-- **Low severity issues**: 8 (documented acceptable risks)
+We maintain security through:
 
-#### Documented Low-Severity Issues
+- **Regular Updates**: Dependencies are monitored and updated regularly
+- **Security Scanning**: Automated scans with:
+  - [Bandit](https://bandit.readthedocs.io/) - Python security linter
+  - [Safety](https://pyup.io/safety/) - Vulnerability scanner
+  - [pip-audit](https://pypi.org/project/pip-audit/) - pip vulnerability checker
+  - [CodeQL](https://codeql.github.com/) - Semantic code analysis
 
-1. **B404 (subprocess)** - Import of subprocess module in CLI tool
-   - **Justification**: Required for document processing tools (pdftotext, ffmpeg)
-   - **Mitigation**: All subprocess calls use validated arguments, no shell injection possible
+- **SBOM Generation**: Software Bill of Materials via [CycloneDX](https://cyclonedx.org/)
 
-2. **B602/B603 (subprocess_with_shell, subprocess_without_shell)** - External tool execution
-   - **Justification**: Required for document format conversion (PDF, DOCX, etc.)
-   - **Mitigation**: All arguments validated, shell=False where possible, whitelisted commands only
-
-3. **B607 (start_process_with_partial_path)** - Starting processes with partial paths
-   - **Justification**: CLI tool needs to invoke system utilities
-   - **Mitigation**: Commands are whitelisted and validated before execution
-
-All low-severity issues are **documented acceptable risks** that do not pose security threats in this CLI context.
-
-### Running Security Scans
+### Pre-commit Security Hooks
 
 ```bash
-# Bandit security scan
-bandit -r src/secondbrain -ll
+# Run security checks before committing
+pre-commit run --all-files
 
-# Dependency vulnerability scan
-safety check
-
-# Full security scan (if script exists)
-./scripts/security_scan.sh all
+# This runs:
+# - Bandit security scan
+# - Safety vulnerability check
+# - Ruff linting
 ```
 
-## Reporting Vulnerabilities
+### Type Safety
 
-To report a security vulnerability:
+- Strict mypy configuration
+- No `Any` types without justification
+- Comprehensive type annotations
+- Prevents entire class of runtime errors
 
-1. **Do NOT** open a public issue
-2. Contact the maintainers directly at: [security contact]
-3. Include:
-   - Description of the vulnerability
-   - Steps to reproduce
-   - Potential impact
-   - Suggested fix (if known)
+### Input Validation
 
-## Security Updates
-
-Security updates are prioritized as follows:
-
-1. **Critical**: Fixed within 24 hours
-2. **High**: Fixed within 7 days
-3. **Medium**: Fixed within 30 days
-4. **Low**: Fixed in next release cycle
-
-## Hardcoded Credentials
-
-**Policy**: No hardcoded credentials in code.
-
-All sensitive configuration must be provided via:
-- Environment variables (e.g., `SECONDBRAIN_MONGO_URI`)
-- `.env` files (not committed to version control)
-- Secret management systems (e.g., AWS Secrets Manager, HashiCorp Vault)
-
-**Example `.env` file:**
-```bash
-SECONDBRAIN_MONGO_URI=mongodb://username:password@localhost:27017/secondbrain
-SECONDBRAIN_OLLAMA_HOST=http://localhost:11434
-```
+- Pydantic for data validation
+- Strict input sanitization
+- Path traversal prevention
+- SQL injection prevention (MongoDB parameterization)
 
 ## Security Best Practices
 
-### For Contributors
-
-1. **Never commit secrets** - Use `.env` files and `.gitignore`
-2. **Validate all inputs** - Sanitize user-provided data
-3. **Use parameterized queries** - Prevent injection attacks
-4. **Follow least privilege** - Minimum permissions for services
-5. **Document security decisions** - Explain why certain risks are acceptable
-
 ### For Users
 
-1. **Use strong credentials** - Change default passwords
-2. **Keep dependencies updated** - Run `safety check` regularly
-3. **Restrict network access** - Use firewalls for database services
-4. **Monitor logs** - Watch for suspicious activity
-5. **Backup data** - Regular backups for disaster recovery
+1. **Keep Dependencies Updated**: Regularly run `pip install --upgrade secondbrain`
+2. **Use Environment Variables**: Never hardcode credentials
+3. **Secure MongoDB**: Use authentication and encryption in production
+4. **Limit Permissions**: Run with minimal required permissions
+5. **Review SBOM**: Check Software Bill of Materials for known vulnerabilities
 
-## Security Checklist
+### For Developers
 
-Before releasing a new version:
+1. **Run Security Scans**: Include in CI/CD pipeline
+2. **Review Dependencies**: Audit new dependencies before adding
+3. **Follow OWASP**: Adhere to OWASP Top 10 guidelines
+4. **Code Review**: All changes reviewed for security issues
+5. **Test Security Paths**: Include security test cases
 
-- [ ] Run `bandit -r src/` - 0 high severity issues
-- [ ] Run `safety check` - No critical CVEs
-- [ ] Review all subprocess calls - Document acceptable risks
-- [ ] Verify no hardcoded credentials
-- [ ] Test input sanitization
-- [ ] Update SECURITY.md with new findings
+## Vulnerability Management
+
+### Response Timeline
+
+- **0-24 hours**: Initial assessment and acknowledgment
+- **24-72 hours**: Reproduction and impact analysis
+- **3-7 days**: Fix development and testing
+- **7-14 days**: Release and disclosure
+
+### Severity Levels
+
+| Level | Response Time | Examples |
+|-------|---------------|----------|
+| Critical | 24-48 hours | RCE, data exfiltration |
+| High | 3-5 days | Auth bypass, privilege escalation |
+| Medium | 7-10 days | XSS, CSRF, info disclosure |
+| Low | 14-30 days | Minor issues, best practices |
+
+## Security Dependencies
+
+We track and update security-critical dependencies:
+
+- **Pydantic**: Data validation, strict mode
+- **PyMongo/Motor**: MongoDB drivers, connection pooling
+- **Click**: CLI framework, input handling
+- **Rich**: Terminal output, XSS prevention
+- **Docling**: Document parsing, sandboxed execution
+
+## Compliance
+
+SecondBrain follows security best practices from:
+
+- [OWASP Top 10](https://owasp.org/www-project-top-ten/)
+- [CWE/SANS Top 25](https://cwe.mitre.org/data/sans-top-25.html)
+- [NIST Secure Software Development Framework](https://www.nist.gov/ssdf)
+
+## Contact
+
+For security questions or concerns:
+- Email: [INSERT SECURITY EMAIL]
+- GitHub Discussions: [Security category](https://github.com/your-org/secondbrain/discussions/categories/security)
+
+---
+
+Last updated: March 2026

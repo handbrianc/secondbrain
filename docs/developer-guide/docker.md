@@ -1,104 +1,231 @@
-# Docker Setup
+# Docker Guide
 
-Containerized development and deployment with SecondBrain.
+Container deployment guide for SecondBrain.
 
-## Docker Compose Setup
+## Quick Start
 
-### Start Services
-
-```bash
-# Start MongoDB and sentence-transformers
-docker-compose up -d
-```
-
-### Services
-
-| Service | Port | Description |
-|---------|------|-------------|
-| mongo | 27017 | MongoDB database |
-| sentence-transformers | 11434 | Embedding API |
-
-### Check Status
+### Run with Docker
 
 ```bash
-# View running containers
-docker-compose ps
+# Pull image
+docker pull secondbrain/secondbrain:latest
 
-# View logs
-docker-compose logs -f
-```
-
-### Stop Services
-
-```bash
-# Stop all services
-docker-compose down
-
-# Stop and remove volumes
-docker-compose down -v
-```
-
-## Building the Docker Image
-
-```bash
-# Build the image
-docker build -t secondbrain:latest .
-
-# Build with build args
-docker build --build-arg VERSION=0.1.0 -t secondbrain:0.1.0 .
-```
-
-## Running in Docker
-
-```bash
-# Run with mounted volume
+# Run container
 docker run -it \
-  -v $(pwd)/documents:/data \
-  -v $(pwd)/.env:/app/.env \
-  secondbrain:latest \
-  ingest /data/
+  -e MONGODB_URI=mongodb://mongo:27017 \
+  secondbrain/secondbrain:latest
 ```
 
-## Development with Docker
+## Docker Compose
 
-### Mount Source Code
+### Development Setup
 
-```bash
-docker run -it \
-  -v $(pwd)/src:/app/src \
-  -v $(pwd)/tests:/app/tests \
-  secondbrain:latest
+```yaml
+# docker-compose.yml
+version: '3.8'
+
+services:
+  secondbrain:
+    build: .
+    volumes:
+      - ./documents:/app/documents
+      - .env:/app/.env:ro
+    depends_on:
+      - mongo
+    environment:
+      - MONGODB_URI=mongodb://mongo:27017
+
+  mongo:
+    image: mongo:6.0
+    volumes:
+      - mongo-data:/data/db
+    ports:
+      - "27017:27017"
+
+volumes:
+  mongo-data:
 ```
 
-### Run Tests in Container
+### Production Setup
 
-```bash
-docker-compose run --rm app pytest
+```yaml
+# docker-compose.prod.yml
+version: '3.8'
+
+services:
+  secondbrain:
+    image: secondbrain/secondbrain:latest
+    restart: unless-stopped
+    environment:
+      - MONGODB_URI=mongodb://mongo:27017
+    depends_on:
+      - mongo
+
+  mongo:
+    image: mongo:6.0
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_PASSWORD}
+
+volumes:
+  mongo-data:
+```
+
+## Dockerfile
+
+### Multi-stage Build
+
+```dockerfile
+# Build stage
+FROM python:3.11-slim as builder
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --user --no-cache-dir -r requirements.txt
+
+# Runtime stage
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Copy installed packages
+COPY --from=builder /root/.local /root/.local
+
+# Copy application
+COPY . .
+
+# Set environment
+ENV PATH=/root/.local/bin:$PATH
+
+# Run as non-root
+RUN useradd -m -u 1000 secondbrain
+USER secondbrain
+
+# Run
+CMD ["secondbrain"]
 ```
 
 ## Configuration
 
 ### Environment Variables
 
-```yaml
-# docker-compose.yml
-services:
-  mongo:
-    environment:
-      - MONGO_INITDB_ROOT_USERNAME=admin
-      - MONGO_INITDB_ROOT_PASSWORD=secret
-  
-  sentence-transformers:
-    environment:
-      - MODEL=all-MiniLM-L6-v2
+```dockerfile
+ENV MONGODB_URI=mongodb://mongo:27017
+ENV MONGODB_DB=secondbrain
+ENV EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
 ```
 
 ### Volume Mounts
 
+```bash
+# Mount documents
+-v /path/to/documents:/app/documents
+
+# Mount config
+-v /path/to/.env:/app/.env:ro
+
+# Mount data
+-v secondbrain-data:/app/data
+```
+
+## GPU Support
+
+### NVIDIA Docker
+
+```bash
+# Install NVIDIA Container Toolkit
+# https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html
+
+# Run with GPU
+docker run --gpus all \
+  secondbrain/secondbrain:latest
+```
+
+### Docker Compose GPU
+
 ```yaml
-volumes:
-  - mongo_data:/data/db
-  - ./documents:/documents:ro
+services:
+  secondbrain:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+```
+
+## Security
+
+### Non-root User
+
+```dockerfile
+RUN useradd -m -u 1000 secondbrain
+USER secondbrain
+```
+
+### Read-only Filesystem
+
+```bash
+docker run --read-only \
+  --tmpfs /tmp \
+  secondbrain/secondbrain:latest
+```
+
+### Secrets Management
+
+```bash
+docker secret create mongo_password mongo_password.txt
+
+docker run --secret mongo_password \
+  secondbrain/secondbrain:latest
+```
+
+## Monitoring
+
+### Health Check
+
+```dockerfile
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD python -c "import secondbrain; secondbrain.health_check()"
+```
+
+### Logging
+
+```yaml
+services:
+  secondbrain:
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+```
+
+## Scaling
+
+### Horizontal Scaling
+
+```bash
+# Run multiple instances
+docker-compose up -d --scale secondbrain=3
+```
+
+### Load Balancing
+
+```yaml
+services:
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - secondbrain
 ```
 
 ## Troubleshooting
@@ -107,48 +234,27 @@ volumes:
 
 ```bash
 # Check logs
-docker-compose logs mongo
-docker-compose logs sentence-transformers
+docker logs secondbrain
 
-# Restart services
-docker-compose restart
+# Check environment
+docker exec secondbrain env
+
+# Inspect container
+docker inspect secondbrain
 ```
 
-### Port Conflicts
+### MongoDB Connection Issues
 
 ```bash
-# Check what's using the port
-lsof -i :27017
-lsof -i :11434
+# Check MongoDB is running
+docker ps | grep mongo
 
-# Change ports in docker-compose.yml
+# Test connection
+docker exec secondbrain mongosh mongodb://mongo:27017
 ```
 
-### Permission Issues
+## See Also
 
-```bash
-# Run as current user
-docker run -u $(id -u):$(id -g) secondbrain:latest
-```
-
-## Production Deployment
-
-### Build for Production
-
-```bash
-# Multi-stage build
-docker build -f Dockerfile.prod -t secondbrain-prod .
-```
-
-### Security Best Practices
-
-- Use non-root user
-- Scan for vulnerabilities
-- Use specific versions
-- Enable TLS for MongoDB
-
-## Next Steps
-
-- [Development Setup](development.md) - Local development
-- [Building Guide](building.md) - Create distributables
-- [Configuration](configuration.md) - Environment settings
+- [Deployment](../getting-started/installation.md)
+- [Configuration](configuration.md)
+- [Security](security.md)

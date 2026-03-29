@@ -1,184 +1,170 @@
 # API Reference
 
-Auto-generated API documentation for SecondBrain.
+Complete API reference for SecondBrain's Python SDK and async API.
 
-## Core Modules
+## Core Classes
 
-### secondbrain
+### Document
 
-Main package containing all SecondBrain functionality.
+Represents a document in the system.
 
 ```python
-import secondbrain
+from secondbrain.document import Document
+
+doc = Document(
+    id="unique-id",
+    title="Document Title",
+    content="Document content...",
+    metadata={"source": "file.pdf", "author": "John Doe"}
+)
 ```
 
-### secondbrain.types
+**Properties:**
+- `id`: str - Unique document identifier
+- `title`: str - Document title
+- `content`: str - Document text content
+- `metadata`: dict - Additional metadata
+- `embeddings`: Optional[list[float]] - Vector embeddings
 
-Type definitions and data models.
+### Storage
+
+Abstract storage interface.
 
 ```python
-from secondbrain.types import Document, Chunk, SearchResult
+from secondbrain.storage import MongoDBStorage
+
+storage = MongoDBStorage(
+    uri="mongodb://localhost:27017",
+    database="secondbrain"
+)
+```
+
+**Methods:**
+- `store_document(doc: Document) -> str`: Store a document
+- `get_document(id: str) -> Optional[Document]`: Retrieve document
+- `delete_document(id: str) -> bool`: Delete document
+- `list_documents() -> List[Document]`: List all documents
+- `search(query: str, limit: int = 10) -> List[Document]`: Semantic search
+
+### Ingestor
+
+Document ingestion pipeline.
+
+```python
+from secondbrain.ingestor import DocumentIngestor
+
+ingestor = DocumentIngestor(
+    storage=storage,
+    embedding_model="sentence-transformers/all-MiniLM-L6-v2",
+    chunk_size=500,
+    chunk_overlap=50
+)
+
+ingestor.ingest_file("document.pdf")
+```
+
+**Methods:**
+- `ingest_file(path: str) -> List[str]`: Ingest single file
+- `ingest_directory(path: str, recursive: bool = False) -> List[str]`: Ingest directory
+- `ingest_batch(paths: List[str]) -> List[str]`: Batch ingestion
+
+## Async API
+
+All core classes support async operations.
+
+```python
+import asyncio
+from secondbrain.storage import MongoDBStorage
+
+async def main():
+    storage = MongoDBStorage(uri="mongodb://localhost:27017")
+    
+    # Async operations
+    await storage.store_document(doc)
+    result = await storage.search("query", limit=10)
+    
+    return result
+
+asyncio.run(main())
 ```
 
 ## Configuration
 
-### secondbrain.config
-
-Configuration management with Pydantic.
+### Environment Variables
 
 ```python
-from secondbrain.config import SecondBrainConfig
+from pydantic_settings import BaseSettings
 
-config = SecondBrainConfig()
+class Settings(BaseSettings):
+    mongodb_uri: str = "mongodb://localhost:27017"
+    mongodb_db: str = "secondbrain"
+    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    chunk_size: int = 500
+    chunk_overlap: int = 50
+    
+    class Config:
+        env_file = ".env"
 ```
 
-## Document Processing
-
-### secondbrain.document
-
-Document ingestion and parsing.
-
-```python
-from secondbrain.document import DocumentParser
-```
-
-## Embedding
-
-### secondbrain.embedding.local
-
-Local embedding generation via sentence-transformers.
-
-```python
-from secondbrain.embedding.local import LocalEmbedder
-```
-
-## Storage
-
-### secondbrain.storage.models
-
-Database models and schemas.
-
-```python
-from secondbrain.storage.models import EmbeddingDocument
-```
-
-### secondbrain.storage.storage
-
-Document storage operations.
-
-```python
-from secondbrain.storage.storage import DocumentStorage
-```
-
-### secondbrain.storage.pipeline
-
-Ingestion pipeline.
-
-```python
-from secondbrain.storage.pipeline import IngestionPipeline
-```
-
-## Search
-
-### secondbrain.search
-
-Semantic search functionality.
-
-```python
-from secondbrain.search import SemanticSearch
-```
-
-## CLI
-
-### secondbrain.cli.commands
-
-CLI command implementations.
-
-```python
-from secondbrain.cli.commands import ingest, search, list_docs
-```
-
-### secondbrain.cli.display
-
-Output formatting and display.
-
-```python
-from secondbrain.cli.display import DisplayFormatter
-```
-
-### secondbrain.cli.errors
-
-CLI error handling.
-
-```python
-from secondbrain.cli.errors import CLIError
-```
-
-## Utilities
-
-### secondbrain.utils.circuit_breaker
-
-Circuit breaker pattern implementation.
-
-```python
-from secondbrain.utils.circuit_breaker import CircuitBreaker
-```
-
-### secondbrain.utils.connections
-
-Connection management.
-
-```python
-from secondbrain.utils.connections import ConnectionManager
-```
-
-### secondbrain.utils.embedding_cache
-
-Embedding cache with LRU eviction.
-
-```python
-from secondbrain.utils.embedding_cache import EmbeddingCache
-```
-
-### secondbrain.utils.perf_monitor
-
-Performance monitoring utilities.
-
-```python
-from secondbrain.utils.perf_monitor import PerformanceMonitor
-```
-
-## Logging
-
-### secondbrain.logging
-
-Structured logging configuration.
-
-```python
-from secondbrain.logging import setup_logging
-```
-
-## Management
-
-### secondbrain.management
-
-Database management operations.
-
-```python
-from secondbrain.management import DatabaseManager
-```
-
-## Exceptions
-
-### secondbrain.exceptions
-
-Custom exception classes.
+## Error Handling
 
 ```python
 from secondbrain.exceptions import (
-    SecondBrainError,
-    ConfigurationError,
-    ConnectionError,
-    DocumentError,
+    DocumentNotFoundError,
+    StorageError,
+    IngestionError
 )
+
+try:
+    doc = storage.get_document("nonexistent-id")
+except DocumentNotFoundError:
+    print("Document not found")
+except StorageError as e:
+    print(f"Storage error: {e}")
 ```
+
+## Advanced Features
+
+### Custom Embedding Models
+
+```python
+from sentence_transformers import SentenceTransformer
+
+model = SentenceTransformer("custom-model-name")
+embeddings = model.encode(["text to embed"])
+```
+
+### Batch Processing
+
+```python
+from secondbrain.ingestor import BatchIngestor
+
+ingestor = BatchIngestor(
+    storage=storage,
+    batch_size=100,
+    max_workers=4
+)
+
+ingestor.ingest_batch(document_paths)
+```
+
+### GPU Acceleration
+
+```python
+import torch
+
+# Enable GPU if available
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
+model = SentenceTransformer("model-name", device=device)
+```
+
+## See Also
+
+- [Getting Started](../getting-started/index.md)
+- [User Guide](../user-guide/index.md)
+- [Developer Guide](../developer-guide/index.md)
+
+---
+
+For more information, see the source code documentation or open an issue on GitHub.

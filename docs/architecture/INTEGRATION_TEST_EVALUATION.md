@@ -1,262 +1,267 @@
 # Integration Test Evaluation
 
-Evaluation framework for SecondBrain integration tests.
+Integration testing strategy and evaluation for SecondBrain.
+
+## Testing Philosophy
+
+SecondBrain employs a comprehensive integration testing approach to ensure system reliability.
 
 ## Test Categories
 
 ### Unit Tests
-- Test individual components in isolation
-- Fast execution (< 1 second per test)
-- No external dependencies
 
-### Integration Tests
-- Test component interactions
-- Require MongoDB and sentence-transformers
-- Medium execution time (1-5 seconds per test)
-
-### End-to-End Tests
-- Test complete workflows
-- Full system validation
-- Slower execution (5-30 seconds per test)
-
-## Test Infrastructure
-
-### Required Services
-
-```yaml
-# docker-compose.yml
-version: '3.8'
-services:
-  mongo:
-    image: mongo:8.0
-    ports:
-      - "27017:27017"
-  
-  sentence-transformers:
-    image: sentence-transformers:latest
-    ports:
-      - "11434:11434"
-```
-
-### Test Fixtures
+**Purpose**: Test individual components in isolation
 
 ```python
-@pytest.fixture
-async def mongo_client():
-    client = AsyncMongoClient("mongodb://localhost:27017")
-    yield client
-    await client.close()
-
-@pytest.fixture
-async def document_storage(mongo_client):
-    storage = DocumentStorage(client=mongo_client)
-    await storage.initialize()
-    yield storage
-    await storage.cleanup()
+def test_chunk_text():
+    chunks = chunk_text("Long text...", chunk_size=100)
+    assert len(chunks) > 1
+    assert all(len(c) <= 100 for c in chunks)
 ```
 
-## Test Profiles
+**Coverage**: ~90% of codebase
 
-### Fast Profile (Default)
+### Integration Tests
 
-```bash
-pytest -m "not integration"
-```
-
-- Unit tests only
-- ~5 seconds total
-- No external services required
-
-### Integration Profile
-
-```bash
-pytest -m integration
-```
-
-- Integration tests
-- ~15 seconds total
-- Requires MongoDB + sentence-transformers
-
-### Slow Profile (E2E)
-
-```bash
-pytest -m slow
-```
-
-- Full end-to-end tests
-- ~16 seconds total
-- Complete workflow validation
-
-### Full Profile
-
-```bash
-pytest
-```
-
-- All tests
-- ~25 seconds total
-- Complete test coverage
-
-## Test Markers
+**Purpose**: Test component interactions
 
 ```python
 @pytest.mark.integration
-def test_ingestion_flow():
-    """Integration test requiring services"""
-    pass
-
-@pytest.mark.slow
-def test_full_workflow():
-    """Slow end-to-end test"""
-    pass
-
-@pytest.mark.asyncio
-async def test_async_operations():
-    """Async test"""
-    pass
+async def test_ingest_and_search():
+    # Setup
+    storage = MongoDBStorage(uri="mongodb://localhost:27017")
+    ingestor = DocumentIngestor(storage=storage)
+    
+    # Action
+    doc_ids = await ingestor.ingest_file("test.pdf")
+    
+    # Verification
+    results = await storage.search("test query", limit=5)
+    assert len(results) > 0
 ```
 
-## Coverage Goals
+**Requirements**:
+- MongoDB instance running
+- Test data available
+- Isolated test database
 
-| Module | Target | Current |
-|--------|--------|---------|
-| CLI | 90% | 92% |
-| Document Ingestion | 85% | 88% |
-| Embedding | 80% | 82% |
-| Storage | 90% | 91% |
-| Search | 85% | 87% |
-| Utils | 95% | 94% |
+### End-to-End Tests
 
-**Overall Target**: 85% coverage
+**Purpose**: Test complete workflows
 
-## Running Tests
-
-### Local Development
-
-```bash
-# Fast profile (default)
-pytest
-
-# With coverage
-pytest --cov=secondbrain --cov-report=term-missing
-
-# Integration tests only
-pytest -m integration
-
-# Specific test file
-pytest tests/test_storage.py
+```python
+@pytest.mark.integration
+def test_cli_workflow():
+    runner = CliRunner()
+    
+    # Ingest
+    result = runner.invoke(cli, ["ingest", "test.pdf"])
+    assert result.exit_code == 0
+    
+    # Search
+    result = runner.invoke(cli, ["search", "query"])
+    assert result.exit_code == 0
+    assert "result" in result.output
 ```
 
-### CI/CD
+## Test Infrastructure
 
-```bash
-# Full test suite with coverage
-pytest -m "not slow" --cov=secondbrain --cov-report=xml
-
-# Generate coverage report
-coverage html
-```
-
-## Test Data
-
-### Fixtures
+### Test Database
 
 ```python
 @pytest.fixture
-def sample_pdf(tmp_path):
-    pdf_path = tmp_path / "test.pdf"
-    pdf_path.write_bytes(sample_pdf_content)
-    return pdf_path
-
-@pytest.fixture
-def sample_documents():
-    return [
-        {"id": "1", "content": "Test document 1"},
-        {"id": "2", "content": "Test document 2"},
-    ]
+async def test_db():
+    client = AsyncMongoClient("mongodb://localhost:27017")
+    db = client["secondbrain_test"]
+    
+    yield db
+    
+    # Cleanup
+    await db.drop_collection("documents")
+    await client.drop_database("secondbrain_test")
 ```
 
-### Test Databases
+### Mock Services
 
-- Use separate test database
-- Clean before/after each test
-- Isolated from production data
+```python
+from mongomock import MongoClient
+
+@pytest.fixture
+def mock_mongo():
+    client = MongoClient()
+    return client["test_db"]
+```
 
 ## Performance Testing
 
-### Benchmarks
+### Benchmark Tests
 
-```bash
-# Run benchmarks
-pytest --benchmark-only
-
-# Compare with baseline
-pytest --benchmark-compare
+```python
+@pytest.mark.benchmark
+def test_search_latency(benchmark):
+    def search():
+        results = storage.search("query", limit=10)
+        return results
+    
+    result = benchmark(search)
+    assert len(result) <= 10
 ```
 
 ### Load Testing
 
 ```python
-def test_concurrent_ingestion():
-    """Test parallel document ingestion"""
-    with ThreadPoolExecutor(max_workers=8) as executor:
-        futures = [
-            executor.submit(ingest_document, doc)
-            for doc in large_document_set
-        ]
-        results = [f.result() for f in futures]
-    assert all(results)
+@pytest.mark.integration
+async def test_concurrent_search():
+    async def search_task(i):
+        return await storage.search(f"query {i}", limit=5)
+    
+    tasks = [search_task(i) for i in range(100)]
+    results = await asyncio.gather(*tasks)
+    
+    assert len(results) == 100
 ```
 
-## Quality Gates
+## Circuit Breaker Testing
 
-### Pre-Commit
+### Failure Scenarios
 
-```bash
-# Must pass before commit
-ruff check .
-ruff format --check .
-mypy .
-pytest -m "not integration"
+```python
+@pytest.mark.circuit_breaker
+async def test_circuit_opens_on_failure():
+    # Simulate service failure
+    mock_storage = MockStorage(fail_after=5)
+    
+    # Make requests until circuit opens
+    for i in range(10):
+        try:
+            await mock_storage.search("query")
+        except CircuitOpenError:
+            assert i >= 5
+            break
 ```
 
-### Pre-Release
+### Recovery Testing
+
+```python
+@pytest.mark.circuit_breaker
+async def test_circuit_closes_after_recovery():
+    mock_storage = MockStorage(recover_after=10)
+    
+    # Wait for recovery
+    await asyncio.sleep(10)
+    
+    # Should succeed
+    result = await mock_storage.search("query")
+    assert result is not None
+```
+
+## Property-Based Testing
+
+### Hypothesis Integration
+
+```python
+from hypothesis import given, strategies as st
+
+@given(st.text(min_size=1, max_size=1000))
+def test_chunking_preserves_content(text):
+    chunks = chunk_text(text, chunk_size=100)
+    reconstructed = " ".join(chunks)
+    
+    # Content should be preserved (with overlap)
+    assert text.strip() in reconstructed or reconstructed in text.strip()
+```
+
+## Coverage Requirements
+
+### Minimum Coverage
+
+- **Lines**: 90%
+- **Branches**: 85%
+- **Functions**: 90%
+- **Classes**: 85%
+
+### Coverage Report
 
 ```bash
-# Full validation
-pytest
-mypy .
-bandit -r src/
-pip-audit
+pytest --cov=secondbrain --cov-report=html
+
+# Open coverage report
+open htmlcov/index.html
+```
+
+## Continuous Integration
+
+### GitHub Actions
+
+```yaml
+name: Tests
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      mongodb:
+        image: mongo:6.0
+        ports:
+          - 27017:27017
+    
+    steps:
+      - uses: actions/checkout@v3
+      - name: Run tests
+        run: pytest --cov=secondbrain
+```
+
+## Test Data Management
+
+### Fixtures
+
+```python
+@pytest.fixture
+def sample_document():
+    return Document(
+        id="test-123",
+        title="Test Document",
+        content="This is test content.",
+        metadata={"source": "test.pdf"}
+    )
+```
+
+### Test Data Files
+
+```
+tests/
+├── data/
+│   ├── sample.pdf
+│   ├── sample.docx
+│   └── sample.txt
 ```
 
 ## Troubleshooting
 
-### Test Failures
+### Flaky Tests
 
-```bash
-# Verbose output
-pytest -v
+**Issue**: Tests fail intermittently
 
-# Show captured output
-pytest -s
+**Solutions**:
+- Increase timeouts
+- Add proper async cleanup
+- Use transaction isolation
+- Mock external dependencies
 
-# Stop on first failure
-pytest -x
+### Slow Tests
 
-# Detailed failure info
-pytest -vv
-```
+**Issue**: Tests take too long
 
-### Service Issues
+**Solutions**:
+- Use smaller test datasets
+- Mock expensive operations
+- Run tests in parallel (`-n auto`)
+- Mark slow tests with `@pytest.mark.slow`
 
-```bash
-# Check MongoDB
-docker-compose logs mongo
+## See Also
 
-# Check sentence-transformers
-docker-compose logs sentence-transformers
-
-# Restart services
-docker-compose restart
-```
+- [Testing Guide](../developer-guide/TESTING.md) - Detailed testing instructions
+- [Async API](../developer-guide/async-api.md) - Async testing patterns
+- [CI/CD](../developer-guide/development.md) - Continuous integration

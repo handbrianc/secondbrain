@@ -1,270 +1,182 @@
-# Document Management Guide
+# Document Management
 
-Learn how to manage your document database with SecondBrain.
+Manage your document collection in SecondBrain.
 
-## Listing Documents
+## List Documents
 
 ### Basic List
 
 ```bash
-# Show all documents (summary)
-secondbrain ls
+# List all documents
+secondbrain list
 ```
 
-Output:
-```
-ID                                    Filename          Size    Chunks
--------------------------------------------------------------------
-doc-a1b2c3d4e5f6                      report.pdf        45KB    12
-doc-b2c3d4e5f6g7                      notes.md          8KB     3
-doc-c3d4e5f6g7h8                      presentation.pptx 120KB   28
-```
-
-### Detailed List
+### Detailed View
 
 ```bash
-# Show full document details
-secondbrain ls --details
+# Show metadata
+secondbrain list --verbose
 ```
 
-Output:
-```
-ID: doc-a1b2c3d4e5f6
-Filename: report.pdf
-Size: 45KB
-Chunks: 12
-Type: pdf
-Ingested: 2024-01-15 14:30:22
-Metadata:
-  author: John Doe
-  department: Engineering
-```
-
-### Filter by File Type
+### Filter
 
 ```bash
-# List only PDF documents
-secondbrain ls --file-type pdf
+# By collection
+secondbrain list --collection "research"
 
-# List only markdown files
-secondbrain ls --file-type md
+# By format
+secondbrain list --format pdf
 ```
 
-### Limit Results
+## View Document
+
+### Get Details
 
 ```bash
-# Show only recent documents
-secondbrain ls --limit 10
-
-# Combine with details
-secondbrain ls --details --limit 5
+# View document info
+secondbrain info <document-id>
 ```
 
-### JSON Output
+### View Content
 
 ```bash
-# Export document list as JSON
-secondbrain ls --format json
+# Show document content
+secondbrain info <document-id> --show-content
 ```
 
-## Database Statistics
+## Delete Documents
 
-### Status Command
-
-```bash
-# View database statistics
-secondbrain status
-```
-
-Output:
-```
-Database: secondbrain
-Collection: embeddings
-Total Documents: 150
-Total Chunks: 2,340
-Total Content Size: 45.2 MB
-Vector Index Size: 12.8 MB
-Average Chunk Size: 19,316 characters
-```
-
-### Verbose Status
-
-```bash
-# Detailed statistics
-secondbrain status --verbose
-```
-
-Includes:
-- Breakdown by file type
-- Ingestion timeline
-- Search performance metrics
-- Index health
-
-## Deleting Documents
-
-### Delete Single Document
+### Single Document
 
 ```bash
 # Delete by ID
-secondbrain delete doc-a1b2c3d4e5f6
+secondbrain delete <document-id>
+
+# Confirm deletion
+secondbrain delete <document-id> --confirm
 ```
 
-You'll be prompted to confirm:
-```
-Delete document doc-a1b2c3d4e5f6 (report.pdf)? [y/N]: y
-✓ Document deleted successfully
-```
-
-### Force Delete (Skip Confirmation)
+### Multiple Documents
 
 ```bash
-# Delete without confirmation
-secondbrain delete doc-a1b2c3d4e5f6 --force
+# Delete by collection
+secondbrain delete --collection "old-docs" --confirm-all
+
+# Delete by pattern
+secondbrain delete --pattern "*.tmp" --confirm-all
 ```
 
-### Delete All Documents
+## Collections
+
+### Create Collection
 
 ```bash
-# WARNING: Delete all documents
-secondbrain delete --all --force
+# Documents are automatically organized
+# Create custom collection
+secondbrain ingest doc.pdf --collection "my-collection"
 ```
 
-**Warning**: This action cannot be undone!
-
-### Batch Delete
+### List Collections
 
 ```bash
-# Delete multiple documents (manual)
-secondbrain delete doc-1 --force
-secondbrain delete doc-2 --force
-secondbrain delete doc-3 --force
+# Show all collections
+secondbrain collections list
 ```
 
-## Document Metadata
-
-### Viewing Metadata
+### Manage Collection
 
 ```bash
-# See metadata for all documents
-secondbrain ls --details | grep -A 5 "Metadata:"
+# Add to collection
+secondbrain collection add <doc-id> --collection "name"
+
+# Remove from collection
+secondbrain collection remove <doc-id> --collection "name"
 ```
 
-### Metadata Fields
+## Export
 
-Documents can have custom metadata:
-- `filename`: Original file name
-- `file_type`: Extension (pdf, md, etc.)
-- `size`: File size in bytes
-- `ingested_at`: Timestamp
-- `custom fields`: Any user-defined metadata
-
-## Maintenance
-
-### Find Orphaned Chunks
+### Export All
 
 ```bash
-# Check for database inconsistencies
-secondbrain status --verbose
+# Export to JSON
+secondbrain export --format json --output all-documents.json
+
+# Export to CSV
+secondbrain export --format csv --output documents.csv
 ```
 
-### Rebuild Index
+### Export Collection
 
 ```bash
-# Re-ingest all documents to rebuild
-secondbrain ingest ./documents/ --force
+# Export specific collection
+secondbrain export --collection "research" --format json --output research.json
 ```
 
-### Backup Database
+### Export with Content
 
 ```bash
-# MongoDB backup
-mongodump --db secondbrain --out ./backup/
-
-# Restore from backup
-mongorestore --db secondbrain ./backup/secondbrain/
+# Include full content
+secondbrain export --format json --output docs.json --include-content
 ```
 
-## Search Within Results
+## Import
 
-### Filter by Content
-
-After listing documents, you can search within specific files:
+### Import JSON
 
 ```bash
-# First, get document ID
-secondbrain ls --file-type pdf
-
-# Then search with context
-secondbrain search "specific topic" --top-k 10
+# Import from export
+secondbrain import --input documents.json
 ```
 
-### Cross-Reference Documents
+### Import with Options
 
 ```bash
-# Find related documents
-secondbrain search "topic A" --top-k 5
-secondbrain search "topic B" --top-k 5
-
-# Compare results to find overlap
+# Specify collection
+secondbrain import --input docs.json --collection "imported"
 ```
 
-## Best Practices
+## Statistics
 
-### Regular Maintenance
+### Collection Stats
 
 ```bash
-# Weekly: Check database health
-secondbrain status
-
-# Monthly: Review and clean up
-secondbrain ls --details
+# Show statistics
+secondbrain stats
 ```
 
-### Document Organization
+### Document Count
 
 ```bash
-# Ingest by category
-secondbrain ingest ./documents/research/
-secondbrain ingest ./documents/projects/
-
-# Keep track with metadata
+# Count documents
+secondbrain stats --count
 ```
 
-### Version Control
+### Storage Usage
 
-For important documents:
-1. Keep source files in version control
-2. Track document IDs externally
-3. Document ingestion history
+```bash
+# Show storage usage
+secondbrain stats --storage
+```
 
 ## Troubleshooting
 
 ### Document Not Found
 
-```bash
-# Verify document exists
-secondbrain ls | grep "doc-id"
+**Solution**: Verify document ID with `secondbrain list`
 
-# Check for typos in ID
-secondbrain ls --details
-```
+### Delete Permission Denied
 
-### Duplicate Documents
+**Solution**: Use `--confirm` flag to confirm deletion
 
-```bash
-# Re-ingest with --force to deduplicate
-secondbrain ingest ./docs/ --force
-```
+### Export Fails
 
-### Missing Metadata
+**Solutions**:
+1. Check output directory exists
+2. Verify write permissions
+3. Check disk space
 
-```bash
-# Re-ingest to add missing metadata
-secondbrain ingest ./docs/ --force
-```
+## See Also
 
-## Next Steps
-
-- [Search Guide](search-guide.md) - Learn to query documents
-- [CLI Reference](cli-reference.md) - Complete command reference
-- [Troubleshooting](../getting-started/troubleshooting.md) - Common issues
+- [Document Ingestion](document-ingestion.md)
+- [Search Guide](search-guide.md)
+- [CLI Reference](cli-reference.md)

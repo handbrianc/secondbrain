@@ -1,29 +1,42 @@
 # Development Setup
 
-Complete guide to setting up and working with the SecondBrain codebase.
+Complete guide to setting up your SecondBrain development environment.
 
 ## Prerequisites
 
-- **Python 3.11+**
-- **Git**
-- **MongoDB 8.0+** (via Docker or local)
-- **sentence-transformers** (via Docker or local)
+### Required Software
 
-## Initial Setup
+- **Python**: 3.11 or higher
+- **MongoDB**: 6.0 or higher
+- **Git**: Latest version
+- **Docker**: (Optional) For containerized MongoDB
+
+### System Requirements
+
+- **RAM**: 4GB minimum, 8GB recommended
+- **Storage**: 2GB free space
+- **GPU**: (Optional) For faster embeddings
+
+## Installation
 
 ### 1. Clone Repository
 
 ```bash
-git clone https://github.com/your-username/secondbrain.git
+git clone https://github.com/your-org/secondbrain.git
 cd secondbrain
 ```
 
 ### 2. Create Virtual Environment
 
 ```bash
+# Create venv
 python -m venv venv
-source venv/bin/activate  # Linux/macOS
-venv\Scripts\activate     # Windows
+
+# Activate (macOS/Linux)
+source venv/bin/activate
+
+# Activate (Windows)
+venv\Scripts\activate
 ```
 
 ### 3. Install Dependencies
@@ -31,9 +44,12 @@ venv\Scripts\activate     # Windows
 ```bash
 # Install with dev dependencies
 pip install -e ".[dev]"
+
+# Install runtime only
+pip install -e .
 ```
 
-### 4. Install Pre-commit Hooks
+### 4. Set Up Pre-commit Hooks
 
 ```bash
 pre-commit install
@@ -41,178 +57,129 @@ pre-commit install
 
 ### 5. Configure Environment
 
+Create `.env` file:
+
 ```bash
-# Copy example environment file
 cp .env.example .env
-
-# Edit with your settings
-nano .env
 ```
 
-## Development Workflow
+Edit `.env`:
 
-### Running the Application
-
-```bash
-# Development mode with auto-reload
-python -m secondbrain --help
-
-# Or use the CLI directly
-secondbrain --help
+```env
+MONGODB_URI=mongodb://localhost:27017
+MONGODB_DB=secondbrain_dev
+EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
 ```
 
-### Running Tests
+## MongoDB Setup
+
+### Option 1: Local MongoDB
 
 ```bash
-# Fast profile (default)
+# Install MongoDB (macOS)
+brew install mongodb-community
+
+# Start MongoDB
+brew services start mongodb-community
+```
+
+### Option 2: Docker MongoDB
+
+```bash
+# Run MongoDB container
+docker run -d -p 27017:27017 --name secondbrain-mongo mongo:6.0
+```
+
+### Option 3: MongoDB Atlas
+
+1. Create free cluster at [MongoDB Atlas](https://www.mongodb.com/cloud/atlas)
+2. Get connection string
+3. Update `.env` with connection string
+
+## Verify Installation
+
+```bash
+# Check Python version
+python --version  # Should be 3.11+
+
+# Check MongoDB connection
+python -c "from pymongo import MongoClient; print(MongoClient().list_database_names())"
+
+# Run tests
 pytest
 
-# With coverage
-pytest --cov=secondbrain --cov-report=term-missing
-
-# Integration tests
-pytest -m integration
-
-# Specific test file
-pytest tests/test_document.py
-```
-
-### Code Quality
-
-```bash
-# Linting
+# Run linter
 ruff check .
-
-# Formatting
-ruff format .
-
-# Type checking
-mypy .
-
-# All checks
-ruff check . && ruff format . && mypy .
 ```
 
-### Pre-commit Hooks
+## Development Tools
 
+### VS Code Extensions
+
+- Python
+- Pylance
+- Ruff
+- MongoDB for VS Code
+
+### Recommended Settings
+
+```json
+{
+    "python.defaultInterpreterPath": "${workspaceFolder}/venv/bin/python",
+    "python.linting.enabled": true,
+    "python.linting.ruffEnabled": true,
+    "python.formatting.provider": "ruff",
+    "editor.formatOnSave": true
+}
+```
+
+## Common Issues
+
+### Dependency Installation Fails
+
+**Issue**: `pip install` fails with errors
+
+**Solution**:
 ```bash
-# Run all hooks manually
-pre-commit run --all-files
+# Upgrade pip
+python -m pip install --upgrade pip
 
-# Update hooks
-pre-commit autoupdate
+# Clear cache
+pip cache purge
+
+# Try again
+pip install -e ".[dev]"
 ```
 
-## Project Structure
+### MongoDB Connection Failed
 
-```
-secondbrain/
-├── src/
-│   └── secondbrain/
-│       ├── __init__.py
-│       ├── cli/           # CLI commands
-│       ├── core/          # Core logic
-│       ├── storage/       # Database operations
-│       ├── embedding/     # Embedding generation
-│       ├── utils/         # Utilities
-│       └── config.py      # Configuration
-├── tests/
-│   ├── unit/             # Unit tests
-│   ├── integration/      # Integration tests
-│   └── conftest.py       # Test fixtures
-├── docs/                 # Documentation
-├── pyproject.toml        # Project configuration
-└── requirements*.txt     # Dependencies
-```
+**Issue**: Can't connect to MongoDB
 
-## Debugging
-
-### Using pdb
-
-```python
-import pdb; pdb.set_trace()
-```
-
-### Using VS Code
-
-1. Set breakpoints in code
-2. Run "Python: Debug Current File"
-3. Use debug console for inspection
-
-### Logging
-
-```bash
-# Enable debug logging
-SECONDBRAIN_LOG_LEVEL=DEBUG secondbrain ingest ./docs/
-```
-
-## Common Tasks
-
-### Adding a New Command
-
-1. Create command in `src/secondbrain/cli/commands.py`
-2. Add Click decorator
-3. Add to CLI group
-4. Write tests
-5. Update documentation
-
-### Modifying Configuration
-
-1. Update `src/secondbrain/config.py`
-2. Add to `.env.example`
-3. Update [Configuration Guide](configuration.md)
-4. Add validation tests
-
-### Database Changes
-
-1. Update models in `src/secondbrain/storage/models.py`
-2. Write migration if needed
-3. Update [Schema Reference](../architecture/SCHEMA.md)
-4. Test with integration tests
-
-## Performance Testing
-
-```bash
-# Run benchmarks
-pytest --benchmark-only
-
-# Profile code
-python -m cProfile -o profile.out -m secondbrain ingest ./docs/
-```
-
-## Contributing
-
-See [Contributing Guide](contributing.md) for detailed contribution guidelines.
-
-## Troubleshooting
+**Solution**:
+1. Check MongoDB is running
+2. Verify connection string in `.env`
+3. Check firewall settings
+4. Try connecting manually: `mongosh`
 
 ### Import Errors
 
+**Issue**: `ModuleNotFoundError`
+
+**Solution**:
 ```bash
 # Reinstall in development mode
 pip install -e ".[dev]" --force-reinstall
 ```
 
-### Test Failures
-
-```bash
-# Run with verbose output
-pytest -v
-
-# Show captured output
-pytest -s
-```
-
-### Dependency Issues
-
-```bash
-# Clean and reinstall
-pip uninstall secondbrain
-pip install -e ".[dev]"
-```
-
 ## Next Steps
 
-- [Docker Setup](docker.md) - Containerized development
-- [Testing Guide](TESTING.md) - Comprehensive testing
-- [Code Standards](code-standards.md) - Coding guidelines
+- Read [Contributing Guide](contributing.md)
+- Review [Code Standards](code-standards.md)
+- Set up [Testing](TESTING.md)
+- Explore [Async API](async-api.md)
+
+## Support
+
+- 📧 Email: [INSERT EMAIL]
+- 💬 GitHub Discussions
+- 🐛 Issue Tracker

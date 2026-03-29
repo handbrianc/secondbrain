@@ -1,82 +1,159 @@
-# Architecture Documentation
+# Architecture Overview
 
-Technical architecture and system design for SecondBrain.
-
-## Overview
-
-This section provides deep technical documentation for developers and architects:
-
-| Document | Description |
-|----------|-------------|
-| [Data Flow](DATA_FLOW.md) | System architecture and data pipelines |
-| [Schema Reference](SCHEMA.md) | Database structure and models |
-| [SBOM Analysis](SBOM_ANALYSIS.md) | Software Bill of Materials & dependency analysis |
-| [License Risk Report](LICENSE-RISK-REPORT.md) | License compliance & risk assessment |
+This document provides an overview of SecondBrain's system architecture.
 
 ## System Components
 
-### Core Components
+### Core Architecture
 
-1. **CLI Interface** - Click-based command-line tool
-2. **Document Ingestor** - Multi-format document processing
-3. **Embedding Engine** - sentence-transformers integration for vector generation
-4. **Storage Layer** - MongoDB vector storage
-5. **Search Engine** - Semantic search with cosine similarity
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      SecondBrain CLI                        │
+├─────────────────────────────────────────────────────────────┤
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐   │
+│  │ Ingestor │  │ Embedder │  │  Search  │  │  Storage │   │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘   │
+│       │             │              │             │          │
+│       └─────────────┴──────────────┴─────────────┘          │
+│                           │                                  │
+│                    ┌──────▼──────┐                          │
+│                    │   MongoDB   │                          │
+│                    │  (Vectors)  │                          │
+│                    └─────────────┘                          │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Component Descriptions
+
+#### Document Ingestor
+- **Purpose**: Parse and process documents
+- **Technology**: Docling for document parsing
+- **Features**: 
+  - Multi-format support (PDF, DOCX, TXT)
+  - Custom chunking strategies
+  - Batch processing
+  - Progress tracking
+
+#### Embedding Engine
+- **Purpose**: Generate vector embeddings
+- **Technology**: Sentence Transformers
+- **Features**:
+  - Multiple model support
+  - GPU acceleration
+  - Batch encoding
+  - Caching
+
+#### Vector Storage
+- **Purpose**: Store and retrieve embeddings
+- **Technology**: MongoDB with Motor async driver
+- **Features**:
+  - Vector similarity search
+  - Metadata filtering
+  - Async operations
+  - Connection pooling
+
+#### Search Engine
+- **Purpose**: Semantic search and retrieval
+- **Technology**: MongoDB vector search
+- **Features**:
+  - Cosine similarity
+  - Top-K results
+  - Metadata filtering
+  - Result ranking
 
 ### Data Flow
 
+1. **Ingestion**: Document → Parser → Chunker → Embedder → Storage
+2. **Search**: Query → Embedder → Vector Search → Results
+3. **RAG**: Query → Search → Context → LLM → Response
+
+## Technology Stack
+
+### Core Dependencies
+- **Python**: 3.11+
+- **Click**: CLI framework
+- **Pydantic**: Data validation
+- **Rich**: Terminal UI
+
+### Document Processing
+- **Docling**: Document parsing and conversion
+- **Sentence Transformers**: Text embeddings
+- **Torch**: Deep learning framework
+
+### Storage & Sync
+- **MongoDB**: Vector database
+- **Motor**: Async MongoDB driver
+- **httpx**: Async HTTP client
+
+### Observability
+- **OpenTelemetry**: Distributed tracing
+- **Pytest**: Testing framework
+- **Ruff**: Code quality
+
+## Deployment Architecture
+
+### Local Deployment
 ```
-Documents → Ingestor → Chunking → Embeddings → MongoDB → Search
+┌─────────────────────┐
+│   SecondBrain CLI   │
+│  + MongoDB (local)  │
+└─────────────────────┘
 ```
 
-See [Data Flow Documentation](DATA_FLOW.md) for detailed diagrams.
+### Remote Deployment
+```
+┌─────────────────────┐      ┌─────────────────────┐
+│   SecondBrain CLI   │──────│  MongoDB Atlas      │
+└─────────────────────┘      └─────────────────────┘
+```
 
-## Database Schema
+### Docker Deployment
+```
+┌─────────────────────┐      ┌─────────────────────┐
+│   SecondBrain CLI   │──────│  MongoDB Container  │
+│   (Docker)          │      │  (Docker)           │
+└─────────────────────┘      └─────────────────────┘
+```
 
-SecondBrain uses MongoDB for vector storage:
+## Security Architecture
 
-- **embeddings** collection - Document chunks and vectors
-- Indexes on: `document_id`, `file_type`, `chunk_index`
-
-See [Schema Reference](SCHEMA.md) for complete schema details.
-
-## Design Decisions
-
-### Why MongoDB?
-
-- Native vector search capabilities
-- Scalable and production-ready
-- Flexible schema for document metadata
-- Easy deployment via Docker
-
-### Why sentence-transformers?
-
-- Local embedding generation (privacy)
-- No API costs
-- Support for multiple embedding models
-- Easy setup and maintenance
+- **Local-first**: All processing happens locally
+- **Encryption**: MongoDB TLS/SSL support
+- **Authentication**: MongoDB authentication required
+- **Input Validation**: Pydantic strict validation
+- **Dependency Scanning**: Automated security checks
 
 ## Performance Considerations
 
-- **Batch Processing**: Process documents in parallel
-- **Connection Caching**: Reduce connection overhead
-- **Rate Limiting**: Protect sentence-transformers API
-- **Chunk Optimization**: Adjust chunk size for your use case
+### Embedding Generation
+- GPU acceleration for faster encoding
+- Batch processing for multiple documents
+- Model caching to reduce load times
 
-See [Building & Performance](../developer-guide/building.md) for optimization tips.
+### Vector Search
+- MongoDB vector index optimization
+- Connection pooling for database access
+- Async operations for non-blocking I/O
 
-## Security
+### Memory Management
+- Streaming document processing
+- Chunk-based embedding generation
+- Garbage collection optimization
 
-- Environment-based configuration
-- Input validation and sanitization
-- Rate limiting protection
-- Connection health checks
+## Extensibility
 
-See [Security Guide](../developer-guide/security.md) for details.
+### Plugin System
+- Custom embedding models
+- Custom storage backends
+- Custom document parsers
 
-## Related Documentation
+### API Extensions
+- Python SDK for programmatic access
+- MCP server for AI assistants
+- REST API (future)
 
-- [Developer Guide](../developer-guide/index.md) - Development workflows
-- [API Reference](../api/index.md) - Code-level documentation
-- [Getting Started](../getting-started/index.md) - New users
-- [Async API Guide](../developer-guide/async-api.md) - Asynchronous programming
+## See Also
+
+- [Data Flow](DATA_FLOW.md) - Detailed data flow analysis
+- [Schema](SCHEMA.md) - Database schema details
+- [SBOM Analysis](SBOM_ANALYSIS.md) - Dependency analysis

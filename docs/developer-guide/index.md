@@ -1,156 +1,110 @@
 # Developer Guide
 
-Welcome to the SecondBrain developer documentation. This guide covers everything you need to contribute to the project.
+Welcome to the SecondBrain developer guide. This section contains everything you need to contribute to the project.
 
-## Overview
+## Quick Start
 
-SecondBrain is a local document intelligence CLI built with:
+### Prerequisites
 
-- **Python 3.11+** with async support
-- **Click** for CLI interface
-- **Pydantic** for configuration validation
-- **MongoDB** for vector storage
-- **sentence-transformers** for embedding generation
-- **Docling** for document parsing
+- Python 3.11+
+- MongoDB 6.0+
+- Git
 
-## Getting Started
-
-### Quick Setup
+### Setup
 
 ```bash
-# Clone and setup
-git clone https://github.com/your-username/secondbrain.git
+# Clone repository
+git clone https://github.com/your-org/secondbrain.git
 cd secondbrain
+
+# Create virtual environment
 python -m venv venv
 source venv/bin/activate
+
+# Install dependencies
 pip install -e ".[dev]"
+
+# Install pre-commit hooks
 pre-commit install
 ```
 
-### Development Environment
+## Documentation Index
 
-- [Environment Setup](development.md) - Prerequisites and installation
-- [Docker Setup](docker.md) - Containerized development
-- [Testing](TESTING.md) - Running and writing tests
-- [Code Standards](code-standards.md) - Coding guidelines
+### Getting Started
+- [Development Setup](development.md) - Environment configuration
+- [Contributing](contributing.md) - Contribution guidelines
+- [Code Standards](code-standards.md) - Coding conventions
 
-## Documentation Navigation
+### Advanced Topics
+- [Async API](async-api.md) - Asynchronous programming
+- [Configuration](configuration.md) - Advanced configuration
+- [Testing](TESTING.md) - Testing strategies
+- [Security](security.md) - Security best practices
+- [Docker](docker.md) - Container deployment
+- [Building](building.md) - Build process
+- [Migrations](migrations.md) - Database migrations
 
-### Setup & Configuration
-- [Development Setup](development.md) - Full development workflow
-- [Docker Setup](docker.md) - Containerized development and deployment
-- [Configuration](configuration.md) - Environment variables and settings
-- [Building & Distribution](building.md) - Create distributable binaries
+### Performance
+- [Best Practices](python-cli-best-practices-checklist.md) - CLI optimization
+- [Performance Testing](TEST_PERFORMANCE_OPTIMIZATION.md) - Benchmarking
 
-### Development Practices
-- [Code Standards](code-standards.md) - Coding guidelines and best practices
-- [Async API Guide](async-api.md) - Asynchronous programming patterns
-- [Testing Guide](TESTING.md) - Test structure and coverage
-- [Test Performance](TEST_PERFORMANCE_OPTIMIZATION.md) - Optimizing test execution
-- [CLI Best Practices](python-cli-best-practices-checklist.md) - Python CLI guidelines
-- [Contributing](contributing.md) - How to contribute to the project
+### Reference
+- [Changelog](changelog.md) - Version history
 
-### Architecture & Design
-- [Architecture Overview](../architecture/index.md) - System design and data flow
-- [Schema Reference](../architecture/SCHEMA.md) - Database schema
-- [Data Flow](../architecture/DATA_FLOW.md) - Component interactions
-- [Migrations](migrations.md) - Schema migration strategies
+## Development Workflow
 
-### Maintenance & Operations
-- [Security Guide](security.md) - Security guidelines and practices
-- [Changelog](changelog.md) - Version history and changes
+1. **Fork the repository**
+2. **Create a branch** for your feature
+3. **Make changes** following code standards
+4. **Write tests** for new functionality
+5. **Run pre-commit hooks**
+6. **Submit a pull request**
 
-## Examples
+## Code Quality
 
-For practical usage examples, see the [examples directory](../examples/README.md):
-
-- **Basic Usage**: Simple CLI-style examples
-- **Advanced**: Custom chunking, batch processing, async workflows
-- **Integrations**: Flask and FastAPI REST APIs
-
-## API Documentation
-
-- [API Reference](../api/index.md) - Auto-generated API documentation
-- [CLI Reference](../user-guide/cli-reference.md) - Command-line interface
-- [Types](../api/index.md) - Type definitions and data models
-
-## Quick Developer Tasks
-
-### Running Tests
+### Linting
 
 ```bash
-# Fast tests (default)
-pytest
-
-# With coverage
-pytest --cov=secondbrain --cov-report=term-missing
-
-# Integration tests
-pytest -m integration
-
-# Specific test file
-pytest tests/test_document.py
-```
-
-### Code Quality
-
-```bash
-# Linting
+# Run linter
 ruff check .
 
-# Formatting
-ruff format .
-
-# Type checking
-mypy .
-
-# All checks
-ruff check . && ruff format . && mypy .
+# Auto-fix issues
+ruff check . --fix
 ```
 
-### Running the Application
+### Formatting
 
 ```bash
-# Development mode
-python -m secondbrain --help
-
-# With debug logging
-SECONDBRAIN_LOG_LEVEL=DEBUG secondbrain ingest ./docs/
+# Format code
+ruff format .
 ```
 
-### Common Development Tasks
+### Type Checking
 
-**Adding a New Command:**
-1. Create command in `src/secondbrain/cli/commands.py`
-2. Add Click decorator
-3. Add to CLI group
-4. Write tests
-5. Update documentation
+```bash
+# Run mypy
+mypy .
+```
 
-**Modifying Configuration:**
-1. Update `src/secondbrain/config.py`
-2. Add to `.env.example`
-3. Update [Configuration Guide](configuration.md)
-4. Add validation tests
+### Testing
 
-**Database Changes:**
-1. Update models in `src/secondbrain/storage/models.py`
-2. Write migration if needed
-3. Update [Schema Reference](../architecture/SCHEMA.md)
-4. Test with integration tests
+```bash
+# Run all tests
+pytest
 
-## Contributing
+# Run with coverage
+pytest --cov=secondbrain --cov-report=html
+```
 
-Interested in contributing? Read our [Contributing Guide](contributing.md) to get started.
+## Getting Help
 
-### Quick Contribution Ideas
+- 📖 Read the documentation
+- 🐛 Open an issue for bugs
+- 💬 Ask questions in GitHub Discussions
+- 🤝 Join the contributor community
 
-- Fix bugs or typos
-- Improve documentation
-- Add tests for edge cases
-- Enhance CLI commands
+## See Also
 
-## Support
-
-- [Open an Issue](https://github.com/your-username/secondbrain/issues) - Bug reports and feature requests
-- [Discussions](https://github.com/your-username/secondbrain/discussions) - Community discussions
+- [Main Documentation](../index.md)
+- [Contributing Guide](../CONTRIBUTING.md)
+- [API Reference](../api/index.md)

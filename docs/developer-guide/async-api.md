@@ -1,86 +1,73 @@
 # Async API Guide
 
-Asynchronous programming with SecondBrain.
+Complete guide to SecondBrain's asynchronous API.
 
 ## Overview
 
-SecondBrain provides a fully asynchronous API for high-throughput scenarios.
+SecondBrain provides full async/await support for high-performance applications.
 
-## Async Client
+## Async Components
 
-### Basic Usage
+### Async Storage
 
 ```python
 import asyncio
-from secondbrain.client import SecondBrainClient
+from secondbrain.storage import MongoDBStorage
 
 async def main():
-    client = SecondBrainClient()
+    storage = MongoDBStorage(
+        uri="mongodb://localhost:27017",
+        database="secondbrain"
+    )
     
-    # Ingest documents
-    await client.ingest("./documents/")
+    await storage.initialize()
     
-    # Search
-    results = await client.search("semantic query")
-    for result in results:
-        print(result)
+    # Async operations
+    doc_id = await storage.store_document(doc)
+    doc = await storage.get_document(doc_id)
+    results = await storage.search("query", limit=10)
     
-    # Close client
-    await client.close()
+    await storage.cleanup()
 
 asyncio.run(main())
 ```
 
-## Async Storage
-
-### Document Storage
+### Async Ingestor
 
 ```python
-from secondbrain.storage.async_storage import AsyncDocumentStorage
+from secondbrain.ingestor import AsyncDocumentIngestor
 
-async def ingest_document():
-    storage = AsyncDocumentStorage()
+async def ingest_documents():
+    storage = MongoDBStorage(uri="mongodb://localhost:27017")
+    ingestor = AsyncDocumentIngestor(storage=storage)
     
-    await storage.ingest_document(
-        doc_id="doc-1",
-        content="Document content",
-        metadata={"source": "test"}
-    )
+    # Ingest single file
+    doc_ids = await ingestor.ingest_file("document.pdf")
+    
+    # Ingest directory
+    doc_ids = await ingestor.ingest_directory("documents/", recursive=True)
+    
+    # Batch ingest
+    doc_ids = await ingestor.ingest_batch(["doc1.pdf", "doc2.pdf"])
 ```
 
-### Async Search
+### Parallel Processing
 
 ```python
-async def search_documents():
-    storage = AsyncDocumentStorage()
+async def process_multiple_queries(queries: List[str]):
+    """Process multiple queries in parallel."""
+    storage = MongoDBStorage(uri="mongodb://localhost:27017")
     
-    results = await storage.search(
-        query_embedding=[0.1] * 384,
-        top_k=10
-    )
-    
-    for result in results:
-        print(result)
-```
-
-## Batch Processing
-
-### Async Batch Ingestion
-
-```python
-async def batch_ingest(documents):
-    storage = AsyncDocumentStorage()
-    
-    # Process in parallel
+    # Create tasks
     tasks = [
-        storage.ingest_document(
-            doc_id=doc["id"],
-            content=doc["content"]
-        )
-        for doc in documents
+        storage.search(query, limit=10)
+        for query in queries
     ]
     
-    await asyncio.gather(*tasks)
+    # Execute in parallel
+    results = await asyncio.gather(*tasks)
+    
+    return results
 ```
 
 ## Performance Benefits
@@ -89,84 +76,159 @@ async def batch_ingest(documents):
 
 ```python
 # Sequential (slow)
-for doc in documents:
-    await storage.ingest_document(doc)
+async def sequential_search(queries):
+    results = []
+    for query in queries:
+        result = await storage.search(query)
+        results.append(result)
+    return results
 
-# Concurrent (fast)
-await asyncio.gather(*[
-    storage.ingest_document(doc)
-    for doc in documents
-])
+# Parallel (fast)
+async def parallel_search(queries):
+    tasks = [storage.search(query) for query in queries]
+    return await asyncio.gather(*tasks)
 ```
 
 ### Connection Pooling
 
 ```python
-# Async client with connection pooling
-client = SecondBrainClient(
-    max_connections=50,
-    connection_timeout=30
+from motor.motor_asyncio import AsyncMongoClient
+
+client = AsyncMongoClient(
+    "mongodb://localhost:27017",
+    maxPoolSize=50,      # Max connections
+    minPoolSize=10,      # Min connections
+    maxIdleTimeMS=300000 # Close idle after 5min
 )
-```
-
-## Error Handling
-
-```python
-import asyncio
-from secondbrain.exceptions import ConnectionError
-
-async def safe_ingest():
-    try:
-        await client.ingest("./docs/")
-    except ConnectionError as e:
-        print(f"Connection failed: {e}")
-    except Exception as e:
-        print(f"Unexpected error: {e}")
-```
-
-## Integration Examples
-
-### Flask Integration
-
-```python
-from flask import Flask, request, jsonify
-import asyncio
-
-app = Flask(__name__)
-
-@app.route("/ingest", methods=["POST"])
-async def ingest():
-    data = await request.json
-    await client.ingest(data["path"])
-    return jsonify({"status": "success"})
-```
-
-### FastAPI Integration
-
-```python
-from fastapi import FastAPI
-from pydantic import BaseModel
-
-app = FastAPI()
-
-class IngestRequest(BaseModel):
-    path: str
-
-@app.post("/ingest")
-async def ingest(request: IngestRequest):
-    await client.ingest(request.path)
-    return {"status": "success"}
 ```
 
 ## Best Practices
 
-1. **Always use async** for I/O operations
-2. **Use asyncio.gather()** for concurrent operations
-3. **Close clients** properly with `await client.close()`
-4. **Handle errors** gracefully
-5. **Use connection pooling** for high throughput
+### Context Managers
 
-## Next Steps
+```python
+from contextlib import asynccontextmanager
 
-- [Async Storage](../api/index.md) - API documentation
-- [Examples](../examples/README.md) - Code examples
+@asynccontextmanager
+async def get_storage():
+    storage = MongoDBStorage(uri="mongodb://localhost:27017")
+    await storage.initialize()
+    try:
+        yield storage
+    finally:
+        await storage.cleanup()
+
+async def main():
+    async with get_storage() as storage:
+        results = await storage.search("query")
+```
+
+### Error Handling
+
+```python
+import asyncio
+from secondbrain.exceptions import StorageError
+
+async def safe_search(storage, query):
+    try:
+        results = await storage.search(query, limit=10)
+        return results
+    except StorageError as e:
+        logger.error(f"Search failed: {e}")
+        return []
+    except asyncio.TimeoutError:
+        logger.warning("Search timed out")
+        return []
+```
+
+### Timeouts
+
+```python
+async def search_with_timeout(storage, query, timeout=30):
+    try:
+        return await asyncio.wait_for(
+            storage.search(query, limit=10),
+            timeout=timeout
+        )
+    except asyncio.TimeoutError:
+        raise SearchTimeoutError("Search timed out after {}s".format(timeout))
+```
+
+## Concurrency Patterns
+
+### Worker Pool
+
+```python
+async def worker(queue, storage, results):
+    """Worker that processes queue items."""
+    while True:
+        try:
+            query = await asyncio.wait_for(queue.get(), timeout=1.0)
+        except asyncio.TimeoutError:
+            break
+        
+        result = await storage.search(query)
+        results.append(result)
+        queue.task_done()
+
+async def process_with_workers(queries, num_workers=4):
+    queue = asyncio.Queue()
+    results = []
+    
+    # Fill queue
+    for query in queries:
+        await queue.put(query)
+    
+    # Create workers
+    workers = [
+        asyncio.create_task(worker(queue, storage, results))
+        for _ in range(num_workers)
+    ]
+    
+    # Wait for completion
+    await asyncio.gather(*workers)
+    return results
+```
+
+### Rate Limiting
+
+```python
+from aiolimiter import AsyncLimiter
+
+async def rate_limited_search(storage, queries, rate=10):
+    """Search with rate limiting."""
+    limiter = AsyncLimiter(rate, 1)  # rate per second
+    
+    async def search_with_limit(query):
+        async with limiter:
+            return await storage.search(query)
+    
+    tasks = [search_with_limit(q) for q in queries]
+    return await asyncio.gather(*tasks)
+```
+
+## Migration from Sync
+
+### Sync to Async
+
+```python
+# Before (sync)
+def search_documents(query):
+    storage = MongoDBStorage(uri="mongodb://localhost:27017")
+    return storage.search(query)
+
+# After (async)
+async def search_documents(query):
+    storage = MongoDBStorage(uri="mongodb://localhost:27017")
+    await storage.initialize()
+    try:
+        return await storage.search(query)
+    finally:
+        await storage.cleanup()
+```
+
+## See Also
+
+- [API Reference](../api/index.md)
+- [Data Flow](../architecture/DATA_FLOW.md)
+- [Testing](TESTING.md)

@@ -1,199 +1,175 @@
 # Testing Guide
 
-Comprehensive guide to testing SecondBrain.
+Comprehensive testing guide for SecondBrain.
+
+## Testing Overview
+
+SecondBrain uses pytest for testing with comprehensive coverage of unit, integration, and performance tests.
 
 ## Test Structure
 
-### Test Organization
-
 ```
 tests/
-├── unit/           # Unit tests
-│   ├── test_config.py
-│   ├── test_utils.py
-│   └── test_parser.py
-├── integration/    # Integration tests
-│   ├── test_storage.py
-│   └── test_ingestion.py
-├── conftest.py     # Fixtures
-└── test_cli.py     # CLI tests
+├── conftest.py              # Shared fixtures
+├── test_document.py         # Document tests
+├── test_storage.py          # Storage tests
+├── test_ingestor.py         # Ingestion tests
+├── test_search.py           # Search tests
+├── test_cli.py              # CLI tests
+└── integration/             # Integration tests
+    ├── test_mongodb.py
+    └── test_full_pipeline.py
 ```
 
 ## Running Tests
 
-### Fast Profile (Default)
+### Basic Test Run
 
 ```bash
+# Run all tests
 pytest
+
+# Run with verbose output
+pytest -v
+
+# Run specific test file
+pytest tests/test_document.py
+
+# Run specific test
+pytest tests/test_document.py::test_document_creation
 ```
 
-- Unit tests only
-- ~5 seconds
-- No external services
-
-### Integration Tests
+### Test Options
 
 ```bash
-pytest -m integration
-```
+# Run with coverage
+pytest --cov=secondbrain --cov-report=html
 
-- Requires MongoDB + sentence-transformers
-- ~15 seconds
+# Run only failed tests
+pytest --lf
 
-### Full Test Suite
+# Run tests matching pattern
+pytest -k "search"
 
-```bash
-pytest
-```
+# Parallel execution
+pytest -n auto
 
-- All tests
-- ~25 seconds
-
-### With Coverage
-
-```bash
-pytest --cov=secondbrain --cov-report=term-missing
-```
-
-## Test Fixtures
-
-### Basic Fixture
-
-```python
-@pytest.fixture
-def sample_document():
-    return Document(
-        id="test-1",
-        content="Test content",
-        metadata={"source": "test"}
-    )
-```
-
-### Async Fixture
-
-```python
-@pytest.fixture
-async def mongo_client():
-    client = AsyncMongoClient("mongodb://localhost:27017")
-    yield client
-    await client.close()
-```
-
-### Temporary Directory
-
-```python
-@pytest.fixture
-def temp_dir(tmp_path):
-    dir = tmp_path / "test_docs"
-    dir.mkdir()
-    return dir
-```
-
-## Test Markers
-
-```python
-@pytest.mark.integration
-def test_integration():
-    """Integration test"""
-    pass
-
-@pytest.mark.slow
-def test_slow_test():
-    """Slow test"""
-    pass
-
-@pytest.mark.asyncio
-async def test_async():
-    """Async test"""
-    pass
+# Set timeout
+pytest --timeout=60
 ```
 
 ## Writing Tests
 
-### Unit Test Example
+### Unit Tests
 
 ```python
-def test_chunking_creates_correct_chunks():
-    """Test that chunking produces expected results."""
-    text = "A" * 10000
+import pytest
+from secondbrain.document import Document
+
+def test_document_creation():
+    """Test document can be created."""
+    doc = Document(
+        id="test-123",
+        title="Test Document",
+        content="Test content"
+    )
     
-    chunks = chunk_text(text, chunk_size=1000, overlap=100)
+    assert doc.id == "test-123"
+    assert doc.title == "Test Document"
+    assert doc.content == "Test content"
+
+def test_document_metadata():
+    """Test document metadata handling."""
+    doc = Document(
+        id="test-123",
+        title="Test",
+        content="Content",
+        metadata={"author": "John", "tags": ["test"]}
+    )
     
-    assert len(chunks) == 10
-    assert len(chunks[0]) == 1000
-    assert chunks[0][-100:] == chunks[1][:100]  # Overlap
+    assert doc.metadata["author"] == "John"
+    assert "test" in doc.metadata["tags"]
 ```
 
-### Integration Test Example
+### Async Tests
 
 ```python
-@pytest.mark.integration
-async def test_document_ingestion(mongo_client):
-    """Test full ingestion pipeline."""
-    storage = DocumentStorage(client=mongo_client)
+import pytest
+import pytest_asyncio
+from secondbrain.storage import MongoDBStorage
+
+@pytest_asyncio.fixture
+async def storage():
+    """Create test storage."""
+    storage = MongoDBStorage(uri="mongodb://localhost:27017")
     await storage.initialize()
+    yield storage
+    await storage.cleanup()
+
+@pytest.mark.asyncio
+async def test_store_document(storage):
+    """Test storing a document."""
+    doc = Document(id="1", title="Test", content="Content")
+    doc_id = await storage.store_document(doc)
     
-    await storage.ingest_document(
-        doc_id="test-1",
-        content="Test content",
-        metadata={"source": "test"}
-    )
+    assert doc_id is not None
     
-    results = await storage.search(
-        query_embedding=[0.1] * 384,
-        top_k=1
-    )
-    
-    assert len(results) == 1
-    assert results[0].document_id == "test-1"
+    retrieved = await storage.get_document(doc_id)
+    assert retrieved.title == "Test"
 ```
 
-### CLI Test Example
+### Integration Tests
 
 ```python
-def test_cli_ingest_command(runner, tmp_path):
-    """Test CLI ingest command."""
-    doc_path = tmp_path / "test.txt"
-    doc_path.write_text("Test content")
+import pytest
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_full_ingestion_pipeline(storage, sample_pdf):
+    """Test complete ingestion pipeline."""
+    ingestor = DocumentIngestor(storage=storage)
     
-    result = runner.invoke(cli, ["ingest", str(doc_path)])
+    # Ingest document
+    doc_ids = await ingestor.ingest_file(sample_pdf)
+    assert len(doc_ids) > 0
     
-    assert result.exit_code == 0
-    assert "Successfully ingested" in result.output
+    # Search for content
+    results = await storage.search("test content", limit=5)
+    assert len(results) > 0
 ```
 
-## Coverage Goals
+## Fixtures
 
-| Module | Target |
-|--------|--------|
-| CLI | 90% |
-| Document Ingestion | 85% |
-| Embedding | 80% |
-| Storage | 90% |
-| Search | 85% |
-| Utils | 95% |
+### Shared Fixtures
 
-## Test Performance
+```python
+# conftest.py
 
-### Parallel Execution
+import pytest
+import pytest_asyncio
+from secondbrain.document import Document
 
-```bash
-# Use pytest-xdist
-pytest -n auto
-```
+@pytest.fixture
+def sample_document():
+    """Create a sample document."""
+    return Document(
+        id="test-123",
+        title="Sample Document",
+        content="This is sample content for testing.",
+        metadata={"source": "test.pdf", "author": "Test Author"}
+    )
 
-### Skip Slow Tests
-
-```bash
-# Exclude slow tests
-pytest -m "not slow"
-```
-
-### Caching
-
-```bash
-# Use pytest-cach
-pytest --cache-show
+@pytest.fixture
+def sample_documents(sample_document):
+    """Create multiple sample documents."""
+    return [sample_document] + [
+        Document(
+            id=f"test-{i}",
+            title=f"Document {i}",
+            content=f"Content {i}"
+        )
+        for i in range(10)
+    ]
 ```
 
 ## Mocking
@@ -201,59 +177,149 @@ pytest --cache-show
 ### Mock External Services
 
 ```python
-from unittest.mock import AsyncMock, patch
+from unittest.mock import Mock, patch
 
-async def test_ingestion_with_mocked_embedding():
-    with patch("secondbrain.embedding.local.LocalEmbedder.generate") as mock_embed:
-        mock_embed.return_value = [0.1] * 384
-        
-        # Test logic
+def test_search_with_mocked_storage():
+    """Test search with mocked storage."""
+    mock_storage = Mock()
+    mock_storage.search.return_value = [Document(id="1", title="Test", content="Content")]
+    
+    searcher = DocumentSearcher(storage=mock_storage)
+    results = searcher.search("query")
+    
+    assert len(results) == 1
+    mock_storage.search.assert_called_once_with("query", limit=10)
 ```
 
-### Mock MongoDB
+## Coverage
+
+### Coverage Configuration
+
+```ini
+# .coveragerc
+[run]
+source = secondbrain
+omit = 
+    */tests/*
+    */venv/*
+    */__init__.py
+
+[report]
+precision = 2
+fail_under = 90
+```
+
+### Coverage Reports
+
+```bash
+# Generate HTML report
+pytest --cov=secondbrain --cov-report=html
+
+# Generate XML report (for CI)
+pytest --cov=secondbrain --cov-report=xml
+
+# Show missing lines
+pytest --cov=secondbrain --cov-report=term-missing
+```
+
+## Performance Testing
+
+### Benchmark Tests
 
 ```python
-from unittest.mock import MagicMock
+import pytest
 
-def test_storage_with_mock():
-    mock_client = MagicMock()
-    storage = DocumentStorage(client=mock_client)
+@pytest.mark.benchmark
+def test_search_performance(benchmark):
+    """Benchmark search performance."""
     
-    # Test with mock
+    def search():
+        results = storage.search("test query", limit=10)
+        return len(results)
+    
+    result = benchmark(search)
+    assert result > 0
+    
+    # Check timing
+    assert benchmark.stats.mean < 0.1  # < 100ms
 ```
 
-## Continuous Integration
+## Hypothesis Testing
+
+### Property-Based Testing
+
+```python
+from hypothesis import given, strategies as st
+
+@given(st.text(min_size=1, max_size=1000))
+def test_chunking_preserves_text(text):
+    """Test chunking preserves original text."""
+    chunks = chunk_text(text, chunk_size=100)
+    reconstructed = " ".join(chunks)
+    
+    # Content should be largely preserved
+    assert len(reconstructed) >= len(text) * 0.9
+```
+
+## CI/CD Integration
 
 ### GitHub Actions
 
 ```yaml
-- name: Run tests
-  run: pytest -m "not slow" --cov=secondbrain
+name: Tests
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      mongodb:
+        image: mongo:6.0
+        ports:
+          - 27017:27017
+    
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+      
+      - name: Run tests
+        run: pytest --cov=secondbrain --cov-report=xml
+      
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
 ```
 
 ## Troubleshooting
 
-### Test Timeouts
+### Flaky Tests
 
-```bash
-# Increase timeout
-pytest --timeout=120
-```
+**Issue**: Tests fail intermittently
 
-### Debugging Tests
+**Solutions**:
+- Add proper async cleanup
+- Use transaction isolation
+- Mock time-dependent operations
+- Increase timeouts
 
-```bash
-# Show output
-pytest -s
+### Slow Tests
 
-# Stop on failure
-pytest -x
+**Issue**: Tests take too long
 
-# Verbose
-pytest -v
-```
+**Solutions**:
+- Mark slow tests: `@pytest.mark.slow`
+- Use smaller datasets
+- Mock expensive operations
+- Run in parallel: `pytest -n auto`
 
-## Next Steps
+## See Also
 
-- [Code Standards](code-standards.md) - Writing testable code
-- [Development Setup](development.md) - Setup testing environment
+- [Code Standards](code-standards.md)
+- [Development Setup](development.md)
+- [Integration Test Evaluation](../architecture/INTEGRATION_TEST_EVALUATION.md)

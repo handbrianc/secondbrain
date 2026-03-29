@@ -62,7 +62,14 @@ MAX_LIST_LIMIT = 100000
     "--cores",
     "-c",
     type=int,
-    help="Number of CPU cores to use for parallel processing (default: auto-detect)",
+    help="Number of CPU cores to use for parallel processing (default: auto-detect, limited by memory)",
+)
+@click.option(
+    "--memory-limit",
+    "-m",
+    type=click.FloatRange(0.1, 1.0),
+    default=None,
+    help="Memory limit as fraction of available RAM (0.1-1.0, default: 0.8 = 80%)",
 )
 @click.pass_context
 def ingest(
@@ -73,6 +80,7 @@ def ingest(
     chunk_size: int | None,
     chunk_overlap: int | None,
     cores: int | None,
+    memory_limit: float | None,
 ) -> None:
     """Ingest documents into the vector database.
 
