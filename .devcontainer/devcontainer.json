@@ -1,0 +1,65 @@
+{
+  "name": "SecondBrain Development",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.11",
+      "installTools": true
+    },
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "latest"
+    },
+    "ghcr.io/devcontainers/features/git:1": {
+      "version": "latest"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-python.debugpy",
+        "tamasfe.even-better-toml",
+        "redhat.vscode-yaml",
+        "ms-azuretools.vscode-docker",
+        "github.copilot",
+        "github.copilot-chat"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "python.linting.enabled": true,
+        "python.linting.ruffEnabled": true,
+        "python.formatting.provider": "ruff",
+        "python.testing.pytestEnabled": true,
+        "python.testing.unittestEnabled": false,
+        "[python]": {
+          "editor.codeActionsOnSave": {
+            "source.organizeImports": "explicit"
+          },
+          "editor.defaultFormatter": "ms-python.black-formatter"
+        },
+        "editor.formatOnSave": true,
+        "editor.rulers": [88, 100],
+        "files.eol": "\n",
+        "files.trimTrailingWhitespace": true
+      }
+    }
+  },
+  "forwardPorts": [
+    27017
+  ],
+  "postCreateCommand": "pip install -e '.[dev]' && python -m spacy download en_core_web_sm",
+  "postStartCommand": "mongod --fork --logpath /var/log/mongodb.log --dbpath /data/db",
+  "mounts": [
+    "source=secondbrain-vscode-extensions,target=/root/.vscode-server/extensions,type=volume"
+  ],
+  "remoteEnv": {
+    "PATH": "${containerEnv:PATH}:/workspace/scripts",
+    "PYTHONPATH": "/workspace/src"
+  },
+  "workspaceFolder": "/workspace",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind"
+}

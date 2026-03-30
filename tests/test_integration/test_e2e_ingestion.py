@@ -6,6 +6,5 @@ workflow tests using mongomock.
 """
 
 
-
 class TestEndToEndIngestion:
     """Test full document ingestion workflow."""

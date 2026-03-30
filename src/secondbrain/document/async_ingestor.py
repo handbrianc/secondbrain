@@ -12,6 +12,7 @@ from secondbrain.document.ingestor import DocumentIngestor
 from secondbrain.embedding.local import LocalEmbeddingGenerator
 from secondbrain.exceptions import DocumentExtractionError
 from secondbrain.storage import VectorStorage
+from secondbrain.utils.tracing import async_trace_decorator, get_span_name
 
 logger = logging.getLogger(__name__)
 

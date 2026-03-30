@@ -96,6 +96,24 @@ mypy .
 ruff check . && ruff format . && mypy .
 ```
 
+### Dependency Management
+
+When adding or updating dependencies:
+
+1. **Add to pyproject.toml**: Add dependencies to the appropriate section (`dependencies` or `dev`)
+2. **Pin versions**: Use version constraints (e.g., `>=1.0.0,<2.0.0`)
+3. **Run security scan**: Check for vulnerabilities
+   ```bash
+   ./scripts/audit_dependencies.sh
+   ```
+4. **Validate**: Run dependency validation
+   ```bash
+   ./scripts/validate_dependencies.sh
+   ```
+5. **Document**: If adding a new dependency, explain why in the PR description
+
+For detailed dependency management procedures, see the [Dependency Management Guide](docs/developer-guide/dependency-management.md).
+
 ### Commit Messages
 
 We follow [Conventional Commits](https://www.conventionalcommits.org/):

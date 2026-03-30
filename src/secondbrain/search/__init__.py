@@ -17,7 +17,7 @@ from secondbrain.storage import (
     VectorStorage,
     build_search_pipeline,
 )
-from secondbrain.utils.tracing import trace_operation
+from secondbrain.utils.tracing import get_span_name, trace_operation
 
 logger = logging.getLogger(__name__)
 

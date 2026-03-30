@@ -3,9 +3,10 @@
 Defines the protocol that all local LLM providers must implement.
 """
 
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 
+@runtime_checkable
 class LocalLLMProvider(Protocol):
     """Protocol for local LLM providers.
 

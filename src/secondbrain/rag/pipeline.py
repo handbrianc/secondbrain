@@ -11,6 +11,7 @@ from secondbrain.config import get_config
 from secondbrain.conversation import ConversationSession, QueryRewriter
 from secondbrain.rag.interfaces import LocalLLMProvider
 from secondbrain.search import Searcher
+from secondbrain.utils.tracing import get_span_name, trace_decorator
 
 logger = logging.getLogger(__name__)
 

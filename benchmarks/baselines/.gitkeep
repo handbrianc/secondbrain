@@ -1,0 +1,7 @@
+# Baseline directory for performance benchmarks
+# 
+# Create baseline files by running:
+#   ./scripts/run_benchmarks.sh baseline main
+#
+# Baseline files are JSON format with benchmark results.
+# See docs/performance-testing.md for details.

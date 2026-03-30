@@ -23,6 +23,8 @@ __all__ = [
     "CircuitBreakerEnabledService",
     "CircuitBreakerError",
     "CircuitState",
+    "reset_all_circuit_breakers",
+    "reset_circuit_breaker",
 ]
 
 
@@ -427,3 +429,28 @@ class CircuitBreakerEnabledService:
                 self._circuit_breaker.record_failure()
 
         return result
+
+
+# Global circuit breaker registry for testing
+_circuit_breakers: dict[str, CircuitBreaker] = {}
+
+
+def reset_circuit_breaker(service_name: str) -> None:
+    """Reset a circuit breaker by service name.
+
+    Args:
+        service_name: Name of the service whose circuit breaker to reset.
+    """
+    global _circuit_breakers
+    if service_name in _circuit_breakers:
+        _circuit_breakers[service_name].reset()
+
+
+def reset_all_circuit_breakers() -> None:
+    """Reset all registered circuit breakers.
+
+    Useful for testing to ensure clean state between tests.
+    """
+    global _circuit_breakers
+    for cb in _circuit_breakers.values():
+        cb.reset()

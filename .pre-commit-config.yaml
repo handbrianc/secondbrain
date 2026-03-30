@@ -45,6 +45,14 @@ repos:
 
   - repo: local
     hooks:
+      - id: validate-dependencies
+        name: Validate Dependencies
+        entry: bash scripts/validate_dependencies.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
       - id: pytest
         name: pytest
         entry: pytest
