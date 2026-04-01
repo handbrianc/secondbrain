@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import psutil
 from click.testing import CliRunner
 
 from secondbrain.cli import cli
@@ -53,6 +54,8 @@ class TestIngestCoresValidation:
         assert result.exception is not None
         assert "positive" in str(result.exception).lower()
 
+        # Test excessive cores - should warn but still work
+        available_cores = psutil.cpu_count()
         excessive_cores = available_cores + 10
         result = runner.invoke(
             cli,
