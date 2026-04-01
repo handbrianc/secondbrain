@@ -6,6 +6,7 @@ to catch errors early and provide clear error messages.
 
 from __future__ import annotations
 
+import os
 import re
 from typing import Any
 
@@ -331,7 +332,10 @@ def validate_settings() -> SecondBrainSettings:
     Raises:
         ValidationError: If configuration is invalid
     """
-    return SecondBrainSettings()
+    # Create settings with MongoDB URI from environment
+    return SecondBrainSettings(
+        mongo_uri=os.getenv("MONGODB_URI", "mongodb://localhost:27017")
+    )
 
 
 def get_settings() -> SecondBrainSettings:

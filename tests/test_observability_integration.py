@@ -10,7 +10,6 @@ Tests cover:
 
 from __future__ import annotations
 
-import asyncio
 import os
 from unittest.mock import MagicMock, patch
 
@@ -25,7 +24,6 @@ from secondbrain.logging import (
 from secondbrain.utils.metrics import (
     OTelMetricsCollector,
     is_metrics_enabled,
-    setup_metrics,
 )
 from secondbrain.utils.observability import (
     MetricsCollector,
@@ -38,10 +36,14 @@ from secondbrain.utils.tracing import (
     SPAN_HIERARCHY,
     async_trace_decorator,
     get_span_name,
-    get_trace_context as get_tracing_context,
     is_tracing_enabled,
-    set_trace_context as set_tracing_context,
     trace_operation,
+)
+from secondbrain.utils.tracing import (
+    get_trace_context as get_tracing_context,
+)
+from secondbrain.utils.tracing import (
+    set_trace_context as set_tracing_context,
 )
 
 

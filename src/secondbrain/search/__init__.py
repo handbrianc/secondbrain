@@ -11,6 +11,7 @@ from typing import Any
 
 from secondbrain.config import get_config
 from secondbrain.embedding import LocalEmbeddingGenerator
+from secondbrain.exceptions import ValidationError
 from secondbrain.storage import (
     SearchResult,
     StorageConnectionError,
@@ -25,6 +26,9 @@ __all__ = ["Searcher"]
 
 # Maximum query length to prevent DoS attacks
 MAX_QUERY_LENGTH = 10000
+
+# Maximum results limit to prevent resource exhaustion
+MAX_TOP_K = 1000
 
 # Pattern to detect potential injection attempts
 INJECTION_PATTERNS = [
@@ -140,11 +144,30 @@ class Searcher:
         source_filter: str | None = None,
         file_type_filter: str | None = None,
     ) -> list[dict[str, Any]]:
-        """Search for similar documents using semantic similarity."""
+        """Search for similar documents using semantic similarity.
+
+        Args:
+            query: Search query string.
+            top_k: Number of results to return (max: 1000).
+            source_filter: Filter by source file.
+            file_type_filter: Filter by file type.
+
+        Returns:
+            List of search results as dictionaries.
+
+        Raises:
+            ValueError: If top_k exceeds maximum limit.
+        """
         # Sanitize query to prevent injection attacks
         sanitized_query = sanitize_query(query)
 
         top_k = top_k or self.config.default_top_k
+
+        # Enforce maximum results limit
+        if top_k > MAX_TOP_K:
+            raise ValidationError(
+                f"top_k ({top_k}) exceeds maximum limit of {MAX_TOP_K}"
+            )
 
         # Validate connections
         if not self.storage.validate_connection():

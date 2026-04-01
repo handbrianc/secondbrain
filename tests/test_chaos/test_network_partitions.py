@@ -12,7 +12,6 @@ from secondbrain.utils.circuit_breaker import (
 
 
 @pytest.mark.chaos
-@pytest.mark.slow
 class TestNetworkPartitionScenarios:
     """Test network partition handling."""
 
@@ -94,7 +93,6 @@ class TestNetworkPartitionScenarios:
 
 
 @pytest.mark.chaos
-@pytest.mark.slow
 class TestTimeoutHandling:
     """Test timeout handling in network partitions."""
 
@@ -138,7 +136,6 @@ class TestTimeoutHandling:
 
 
 @pytest.mark.chaos
-@pytest.mark.slow
 class TestRecoveryPatterns:
     """Test recovery patterns after network partitions."""
 

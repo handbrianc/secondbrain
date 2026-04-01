@@ -18,7 +18,7 @@ from secondbrain.document.segment import Segment
 from secondbrain.document.utils import get_file_type
 from secondbrain.document.worker import init_worker_with_queue
 from secondbrain.embedding.local import LocalEmbeddingGenerator
-from secondbrain.exceptions import DocumentExtractionError
+from secondbrain.exceptions import DocumentExtractionError, ValidationError
 from secondbrain.storage import VectorStorage
 from secondbrain.utils.embedding_cache import EmbeddingCache
 from secondbrain.utils.tracing import trace_operation
@@ -43,11 +43,11 @@ class DocumentIngestor:
         config = get_config()
 
         if chunk_size <= 0:
-            raise ValueError("chunk_size must be positive")
+            raise ValidationError("chunk_size must be positive")
         if chunk_overlap < 0:
-            raise ValueError("chunk_overlap must be non-negative")
+            raise ValidationError("chunk_overlap must be non-negative")
         if chunk_overlap >= chunk_size:
-            raise ValueError("chunk_overlap must be less than chunk_size")
+            raise ValidationError("chunk_overlap must be less than chunk_size")
 
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap

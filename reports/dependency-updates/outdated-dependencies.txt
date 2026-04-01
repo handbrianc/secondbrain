@@ -1,5 +1,5 @@
 SecondBrain Dependency Update Report
-Generated: 2026-03-29 22:16:13
+Generated: 2026-03-30 16:51:14
 =====================================
 
 Outdated Dependencies:
@@ -42,14 +42,16 @@ confection                               0.1.5                      1.3.3       
 contourpy                                1.3.1                      1.3.3        wheel
 coverage                                 7.8.0                      7.13.5       wheel
 cssselect2                               0.7.0                      0.9.0        wheel
+cyclonedx-bom                            7.2.2                      7.3.0        wheel
 cyclonedx-python-lib                     11.6.0                     11.7.0       wheel
 Deprecated                               1.2.18                     1.3.1        wheel
 distlib                                  0.3.9                      0.4.0        wheel
+docling-core                             2.70.2                     2.71.0       wheel
 docling-parse                            5.5.0                      5.6.2        wheel
 docutils                                 0.21.2                     0.22.4       wheel
 einops                                   0.8.1                      0.8.2        wheel
 empy                                     4.2                        4.2.1        sdist
-Faker                                    40.1.2                     40.11.1      wheel
+Faker                                    40.1.2                     40.12.0      wheel
 fastapi                                  0.128.0                    0.135.2      wheel
 fastapi-cli                              0.0.20                     0.0.24       wheel
 fastapi-cloud-cli                        0.11.0                     0.15.1       wheel
@@ -70,8 +72,8 @@ GitPython                                3.1.43                     3.1.46      
 googleapis-common-protos                 1.72.0                     1.73.1       wheel
 greenlet                                 3.3.1                      3.3.2        wheel
 griffe                                   1.15.0                     2.0.2        wheel
-grpcio                                   1.76.0                     1.78.0       wheel
-grpcio-reflection                        1.76.0                     1.78.0       wheel
+grpcio                                   1.76.0                     1.80.0       wheel
+grpcio-reflection                        1.76.0                     1.80.0       wheel
 hf-xet                                   1.1.5                      1.4.2        wheel
 huggingface-hub                          0.36.0                     1.8.0        wheel
 hypothesis                               6.151.9                    6.151.10     wheel
@@ -104,7 +106,7 @@ llama-index-embeddings-openai            0.5.1                      0.6.0       
 llama-index-indices-managed-llama-cloud  0.9.4                      0.11.1       wheel
 llama-index-instrumentation              0.4.2                      0.5.0        wheel
 llama-index-llms-ollama                  0.9.1                      0.10.1       wheel
-llama-index-llms-openai                  0.6.15                     0.7.4        wheel
+llama-index-llms-openai                  0.6.15                     0.7.5        wheel
 llama-index-readers-file                 0.5.6                      0.6.0        wheel
 llama-index-readers-llama-parse          0.5.1                      0.6.1        wheel
 llama-index-storage-chat-store-mongo     0.3.0                      0.4.0        wheel
@@ -181,7 +183,7 @@ PyYAML                                   6.0.2                      6.0.3       
 rapidocr                                 3.5.0                      3.7.0        wheel
 referencing                              0.36.2                     0.37.0       wheel
 regex                                    2024.11.6                  2026.3.32    wheel
-requests                                 2.32.3                     2.33.0       wheel
+requests                                 2.32.3                     2.33.1       wheel
 resolvelib                               1.0.1                      1.2.1        wheel
 rich-toolkit                             0.17.2                     0.19.7       wheel
 rosdep                                   0.25.1                     0.26.0       wheel
@@ -283,7 +285,288 @@ Dev Dependencies:
 Recommended Actions:
 -------------------
 To update all packages safely (minor/patch only):
-  pip install --upgrade accelerate aider-install aiohttp aiosignal ansible-core anthropic antlr4-python3-runtime anyio argcomplete attrs Authlib banks basedpyright beautifulsoup4 black build cachetools catkin-pkg cbor2 certifi chardet charset-normalizer chromadb click colcon-core colcon-notification colcon-output colcon-package-information colcon-parallel-executor colcon-powershell comfyui_frontend_package compressed-tensors confection contourpy coverage cssselect2 cyclonedx-python-lib Deprecated distlib docling-parse docutils einops empy Faker fastapi fastapi-cli fastapi-cloud-cli fastar filelock flake8 flake8-blind-except flake8-builtins flake8-comprehensions flake8-deprecated flake8-import-order fonttools frozenlist fsspec gguf gitdb GitPython googleapis-common-protos greenlet griffe grpcio grpcio-reflection hf-xet huggingface-hub hypothesis identify idna ijson imageio importlib_metadata iniconfig isort jiter jsonpointer jsonschema-specifications kafka-python kiwisolver kornia kornia_rs langchain-core langchain-text-splitters langsmith lark latex2mathml lazy_loader llama-cloud llama-cloud-services llama-index llama-index-cli llama-index-core llama-index-embeddings-openai llama-index-indices-managed-llama-cloud llama-index-instrumentation llama-index-llms-ollama llama-index-llms-openai llama-index-readers-file llama-index-readers-llama-parse llama-index-storage-chat-store-mongo llama-index-workflows llama-parse llguidance llvmlite lxml markdown-it-py MarkupSafe marshmallow matplotlib mistral_common mlx mlx-lm mlx-metal mmh3 model-hosting-container-standards mpmath multidict mypy-extensions networkx nltk nodejs-wheel-binaries numba numpy onnxruntime openai opentelemetry-api opentelemetry-exporter-otlp-proto-common opentelemetry-exporter-otlp-proto-grpc opentelemetry-proto opentelemetry-sdk orjson outlines_core pandas pdfminer.six pdfplumber pip pipdeptree platformdirs pluggy polyfactory posthog preshed prompt_toolkit propcache protobuf psutil pycodestyle pycountry pycparser pydantic_core pydantic-extra-types pydantic-settings pydot pyflakes PyGithub Pygments pyinstaller-hooks-contrib PyJWT pymdown-extensions PyNaCl pyparsing pypdf PyPika pytest pytest-cov pytest-mock pytest-rerunfailures python-json-logger pytz PyYAML rapidocr referencing regex requests resolvelib rich-toolkit rosdep rospkg safetensors safety-schemas scikit-image scipy semchunk sentence-transformers sentencepiece sentry-sdk six smart_open smmap snowballstemmer soupsieve spacy spandrel spdx-tools SQLAlchemy srsly sse-starlette starlette striprtf svglib tabulate tenacity thinc tifffile timm tinycss2 tomli torch torchaudio torchvision tqdm transformers typer typer-slim uuid_utils uv uvicorn virtualenv vllm vulture wcwidth weasel wrapt xgrammar yarl zipp 
+Package                                  Version                    Latest       Type  Editable project location
+---------------------------------------- -------------------------- ------------ ----- ----------------------------
+accelerate                               1.12.0                     1.13.0       wheel
+aider-install                            0.1.3                      0.2.0        wheel
+aiohttp                                  3.11.14                    3.13.4       wheel
+aiosignal                                1.3.2                      1.4.0        wheel
+ansible-core                             2.16.11                    2.20.4       wheel
+anthropic                                0.77.0                     0.86.0       wheel
+antlr4-python3-runtime                   4.9.3                      4.13.2       wheel
+anyio                                    4.12.1                     4.13.0       wheel
+argcomplete                              3.6.2                      3.6.3        wheel
+attrs                                    25.3.0                     26.1.0       wheel
+Authlib                                  1.6.8                      1.6.9        wheel
+banks                                    2.3.0                      2.4.1        wheel
+basedpyright                             1.37.4                     1.38.4       wheel
+beautifulsoup4                           4.12.3                     4.14.3       wheel
+black                                    26.1.0                     26.3.1       wheel
+build                                    1.4.0                      1.4.2        wheel
+cachetools                               6.2.6                      7.0.5        wheel
+catkin-pkg                               1.0.0                      1.1.0        wheel
+cbor2                                    5.8.0                      5.9.0        wheel
+certifi                                  2025.1.31                  2026.2.25    wheel
+chardet                                  5.2.0                      7.4.0.post2  wheel
+charset-normalizer                       3.4.1                      3.4.6        wheel
+chromadb                                 1.4.1                      1.5.5        wheel
+click                                    8.1.7                      8.3.1        wheel
+colcon-core                              0.19.0                     0.20.1       wheel
+colcon-notification                      0.3.0                      0.3.1        wheel
+colcon-output                            0.2.13                     0.2.14       wheel
+colcon-package-information               0.4.0                      0.4.1        wheel
+colcon-parallel-executor                 0.3.0                      0.4.0        wheel
+colcon-powershell                        0.4.0                      0.5.0        wheel
+comfyui_frontend_package                 1.14.5                     1.43.1       wheel
+compressed-tensors                       0.13.0                     0.14.0.1     wheel
+confection                               0.1.5                      1.3.3        wheel
+contourpy                                1.3.1                      1.3.3        wheel
+coverage                                 7.8.0                      7.13.5       wheel
+cssselect2                               0.7.0                      0.9.0        wheel
+cyclonedx-bom                            7.2.2                      7.3.0        wheel
+cyclonedx-python-lib                     11.6.0                     11.7.0       wheel
+Deprecated                               1.2.18                     1.3.1        wheel
+distlib                                  0.3.9                      0.4.0        wheel
+docling-core                             2.70.2                     2.71.0       wheel
+docling-parse                            5.5.0                      5.6.2        wheel
+docutils                                 0.21.2                     0.22.4       wheel
+einops                                   0.8.1                      0.8.2        wheel
+empy                                     4.2                        4.2.1        sdist
+Faker                                    40.1.2                     40.12.0      wheel
+fastapi                                  0.128.0                    0.135.2      wheel
+fastapi-cli                              0.0.20                     0.0.24       wheel
+fastapi-cloud-cli                        0.11.0                     0.15.1       wheel
+fastar                                   0.8.0                      0.9.0        wheel
+filelock                                 3.24.3                     3.25.2       wheel
+flake8                                   7.2.0                      7.3.0        wheel
+flake8-blind-except                      0.1.1                      0.2.1        sdist
+flake8-builtins                          2.5.0                      3.1.0        wheel
+flake8-comprehensions                    3.16.0                     3.17.0       wheel
+flake8-deprecated                        2.2.1                      2.3.0        wheel
+flake8-import-order                      0.18.2                     0.19.2       wheel
+fonttools                                4.56.0                     4.62.1       wheel
+frozenlist                               1.5.0                      1.8.0        wheel
+fsspec                                   2025.3.0                   2026.3.0     wheel
+gguf                                     0.17.1                     0.18.0       wheel
+gitdb                                    4.0.11                     4.0.12       wheel
+GitPython                                3.1.43                     3.1.46       wheel
+googleapis-common-protos                 1.72.0                     1.73.1       wheel
+greenlet                                 3.3.1                      3.3.2        wheel
+griffe                                   1.15.0                     2.0.2        wheel
+grpcio                                   1.76.0                     1.80.0       wheel
+grpcio-reflection                        1.76.0                     1.80.0       wheel
+hf-xet                                   1.1.5                      1.4.2        wheel
+huggingface-hub                          0.36.0                     1.8.0        wheel
+hypothesis                               6.151.9                    6.151.10     wheel
+identify                                 2.6.16                     2.6.18       wheel
+idna                                     3.10                       3.11         wheel
+ijson                                    3.4.0.post0                3.5.0        wheel
+imageio                                  2.37.0                     2.37.3       wheel
+importlib_metadata                       8.6.1                      9.0.0        wheel
+iniconfig                                2.1.0                      2.3.0        wheel
+isort                                    8.0.0                      8.0.1        wheel
+jiter                                    0.12.0                     0.13.0       wheel
+jsonpointer                              3.0.0                      3.1.1        wheel
+jsonschema-specifications                2024.10.1                  2025.9.1     wheel
+kafka-python                             2.2.15                     2.3.0        wheel
+kiwisolver                               1.4.8                      1.5.0        wheel
+kornia                                   0.8.0                      0.8.2        wheel
+kornia_rs                                0.1.8                      0.1.10       wheel
+langchain-core                           1.2.7                      1.2.23       wheel
+langchain-text-splitters                 1.1.0                      1.1.1        wheel
+langsmith                                0.6.7                      0.7.22       wheel
+lark                                     1.2.2                      1.3.1        wheel
+latex2mathml                             3.78.1                     3.79.0       wheel
+lazy_loader                              0.4                        0.5          wheel
+llama-cloud                              0.1.35                     1.6.0        wheel
+llama-cloud-services                     0.6.54                     0.6.94       wheel
+llama-index                              0.14.13                    0.14.19      wheel
+llama-index-cli                          0.5.3                      0.5.6        wheel
+llama-index-core                         0.14.13                    0.14.19      wheel
+llama-index-embeddings-openai            0.5.1                      0.6.0        wheel
+llama-index-indices-managed-llama-cloud  0.9.4                      0.11.1       wheel
+llama-index-instrumentation              0.4.2                      0.5.0        wheel
+llama-index-llms-ollama                  0.9.1                      0.10.1       wheel
+llama-index-llms-openai                  0.6.15                     0.7.5        wheel
+llama-index-readers-file                 0.5.6                      0.6.0        wheel
+llama-index-readers-llama-parse          0.5.1                      0.6.1        wheel
+llama-index-storage-chat-store-mongo     0.3.0                      0.4.0        wheel
+llama-index-workflows                    2.13.1                     2.17.1       wheel
+llama-parse                              0.6.54                     0.6.94       wheel
+llguidance                               1.3.0                      1.7.0        wheel
+llvmlite                                 0.44.0                     0.46.0       wheel
+lxml                                     5.3.2                      6.0.2        wheel
+markdown-it-py                           3.0.0                      4.0.0        wheel
+MarkupSafe                               3.0.2                      3.0.3        wheel
+marshmallow                              3.26.2                     4.2.3        wheel
+matplotlib                               3.10.1                     3.10.8       wheel
+mistral_common                           1.9.0                      1.10.0       wheel
+mlx                                      0.30.4                     0.31.1       wheel
+mlx-lm                                   0.29.1                     0.31.1       wheel
+mlx-metal                                0.30.4                     0.31.1       wheel
+mmh3                                     5.2.0                      5.2.1        wheel
+model-hosting-container-standards        0.1.13                     0.1.14       wheel
+mpmath                                   1.3.0                      1.4.1        wheel
+multidict                                6.2.0                      6.7.1        wheel
+mypy-extensions                          1.0.0                      1.1.0        wheel
+networkx                                 3.4.2                      3.6.1        wheel
+nltk                                     3.9.2                      3.9.4        wheel
+nodejs-wheel-binaries                    24.13.0                    24.14.0      wheel
+numba                                    0.61.2                     0.64.0       wheel
+numpy                                    2.4.3                      2.4.4        wheel
+onnxruntime                              1.23.2                     1.24.4       wheel
+openai                                   2.15.0                     2.30.0       wheel
+opentelemetry-api                        1.39.1                     1.40.0       wheel
+opentelemetry-exporter-otlp-proto-common 1.39.1                     1.40.0       wheel
+opentelemetry-exporter-otlp-proto-grpc   1.39.1                     1.40.0       wheel
+opentelemetry-proto                      1.39.1                     1.40.0       wheel
+opentelemetry-sdk                        1.39.1                     1.40.0       wheel
+orjson                                   3.11.6                     3.11.7       wheel
+outlines_core                            0.2.11                     0.2.14       wheel
+pandas                                   2.3.3                      3.0.1        wheel
+pdfminer.six                             20250506                   20260107     wheel
+pdfplumber                               0.11.7                     0.11.9       wheel
+pip                                      26.0                       26.0.1       wheel
+pipdeptree                               2.31.0                     2.34.0       wheel
+platformdirs                             4.5.1                      4.9.4        wheel
+pluggy                                   1.5.0                      1.6.0        wheel
+polyfactory                              3.2.0                      3.3.0        wheel
+posthog                                  5.4.0                      7.9.12       wheel
+preshed                                  3.0.12                     3.0.13       wheel
+prompt_toolkit                           3.0.51                     3.0.52       wheel
+propcache                                0.3.0                      0.4.1        wheel
+protobuf                                 6.33.5                     7.34.1       wheel
+psutil                                   7.0.0                      7.2.2        wheel
+pycodestyle                              2.13.0                     2.14.0       wheel
+pycountry                                24.6.1                     26.2.16      wheel
+pycparser                                2.22                       3.0          wheel
+pydantic_core                            2.41.5                     2.43.0       wheel
+pydantic-extra-types                     2.11.0                     2.11.1       wheel
+pydantic-settings                        2.12.0                     2.13.1       wheel
+pydot                                    1.4.2                      4.0.1        wheel
+pyflakes                                 3.3.2                      3.4.0        wheel
+PyGithub                                 2.5.0                      2.9.0        wheel
+Pygments                                 2.18.0                     2.20.0       wheel
+pyinstaller-hooks-contrib                2026.1                     2026.3       wheel
+PyJWT                                    2.10.1                     2.12.1       wheel
+pymdown-extensions                       10.21                      10.21.2      wheel
+PyNaCl                                   1.5.0                      1.6.2        wheel
+pyparsing                                2.4.7                      3.3.2        wheel
+pypdf                                    6.6.2                      6.9.2        wheel
+PyPika                                   0.50.0                     0.51.1       wheel
+pytest                                   8.3.5                      9.0.2        wheel
+pytest-cov                               6.1.1                      7.1.0        wheel
+pytest-mock                              3.14.0                     3.15.1       wheel
+pytest-rerunfailures                     15.0                       16.1         wheel
+python-json-logger                       2.0.7                      4.1.0        wheel
+pytz                                     2025.2                     2026.1.post1 wheel
+PyYAML                                   6.0.2                      6.0.3        wheel
+rapidocr                                 3.5.0                      3.7.0        wheel
+referencing                              0.36.2                     0.37.0       wheel
+regex                                    2024.11.6                  2026.3.32    wheel
+requests                                 2.32.3                     2.33.1       wheel
+resolvelib                               1.0.1                      1.2.1        wheel
+rich-toolkit                             0.17.2                     0.19.7       wheel
+rosdep                                   0.25.1                     0.26.0       wheel
+rospkg                                   1.6.0                      1.6.1        wheel
+safetensors                              0.5.3                      0.7.0        wheel
+safety-schemas                           0.0.16                     0.0.18       wheel
+scikit-image                             0.25.1                     0.26.0       wheel
+scipy                                    1.15.2                     1.17.1       wheel
+semchunk                                 2.2.2                      4.0.0        wheel
+sentence-transformers                    5.2.2                      5.3.0        wheel
+sentencepiece                            0.2.0                      0.2.1        wheel
+sentry-sdk                               2.51.0                     2.56.0       wheel
+six                                      1.16.0                     1.17.0       wheel
+smart_open                               7.5.0                      7.5.1        wheel
+smmap                                    5.0.1                      5.0.3        wheel
+snowballstemmer                          2.2.0                      3.0.1        wheel
+soupsieve                                2.5                        2.8.3        wheel
+spacy                                    3.8.11                     3.8.14       wheel
+spandrel                                 0.4.1                      0.4.2        wheel
+spdx-tools                               0.8.3                      0.8.5        wheel
+SQLAlchemy                               2.0.46                     2.0.48       wheel
+srsly                                    2.5.2                      2.5.3        wheel
+sse-starlette                            3.2.0                      3.3.4        wheel
+starlette                                0.50.0                     1.0.0        wheel
+striprtf                                 0.0.26                     0.0.29       wheel
+svglib                                   1.5.1                      1.6.0        wheel
+tabulate                                 0.9.0                      0.10.0       wheel
+tenacity                                 9.1.2                      9.1.4        wheel
+thinc                                    8.3.10                     9.1.1        wheel
+tifffile                                 2025.1.10                  2026.3.3     wheel
+timm                                     1.0.14                     1.0.26       wheel
+tinycss2                                 1.2.1                      1.5.1        wheel
+tomli                                    2.2.1                      2.4.1        wheel
+torch                                    2.10.0                     2.11.0       wheel
+torchaudio                               2.10.0                     2.11.0       wheel
+torchvision                              0.25.0                     0.26.0       wheel
+tqdm                                     4.67.1                     4.67.3       wheel
+transformers                             4.57.6                     5.4.0        wheel
+typer                                    0.19.2                     0.24.1       wheel
+typer-slim                               0.21.1                     0.24.0       wheel
+uuid_utils                               0.14.0                     0.14.1       wheel
+uv                                       0.7.8                      0.11.2       wheel
+uvicorn                                  0.40.0                     0.42.0       wheel
+virtualenv                               20.39.0                    21.2.0       wheel
+vllm                                     0.16.0rc1.dev71+g1e86c802d 0.18.0       sdist /Users/bchand/Documents/vllm
+vulture                                  2.15                       2.16         wheel
+wcwidth                                  0.2.13                     0.6.0        wheel
+weasel                                   0.4.3                      1.0.0        wheel
+wrapt                                    1.17.0                     2.1.2        wheel
+xgrammar                                 0.1.29                     0.1.33       wheel
+yarl                                     1.18.3                     1.23.0       wheel
+zipp                                     3.21.0                     3.23.0       wheel
+
+[notice] A new release of pip is available: 26.0 -> 26.0.1
+[notice] To update, run: pip install --upgrade pip
+
+Project Dependencies (from pyproject.toml):
+-------------------------------------------
+Runtime Dependencies:
+  "click>=8.1.0",
+  "docling>=2.81.0",
+  "docling-core>=2.48.4",
+  "pymongo>=4.6.0",
+  "motor>=3.0.0",
+  "httpx>=0.28.1",
+  "pydantic>=2.0.0",
+  "pydantic-settings>=2.0.0",
+  "rich>=14.0.0",
+  "python-dotenv>=1.2.2",
+  "sentence-transformers>=5.0.0",
+  "torch>=2.0.0",  # GPU acceleration support
+  "opentelemetry-api>=1.20.0",
+  "opentelemetry-sdk>=1.20.0",
+  "ollama>=0.1.0",
+  "mcp>=1.0.0",
+
+Dev Dependencies:
+  "ruff>=0.15.5",
+  "mypy>=1.8.0",
+  "pytest>=8.0.0",
+  "pytest-asyncio>=0.23.0",
+  "pytest-cov>=4.1.0",
+  "pytest-benchmark>=4.0.0",
+  "pytest-xdist>=3.0.0",
+  "pytest-hypothesis>=6.0.0",
+  "pytest-timeout>=2.2.0",
+  "pytest-testmon>=2.0.0",
+  "hypothesis>=6.0.0",
+  "bandit>=1.7.0",
+  "safety>=3.0.0",
+  "pip-audit>=2.7.0",
+  "pre-commit>=3.6.0",
+  "pyinstaller>=6.0.0",
+  "mongomock>=4.0.0",
+  "vulture>=2.11",
+  "cyclonedx-bom>=7.0.0",
+  "mkdocs>=1.6.0",
+
+Recommended Actions:
+-------------------
+To update all packages safely (minor/patch only):
+  pip install --upgrade accelerate aider-install aiohttp aiosignal ansible-core anthropic antlr4-python3-runtime anyio argcomplete attrs Authlib banks basedpyright beautifulsoup4 black build cachetools catkin-pkg cbor2 certifi chardet charset-normalizer chromadb click colcon-core colcon-notification colcon-output colcon-package-information colcon-parallel-executor colcon-powershell comfyui_frontend_package compressed-tensors confection contourpy coverage cssselect2 cyclonedx-bom cyclonedx-python-lib Deprecated distlib docling-core docling-parse docutils einops empy Faker fastapi fastapi-cli fastapi-cloud-cli fastar filelock flake8 flake8-blind-except flake8-builtins flake8-comprehensions flake8-deprecated flake8-import-order fonttools frozenlist fsspec gguf gitdb GitPython googleapis-common-protos greenlet griffe grpcio grpcio-reflection hf-xet huggingface-hub hypothesis identify idna ijson imageio importlib_metadata iniconfig isort jiter jsonpointer jsonschema-specifications kafka-python kiwisolver kornia kornia_rs langchain-core langchain-text-splitters langsmith lark latex2mathml lazy_loader llama-cloud llama-cloud-services llama-index llama-index-cli llama-index-core llama-index-embeddings-openai llama-index-indices-managed-llama-cloud llama-index-instrumentation llama-index-llms-ollama llama-index-llms-openai llama-index-readers-file llama-index-readers-llama-parse llama-index-storage-chat-store-mongo llama-index-workflows llama-parse llguidance llvmlite lxml markdown-it-py MarkupSafe marshmallow matplotlib mistral_common mlx mlx-lm mlx-metal mmh3 model-hosting-container-standards mpmath multidict mypy-extensions networkx nltk nodejs-wheel-binaries numba numpy onnxruntime openai opentelemetry-api opentelemetry-exporter-otlp-proto-common opentelemetry-exporter-otlp-proto-grpc opentelemetry-proto opentelemetry-sdk orjson outlines_core pandas pdfminer.six pdfplumber pip pipdeptree platformdirs pluggy polyfactory posthog preshed prompt_toolkit propcache protobuf psutil pycodestyle pycountry pycparser pydantic_core pydantic-extra-types pydantic-settings pydot pyflakes PyGithub Pygments pyinstaller-hooks-contrib PyJWT pymdown-extensions PyNaCl pyparsing pypdf PyPika pytest pytest-cov pytest-mock pytest-rerunfailures python-json-logger pytz PyYAML rapidocr referencing regex requests resolvelib rich-toolkit rosdep rospkg safetensors safety-schemas scikit-image scipy semchunk sentence-transformers sentencepiece sentry-sdk six smart_open smmap snowballstemmer soupsieve spacy spandrel spdx-tools SQLAlchemy srsly sse-starlette starlette striprtf svglib tabulate tenacity thinc tifffile timm tinycss2 tomli torch torchaudio torchvision tqdm transformers typer typer-slim uuid_utils uv uvicorn virtualenv vllm vulture wcwidth weasel wrapt xgrammar yarl zipp 
 
 To update specific package:
   pip install --upgrade <package-name>

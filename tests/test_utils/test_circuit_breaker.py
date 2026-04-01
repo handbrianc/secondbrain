@@ -15,7 +15,6 @@ from secondbrain.utils.circuit_breaker import (
 
 
 @pytest.mark.circuit_breaker
-@pytest.mark.slow
 class TestCircuitState:
     """Test CircuitState enum."""
 
@@ -31,7 +30,6 @@ class TestCircuitState:
 
 
 @pytest.mark.circuit_breaker
-@pytest.mark.slow
 class TestCircuitBreakerConfig:
     """Test CircuitBreakerConfig dataclass."""
 
@@ -58,7 +56,6 @@ class TestCircuitBreakerConfig:
 
 
 @pytest.mark.circuit_breaker
-@pytest.mark.slow
 class TestCircuitBreakerBasic:
     """Test basic circuit breaker functionality."""
 
@@ -92,7 +89,6 @@ class TestCircuitBreakerBasic:
 
 
 @pytest.mark.circuit_breaker
-@pytest.mark.slow
 class TestCircuitBreakerStateTransitions:
     """Test circuit breaker state transitions."""
 
@@ -191,7 +187,6 @@ class TestCircuitBreakerStateTransitions:
 
 
 @pytest.mark.circuit_breaker
-@pytest.mark.slow
 class TestCircuitBreakerThreadSafety:
     """Test circuit breaker thread safety."""
 
@@ -274,7 +269,6 @@ class TestCircuitBreakerThreadSafety:
 
 
 @pytest.mark.circuit_breaker
-@pytest.mark.slow
 class TestCircuitBreakerError:
     """Test CircuitBreakerError exception."""
 
@@ -296,7 +290,6 @@ class TestCircuitBreakerError:
 
 
 @pytest.mark.circuit_breaker
-@pytest.mark.slow
 class TestCircuitBreakerHalfOpenCalls:
     """Test HALF_OPEN state call limits."""
 

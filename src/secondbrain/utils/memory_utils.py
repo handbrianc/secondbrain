@@ -9,10 +9,10 @@ This module provides functions to:
 from __future__ import annotations
 
 import logging
-import os
 import resource
 import sys
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     pass
@@ -29,8 +29,8 @@ def get_available_memory_gb() -> float:
     if sys.platform == "darwin" or sys.platform == "linux":
         try:
             # Try to get total memory from /proc or sysctl
-            if sys.platform == "linux" and os.path.exists("/proc/meminfo"):
-                with open("/proc/meminfo", "r") as f:
+            if sys.platform == "linux" and Path("/proc/meminfo").exists():
+                with Path("/proc/meminfo").open() as f:
                     for line in f:
                         if line.startswith("MemTotal:"):
                             # Convert from KB to GB
@@ -60,8 +60,6 @@ def get_available_memory_gb() -> float:
             "psutil not available and could not read system memory. Using default 8GB"
         )
         return 8.0
-
-    return 8.0  # Default fallback
 
 
 def get_memory_limit_gb(percentage: float = 0.8) -> float:
@@ -161,7 +159,7 @@ def set_memory_limit_mb(limit_mb: float) -> bool:
             # Convert MB to bytes
             limit_bytes = int(limit_mb * 1024 * 1024)
             # Get current limits
-            soft, hard = resource.getrlimit(resource.RLIMIT_AS)
+            _, hard = resource.getrlimit(resource.RLIMIT_AS)
             # Set new limit (keep hard limit unchanged or set to new value)
             resource.setrlimit(resource.RLIMIT_AS, (limit_bytes, hard))
             logger.info("Set memory limit to %.2f MB", limit_mb)
@@ -229,7 +227,7 @@ class MemoryMonitor:
 
         return True
 
-    def get_usage_stats(self) -> dict:
+    def get_usage_stats(self) -> dict[str, Any]:
         """Get current memory usage statistics.
 
         Returns:

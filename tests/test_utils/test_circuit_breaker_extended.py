@@ -15,7 +15,6 @@ from secondbrain.utils.circuit_breaker import (
 
 
 @pytest.mark.circuit_breaker
-@pytest.mark.slow
 class TestHalfOpenExceedsMaxCalls:
     """Test exceeding half_open_max_calls limit in HALF_OPEN state."""
 
@@ -65,7 +64,6 @@ class TestHalfOpenExceedsMaxCalls:
 
 
 @pytest.mark.circuit_breaker
-@pytest.mark.slow
 class TestHalfOpenPartialSuccess:
     """Test partial success scenarios in HALF_OPEN state."""
 
@@ -121,7 +119,6 @@ class TestHalfOpenPartialSuccess:
 
 
 @pytest.mark.circuit_breaker
-@pytest.mark.slow
 class TestConcurrentStateTransitions:
     """Test thread safety with concurrent state transitions."""
 
@@ -187,7 +184,6 @@ class TestConcurrentStateTransitions:
 
 
 @pytest.mark.circuit_breaker
-@pytest.mark.slow
 class TestRecoveryTimeoutPrecision:
     """Test recovery timeout timing accuracy."""
 
@@ -237,7 +233,6 @@ class TestRecoveryTimeoutPrecision:
 
 
 @pytest.mark.circuit_breaker
-@pytest.mark.slow
 class TestSuccessThresholdRequirement:
     """Test exact success count needed to close circuit."""
 

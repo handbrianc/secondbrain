@@ -31,7 +31,6 @@ warnings.filterwarnings(
 
 
 @pytest.mark.integration
-@pytest.mark.slow
 class TestPDFIngestionE2E:
     """End-to-end tests for PDF ingestion pipeline."""
 
@@ -68,7 +67,6 @@ class TestPDFIngestionE2E:
             auto_mongomock,
         )
 
-    @pytest.mark.slow
     def test_pdf_text_extraction(self, sample_pdf_path: Path) -> None:
         """Test that PDF text extraction works correctly."""
         # Verify the PDF file exists
@@ -92,7 +90,6 @@ class TestPDFIngestionE2E:
         assert len(combined_text) > 0
         assert "SecondBrain" in combined_text or "test" in combined_text.lower()
 
-    @pytest.mark.slow
     def test_pdf_text_chunking(self, sample_pdf_path: Path) -> None:
         """Test that PDF text is chunked correctly."""
         ingestor = DocumentIngestor(chunk_size=100, chunk_overlap=20)
@@ -111,7 +108,6 @@ class TestPDFIngestionE2E:
         for chunk in chunks:
             assert len(chunk["text"]) <= 100
 
-    @pytest.mark.slow
     def test_embedding_generation(self, cached_embedding_generator: MagicMock) -> None:
         """Test that embedding generation works."""
         # Use mocked embedding generator
@@ -128,7 +124,6 @@ class TestPDFIngestionE2E:
 
 
 @pytest.mark.integration
-@pytest.mark.slow
 class TestPDFSearchIntegration:
     """Integration tests for search functionality after ingestion."""
 
@@ -165,7 +160,6 @@ class TestPDFSearchIntegration:
 
         del monkeypatch, auto_mongomock
 
-    @pytest.mark.slow
     def test_search_after_ingestion(
         self,
         sample_pdf_path: Path,
@@ -196,7 +190,6 @@ class TestPDFSearchIntegration:
         for chunk in chunks:
             assert "chunk_text" in chunk
 
-    @pytest.mark.slow
     def test_search_with_filters(
         self, sample_pdf_path: Path, mocked_pdf_extraction: MagicMock
     ) -> None:

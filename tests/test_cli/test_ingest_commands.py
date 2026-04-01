@@ -32,9 +32,10 @@ class TestIngestCoresValidation:
     """Tests for ingest command cores parameter validation."""
 
     def test_ingest_cores_validation(self) -> None:
+        """Test cores parameter validation without spawning subprocesses."""
         runner = CliRunner()
-        available_cores = os.cpu_count() or 1
 
+        # Test zero cores - validation should fail immediately
         result = runner.invoke(
             cli,
             ["ingest", "/tmp", "--cores", "0"],
@@ -43,6 +44,7 @@ class TestIngestCoresValidation:
         assert result.exception is not None
         assert "positive" in str(result.exception).lower()
 
+        # Test negative cores - validation should fail immediately
         result = runner.invoke(
             cli,
             ["ingest", "/tmp", "--cores", "-1"],

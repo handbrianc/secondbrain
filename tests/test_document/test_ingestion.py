@@ -134,8 +134,8 @@ class TestDocumentIngestor:
         assert len(chunks) == 0
 
 
-def test_ingest_with_recursive(tmp_path: Path) -> None:
-    """Test ingesting files recursively."""
+def test_ingest_with_recursive(tmp_path: Path, monkeypatch) -> None:
+    """Test ingesting files recursively with mocked extraction."""
     # Create test directory structure
     subdir = tmp_path / "subdir"
     subdir.mkdir()
@@ -143,6 +143,14 @@ def test_ingest_with_recursive(tmp_path: Path) -> None:
     # Create test files
     (tmp_path / "test1.txt").write_text("Test content 1")
     (subdir / "test2.txt").write_text("Test content 2")
+
+    # Mock extraction to skip actual file processing
+    def mock_extract_text(self, path):
+        return [{"text": "mocked content", "page": 1}]
+
+    monkeypatch.setattr(
+        "secondbrain.document.DocumentIngestor._extract_text", mock_extract_text
+    )
 
     ingestor = DocumentIngestor()
 

@@ -15,7 +15,6 @@ from secondbrain.utils.circuit_breaker import (
 
 
 @pytest.mark.concurrent
-@pytest.mark.slow
 class TestConcurrentIngestion:
     """Test concurrent document ingestion scenarios."""
 
@@ -73,7 +72,6 @@ class TestConcurrentIngestion:
 
 
 @pytest.mark.concurrent
-@pytest.mark.slow
 class TestRaceConditionDetection:
     """Test race condition detection in concurrent operations."""
 
@@ -144,7 +142,6 @@ class TestRaceConditionDetection:
 
 
 @pytest.mark.concurrent
-@pytest.mark.slow
 class TestThreadSafety:
     """Test thread safety of storage operations."""
 
@@ -186,7 +183,6 @@ class TestThreadSafety:
 
 
 @pytest.mark.concurrent
-@pytest.mark.slow
 class TestConcurrencyWithCircuitBreaker:
     """Test concurrency with circuit breaker protection."""
 
@@ -237,7 +233,6 @@ class TestConcurrencyWithCircuitBreaker:
 
 
 @pytest.mark.concurrent
-@pytest.mark.slow
 class TestBatchConcurrency:
     """Test concurrency in batch operations."""
 

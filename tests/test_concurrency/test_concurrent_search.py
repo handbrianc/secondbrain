@@ -13,7 +13,6 @@ from secondbrain.utils.circuit_breaker import (
 
 
 @pytest.mark.concurrent
-@pytest.mark.slow
 class TestConcurrentSearch:
     """Test concurrent search operations."""
 
@@ -75,7 +74,6 @@ class TestConcurrentSearch:
 
 
 @pytest.mark.concurrent
-@pytest.mark.slow
 class TestSearchRaceConditions:
     """Test race conditions in search operations."""
 
@@ -120,7 +118,6 @@ class TestSearchRaceConditions:
 
 
 @pytest.mark.concurrent
-@pytest.mark.slow
 class TestSearchPerformanceUnderLoad:
     """Test search performance under concurrent load."""
 
@@ -157,7 +154,6 @@ class TestSearchPerformanceUnderLoad:
 
 
 @pytest.mark.concurrent
-@pytest.mark.slow
 class TestSearchWithCircuitBreaker:
     """Test search behavior with circuit breaker."""
 
@@ -204,7 +200,6 @@ class TestSearchWithCircuitBreaker:
 
 
 @pytest.mark.concurrent
-@pytest.mark.slow
 class TestSearchConsistency:
     """Test search consistency under concurrent modifications."""
 

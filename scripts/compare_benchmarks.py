@@ -18,7 +18,7 @@ def load_benchmark_data(filepath: str) -> dict:
     if not path.exists():
         raise FileNotFoundError(f"Benchmark file not found: {filepath}")
 
-    with open(path) as f:
+    with path.open() as f:
         return json.load(f)
 
 
@@ -75,8 +75,8 @@ def compare_benchmarks(
     return len(regressions) > 0, regressions
 
 
-def main():
-    """Main entry point."""
+def main() -> None:
+    """Run benchmark comparison."""
     parser = argparse.ArgumentParser(description="Compare benchmark results")
     parser.add_argument(
         "--baseline", required=True, help="Baseline benchmark JSON file"

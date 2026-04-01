@@ -13,7 +13,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 logger = logging.getLogger(__name__)
 
@@ -91,15 +91,43 @@ class CircuitBreaker:
 
     def __init__(
         self,
-        config: CircuitBreakerConfig | None = None,
+        config: CircuitBreakerConfig | str | None = None,
         service_name: str | None = None,
+        # Backward compatibility: allow positional args
+        failure_threshold: int | None = None,
+        success_threshold: int | None = None,
+        recovery_timeout: float | None = None,
+        half_open_max_calls: int | None = None,
     ) -> None:
         """Initialize circuit breaker.
 
         Args:
-            config: Circuit breaker configuration. Uses defaults if None.
+            config: Circuit breaker configuration, or service_name (backward compat).
             service_name: Optional service name for logging and error context.
+            failure_threshold: Backward compatibility - failure threshold.
+            success_threshold: Backward compatibility - success threshold.
+            recovery_timeout: Backward compatibility - recovery timeout in seconds.
+            half_open_max_calls: Backward compatibility - max calls in half-open state.
         """
+        # Handle backward compatibility: if first arg is string, it's service_name
+        if isinstance(config, str):
+            service_name = config
+            config = None
+
+        # Handle backward compatibility: if positional args provided, create config
+        if (
+            failure_threshold is not None
+            or success_threshold is not None
+            or recovery_timeout is not None
+            or half_open_max_calls is not None
+        ):
+            config = CircuitBreakerConfig(
+                failure_threshold=failure_threshold or 5,
+                success_threshold=success_threshold or 2,
+                recovery_timeout=recovery_timeout or 30.0,
+                half_open_max_calls=half_open_max_calls or 3,
+            )
+
         self.config = config or CircuitBreakerConfig()
         self.service_name = service_name or "unnamed"
 
@@ -275,6 +303,74 @@ class CircuitBreaker:
             )
             self.record_failure()
             raise
+
+    def __enter__(self) -> "CircuitBreaker":
+        """Enter context - check if circuit allows the call."""
+        if not self.is_allowed():
+            raise CircuitBreakerError(
+                "Circuit breaker is open, request not allowed",
+                service_name=self.service_name,
+            )
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: Any,
+    ) -> Literal[False]:
+        """Exit context - record success or failure based on exception.
+
+        Args:
+            exc_type: Exception type if raised, None otherwise.
+            exc_val: Exception instance if raised, None otherwise.
+            exc_tb: Exception traceback if raised, None otherwise.
+
+        Returns:
+            False (never suppress exceptions).
+        """
+        if exc_type is None:
+            # No exception - success
+            self.record_success()
+        else:
+            # Exception occurred - failure
+            self.record_failure()
+        # Don't suppress exceptions
+        return False
+
+    async def __aenter__(self) -> "CircuitBreaker":
+        """Async enter context - check if circuit allows the call."""
+        if not self.is_allowed():
+            raise CircuitBreakerError(
+                "Circuit breaker is open, request not allowed",
+                service_name=self.service_name,
+            )
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: Any,
+    ) -> Literal[False]:
+        """Async exit context - record success or failure based on exception.
+
+        Args:
+            exc_type: Exception type if raised, None otherwise.
+            exc_val: Exception instance if raised, None otherwise.
+            exc_tb: Exception traceback if raised, None otherwise.
+
+        Returns:
+            False (never suppress exceptions).
+        """
+        if exc_type is None:
+            # No exception - success
+            self.record_success()
+        else:
+            # Exception occurred - failure
+            self.record_failure()
+        # Don't suppress exceptions
+        return False
 
     def get_state_info(self) -> dict[str, Any]:
         """Get detailed state information for debugging and monitoring.

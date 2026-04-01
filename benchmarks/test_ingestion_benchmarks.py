@@ -10,13 +10,15 @@ Run with: pytest benchmarks/test_ingestion_benchmarks.py --benchmark-only
 
 import contextlib
 import tempfile
+from collections.abc import Generator
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 
 @pytest.fixture
-def temp_docx_file():
+def temp_docx_file() -> Generator[str, None, None]:
     """Create a temporary DOCX file for benchmarking."""
     with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as f:
         # Create a simple DOCX with some content
@@ -30,7 +32,7 @@ def temp_docx_file():
 
 
 @pytest.fixture
-def temp_pdf_file():
+def temp_pdf_file() -> Generator[str, None, None]:
     """Create a temporary PDF file for benchmarking."""
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
         # Create a minimal PDF structure
@@ -48,14 +50,14 @@ def temp_pdf_file():
     Path(temp_path).unlink(missing_ok=True)
 
 
-def test_ingest_single_document(benchmark, temp_docx_file):
+def test_ingest_single_document(benchmark: Any, temp_docx_file: str) -> None:
     """Benchmark single document ingestion throughput."""
     from secondbrain.config import get_config
     from secondbrain.document import DocumentIngestor
 
     get_config.cache_clear()
 
-    def ingest_document():
+    def ingest_document() -> None:
         ingestor = DocumentIngestor()
         with contextlib.suppress(Exception):
             ingestor.ingest(temp_docx_file)
@@ -66,13 +68,15 @@ def test_ingest_single_document(benchmark, temp_docx_file):
     print(f"Std deviation: {result.stats['stddev'] * 1000:.2f}ms")
 
 
-def test_batch_ingest_documents(benchmark, temp_docx_file, temp_pdf_file):
+def test_batch_ingest_documents(
+    benchmark: Any, temp_docx_file: str, temp_pdf_file: str
+) -> None:
     """Benchmark batch document ingestion throughput."""
     from secondbrain.document import DocumentIngestor
 
     files = [temp_docx_file, temp_pdf_file]
 
-    def ingest_batch():
+    def ingest_batch() -> None:
         ingestor = DocumentIngestor()
         for file_path in files:
             with contextlib.suppress(Exception):
@@ -101,12 +105,11 @@ if __name__ == "__main__":
 #   - docs/performance-testing.md
 #
 
-import time
 from unittest.mock import MagicMock, patch
 
 
 @pytest.fixture
-def mock_mongodb():
+def mock_mongodb() -> Any:
     """Mock MongoDB connection for consistent benchmarking."""
     with patch("secondbrain.storage.MongoClient") as mock_client:
         mock_db = MagicMock()
@@ -116,18 +119,18 @@ def mock_mongodb():
 
 
 @pytest.mark.benchmark
-def test_embedding_generation(benchmark, mock_mongodb):
+def test_embedding_generation(benchmark: Any, mock_mongodb: Any) -> None:
     """Benchmark embedding generation performance."""
-    from secondbrain.embedding import EmbeddingGenerator
+    from secondbrain.embedding import LocalEmbeddingGenerator
 
-    generator = EmbeddingGenerator()
+    generator = LocalEmbeddingGenerator()
     test_texts = [
         "This is a test document for benchmarking embedding generation.",
         "Machine learning is a subset of artificial intelligence.",
         "Python is a popular programming language for data science.",
     ]
 
-    def generate_embeddings():
+    def generate_embeddings() -> None:
         for text in test_texts:
             embedding = generator.generate(text)
             assert len(embedding) > 0
@@ -139,15 +142,15 @@ def test_embedding_generation(benchmark, mock_mongodb):
 
 
 @pytest.mark.benchmark
-def test_chunking_performance(benchmark):
+def test_chunking_performance(benchmark: Any) -> None:
     """Benchmark document chunking performance."""
-    from secondbrain.document import TextChunker
+    from secondbrain.document.segment import Segment, chunk_segments
 
-    chunker = TextChunker(chunk_size=500, chunk_overlap=50)
     test_text = " ".join(["This is a test sentence."] * 100)
+    segments: list[Segment] = [{"text": test_text, "page": 1}]
 
-    def chunk_document():
-        chunks = chunker.chunk(test_text)
+    def chunk_document() -> None:
+        chunks = list(chunk_segments(segments, chunk_size=500, chunk_overlap=50))
         assert len(chunks) > 0
 
     result = benchmark(chunk_document)
@@ -157,14 +160,14 @@ def test_chunking_performance(benchmark):
 
 
 @pytest.mark.benchmark
-def test_metadata_extraction(benchmark, temp_docx_file):
+def test_metadata_extraction(benchmark: Any, temp_docx_file: str) -> None:
     """Benchmark metadata extraction performance."""
-    from secondbrain.document import DocumentParser
+    from secondbrain.document.converter import DocumentConverterWrapper
 
-    parser = DocumentParser()
+    converter = DocumentConverterWrapper()
 
-    def extract_metadata():
-        metadata = parser.extract_metadata(temp_docx_file)
+    def extract_metadata() -> None:
+        metadata = converter.convert(Path(temp_docx_file))
         assert metadata is not None
 
     result = benchmark(extract_metadata)

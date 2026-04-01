@@ -2,8 +2,6 @@
 
 from unittest.mock import patch
 
-import pytest
-
 from secondbrain.utils.cpu_throttle import CPUThrottler
 
 
@@ -57,6 +55,7 @@ class TestCPUThrottler:
         try:
             # Need to reimport to pick up the mock
             import importlib
+
             from secondbrain.utils import cpu_throttle
 
             importlib.reload(cpu_throttle)
@@ -116,6 +115,7 @@ class TestCPUThrottler:
         with patch.dict("sys.modules", {"psutil": None}):
             # Force reimport
             import importlib
+
             from secondbrain.utils import cpu_throttle
 
             importlib.reload(cpu_throttle)
@@ -132,6 +132,7 @@ class TestCPUThrottler:
         with patch.dict("sys.modules", {"psutil": None}):
             # Force reimport
             import importlib
+
             from secondbrain.utils import cpu_throttle
 
             importlib.reload(cpu_throttle)

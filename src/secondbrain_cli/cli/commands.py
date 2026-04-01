@@ -80,7 +80,6 @@ def ingest(
     chunk_size: int | None,
     chunk_overlap: int | None,
     cores: int | None,
-    memory_limit: float | None,
 ) -> None:
     """Ingest documents into the vector database.
 

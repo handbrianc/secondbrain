@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-SBOM Generation Tool for SecondBrain
+SBOM Generation Tool for SecondBrain.
 
 Generates Software Bill of Materials in SPDX and CycloneDX formats.
 This wrapper provides a Python interface for SBOM generation with
@@ -11,7 +11,7 @@ import argparse
 import json
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -30,7 +30,7 @@ class SBOMGenerator:
         self.project_root = project_root
         self.output_dir = output_dir
         self.include_dev = include_dev
-        self.timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        self.timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     def generate_cyclonedx(self) -> Path:
         """Generate SBOM in CycloneDX JSON format.
@@ -42,7 +42,7 @@ class SBOMGenerator:
 
         try:
             # Generate CycloneDX SBOM to file
-            result = subprocess.run(
+            subprocess.run(
                 ["cyclonedx-py", "environment", "-o", str(output_file)],
                 capture_output=True,
                 text=True,
@@ -254,8 +254,8 @@ class SBOMGenerator:
             return False, [f"Invalid JSON: {e}"]
 
 
-def main():
-    """Main entry point for SBOM generation."""
+def main() -> None:
+    """Run SBOM generation."""
     parser = argparse.ArgumentParser(
         description="Generate Software Bill of Materials for SecondBrain",
         formatter_class=argparse.RawDescriptionHelpFormatter,

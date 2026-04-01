@@ -154,7 +154,6 @@ def setup_tracing(
     service_name: str = "secondbrain",
     service_version: str = "0.1.0",
     environment: str = "development",
-    use_otlp: bool = True,
 ) -> None:
     """Set up OpenTelemetry tracing.
 

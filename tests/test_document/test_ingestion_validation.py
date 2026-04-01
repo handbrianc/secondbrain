@@ -6,37 +6,38 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from secondbrain.document import DocumentIngestor, Segment
+from secondbrain.exceptions import ValidationError
 
 
 class TestDocumentIngestorValidation:
     """Tests for DocumentIngestor parameter validation."""
 
     def test_init_rejects_zero_chunk_size(self) -> None:
-        """Test that chunk_size=0 raises ValueError."""
-        with pytest.raises(ValueError, match="chunk_size must be positive"):
+        """Test that chunk_size=0 raises ValidationError."""
+        with pytest.raises(ValidationError, match="chunk_size must be positive"):
             DocumentIngestor(chunk_size=0)
 
     def test_init_rejects_negative_chunk_size(self) -> None:
-        """Test that negative chunk_size raises ValueError."""
-        with pytest.raises(ValueError, match="chunk_size must be positive"):
+        """Test that negative chunk_size raises ValidationError."""
+        with pytest.raises(ValidationError, match="chunk_size must be positive"):
             DocumentIngestor(chunk_size=-1)
 
     def test_init_rejects_negative_chunk_overlap(self) -> None:
-        """Test that negative chunk_overlap raises ValueError."""
-        with pytest.raises(ValueError, match="chunk_overlap must be non-negative"):
+        """Test that negative chunk_overlap raises ValidationError."""
+        with pytest.raises(ValidationError, match="chunk_overlap must be non-negative"):
             DocumentIngestor(chunk_size=100, chunk_overlap=-1)
 
     def test_init_rejects_overlap_gte_chunk_size(self) -> None:
-        """Test that chunk_overlap >= chunk_size raises ValueError."""
+        """Test that chunk_overlap >= chunk_size raises ValidationError."""
         with pytest.raises(
-            ValueError, match="chunk_overlap must be less than chunk_size"
+            ValidationError, match="chunk_overlap must be less than chunk_size"
         ):
             DocumentIngestor(chunk_size=100, chunk_overlap=100)
 
     def test_init_rejects_overlap_exceeds_chunk_size(self) -> None:
-        """Test that chunk_overlap > chunk_size raises ValueError."""
+        """Test that chunk_overlap > chunk_size raises ValidationError."""
         with pytest.raises(
-            ValueError, match="chunk_overlap must be less than chunk_size"
+            ValidationError, match="chunk_overlap must be less than chunk_size"
         ):
             DocumentIngestor(chunk_size=100, chunk_overlap=150)
 

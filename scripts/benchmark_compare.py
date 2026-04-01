@@ -35,7 +35,7 @@ def load_benchmark_results(file_path: Path) -> dict[str, Any]:
     if not file_path.exists():
         raise FileNotFoundError(f"Benchmark results file not found: {file_path}")
 
-    with open(file_path, "r") as f:
+    with file_path.open() as f:
         return json.load(f)
 
 
@@ -139,7 +139,7 @@ def save_baseline(results: dict, baseline_name: str, output_dir: Path) -> Path:
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    with open(baseline_file, "w") as f:
+    with baseline_file.open("w") as f:
         json.dump(baseline_data, f, indent=2)
 
     return baseline_file
@@ -156,7 +156,7 @@ def print_comparison_results(results: dict) -> None:
 
     # Summary
     summary = results["summary"]
-    print(f"\nSUMMARY:")
+    print("\nSUMMARY:")
     print(f"  Total Benchmarks: {summary['total_benchmarks']}")
     print(f"  Passed: {summary['passed']}")
     print(f"  Regressions: {summary['regressions']}")
@@ -165,7 +165,7 @@ def print_comparison_results(results: dict) -> None:
 
     # Regressions
     if results["regressions"]:
-        print(f"\n⚠️  REGRESSIONS DETECTED:")
+        print("\n⚠️  REGRESSIONS DETECTED:")
         for reg in results["regressions"]:
             print(f"  ❌ {reg['name']}")
             print(f"      Current: {reg['current_mean_ms']:.2f}ms")
@@ -174,7 +174,7 @@ def print_comparison_results(results: dict) -> None:
 
     # Improvements
     if results["improvements"]:
-        print(f"\n✅ IMPROVEMENTS:")
+        print("\n✅ IMPROVEMENTS:")
         for imp in results["improvements"]:
             print(f"  🚀 {imp['name']}")
             print(f"      Current: {imp['current_mean_ms']:.2f}ms")
@@ -215,7 +215,7 @@ def print_comparison_results(results: dict) -> None:
 
 
 def main():
-    """Main entry point for benchmark comparison script."""
+    """Run benchmark comparison script."""
     parser = argparse.ArgumentParser(
         description="Compare benchmark results against baseline and detect regressions"
     )
@@ -281,7 +281,7 @@ def main():
 
         # Output
         if args.output:
-            with open(args.output, "w") as f:
+            with Path(args.output).open("w") as f:
                 json.dump(results, f, indent=2)
             print(f"Results saved to: {args.output}")
 

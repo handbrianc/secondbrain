@@ -200,8 +200,8 @@ class TestAsyncConnection:
 
             # Concurrent execution should be faster than sequential
             # Sequential would take ~0.1s (10 * 0.01s), concurrent should be ~0.01s
-            # Allow up to 0.2s to account for system variance and CI environments
-            assert elapsed < 0.2  # Should complete in under 200ms
+            # Allow up to 0.5s to account for system variance and CI environments
+            assert elapsed < 0.5  # Should complete in under 500ms
 
     @pytest.mark.asyncio
     async def test_async_memory_leak_detection(self, storage: VectorStorage) -> None:

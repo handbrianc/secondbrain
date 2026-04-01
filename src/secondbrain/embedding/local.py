@@ -8,6 +8,8 @@ from typing import Any
 
 import torch
 
+from secondbrain.exceptions import EmbeddingGenerationError
+
 logger = logging.getLogger(__name__)
 
 # Target embedding dimensions (truncate to match expected dimensions)
@@ -82,9 +84,19 @@ class LocalEmbeddingGenerator:
         """Generate embedding for single text.
 
         Truncates to TARGET_EMBEDDING_DIMENSIONS (384) for compatibility.
+
+        Raises:
+            EmbeddingGenerationError: If embedding generation fails.
         """
-        embedding: list[float] = self.model.encode(text, convert_to_numpy=True).tolist()
-        return embedding[:TARGET_EMBEDDING_DIMENSIONS]
+        try:
+            embedding: list[float] = self.model.encode(
+                text, convert_to_numpy=True
+            ).tolist()
+            return embedding[:TARGET_EMBEDDING_DIMENSIONS]
+        except Exception as e:
+            raise EmbeddingGenerationError(
+                f"Failed to generate embedding for text: {e}"
+            ) from e
 
     def generate_batch(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings for multiple texts.

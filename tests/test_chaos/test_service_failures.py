@@ -13,7 +13,6 @@ from secondbrain.utils.circuit_breaker import (
 
 
 @pytest.mark.chaos
-@pytest.mark.slow
 class TestMongoDBFailureScenarios:
     """Test MongoDB unavailability scenarios."""
 
@@ -62,7 +61,6 @@ class TestMongoDBFailureScenarios:
 
 
 @pytest.mark.chaos
-@pytest.mark.slow
 class TestSentenceTransformersFailureScenarios:
     """Test sentence-transformers service failures."""
 
@@ -109,7 +107,6 @@ class TestSentenceTransformersFailureScenarios:
 
 
 @pytest.mark.chaos
-@pytest.mark.slow
 class TestCircuitBreakerResponse:
     """Test circuit breaker response to service failures."""
 
@@ -171,7 +168,6 @@ class TestCircuitBreakerResponse:
 
 
 @pytest.mark.chaos
-@pytest.mark.slow
 class TestGracefulDegradation:
     """Test graceful degradation under failure conditions."""
 

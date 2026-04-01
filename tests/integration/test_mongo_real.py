@@ -3,6 +3,8 @@
 These tests require MongoDB to be running via docker-compose.test.yml
 """
 
+import uuid
+
 import pytest
 
 from secondbrain.storage import VectorStorage
@@ -11,35 +13,63 @@ from secondbrain.storage import VectorStorage
 try:
     from pymongo import MongoClient
 
-    TEST_MONGO_URI = (
-        "mongodb://admin:admin123@127.0.0.1:27017/secondbrain_test?authSource=admin"
-    )
+    # Try multiple connection strategies
+    TEST_MONGO_URI = "mongodb://127.0.0.1:27017/secondbrain_test"
     client = MongoClient(
         TEST_MONGO_URI, serverSelectionTimeoutMS=5000, directConnection=True
     )
     client.admin.command("ping")
     client.close()
 except Exception:
-    pytest.skip(
-        "MongoDB not available - integration tests require MongoDB running",
-        allow_module_level=True,
-    )
+    try:
+        # Fallback: try with authentication
+        TEST_MONGO_URI = (
+            "mongodb://admin:admin123@127.0.0.1:27017/secondbrain_test?authSource=admin"
+        )
+        client = MongoClient(
+            TEST_MONGO_URI, serverSelectionTimeoutMS=5000, directConnection=True
+        )
+        client.admin.command("ping")
+        client.close()
+    except Exception:
+        pytest.skip(
+            "MongoDB not available - integration tests require MongoDB running",
+            allow_module_level=True,
+        )
+
+
+@pytest.fixture(scope="function")
+def unique_collection_name() -> str:
+    """Generate a unique collection name for each test to avoid race conditions."""
+    return f"test_collection_{uuid.uuid4().hex[:8]}"
+
+
+@pytest.fixture(scope="function")
+def isolated_storage(unique_collection_name: str) -> VectorStorage:
+    """Create a VectorStorage with a unique collection for test isolation."""
+    storage = VectorStorage(collection_name=unique_collection_name)
+    yield storage
+    # Cleanup after test
+    try:
+        storage.delete_all()
+    except Exception:
+        pass  # Ignore cleanup errors
 
 
 @pytest.mark.integration
 class TestMongoRealConnection:
     """Test VectorStorage with real MongoDB connection."""
 
-    def test_storage_real_mongo_connection(self, real_storage: VectorStorage) -> None:
+    def test_storage_real_mongo_connection(self, isolated_storage: VectorStorage) -> None:
         """Test real MongoDB connection is established."""
-        assert real_storage is not None
+        assert isolated_storage is not None
         # Validate connection by pinging
-        assert real_storage.validate_connection() is True
+        assert isolated_storage.validate_connection() is True
 
-    def test_storage_real_store_and_retrieve(self, real_storage: VectorStorage) -> None:
+    def test_storage_real_store_and_retrieve(self, isolated_storage: VectorStorage) -> None:
         """Test store and retrieve with real MongoDB."""
         # Clean up first
-        real_storage.delete_all()
+        isolated_storage.delete_all()
 
         # Store a document
         test_chunk = {
@@ -49,19 +79,19 @@ class TestMongoRealConnection:
             "chunk_text": "Integration test content",
             "embedding": [0.1] * 384,
         }
-        real_storage.store(test_chunk)
+        isolated_storage.store(test_chunk)
 
-        chunks = real_storage.list_chunks(limit=10)
+        chunks = isolated_storage.list_chunks(limit=10)
         assert len(chunks) > 0
         assert any(c["chunk_id"] == "test_chunk_1" for c in chunks)
 
         # Cleanup
-        real_storage.delete_by_chunk_id("test_chunk_1")
+        isolated_storage.delete_by_chunk_id("test_chunk_1")
 
-    def test_storage_real_batch_operations(self, real_storage: VectorStorage) -> None:
+    def test_storage_real_batch_operations(self, isolated_storage: VectorStorage) -> None:
         """Test batch store with real MongoDB."""
         # Clean up first
-        real_storage.delete_all()
+        isolated_storage.delete_all()
 
         # Create batch of test documents
         chunks = [
@@ -76,18 +106,18 @@ class TestMongoRealConnection:
         ]
 
         # Batch store
-        real_storage.store_batch(chunks)
+        isolated_storage.store_batch(chunks)
 
-        results = real_storage.list_chunks(source_filter="batch_test.pdf", limit=20)
+        results = isolated_storage.list_chunks(source_filter="batch_test.pdf", limit=20)
         assert len(results) == 10
 
         # Cleanup
-        real_storage.delete_by_source("batch_test.pdf")
+        isolated_storage.delete_by_source("batch_test.pdf")
 
-    def test_storage_real_search_similarity(self, real_storage: VectorStorage) -> None:
+    def test_storage_real_search_similarity(self, isolated_storage: VectorStorage) -> None:
         """Test document storage and retrieval with real MongoDB."""
         # Clean up first
-        real_storage.delete_all()
+        isolated_storage.delete_all()
 
         # Store documents with different content
         chunks = [
@@ -100,21 +130,21 @@ class TestMongoRealConnection:
             }
             for i in range(5)
         ]
-        real_storage.store_batch(chunks)
+        isolated_storage.store_batch(chunks)
 
-        results = real_storage.list_chunks(source_filter="sim_test.pdf", limit=10)
+        results = isolated_storage.list_chunks(source_filter="sim_test.pdf", limit=10)
         assert len(results) == 5
 
         chunk_texts = [c["chunk_text"] for c in results]
         assert len(set(chunk_texts)) == 5
 
         # Cleanup
-        real_storage.delete_by_source("sim_test.pdf")
+        isolated_storage.delete_by_source("sim_test.pdf")
 
-    def test_storage_real_filter_by_source(self, real_storage: VectorStorage) -> None:
+    def test_storage_real_filter_by_source(self, isolated_storage: VectorStorage) -> None:
         """Test source file filtering."""
         # Clean up first
-        real_storage.delete_all()
+        isolated_storage.delete_all()
 
         # Store documents from different sources
         chunks = [
@@ -136,22 +166,22 @@ class TestMongoRealConnection:
             }
             for i in range(3)
         ]
-        real_storage.store_batch(chunks)
+        isolated_storage.store_batch(chunks)
 
         # Filter by source_a using list_chunks
-        results = real_storage.list_chunks(source_filter="source_a.pdf", limit=10)
+        results = isolated_storage.list_chunks(source_filter="source_a.pdf", limit=10)
         assert len(results) == 3
         assert all(r["source_file"] == "source_a.pdf" for r in results)
 
         # Cleanup
-        real_storage.delete_all()
+        isolated_storage.delete_all()
 
     def test_storage_real_filter_by_file_type(
-        self, real_storage: VectorStorage
+        self, isolated_storage: VectorStorage
     ) -> None:
         """Test file type filtering."""
         # Clean up first
-        real_storage.delete_all()
+        isolated_storage.delete_all()
 
         # Store documents with different file types
         chunks = [
@@ -173,10 +203,10 @@ class TestMongoRealConnection:
             }
             for i in range(3)
         ]
-        real_storage.store_batch(chunks)
+        isolated_storage.store_batch(chunks)
 
         # Get all results using list_chunks
-        results = real_storage.list_chunks(limit=10)
+        results = isolated_storage.list_chunks(limit=10)
         assert len(results) == 6
 
         # Verify file types
@@ -186,12 +216,12 @@ class TestMongoRealConnection:
         assert docx_count == 3
 
         # Cleanup
-        real_storage.delete_all()
+        isolated_storage.delete_all()
 
-    def test_storage_real_delete_operations(self, real_storage: VectorStorage) -> None:
+    def test_storage_real_delete_operations(self, isolated_storage: VectorStorage) -> None:
         """Test delete operations with real MongoDB."""
         # Clean up first
-        real_storage.delete_all()
+        isolated_storage.delete_all()
 
         # Store test documents
         chunks = [
@@ -204,25 +234,25 @@ class TestMongoRealConnection:
             }
             for i in range(5)
         ]
-        real_storage.store_batch(chunks)
+        isolated_storage.store_batch(chunks)
 
-        results = real_storage.list_chunks(source_filter="delete_test.pdf", limit=10)
+        results = isolated_storage.list_chunks(source_filter="delete_test.pdf", limit=10)
         assert len(results) == 5
 
         # Delete by chunk_id
-        real_storage.delete_by_chunk_id("delete_test_0")
-        results = real_storage.list_chunks(source_filter="delete_test.pdf", limit=10)
+        isolated_storage.delete_by_chunk_id("delete_test_0")
+        results = isolated_storage.list_chunks(source_filter="delete_test.pdf", limit=10)
         assert len(results) == 4
 
         # Delete by source
-        real_storage.delete_by_source("delete_test.pdf")
-        results = real_storage.list_chunks(source_filter="delete_test.pdf", limit=10)
+        isolated_storage.delete_by_source("delete_test.pdf")
+        results = isolated_storage.list_chunks(source_filter="delete_test.pdf", limit=10)
         assert len(results) == 0
 
-    def test_storage_real_pagination(self, real_storage: VectorStorage) -> None:
+    def test_storage_real_pagination(self, isolated_storage: VectorStorage) -> None:
         """Test pagination with limit and offset."""
         # Clean up first
-        real_storage.delete_all()
+        isolated_storage.delete_all()
 
         # Store many documents
         chunks = [
@@ -235,27 +265,27 @@ class TestMongoRealConnection:
             }
             for i in range(20)
         ]
-        real_storage.store_batch(chunks)
+        isolated_storage.store_batch(chunks)
 
         # Test limit using list_chunks
-        results = real_storage.list_chunks(source_filter="page_test.pdf", limit=5)
+        results = isolated_storage.list_chunks(source_filter="page_test.pdf", limit=5)
         assert len(results) == 5
 
         # Test with larger limit
-        results_limited = real_storage.list_chunks(
+        results_limited = isolated_storage.list_chunks(
             source_filter="page_test.pdf", limit=10
         )
         assert len(results_limited) == 10
 
         # Cleanup
-        real_storage.delete_by_source("page_test.pdf")
+        isolated_storage.delete_by_source("page_test.pdf")
 
-    def test_storage_real_concurrent_writes(self, real_storage: VectorStorage) -> None:
+    def test_storage_real_concurrent_writes(self, isolated_storage: VectorStorage) -> None:
         """Test concurrent batch operations."""
         from concurrent.futures import ThreadPoolExecutor
 
         # Clean up first
-        real_storage.delete_all()
+        isolated_storage.delete_all()
 
         # Store from multiple threads
         def store_batch(thread_id: int) -> None:
@@ -269,7 +299,7 @@ class TestMongoRealConnection:
                 }
                 for i in range(5)
             ]
-            real_storage.store_batch(chunks)
+            isolated_storage.store_batch(chunks)
 
         # Run concurrent stores
         with ThreadPoolExecutor(max_workers=3) as executor:
@@ -278,14 +308,14 @@ class TestMongoRealConnection:
                 future.result()  # Wait for completion
 
         # Verify all stored using list_chunks
-        results = real_storage.list_chunks(limit=30)
+        results = isolated_storage.list_chunks(limit=30)
         assert len(results) == 15
 
         # Cleanup
-        real_storage.delete_all()
+        isolated_storage.delete_all()
 
     def test_storage_real_connection_recovery(
-        self, real_storage: VectorStorage
+        self, isolated_storage: VectorStorage
     ) -> None:
         """Test reconnection after connection loss."""
         # This test validates that the storage can handle connection issues
@@ -293,7 +323,7 @@ class TestMongoRealConnection:
         # just test that the connection validation works
 
         # Validate connection
-        assert real_storage.validate_connection() is True
+        assert isolated_storage.validate_connection() is True
 
         # Perform an operation
         test_chunk = {
@@ -303,10 +333,10 @@ class TestMongoRealConnection:
             "chunk_text": "Recovery test",
             "embedding": [0.1] * 384,
         }
-        real_storage.store(test_chunk)
+        isolated_storage.store(test_chunk)
 
         # Validate connection again
-        assert real_storage.validate_connection() is True
+        assert isolated_storage.validate_connection() is True
 
         # Cleanup
-        real_storage.delete_by_chunk_id("recovery_test")
+        isolated_storage.delete_by_chunk_id("recovery_test")

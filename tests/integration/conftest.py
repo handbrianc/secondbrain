@@ -100,9 +100,9 @@ def wait_for_services() -> Generator[None, None, None]:
     if _check_embedding_service_healthy():
         print("Sentence-transformers is healthy")
     else:
-        pytest.skip(
-            "Sentence-transformers service not available - integration tests require embedding service running at "
-            f"{TEST_EMBEDDING_URL}. Start with: sentence-transformers serve"
+        print(
+            f"Warning: Sentence-transformers service not available at {TEST_EMBEDDING_URL}. "
+            "Tests requiring embeddings will be skipped individually."
         )
 
     print("MongoDB is ready, proceeding with tests\n")

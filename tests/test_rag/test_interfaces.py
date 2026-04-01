@@ -4,10 +4,7 @@ Tests the LocalLLMProvider protocol to ensure all implementations
 conform to the expected interface.
 """
 
-from typing import Any
 from unittest.mock import MagicMock
-
-import pytest
 
 from secondbrain.rag.interfaces import LocalLLMProvider
 
@@ -80,7 +77,7 @@ class TestLocalLLMProviderProtocol:
         assert isinstance(GoodImplementation(), LocalLLMProvider)
 
     def test_generate_signature(self):
-        """generate method should have correct signature."""
+        """Generate method should have correct signature."""
 
         class TestImplementation:
             def generate(
@@ -107,7 +104,7 @@ class TestLocalLLMProviderProtocol:
         assert result == "test"
 
     def test_generate_with_parameters(self):
-        """generate should accept temperature and max_tokens parameters."""
+        """Generate should accept temperature and max_tokens parameters."""
 
         class TestImplementation:
             def generate(
@@ -136,7 +133,7 @@ class TestLocalLLMProviderProtocol:
         assert "1000" in result
 
     def test_agenerate_is_async(self):
-        """agenerate should be an async method."""
+        """Agenerate should be an async method."""
         import asyncio
 
         class TestImplementation:
@@ -205,8 +202,6 @@ class TestLocalLLMProviderProtocol:
         """Protocol should support isinstance checks."""
         import inspect
 
-        from typing import Protocol
-
         # Check that LocalLLMProvider is a Protocol
         assert inspect.isclass(LocalLLMProvider)
         assert hasattr(LocalLLMProvider, "__protocol_attrs__")
@@ -217,7 +212,6 @@ class TestProtocolUsage:
 
     def test_can_use_as_type_hint(self):
         """Protocol can be used as a type hint."""
-        from typing import Callable
 
         def use_provider(provider: LocalLLMProvider) -> str:
             return provider.generate("test")
