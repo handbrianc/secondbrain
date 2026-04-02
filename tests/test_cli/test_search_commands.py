@@ -45,6 +45,7 @@ def create_mock_searcher(
 class TestSearchFilters:
     """Tests for search command filters."""
 
+    @pytest.mark.fast
     def test_search_with_source_filter(self) -> None:
         """Test search with --source filter."""
         mock_searcher_class = create_mock_searcher(
@@ -70,6 +71,7 @@ class TestSearchFilters:
         call_kwargs = mock_instance.search.call_args[1]
         assert call_kwargs["source_filter"] == "/path/to/document.pdf"
 
+    @pytest.mark.fast
     def test_search_with_file_type_filter(self) -> None:
         """Test search with --file-type filter."""
         mock_searcher_class = create_mock_searcher(
@@ -91,6 +93,7 @@ class TestSearchFilters:
         call_kwargs = mock_instance.search.call_args[1]
         assert call_kwargs["file_type_filter"] == "pdf"
 
+    @pytest.mark.fast
     def test_search_with_min_score_filter(self) -> None:
         """Test search with --min-score filter."""
         mock_searcher_class = create_mock_searcher(
@@ -121,6 +124,7 @@ class TestSearchFilters:
         assert call_kwargs["source_filter"] is None
         assert call_kwargs["file_type_filter"] is None
 
+    @pytest.mark.fast
     def test_search_with_multiple_filters(self) -> None:
         """Test search with multiple filters combined."""
         mock_searcher_class = create_mock_searcher(
@@ -160,6 +164,7 @@ class TestSearchFilters:
 class TestSearchJsonOutput:
     """Tests for search command JSON output format."""
 
+    @pytest.mark.fast
     def test_search_json_output_format(self) -> None:
         """Test search with --format json flag."""
         mock_searcher_class = create_mock_searcher(
@@ -193,6 +198,7 @@ class TestSearchJsonOutput:
         assert output_data[0]["score"] == 0.9
         assert output_data[0]["chunk_text"] == "This is the chunk text content"
 
+    @pytest.mark.fast
     def test_search_json_empty_results(self) -> None:
         """Test JSON output with no results."""
         mock_searcher_class = create_mock_searcher(return_value=[])
@@ -209,6 +215,7 @@ class TestSearchJsonOutput:
         output_data = json.loads(result.output)
         assert output_data == []
 
+    @pytest.mark.fast
     def test_search_json_serialization(self) -> None:
         """Test proper JSON serialization of search results."""
         mock_searcher_class = create_mock_searcher(
@@ -238,6 +245,7 @@ class TestSearchJsonOutput:
 class TestSearchNoResults:
     """Tests for search command with no results."""
 
+    @pytest.mark.fast
     def test_search_empty_result_set(self) -> None:
         """Test search when storage returns empty list."""
         mock_searcher_class = create_mock_searcher(return_value=[])
@@ -249,6 +257,7 @@ class TestSearchNoResults:
         assert result.exit_code == 0
         assert "No results found" in result.output
 
+    @pytest.mark.fast
     def test_search_empty_result_below_threshold(self) -> None:
         """Test search when all results are below minimum score threshold."""
         mock_searcher_class = create_mock_searcher(
@@ -273,6 +282,7 @@ class TestSearchNoResults:
         assert "No relevant results found" in result.output
         assert "minimum score: 0.78" in result.output
 
+    @pytest.mark.fast
     def test_search_no_results_exit_code(self) -> None:
         """Test that no results does not cause error exit code."""
         mock_searcher_class = create_mock_searcher(return_value=[])
@@ -287,6 +297,7 @@ class TestSearchNoResults:
 class TestSearchTimeoutHandling:
     """Tests for search command timeout and error handling."""
 
+    @pytest.mark.fast
     def test_search_timeout_error(self) -> None:
         """Test search with timeout error handling."""
         from secondbrain.exceptions import ServiceUnavailableError
@@ -301,6 +312,7 @@ class TestSearchTimeoutHandling:
 
         assert result.exit_code == 1
 
+    @pytest.mark.fast
     def test_search_connection_error(self) -> None:
         """Test search with connection error handling."""
         from secondbrain.exceptions import StorageConnectionError
@@ -315,6 +327,7 @@ class TestSearchTimeoutHandling:
 
         assert result.exit_code == 1
 
+    @pytest.mark.fast
     def test_search_timeout_with_user_friendly_message(self) -> None:
         """Test that timeout errors show user-friendly messages."""
         from secondbrain.exceptions import ServiceUnavailableError
@@ -342,6 +355,7 @@ class TestSearchFilterParametrization:
             ("--file-type", "pdf"),
         ],
     )
+    @pytest.mark.fast
     def test_search_filters_parametrized(
         self, filter_arg, filter_value, monkeypatch
     ) -> None:

@@ -49,7 +49,9 @@ class TestMongoDBFailureScenarios:
 
         assert storage_cb.state == CircuitState.OPEN
 
-        time.sleep(0.15)
+        time.sleep(
+            0.12
+        )  # Reduced from 0.15s (must exceed 0.1s recovery timeout) for faster testing
 
         assert storage_cb.is_allowed() is True
         assert storage_cb.state == CircuitState.HALF_OPEN
@@ -96,7 +98,7 @@ class TestSentenceTransformersFailureScenarios:
 
         assert embedding_cb.state == CircuitState.OPEN
 
-        time.sleep(0.15)
+        time.sleep(0.12)
 
         assert embedding_cb.is_allowed() is True
 
@@ -161,7 +163,9 @@ class TestCircuitBreakerResponse:
 
         assert cb.state == CircuitState.OPEN
 
-        time.sleep(0.15)
+        time.sleep(
+            0.12
+        )  # Reduced from 0.15s (must exceed 0.1s recovery timeout) for faster testing
 
         assert cb.is_allowed() is True
         assert cb.state == CircuitState.HALF_OPEN
@@ -188,7 +192,7 @@ class TestGracefulDegradation:
 
         assert cb.state == CircuitState.OPEN
 
-        time.sleep(0.15)
+        time.sleep(0.12)
 
         assert cb.is_allowed() is True
         assert cb.state == CircuitState.HALF_OPEN

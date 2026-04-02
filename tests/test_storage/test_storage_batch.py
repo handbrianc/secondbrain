@@ -15,8 +15,6 @@ from secondbrain.storage import StorageConnectionError, VectorStorage
 @pytest.fixture(scope="module")
 def mock_storage_config():
     """Module-scoped mock config to avoid repeated Config initialization."""
-    from unittest.mock import MagicMock
-
     config = MagicMock()
     config.mongo_uri = "mongodb://localhost:27017"
     config.mongo_db = "secondbrain"
@@ -36,6 +34,7 @@ def storage_with_mock(mock_storage_config):
 class TestVectorStorageBatchOperations:
     """Tests for batch storage operations."""
 
+    @pytest.mark.fast
     def test_store_batch_success(self, storage_with_mock: VectorStorage) -> None:
         """Test batch document storage."""
         storage = storage_with_mock
@@ -68,6 +67,7 @@ class TestVectorStorageBatchOperations:
                 assert "metadata" in doc
                 assert "ingested_at" in doc["metadata"]
 
+    @pytest.mark.fast
     def test_store_batch_empty_list(self, storage_with_mock: VectorStorage) -> None:
         """Test batch storage with empty list."""
         storage = storage_with_mock
@@ -82,6 +82,7 @@ class TestVectorStorageBatchOperations:
             # Method is called but returns 0 for empty list
             assert count == 0
 
+    @pytest.mark.fast
     def test_store_batch_preserves_existing_metadata(
         self, storage_with_mock: VectorStorage
     ) -> None:
@@ -110,6 +111,7 @@ class TestVectorStorageBatchOperations:
             # Should preserve custom field and update timestamp
             assert call_args[0]["metadata"]["custom_field"] == "value"
 
+    @pytest.mark.fast
     def test_store_batch_with_connection_failure(
         self, storage_with_mock: VectorStorage
     ) -> None:
@@ -126,6 +128,7 @@ class TestVectorStorageBatchOperations:
 class TestVectorStorageIndexTimeout:
     """Tests for index ready timeout scenarios."""
 
+    @pytest.mark.fast
     def test_wait_for_index_ready_success(
         self, storage_with_mock: VectorStorage
     ) -> None:
@@ -145,6 +148,7 @@ class TestVectorStorageIndexTimeout:
             # Should have called ensure_index once
             storage.ensure_index()
 
+    @pytest.mark.fast
     def test_wait_for_index_ready_multiple_retries(
         self, storage_with_mock: VectorStorage
     ) -> None:
@@ -166,6 +170,7 @@ class TestVectorStorageIndexTimeout:
         ):
             storage._wait_for_index_ready()
 
+    @pytest.mark.fast
     def test_wait_for_index_ready_timeout_warning(
         self, storage_with_mock: VectorStorage
     ) -> None:
@@ -185,6 +190,7 @@ class TestVectorStorageIndexTimeout:
             storage._wait_for_index_ready()
             # Should have attempted 3 times
 
+    @pytest.mark.fast
     def test_wait_for_index_ready_with_exception(
         self, storage_with_mock: VectorStorage
     ) -> None:
@@ -206,6 +212,7 @@ class TestVectorStorageIndexTimeout:
 class TestVectorStorageFilterCombinations:
     """Tests for various filter combinations in search."""
 
+    @pytest.mark.fast
     def test_search_with_both_filters(self, storage_with_mock: VectorStorage) -> None:
         """Test search with both source and file_type filters."""
         storage = storage_with_mock
@@ -241,6 +248,7 @@ class TestVectorStorageFilterCombinations:
             call_args = mock_collection.aggregate.call_args[0][0]
             assert "$vectorSearch" in call_args[0]
 
+    @pytest.mark.fast
     def test_search_with_only_source_filter(
         self, storage_with_mock: VectorStorage
     ) -> None:
@@ -263,6 +271,7 @@ class TestVectorStorageFilterCombinations:
                 source_filter="document.pdf",
             )
 
+    @pytest.mark.fast
     def test_search_with_only_file_type_filter(
         self, storage_with_mock: VectorStorage
     ) -> None:
@@ -285,6 +294,7 @@ class TestVectorStorageFilterCombinations:
                 file_type_filter="pdf",
             )
 
+    @pytest.mark.fast
     def test_search_with_no_filters(self, storage_with_mock: VectorStorage) -> None:
         """Test search with no filters."""
         storage = storage_with_mock
@@ -306,6 +316,7 @@ class TestVectorStorageFilterCombinations:
 class TestVectorStorageConnectionRecovery:
     """Tests for connection recovery mechanisms."""
 
+    @pytest.mark.fast
     def test_connection_reestablished_after_close(
         self, storage_with_mock: VectorStorage
     ) -> None:
@@ -324,6 +335,7 @@ class TestVectorStorageConnectionRecovery:
         new_client = storage.client
         assert new_client is not None
 
+    @pytest.mark.fast
     def test_validate_connection_with_retry(
         self, storage_with_mock: VectorStorage
     ) -> None:
@@ -342,6 +354,7 @@ class TestVectorStorageConnectionRecovery:
             result = storage.validate_connection()
             assert result is False
 
+    @pytest.mark.fast
     def test_storage_context_manager(self, storage_with_mock: VectorStorage) -> None:
         """Test storage works correctly as context manager."""
         storage = storage_with_mock
@@ -357,6 +370,7 @@ class TestVectorStorageConnectionRecovery:
 class TestVectorStorageStatistics:
     """Tests for database statistics and metadata operations."""
 
+    @pytest.mark.fast
     def test_get_database_statistics(self, storage_with_mock: VectorStorage) -> None:
         """Test database statistics retrieval."""
         storage = storage_with_mock
@@ -382,6 +396,7 @@ class TestVectorStorageStatistics:
             count = mock_collection.count_documents({})
             assert count == 1000
 
+    @pytest.mark.fast
     def test_list_chunks_with_filters(self, storage_with_mock: VectorStorage) -> None:
         """Test listing chunks with various filters."""
         storage = storage_with_mock
@@ -408,6 +423,7 @@ class TestVectorStorageStatistics:
             result = storage.list_chunks(source_filter="test.pdf", limit=50)
             assert len(result) == 1
 
+    @pytest.mark.fast
     def test_list_chunks_by_chunk_id(self, storage_with_mock: VectorStorage) -> None:
         """Test listing chunks by specific chunk ID."""
         storage = storage_with_mock
@@ -435,6 +451,7 @@ class TestVectorStorageStatistics:
             assert len(result) == 1
             assert result[0]["chunk_id"] == "specific-id"
 
+    @pytest.mark.fast
     def test_list_chunks_with_pagination(
         self, storage_with_mock: VectorStorage
     ) -> None:

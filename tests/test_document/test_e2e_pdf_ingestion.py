@@ -41,7 +41,7 @@ warnings.filterwarnings(
 class TestPDFIngestionE2E:
     """End-to-end tests for PDF ingestion pipeline."""
 
-    @pytest.fixture(autouse=True)
+    @pytest.fixture(autouse=False)
     def mock_storage_and_services(
         self,
         monkeypatch: pytest.MonkeyPatch,
@@ -49,7 +49,11 @@ class TestPDFIngestionE2E:
         mocked_pdf_extraction: MagicMock,
         auto_mongomock: Any,
     ) -> None:
-        """Mock external services and MongoDB to speed up E2E tests."""
+        """Mock external services and MongoDB to speed up E2E tests.
+
+        Note: This fixture is no longer autouse - tests must explicitly request it.
+        This reduces overhead for tests that only need PDF extraction without storage.
+        """
         mock_storage_instance = MagicMock()
         mock_storage_instance.validate_connection.return_value = True
         mock_storage_instance.delete_by_source.return_value = 0

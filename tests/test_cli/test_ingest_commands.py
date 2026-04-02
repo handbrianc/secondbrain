@@ -15,6 +15,7 @@ from click.testing import CliRunner
 from secondbrain.cli import cli
 
 
+@pytest.mark.cli
 class TestIngestProgressCallback:
     """Tests for ingest command progress callback with Rich progress bar."""
 
@@ -29,42 +30,51 @@ class TestIngestProgressCallback:
             assert "Successfully ingested" in result.output
 
 
+@pytest.mark.cli
 class TestIngestCoresValidation:
     """Tests for ingest command cores parameter validation."""
 
     @pytest.mark.slow
-    def test_ingest_cores_validation(self) -> None:
+    def test_ingest_cores_validation(self, fast_cli_test) -> None:
         """Test cores parameter validation without spawning subprocesses."""
-        runner = CliRunner()
+        from unittest.mock import patch
 
-        # Test zero cores - validation should fail immediately
-        result = runner.invoke(
-            cli,
-            ["ingest", "/tmp", "--cores", "0"],
-        )
-        assert result.exit_code != 0
-        assert result.exception is not None
-        assert "positive" in str(result.exception).lower()
+        # Mock DocumentIngestor to avoid real ingestion
+        with patch("secondbrain.document.DocumentIngestor") as mock_ingestor_class:
+            mock_ingestor = MagicMock()
+            mock_ingestor.ingest.return_value = {"success": 0, "failed": 0}
+            mock_ingestor_class.return_value = mock_ingestor
 
-        # Test negative cores - validation should fail immediately
-        result = runner.invoke(
-            cli,
-            ["ingest", "/tmp", "--cores", "-1"],
-        )
-        assert result.exit_code != 0
-        assert result.exception is not None
-        assert "positive" in str(result.exception).lower()
+            runner = CliRunner()
 
-        # Test excessive cores - should warn but still work
-        available_cores = psutil.cpu_count()
-        excessive_cores = available_cores + 10
-        result = runner.invoke(
-            cli,
-            ["ingest", "/tmp", "--cores", str(excessive_cores)],
-        )
-        assert result.exit_code == 0
-        assert "Warning" in result.output
-        assert str(available_cores) in result.output
+            # Test zero cores - validation should fail immediately
+            result = runner.invoke(
+                cli,
+                ["ingest", "/tmp", "--cores", "0"],
+            )
+            assert result.exit_code != 0
+            assert result.exception is not None
+            assert "positive" in str(result.exception).lower()
+
+            # Test negative cores - validation should fail immediately
+            result = runner.invoke(
+                cli,
+                ["ingest", "/tmp", "--cores", "-1"],
+            )
+            assert result.exit_code != 0
+            assert result.exception is not None
+            assert "positive" in str(result.exception).lower()
+
+            # Test excessive cores - should warn but still work
+            available_cores = psutil.cpu_count()
+            excessive_cores = available_cores + 10
+            result = runner.invoke(
+                cli,
+                ["ingest", "/tmp", "--cores", str(excessive_cores)],
+            )
+            assert result.exit_code == 0
+            assert "Warning" in result.output
+            assert str(available_cores) in result.output
 
 
 class TestIngestStreamingEnabled:

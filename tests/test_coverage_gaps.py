@@ -23,7 +23,7 @@ class TestErrorHandlingPaths:
     """Tests for error handling code paths."""
 
     @pytest.mark.slow
-    def test_ingestor_handles_extraction_error(self, tmp_path):
+    def test_ingestor_handles_extraction_error(self, tmp_path, mocked_pdf_extraction):
         """Should handle document extraction failures gracefully."""
         # Create a corrupted PDF file
         pdf_path = tmp_path / "corrupted.pdf"
@@ -94,8 +94,8 @@ class TestErrorHandlingPaths:
 class TestEdgeCases:
     """Tests for edge cases and boundary conditions."""
 
-    @pytest.mark.slow
-    def test_empty_document_ingestion(self, tmp_path):
+    @pytest.mark.fast
+    def test_empty_document_ingestion(self, tmp_path, mocked_pdf_extraction):
         """Should handle empty documents gracefully."""
         # Create empty PDF
         pdf_path = tmp_path / "empty.pdf"
@@ -108,6 +108,7 @@ class TestEdgeCases:
         result = ingestor.ingest(pdf_path)
         assert result is not None
 
+    @pytest.mark.fast
     def test_very_large_chunk_handling(self, tmp_path):
         """Should handle very large chunk sizes."""
         # Create a document with very long text
@@ -118,6 +119,7 @@ class TestEdgeCases:
         result = ingestor.ingest(txt_path)
         assert result is not None
 
+    @pytest.mark.fast
     def test_special_characters_in_filename(self, tmp_path):
         """Should handle filenames with special characters."""
         special_path = tmp_path / "document with spaces & special!@#.txt"
@@ -127,7 +129,10 @@ class TestEdgeCases:
         result = ingestor.ingest(special_path)
         assert result is not None
 
-    def test_unicode_content(self, tmp_path):
+    @pytest.mark.fast
+    def test_unicode_content(
+        self, tmp_path, cached_embedding_generator, mocked_pdf_extraction
+    ):
         """Should handle Unicode content in documents."""
         txt_path = tmp_path / "unicode.txt"
         txt_path.write_text("Hello 世界 🌍 مرحبا")
@@ -136,7 +141,10 @@ class TestEdgeCases:
         result = ingestor.ingest(txt_path)
         assert result is not None
 
-    def test_concurrent_ingestion_same_file(self, tmp_path):
+    @pytest.mark.fast
+    def test_concurrent_ingestion_same_file(
+        self, tmp_path, cached_embedding_generator, mocked_pdf_extraction
+    ):
         """Should handle concurrent ingestion of the same file."""
         pdf_path = tmp_path / "test.pdf"
         pdf_path.write_bytes(
@@ -255,7 +263,9 @@ class TestAsyncErrorPropagation:
 
     @pytest.mark.asyncio
     @pytest.mark.slow
-    async def test_async_storage_handles_connection_error(self):
+    async def test_async_storage_handles_connection_error(
+        self, cached_embedding_generator
+    ):
         """Async storage should properly propagate connection errors."""
         with patch(
             "motor.motor_asyncio.AsyncIOMotorClient",

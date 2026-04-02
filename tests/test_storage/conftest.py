@@ -6,7 +6,39 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+
 from secondbrain.storage import VectorStorage
+
+
+@pytest.fixture(scope="session")
+def mongo_client_storage() -> Generator[Any, None, None]:
+    """Session-scoped MongoDB client for storage tests.
+
+    Creates a single MongoDB client per test session to reduce
+    connection overhead. Used by session-scoped storage fixtures.
+    """
+    from pymongo import MongoClient
+
+    client = MongoClient(
+        "mongodb://localhost:27017",
+        serverSelectionTimeoutMS=5000,
+        socketTimeoutMS=2000,
+        connectTimeoutMS=2000,
+    )
+    yield client
+    client.close()
+
+
+@pytest.fixture(scope="session")
+def test_storage_db(mongo_client_storage: Any) -> Generator[Any, None, None]:
+    """Session-scoped test database for storage tests.
+
+    Creates a single test database per session for storage tests,
+    reducing database creation overhead across all storage test modules.
+    """
+    db = mongo_client_storage["test_storage_secondbrain"]
+    yield db
+    mongo_client_storage.drop_database("test_storage_secondbrain")
 
 
 @pytest.fixture(scope="module")

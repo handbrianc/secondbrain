@@ -250,7 +250,7 @@ ignore = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-n 12 --timeout=120 -p no:warnings -p no:benchmark --durations=10"
+addopts = "-n auto --timeout=120 -p no:warnings -p no:benchmark --durations=10"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 numprocesses = "auto"
@@ -277,6 +277,13 @@ filterwarnings = [
     "ignore:.*Benchmarks are automatically disabled.*",
     "ignore:.*This process.*is multi-threaded, use of fork.*",
 ]
+
+# Test execution recommendations:
+# - Full suite: pytest (includes E2E tests, ~100s)
+# - Fast CI: pytest -m "not e2e" (~35s, excludes E2E with real services)
+# - Unit tests only: pytest -m unit (~20s)
+# - Quick feedback: pytest --testmon (~10-15s after initial run)
+# - E2E tests only: pytest -m e2e (run separately, ~70s)
 
 [tool.pytest-timeout]
 timeout = 60

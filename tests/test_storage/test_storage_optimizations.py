@@ -21,6 +21,7 @@ from secondbrain.storage import VectorStorage
 class TestEmbeddingEncoding:
     """Tests for embedding float32 encoding/decoding."""
 
+    @pytest.mark.fast
     def test_encode_embedding_float32(self):
         """Test encoding embedding to float32 binary."""
         storage = VectorStorage()
@@ -31,6 +32,7 @@ class TestEmbeddingEncoding:
         # Should be 384 * 4 bytes = 1536 bytes (float32)
         assert len(binary) == 384 * 4
 
+    @pytest.mark.fast
     def test_decode_embedding_restores_values(self):
         """Test decoding binary restores original values with float32 precision."""
         storage = VectorStorage()
@@ -43,6 +45,7 @@ class TestEmbeddingEncoding:
         for orig, rst in zip(original, restored, strict=False):
             assert abs(orig - rst) < 0.0001
 
+    @pytest.mark.fast
     def test_encode_decode_roundtrip(self):
         """Test full encode/decode roundtrip preserves data."""
         storage = VectorStorage()
@@ -55,6 +58,7 @@ class TestEmbeddingEncoding:
         for orig, rst in zip(original, restored, strict=False):
             assert abs(orig - rst) < 0.0001
 
+    @pytest.mark.fast
     def test_prepare_embedding_binary_format(self):
         """Test embedding prepared as BSON Binary when configured."""
         config = Config(embedding_storage_format="binary")
@@ -66,6 +70,7 @@ class TestEmbeddingEncoding:
 
         assert isinstance(result, Binary)
 
+    @pytest.mark.fast
     def test_prepare_embedding_array_format(self):
         """Test embedding stored as array when configured."""
         config = Config(embedding_storage_format="array")
@@ -78,6 +83,7 @@ class TestEmbeddingEncoding:
         assert isinstance(result, list)
         assert len(result) == 384
 
+    @pytest.mark.fast
     def test_normalize_embedding_from_binary(self):
         """Test normalizing Binary embedding back to list."""
         storage = VectorStorage()
@@ -89,6 +95,7 @@ class TestEmbeddingEncoding:
         assert isinstance(normalized, list)
         assert len(normalized) == 384
 
+    @pytest.mark.fast
     def test_normalize_embedding_from_bytes(self):
         """Test normalizing raw bytes embedding."""
         storage = VectorStorage()
@@ -100,6 +107,7 @@ class TestEmbeddingEncoding:
         assert isinstance(normalized, list)
         assert len(normalized) == 384
 
+    @pytest.mark.fast
     def test_normalize_embedding_already_list(self):
         """Test that list embeddings pass through unchanged."""
         storage = VectorStorage()
@@ -113,6 +121,7 @@ class TestEmbeddingEncoding:
 class TestDocumentPreparation:
     """Tests for document preparation with optimizations."""
 
+    @pytest.mark.fast
     def test_prepare_document_encodes_embedding(self):
         """Test document preparation converts embedding to binary."""
         config = Config(embedding_storage_format="binary")
@@ -134,6 +143,7 @@ class TestDocumentPreparation:
         assert isinstance(prepared["embedding"], Binary)
         assert prepared["chunk_id"] == "test-123"
 
+    @pytest.mark.fast
     def test_prepare_document_preserves_flattened_fields(self):
         """Test document preparation preserves flattened metadata."""
         storage = VectorStorage()
@@ -156,6 +166,7 @@ class TestDocumentPreparation:
             "metadata", {}
         )
 
+    @pytest.mark.fast
     def test_prepare_document_batch(self):
         """Test batch document preparation."""
         config = Config(embedding_storage_format="binary")
@@ -184,6 +195,7 @@ class TestDocumentPreparation:
 class TestSchemaChanges:
     """Tests for schema changes (flattened metadata, removed chunk_index)."""
 
+    @pytest.mark.fast
     def test_document_has_no_metadata_nested_object(self):
         """Test documents don't have nested metadata object."""
         doc = {
@@ -202,6 +214,7 @@ class TestSchemaChanges:
         # Old nested metadata should not exist
         assert "metadata" not in doc or "file_type" not in doc.get("metadata", {})
 
+    @pytest.mark.fast
     def test_document_has_no_chunk_index(self):
         """Test documents don't have chunk_index field."""
         doc = {
@@ -217,6 +230,7 @@ class TestSchemaChanges:
         assert "chunk_index" not in doc
         assert "chunk_index" not in doc.get("metadata", {})
 
+    @pytest.mark.fast
     def test_storage_config_has_new_fields(self):
         """Test config has new optimization settings."""
         config = Config()
@@ -226,6 +240,7 @@ class TestSchemaChanges:
         assert hasattr(config, "embedding_storage_format")
         assert hasattr(config, "text_compression_enabled")
 
+    @pytest.mark.fast
     def test_config_defaults(self):
         """Test config has correct default values."""
         config = Config()
@@ -238,6 +253,7 @@ class TestSchemaChanges:
 class TestStorageConfigValidation:
     """Tests for config validation."""
 
+    @pytest.mark.fast
     def test_config_validation(self):
         """Test config validates optimization settings."""
         with pytest.raises(ValueError, match="embedding_dtype must be"):

@@ -1,11 +1,14 @@
 """Tests for search pipeline construction."""
 
+import pytest
+
 from secondbrain.storage import build_search_pipeline
 
 
 class TestBuildSearchPipeline:
     """Tests for the build_search_pipeline function."""
 
+    @pytest.mark.fast
     def test_basic_pipeline_no_filters(self) -> None:
         """Test basic pipeline without any filters."""
         embedding = [0.1] * 10
@@ -31,6 +34,7 @@ class TestBuildSearchPipeline:
         assert "chunk_text" in project
         assert "score" in project
 
+    @pytest.mark.fast
     def test_pipeline_with_source_filter(self) -> None:
         """Test pipeline with source file filter."""
         embedding = [0.1] * 10
@@ -45,6 +49,7 @@ class TestBuildSearchPipeline:
         match = pipeline[1]["$match"]
         assert match["source_file"] == {"$regex": "^document.pdf"}
 
+    @pytest.mark.fast
     def test_pipeline_with_file_type_filter(self) -> None:
         """Test pipeline with file type filter."""
         embedding = [0.1] * 10
@@ -59,6 +64,7 @@ class TestBuildSearchPipeline:
         match = pipeline[1]["$match"]
         assert match["file_type"] == "pdf"
 
+    @pytest.mark.fast
     def test_pipeline_with_both_filters(self) -> None:
         """Test pipeline with both source and file type filters."""
         embedding = [0.1] * 10
@@ -77,6 +83,7 @@ class TestBuildSearchPipeline:
         assert match["source_file"] == {"$regex": "^report.pdf"}
         assert match["file_type"] == "pdf"
 
+    @pytest.mark.fast
     def test_pipeline_numcandidates_scaling(self) -> None:
         """Test that numCandidates scales with top_k."""
         embedding = [0.1] * 10
@@ -87,6 +94,7 @@ class TestBuildSearchPipeline:
             assert vector_search["numCandidates"] == top_k * 10
             assert vector_search["limit"] == top_k
 
+    @pytest.mark.fast
     def test_projection_includes_score(self) -> None:
         """Test that projection includes vectorSearchScore."""
         embedding = [0.1] * 10
@@ -95,6 +103,7 @@ class TestBuildSearchPipeline:
         project = pipeline[-1]["$project"]
         assert project["score"] == {"$meta": "vectorSearchScore"}
 
+    @pytest.mark.fast
     def test_pipeline_order(self) -> None:
         """Test that pipeline stages are in correct order."""
         embedding = [0.1] * 10
@@ -113,6 +122,7 @@ class TestBuildSearchPipeline:
         # project should be last
         assert "$project" in pipeline[-1]
 
+    @pytest.mark.fast
     def test_pipeline_with_different_top_k_values(self) -> None:
         """Test pipeline generation with various top_k values."""
         embedding = [0.1] * 10
@@ -130,6 +140,7 @@ class TestBuildSearchPipeline:
             assert vector_search["numCandidates"] == expected_candidates
             assert vector_search["limit"] == expected_limit
 
+    @pytest.mark.fast
     def test_pipeline_filter_regex_pattern(self) -> None:
         """Test that source filter uses anchored regex pattern."""
         embedding = [0.1] * 10
@@ -141,6 +152,7 @@ class TestBuildSearchPipeline:
         # Default behavior uses anchored regex for better index performance
         assert match["source_file"] == {"$regex": "^partial"}
 
+    @pytest.mark.fast
     def test_pipeline_field_selection(self) -> None:
         """Test that projection selects only required fields."""
         embedding = [0.1] * 10

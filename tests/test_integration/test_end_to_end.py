@@ -117,6 +117,7 @@ class TestFullWorkflow:
             pdf_path.unlink(missing_ok=True)
 
     @pytest.mark.integration
+    @pytest.mark.slow
     def test_delete_by_chunk_id(
         self,
         mongomock_client: mongomock.MongoClient,
@@ -143,6 +144,7 @@ class TestFullWorkflow:
         assert len(remaining) == 0
 
     @pytest.mark.integration
+    @pytest.mark.slow
     def test_delete_all(
         self,
         mongomock_client: mongomock.MongoClient,
@@ -174,6 +176,7 @@ class TestIntegrationDataFlow:
     """Tests validating data flows between modules."""
 
     @pytest.mark.integration
+    @pytest.mark.slow
     def test_list_pagination_works(
         self,
         mongomock_client: mongomock.MongoClient,
@@ -230,6 +233,7 @@ class TestIntegrationDataFlow:
         assert chunk_ids_page1.isdisjoint(chunk_ids_page2)
 
     @pytest.mark.integration
+    @pytest.mark.slow
     def test_list_with_source_filter(
         self,
         mongomock_client: mongomock.MongoClient,

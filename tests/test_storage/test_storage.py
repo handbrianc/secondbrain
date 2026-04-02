@@ -15,6 +15,7 @@ from secondbrain.storage import StorageConnectionError, VectorStorage
 class TestVectorStorage:
     """Tests for VectorStorage class."""
 
+    @pytest.mark.fast
     def test_init_default(self) -> None:
         """Test initialization with defaults."""
         from secondbrain.config import get_config
@@ -32,6 +33,7 @@ class TestVectorStorage:
             assert storage.collection_name == "embeddings"
             assert storage._index_created is False
 
+    @pytest.mark.fast
     def test_init_custom(self) -> None:
         """Test initialization with custom values."""
         with patch("secondbrain.storage.sync.get_config") as mock_config:
@@ -49,6 +51,7 @@ class TestVectorStorage:
             assert storage.db_name == "custom_db"
             assert storage.collection_name == "custom_collection"
 
+    @pytest.mark.fast
     def test_validate_connection_success(self) -> None:
         """Test connection validation when successful."""
         with patch("secondbrain.storage.sync.get_config") as mock_config:
@@ -65,6 +68,7 @@ class TestVectorStorage:
             with patch.object(storage, "_client", mock_client):
                 assert storage.validate_connection() is True
 
+    @pytest.mark.fast
     def test_validate_connection_failure(self) -> None:
         """Test connection validation when failing."""
         with patch("secondbrain.storage.sync.get_config") as mock_config:
@@ -363,6 +367,7 @@ class TestVectorStorage:
 class TestStatisticsAndMetadata:
     """Tests for statistics and metadata operations."""
 
+    @pytest.mark.fast
     def test_get_stats_empty_database(self) -> None:
         """Test getting statistics from empty database."""
         from secondbrain.config import get_config
@@ -532,6 +537,7 @@ class TestStatisticsAndMetadata:
 class TestIndexReadyTimeout:
     """Tests for index ready timeout scenarios."""
 
+    @pytest.mark.fast
     def test_wait_for_index_timeout_after_max_retries(self) -> None:
         """Test timeout after maximum retry attempts."""
         with patch("secondbrain.storage.sync.get_config") as mock_config:

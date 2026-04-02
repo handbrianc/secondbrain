@@ -5,6 +5,8 @@ of DocumentIngestor, focusing on boundary cases, overlap validation,
 large documents, multiline handling, Unicode, and deduplication.
 """
 
+import pytest
+
 from pathlib import Path
 
 from secondbrain.document import DocumentIngestor, Segment
@@ -13,6 +15,7 @@ from secondbrain.document import DocumentIngestor, Segment
 class TestChunkSegmentsBoundaryCases:
     """Test chunking with exact boundaries, empty text, and single word cases."""
 
+    @pytest.mark.fast
     def test_chunk_segments_empty_text(self) -> None:
         """Test chunking produces no chunks for empty text."""
         ingestor = DocumentIngestor(chunk_size=256, chunk_overlap=50)
@@ -20,6 +23,7 @@ class TestChunkSegmentsBoundaryCases:
         chunks = ingestor._chunk_text(segments)
         assert len(chunks) == 0
 
+    @pytest.mark.fast
     def test_chunk_segments_whitespace_only(self) -> None:
         """Test chunking produces no chunks for whitespace-only text."""
         ingestor = DocumentIngestor(chunk_size=256, chunk_overlap=50)
@@ -27,6 +31,7 @@ class TestChunkSegmentsBoundaryCases:
         chunks = ingestor._chunk_text(segments)
         assert len(chunks) == 0
 
+    @pytest.mark.fast
     def test_chunk_segments_single_word_shorter_than_chunk(self) -> None:
         """Test single word shorter than chunk size produces one chunk."""
         ingestor = DocumentIngestor(chunk_size=256, chunk_overlap=50)
@@ -36,6 +41,7 @@ class TestChunkSegmentsBoundaryCases:
         assert chunks[0]["text"] == "Hello"
         assert chunks[0]["page"] == 1
 
+    @pytest.mark.fast
     def test_chunk_segments_single_word_exact_chunk_size(self) -> None:
         """Test single word exactly at chunk size."""
         text = "A" * 100
@@ -45,6 +51,7 @@ class TestChunkSegmentsBoundaryCases:
         assert len(chunks) == 1
         assert len(chunks[0]["text"]) <= 100
 
+    @pytest.mark.fast
     def test_chunk_segments_exact_boundary_no_overlap(self) -> None:
         """Test exact boundary with zero overlap."""
         text = "Word " * 20  # 100 chars
@@ -54,6 +61,7 @@ class TestChunkSegmentsBoundaryCases:
         assert len(chunks) >= 1
         assert all(len(chunk["text"]) <= 50 for chunk in chunks)
 
+    @pytest.mark.fast
     def test_chunk_segments_single_character(self) -> None:
         """Test chunking with single character text."""
         ingestor = DocumentIngestor(chunk_size=256, chunk_overlap=50)
@@ -63,6 +71,7 @@ class TestChunkSegmentsBoundaryCases:
         assert chunks[0]["text"] == "X"
         assert chunks[0]["page"] == 5
 
+    @pytest.mark.fast
     def test_chunk_segments_newline_only(self) -> None:
         """Test chunking with only newlines."""
         ingestor = DocumentIngestor(chunk_size=256, chunk_overlap=50)
@@ -74,6 +83,7 @@ class TestChunkSegmentsBoundaryCases:
 class TestChunkSegmentsOverlapValidation:
     """Test that overlap preserves context across chunk boundaries."""
 
+    @pytest.mark.fast
     def test_chunk_segments_overlap_preserves_context(self) -> None:
         """Verify overlap preserves context from previous chunk."""
         # Create text where overlap should capture last words
@@ -91,6 +101,7 @@ class TestChunkSegmentsOverlapValidation:
         # Overlap should preserve some context
         assert any(word in chunk1_start for word in chunk0_end.split())
 
+    @pytest.mark.fast
     def test_chunk_segments_overlap_size_validation(self) -> None:
         """Test that overlap size is respected."""
         text = "Word " * 100
@@ -113,6 +124,7 @@ class TestChunkSegmentsOverlapValidation:
                 f"Overlap not preserved between chunk {i} and {i + 1}"
             )
 
+    @pytest.mark.fast
     def test_chunk_segments_zero_overlap(self) -> None:
         """Test chunking with zero overlap produces contiguous chunks."""
         text = "Word " * 50
@@ -128,6 +140,7 @@ class TestChunkSegmentsOverlapValidation:
             # Minimal overlap allowed due to word boundary splitting
             assert len(chunk0_words & chunk1_words) <= 2
 
+    @pytest.mark.fast
     def test_chunk_segments_large_overlap(self) -> None:
         """Test chunking with large overlap (50% of chunk size)."""
         text = "Word " * 100
@@ -143,6 +156,7 @@ class TestChunkSegmentsOverlapValidation:
 class TestChunkSegmentsLargeDocuments:
     """Test chunking with large documents (100K+ characters)."""
 
+    @pytest.mark.fast
     def test_chunk_segments_large_document_100k_chars(self) -> None:
         """Test chunking 100K+ character document."""
         # Generate 100K+ character document
@@ -157,6 +171,7 @@ class TestChunkSegmentsLargeDocuments:
         assert all(len(chunk["text"]) <= 1024 for chunk in chunks)
         assert all(chunk["page"] == 1 for chunk in chunks)
 
+    @pytest.mark.fast
     def test_chunk_segments_large_document_multiple_pages(self) -> None:
         """Test chunking large document with multiple pages."""
         # Simulate multi-page document
@@ -178,6 +193,7 @@ class TestChunkSegmentsLargeDocuments:
         assert len(page_counts) == 5
         assert all(count > 0 for count in page_counts.values())
 
+    @pytest.mark.fast
     def test_chunk_segments_large_document_memory_efficiency(self) -> None:
         """Test that large document chunking completes without memory issues."""
         text = "Test content for memory efficiency. " * 10000
@@ -192,6 +208,7 @@ class TestChunkSegmentsLargeDocuments:
 class TestChunkSegmentsMultilineHandling:
     """Test chunking with paragraphs, newlines, and multiline text."""
 
+    @pytest.mark.fast
     def test_chunk_segments_paragraphs_preserved(self) -> None:
         """Test that paragraph structure is handled correctly."""
         text = "First paragraph. " * 20 + "\n\n" + "Second paragraph. " * 20
@@ -202,6 +219,7 @@ class TestChunkSegmentsMultilineHandling:
         assert len(chunks) >= 1
         assert all(isinstance(chunk["text"], str) for chunk in chunks)
 
+    @pytest.mark.fast
     def test_chunk_segments_newlines_stripped(self) -> None:
         """Test that leading/trailing newlines are stripped."""
         text = "\n\n  Content with newlines  \n\n"
@@ -214,6 +232,7 @@ class TestChunkSegmentsMultilineHandling:
         assert not chunk_text.startswith(("\n", " "))
         assert not chunk_text.endswith(("\n", " "))
 
+    @pytest.mark.fast
     def test_chunk_segments_multiple_newlines_between_words(self) -> None:
         """Test handling of multiple newlines between words."""
         text = "Word1\n\n\n\nWord2\n\n\nWord3"
@@ -227,6 +246,7 @@ class TestChunkSegmentsMultilineHandling:
         assert "Word2" in chunks[0]["text"]
         assert "Word3" in chunks[0]["text"]
 
+    @pytest.mark.fast
     def test_chunk_segments_mixed_whitespace(self) -> None:
         """Test handling of mixed whitespace (spaces, tabs, newlines)."""
         text = "Word1 Word2 Word3 Word4 Word5 Word6 Word7 Word8 Word9 Word10"
@@ -243,6 +263,7 @@ class TestChunkSegmentsMultilineHandling:
 class TestChunkSegmentsUnicode:
     """Test chunking with Unicode characters, emojis, and CJK text."""
 
+    @pytest.mark.fast
     def test_chunk_segments_unicode_accented_characters(self) -> None:
         """Test chunking with accented characters."""
         text = "Café résumé naïve façade. " * 50
@@ -255,6 +276,7 @@ class TestChunkSegmentsUnicode:
         assert any("é" in chunk["text"] for chunk in chunks)
         assert any("ï" in chunk["text"] for chunk in chunks)
 
+    @pytest.mark.fast
     def test_chunk_segments_emojis(self) -> None:
         """Test chunking with emojis."""
         text = "Hello world test content here 😀 😃 😀 😃 " * 20
@@ -266,6 +288,7 @@ class TestChunkSegmentsUnicode:
         # Emojis should be preserved
         assert any("😀" in chunk["text"] for chunk in chunks)
 
+    @pytest.mark.fast
     def test_chunk_segments_cjk_characters(self) -> None:
         """Test chunking with Chinese, Japanese, Korean characters."""
         text = "你好世界 这是中文测试 日本語テスト  한국어테스트 " * 50
@@ -279,6 +302,7 @@ class TestChunkSegmentsUnicode:
         assert any("日本語" in chunk["text"] for chunk in chunks)
         assert any("한국어" in chunk["text"] for chunk in chunks)
 
+    @pytest.mark.fast
     def test_chunk_segments_mixed_unicode(self) -> None:
         """Test chunking with mixed Unicode scripts."""
         text = (
@@ -297,6 +321,7 @@ class TestChunkSegmentsUnicode:
         assert "日本語" in all_text
         assert "한국어" in all_text
 
+    @pytest.mark.fast
     def test_chunk_segments_rtl_text(self) -> None:
         """Test chunking with right-to-left text (Arabic, Hebrew)."""
         text = "مرحبا بالعالم هذا اختبار نصي " * 30
@@ -312,6 +337,7 @@ class TestChunkSegmentsUnicode:
 class TestDeduplicateAndChunkSegments:
     """Test hash-based deduplication in chunking."""
 
+    @pytest.mark.fast
     def test_deduplicate_and_chunk_segments_identical_segments(self) -> None:
         """Test that identical segments are deduplicated."""
         ingestor = DocumentIngestor(chunk_size=256, chunk_overlap=50)
@@ -326,6 +352,7 @@ class TestDeduplicateAndChunkSegments:
         # All three segments are identical after normalization, so only one chunk
         assert len(chunks) == 1
 
+    @pytest.mark.fast
     def test_deduplicate_and_chunk_segments_whitespace_differences(self) -> None:
         """Test that whitespace-only differences are deduplicated."""
         ingestor = DocumentIngestor(chunk_size=256, chunk_overlap=50)
@@ -341,6 +368,7 @@ class TestDeduplicateAndChunkSegments:
         # All segments normalize to the same text
         assert len(chunks) == 1
 
+    @pytest.mark.fast
     def test_deduplicate_and_chunk_segments_preserves_page(self) -> None:
         """Test that page number from first occurrence is preserved."""
         ingestor = DocumentIngestor(chunk_size=256, chunk_overlap=50)
@@ -357,6 +385,7 @@ class TestDeduplicateAndChunkSegments:
         assert chunks[0]["page"] == 5
         assert chunks[1]["page"] == 10
 
+    @pytest.mark.fast
     def test_deduplicate_and_chunk_segments_text_hash_included(self) -> None:
         """Test that text_hash is included in chunk metadata."""
         ingestor = DocumentIngestor(chunk_size=256, chunk_overlap=50)
@@ -368,6 +397,7 @@ class TestDeduplicateAndChunkSegments:
         assert "text_hash" in chunks[0]
         assert len(chunks[0]["text_hash"]) == 64  # SHA256 hex length
 
+    @pytest.mark.fast
     def test_deduplicate_and_chunk_segments_empty_segments_skipped(self) -> None:
         """Test that empty segments are skipped during deduplication."""
         ingestor = DocumentIngestor(chunk_size=256, chunk_overlap=50)
@@ -387,6 +417,7 @@ class TestDeduplicateAndChunkSegments:
 class TestDeduplicateWhitespaceVariations:
     """Test normalization and whitespace variation handling."""
 
+    @pytest.mark.fast
     def test_deduplicate_whitespace_variations_normalization(self) -> None:
         """Test that whitespace variations are normalized before hashing."""
         ingestor = DocumentIngestor(chunk_size=256, chunk_overlap=50)
@@ -403,6 +434,7 @@ class TestDeduplicateWhitespaceVariations:
         # All variations should normalize to the same text
         assert len(chunks) == 1
 
+    @pytest.mark.fast
     def test_deduplicate_whitespace_variations_preserves_meaningful_diffs(self) -> None:
         """Test that meaningful text differences are preserved."""
         ingestor = DocumentIngestor(chunk_size=256, chunk_overlap=50)
@@ -416,6 +448,7 @@ class TestDeduplicateWhitespaceVariations:
 
         assert len(chunks) == 2
 
+    @pytest.mark.fast
     def test_deduplicate_whitespace_variations_leading_trailing(self) -> None:
         """Test that leading/trailing whitespace is normalized."""
         ingestor = DocumentIngestor(chunk_size=256, chunk_overlap=50)
@@ -431,6 +464,7 @@ class TestDeduplicateWhitespaceVariations:
         assert len(chunks) == 1
         assert chunks[0]["text"] == "Content here"
 
+    @pytest.mark.fast
     def test_deduplicate_whitespace_variations_complex_normalization(self) -> None:
         """Test complex whitespace normalization scenarios."""
         ingestor = DocumentIngestor(chunk_size=256, chunk_overlap=50)

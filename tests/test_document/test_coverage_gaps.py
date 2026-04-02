@@ -11,6 +11,8 @@ Covers:
 - Lines 1032, 1053-1056, 1283, 1289-1298: Deduplication and empty results
 """
 
+import pytest
+
 import os
 import tempfile
 from pathlib import Path
@@ -32,6 +34,7 @@ from secondbrain.document import (
 class TestWorkerInitialization:
     """Tests for worker process initialization functions."""
 
+    @pytest.mark.fast
     def test_init_worker_basic(self) -> None:
         """Test _init_worker() initializes DocumentConverter (lines 69-71)."""
         import secondbrain.document as doc_module
@@ -43,6 +46,7 @@ class TestWorkerInitialization:
 
         assert doc_module._worker_converter is not None
 
+    @pytest.mark.fast
     def test_init_worker_with_queue(self) -> None:
         """Test _init_worker_with_queue() full initialization (lines 79-103)."""
         import secondbrain.document as doc_module
@@ -66,6 +70,7 @@ class TestWorkerInitialization:
 class TestExtractSegmentsEdgeCases:
     """Tests for extract functions edge cases."""
 
+    @pytest.mark.fast
     def test_extract_segments_empty_text(self) -> None:
         """Test extract skips empty text (line 145)."""
         with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
@@ -80,6 +85,7 @@ class TestExtractSegmentsEdgeCases:
         finally:
             temp_path.unlink()
 
+    @pytest.mark.fast
     def test_extract_segments_no_page_info(self) -> None:
         """Test extract handles missing page info (lines 149-151)."""
         with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
@@ -114,6 +120,7 @@ class TestExtractSegmentsEdgeCases:
         finally:
             temp_path.unlink()
 
+    @pytest.mark.fast
     def test_extract_segments_fallback_read(self) -> None:
         """Test extract fallback to direct file read (lines 157-159)."""
         with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
@@ -146,6 +153,7 @@ class TestExtractSegmentsEdgeCases:
 class TestExtractionPipeline:
     """Tests for full extraction pipeline."""
 
+    @pytest.mark.fast
     def test_extract_and_chunk_file_success(self) -> None:
         """Full success path (lines 201-301)."""
         with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
@@ -178,6 +186,7 @@ class TestExtractionPipeline:
         finally:
             temp_path.unlink()
 
+    @pytest.mark.fast
     def test_extract_and_chunk_file_no_segments_fallback(self) -> None:
         """No segments fallback."""
         with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
@@ -209,6 +218,7 @@ class TestExtractionPipeline:
 class TestChunkSegmentsEdgeCases:
     """Tests for _chunk_segments() edge cases."""
 
+    @pytest.mark.fast
     def test_chunk_segments_empty_text(self) -> None:
         """Skips empty text (lines 463-465)."""
         segments: list[Segment] = [{"text": "   \n\t  ", "page": 1}]
@@ -216,6 +226,7 @@ class TestChunkSegmentsEdgeCases:
 
         assert len(result) == 0  # Empty text skipped
 
+    @pytest.mark.fast
     def test_chunk_segments_word_boundary(self) -> None:
         """Respects word boundaries (lines 468-472)."""
         # Text longer than chunk_size
@@ -229,6 +240,7 @@ class TestChunkSegmentsEdgeCases:
         for chunk in result:
             assert len(chunk["text"]) <= 25  # 20 + some tolerance
 
+    @pytest.mark.fast
     def test_chunk_segments_overlap(self) -> None:
         """Maintains overlap (lines 477-480)."""
         text = "One two three four five six seven eight nine ten"
@@ -248,6 +260,7 @@ class TestChunkSegmentsEdgeCases:
 class TestDeduplicationAndEmptyResults:
     """Tests for deduplication and empty result handling."""
 
+    @pytest.mark.fast
     def test_extract_and_chunk_duplicate_removal(self) -> None:
         """Test that _extract_and_chunk_file extracts all segments (no dedup here)."""
         import secondbrain.document as doc_module
@@ -285,6 +298,7 @@ class TestDeduplicationAndEmptyResults:
         finally:
             temp_path.unlink()
 
+    @pytest.mark.fast
     def test_extract_and_chunk_empty_after_dedup(self) -> None:
         """Empty result handling (lines 1053-1056)."""
         with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
@@ -314,6 +328,7 @@ class TestDeduplicationAndEmptyResults:
         finally:
             temp_path.unlink()
 
+    @pytest.mark.fast
     def test_extract_chunk_and_embed_duplicate_removal(self) -> None:
         """Test deduplication in _extract_chunk_and_embed_file (line 1283)."""
         import secondbrain.document as doc_module
@@ -363,6 +378,7 @@ class TestDeduplicationAndEmptyResults:
         finally:
             temp_path.unlink()
 
+    @pytest.mark.fast
     def test_extract_chunk_and_embed_empty_after_dedup(self) -> None:
         """Test empty result after deduplication (lines 1053-1056)."""
         with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
@@ -405,6 +421,7 @@ class TestDeduplicationAndEmptyResults:
         finally:
             temp_path.unlink()
 
+    @pytest.mark.fast
     def test_extract_and_chunk_file_with_progress_success(self) -> None:
         """Test _extract_and_chunk_file_with_progress success path."""
         with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
@@ -439,6 +456,7 @@ class TestDeduplicationAndEmptyResults:
         finally:
             temp_path.unlink()
 
+    @pytest.mark.fast
     def test_extract_and_chunk_file_error_handling(self) -> None:
         """Test error handling in _extract_and_chunk_file."""
         import secondbrain.document as doc_module
@@ -468,6 +486,7 @@ class TestDeduplicationAndEmptyResults:
 class TestGlobalStateReset:
     """Tests that verify global state reset behavior."""
 
+    @pytest.mark.fast
     def test_worker_globals_can_be_reset(self) -> None:
         """Test that worker globals can be reset for test isolation."""
         import secondbrain.document as doc_module

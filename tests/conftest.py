@@ -7,9 +7,9 @@ import contextlib
 import os
 import shutil
 from collections.abc import Generator
+from functools import lru_cache
 from pathlib import Path
-from typing import Any, TypeVar
-from unittest.mock import MagicMock
+from typing import Any, Generator, TypeVar
 
 import pytest
 
@@ -421,12 +421,13 @@ def mongo_client() -> Generator[Any, None, None]:
     client.close()
 
 
-@pytest.fixture(scope="class")
+@pytest.fixture(scope="session")
 def test_database(mongo_client: Any) -> Generator[Any, None, None]:
-    """Class-scoped test database for grouped test execution.
+    """Session-scoped test database for shared test execution.
 
-    Creates a single test database per test class, reducing database
-    creation overhead compared to function-scoped fixtures.
+    Creates a single test database per test session, reducing database
+    creation overhead compared to class-scoped fixtures. This improves
+    test performance by sharing the database across all test classes.
 
     Args:
         mongo_client: Session-scoped MongoDB client
@@ -459,7 +460,7 @@ def embedding_model() -> Generator[Any, None, None]:
     # No explicit cleanup needed - SentenceTransformer handles it
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def sample_pdf_path(tmp_path_factory: pytest.TempPathFactory) -> Path:
     """Create a sample PDF file for testing.
 
@@ -467,14 +468,31 @@ def sample_pdf_path(tmp_path_factory: pytest.TempPathFactory) -> Path:
     the document ingestion pipeline.
     Cached at session scope to avoid repeated PDF generation.
     """
+    tmp_path = tmp_path_factory.mktemp("data")
+    pdf_path = tmp_path / "test_document.pdf"
+
+    # Use cached PDF generation
+    pdf_content = _create_sample_pdf_content()
+    pdf_path.write_bytes(pdf_content)
+
+    return pdf_path
+
+
+@lru_cache(maxsize=1)
+def _create_sample_pdf_content() -> bytes:
+    """Create sample PDF content with LRU caching.
+
+    Generates a simple PDF once and caches it to avoid
+    repeated PDF generation overhead across test sessions.
+
+    Returns:
+        bytes: PDF file content
+    """
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.units import mm
     from reportlab.pdfgen import canvas
 
-    tmp_path = tmp_path_factory.mktemp("data")
-    pdf_path = tmp_path / "test_document.pdf"
-
-    c = canvas.Canvas(str(pdf_path), pagesize=A4)
+    c = canvas.Canvas("temp.pdf", pagesize=A4)
     _, height = A4
 
     c.setFont("Helvetica-Bold", 24)
@@ -506,7 +524,11 @@ def sample_pdf_path(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
     c.save()
 
-    return pdf_path
+    # Read and return the content
+    pdf_content = Path("temp.pdf").read_bytes()
+    Path("temp.pdf").unlink()  # Clean up temp file
+
+    return pdf_content
 
 
 @pytest.fixture(scope="session")
@@ -685,27 +707,43 @@ atexit.register(_cleanup_mongodb)
 
 
 @pytest.fixture(autouse=True)
-def _patch_ensure_mongodb() -> Generator[None, None, None]:
+def _patch_ensure_mongodb(request) -> Generator[None, None, None]:
     """Patch _ensure_mongodb to prevent MongoDB connection attempts in CLI tests.
 
     The CLI's _ensure_mongodb function tries to connect to MongoDB before each
     command is executed, causing timeouts in tests. This fixture patches it to
     prevent those connection attempts.
+
+    Only applies to CLI tests to avoid unnecessary patching overhead.
     """
     from unittest.mock import patch
 
-    with patch("secondbrain.cli._ensure_mongodb"):
+    # Only patch for CLI-related tests
+    if "cli" in str(request.node.fspath) or request.node.get_closest_marker("cli"):
+        with patch("secondbrain.cli._ensure_mongodb"):
+            yield
+    else:
         yield
 
 
 @pytest.fixture(autouse=True, scope="session")
-def _suppress_mongodb_debug_logging() -> Generator[None, None, None]:
+def _suppress_mongodb_debug_logging(request) -> Generator[None, None, None]:
     """Suppress MongoDB/Motor debug logging during tests.
 
     Motor and pymongo emit verbose debug logs that add ~10-15s to test execution
-    due to I/O overhead. This fixture suppresses those logs at session scope.
+    due to I/O overhead. This fixture suppresses those logs at session scope,
+    but only for integration/e2e tests where MongoDB logging is relevant.
     """
     import logging
+
+    # Only suppress for integration or e2e tests
+    has_integration_marker = request.node.get_closest_marker("integration") is not None
+    has_e2e_marker = request.node.get_closest_marker("e2e") is not None
+
+    if not (has_integration_marker or has_e2e_marker):
+        # No suppression needed for unit tests
+        yield
+        return
 
     # Save original levels
     mongo_logger = logging.getLogger("pymongo")

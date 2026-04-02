@@ -68,6 +68,7 @@ def test_get_file_type_unknown() -> None:
 class TestDocumentIngestor:
     """Tests for DocumentIngestor class."""
 
+    @pytest.mark.fast
     def test_init(
         self, cached_embedding_generator: MagicMock, mocked_pdf_extraction: MagicMock
     ) -> None:
@@ -78,6 +79,7 @@ class TestDocumentIngestor:
         assert ingestor.chunk_overlap == 25
         assert ingestor.verbose is False
 
+    @pytest.mark.fast
     def test_init_defaults(
         self, cached_embedding_generator: MagicMock, mocked_pdf_extraction: MagicMock
     ) -> None:
@@ -87,12 +89,14 @@ class TestDocumentIngestor:
         assert ingestor.chunk_size == 4096
         assert ingestor.chunk_overlap == 50
 
+    @pytest.mark.fast
     def test_ingest_nonexistent_file(self) -> None:
         """Test ingesting a non-existent file."""
         ingestor = DocumentIngestor()
         with pytest.raises(ValueError, match="Invalid path"):
             ingestor.ingest("/nonexistent/path/file.pdf")
 
+    @pytest.mark.fast
     def test_ingest_empty_directory(self, tmp_path: Path) -> None:
         """Test ingesting an empty directory."""
         ingestor = DocumentIngestor()
@@ -100,6 +104,7 @@ class TestDocumentIngestor:
         assert result["success"] == 0
         assert result["failed"] == 0
 
+    @pytest.mark.fast
     def test_chunk_text_simple(self) -> None:
         """Test text chunking with simple text."""
         ingestor = DocumentIngestor(chunk_size=50, chunk_overlap=10)
@@ -110,6 +115,7 @@ class TestDocumentIngestor:
         assert len(chunks) > 0
         assert all("text" in chunk and "page" in chunk for chunk in chunks)
 
+    @pytest.mark.fast
     def test_chunk_text_exact_size(self) -> None:
         """Test text chunking with exact chunk size."""
         text = "A" * 100  # 100 chars
@@ -119,6 +125,7 @@ class TestDocumentIngestor:
         assert len(chunks) == 1
         assert len(chunks[0]["text"]) <= 100
 
+    @pytest.mark.fast
     def test_chunk_text_multiple_chunks(self) -> None:
         """Test text chunking producing multiple chunks."""
         text = "Word " * 200  # More than chunk size
@@ -127,6 +134,7 @@ class TestDocumentIngestor:
         chunks = ingestor._chunk_text(segments)
         assert len(chunks) > 1
 
+    @pytest.mark.fast
     def test_chunk_text_empty_segment(self) -> None:
         """Test text chunking with empty segment."""
         ingestor = DocumentIngestor()
@@ -172,17 +180,20 @@ def test_is_supported_case_sensitivity() -> None:
 class TestDocumentIngestionSpecRequirements:
     """Tests for document ingestion spec requirements."""
 
+    @pytest.mark.fast
     def test_ingest_with_custom_chunk_size(self) -> None:
         """Test ingesting with custom chunk size (spec: custom chunk size)."""
         ingestor = DocumentIngestor(chunk_size=1024, chunk_overlap=100)
         assert ingestor.chunk_size == 1024
         assert ingestor.chunk_overlap == 100
 
+    @pytest.mark.fast
     def test_ingest_with_custom_chunk_overlap(self) -> None:
         """Test ingesting with custom chunk overlap (spec: configurable overlap)."""
         ingestor = DocumentIngestor(chunk_size=512, chunk_overlap=100)
         assert ingestor.chunk_overlap == 100
 
+    @pytest.mark.fast
     def test_ingest_batch_processing(self) -> None:
         """Test batch processing (spec: multiple documents)."""
         ingestor = DocumentIngestor()
@@ -192,6 +203,7 @@ class TestDocumentIngestionSpecRequirements:
         sig = inspect.signature(ingestor.ingest)
         assert "batch_size" in sig.parameters
 
+    @pytest.mark.fast
     def test_supported_file_types_all_specified(self) -> None:
         """Test all specified file types from spec are supported."""
         # Spec lists: PDF, DOCX, PPTX, XLSX, HTML, Markdown, AsciiDoc, LaTeX, CSV,
@@ -224,6 +236,7 @@ class TestDocumentIngestionSpecRequirements:
         }
         assert expected == SUPPORTED_EXTENSIONS
 
+    @pytest.mark.fast
     def test_get_file_type_all_specified_formats(self) -> None:
         """Test all specified file types from spec are correctly detected."""
         # PDF
@@ -266,6 +279,7 @@ class TestDocumentIngestionSpecRequirements:
         # Docling JSON
         assert get_file_type(Path("test.json")) == "docling-json"
 
+    @pytest.mark.fast
     def test_rejects_unsupported_format_with_clear_error(self) -> None:
         """Test that unsupported format is rejected with clear error."""
         from secondbrain.document import is_supported
@@ -278,7 +292,9 @@ class TestDocumentIngestionSpecRequirements:
         assert get_file_type(Path("file.unknown")) == "unknown"
 
     @pytest.mark.slow
-    def test_ingest_with_recursive_flag(self, tmp_path: Path) -> None:
+    def test_ingest_with_recursive_flag(
+        self, tmp_path: Path, mocked_pdf_extraction
+    ) -> None:
         """Test recursive flag in ingest (spec: recursive processing)."""
         # Create nested directory structure
         subdir = tmp_path / "level1" / "level2"
@@ -298,6 +314,7 @@ class TestDocumentIngestionSpecRequirements:
         result_non_recursive = ingestor.ingest(str(tmp_path), recursive=False)
         assert result_non_recursive["success"] == 0
 
+    @pytest.mark.fast
     def test_empty_text_handling(self) -> None:
         """Test empty text chunk handling (spec: skip empty chunks)."""
         ingestor = DocumentIngestor()
@@ -314,12 +331,14 @@ class TestDocumentIngestionSpecRequirements:
 class TestChunkTextEdgeCases:
     """Additional edge case tests for _chunk_text."""
 
+    @pytest.mark.fast
     def test_chunk_text_whitespace_only_produces_no_chunks(self) -> None:
         """Test whitespace-only text produces no chunks."""
         ingestor = DocumentIngestor(chunk_size=100, chunk_overlap=0)
         chunks = ingestor._chunk_text([{"text": "   ", "page": 1}])
         assert len(chunks) == 0
 
+    @pytest.mark.fast
     def test_chunk_text_single_page_numbers_preserved(self) -> None:
         """Test page numbers preserved across all chunks."""
         ingestor = DocumentIngestor(chunk_size=50, chunk_overlap=10)
@@ -329,6 +348,7 @@ class TestChunkTextEdgeCases:
         assert len(chunks) > 1
         assert all(chunk["page"] == 7 for chunk in chunks)
 
+    @pytest.mark.fast
     def test_chunk_text_larger_overlap(self) -> None:
         """Test chunking with larger overlap."""
         text = "Word " * 30
@@ -341,6 +361,7 @@ class TestChunkTextEdgeCases:
 class TestDocumentIngestorExtractText:
     """Tests for _extract_text method including error paths."""
 
+    @pytest.mark.fast
     def test_extract_text_empty_text_item(self, tmp_path: Path) -> None:
         """Test _extract_text handles empty text items."""
         from unittest.mock import MagicMock, patch
@@ -364,6 +385,7 @@ class TestDocumentIngestorExtractText:
         assert "text" in segments[0]
         assert "page" in segments[0]
 
+    @pytest.mark.fast
     def test_extract_text_with_fallback(self, tmp_path: Path) -> None:
         """Test _extract_text fallback to file read."""
         from unittest.mock import MagicMock, patch
@@ -388,6 +410,7 @@ class TestDocumentIngestorExtractText:
         assert len(segments) >= 1
         assert "Simple text content" in segments[0]["text"]
 
+    @pytest.mark.fast
     def test_extract_text_file_not_found(self, tmp_path: Path) -> None:
         """Test _extract_text raises DocumentExtractionError for missing file."""
         ingestor = DocumentIngestor()
@@ -396,6 +419,7 @@ class TestDocumentIngestorExtractText:
         with pytest.raises(DocumentExtractionError):
             ingestor._extract_text(nonexistent)
 
+    @pytest.mark.fast
     def test_extract_text_exception_handling(self, tmp_path: Path) -> None:
         """Test _extract_text exception handling."""
         from unittest.mock import patch
@@ -415,6 +439,7 @@ class TestDocumentIngestorExtractText:
         ):
             ingestor._extract_text(test_file)
 
+    @pytest.mark.fast
     def test_extract_text_text_item_without_text_attr(self, tmp_path: Path) -> None:
         """Test _extract_text falls back to file read when text items have no text attr."""
         from unittest.mock import MagicMock, patch
@@ -441,6 +466,7 @@ class TestDocumentIngestorExtractText:
         assert len(segments) >= 1
         assert "Test content" in segments[0]["text"]
 
+    @pytest.mark.fast
     def test_extract_text_text_item_without_text_value(self, tmp_path: Path) -> None:
         """Test _extract_text falls back to file read when text items have empty text."""
         from unittest.mock import MagicMock, patch

@@ -40,7 +40,7 @@ class TestNetworkPartitionScenarios:
 
         assert cb.state == CircuitState.OPEN
 
-        time.sleep(0.15)
+        time.sleep(0.12)
 
         assert cb.is_allowed() is True
         assert cb.state == CircuitState.HALF_OPEN
@@ -79,7 +79,7 @@ class TestNetworkPartitionScenarios:
             cb.record_failure()
         assert cb.state == CircuitState.OPEN
 
-        time.sleep(0.25)
+        time.sleep(0.22)
         assert cb.is_allowed() is True
         assert cb.state == CircuitState.HALF_OPEN
 
@@ -153,7 +153,7 @@ class TestRecoveryPatterns:
 
         recovery_times = []
         for attempt in range(5):
-            time.sleep(0.15)
+            time.sleep(0.12)
             if cb.is_allowed():
                 recovery_times.append(attempt)
                 cb.record_success()
@@ -176,7 +176,7 @@ class TestRecoveryPatterns:
         for _ in range(3):
             cb.record_failure()
 
-        time.sleep(0.15)
+        time.sleep(0.12)
 
         calls_in_half_open = 0
         for _ in range(10):
@@ -201,7 +201,7 @@ class TestRecoveryPatterns:
         assert cb.state == CircuitState.OPEN
 
         for _ in range(5):
-            time.sleep(0.15)
+            time.sleep(0.12)
             if cb.is_allowed():
                 cb.record_failure()
 

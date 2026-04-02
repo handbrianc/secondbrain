@@ -16,6 +16,7 @@ class TestSearchE2E:
     @pytest.mark.integration
     @patch("secondbrain.search.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
+    @pytest.mark.slow
     def test_search_e2e(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
     ) -> None:
@@ -72,6 +73,7 @@ class TestSearchE2E:
     @pytest.mark.integration
     @patch("secondbrain.search.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
+    @pytest.mark.slow
     def test_search_with_filters(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
     ) -> None:
@@ -120,6 +122,7 @@ class TestSearchIntegration:
     @pytest.mark.integration
     @patch("secondbrain.search.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
+    @pytest.mark.slow
     def test_search_with_custom_top_k(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
     ) -> None:
@@ -144,6 +147,7 @@ class TestSearchIntegration:
     @pytest.mark.integration
     @patch("secondbrain.search.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
+    @pytest.mark.slow
     def test_search_no_results(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
     ) -> None:
@@ -167,6 +171,7 @@ class TestSearchIntegration:
     @pytest.mark.integration
     @patch("secondbrain.search.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
+    @pytest.mark.slow
     def test_search_empty_embed_result(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
     ) -> None:

@@ -1,5 +1,7 @@
 """Tests for CLI module."""
 
+import pytest
+
 from unittest.mock import MagicMock, patch
 
 from click.testing import CliRunner
@@ -10,6 +12,7 @@ from secondbrain.cli import cli
 class TestCLI:
     """Tests for CLI commands."""
 
+    @pytest.mark.fast
     def test_cli_help(self) -> None:
         """Test CLI help output."""
         runner = CliRunner()
@@ -17,12 +20,14 @@ class TestCLI:
         assert result.exit_code == 0
         assert "SecondBrain" in result.output
 
+    @pytest.mark.fast
     def test_cli_verbose_flag(self) -> None:
         """Test CLI verbose flag."""
         runner = CliRunner()
         result = runner.invoke(cli, ["--verbose", "ingest", "--help"])
         assert result.exit_code == 0
 
+    @pytest.mark.fast
     def test_ingest_command(self) -> None:
         """Test ingest command with empty directory (no files to process)."""
         import tempfile
@@ -34,6 +39,7 @@ class TestCLI:
             assert "Successfully ingested" in result.output
 
     @patch("secondbrain.document.DocumentIngestor")
+    @pytest.mark.fast
     def test_ingest_command_recursive(self, mock_ingestor_class: MagicMock) -> None:
         """Test ingest command with recursive flag."""
         mock_ingestor = MagicMock()
@@ -47,6 +53,7 @@ class TestCLI:
         mock_ingestor.ingest.assert_called_once()
 
     @patch("secondbrain.search.Searcher")
+    @pytest.mark.fast
     def test_search_command(self, mock_searcher_class: MagicMock) -> None:
         """Test search command."""
         mock_searcher = MagicMock()
@@ -61,6 +68,7 @@ class TestCLI:
         # May fail due to connection, but tests the command
 
     @patch("secondbrain.search.Searcher")
+    @pytest.mark.fast
     def test_search_command_with_top_k(self, mock_searcher_class: MagicMock) -> None:
         """Test search command with top-k."""
         mock_searcher = MagicMock()
@@ -71,6 +79,7 @@ class TestCLI:
         runner.invoke(cli, ["search", "test query", "--top-k", "10"])
 
     @patch("secondbrain.management.Deleter")
+    @pytest.mark.fast
     def test_delete_with_chunk_id(self, mock_deleter_class: MagicMock) -> None:
         """Test delete command with chunk-id option."""
         mock_deleter = MagicMock()
@@ -85,6 +94,7 @@ class TestCLI:
         assert "document" in result.output
 
     @patch("secondbrain.management.Deleter")
+    @pytest.mark.fast
     def test_delete_all_with_confirmation(self, mock_deleter_class: MagicMock) -> None:
         """Test delete all command with confirmation."""
         mock_deleter = MagicMock()
@@ -99,6 +109,7 @@ class TestCLI:
         assert "document" in result.output
 
     @patch("secondbrain.management.Deleter")
+    @pytest.mark.fast
     def test_delete_cancelled_by_user(self, mock_deleter_class: MagicMock) -> None:
         """Test delete command cancelled by user."""
         runner = CliRunner()
@@ -107,6 +118,7 @@ class TestCLI:
         assert result.exit_code == 0
         assert "Cancelled" in result.output
 
+    @pytest.mark.fast
     def test_ingest_with_failed_files_displayed(self) -> None:
         """Test ingest command handles empty directory gracefully."""
         import tempfile
@@ -118,6 +130,7 @@ class TestCLI:
             assert "Successfully ingested" in result.output
             assert "0 files" in result.output
 
+    @pytest.mark.fast
     def test_search_verbose_format_empty_results(self) -> None:
         """Test search with json format and empty results."""
         from unittest.mock import MagicMock, patch
@@ -134,6 +147,7 @@ class TestCLI:
 
             assert result.exit_code == 0
 
+    @pytest.mark.fast
     def test_delete_validation_no_options(self) -> None:
         """Test delete command fails when no options provided."""
         runner = CliRunner()
@@ -142,6 +156,7 @@ class TestCLI:
         assert result.exit_code != 0
         assert "Error" in result.output
 
+    @pytest.mark.fast
     def test_delete_validation_multiple_options(self) -> None:
         """Test delete command fails with multiple conflicting options."""
         runner = CliRunner()
@@ -152,6 +167,7 @@ class TestCLI:
         assert result.exit_code != 0
         assert "Error" in result.output or "Specify only one" in result.output
 
+    @pytest.mark.fast
     def test_metrics_reset_command(self) -> None:
         """Test metrics command with reset flag."""
         from unittest.mock import patch
