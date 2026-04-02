@@ -15,44 +15,71 @@ from unittest.mock import patch
 import pytest
 
 
-@pytest.mark.integration
+def _get_worker_id() -> str:
+    """Get pytest-xdist worker ID for test isolation."""
+    import os
+
+    # Get worker ID from environment variable set by pytest-xdist
+    return os.environ.get("PYTEST_XDIST_WORKER", "master")
+
+
+@pytest.fixture
+def worker_isolated_storage() -> "VectorStorage":
+    """Provide VectorStorage with worker-isolated collection.
+
+    Each pytest-xdist worker gets its own collection to prevent race conditions
+    during parallel execution.
+    """
+    from secondbrain.storage.sync import VectorStorage
+
+    worker_id = _get_worker_id()
+    collection_name = f"test_network_partitions_{worker_id}"
+
+    storage = VectorStorage(
+        mongo_uri="mongodb://127.0.0.1:27018/secondbrain_test",
+        db_name="secondbrain_test",
+        collection_name=collection_name,
+    )
+    try:
+        yield storage
+    finally:
+        # Cleanup at end of test
+        try:
+            storage.delete_all()
+        except Exception:
+            pass
+        storage.close()
+
+
+@pytest.mark.chaos
 class TestNetworkPartitions:
     """Tests for handling network partition scenarios."""
 
-    async def test_mongodb_connection_failure_recovery(self):
+    async def test_mongodb_connection_failure_recovery(self, worker_isolated_storage):
         """Should recover gracefully after MongoDB connection failure."""
-        from secondbrain.storage.sync import VectorStorage
-
-        storage = VectorStorage()
+        storage = worker_isolated_storage
         chunks = storage.list_chunks(limit=1)
         assert isinstance(chunks, list)
 
-    async def test_query_timeout_handling(self):
+    async def test_query_timeout_handling(self, worker_isolated_storage):
         """Should handle query timeouts gracefully."""
-        from secondbrain.storage.sync import VectorStorage
-
-        # Test that storage can be instantiated and handles errors
-        storage = VectorStorage()
+        storage = worker_isolated_storage
         # With invalid connection, should raise appropriate error
         with pytest.raises(Exception):
             storage.list_chunks(limit=1, timeout=0.001)
 
-    async def test_reconnection_after_disconnect(self):
+    async def test_reconnection_after_disconnect(self, worker_isolated_storage):
         """Should automatically reconnect after disconnection."""
-        from secondbrain.storage.sync import VectorStorage
-
-        storage1 = VectorStorage()
+        storage1 = worker_isolated_storage
         chunks1 = storage1.list_chunks(limit=1)
         assert isinstance(chunks1, list)
 
-        storage2 = VectorStorage()
+        storage2 = worker_isolated_storage
         assert storage2 is not None
 
-    def test_connection_pool_exhaustion(self):
+    def test_connection_pool_exhaustion(self, worker_isolated_storage):
         """Should handle connection pool exhaustion."""
-        from secondbrain.storage.sync import VectorStorage
-
-        storage = VectorStorage()
+        storage = worker_isolated_storage
 
         with patch.object(storage, "_do_validate", return_value=False):
             # Should raise connection error when validation fails
@@ -149,11 +176,11 @@ class TestCircuitBreakerBehavior:
         # Should be open again
         assert cb.state == CircuitState.OPEN
 
-    def test_circuit_breaker_metrics(self):
+    def test_circuit_breaker_metrics(self, worker_isolated_metrics):
         """Circuit breaker should record metrics."""
         from secondbrain.utils.circuit_breaker import CircuitBreaker
-        from secondbrain.utils.metrics import metrics
 
+        metrics = worker_isolated_metrics
         cb = CircuitBreaker(service_name="test_metrics", failure_threshold=2)
 
         # Generate some failures

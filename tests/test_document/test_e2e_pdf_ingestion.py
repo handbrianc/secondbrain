@@ -21,6 +21,12 @@ import pytest
 from secondbrain.document import DocumentIngestor, get_file_type
 from secondbrain.storage import VectorStorage
 
+# Mark all tests as e2e (end-to-end with real services)
+pytestmark = [
+    pytest.mark.e2e,
+    pytest.mark.slow,
+]
+
 # Suppress docling deprecation warnings (upstream library issue)
 warnings.filterwarnings(
     "ignore",
@@ -31,6 +37,7 @@ warnings.filterwarnings(
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 class TestPDFIngestionE2E:
     """End-to-end tests for PDF ingestion pipeline."""
 
@@ -124,6 +131,7 @@ class TestPDFIngestionE2E:
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 class TestPDFSearchIntegration:
     """Integration tests for search functionality after ingestion."""
 

@@ -83,6 +83,7 @@ class TestExtractTextPdfPages:
 class TestExtractTextImageFallback:
     """Tests for image OCR fallback mechanism."""
 
+    @pytest.mark.ocr
     def test_extract_text_image_fallback_ocr(self, tmp_path: Path) -> None:
         """Test image OCR fallback when docling returns no text."""
         test_image = tmp_path / "test_image.png"

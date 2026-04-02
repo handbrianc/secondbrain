@@ -400,6 +400,66 @@ def mocked_pdf_extraction(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
 
 
 @pytest.fixture(scope="session")
+def mongo_client() -> Generator[Any, None, None]:
+    """Session-scoped MongoDB client to avoid repeated connection overhead.
+
+    Creates one MongoDB client per test session and reuses it across all tests.
+    Saves ~200-300ms per test that needs MongoDB access.
+
+    Yields:
+        MongoClient: Connected MongoDB client
+    """
+    from pymongo import MongoClient
+
+    client = MongoClient(
+        "mongodb://localhost:27017",
+        serverSelectionTimeoutMS=5000,
+        socketTimeoutMS=2000,
+        connectTimeoutMS=2000,
+    )
+    yield client
+    client.close()
+
+
+@pytest.fixture(scope="class")
+def test_database(mongo_client: Any) -> Generator[Any, None, None]:
+    """Class-scoped test database for grouped test execution.
+
+    Creates a single test database per test class, reducing database
+    creation overhead compared to function-scoped fixtures.
+
+    Args:
+        mongo_client: Session-scoped MongoDB client
+
+    Yields:
+        Database: Test database instance
+    """
+    db = mongo_client["test_secondbrain"]
+    yield db
+    mongo_client.drop_database("test_secondbrain")
+
+
+@pytest.fixture(scope="session")
+def embedding_model() -> Generator[Any, None, None]:
+    """Session-scoped SentenceTransformer model singleton.
+
+    Loads the embedding model once per test session instead of per test.
+    Saves ~2-3s per test that uses real embeddings.
+
+    Note: Only used by integration tests; unit tests should use
+    cached_embedding_generator or mock_embeddings fixtures.
+
+    Yields:
+        SentenceTransformer: Loaded embedding model
+    """
+    from sentence_transformers import SentenceTransformer
+
+    model = SentenceTransformer("all-MiniLM-L6-v2")
+    yield model
+    # No explicit cleanup needed - SentenceTransformer handles it
+
+
+@pytest.fixture
 def sample_pdf_path(tmp_path_factory: pytest.TempPathFactory) -> Path:
     """Create a sample PDF file for testing.
 
@@ -636,3 +696,34 @@ def _patch_ensure_mongodb() -> Generator[None, None, None]:
 
     with patch("secondbrain.cli._ensure_mongodb"):
         yield
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _suppress_mongodb_debug_logging() -> Generator[None, None, None]:
+    """Suppress MongoDB/Motor debug logging during tests.
+
+    Motor and pymongo emit verbose debug logs that add ~10-15s to test execution
+    due to I/O overhead. This fixture suppresses those logs at session scope.
+    """
+    import logging
+
+    # Save original levels
+    mongo_logger = logging.getLogger("pymongo")
+    motor_logger = logging.getLogger("motor")
+    asyncio_logger = logging.getLogger("asyncio")
+
+    original_mongo_level = mongo_logger.level
+    original_motor_level = motor_logger.level
+    original_asyncio_level = asyncio_logger.level
+
+    # Suppress debug logs
+    mongo_logger.setLevel(logging.WARNING)
+    motor_logger.setLevel(logging.WARNING)
+    asyncio_logger.setLevel(logging.WARNING)
+
+    yield
+
+    # Restore original levels
+    mongo_logger.setLevel(original_mongo_level)
+    motor_logger.setLevel(original_motor_level)
+    asyncio_logger.setLevel(original_asyncio_level)

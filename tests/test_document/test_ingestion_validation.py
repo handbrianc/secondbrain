@@ -241,6 +241,7 @@ class TestDocumentIngestorFileProcessing:
 class TestDocumentIngestorIngestErrorHandling:
     """Tests for DocumentIngestor.ingest error handling."""
 
+    @pytest.mark.slow
     def test_ingest_handles_file_exception(self, tmp_path: Path) -> None:
         """Test that exceptions in file processing increment failed count."""
         ingestor = DocumentIngestor()

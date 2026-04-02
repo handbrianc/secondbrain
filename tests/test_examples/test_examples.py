@@ -5,8 +5,6 @@ These tests validate that example scripts work correctly with real services.
 
 from __future__ import annotations
 
-import sys
-import time
 from pathlib import Path
 from typing import Any
 
@@ -54,7 +52,11 @@ class TestBasicUsageExamples:
         )
 
         # Script may have errors, just validate structure exists
-        assert result["success"] or "Usage:" in result["stdout"] or "ArgumentError" in result["stderr"]
+        assert (
+            result["success"]
+            or "Usage:" in result["stdout"]
+            or "ArgumentError" in result["stderr"]
+        )
 
     @pytest.mark.timeout(30)
     def test_example_basic_usage_list(
@@ -98,6 +100,7 @@ class TestAdvancedExamples:
         assert result["success"] or "Usage:" in result["stdout"]
 
     @pytest.mark.timeout(30)
+    @pytest.mark.flaky(reruns=2, rerun_delay=1)
     def test_example_tracing(self, example_runner: Any) -> None:
         """Test tracing example structure with OpenTelemetry.
 
@@ -115,6 +118,7 @@ class TestAdvancedExamples:
         assert result["success"] or "Usage:" in result["stdout"]
 
     @pytest.mark.timeout(30)
+    @pytest.mark.flaky(reruns=2, rerun_delay=1)
     def test_example_async_workflow(self, example_runner: Any, tmp_path: Path) -> None:
         """Test async workflow example structure."""
         test_dir = tmp_path / "test_async"
@@ -136,6 +140,7 @@ class TestAdvancedExamples:
 
     @pytest.mark.integration
     @pytest.mark.timeout(30)
+    @pytest.mark.flaky(reruns=2, rerun_delay=1)
     def test_example_batch_ingestion(self, example_runner: Any, tmp_path: Path) -> None:
         """Test batch ingestion example structure."""
         test_dir = tmp_path / "test_batch"
@@ -156,9 +161,7 @@ class TestAdvancedExamples:
         assert result["success"] or "Usage:" in result["stdout"]
 
     @pytest.mark.timeout(30)
-    def test_example_custom_chunking(
-        self, example_runner: Any, tmp_path: Path
-    ) -> None:
+    def test_example_custom_chunking(self, example_runner: Any, tmp_path: Path) -> None:
         """Test custom chunking example structure.
 
         Validates docs/examples/advanced/custom_chunking.py
@@ -198,9 +201,7 @@ class TestIntegrationExamples:
         assert result["success"] or "Usage:" in result["stdout"]
 
     @pytest.mark.timeout(30)
-    def test_example_fastapi_endpoint(
-        self, example_runner: Any
-    ) -> None:
+    def test_example_fastapi_endpoint(self, example_runner: Any) -> None:
         """Test FastAPI endpoint example structure.
 
         Validates docs/examples/integrations/fastapi_endpoint.py

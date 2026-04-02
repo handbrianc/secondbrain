@@ -57,16 +57,21 @@ def isolated_storage(unique_collection_name: str) -> VectorStorage:
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 class TestMongoRealConnection:
     """Test VectorStorage with real MongoDB connection."""
 
-    def test_storage_real_mongo_connection(self, isolated_storage: VectorStorage) -> None:
+    def test_storage_real_mongo_connection(
+        self, isolated_storage: VectorStorage
+    ) -> None:
         """Test real MongoDB connection is established."""
         assert isolated_storage is not None
         # Validate connection by pinging
         assert isolated_storage.validate_connection() is True
 
-    def test_storage_real_store_and_retrieve(self, isolated_storage: VectorStorage) -> None:
+    def test_storage_real_store_and_retrieve(
+        self, isolated_storage: VectorStorage
+    ) -> None:
         """Test store and retrieve with real MongoDB."""
         # Clean up first
         isolated_storage.delete_all()
@@ -88,7 +93,9 @@ class TestMongoRealConnection:
         # Cleanup
         isolated_storage.delete_by_chunk_id("test_chunk_1")
 
-    def test_storage_real_batch_operations(self, isolated_storage: VectorStorage) -> None:
+    def test_storage_real_batch_operations(
+        self, isolated_storage: VectorStorage
+    ) -> None:
         """Test batch store with real MongoDB."""
         # Clean up first
         isolated_storage.delete_all()
@@ -114,7 +121,9 @@ class TestMongoRealConnection:
         # Cleanup
         isolated_storage.delete_by_source("batch_test.pdf")
 
-    def test_storage_real_search_similarity(self, isolated_storage: VectorStorage) -> None:
+    def test_storage_real_search_similarity(
+        self, isolated_storage: VectorStorage
+    ) -> None:
         """Test document storage and retrieval with real MongoDB."""
         # Clean up first
         isolated_storage.delete_all()
@@ -141,7 +150,9 @@ class TestMongoRealConnection:
         # Cleanup
         isolated_storage.delete_by_source("sim_test.pdf")
 
-    def test_storage_real_filter_by_source(self, isolated_storage: VectorStorage) -> None:
+    def test_storage_real_filter_by_source(
+        self, isolated_storage: VectorStorage
+    ) -> None:
         """Test source file filtering."""
         # Clean up first
         isolated_storage.delete_all()
@@ -218,7 +229,9 @@ class TestMongoRealConnection:
         # Cleanup
         isolated_storage.delete_all()
 
-    def test_storage_real_delete_operations(self, isolated_storage: VectorStorage) -> None:
+    def test_storage_real_delete_operations(
+        self, isolated_storage: VectorStorage
+    ) -> None:
         """Test delete operations with real MongoDB."""
         # Clean up first
         isolated_storage.delete_all()
@@ -236,17 +249,23 @@ class TestMongoRealConnection:
         ]
         isolated_storage.store_batch(chunks)
 
-        results = isolated_storage.list_chunks(source_filter="delete_test.pdf", limit=10)
+        results = isolated_storage.list_chunks(
+            source_filter="delete_test.pdf", limit=10
+        )
         assert len(results) == 5
 
         # Delete by chunk_id
         isolated_storage.delete_by_chunk_id("delete_test_0")
-        results = isolated_storage.list_chunks(source_filter="delete_test.pdf", limit=10)
+        results = isolated_storage.list_chunks(
+            source_filter="delete_test.pdf", limit=10
+        )
         assert len(results) == 4
 
         # Delete by source
         isolated_storage.delete_by_source("delete_test.pdf")
-        results = isolated_storage.list_chunks(source_filter="delete_test.pdf", limit=10)
+        results = isolated_storage.list_chunks(
+            source_filter="delete_test.pdf", limit=10
+        )
         assert len(results) == 0
 
     def test_storage_real_pagination(self, isolated_storage: VectorStorage) -> None:
@@ -280,7 +299,9 @@ class TestMongoRealConnection:
         # Cleanup
         isolated_storage.delete_by_source("page_test.pdf")
 
-    def test_storage_real_concurrent_writes(self, isolated_storage: VectorStorage) -> None:
+    def test_storage_real_concurrent_writes(
+        self, isolated_storage: VectorStorage
+    ) -> None:
         """Test concurrent batch operations."""
         from concurrent.futures import ThreadPoolExecutor
 

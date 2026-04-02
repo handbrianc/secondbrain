@@ -5,11 +5,11 @@ including progress callbacks, cores validation, streaming config, file validatio
 empty directories, and mixed success/failure scenarios.
 """
 
-import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import psutil
+import pytest
 from click.testing import CliRunner
 
 from secondbrain.cli import cli
@@ -32,6 +32,7 @@ class TestIngestProgressCallback:
 class TestIngestCoresValidation:
     """Tests for ingest command cores parameter validation."""
 
+    @pytest.mark.slow
     def test_ingest_cores_validation(self) -> None:
         """Test cores parameter validation without spawning subprocesses."""
         runner = CliRunner()

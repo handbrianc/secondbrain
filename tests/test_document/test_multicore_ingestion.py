@@ -22,6 +22,12 @@ from secondbrain.document import (
     _extract_and_chunk_file,
 )
 
+# Mark integration tests that involve real parallel processing
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.slow,
+]
+
 
 class TestCoreCountValidation:
     """Tests for core count validation logic."""

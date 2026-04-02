@@ -16,6 +16,11 @@ import pytest
 
 from secondbrain.document import DocumentIngestor, Segment
 
+# Mark integration tests that involve streaming processing
+pytestmark = [
+    pytest.mark.integration,
+]
+
 
 class TestStreamingProcessing:
     """Tests for streaming document processing."""

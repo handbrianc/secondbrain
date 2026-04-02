@@ -15,7 +15,20 @@ from secondbrain.storage import VectorStorage
 if TYPE_CHECKING:
     pass  # type: ignore[unused-ignore]
 
+
+def _get_worker_id() -> str:
+    """Get pytest-xdist worker ID for test isolation."""
+    # Get worker ID from environment variable set by pytest-xdist
+    return os.environ.get("PYTEST_XDIST_WORKER", "master")
+
+
 EMBEDDING_DIMENSIONS = 768
+
+
+@pytest.fixture
+def worker_id_suffix_test_integration() -> str:
+    """Get worker ID suffix for test isolation in test_integration."""
+    return _get_worker_id()
 
 
 @pytest.fixture
@@ -118,8 +131,13 @@ def ingestor_with_mock_embedder(sample_embedding: list[float]) -> Any:
 
 
 @pytest.fixture
-def storage_with_index(test_collection: Any) -> Any:
-    """Create a VectorStorage instance for integration testing."""
+def storage_with_index(
+    test_collection: Any, worker_id_suffix_test_integration: str
+) -> Any:
+    """Create a VectorStorage instance for integration testing (worker-isolated)."""
+    # Get worker ID for isolation
+    worker_id = worker_id_suffix_test_integration
+
     # Save original environment variables
     original_mongo_uri = os.environ.get("SECONDBRAIN_MONGO_URI")
     original_mongo_db = os.environ.get("SECONDBRAIN_MONGO_DB")
@@ -129,7 +147,8 @@ def storage_with_index(test_collection: Any) -> Any:
 
     os.environ["SECONDBRAIN_MONGO_URI"] = "mongodb://localhost:27017"
     os.environ["SECONDBRAIN_MONGO_DB"] = "test_secondbrain"
-    os.environ["SECONDBRAIN_MONGO_COLLECTION"] = "test_embeddings"
+    # Dynamic collection per worker for parallel safety
+    os.environ["SECONDBRAIN_MONGO_COLLECTION"] = f"test_embeddings_{worker_id}"
     os.environ["SECONDBRAIN_LOCALHOST"] = "http://localhost:11434"
     os.environ["SECONDBRAIN_LOCAL_EMBEDDING_MODEL"] = "all-MiniLM-L6-v2"
 
@@ -140,7 +159,7 @@ def storage_with_index(test_collection: Any) -> Any:
     storage = VectorStorage(
         mongo_uri="mongodb://localhost:27017",
         db_name="test_secondbrain",
-        collection_name="test_embeddings",
+        collection_name=f"test_embeddings_{worker_id}",
     )
 
     test_collection.create_index("source_file")

@@ -14,11 +14,48 @@ from pathlib import Path
 import pytest
 
 
-@pytest.mark.integration
+def _get_worker_id() -> str:
+    """Get pytest-xdist worker ID for test isolation."""
+    import os
+
+    # Get worker ID from environment variable set by pytest-xdist
+    return os.environ.get("PYTEST_XDIST_WORKER", "master")
+
+
+@pytest.fixture
+def worker_isolated_storage():
+    """Provide VectorStorage with worker-isolated collection.
+
+    Each pytest-xdist worker gets its own collection to prevent race conditions
+    during parallel execution.
+    """
+    from secondbrain.storage.sync import VectorStorage
+
+    worker_id = _get_worker_id()
+    collection_name = f"test_large_docs_{worker_id}"
+
+    storage = VectorStorage(
+        mongo_uri="mongodb://127.0.0.1:27018/secondbrain_test",
+        db_name="secondbrain_test",
+        collection_name=collection_name,
+    )
+    try:
+        yield storage
+    finally:
+        try:
+            storage.delete_all()
+        except Exception:
+            pass
+        storage.close()
+
+
+@pytest.mark.e2e
+@pytest.mark.slow
 class TestLargeDocumentHandling:
     """Tests for handling large documents."""
 
-    def test_ingest_large_pdf_memory_efficient(self, tmp_path):
+    @pytest.mark.slow
+    def test_ingest_large_pdf_memory_efficient(self, tmp_path, worker_isolated_storage):
         """Should process large documents without running out of memory."""
         from secondbrain.document.ingestor import DocumentIngestor
 
@@ -47,7 +84,9 @@ class TestLargeDocumentHandling:
         assert all(len(chunk["text"]) <= 512 + 50 for chunk in chunks)
         assert all(len(chunk["text"]) > 0 for chunk in chunks)
 
-    def test_concurrent_large_document_ingestion(self, tmp_path):
+    def test_concurrent_large_document_ingestion(
+        self, tmp_path, worker_isolated_storage
+    ):
         """Test concurrent large document ingestion."""
         import asyncio
 
@@ -75,7 +114,7 @@ class TestLargeDocumentHandling:
         converter = DocumentConverterWrapper()
         assert converter is not None
 
-    def test_memory_usage_under_load(self):
+    def test_memory_usage_under_load(self, worker_isolated_storage):
         """Test memory usage under load."""
         # Basic memory test - verify memory tracking works
         from secondbrain.utils.memory_utils import (
@@ -133,6 +172,7 @@ class TestUnicodeAndEncoding:
         assert "🚀" in all_chunks_text
         assert "✨" in all_chunks_text
 
+    @pytest.mark.slow
     def test_mixed_encoding_files(self):
         """Test mixed encoding files."""
         import tempfile

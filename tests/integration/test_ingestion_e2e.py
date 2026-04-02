@@ -18,39 +18,11 @@ from secondbrain.embedding.local import LocalEmbeddingGenerator
 from secondbrain.storage import VectorStorage
 from secondbrain.storage.pipeline import build_search_pipeline
 
-# Mark all tests as integration and slow
+# Mark all tests as e2e (end-to-end with real services)
 pytestmark = [
-    pytest.mark.integration,
+    pytest.mark.e2e,
+    pytest.mark.slow,
 ]
-
-
-@pytest.fixture(scope="module")
-def real_embedding_generator() -> LocalEmbeddingGenerator:
-    """Create a real embedding generator with sentence-transformers."""
-    try:
-        gen = LocalEmbeddingGenerator(model_name="all-MiniLM-L6-v2")
-        gen.validate_connection()
-        return gen
-    except Exception:
-        pytest.skip("Embedding model not available")
-
-
-@pytest.fixture(scope="module")
-def real_storage() -> VectorStorage:
-    """Create real vector storage with MongoDB connection."""
-    try:
-        storage = VectorStorage()
-        storage.validate_connection()
-        storage.ensure_index()
-        return storage
-    except Exception:
-        pytest.skip("MongoDB not available")
-
-
-@pytest.fixture
-def clean_database(real_storage: VectorStorage) -> None:
-    """Clean database before each test."""
-    real_storage.delete_all()
 
 
 @pytest.fixture

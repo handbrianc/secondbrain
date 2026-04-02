@@ -1,21 +1,19 @@
 services:
   mongodb:
-    image: mongo:8.0
+    image: mongo:6.0
     container_name: secondbrain-mongodb-test
     hostname: mongodb
     ports:
       - "27018:27017"  # Different from dev port (27017)
     environment:
       MONGO_INITDB_DATABASE: secondbrain_test
-      MONGO_INITDB_ROOT_USERNAME: testuser
-      MONGO_INITDB_ROOT_PASSWORD: testpass
     volumes:
       - mongo_test_data:/data/db
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
+      interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
       start_period: 10s
     networks:
       - secondbrain-test-network
@@ -25,17 +23,20 @@ services:
     container_name: secondbrain-embeddings-test
     hostname: sentence-transformers
     ports:
-      - "11435:11434"  # Different from dev port (11434)
+      - "11435:8000"  # Different from dev port (11434)
     environment:
-      MODEL: all-MiniLM-L6-v2
+      MODEL_NAME: all-MiniLM-L6-v2
     volumes:
       - model_cache:/root/.cache
+    depends_on:
+      mongodb:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/health"]
-      interval: 10s
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 5s
       timeout: 5s
-      retries: 5
-      start_period: 30s
+      retries: 10
+      start_period: 15s
     networks:
       - secondbrain-test-network
 

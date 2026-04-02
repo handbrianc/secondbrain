@@ -47,7 +47,9 @@ class TestDocumentIngestion:
 class TestFullWorkflow:
     """Tests for complete workflow: ingest -> list -> delete."""
 
+    @pytest.mark.e2e
     @pytest.mark.integration
+    @pytest.mark.slow
     def test_full_workflow(
         self,
         mongomock_client: mongomock.MongoClient,
@@ -264,6 +266,7 @@ class TestIntegrationDataFlow:
         for chunk in filtered:
             assert "test0" in chunk["source_file"]
 
+    @pytest.mark.e2e
     @pytest.mark.integration
     @pytest.mark.slow
     def test_chunk_overlapping_text(

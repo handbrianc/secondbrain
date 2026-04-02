@@ -18,9 +18,11 @@ from secondbrain.exceptions import (
 from secondbrain.utils.circuit_breaker import CircuitBreaker
 
 
+@pytest.mark.unit
 class TestErrorHandlingPaths:
     """Tests for error handling code paths."""
 
+    @pytest.mark.slow
     def test_ingestor_handles_extraction_error(self, tmp_path):
         """Should handle document extraction failures gracefully."""
         # Create a corrupted PDF file
@@ -88,9 +90,11 @@ class TestErrorHandlingPaths:
                 storage.list_chunks(limit=1)
 
 
+@pytest.mark.unit
 class TestEdgeCases:
     """Tests for edge cases and boundary conditions."""
 
+    @pytest.mark.slow
     def test_empty_document_ingestion(self, tmp_path):
         """Should handle empty documents gracefully."""
         # Create empty PDF
@@ -153,6 +157,7 @@ class TestEdgeCases:
         assert len(results) == 3
 
 
+@pytest.mark.integration
 class TestCircuitBreakerBehavior:
     """Tests for circuit breaker state transitions."""
 
@@ -244,10 +249,12 @@ class TestCircuitBreakerBehavior:
         assert cb.state.value.upper() == "OPEN"
 
 
+@pytest.mark.integration
 class TestAsyncErrorPropagation:
     """Tests for async error propagation patterns."""
 
     @pytest.mark.asyncio
+    @pytest.mark.slow
     async def test_async_storage_handles_connection_error(self):
         """Async storage should properly propagate connection errors."""
         with patch(
@@ -277,6 +284,7 @@ class TestAsyncErrorPropagation:
         assert "success" in result or "failed" in result
 
 
+@pytest.mark.unit
 class TestBoundaryConditions:
     """Tests for boundary conditions and limits."""
 
@@ -316,6 +324,7 @@ class TestBoundaryConditions:
             searcher.search("test", top_k=200000)
 
 
+@pytest.mark.integration
 class TestRecoveryScenarios:
     """Tests for error recovery scenarios."""
 

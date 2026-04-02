@@ -1,0 +1,1002 @@
+bringing up nodes...
+bringing up nodes...
+
+........................................................................ [  5%]
+........................................................................ [ 10%]
+........................................................................ [ 15%]
+........................................................................ [ 20%]
+........................................................................ [ 25%]
+........................................................................ [ 30%]
+........................................................................ [ 35%]
+........................................................................ [ 40%]
+........................................................................ [ 46%]
+........................................................................ [ 51%]
+........................................................................ [ 56%]
+........................................................................ [ 61%]
+........................................................................ [ 66%]
+........................................................................ [ 71%]
+........................................................................ [ 76%]
+........................................................................ [ 81%]
+........................................................................ [ 86%]
+...................                    DEBUG    {"timestamp": "2026-04-01             logger.py:108
+                             18:22:42,564", "level": "DEBUG",                   
+                             "logger": "pymongo.topology",                      
+                             "message": "{\"message\": \"Starting               
+                             topology monitoring\",                             
+                             \"topologyId\": {\"$oid\":                         
+                             \"69cda8c2f1f1a8fe7c0434c4\"}}",                   
+                             "module": "logger", "function":                    
+                             "_debug_log", "line": 108,                         
+                             "request_id": "test-request-id",                   
+                             "correlation_id": "unknown"}                       
+                    DEBUG    {"timestamp": "2026-04-01             logger.py:108
+                             18:22:42,565", "level": "DEBUG",                   
+                             "logger": "pymongo.topology",                      
+                             "message": "{\"message\": \"Topology               
+                             description changed\",                             
+                             \"topologyId\": {\"$oid\":                         
+                             \"69cda8c2f1f1a8fe7c0434c4\"},                     
+                             \"previousDescription\":                           
+                             \"<TopologyDescription id:                         
+                             69cda8c2f1f1a8fe7c0434c4,                          
+                             topology_type: Unknown, servers:                   
+                             []>\", \"newDescription\":                         
+                             \"<TopologyDescription id:                         
+                             69cda8c2f1f1a8fe7c0434c4,                          
+                             topology_type: Unknown, servers:                   
+                             [<ServerDescription ('localhost',                  
+                             27017) server_type: Unknown, rtt:                  
+                             None>]>\"}", "module": "logger",                   
+                             "function": "_debug_log", "line":                  
+                             108, "request_id": "test-request-id",              
+                             "correlation_id": "unknown"}                       
+                    DEBUG    {"timestamp": "2026-04-01             logger.py:108
+                             18:22:42,566", "level": "DEBUG",                   
+                             "logger": "pymongo.topology",                      
+                             "message": "{\"message\": \"Starting               
+                             server monitoring\", \"topologyId\":               
+                             {\"$oid\":                                         
+                             \"69cda8c2f1f1a8fe7c0434c4\"},                     
+                             \"serverHost\": \"localhost\",                     
+                             \"serverPort\": 27017}", "module":                 
+                             "logger", "function": "_debug_log",                
+                             "line": 108, "request_id":                         
+                             "test-request-id", "correlation_id":               
+                             "unknown"}                                         
+                    DEBUG    {"timestamp": "2026-04-01             logger.py:108
+                             18:22:42,567", "level": "DEBUG",                   
+                             "logger": "pymongo.connection",                    
+                             "message": "{\"message\":                          
+                             \"Connection pool created\",                       
+                             \"clientId\": {\"$oid\":                           
+                             \"69cda8c2f1f1a8fe7c0434c4\"},                     
+                             \"serverHost\": \"localhost\",                     
+                             \"serverPort\": 27017}", "module":                 
+                             "logger", "function": "_debug_log",                
+                             "line": 108, "request_id":                         
+                             "test-request-id", "correlation_id":               
+                             "unknown"}                                         
+                    DEBUG    {"timestamp": "2026-04-01             logger.py:108
+                             18:22:42,568", "level": "DEBUG",                   
+                             "logger": "pymongo.serverSelection",               
+                             "message": "{\"message\": \"Server                 
+                             selection started\", \"selector\":                 
+                             \"<function writable_server_selector               
+                             at 0x10fdcfba0>\", \"operation\":                  
+                             \"dropDatabase\",                                  
+                             \"topologyDescription\":                           
+                             \"<TopologyDescription id:                         
+                             69cda8c2f1f1a8fe7c0434c4,                          
+                             topology_type: Unknown, servers:                   
+                             [<ServerDescription ('localhost',                  
+                             27017) server_type: Unknown, rtt:                  
+                             None>]>\", \"clientId\": {\"$oid\":                
+                             \"69cda8c2f1f1a8fe7c0434c4\"}}",                   
+                             "module": "logger", "function":                    
+                             "_debug_log", "line": 108,                         
+                             "request_id": "test-request-id",                   
+                             "correlation_id": "unknown"}                       
+                    DEBUG    {"timestamp": "2026-04-01             logger.py:108
+                             18:22:42,569", "level": "DEBUG",                   
+                             "logger": "pymongo.serverSelection",               
+                             "message": "{\"message\": \"Waiting                
+                             for suitable server to become                      
+                             available\", \"selector\":                         
+                             \"<function writable_server_selector               
+                             at 0x10fdcfba0>\", \"operation\":                  
+                             \"dropDatabase\",                                  
+                             \"topologyDescription\":                           
+                             \"<TopologyDescription id:                         
+                             69cda8c2f1f1a8fe7c0434c4,                          
+                             topology_type: Unknown, servers:                   
+                             [<ServerDescription ('localhost',                  
+                             27017) server_type: Unknown, rtt:                  
+                             None>]>\", \"clientId\": {\"$oid\":                
+                             \"69cda8c2f1f1a8fe7c0434c4\"},                     
+                             \"remainingTimeMS\": 998}", "module":              
+                             "logger", "function": "_debug_log",                
+                             "line": 108, "request_id":                         
+                             "test-request-id", "correlation_id":               
+                             "unknown"}                                         
+                    DEBUG    {"timestamp": "2026-04-01             logger.py:108
+                             18:22:42,571", "level": "DEBUG",                   
+                             "logger": "pymongo.topology",                      
+                             "message": "{\"message\": \"Server                 
+                             heartbeat started\", \"topologyId\":               
+                             {\"$oid\":                                         
+                             \"69cda8c2f1f1a8fe7c0434c4\"},                     
+                             \"driverConnectionId\": 1,                         
+                             \"serverHost\": \"localhost\",                     
+                             \"serverPort\": 27017, \"awaited\":                
+                             false}", "module": "logger",                       
+                             "function": "_debug_log", "line":                  
+                             108, "request_id": "",                             
+                             "correlation_id": "unknown"}                       
+                    DEBUG    {"timestamp": "2026-04-01             logger.py:108
+                             18:22:42,575", "level": "DEBUG",                   
+                             "logger": "pymongo.topology",                      
+                             "message": "{\"message\": \"Server                 
+                             heartbeat succeeded\",                             
+                             \"topologyId\": {\"$oid\":                         
+                             \"69cda8c2f1f1a8fe7c0434c4\"},                     
+                             \"driverConnectionId\": 1,                         
+                             \"serverConnectionId\": 74586,                     
+                             \"serverHost\": \"localhost\",                     
+                             \"serverPort\": 27017, \"awaited\":                
+                             false, \"durationMS\":                             
+                             3.5238749987911433, \"reply\":                     
+                             \"{\\\"helloOk\\\": true,                          
+                             \\\"topologyVersion\\\":                           
+                             {\\\"processId\\\": {\\\"$oid\\\":                 
+                             \\\"69cc33d63d70b2dfdf927d24\\\"},                 
+                             \\\"counter\\\": 6}, \\\"hosts\\\":                
+                             [\\\"mongodb:27017\\\"],                           
+                             \\\"setName\\\": \\\"mongodb\\\",                  
+                             \\\"setVersion\\\": 1,                             
+                             \\\"ismaster\\\": true,                            
+                             \\\"primary\\\":                                   
+                             \\\"mongodb:27017\\\", \\\"me\\\":                 
+                             \\\"mongodb:27017\\\",                             
+                             \\\"electionId\\\": {\\\"$oid\\\":                 
+                             \\\"7fffffff0000000000000009\\\"},                 
+                             \\\"lastWrite\\\": {\\\"opTime\\\":                
+                             {\\\"ts\\\": {\\\"$timestamp\\\":                  
+                             {\\\"t\\\": 1775085758, \\\"i\\\":                 
+                             2}}, \\\"t\\\": 9},                                
+                             \\\"lastWriteDate\\\":                             
+                             {\\\"$date\\\":                                    
+                             \\\"2026-04-01T23:22:38Z\\\"},                     
+                             \\\"majorityOpTime\\\": {\\\"ts\\\":               
+                             {\\\"$timestamp\\\": {\\\"t\\\":                   
+                             1775085758, \\\"i\\\": 2}},                        
+                             \\\"t\\\": 9},                                     
+                             \\\"majorityWriteDate\\\":                         
+                             {\\\"$date\\\":                                    
+                             \\\"2026-04-01T23:22:38Z\\\"}},                    
+                             \\\"maxBsonObjectSize\\\": 16777216,               
+                             \\\"maxMessageSizeBytes\\\":                       
+                             48000000, \\\"maxWriteBatchSize\\\":               
+                             100000, \\\"localTime\\\":                         
+                             {\\\"$date\\\":                                    
+                             \\\"2026-04-01T23:22:42.574Z\\\"},                 
+                             \\\"logicalSessionTimeoutMinutes\\\":              
+                             30, \\\"connectionId\\\": 74586,                   
+                             \\\"maxWireVersion\\\": 27,                        
+                             \\\"ok\\\": 1.0,                                   
+                             \\\"$clusterTime\\\":                              
+                             {\\\"clusterTime\\\":                              
+                             {\\\"$timestamp\\\": {\\\"t\\\":                   
+                             1775085758, \\\"i\\\": 2}},                        
+                             \\\"signature\\\": {\\\"hash\\\":                  
+                             {\\\"$binary\\\": {\\\"base64\\\":                 
+                             \\\"AAAAAAAAAAAAAAAAAAAAAAAAAAA=\\\",              
+                             \\\"subType\\\": \\\"00\\\"}}}},                   
+                             \\\"operationTime\\\":                             
+                             {\\\"$timestamp...\"}", "module":                  
+                             "logger", "function": "_debug_log",                
+                             "line": 108, "request_id": "",                     
+                             "correlation_id": "unknown"}                       
+                    DEBUG    {"timestamp": "2026-04-01             logger.py:108
+                             18:22:42,577", "level": "DEBUG",                   
+                             "logger": "pymongo.connection",                    
+                             "message": "{\"message\":                          
+                             \"Connection pool ready\",                         
+                             \"clientId\": {\"$oid\":                           
+                             \"69cda8c2f1f1a8fe7c0434c4\"},                     
+                             \"serverHost\": \"localhost\",                     
+                             \"serverPort\": 27017}", "module":                 
+                             "logger", "function": "_debug_log",                
+                             "line": 108, "request_id": "",                     
+                             "correlation_id": "unknown"}                       
+                    DEBUG    {"timestamp": "2026-04-01             logger.py:108
+                             18:22:42,578", "level": "DEBUG",                   
+                             "logger": "pymongo.connection",                    
+                             "message": "{\"message\":                          
+                             \"Connection pool created\",                       
+                             \"clientId\": {\"$oid\":                           
+                             \"69cda8c2f1f1a8fe7c0434c4\"},                     
+                             \"serverHost\": \"mongodb\",                       
+                             \"serverPort\": 27017}", "module":                 
+                             "logger", "function": "_debug_log",                
+                             "line": 108, "request_id": "",                     
+                             "correlation_id": "unknown"}                       
+                    DEBUG    {"timestamp": "2026-04-01             logger.py:108
+                             18:22:42,579", "level": "DEBUG",                   
+                             "logger": "pymongo.topology",                      
+                             "message": "{\"message\": \"Stopped                
+                             server monitoring\", \"topologyId\":               
+                             {\"$oid\":                                         
+                             \"69cda8c2f1f1a8fe7c0434c4\"},                     
+                             \"serverHost\": \"localhost\",                     
+                             \"serverPort\": 27017}", "module":                 
+                             "logger", "function": "_debug_log",                
+                             "line": 108, "request_id": "",                     
+                             "correlation_id": "unknown"}                       
+                    DEBUG    {"timestamp": "2026-04-01             logger.py:108
+                             18:22:42,580", "level": "DEBUG",                   
+                             "logger": "pymongo.connection",                    
+                             "message": "{\"message\":                          
+                             \"Connection pool closed\",                        
+                             \"clientId\": {\"$oid\":                           
+                             \"69cda8c2f1f1a8fe7c0434c4\"},                     
+                             \"serverHost\": \"localhost\",                     
+                             \"serverPort\": 27017}", "module":                 
+                             "logger", "function": "_debug_log",                
+                             "line": 108, "request_id": "",                     
+                             "correlation_id": "unknown"}                       
+                    DEBUG    {"timestamp": "2026-04-01             logger.py:108
+                             18:22:42,580", "level": "DEBUG",                   
+                             "logger": "pymongo.topology",                      
+                             "message": "{\"message\": \"Topology               
+                             description changed\",                             
+                             \"topologyId\": {\"$oid\":                         
+                             \"69cda8c2f1f1a8fe7c0434c4\"},                     
+                             \"previousDescription\":                           
+                             \"<TopologyDescription id:                         
+                             69cda8c2f1f1a8fe7c0434c4,                          
+                             topology_type: Unknown, servers:                   
+                             [<ServerDescription ('localhost',                  
+                             27017) server_type: Unknown, rtt:                  
+                             None>]>\", \"newDescription\":                     
+                             \"<TopologyDescription id:                         
+                             69cda8c2f1f1a8fe7c0434c4,                          
+                             topology_type: ReplicaSetNoPrimary,                
+                             servers: [<ServerDescription                       
+                             ('mongodb', 27017) server_type:                    
+                             Unknown, rtt: None>]>\"}", "module":               
+                             "logger", "function": "_debug_log",                
+                             "line": 108, "request_id": "",                     
+                             "correlation_id": "unknown"}                       
+                    DEBUG    {"timestamp": "2026-04-01             logger.py:108
+                             18:22:42,582", "level": "DEBUG",                   
+                             "logger": "pymongo.topology",                      
+                             "message": "{\"message\": \"Server                 
+                             heartbeat failed\", \"topologyId\":                
+                             {\"$oid\":                                         
+                             \"69cda8c2f1f1a8fe7c0434c4\"},                     
+                             \"serverHost\": \"mongodb\",                       
+                             \"serverPort\": 27017, \"awaited\":                
+                             false, \"durationMS\":                             
+                             2.748208004049957, \"failure\":                    
+                             \"\\\"AutoReconnect('mongodb:27017:                
+                             [Errno 8] nodename nor servname                    
+                             provided, or not known (configured                 
+                             timeouts: socketTimeoutMS: 20000.0ms,              
+                             connectTimeoutMS:                                  
+                             20000.0ms)')\\\"\"}", "module":                    
+                             "logger", "function": "_debug_log",                
+                             "line": 108, "request_id": "",                     
+                             "correlation_id": "unknown"}                       
+                    DEBUG    {"timestamp": "2026-04-01             logger.py:108
+                             18:22:42,583", "level": "DEBUG",                   
+                             "logger": "pymongo.topology",                      
+                             "message": "{\"message\": \"Topology               
+                             description changed\",                             
+                             \"topologyId\": {\"$oid\":                         
+                             \"69cda8c2f1f1a8fe7c0434c4\"},                     
+                             \"previousDescription\":                           
+                             \"<TopologyDescription id:                         
+                             69cda8c2f1f1a8fe7c0434c4,                          
+                             topology_type: ReplicaSetNoPrimary,                
+                             servers: [<ServerDescription                       
+                             ('mongodb', 27017) server_type:                    
+                             Unknown, rtt: None>]>\",                           
+                             \"newDescription\":                                
+                             \"<TopologyDescription id:                         
+                             69cda8c2f1f1a8fe7c0434c4,                          
+                             topology_type: ReplicaSetNoPrimary,                
+                             servers: [<ServerDescription                       
+                             ('mongodb', 27017) server_type:                    
+                             Unknown, rtt: None,                                
+                             error=AutoReconnect('mongodb:27017:                
+                             [Errno 8] nodename nor servname                    
+                             provided, or not known (configured                 
+                             timeouts: socketTimeoutMS: 20000.0ms,              
+                             connectTimeoutMS:                                  
+                             20000.0ms)')>]>\"}", "module":                     
+                             "logger", "function": "_debug_log",                
+                             "line": 108, "request_id": "",                     
+                             "correlation_id": "unknown"}                       
+[04/01/26 18:22:43] DEBUG    {"timestamp": "2026-04-01             logger.py:108
+                             18:22:43,092", "level": "DEBUG",                   
+                             "logger": "pymongo.topology",                      
+                             "message": "{\"message\": \"Server                 
+                             heartbeat failed\", \"topologyId\":                
+                             {\"$oid\":                                         
+                             \"69cda8c2f1f1a8fe7c0434c4\"},                     
+                             \"serverHost\": \"mongodb\",                       
+                             \"serverPort\": 27017, \"awaited\":                
+                             false, \"durationMS\":                             
+                             2.712083005462773, \"failure\":                    
+                             \"\\\"AutoReconnect('mongodb:27017:                
+                             [Errno 8] nodename nor servname                    
+                             provided, or not known (configured                 
+                             timeouts: socketTimeoutMS: 20000.0ms,              
+                             connectTimeoutMS:                                  
+                             20000.0ms)')\\\"\"}", "module":                    
+                             "logger", "function": "_debug_log",                
+                             "line": 108, "request_id": "",                     
+                             "correlation_id": "unknown"}                       
+                    DEBUG    {"timestamp": "2026-04-01             logger.py:108
+                             18:22:43,093", "level": "DEBUG",                   
+                             "logger": "pymongo.topology",                      
+                             "message": "{\"message\": \"Topology               
+                             description changed\",                             
+                             \"topologyId\": {\"$oid\":                         
+                             \"69cda8c2f1f1a8fe7c0434c4\"},                     
+                             \"previousDescription\":                           
+                             \"<TopologyDescription id:                         
+                             69cda8c2f1f1a8fe7c0434c4,                          
+                             topology_type: ReplicaSetNoPrimary,                
+                             servers: [<ServerDescription                       
+                             ('mongodb', 27017) server_type:                    
+                             Unknown, rtt: None,                                
+                             error=AutoReconnect('mongodb:27017:                
+                             [Errno 8] nodename nor servname                    
+                             provided, or not known (configured                 
+                             timeouts: socketTimeoutMS: 20000.0ms,              
+                             connectTimeoutMS: 20000.0ms)')>]>\",               
+                             \"newDescription\":                                
+                             \"<TopologyDescription id:                         
+                             69cda8c2f1f1a8fe7c0434c4,                          
+                             topology_type: ReplicaSetNoPrimary,                
+                             servers: [<ServerDescription                       
+                             ('mongodb', 27017) server_type:                    
+                             Unknown, rtt: None,                                
+                             error=AutoReconnect('mongodb:27017:                
+                             [Errno 8] nodename nor servname                    
+                             provided, or not known (configured                 
+                             timeouts: socketTimeoutMS: 20000.0ms,              
+                             connectTimeoutMS:                                  
+                             20000.0ms)')>]>\"}", "module":                     
+                             "logger", "function": "_debug_log",                
+                             "line": 108, "request_id": "",                     
+                             "correlation_id": "unknown"}                       
+.                    DEBUG    {"timestamp": "2026-04-01             logger.py:108
+                             18:22:43,596", "level": "DEBUG",                   
+                             "logger": "pymongo.serverSelection",               
+                             "message": "{\"message\": \"Server                 
+                             selection failed\", \"selector\":                  
+                             \"<function writable_server_selector               
+                             at 0x10fdcfba0>\", \"operation\":                  
+                             \"dropDatabase\",                                  
+                             \"topologyDescription\":                           
+                             \"<TopologyDescription id:                         
+                             69cda8c2f1f1a8fe7c0434c4,                          
+                             topology_type: ReplicaSetNoPrimary,                
+                             servers: [<ServerDescription                       
+                             ('mongodb', 27017) server_type:                    
+                             Unknown, rtt: None,                                
+                             error=AutoReconnect('mongodb:27017:                
+                             [Errno 8] nodename nor servname                    
+                             provided, or not known (configured                 
+                             timeouts: socketTimeoutMS: 20000.0ms,              
+                             connectTimeoutMS: 20000.0ms)')>]>\",               
+                             \"clientId\": {\"$oid\":                           
+                             \"69cda8c2f1f1a8fe7c0434c4\"},                     
+                             \"failure\": \"\\\"Could not reach                 
+                             any servers in [('mongodb', 27017)].               
+                             Replica set is configured with                     
+                             internal hostnames or IPs?\\\"\"}",                
+                             "module": "logger", "function":                    
+                             "_debug_log", "line": 108,                         
+                             "request_id": "test-request-id",                   
+                             "correlation_id": "unknown"}                       
+                    DEBUG    {"timestamp": "2026-04-01             logger.py:108
+                             18:22:43,597", "level": "DEBUG",                   
+                             "logger": "pymongo.topology",                      
+                             "message": "{\"message\": \"Stopped                
+                             server monitoring\", \"topologyId\":               
+                             {\"$oid\":                                         
+                             \"69cda8c2f1f1a8fe7c0434c4\"},                     
+                             \"serverHost\": \"mongodb\",                       
+                             \"serverPort\": 27017}", "module":                 
+                             "logger", "function": "_debug_log",                
+                             "line": 108, "request_id":                         
+                             "test-request-id", "correlation_id":               
+                             "unknown"}                                         
+                    DEBUG    {"timestamp": "2026-04-01             logger.py:108
+                             18:22:43,598", "level": "DEBUG",                   
+                             "logger": "pymongo.connection",                    
+                             "message": "{\"message\":                          
+                             \"Connection pool closed\",                        
+                             \"clientId\": {\"$oid\":                           
+                             \"69cda8c2f1f1a8fe7c0434c4\"},                     
+                             \"serverHost\": \"mongodb\",                       
+                             \"serverPort\": 27017}", "module":                 
+                             "logger", "function": "_debug_log",                
+                             "line": 108, "request_id":                         
+                             "test-request-id", "correlation_id":               
+                             "unknown"}                                         
+                    DEBUG    {"timestamp": "2026-04-01             logger.py:108
+                             18:22:43,598", "level": "DEBUG",                   
+                             "logger": "pymongo.topology",                      
+                             "message": "{\"message\": \"Topology               
+                             description changed\",                             
+                             \"topologyId\": {\"$oid\":                         
+                             \"69cda8c2f1f1a8fe7c0434c4\"},                     
+                             \"previousDescription\":                           
+                             \"<TopologyDescription id:                         
+                             69cda8c2f1f1a8fe7c0434c4,                          
+                             topology_type: ReplicaSetNoPrimary,                
+                             servers: [<ServerDescription                       
+                             ('mongodb', 27017) server_type:                    
+                             Unknown, rtt: None,                                
+                             error=AutoReconnect('mongodb:27017:                
+                             [Errno 8] nodename nor servname                    
+                             provided, or not known (configured                 
+                             timeouts: socketTimeoutMS: 20000.0ms,              
+                             connectTimeoutMS: 20000.0ms)')>]>\",               
+                             \"newDescription\":                                
+                             \"<TopologyDescription id:                         
+                             69cda8c2f1f1a8fe7c0434c4,                          
+                             topology_type: ReplicaSetNoPrimary,                
+                             servers: [<ServerDescription                       
+                             ('mongodb', 27017) server_type:                    
+                             Unknown, rtt: None>]>\"}", "module":               
+                             "logger", "function": "_debug_log",                
+                             "line": 108, "request_id":                         
+                             "test-request-id", "correlation_id":               
+                             "unknown"}                                         
+                    DEBUG    {"timestamp": "2026-04-01             logger.py:108
+                             18:22:43,600", "level": "DEBUG",                   
+                             "logger": "pymongo.topology",                      
+                             "message": "{\"message\": \"Stopped                
+                             topology monitoring\",                             
+                             \"topologyId\": {\"$oid\":                         
+                             \"69cda8c2f1f1a8fe7c0434c4\"}}",                   
+                             "module": "logger", "function":                    
+                             "_debug_log", "line": 108,                         
+                             "request_id": "test-request-id",                   
+                             "correlation_id": "unknown"}                       
+                    INFO     {"timestamp": "2026-04-01               local.py:46
+                             18:22:43,601", "level": "INFO",                    
+                             "logger":                                          
+                             "secondbrain.embedding.local",                     
+                             "message": "Initializing embedding                 
+                             model: all-MiniLM-L6-v2 on device:                 
+                             mps", "module": "local", "function":               
+                             "__init__", "line": 46, "request_id":              
+                             "test-request-id", "correlation_id":               
+                             "unknown"}                                         
+                    INFO     {"timestamp": "2026-04-01               local.py:55
+                             18:22:43,602", "level": "INFO",                    
+                             "logger":                                          
+                             "secondbrain.embedding.local",                     
+                             "message": "GPU acceleration enabled:              
+                             Apple Silicon MPS detected", "module":             
+                             "local", "function": "__init__",                   
+                             "line": 55, "request_id":                          
+                             "test-request-id", "correlation_id":               
+                             "unknown"}                                         
+.................................................... [ 92%]
+........................................................................ [ 97%]
+.......................................                                  [100%][04/01/26 18:23:30] DEBUG    {"timestamp": "2026-04-01             logger.py:108
+                             18:23:30,256", "level": "DEBUG",                   
+                             "logger": "pymongo.topology",                      
+                             "message": "{\"message\": \"Starting               
+                             topology monitoring\",                             
+                             \"topologyId\": {\"$oid\":                         
+                             \"69cda8f2f1f1a8fe7c0434c5\"}}",                   
+                             "module": "logger", "function":                    
+                             "_debug_log", "line": 108,                         
+                             "request_id": "test-request-id",                   
+                             "correlation_id": "unknown"}                       
+                    DEBUG    {"timestamp": "2026-04-01             logger.py:108
+                             18:23:30,258", "level": "DEBUG",                   
+                             "logger": "pymongo.topology",                      
+                             "message": "{\"message\": \"Topology               
+                             description changed\",                             
+                             \"topologyId\": {\"$oid\":                         
+                             \"69cda8f2f1f1a8fe7c0434c5\"},                     
+                             \"previousDescription\":                           
+                             \"<TopologyDescription id:                         
+                             69cda8f2f1f1a8fe7c0434c5,                          
+                             topology_type: Unknown, servers:                   
+                             []>\", \"newDescription\":                         
+                             \"<TopologyDescription id:                         
+                             69cda8f2f1f1a8fe7c0434c5,                          
+                             topology_type: Unknown, servers:                   
+                             [<ServerDescription ('localhost',                  
+                             27017) server_type: Unknown, rtt:                  
+                             None>]>\"}", "module": "logger",                   
+                             "function": "_debug_log", "line":                  
+                             108, "request_id": "test-request-id",              
+                             "correlation_id": "unknown"}                       
+                    DEBUG    {"timestamp": "2026-04-01             logger.py:108
+                             18:23:30,261", "level": "DEBUG",                   
+                             "logger": "pymongo.topology",                      
+                             "message": "{\"message\": \"Starting               
+                             server monitoring\", \"topologyId\":               
+                             {\"$oid\":                                         
+                             \"69cda8f2f1f1a8fe7c0434c5\"},                     
+                             \"serverHost\": \"localhost\",                     
+                             \"serverPort\": 27017}", "module":                 
+                             "logger", "function": "_debug_log",                
+                             "line": 108, "request_id":                         
+                             "test-request-id", "correlation_id":               
+                             "unknown"}                                         
+                    DEBUG    {"timestamp": "2026-04-01             logger.py:108
+                             18:23:30,262", "level": "DEBUG",                   
+                             "logger": "pymongo.connection",                    
+                             "message": "{\"message\":                          
+                             \"Connection pool created\",                       
+                             \"clientId\": {\"$oid\":                           
+                             \"69cda8f2f1f1a8fe7c0434c5\"},                     
+                             \"serverHost\": \"localhost\",                     
+                             \"serverPort\": 27017}", "module":                 
+                             "logger", "function": "_debug_log",                
+                             "line": 108, "request_id":                         
+                             "test-request-id", "correlation_id":               
+                             "unknown"}                                         
+                    DEBUG    {"timestamp": "2026-04-01             logger.py:108
+                             18:23:30,264", "level": "DEBUG",                   
+                             "logger": "pymongo.serverSelection",               
+                             "message": "{\"message\": \"Server                 
+                             selection started\", \"selector\":                 
+                             \"<function writable_server_selector               
+                             at 0x10fdcfba0>\", \"operation\":                  
+                             \"dropDatabase\",                                  
+                             \"topologyDescription\":                           
+                             \"<TopologyDescription id:                         
+                             69cda8f2f1f1a8fe7c0434c5,                          
+                             topology_type: Unknown, servers:                   
+                             [<ServerDescription ('localhost',                  
+                             27017) server_type: Unknown, rtt:                  
+                             None>]>\", \"clientId\": {\"$oid\":                
+                             \"69cda8f2f1f1a8fe7c0434c5\"}}",                   
+                             "module": "logger", "function":                    
+                             "_debug_log", "line": 108,                         
+                             "request_id": "test-request-id",                   
+                             "correlation_id": "unknown"}                       
+                    DEBUG    {"timestamp": "2026-04-01             logger.py:108
+                             18:23:30,266", "level": "DEBUG",                   
+                             "logger": "pymongo.serverSelection",               
+                             "message": "{\"message\": \"Waiting                
+                             for suitable server to become                      
+                             available\", \"selector\":                         
+                             \"<function writable_server_selector               
+                             at 0x10fdcfba0>\", \"operation\":                  
+                             \"dropDatabase\",                                  
+                             \"topologyDescription\":                           
+                             \"<TopologyDescription id:                         
+                             69cda8f2f1f1a8fe7c0434c5,                          
+                             topology_type: Unknown, servers:                   
+                             [<ServerDescription ('localhost',                  
+                             27017) server_type: Unknown, rtt:                  
+                             None>]>\", \"clientId\": {\"$oid\":                
+                             \"69cda8f2f1f1a8fe7c0434c5\"},                     
+                             \"remainingTimeMS\": 997}", "module":              
+                             "logger", "function": "_debug_log",                
+                             "line": 108, "request_id":                         
+                             "test-request-id", "correlation_id":               
+                             "unknown"}                                         
+[04/01/26 18:23:31] DEBUG    {"timestamp": "2026-04-01             logger.py:108
+                             18:23:31,271", "level": "DEBUG",                   
+                             "logger": "pymongo.serverSelection",               
+                             "message": "{\"message\": \"Server                 
+                             selection failed\", \"selector\":                  
+                             \"<function writable_server_selector               
+                             at 0x10fdcfba0>\", \"operation\":                  
+                             \"dropDatabase\",                                  
+                             \"topologyDescription\":                           
+                             \"<TopologyDescription id:                         
+                             69cda8f2f1f1a8fe7c0434c5,                          
+                             topology_type: Unknown, servers:                   
+                             [<ServerDescription ('localhost',                  
+                             27017) server_type: Unknown, rtt:                  
+                             None>]>\", \"clientId\": {\"$oid\":                
+                             \"69cda8f2f1f1a8fe7c0434c5\"},                     
+                             \"failure\": \"\\\"No servers found                
+                             yet\\\"\"}", "module": "logger",                   
+                             "function": "_debug_log", "line":                  
+                             108, "request_id": "test-request-id",              
+                             "correlation_id": "unknown"}                       
+                    DEBUG    {"timestamp": "2026-04-01             logger.py:108
+                             18:23:31,272", "level": "DEBUG",                   
+                             "logger": "pymongo.topology",                      
+                             "message": "{\"message\": \"Stopped                
+                             server monitoring\", \"topologyId\":               
+                             {\"$oid\":                                         
+                             \"69cda8f2f1f1a8fe7c0434c5\"},                     
+                             \"serverHost\": \"localhost\",                     
+                             \"serverPort\": 27017}", "module":                 
+                             "logger", "function": "_debug_log",                
+                             "line": 108, "request_id":                         
+                             "test-request-id", "correlation_id":               
+                             "unknown"}                                         
+                    DEBUG    {"timestamp": "2026-04-01             logger.py:108
+                             18:23:31,273", "level": "DEBUG",                   
+                             "logger": "pymongo.connection",                    
+                             "message": "{\"message\":                          
+                             \"Connection pool closed\",                        
+                             \"clientId\": {\"$oid\":                           
+                             \"69cda8f2f1f1a8fe7c0434c5\"},                     
+                             \"serverHost\": \"localhost\",                     
+                             \"serverPort\": 27017}", "module":                 
+                             "logger", "function": "_debug_log",                
+                             "line": 108, "request_id":                         
+                             "test-request-id", "correlation_id":               
+                             "unknown"}                                         
+                    DEBUG    {"timestamp": "2026-04-01             logger.py:108
+                             18:23:31,274", "level": "DEBUG",                   
+                             "logger": "pymongo.topology",                      
+                             "message": "{\"message\": \"Topology               
+                             description changed\",                             
+                             \"topologyId\": {\"$oid\":                         
+                             \"69cda8f2f1f1a8fe7c0434c5\"},                     
+                             \"previousDescription\":                           
+                             \"<TopologyDescription id:                         
+                             69cda8f2f1f1a8fe7c0434c5,                          
+                             topology_type: Unknown, servers:                   
+                             [<ServerDescription ('localhost',                  
+                             27017) server_type: Unknown, rtt:                  
+                             None>]>\", \"newDescription\":                     
+                             \"<TopologyDescription id:                         
+                             69cda8f2f1f1a8fe7c0434c5,                          
+                             topology_type: Unknown, servers:                   
+                             [<ServerDescription ('localhost',                  
+                             27017) server_type: Unknown, rtt:                  
+                             None>]>\"}", "module": "logger",                   
+                             "function": "_debug_log", "line":                  
+                             108, "request_id": "test-request-id",              
+                             "correlation_id": "unknown"}                       
+                    DEBUG    {"timestamp": "2026-04-01             logger.py:108
+                             18:23:31,276", "level": "DEBUG",                   
+                             "logger": "pymongo.topology",                      
+                             "message": "{\"message\": \"Stopped                
+                             topology monitoring\",                             
+                             \"topologyId\": {\"$oid\":                         
+                             \"69cda8f2f1f1a8fe7c0434c5\"}}",                   
+                             "module": "logger", "function":                    
+                             "_debug_log", "line": 108,                         
+                             "request_id": "test-request-id",                   
+                             "correlation_id": "unknown"}                       
+                    INFO     {"timestamp": "2026-04-01               local.py:46
+                             18:23:31,277", "level": "INFO",                    
+                             "logger":                                          
+                             "secondbrain.embedding.local",                     
+                             "message": "Initializing embedding                 
+                             model: all-MiniLM-L6-v2 on device:                 
+                             mps", "module": "local", "function":               
+                             "__init__", "line": 46, "request_id":              
+                             "test-request-id", "correlation_id":               
+                             "unknown"}                                         
+                    INFO     {"timestamp": "2026-04-01               local.py:55
+                             18:23:31,278", "level": "INFO",                    
+                             "logger":                                          
+                             "secondbrain.embedding.local",                     
+                             "message": "GPU acceleration enabled:              
+                             Apple Silicon MPS detected", "module":             
+                             "local", "function": "__init__",                   
+                             "line": 55, "request_id":                          
+                             "test-request-id", "correlation_id":               
+                             "unknown"}                                         
+
+============================== slowest durations ===============================
+11.23s call     tests/test_document/test_ingestion.py::TestDocumentIngestionSpecRequirements::test_ingest_with_recursive_flag
+9.83s call     tests/integration/test_ingestion_e2e.py::TestIngestionE2E::test_ingestion_e2e_pdf
+9.76s call     tests/test_document/test_e2e_pdf_ingestion.py::TestPDFSearchIntegration::test_search_after_ingestion
+9.41s call     tests/integration/test_network_partitions.py::TestChaosEngineering::test_resource_cleanup_on_error
+9.35s call     tests/test_cli/test_ingest_commands.py::TestIngestCoresValidation::test_ingest_cores_validation
+9.28s call     tests/test_coverage_gaps.py::TestErrorHandlingPaths::test_ingestor_handles_extraction_error
+8.61s call     tests/test_coverage_gaps.py::TestEdgeCases::test_empty_document_ingestion
+7.66s call     tests/test_document/test_e2e_pdf_ingestion.py::TestPDFSearchIntegration::test_search_with_filters
+7.47s call     tests/integration/test_ingestion_e2e.py::TestIngestionE2E::test_ingestion_e2e_multidoc
+6.37s call     tests/test_document/test_ingestion.py::test_ingest_with_recursive
+6.20s call     tests/integration/test_ingestion_e2e.py::TestIngestionE2E::test_search_e2e_filters
+6.17s call     tests/integration/test_ingestion_e2e.py::TestIngestionE2E::test_ingestion_e2e_docx
+6.11s call     tests/integration/test_ingestion_e2e.py::TestIngestionE2E::test_ingestion_e2e_multicore
+5.85s call     tests/integration/test_ingestion_e2e.py::TestIngestionE2E::test_search_e2e_semantic
+5.55s call     tests/integration/test_ingestion_e2e.py::TestIngestionE2E::test_ingestion_e2e_markdown
+5.07s call     tests/test_coverage_gaps.py::TestAsyncErrorPropagation::test_async_storage_handles_connection_error
+5.01s call     tests/test_coverage_gaps.py::TestEdgeCases::test_concurrent_ingestion_same_file
+4.78s call     tests/test_coverage_gaps.py::TestEdgeCases::test_very_large_chunk_handling
+4.63s call     tests/test_coverage_gaps.py::TestEdgeCases::test_special_characters_in_filename
+4.62s call     tests/test_integration/test_end_to_end.py::TestFullWorkflow::test_full_workflow
+4.55s call     tests/test_document/test_ingestion_validation.py::TestDocumentIngestorIngestErrorHandling::test_ingest_handles_file_exception
+4.18s call     tests/test_coverage_gaps.py::TestEdgeCases::test_unicode_content
+3.95s call     tests/integration/test_large_docs.py::TestLargeDocumentHandling::test_ingest_large_pdf_memory_efficient
+3.83s call     tests/integration/test_large_docs.py::TestUnicodeAndEncoding::test_mixed_encoding_files
+3.82s call     tests/integration/test_network_partitions.py::TestChaosEngineering::test_random_service_failures
+3.58s setup    tests/integration/test_ingestion_e2e.py::TestIngestionE2E::test_ingestion_e2e_pdf
+2.45s call     tests/test_document/test_document_types.py::TestImageFormats::test_png_ingestion_with_ocr
+2.43s call     tests/test_document/test_extraction.py::TestExtractTextImageFallback::test_extract_text_image_fallback_ocr
+2.37s call     tests/test_document/test_doc_validation.py::TestResolveCoreCount::test_resolve_core_count_auto
+2.21s call     tests/test_examples/test_examples.py::TestAdvancedExamples::test_example_circuit_breaker
+1.78s call     tests/test_integration/test_end_to_end.py::TestIntegrationDataFlow::test_chunk_overlapping_text
+1.36s call     tests/test_coverage_gaps.py::TestErrorHandlingPaths::test_embedding_error_handling
+1.30s call     tests/test_coverage_gaps.py::TestAsyncErrorPropagation::test_async_ingestor_handles_partial_failure
+1.02s call     tests/test_examples/test_examples.py::TestIntegrationExamples::test_example_fastapi_endpoint
+1.01s call     tests/test_utils/test_docker_manager.py::TestWaitForMongoReady::test_wait_for_mongo_ready_timeout
+0.99s call     tests/test_examples/test_examples.py::TestBasicUsageExamples::test_example_basic_usage_ingest
+0.99s call     tests/test_examples/test_examples.py::TestAdvancedExamples::test_example_batch_ingestion
+0.98s call     tests/test_examples/test_examples.py::TestBasicUsageExamples::test_example_basic_usage_search
+0.98s call     tests/test_examples/test_examples.py::TestIntegrationExamples::test_example_flask_api
+0.96s call     tests/test_examples/test_examples.py::TestAdvancedExamples::test_example_async_workflow
+0.95s call     tests/test_examples/test_examples.py::TestAdvancedExamples::test_example_custom_chunking
+0.76s call     tests/test_chaos/test_network_partitions.py::TestRecoveryPatterns::test_permanent_partition_handling
+0.70s call     tests/test_storage/test_async_storage.py::TestAsyncVectorStorage::test_search_async_success
+0.70s call     tests/test_storage/test_async_storage.py::TestAsyncVectorStorage::test_wait_for_index_ready_async_timeout
+0.70s call     tests/test_storage/test_async_storage.py::TestAsyncVectorStorage::test_search_async_with_filters
+0.55s call     tests/test_examples/test_examples.py::TestAdvancedExamples::test_example_tracing
+0.33s call     tests/test_examples/test_examples.py::TestBasicUsageExamples::test_example_basic_usage_list
+0.30s call     tests/test_chaos/test_network_partitions.py::TestRecoveryPatterns::test_exponential_backoff_recovery
+0.30s call     tests/test_utils/test_rate_limiter.py::TestTokenBucketRateLimiter::test_tokens_refill_over_time
+0.30s call     tests/test_utils/test_rate_limiter.py::TestTokenBucketRateLimiter::test_acquire_multiple_tokens
+0.25s call     tests/test_chaos/test_network_partitions.py::TestNetworkPartitionScenarios::test_circuit_breaker_response_to_partition
+0.20s call     tests/integration/test_network_partitions.py::TestCircuitBreakerBehavior::test_circuit_reopens_on_failure_in_half_open
+0.20s call     tests/integration/test_network_partitions.py::TestCircuitBreakerBehavior::test_circuit_half_open_after_timeout
+0.20s call     tests/test_coverage_gaps.py::TestCircuitBreakerBehavior::test_circuit_breaker_reopens_on_failure_in_half_open
+0.20s call     tests/test_coverage_gaps.py::TestCircuitBreakerBehavior::test_circuit_breaker_half_open_after_timeout
+0.20s call     tests/test_coverage_gaps.py::TestCircuitBreakerBehavior::test_circuit_breaker_closes_on_success
+0.20s call     tests/test_utils/test_rate_limiter.py::TestTokenBucketRateLimiter::test_tokens_cannot_exceed_burst_size
+0.17s call     tests/test_dependency_scripts.py::TestMakefileTargets::test_sbom_target
+0.15s call     tests/test_concurrency/test_concurrent_search.py::TestSearchWithCircuitBreaker::test_concurrent_search_during_circuit_recovery
+0.15s call     tests/test_concurrency/test_concurrent_ingestion.py::TestConcurrencyWithCircuitBreaker::test_concurrent_requests_during_half_open
+0.15s call     tests/test_chaos/test_service_failures.py::TestMongoDBFailureScenarios::test_mongodb_recovery_after_failure
+0.15s call     tests/test_chaos/test_network_partitions.py::TestRecoveryPatterns::test_gradual_traffic_increase_after_recovery
+0.15s call     tests/test_utils/test_circuit_breaker.py::TestCircuitBreakerHalfOpenCalls::test_half_open_allows_limited_calls
+0.15s call     tests/test_chaos/test_service_failures.py::TestGracefulDegradation::test_retry_with_backoff
+0.15s call     tests/test_chaos/test_service_failures.py::TestSentenceTransformersFailureScenarios::test_embedding_service_recovery
+0.15s call     tests/test_chaos/test_service_failures.py::TestCircuitBreakerResponse::test_circuit_half_open_after_timeout
+0.15s call     tests/test_chaos/test_network_partitions.py::TestNetworkPartitionScenarios::test_partition_recovery_detection
+0.14s call     tests/test_storage/test_async_connection.py::TestAsyncConnection::test_async_memory_leak_detection
+0.14s call     tests/test_utils/test_circuit_breaker_extended.py::TestHalfOpenPartialSuccess::test_half_open_partial_success
+0.13s call     tests/test_document/test_chunking.py::TestChunkSegmentsBoundaryCases::test_chunk_segments_single_word_exact_chunk_size
+0.13s call     tests/integration/test_network_partitions.py::TestEndToEndWorkflows::test_full_ingestion_workflow
+0.13s call     tests/test_document/test_ingestion_edge_cases.py::TestDocumentIngestorCollectFiles::test_collect_from_directory_recursive
+0.12s call     tests/test_document/test_streaming.py::TestStreamingProcessing::test_streaming_disabled_fallback
+0.11s call     tests/test_utils/test_circuit_breaker_extended.py::TestRecoveryTimeoutPrecision::test_recovery_timeout_precision
+0.11s call     tests/test_utils/test_connections.py::TestValidatableServiceAsync::test_validate_connection_async_cache_miss
+0.11s call     tests/test_utils/test_connections.py::TestValidatableService::test_validate_connection_cache_miss
+0.10s call     tests/test_storage/test_async_connection.py::TestAsyncConnection::test_async_validate_connection_timeout
+0.10s call     tests/test_storage/test_storage_batch.py::TestVectorStorageIndexTimeout::test_wait_for_index_ready_multiple_retries
+0.10s call     tests/test_coverage_gaps.py::TestRecoveryScenarios::test_retry_on_transient_failure
+0.10s call     tests/test_utils/test_rate_limiter.py::TestTokenBucketRateLimiter::test_acquire_blocks_when_tokens_exhausted
+0.07s call     tests/test_utils/test_circuit_breaker_extended.py::TestSuccessThresholdRequirement::test_threshold_not_met
+0.07s call     tests/test_utils/test_circuit_breaker_extended.py::TestHalfOpenExceedsMaxCalls::test_half_open_exceeds_max_calls
+0.07s call     tests/test_utils/test_circuit_breaker.py::TestCircuitBreakerStateTransitions::test_half_open_to_closed_after_successes
+0.07s call     tests/test_utils/test_circuit_breaker_extended.py::TestSuccessThresholdRequirement::test_success_threshold_requirement
+0.07s call     tests/test_utils/test_circuit_breaker_extended.py::TestSuccessThresholdRequirement::test_threshold_exceeded
+0.07s call     tests/test_utils/test_circuit_breaker.py::TestCircuitBreakerStateTransitions::test_open_to_half_open_after_timeout
+0.07s call     tests/test_utils/test_circuit_breaker.py::TestCircuitBreakerStateTransitions::test_half_open_to_open_on_failure
+0.06s setup    tests/test_cli/test_display.py::TestDisplayHealthStatus::test_display_health_status_all_healthy
+0.06s setup    tests/test_cli/test_cli.py::TestCLI::test_delete_validation_no_options
+0.06s setup    tests/integration/test_network_partitions.py::TestChaosEngineering::test_slow_downstream_services
+0.06s setup    tests/test_cli/test_search_commands.py::TestSearchFilters::test_search_with_multiple_filters
+0.06s setup    tests/test_coverage_gaps.py::TestErrorHandlingPaths::test_storage_connection_error_handling
+0.06s setup    tests/test_conversation/test_rewriter.py::TestQueryRewriterRewrite::test_rewrite_limits_context_window
+0.06s setup    tests/test_concurrency/test_concurrent_search.py::TestConcurrentSearch::test_concurrent_search_different_collections
+0.06s call     tests/test_embedding/test_local_generation.py::TestEmbeddingModelLoading::test_model_property_loads_sentence_transformers
+0.06s call     tests/test_storage/test_async_validation.py::TestAsyncValidation::test_async_search_timeout
+0.05s call     tests/integration/test_network_partitions.py::TestEndToEndWorkflows::test_concurrent_ingest_and_search
+0.05s call     tests/integration/test_network_partitions.py::TestChaosEngineering::test_slow_downstream_services
+0.04s call     tests/test_dependency_scripts.py::TestGenerateSBOMScript::test_python_help_command
+0.04s call     tests/test_document/test_doc_validation.py::TestValidateFileSize::test_validate_file_size_within_limit
+0.04s call     tests/test_document/test_doc_validation.py::TestValidateFileSize::test_validate_file_size_exceeds
+0.04s call     tests/test_dependency_scripts.py::TestValidateDependenciesScript::test_syntax_validation
+0.04s call     tests/test_observability_integration.py::TestOTLPConfiguration::test_otlp_endpoint_from_env
+0.04s call     tests/test_dependency_scripts.py::TestIntegration::test_full_dependency_workflow
+0.03s call     tests/test_dependency_scripts.py::TestMakefileTargets::test_help_target
+0.03s call     tests/test_utils/test_connections.py::TestRateLimitedRetry::test_retry_resets_after_success
+0.03s call     tests/test_logging/test_logging.py::TestGetHealthStatus::test_get_health_status_structure
+0.03s call     tests/test_document/test_document_types.py::TestStructuredDataFormats::test_csv_ingestion
+0.03s call     tests/test_property_based/test_properties.py::TestQuerySanitization::test_sanitize_preserves_valid_input
+0.03s call     tests/test_document/test_extraction.py::TestExtractTextEmptyFile::test_extract_text_empty_file_text
+0.02s call     tests/test_document/test_coverage_gaps.py::TestExtractSegmentsEdgeCases::test_extract_segments_empty_text
+0.02s call     tests/integration/test_mongo_real.py::TestMongoRealConnection::test_storage_real_concurrent_writes
+0.02s call     tests/test_dependency_scripts.py::TestUpdateDependenciesScript::test_help_command
+0.02s call     tests/integration/test_large_docs.py::TestLargeDocumentHandling::test_memory_usage_under_load
+0.02s call     tests/test_dependency_scripts.py::TestAuditDependenciesScript::test_help_command
+0.02s call     tests/integration/test_mongo_real.py::TestMongoRealConnection::test_storage_real_search_similarity
+0.02s call     tests/test_dependency_scripts.py::TestMakefileTargets::test_deps_check_target
+0.02s call     tests/test_dependency_scripts.py::TestGenerateSBOMScript::test_shell_help_command
+0.02s call     tests/test_dependency_scripts.py::TestValidateDependenciesScript::test_help_command
+0.02s call     tests/test_cli/test_chat_commands.py::TestChatCommands::test_interactive_chat_commands
+0.02s call     tests/test_dependency_scripts.py::TestUpdateDependenciesScript::test_check_command
+0.02s call     tests/test_dependency_scripts.py::TestUpdateDependenciesScript::test_json_output_format
+0.02s call     tests/test_cli/test_ingest_commands.py::TestIngestFileValidation::test_ingest_file_validation
+0.02s call     tests/test_cli/test_list_delete_fixed.py::TestListWithLimitParameter::test_list_all_flag_bypasses_limit
+0.02s call     tests/integration/test_mongo_real.py::TestMongoRealConnection::test_storage_real_pagination
+0.02s call     tests/integration/test_mongo_real.py::TestMongoRealConnection::test_storage_real_delete_operations
+0.02s call     tests/test_utils/test_circuit_breaker_extended.py::TestRecoveryTimeoutPrecision::test_sub_second_precision
+0.02s call     tests/test_mcp/test_server.py::TestMCPToolCall::test_call_tool_with_none_arguments
+0.02s call     tests/test_cli/test_cli_edge_cases.py::TestCLIHealthEdgeCases::test_health_command_json_format
+0.02s call     tests/test_document/test_ingestion_edge_cases.py::TestDocumentIngestorCollectFiles::test_collect_rejects_invalid_path
+0.02s call     tests/integration/test_mongo_real.py::TestMongoRealConnection::test_storage_real_filter_by_file_type
+0.01s call     tests/test_document/test_multicore_ingestion.py::TestWorkerFunction::test_worker_function_returns_correct_structure
+0.01s call     tests/integration/test_mongo_real.py::TestMongoRealConnection::test_storage_real_connection_recovery
+0.01s setup    tests/test_document/test_e2e_pdf_ingestion.py::TestPDFIngestionE2E::test_pdf_text_extraction
+0.01s setup    tests/test_examples/test_examples.py::TestBasicUsageExamples::test_example_basic_usage_ingest
+0.01s call     tests/integration/test_mongo_real.py::TestMongoRealConnection::test_storage_real_batch_operations
+0.01s call     tests/test_document/test_multicore_ingestion.py::TestWorkerFunction::test_worker_function_chunks_text_correctly
+0.01s call     tests/test_document/test_ingestion_edge_cases.py::TestDocumentIngestorBuildDocumentsEdgeCases::test_build_documents_with_large_number_of_chunks
+0.01s setup    tests/test_integration/test_end_to_end.py::TestIntegrationDataFlow::test_chunk_overlapping_text
+0.01s call     tests/test_mcp/integration/test_mcp_integration.py::TestMCPIntegration::test_health_tool_basic
+0.01s call     tests/test_document/test_ingestion.py::TestDocumentIngestorExtractText::test_extract_text_exception_handling
+0.01s call     tests/test_storage/test_async_connection.py::TestAsyncConnection::test_async_concurrent_searches
+0.01s call     tests/test_document/test_document_types.py::TestAudioFormats::test_wav_ingestion_with_transcription
+0.01s call     tests/test_coverage_gaps.py::TestErrorHandlingPaths::test_ingestor_rejects_unsupported_file
+0.01s call     tests/test_document/test_doc_validation.py::TestResolveCoreCount::test_resolve_core_count_clamped
+0.01s call     tests/test_document/test_ingestion_edge_cases.py::TestDocumentIngestorBuildDocumentsEdgeCases::test_build_documents_skips_chunks_without_embedding
+0.01s call     tests/test_document/test_ingestion_edge_cases.py::TestDocumentIngestorBuildDocumentsEdgeCases::test_build_documents_preserves_file_type_metadata
+0.01s call     tests/test_document/test_doc_validation.py::TestValidateFilePath::test_validate_file_path_traversal
+0.01s call     tests/test_document/test_ingestion_edge_cases.py::TestDocumentIngestorBuildDocumentsEdgeCases::test_build_documents_with_multiple_pages
+0.01s call     tests/test_document/test_chunking.py::TestChunkSegmentsUnicode::test_chunk_segments_cjk_characters
+0.01s call     tests/test_document/test_ingestion_edge_cases.py::TestDocumentIngestorIngestEdgeCases::test_ingest_empty_directory_returns_zeros
+0.01s call     tests/integration/test_mongo_real.py::TestMongoRealConnection::test_storage_real_filter_by_source
+0.01s call     tests/test_document/test_document_types.py::TestSpecialtyFormats::test_txt_ingestion
+0.01s call     tests/test_coverage_gaps.py::TestErrorHandlingPaths::test_ingestor_validates_path_traversal
+0.01s call     tests/test_document/test_async_api_extended.py::TestAsyncDocumentIngestorCoverage::test_ingest_async_empty_files
+0.01s call     tests/test_document/test_ingestion_edge_cases.py::TestDocumentIngestorBuildDocumentsEdgeCases::test_build_documents_with_sentence_transformers_unavailable_error
+0.01s call     tests/test_document/test_ingestion_validation.py::TestDocumentIngestorFileProcessing::test_build_documents_with_embeddings_embedding_failure
+0.01s call     tests/test_document/test_extraction.py::TestExtractTextEmptyFile::test_extract_text_whitespace_only
+0.01s call     tests/integration/test_large_docs.py::TestLargeDocumentHandling::test_concurrent_large_document_ingestion
+0.01s call     tests/test_document/test_ingestion_validation.py::TestDocumentIngestorFileProcessing::test_build_documents_with_embeddings_empty_text_skipped
+0.01s call     tests/test_document/test_ingestion.py::TestDocumentIngestionSpecRequirements::test_ingest_with_custom_chunk_size
+0.01s call     tests/test_document/test_ingestion_validation.py::TestDocumentIngestorPathValidation::test_validate_file_path_rejects_encoded_traversal
+0.01s call     tests/test_document/test_ingestion_edge_cases.py::TestDocumentIngestorCollectFiles::test_collect_from_directory_with_supported_files
+0.01s call     tests/test_document/test_ingestion.py::TestDocumentIngestionSpecRequirements::test_empty_text_handling
+0.01s call     tests/test_document/test_document_types.py::TestImageFormats::test_jpeg_ingestion
+0.01s call     tests/test_document/test_ingestion.py::TestDocumentIngestorExtractText::test_extract_text_file_not_found
+0.01s call     tests/test_document/test_document_types.py::TestWebFormats::test_markdown_ingestion_with_converter
+0.01s call     tests/test_document/test_ingestion_validation.py::TestDocumentIngestorPathValidation::test_validate_file_path_rejects_traversal
+0.01s call     tests/test_document/test_extraction.py::TestExtractTextImageFallback::test_extract_text_image_fallback_no_texts_attr
+0.01s call     tests/test_document/test_async_api.py::TestAsyncDocumentIngestor::test_async_context_manager
+0.01s call     tests/test_document/test_streaming.py::TestMemoryEfficiency::test_streaming_constant_memory_usage
+0.01s call     tests/test_document/test_chunking.py::TestChunkSegmentsOverlapValidation::test_chunk_segments_zero_overlap
+0.01s call     tests/test_document/test_document_types.py::TestWebFormats::test_html_ingestion
+0.01s call     tests/test_document/test_document_types.py::TestStructuredDataFormats::test_json_ingestion
+0.01s call     tests/test_document/test_ingestion_validation.py::TestDocumentIngestorFileProcessing::test_build_documents_with_embeddings_deduplication
+0.01s call     tests/test_document/test_ingestion.py::TestChunkTextEdgeCases::test_chunk_text_larger_overlap
+0.01s call     tests/test_document/test_ingestion_validation.py::TestDocumentIngestorPathValidation::test_validate_file_path_accepts_valid_path
+0.01s call     tests/test_document/test_chunking.py::TestChunkSegmentsUnicode::test_chunk_segments_rtl_text
+0.01s call     tests/test_document/test_ingestion.py::TestDocumentIngestorExtractText::test_extract_text_text_item_without_text_value
+0.01s call     tests/test_document/test_ingestion_validation.py::TestDocumentIngestorExtractTextPageNumbers::test_extract_text_without_prov_falls_back_to_default
+0.01s call     tests/test_document/test_ingestion.py::TestDocumentIngestorExtractText::test_extract_text_with_fallback
+0.01s call     tests/test_document/test_ingestion.py::TestDocumentIngestorExtractText::test_extract_text_empty_text_item
+0.01s call     tests/test_document/test_chunking.py::TestDeduplicateWhitespaceVariations::test_deduplicate_whitespace_variations_normalization
+0.01s call     tests/test_document/test_chunking.py::TestDeduplicateWhitespaceVariations::test_deduplicate_whitespace_variations_leading_trailing
+0.01s call     tests/test_document/test_streaming.py::TestStreamingProcessing::test_streaming_batch_size_limit
+0.01s call     tests/test_document/test_ingestion.py::TestDocumentIngestorExtractText::test_extract_text_text_item_without_text_attr
+0.01s call     tests/test_document/test_document_types.py::TestSpecialtyFormats::test_latex_ingestion
+0.01s call     tests/test_document/test_streaming.py::TestEmbeddingBatchGeneration::test_embedding_batch_size_config
+0.01s call     tests/test_property_based/test_properties.py::TestConfigValidation::test_chunk_size_greater_than_overlap
+0.01s call     tests/integration/test_mongo_real.py::TestMongoRealConnection::test_storage_real_store_and_retrieve
+0.01s call     tests/test_document/test_ingestion_validation.py::TestDocumentIngestorExtractTextPageNumbers::test_extract_text_with_page_numbers
+0.01s call     tests/test_document/test_streaming.py::TestMemoryEfficiency::test_streaming_batch_reset
+0.01s call     tests/test_document/test_streaming.py::TestStoreEmbeddingBatch::test_store_embedding_batch
+0.01s call     tests/test_document/test_chunking.py::TestDeduplicateAndChunkSegments::test_deduplicate_and_chunk_segments_whitespace_differences
+0.01s call     tests/integration/test_network_partitions.py::TestEndToEndWorkflows::test_ingest_and_search_workflow
+0.01s call     tests/test_document/test_ingestion.py::TestDocumentIngestionSpecRequirements::test_ingest_batch_processing
+0.01s call     tests/test_document/test_document_types.py::TestSpecialtyFormats::test_asciidoc_ingestion
+0.01s call     tests/test_document/test_chunking.py::TestChunkSegmentsOverlapValidation::test_chunk_segments_overlap_preserves_context
+0.01s call     tests/test_document/test_extraction.py::TestExtractTextCorruptedPdf::test_extract_text_corrupted_pdf_truncated
+0.01s call     tests/test_document/test_extraction.py::TestExtractTextPdfPages::test_extract_text_pdf_pages_multiple_pages
+0.01s call     tests/test_document/test_async_api_extended.py::TestAsyncDocumentIngestorCoverage::test_ingest_async_with_semaphore
+0.01s call     tests/test_document/test_chunking.py::TestDeduplicateAndChunkSegments::test_deduplicate_and_chunk_segments_empty_segments_skipped
+0.01s call     tests/test_document/test_ingestion_validation.py::TestDocumentIngestorFileProcessing::test_build_documents_with_embeddings_success
+0.01s call     tests/test_document/test_document_types.py::TestWebFormats::test_xml_ingestion
+0.01s call     tests/test_document/test_extraction.py::TestExtractTextCorruptedPdf::test_extract_text_corrupted_pdf_malformed
+0.01s call     tests/test_document/test_document_types.py::TestWebFormats::test_markdown_ingestion_simple
+0.01s call     tests/test_document/test_ingestion_edge_cases.py::TestDocumentIngestorCollectFiles::test_collect_from_directory_non_recursive
+0.01s call     tests/test_document/test_chunking.py::TestDeduplicateWhitespaceVariations::test_deduplicate_whitespace_variations_complex_normalization
+0.01s call     tests/test_document/test_ingestion_edge_cases.py::TestDocumentIngestorIngestEdgeCases::test_ingest_directory_with_no_supported_files
+0.01s call     tests/test_document/test_chunking.py::TestDeduplicateWhitespaceVariations::test_deduplicate_whitespace_variations_preserves_meaningful_diffs
+0.01s call     tests/test_document/test_async_api_extended.py::TestAsyncDocumentIngestorCoverage::test_process_with_semaphore_async
+0.01s call     tests/test_document/test_async_api.py::TestAsyncDocumentIngestor::test_async_exit_returns_none
+0.01s call     tests/test_document/test_ingestion.py::TestDocumentIngestionSpecRequirements::test_ingest_with_custom_chunk_overlap
+0.01s call     tests/test_document/test_chunking.py::TestDeduplicateAndChunkSegments::test_deduplicate_and_chunk_segments_preserves_page
+0.01s call     tests/test_document/test_chunking.py::TestDeduplicateAndChunkSegments::test_deduplicate_and_chunk_segments_text_hash_included
+0.01s call     tests/test_document/test_streaming.py::TestStreamingProcessing::test_streaming_with_large_document
+0.01s call     tests/test_document/test_ingestion_validation.py::TestDocumentIngestorFileProcessing::test_process_file_for_storage_extraction_failure
+0.01s call     tests/test_document/test_doc_validation.py::TestValidateFilePath::test_validate_file_path_encoded
+0.01s call     tests/test_document/test_extraction.py::TestExtractTextPdfPages::test_extract_text_pdf_pages_no_provenance
+0.01s call     tests/test_document/test_chunking.py::TestChunkSegmentsUnicode::test_chunk_segments_mixed_unicode
+0.01s call     tests/test_document/test_doc_validation.py::TestResolveCoreCount::test_resolve_core_count_invalid
+0.01s call     tests/test_document/test_ingestion.py::TestChunkTextEdgeCases::test_chunk_text_whitespace_only_produces_no_chunks
+0.01s call     tests/test_document/test_ingestion_validation.py::TestDocumentIngestorFileProcessing::test_process_file_for_storage_unexpected_error
+0.01s call     tests/test_document/test_chunking.py::TestChunkSegmentsOverlapValidation::test_chunk_segments_large_overlap
+0.01s call     tests/test_document/test_ingestion.py::TestChunkTextEdgeCases::test_chunk_text_single_page_numbers_preserved
+0.01s call     tests/test_document/test_document_types.py::TestSpecialtyFormats::test_webvtt_ingestion
+0.01s call     tests/test_document/test_extraction.py::TestExtractTextEmptyFile::test_extract_text_empty_file_pdf
+0.01s call     tests/test_document/test_document_types.py::TestAudioFormats::test_mp3_ingestion
+0.01s call     tests/test_document/test_multicore_ingestion.py::TestWorkerFunction::test_worker_function_handles_extraction_errors
+0.01s call     tests/test_document/test_ingestion.py::TestDocumentIngestor::test_ingest_empty_directory
+0.01s call     tests/test_document/test_chunking.py::TestChunkSegmentsOverlapValidation::test_chunk_segments_overlap_size_validation
+0.01s call     tests/test_document/test_streaming.py::TestStreamingProcessing::test_streaming_deduplication
+0.01s call     tests/test_document/test_e2e_pdf_ingestion.py::TestPDFIngestionE2E::test_pdf_text_extraction
+0.01s call     tests/test_document/test_streaming.py::TestStoreEmbeddingBatch::test_store_embedding_batch_empty
+0.01s call     tests/test_document/test_extraction.py::TestExtractTextCorruptedPdf::test_extract_text_corrupted_file_not_found
+0.01s call     tests/test_document/test_ingestion_validation.py::TestDocumentIngestorPathValidation::test_validate_file_size_rejects_oversized_file
+0.01s call     tests/test_document/test_chunking.py::TestChunkSegmentsLargeDocuments::test_chunk_segments_large_document_100k_chars
+0.01s call     tests/test_document/test_e2e_pdf_ingestion.py::TestPDFIngestionE2E::test_pdf_text_chunking
+0.01s call     tests/test_document/test_ingestion.py::TestDocumentIngestor::test_chunk_text_simple
+0.01s call     tests/test_document/test_chunking.py::TestChunkSegmentsUnicode::test_chunk_segments_emojis
+0.01s call     tests/test_document/test_streaming.py::TestStreamingProcessing::test_streaming_enabled_by_config
+0.01s call     tests/test_document/test_streaming.py::TestEmbeddingBatchGeneration::test_batch_embedding_generation_failure
+0.01s call     tests/test_document/test_chunking.py::TestChunkSegmentsLargeDocuments::test_chunk_segments_large_document_multiple_pages
+0.01s call     tests/test_document/test_extraction.py::TestExtractTextCorruptedPdf::test_extract_text_corrupted_pdf_magic_bytes
+0.01s call     tests/test_document/test_ingestion.py::TestDocumentIngestor::test_ingest_nonexistent_file
+0.01s call     tests/test_document/test_ingestion.py::TestDocumentIngestor::test_init_defaults
+0.01s call     tests/test_property_based/test_properties.py::TestQuerySanitization::test_sanitize_strips_whitespace
+0.01s call     tests/test_document/test_streaming.py::TestStoreEmbeddingBatch::test_store_embedding_batch_with_cache
+0.01s call     tests/test_document/test_extraction.py::TestExtractTextPdfPages::test_extract_text_pdf_pages_empty_provenance
+0.01s call     tests/test_document/test_streaming.py::TestEmbeddingBatchGeneration::test_batch_embedding_with_cache
+0.01s call     tests/test_document/test_ingestion.py::TestDocumentIngestor::test_chunk_text_exact_size
+0.01s call     tests/test_document/test_ingestion.py::TestDocumentIngestor::test_chunk_text_empty_segment
+0.01s call     tests/test_document/test_streaming.py::TestEmbeddingBatchGeneration::test_batch_embedding_generation
+0.01s call     tests/test_document/test_chunking.py::TestChunkSegmentsLargeDocuments::test_chunk_segments_large_document_memory_efficiency
+0.01s call     tests/test_document/test_chunking.py::TestChunkSegmentsMultilineHandling::test_chunk_segments_multiple_newlines_between_words
+0.01s call     tests/test_document/test_ingestion.py::TestDocumentIngestor::test_init
+0.01s call     tests/test_document/test_chunking.py::TestChunkSegmentsBoundaryCases::test_chunk_segments_single_character
+0.01s call     tests/test_document/test_ingestion.py::TestDocumentIngestor::test_chunk_text_multiple_chunks
+0.01s call     tests/test_concurrency/test_concurrent_search.py::TestSearchConsistency::test_search_after_concurrent_deletion
+0.01s call     tests/test_document/test_streaming.py::TestStreamingProcessing::test_streaming_handles_extraction_errors
+0.01s call     tests/test_property_based/test_properties.py::TestConfigValidation::test_embedding_dimensions_positive
+0.01s call     tests/test_concurrency/test_concurrent_search.py::TestSearchPerformanceUnderLoad::test_search_throughput_under_load
+0.01s call     tests/test_document/test_chunking.py::TestDeduplicateAndChunkSegments::test_deduplicate_and_chunk_segments_identical_segments
+0.01s call     tests/test_document/test_chunking.py::TestChunkSegmentsBoundaryCases::test_chunk_segments_empty_text
+0.01s call     tests/test_document/test_chunking.py::TestChunkSegmentsMultilineHandling::test_chunk_segments_paragraphs_preserved
+0.01s call     tests/test_document/test_chunking.py::TestChunkSegmentsMultilineHandling::test_chunk_segments_newlines_stripped
+0.01s call     tests/test_concurrency/test_concurrent_search.py::TestConcurrentSearch::test_concurrent_search_and_ingest
+0.01s call     tests/test_document/test_chunking.py::TestChunkSegmentsBoundaryCases::test_chunk_segments_whitespace_only
+0.01s call     tests/test_document/test_chunking.py::TestChunkSegmentsBoundaryCases::test_chunk_segments_exact_boundary_no_overlap
+0.01s call     tests/integration/test_network_partitions.py::TestNetworkPartitions::test_reconnection_after_disconnect
+0.01s call     tests/test_document/test_chunking.py::TestChunkSegmentsUnicode::test_chunk_segments_unicode_accented_characters
+0.01s call     tests/test_concurrency/test_concurrent_ingestion.py::TestRaceConditionDetection::test_detect_concurrent_index_race
+0.01s call     tests/test_utils/test_perf_monitor.py::TestAsyncTimingDecorator::test_async_timing_decorator_records_duration
+0.01s call     tests/test_utils/test_perf_monitor.py::TestAsyncTimingDecorator::test_async_timing_decorator_handles_exceptions
+0.01s call     tests/test_document/test_chunking.py::TestChunkSegmentsBoundaryCases::test_chunk_segments_single_word_shorter_than_chunk
+0.01s call     tests/test_concurrency/test_concurrent_search.py::TestSearchRaceConditions::test_concurrent_index_creation_and_search
+0.01s call     tests/test_document/test_chunking.py::TestChunkSegmentsMultilineHandling::test_chunk_segments_mixed_whitespace
+0.01s call     tests/test_concurrency/test_concurrent_search.py::TestSearchPerformanceUnderLoad::test_search_latency_under_concurrency
+0.01s call     tests/test_concurrency/test_concurrent_ingestion.py::TestRaceConditionDetection::test_detect_concurrent_update_race
+0.01s call     tests/test_document/test_ingestion_validation.py::TestDocumentIngestorPathValidation::test_validate_file_size_accepts_valid_file
+0.01s call     tests/test_concurrency/test_concurrent_ingestion.py::TestRaceConditionDetection::test_detect_concurrent_delete_race
+0.01s call     tests/test_concurrency/test_concurrent_search.py::TestSearchConsistency::test_search_sees_consistent_results
+0.01s call     tests/test_concurrency/test_concurrent_search.py::TestSearchRaceConditions::test_search_during_ingestion
+0.01s call     tests/test_document/test_coverage_gaps.py::TestWorkerInitialization::test_init_worker_basic
+0.01s call     tests/test_utils/test_perf_monitor.py::TestTimingDecorator::test_timing_decorator_records_duration
+0.01s call     tests/test_utils/test_perf_monitor.py::TestTimingDecorator::test_timing_decorator_handles_exceptions
+0.01s call     tests/test_document/test_chunking.py::TestChunkSegmentsBoundaryCases::test_chunk_segments_newline_only
+0.01s call     tests/test_concurrency/test_concurrent_search.py::TestConcurrentSearch::test_concurrent_search_different_collections
+0.01s call     tests/test_property_based/test_properties.py::TestConfigValidation::test_streaming_batch_size_in_range
+0.01s call     tests/test_property_based/test_properties.py::TestConfigValidation::test_embedding_batch_size_in_range
+0.01s call     tests/integration/test_large_docs.py::TestLargeDocumentHandling::test_document_with_high_resolution_images
+0.01s call     tests/test_cli/test_chat_commands.py::TestChatCommands::test_single_turn_chat
+0.01s call     tests/test_property_based/test_properties.py::TestQuerySanitization::test_sanitize_removes_control_characters
+0.01s call     tests/test_storage/test_async_validation.py::TestAsyncValidation::test_async_store_large_batch
+0.01s call     tests/test_mcp/integration/test_mcp_integration.py::TestMCPIntegration::test_ls_tool_basic
+0.01s call     tests/integration/test_mongo_real.py::TestMongoRealConnection::test_storage_real_mongo_connection
+0.01s call     tests/test_cli/test_chat_commands.py::TestChatCommands::test_interactive_chat_error_handling
+0.01s call     tests/test_mcp/integration/test_mcp_integration.py::TestMCPIntegration::test_status_tool_basic
+0.01s call     tests/integration/test_network_partitions.py::TestNetworkPartitions::test_mongodb_connection_failure_recovery
+0.01s call     tests/test_cli/test_status_health_metrics.py::TestStatusHealthMetrics::test_status_display
+0.01s call     tests/test_logging/test_logging.py::TestCheckServices::test_check_services_returns_dict
+0.01s call     tests/test_logging/test_logging.py::TestCheckServices::test_check_services_values_are_booleans
+0.01s call     tests/test_cli/test_cli.py::TestCLI::test_ingest_command_recursive
+
+(3918 durations < 0.005s hidden.  Use -vv to show these durations.)
+1407 passed in 70.27s (0:01:10)

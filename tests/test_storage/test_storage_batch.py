@@ -330,6 +330,9 @@ class TestVectorStorageConnectionRecovery:
         """Test connection validation handles failures gracefully."""
         storage = storage_with_mock
 
+        # Reset connection cache state to ensure clean test
+        storage.invalidate_connection_cache()
+
         mock_client = MagicMock()
         # Always fail
         mock_client.admin.command.side_effect = Exception("Connection refused")

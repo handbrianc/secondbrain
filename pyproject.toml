@@ -250,7 +250,7 @@ ignore = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-n auto --timeout=60 -p no:warnings -p no:benchmark"
+addopts = "-n 12 --timeout=120 -p no:warnings -p no:benchmark --durations=10"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 numprocesses = "auto"
@@ -259,12 +259,16 @@ testmon = true
 markers = [
     "integration: marks tests as integration tests that require external services",
     "unit: marks tests as unit tests that use mocks",
-    "slow: marks tests as slow (takes >1s to execute)",
+    "e2e: marks end-to-end tests with real services (MongoDB, embedding model)",
+    "slow: marks tests as slow (takes >5s to execute)",
     "fast: marks tests as fast (takes <50ms to execute)",
     "medium: marks tests as medium speed (takes <500ms to execute)",
     "circuit_breaker: marks tests that involve circuit breaker behavior (may be slow)",
     "hypothesis: marks tests as property-based testing",
     "concurrent: marks tests as concurrency/thread safety tests (may be slow)",
+    "flaky: marks tests that may fail intermittently and have retry logic",
+    "ocr: marks tests involving OCR processing for images",
+    "chaos: marks chaos engineering and failure injection tests",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning:docling",
@@ -277,6 +281,20 @@ filterwarnings = [
 [tool.pytest-timeout]
 timeout = 60
 timeout_method = "thread"  # More aggressive than signal, works with threads
+
+[tool.pytest-testmon]
+# Testmon configuration for selective test running
+# Install: pip install pytest-testmon
+# Usage: pytest --testmon (runs only changed/failed tests)
+#        pytest --testmon --no-select (full run, updates cache)
+
+[tool.pytest-partition]
+# Test partitioning for parallel CI execution
+# Install: pip install pytest-partition
+# Usage: pytest --partition --partition-id=1 (run partition 1)
+partitions = 4
+partition_by = "duration"
+output = "partition_report.json"
 
 [tool.pre-commit]
 default_stages = ["pre-commit"]

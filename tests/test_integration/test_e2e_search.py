@@ -12,6 +12,7 @@ from secondbrain.search import Searcher
 class TestSearchE2E:
     """Test suite for end-to-end search integration."""
 
+    @pytest.mark.e2e
     @pytest.mark.integration
     @patch("secondbrain.search.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
@@ -67,6 +68,7 @@ class TestSearchE2E:
             file_type_filter=None,
         )
 
+    @pytest.mark.e2e
     @pytest.mark.integration
     @patch("secondbrain.search.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
@@ -114,6 +116,7 @@ class TestSearchE2E:
 class TestSearchIntegration:
     """Test suite for search integration scenarios."""
 
+    @pytest.mark.e2e
     @pytest.mark.integration
     @patch("secondbrain.search.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
@@ -137,6 +140,7 @@ class TestSearchIntegration:
         call_args = mock_storage.search.call_args
         assert call_args.kwargs["top_k"] == 20
 
+    @pytest.mark.e2e
     @pytest.mark.integration
     @patch("secondbrain.search.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
@@ -159,6 +163,7 @@ class TestSearchIntegration:
 
         assert results == []
 
+    @pytest.mark.e2e
     @pytest.mark.integration
     @patch("secondbrain.search.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
