@@ -40,7 +40,7 @@ def storage_with_mocks(mock_client, mock_collection):
         "secondbrain.conversation.storage.MongoClient", return_value=mock_client
     ) as mock_client_class:
         storage = ConversationStorage(
-            mongo_uri="mongodb://localhost:27017",
+            mongo_uri="mongodb://localhost:27018",
             db_name="test_db",
             collection_name="test_conversations",
         )

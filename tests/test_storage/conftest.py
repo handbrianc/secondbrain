@@ -20,7 +20,7 @@ def mongo_client_storage() -> Generator[Any, None, None]:
     from pymongo import MongoClient
 
     client = MongoClient(
-        "mongodb://localhost:27017",
+        "mongodb://localhost:27018",
         serverSelectionTimeoutMS=5000,
         socketTimeoutMS=2000,
         connectTimeoutMS=2000,
@@ -45,7 +45,7 @@ def test_storage_db(mongo_client_storage: Any) -> Generator[Any, None, None]:
 def mock_storage_config() -> MagicMock:
     """Module-scoped mock config to avoid repeated Config initialization."""
     config = MagicMock()
-    config.mongo_uri = "mongodb://localhost:27017"
+    config.mongo_uri = "mongodb://localhost:27018"
     config.mongo_db = "secondbrain"
     config.mongo_collection = "embeddings"
     config.embedding_dimensions = 384

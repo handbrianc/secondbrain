@@ -16,7 +16,7 @@ class TestAsyncVectorStorage:
     def async_storage(self) -> Generator[AsyncVectorStorage, None, None]:
         """Create an AsyncVectorStorage instance with mocked config."""
         with patch("secondbrain.storage.async_storage.get_config") as mock_config:
-            mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
+            mock_config.return_value.mongo_uri = "mongodb://localhost:27018"
             mock_config.return_value.mongo_db = "secondbrain_test"
             mock_config.return_value.mongo_collection = "embeddings_test"
             mock_config.return_value.embedding_dimensions = 384
@@ -31,7 +31,7 @@ class TestAsyncVectorStorage:
     @pytest.mark.asyncio
     async def test_init_with_defaults(self, async_storage: AsyncVectorStorage) -> None:
         """Test initialization with default config values."""
-        assert async_storage.mongo_uri == "mongodb://localhost:27017"
+        assert async_storage.mongo_uri == "mongodb://localhost:27018"
         assert async_storage.db_name == "secondbrain_test"
         assert async_storage.collection_name == "embeddings_test"
         assert async_storage._index_created is False

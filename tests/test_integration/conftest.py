@@ -145,11 +145,11 @@ def storage_with_index(
     original_localhost = os.environ.get("SECONDBRAIN_LOCALHOST")
     original_embedding_model = os.environ.get("SECONDBRAIN_LOCAL_EMBEDDING_MODEL")
 
-    os.environ["SECONDBRAIN_MONGO_URI"] = "mongodb://localhost:27017"
+    os.environ["SECONDBRAIN_MONGO_URI"] = "mongodb://localhost:27018"
     os.environ["SECONDBRAIN_MONGO_DB"] = "test_secondbrain"
     # Dynamic collection per worker for parallel safety
     os.environ["SECONDBRAIN_MONGO_COLLECTION"] = f"test_embeddings_{worker_id}"
-    os.environ["SECONDBRAIN_LOCALHOST"] = "http://localhost:11434"
+    os.environ["SECONDBRAIN_LOCALHOST"] = "http://localhost:11435"
     os.environ["SECONDBRAIN_LOCAL_EMBEDDING_MODEL"] = "all-MiniLM-L6-v2"
 
     from secondbrain.config import get_config
@@ -157,7 +157,7 @@ def storage_with_index(
     get_config.cache_clear()
 
     storage = VectorStorage(
-        mongo_uri="mongodb://localhost:27017",
+        mongo_uri="mongodb://localhost:27018",
         db_name="test_secondbrain",
         collection_name=f"test_embeddings_{worker_id}",
     )

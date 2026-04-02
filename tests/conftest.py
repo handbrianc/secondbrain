@@ -16,9 +16,9 @@ import pytest
 # Set test environment variables BEFORE any imports happen.
 # This must happen at module load time to prevent Config validation errors.
 for _k, _v in {
-    "SECONDBRAIN_MONGO_URI": "mongodb://localhost:27017",
+    "SECONDBRAIN_MONGO_URI": "mongodb://localhost:27018",
     "SECONDBRAIN_MONGO_COLLECTION": "test_embeddings",
-    "SECONDBRAIN_LOCALHOST": "http://localhost:11434",
+    "SECONDBRAIN_LOCALHOST": "http://localhost:11435",
     "SECONDBRAIN_LOCAL_EMBEDDING_MODEL": "all-MiniLM-L6-v2",
     "SECONDBRAIN_CHUNK_SIZE": 512,
     "SECONDBRAIN_CHUNK_OVERLAP": 50,
@@ -58,7 +58,7 @@ def _clear_config_cache_per_test() -> Generator[None, None, None]:
 def storage_config_mock() -> MagicMock:
     """Provide storage configuration mock for tests."""
     config = MagicMock()
-    config.mongo_uri = "mongodb://localhost:27017"
+    config.mongo_uri = "mongodb://localhost:27018"
     config.mongo_db = "secondbrain"
     config.mongo_collection = "embeddings"
     config.embedding_dimensions = 384
@@ -244,10 +244,10 @@ def test_data_dir(tmp_path: Path) -> Path:
 def mock_config(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     """Mock configuration for testing."""
     test_config = {
-        "SECONDBRAIN_MONGO_URI": "mongodb://localhost:27017",
+        "SECONDBRAIN_MONGO_URI": "mongodb://localhost:27018",
         "SECONDBRAIN_MONGO_DB": "test_secondbrain",
         "SECONDBRAIN_MONGO_COLLECTION": "test_embeddings",
-        "SECONDBRAIN_LOCALHOST": "http://localhost:11434",
+        "SECONDBRAIN_LOCALHOST": "http://localhost:11435",
         "SECONDBRAIN_LOCAL_EMBEDDING_MODEL": "all-MiniLM-L6-v2",
         "SECONDBRAIN_CHUNK_SIZE": 512,
         "SECONDBRAIN_CHUNK_OVERLAP": 50,
@@ -270,10 +270,10 @@ def fast_test_config(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     to speed up test execution while maintaining test validity.
     """
     test_config = {
-        "SECONDBRAIN_MONGO_URI": "mongodb://localhost:27017",
+        "SECONDBRAIN_MONGO_URI": "mongodb://localhost:27018",
         "SECONDBRAIN_MONGO_DB": "test_secondbrain_fast",
         "SECONDBRAIN_MONGO_COLLECTION": "test_embeddings_fast",
-        "SECONDBRAIN_LOCALHOST": "http://localhost:11434",
+        "SECONDBRAIN_LOCALHOST": "http://localhost:11435",
         "SECONDBRAIN_LOCAL_EMBEDDING_MODEL": "all-MiniLM-L6-v2",
         "SECONDBRAIN_CHUNK_SIZE": 256,  # Smaller chunks for faster processing
         "SECONDBRAIN_CHUNK_OVERLAP": 25,
@@ -307,10 +307,10 @@ def fast_cli_test(monkeypatch: pytest.MonkeyPatch) -> None:
             ...
     """
     test_config = {
-        "SECONDBRAIN_MONGO_URI": "mongodb://localhost:27017",
+        "SECONDBRAIN_MONGO_URI": "mongodb://localhost:27018",
         "SECONDBRAIN_MONGO_DB": "test_secondbrain",
         "SECONDBRAIN_MONGO_COLLECTION": "test_embeddings",
-        "SECONDBRAIN_LOCALHOST": "http://localhost:11434",
+        "SECONDBRAIN_LOCALHOST": "http://localhost:11435",
         "SECONDBRAIN_LOCAL_EMBEDDING_MODEL": "all-MiniLM-L6-v2",
         "SECONDBRAIN_CHUNK_SIZE": 512,
         "SECONDBRAIN_CHUNK_OVERLAP": 50,
@@ -412,7 +412,7 @@ def mongo_client() -> Generator[Any, None, None]:
     from pymongo import MongoClient
 
     client = MongoClient(
-        "mongodb://localhost:27017",
+        "mongodb://localhost:27018",
         serverSelectionTimeoutMS=5000,
         socketTimeoutMS=2000,
         connectTimeoutMS=2000,
@@ -602,10 +602,10 @@ def mock_config_defaults() -> None:
     import os
 
     test_config = {
-        "SECONDBRAIN_MONGO_URI": "mongodb://localhost:27017",
+        "SECONDBRAIN_MONGO_URI": "mongodb://localhost:27018",
         # NOTE: Not setting SECONDBRAIN_MONGO_DB - tests control their own db name
         "SECONDBRAIN_MONGO_COLLECTION": "test_embeddings",
-        "SECONDBRAIN_LOCALHOST": "http://localhost:11434",
+        "SECONDBRAIN_LOCALHOST": "http://localhost:11435",
         "SECONDBRAIN_LOCAL_EMBEDDING_MODEL": "all-MiniLM-L6-v2",
         "SECONDBRAIN_CHUNK_SIZE": 512,
         "SECONDBRAIN_CHUNK_OVERLAP": 50,
@@ -644,7 +644,7 @@ def _cleanup_mongodb() -> None:
         from pymongo import MongoClient
 
         client: MongoClient[dict[str, Any]] = MongoClient(
-            "mongodb://localhost:27017", serverSelectionTimeoutMS=1000
+            "mongodb://localhost:27018", serverSelectionTimeoutMS=1000
         )
         try:
             client.drop_database("test_secondbrain")

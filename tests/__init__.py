@@ -18,7 +18,7 @@ def test_config_default_values() -> None:
                 del os.environ[key]
 
         config = Config()
-        assert config.mongo_uri == "mongodb://localhost:27017"
+        assert config.mongo_uri == "mongodb://localhost:27018"
         assert config.mongo_db == "secondbrain"
         assert config.mongo_collection == "embeddings"
         assert config.local_embedding_model == "all-MiniLM-L6-v2"

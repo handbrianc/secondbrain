@@ -14,7 +14,7 @@ try:
     from pymongo import MongoClient
 
     # Try multiple connection strategies
-    TEST_MONGO_URI = "mongodb://127.0.0.1:27017/secondbrain_test"
+    TEST_MONGO_URI = "mongodb://127.0.0.1:27018/secondbrain_test"
     client = MongoClient(
         TEST_MONGO_URI, serverSelectionTimeoutMS=5000, directConnection=True
     )
@@ -24,7 +24,7 @@ except Exception:
     try:
         # Fallback: try with authentication
         TEST_MONGO_URI = (
-            "mongodb://admin:admin123@127.0.0.1:27017/secondbrain_test?authSource=admin"
+            "mongodb://admin:admin123@127.0.0.1:27018/secondbrain_test?authSource=admin"
         )
         client = MongoClient(
             TEST_MONGO_URI, serverSelectionTimeoutMS=5000, directConnection=True

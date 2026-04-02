@@ -36,7 +36,7 @@ class TestChatCommands:
             # Mock config
             mock_config = MagicMock()
             mock_config.llm_model = "llama3.2"
-            mock_config.ollama_host = "http://localhost:11434"
+            mock_config.ollama_host = "http://localhost:11435"
             mock_config.rag_context_window = 10
             mock_get_config.return_value = mock_config
 
@@ -93,7 +93,7 @@ class TestChatCommands:
             # Mock config
             mock_config = MagicMock()
             mock_config.llm_model = "llama3.2"
-            mock_config.ollama_host = "http://localhost:11434"
+            mock_config.ollama_host = "http://localhost:11435"
             mock_config.rag_context_window = 10
             mock_config.llm_temperature = 0.1
             mock_config.llm_max_tokens = 2048
@@ -151,7 +151,7 @@ class TestChatCommands:
             # Mock config
             mock_config = MagicMock()
             mock_config.llm_model = "llama3.2"
-            mock_config.ollama_host = "http://localhost:11434"
+            mock_config.ollama_host = "http://localhost:11435"
             mock_config.rag_context_window = 10
             mock_config.llm_temperature = 0.1
             mock_config.llm_max_tokens = 2048
@@ -282,7 +282,7 @@ class TestChatCommands:
         ):
             # Mock config
             mock_config = MagicMock()
-            mock_config.ollama_host = "http://localhost:11434"
+            mock_config.ollama_host = "http://localhost:11435"
             mock_config.llm_model = "llama3.2"
             mock_get_config.return_value = mock_config
 

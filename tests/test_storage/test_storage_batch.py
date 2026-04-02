@@ -16,7 +16,7 @@ from secondbrain.storage import StorageConnectionError, VectorStorage
 def mock_storage_config():
     """Module-scoped mock config to avoid repeated Config initialization."""
     config = MagicMock()
-    config.mongo_uri = "mongodb://localhost:27017"
+    config.mongo_uri = "mongodb://localhost:27018"
     config.mongo_db = "secondbrain"
     config.mongo_collection = "embeddings"
     config.embedding_dimensions = 384

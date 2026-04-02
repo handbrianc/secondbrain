@@ -11,7 +11,7 @@ from secondbrain.storage import VectorStorage
 def mock_storage_config():
     """Provide mock storage configuration for aggregation edge case tests."""
     config = MagicMock()
-    config.mongo_uri = "mongodb://localhost:27017"
+    config.mongo_uri = "mongodb://localhost:27018"
     config.mongo_db = "secondbrain"
     config.mongo_collection = "embeddings"
     config.embedding_dimensions = 384

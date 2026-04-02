@@ -40,7 +40,7 @@ def mongomock_storage() -> "VectorStorage":
     mock_client = mongomock.MongoClient()
 
     storage = VectorStorage(
-        mongo_uri="mongodb://127.0.0.1:27017/secondbrain_test",
+        mongo_uri="mongodb://127.0.0.1:27018/secondbrain_test",
         db_name="secondbrain_test",
         collection_name=f"test_network_partitions_{_get_worker_id()}",
     )

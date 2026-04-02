@@ -19,7 +19,7 @@ class TestDeleteBySource:
     def test_delete_by_source_success(self) -> None:
         """Test that delete by source successfully removes documents."""
         with patch("secondbrain.storage.sync.get_config") as mock_config:
-            mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
+            mock_config.return_value.mongo_uri = "mongodb://localhost:27018"
             mock_config.return_value.mongo_db = "secondbrain"
             mock_config.return_value.mongo_collection = "embeddings"
             mock_config.return_value.embedding_dimensions = 384
@@ -46,7 +46,7 @@ class TestDeleteBySource:
     def test_delete_by_source_no_matches(self) -> None:
         """Test that delete by source returns 0 when no matches found."""
         with patch("secondbrain.storage.sync.get_config") as mock_config:
-            mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
+            mock_config.return_value.mongo_uri = "mongodb://localhost:27018"
             mock_config.return_value.mongo_db = "secondbrain"
             mock_config.return_value.mongo_collection = "embeddings"
             mock_config.return_value.embedding_dimensions = 384
@@ -73,7 +73,7 @@ class TestDeleteBySource:
     def test_delete_by_source_connection_failure(self) -> None:
         """Test that delete by source raises StorageConnectionError on failure."""
         with patch("secondbrain.storage.sync.get_config") as mock_config:
-            mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
+            mock_config.return_value.mongo_uri = "mongodb://localhost:27018"
             mock_config.return_value.mongo_db = "secondbrain"
             mock_config.return_value.mongo_collection = "embeddings"
             mock_config.return_value.embedding_dimensions = 384
@@ -93,7 +93,7 @@ class TestDeleteBySource:
     def test_delete_by_source_large_batch(self) -> None:
         """Test that delete by source handles large batches correctly."""
         with patch("secondbrain.storage.sync.get_config") as mock_config:
-            mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
+            mock_config.return_value.mongo_uri = "mongodb://localhost:27018"
             mock_config.return_value.mongo_db = "secondbrain"
             mock_config.return_value.mongo_collection = "embeddings"
             mock_config.return_value.embedding_dimensions = 384
@@ -121,7 +121,7 @@ class TestDeleteByChunkId:
     def test_delete_by_chunk_id_success(self) -> None:
         """Test that delete by chunk ID successfully removes a document."""
         with patch("secondbrain.storage.sync.get_config") as mock_config:
-            mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
+            mock_config.return_value.mongo_uri = "mongodb://localhost:27018"
             mock_config.return_value.mongo_db = "secondbrain"
             mock_config.return_value.mongo_collection = "embeddings"
             mock_config.return_value.embedding_dimensions = 384
@@ -148,7 +148,7 @@ class TestDeleteByChunkId:
     def test_delete_by_chunk_id_not_found(self) -> None:
         """Test that delete by chunk ID returns 0 when not found."""
         with patch("secondbrain.storage.sync.get_config") as mock_config:
-            mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
+            mock_config.return_value.mongo_uri = "mongodb://localhost:27018"
             mock_config.return_value.mongo_db = "secondbrain"
             mock_config.return_value.mongo_collection = "embeddings"
             mock_config.return_value.embedding_dimensions = 384
@@ -175,7 +175,7 @@ class TestDeleteByChunkId:
     def test_delete_by_chunk_id_connection_failure(self) -> None:
         """Test that delete by chunk ID raises StorageConnectionError on failure."""
         with patch("secondbrain.storage.sync.get_config") as mock_config:
-            mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
+            mock_config.return_value.mongo_uri = "mongodb://localhost:27018"
             mock_config.return_value.mongo_db = "secondbrain"
             mock_config.return_value.mongo_collection = "embeddings"
             mock_config.return_value.embedding_dimensions = 384
@@ -195,7 +195,7 @@ class TestDeleteByChunkId:
     def test_delete_by_chunk_id_uuid_format(self) -> None:
         """Test that delete by chunk ID handles UUID format correctly."""
         with patch("secondbrain.storage.sync.get_config") as mock_config:
-            mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
+            mock_config.return_value.mongo_uri = "mongodb://localhost:27018"
             mock_config.return_value.mongo_db = "secondbrain"
             mock_config.return_value.mongo_collection = "embeddings"
             mock_config.return_value.embedding_dimensions = 384
@@ -228,7 +228,7 @@ class TestDeleteAll:
     def test_delete_all_success(self) -> None:
         """Test that delete all successfully removes all documents."""
         with patch("secondbrain.storage.sync.get_config") as mock_config:
-            mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
+            mock_config.return_value.mongo_uri = "mongodb://localhost:27018"
             mock_config.return_value.mongo_db = "secondbrain"
             mock_config.return_value.mongo_collection = "embeddings"
             mock_config.return_value.embedding_dimensions = 384
@@ -253,7 +253,7 @@ class TestDeleteAll:
     def test_delete_all_empty_database(self) -> None:
         """Test that delete all returns 0 on empty database."""
         with patch("secondbrain.storage.sync.get_config") as mock_config:
-            mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
+            mock_config.return_value.mongo_uri = "mongodb://localhost:27018"
             mock_config.return_value.mongo_db = "secondbrain"
             mock_config.return_value.mongo_collection = "embeddings"
             mock_config.return_value.embedding_dimensions = 384
@@ -278,7 +278,7 @@ class TestDeleteAll:
     def test_delete_all_connection_failure(self) -> None:
         """Test that delete all raises StorageConnectionError on failure."""
         with patch("secondbrain.storage.sync.get_config") as mock_config:
-            mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
+            mock_config.return_value.mongo_uri = "mongodb://localhost:27018"
             mock_config.return_value.mongo_db = "secondbrain"
             mock_config.return_value.mongo_collection = "embeddings"
             mock_config.return_value.embedding_dimensions = 384
@@ -298,7 +298,7 @@ class TestDeleteAll:
     def test_delete_all_large_dataset(self) -> None:
         """Test that delete all handles large datasets correctly."""
         with patch("secondbrain.storage.sync.get_config") as mock_config:
-            mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
+            mock_config.return_value.mongo_uri = "mongodb://localhost:27018"
             mock_config.return_value.mongo_db = "secondbrain"
             mock_config.return_value.mongo_collection = "embeddings"
             mock_config.return_value.embedding_dimensions = 384
@@ -326,7 +326,7 @@ class TestDeleteEdgeCases:
     def test_delete_by_source_with_special_characters(self) -> None:
         """Test that delete by source handles special characters correctly."""
         with patch("secondbrain.storage.sync.get_config") as mock_config:
-            mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
+            mock_config.return_value.mongo_uri = "mongodb://localhost:27018"
             mock_config.return_value.mongo_db = "secondbrain"
             mock_config.return_value.mongo_collection = "embeddings"
             mock_config.return_value.embedding_dimensions = 384
@@ -353,7 +353,7 @@ class TestDeleteEdgeCases:
     def test_delete_by_chunk_id_empty_string(self) -> None:
         """Test that delete by chunk ID handles empty string correctly."""
         with patch("secondbrain.storage.sync.get_config") as mock_config:
-            mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
+            mock_config.return_value.mongo_uri = "mongodb://localhost:27018"
             mock_config.return_value.mongo_db = "secondbrain"
             mock_config.return_value.mongo_collection = "embeddings"
             mock_config.return_value.embedding_dimensions = 384
@@ -378,7 +378,7 @@ class TestDeleteEdgeCases:
     def test_delete_operations_return_int_type(self) -> None:
         """Test that delete operations return int type."""
         with patch("secondbrain.storage.sync.get_config") as mock_config:
-            mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
+            mock_config.return_value.mongo_uri = "mongodb://localhost:27018"
             mock_config.return_value.mongo_db = "secondbrain"
             mock_config.return_value.mongo_collection = "embeddings"
             mock_config.return_value.embedding_dimensions = 384
@@ -412,7 +412,7 @@ class TestAsyncDeleteOperations:
     async def test_delete_by_source_async_success(self) -> None:
         """Test that async delete by source succeeds."""
         with patch("secondbrain.storage.sync.get_config") as mock_config:
-            mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
+            mock_config.return_value.mongo_uri = "mongodb://localhost:27018"
             mock_config.return_value.mongo_db = "secondbrain"
             mock_config.return_value.mongo_collection = "embeddings"
             mock_config.return_value.embedding_dimensions = 384
@@ -436,7 +436,7 @@ class TestAsyncDeleteOperations:
     async def test_delete_by_chunk_id_async_success(self) -> None:
         """Test that async delete by chunk ID succeeds."""
         with patch("secondbrain.storage.sync.get_config") as mock_config:
-            mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
+            mock_config.return_value.mongo_uri = "mongodb://localhost:27018"
             mock_config.return_value.mongo_db = "secondbrain"
             mock_config.return_value.mongo_collection = "embeddings"
             mock_config.return_value.embedding_dimensions = 384
@@ -460,7 +460,7 @@ class TestAsyncDeleteOperations:
     async def test_delete_all_async_success(self) -> None:
         """Test that async delete all succeeds."""
         with patch("secondbrain.storage.sync.get_config") as mock_config:
-            mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
+            mock_config.return_value.mongo_uri = "mongodb://localhost:27018"
             mock_config.return_value.mongo_db = "secondbrain"
             mock_config.return_value.mongo_collection = "embeddings"
             mock_config.return_value.embedding_dimensions = 384
@@ -484,7 +484,7 @@ class TestAsyncDeleteOperations:
     async def test_delete_by_source_async_connection_failure(self) -> None:
         """Test that async delete by source raises on connection failure."""
         with patch("secondbrain.storage.sync.get_config") as mock_config:
-            mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
+            mock_config.return_value.mongo_uri = "mongodb://localhost:27018"
             mock_config.return_value.mongo_db = "secondbrain"
             mock_config.return_value.mongo_collection = "embeddings"
             mock_config.return_value.embedding_dimensions = 384
@@ -501,7 +501,7 @@ class TestAsyncDeleteOperations:
     async def test_delete_by_chunk_id_async_connection_failure(self) -> None:
         """Test that async delete by chunk ID raises on connection failure."""
         with patch("secondbrain.storage.sync.get_config") as mock_config:
-            mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
+            mock_config.return_value.mongo_uri = "mongodb://localhost:27018"
             mock_config.return_value.mongo_db = "secondbrain"
             mock_config.return_value.mongo_collection = "embeddings"
             mock_config.return_value.embedding_dimensions = 384
@@ -518,7 +518,7 @@ class TestAsyncDeleteOperations:
     async def test_delete_all_async_connection_failure(self) -> None:
         """Test that async delete all raises on connection failure."""
         with patch("secondbrain.storage.sync.get_config") as mock_config:
-            mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
+            mock_config.return_value.mongo_uri = "mongodb://localhost:27018"
             mock_config.return_value.mongo_db = "secondbrain"
             mock_config.return_value.mongo_collection = "embeddings"
             mock_config.return_value.embedding_dimensions = 384
@@ -539,7 +539,7 @@ class TestDeleteIntegrationScenarios:
     def test_delete_by_source_then_verify_count(self) -> None:
         """Test that delete by source followed by count verification works."""
         with patch("secondbrain.storage.sync.get_config") as mock_config:
-            mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
+            mock_config.return_value.mongo_uri = "mongodb://localhost:27018"
             mock_config.return_value.mongo_db = "secondbrain"
             mock_config.return_value.mongo_collection = "embeddings"
             mock_config.return_value.embedding_dimensions = 384
@@ -569,7 +569,7 @@ class TestDeleteIntegrationScenarios:
     def test_sequential_delete_operations(self) -> None:
         """Test that sequential delete operations work correctly."""
         with patch("secondbrain.storage.sync.get_config") as mock_config:
-            mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
+            mock_config.return_value.mongo_uri = "mongodb://localhost:27018"
             mock_config.return_value.mongo_db = "secondbrain"
             mock_config.return_value.mongo_collection = "embeddings"
             mock_config.return_value.embedding_dimensions = 384

@@ -32,7 +32,7 @@ class TestFinalCoverage:
         from secondbrain.conversation.storage import ConversationStorage
 
         with patch("secondbrain.conversation.storage.get_config") as mock_config:
-            mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
+            mock_config.return_value.mongo_uri = "mongodb://localhost:27018"
             mock_config.return_value.mongo_db = "test"
             mock_config.return_value.mongo_conversation_collection = "conversations"
 

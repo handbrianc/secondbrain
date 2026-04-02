@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import contextlib
+import os
+import subprocess
 import time
 from collections.abc import Generator
 from typing import TYPE_CHECKING, Any
@@ -13,6 +15,7 @@ from pymongo import MongoClient
 
 from secondbrain.embedding import LocalEmbeddingGenerator
 from secondbrain.storage import VectorStorage
+from secondbrain.utils.docker_manager import DockerManager
 from secondbrain.utils.observability import MetricsCollector
 
 if TYPE_CHECKING:
@@ -20,14 +23,12 @@ if TYPE_CHECKING:
 
 # Test service URLs (use running services)
 # Check if running in Docker environment
-import os
-
 if os.getenv("RUNNING_IN_CI", "false").lower() == "true":
     # Docker-compose test environment
     TEST_MONGO_URI = "mongodb://mongodb:27017/secondbrain_test"
     TEST_EMBEDDING_URL = "http://sentence-transformers:8000"
 else:
-    # Local development environment
+    # Local development environment - use test-specific ports
     TEST_MONGO_URI = "mongodb://127.0.0.1:27018/secondbrain_test"
     TEST_EMBEDDING_URL = "http://localhost:11435"
 
@@ -105,13 +106,57 @@ def wait_for_services() -> Generator[None, None, None]:
     This session-scoped fixture ensures MongoDB is healthy before tests run.
     It waits up to SERVICE_HEALTH_TIMEOUT seconds for MongoDB to become available.
 
+    If MongoDB is not running locally, this fixture will attempt to start it
+    using Docker Compose (docker-compose.test.yml).
+
     The sentence-transformers embedding service is optional - tests that require
     real embeddings will be skipped if the service is not available.
 
-    If MongoDB is not available, pytest.skip() is called to skip all integration
-    tests gracefully instead of failing.
+    If MongoDB cannot be started or is not available, pytest.skip() is called
+    to skip all integration tests gracefully instead of failing.
     """
     print("\nWaiting for test services to be healthy...")
+
+    # Track if we started the services (for cleanup)
+    services_started = False
+
+    # If not running in CI, try to start services locally using Docker
+    if os.getenv("RUNNING_IN_CI", "false").lower() != "true":
+        print("Checking if services are running locally...")
+        try:
+            docker_manager = DockerManager(compose_file="docker-compose.test.yml")
+            if (
+                docker_manager.check_docker_installed()
+                and docker_manager.check_docker_compose_installed()
+            ):
+                print("Docker available - ensuring services are running...")
+                # Use correct container names for test compose file
+                docker_manager.container_name = "secondbrain-mongodb-test"
+                if not docker_manager.check_mongo_running():
+                    print("MongoDB not running, starting via docker-compose...")
+                    # Start all services (MongoDB + sentence-transformers)
+                    subprocess.run(
+                        [
+                            "docker",
+                            "compose",
+                            "-f",
+                            "docker-compose.test.yml",
+                            "up",
+                            "-d",
+                        ],
+                        check=False,
+                        capture_output=True,
+                        text=True,
+                    )
+                    services_started = True
+                    print("Services started, waiting for them to be ready...")
+                docker_manager.wait_for_mongo_ready(max_wait_seconds=30)
+                print("MongoDB is running on test port 27018")
+        except Exception as e:
+            print(f"Warning: Could not auto-start services: {e}")
+            print(
+                "Please start services manually: docker-compose -f docker-compose.test.yml up -d"
+            )
 
     # Wait for MongoDB
     start_time = time.time()
@@ -136,6 +181,21 @@ def wait_for_services() -> Generator[None, None, None]:
 
     print("MongoDB is ready, proceeding with tests\n")
     yield
+
+    # Cleanup: stop services if we started them
+    if services_started:
+        print("\nCleaning up test services...")
+        try:
+            subprocess.run(
+                ["docker", "compose", "-f", "docker-compose.test.yml", "down"],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            print("Test services stopped")
+        except Exception as e:
+            print(f"Warning: Could not stop test services: {e}")
 
 
 @pytest.fixture(scope="session")
