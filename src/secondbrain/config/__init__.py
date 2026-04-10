@@ -109,6 +109,16 @@ class Config(BaseSettings):
         description="Number of recent messages to keep in context",
     )
 
+    # RAG prompt settings
+    rag_system_prompt: str = Field(
+        default=(
+            "You are a helpful assistant. Answer questions based on the "
+            "provided context from documents. If the answer is not in the "
+            'context, say "I cannot find the answer in the provided documents."'
+        ),
+        description="System prompt for RAG chat (supports environment variable SECONDBRAIN_RAG_SYSTEM_PROMPT)",
+    )
+
     # Chunking settings
     chunk_size: int = Field(
         default=4096,
