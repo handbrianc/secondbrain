@@ -240,18 +240,6 @@ def ls(
     all: bool,  # noqa: A002
 ) -> None:
     """List ingested documents and chunks."""
-    from secondbrain.storage import VectorStorage
-
-    # Alias: 'list' command maps to 'ls'
-    pass
-
-
-# Create an alias for ls -> list
-list_cmd = ls
-list_cmd.__name__ = "list"
-list_cmd.__doc__ = "List ingested documents and chunks (alias for 'ls')"
-cli.add_command(list_cmd, "list")
-    """List ingested documents/chunks."""
     from secondbrain.management import Lister
 
     if limit < 0:
@@ -278,6 +266,13 @@ cli.add_command(list_cmd, "list")
                 offset=offset,
             )
     display_list_results(results)
+
+
+# Create an alias for ls -> list
+list_cmd = ls
+list_cmd.__name__ = "list"
+list_cmd.__doc__ = "List ingested documents and chunks (alias for 'ls')"
+cli.add_command(list_cmd, "list")
 
 
 @handle_cli_errors
