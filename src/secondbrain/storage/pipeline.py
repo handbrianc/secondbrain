@@ -164,16 +164,16 @@ def build_search_pipeline(
     # Limit results
     pipeline.append({"$limit": top_k})
 
-    # Final projection (exclude embedding field)
+    # Final projection - keep only desired fields (inclusion mode)
     pipeline.append(
         {
             "$project": {
-                "chunk_id": 0,
-                "source_file": 0,
-                "page_number": 0,
-                "chunk_text": 0,
-                "score": 0,
-                "embedding": 0,
+                "_id": 0,  # Exclude MongoDB's _id field
+                "chunk_id": 1,
+                "source_file": 1,
+                "page_number": 1,
+                "chunk_text": 1,
+                "score": 1,
             }
         }
     )
