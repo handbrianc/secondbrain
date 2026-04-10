@@ -185,8 +185,8 @@ def ingest(
 @click.option(
     "--min-score",
     type=float,
-    default=0.78,
-    help="Minimum similarity score threshold (0.0-1.0)",
+    default=None,
+    help="Minimum similarity score threshold (0.0-1.0, default: 0.46)",
 )
 @click.pass_context
 def search(
@@ -202,10 +202,15 @@ def search(
 
     QUERY: Search query text.
     """
+    from secondbrain.constants import DEFAULT_MIN_SIMILARITY_THRESHOLD
     from secondbrain.search import Searcher
 
     config = get_config()
     top_k = top_k or config.default_top_k
+    # Use provided min_score or fall back to default constant
+    effective_min_score = (
+        min_score if min_score is not None else DEFAULT_MIN_SIMILARITY_THRESHOLD
+    )
 
     with console.status("[cyan]Searching...", spinner="dots"):
         with Searcher(verbose=ctx.obj.get("verbose", False)) as searcher:
@@ -215,7 +220,7 @@ def search(
                 source_filter=source,
                 file_type_filter=file_type,
             )
-    display_search_results(results, format, min_score=min_score)
+    display_search_results(results, format, min_score=effective_min_score)
 
 
 @handle_cli_errors
