@@ -691,9 +691,8 @@ def _interactive_chat(
                     console.print(f"  [{i}] {source_file} (page {page}): {chunk_text}")
 
         except KeyboardInterrupt:
-            console.print(
-                "\n[dim]Use /quit to exit or Ctrl+C again to force quit[/dim]"
-            )
+            console.print("\n[dim]Goodbye![/dim]")
+            break
         except EOFError:
             console.print("\n[dim]Goodbye![/dim]")
             break
