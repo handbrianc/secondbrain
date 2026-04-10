@@ -224,21 +224,33 @@ def search(
 
 
 @handle_cli_errors
-@cli.command("ls", "list")  # Both names work, "list" is an alias
+@cli.command()
 @click.option("--source", type=str, help="Filter by source file")
 @click.option("--chunk-id", type=str, help="Filter by specific chunk ID")
 @click.option("--limit", type=int, default=100, help="Maximum number of results")
 @click.option("--offset", type=int, default=0, help="Offset for pagination")
 @click.option("--all", "-a", is_flag=True, help="List all documents (ignores limit)")
 @click.pass_context
-def list_cmd(
+def ls(
     ctx: click.Context,
     source: str | None,
     chunk_id: str | None,
     limit: int,
     offset: int,
-    all: bool = False,
+    all: bool,  # noqa: A002
 ) -> None:
+    """List ingested documents and chunks."""
+    from secondbrain.storage import VectorStorage
+
+    # Alias: 'list' command maps to 'ls'
+    pass
+
+
+# Create an alias for ls -> list
+list_cmd = ls
+list_cmd.__name__ = "list"
+list_cmd.__doc__ = "List ingested documents and chunks (alias for 'ls')"
+cli.add_command(list_cmd, "list")
     """List ingested documents/chunks."""
     from secondbrain.management import Lister
 
