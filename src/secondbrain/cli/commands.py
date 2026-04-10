@@ -15,6 +15,7 @@ and user-friendly output formatting using Rich library.
 import json
 import logging
 import os
+import readline
 import sys
 from typing import Any
 
@@ -643,14 +644,12 @@ def _interactive_chat(
 
     history_file = os.path.expanduser("~/.secondbrain_chat_history")
 
-    chat_history = []
     if os.path.exists(history_file):
-        try:
-            with open(history_file, "r") as f:
-                chat_history = [line.strip() for line in f if line.strip()]
-        except Exception:
-            chat_history = []
+        readline.read_history_file(history_file)
 
+    readline.set_history_length(1000)
+
+    chat_history = []
     while True:
         try:
             try:
@@ -713,6 +712,7 @@ def _interactive_chat(
             try:
                 with open(history_file, "a") as f:
                     f.write(user_input + "\n")
+                readline.write_history_file(history_file)
             except Exception:
                 pass
 
