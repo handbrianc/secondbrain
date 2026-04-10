@@ -26,7 +26,10 @@ if TYPE_CHECKING:
 from secondbrain.config import Config, get_config
 from secondbrain.exceptions import StorageConnectionError
 from secondbrain.storage.models import DatabaseStats
-from secondbrain.storage.pipeline import build_search_pipeline
+from secondbrain.storage.pipeline import (
+    build_fallback_search_pipeline,
+    build_search_pipeline,
+)
 from secondbrain.types import ChunkInfo, SearchResult
 from secondbrain.utils.connections import ValidatableService
 from secondbrain.utils.perf_monitor import async_timing, timing
@@ -249,6 +252,16 @@ class VectorStorage(ValidatableService):
                     ):
                         return
             except Exception as e:
+                # Check if this is an Atlas Search not enabled error
+                if "SearchNotEnabled" in str(e) or "Atlas Search" in str(e):
+                    # Atlas Search is not available (using local MongoDB)
+                    # Skip waiting and allow fallback to manual vector search
+                    logger.debug(
+                        "Atlas Search not available, using fallback search method"
+                    )
+                    self._index_created = False
+                    return
+
                 logger.debug(
                     "Index not ready, retrying... (attempt %s/%s, delay %.2fs, error: %s: %s)",
                     attempt + 1,
@@ -621,7 +634,16 @@ class VectorStorage(ValidatableService):
         # Ensure index exists and wait for it to be ready
         self._wait_for_index_ready()
 
-        with trace_operation("storage_aggregate"):
+        # Use fallback pipeline if Atlas Search is not available
+        if not self._index_created:
+            logger.debug("Using fallback search (no Atlas Search index)")
+            pipeline = build_fallback_search_pipeline(
+                embedding=embedding,
+                top_k=top_k,
+                source_filter=source_filter,
+                file_type_filter=file_type_filter,
+            )
+        else:
             pipeline = build_search_pipeline(
                 embedding=embedding,
                 top_k=top_k,
@@ -629,6 +651,7 @@ class VectorStorage(ValidatableService):
                 file_type_filter=file_type_filter,
             )
 
+        with trace_operation("storage_aggregate"):
             results: list[SearchResult] = list(self.collection.aggregate(pipeline))
         return results
 
