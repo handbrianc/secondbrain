@@ -8,7 +8,9 @@ to improve maintainability and clarity.
 MAX_LIST_LIMIT = 100000  # Maximum number of results for list command
 
 # Search Constants
-DEFAULT_MIN_SIMILARITY_THRESHOLD = 0.78  # Minimum score for search results
+DEFAULT_MIN_SIMILARITY_THRESHOLD = (
+    0.46  # Minimum score for search results (lowered for better recall)
+)
 DEFAULT_TOP_K = 5  # Default number of search results
 
 # Document Processing Constants
