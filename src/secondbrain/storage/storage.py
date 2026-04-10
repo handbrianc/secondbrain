@@ -26,10 +26,7 @@ if TYPE_CHECKING:
 from secondbrain.config import Config, get_config
 from secondbrain.exceptions import StorageConnectionError
 from secondbrain.storage.models import DatabaseStats
-from secondbrain.storage.pipeline import (
-    build_fallback_search_pipeline,
-    build_search_pipeline,
-)
+from secondbrain.storage.pipeline import build_fallback_search_pipeline
 from secondbrain.types import ChunkInfo, SearchResult
 from secondbrain.utils.connections import ValidatableService
 from secondbrain.utils.perf_monitor import async_timing, timing
@@ -209,74 +206,12 @@ class VectorStorage(ValidatableService):
         return embedding
 
     def _wait_for_index_ready(self) -> None:
-        """Wait for MongoDB vector search index to be ready.
+        """No-op for local MongoDB.
 
-        Why We Wait for Index Readiness:
-        --------------------------------
-        MongoDB Atlas vector search indexes are created asynchronously. After
-        creating an index, it may take time to build and become queryable.
-        Attempting searches before the index is READY will fail.
-
-        Exponential Backoff Strategy:
-        -----------------------------
-        - Base delay: 100ms (quick initial check)
-        - Doubling: 100ms → 200ms → 400ms → 800ms → 1600ms → 2000ms (capped)
-        - Max delay: 2 seconds (prevents excessive waiting)
-        - Retry count: 15 attempts (configurable via index_ready_retry_count)
-        - Total max wait: ~15 seconds (sum of geometric series)
-
-        This approach balances:
-        - Responsiveness: Quick checks when index builds fast
-        - Efficiency: Longer waits as build time increases
-        - Safety: Caps prevent infinite waiting
-
-        Args:
-            None
-
-        Returns
-        -------
-            None (returns when index is READY or max retries exceeded)
+        Local MongoDB does not use Atlas Search indexes, so no waiting is needed.
         """
-        self.ensure_index()
-
-        base_delay = 0.1  # 100ms base delay for exponential backoff
-        max_delay = 2.0  # 2 seconds maximum delay cap
-        delay = base_delay
-
-        for attempt in range(self._index_ready_retry_count):
-            try:
-                for idx in self.collection.list_search_indexes():
-                    if (
-                        idx.get("name") == "embedding_index"
-                        and idx.get("status") == "READY"
-                    ):
-                        return
-            except Exception as e:
-                # Check if this is an Atlas Search not enabled error
-                if "SearchNotEnabled" in str(e) or "Atlas Search" in str(e):
-                    # Atlas Search is not available (using local MongoDB)
-                    # Skip waiting and allow fallback to manual vector search
-                    logger.debug(
-                        "Atlas Search not available, using fallback search method"
-                    )
-                    self._index_created = False
-                    return
-
-                logger.debug(
-                    "Index not ready, retrying... (attempt %s/%s, delay %.2fs, error: %s: %s)",
-                    attempt + 1,
-                    self._index_ready_retry_count,
-                    delay,
-                    type(e).__name__,
-                    e,
-                )
-
-            # Exponential backoff: double delay each retry, cap at max_delay
-            # Sequence: 0.1s → 0.2s → 0.4s → 0.8s → 1.6s → 2.0s → 2.0s → ...
-            time.sleep(delay)
-            delay = min(delay * 2, max_delay)
-
-        logger.warning("Vector search index may not be ready after maximum retries")
+        # No index to wait for in local MongoDB
+        pass
 
     async def _require_connection_async(
         self, operation: str = "database operation"
@@ -298,55 +233,12 @@ class VectorStorage(ValidatableService):
             )
 
     async def _wait_for_index_ready_async(self) -> None:
-        """Wait for MongoDB vector search index to be ready asynchronously.
+        """No-op for local MongoDB.
 
-        See _wait_for_index_ready() for explanation of exponential backoff strategy.
-        This is the async version using asyncio.sleep() instead of time.sleep().
-
-        Why We Wait for Index Readiness:
-        --------------------------------
-        MongoDB Atlas vector search indexes are created asynchronously. After
-        creating an index, it may take time to build and become queryable.
-
-        Exponential Backoff Strategy:
-        -----------------------------
-        - Base delay: 100ms (quick initial check)
-        - Doubling: 100ms → 200ms → 400ms → 800ms → 1600ms → 2000ms (capped)
-        - Max delay: 2 seconds (prevents excessive waiting)
-        - Retry count: 15 attempts (configurable)
-        - Total max wait: ~15 seconds
+        Local MongoDB does not use Atlas Search indexes, so no waiting is needed.
         """
-        await asyncio.to_thread(self.ensure_index)
-
-        base_delay = 0.1  # 100ms base delay for exponential backoff
-        max_delay = 2.0  # 2 seconds maximum delay cap
-        delay = base_delay
-
-        for attempt in range(self._index_ready_retry_count):
-            try:
-                indexes = await asyncio.to_thread(
-                    lambda: list(self.collection.list_search_indexes())
-                )
-                for idx in indexes:
-                    if (
-                        idx.get("name") == "embedding_index"
-                        and idx.get("status") == "READY"
-                    ):
-                        return
-            except Exception as e:
-                logger.debug(
-                    "Index not ready, retrying... (attempt %s/%s, delay %.2fs, error: %s: %s)",
-                    attempt + 1,
-                    self._index_ready_retry_count,
-                    delay,
-                    type(e).__name__,
-                    e,
-                )
-
-            await asyncio.sleep(delay)
-            delay = min(delay * 2, max_delay)  # Exponential backoff: 0.1s → 2.0s cap
-
-        logger.warning("Vector search index may not be ready after maximum retries")
+        # No index to wait for in local MongoDB
+        pass
 
     def close(self) -> None:
         """Close resources and release connections."""
@@ -495,84 +387,15 @@ class VectorStorage(ValidatableService):
             return False
 
     def ensure_index(self) -> None:
-        """Create vector index if it does not exist."""
-        if self._index_created:
-            return
+        """Skip index creation for local MongoDB.
 
-        try:
-            from pymongo.operations import SearchIndexModel
-
-            existing_indexes = list(
-                self.collection.list_search_indexes("embedding_index")
-            )
-            if existing_indexes:
-                existing_index = existing_indexes[0]
-                existing_dims = (
-                    existing_index.get("definition", {})
-                    .get("fields", [{}])[0]
-                    .get("numDimensions")
-                )
-                current_dims = self._config.embedding_dimensions
-
-                # Check if dimensions mismatch - only drop when mismatch is CONFIRMED
-                # If existing_dims is None (unreadable), assume index is OK to avoid unnecessary drops
-                dims_mismatch = (
-                    existing_dims is not None and existing_dims != current_dims
-                )
-
-                if dims_mismatch:
-                    logger.info(
-                        "Dropping old index with %d dimensions to create new index with %d dimensions",
-                        existing_dims,
-                        current_dims,
-                    )
-                    try:
-                        self.collection.drop_search_index("embedding_index")
-                        logger.info("Dropped old index successfully")
-                    except Exception as drop_err:
-                        logger.error(
-                            "Failed to drop old index: %s: %s",
-                            type(drop_err).__name__,
-                            drop_err,
-                        )
-                        raise
-                else:
-                    # Index exists with compatible dimensions - no action needed
-                    if existing_dims is None:
-                        logger.debug(
-                            "Existing index found but dimensions unreadable. Assuming compatible."
-                        )
-                    else:
-                        logger.debug(
-                            "Existing index with %d dimensions is compatible.",
-                            existing_dims,
-                        )
-                    self._index_created = True
-                    return
-
-            search_index_model = SearchIndexModel(
-                definition={
-                    "fields": [
-                        {
-                            "type": "vector",
-                            "path": "embedding",
-                            "numDimensions": self._config.embedding_dimensions,
-                            "similarity": "cosine",
-                        }
-                    ]
-                },
-                name="embedding_index",
-                type="vectorSearch",
-            )
-            _ = self.collection.create_search_index(model=search_index_model)
-            logger.info(
-                "Created vector index with dimensions=%d",
-                self._config.embedding_dimensions,
-            )
-            self._index_created = True
-        except Exception as e:
-            logger.warning("Could not create index: %s: %s", type(e).__name__, e)
-            self._index_created = False
+        Local MongoDB Community Edition does not support Atlas Search indexes.
+        Vector search is performed using manual cosine similarity calculation
+        in the aggregation pipeline (O(n) complexity).
+        """
+        # Always use fallback search for local MongoDB
+        self._index_created = False
+        logger.debug("Using local MongoDB without Atlas Search indexes")
 
     @timing("storage_store")
     def store(self, document: dict[str, Any]) -> str:
@@ -847,9 +670,8 @@ class VectorStorage(ValidatableService):
         """
         await self._require_connection_async("search")
 
-        await self._wait_for_index_ready_async()
-
-        pipeline = build_search_pipeline(
+        # Use fallback pipeline for local MongoDB
+        pipeline = build_fallback_search_pipeline(
             embedding=embedding,
             top_k=top_k,
             source_filter=source_filter,
@@ -1074,90 +896,14 @@ class AsyncVectorStorage(ValidatableService):
         logger.warning("Vector search index may not be ready after maximum retries")
 
     async def _ensure_index_async(self) -> None:
-        """Create vector index asynchronously if it does not exist."""
-        if self._index_created:
-            return
+        """Skip index creation for local MongoDB.
 
-        try:
-            from pymongo.operations import SearchIndexModel
-
-            cursor = self.async_collection.list_search_indexes("embedding_index")
-            existing_indexes = await cursor.to_list(length=None)
-
-            if existing_indexes:
-                existing_index = existing_indexes[0]
-                existing_dims = (
-                    existing_index.get("definition", {})
-                    .get("fields", [{}])[0]
-                    .get("numDimensions")
-                )
-                current_dims = self._config.embedding_dimensions
-
-                # Check if dimensions mismatch - only drop when mismatch is CONFIRMED
-                # If existing_dims is None (unreadable), assume index is OK to avoid unnecessary drops
-                dims_mismatch = (
-                    existing_dims is not None and existing_dims != current_dims
-                )
-
-                if dims_mismatch:
-                    logger.info(
-                        "Dropping old index with %d dimensions to create new index with %d dimensions",
-                        existing_dims,
-                        current_dims,
-                    )
-                    try:
-                        drop_cursor = self.async_collection.drop_search_index(
-                            "embedding_index"
-                        )
-                        await drop_cursor
-                        logger.info("Dropped old index successfully")
-                    except Exception as drop_err:
-                        logger.error(
-                            "Failed to drop old index: %s: %s",
-                            type(drop_err).__name__,
-                            drop_err,
-                        )
-                        raise
-                else:
-                    # Index exists with compatible dimensions - no action needed
-                    if existing_dims is None:
-                        logger.debug(
-                            "Existing index found but dimensions unreadable. Assuming compatible."
-                        )
-                    else:
-                        logger.debug(
-                            "Existing index with %d dimensions is compatible.",
-                            existing_dims,
-                        )
-                    self._index_created = True
-                    return
-
-            search_index_model = SearchIndexModel(
-                definition={
-                    "fields": [
-                        {
-                            "type": "vector",
-                            "path": "embedding",
-                            "numDimensions": self._config.embedding_dimensions,
-                            "similarity": "cosine",
-                        }
-                    ]
-                },
-                name="embedding_index",
-                type="vectorSearch",
-            )
-            create_cursor = self.async_collection.create_search_index(
-                model=search_index_model
-            )
-            await create_cursor
-            logger.info(
-                "Created vector index with dimensions=%d",
-                self._config.embedding_dimensions,
-            )
-            self._index_created = True
-        except Exception as e:
-            logger.warning("Could not create index: %s: %s", type(e).__name__, e)
-            self._index_created = False
+        Local MongoDB Community Edition does not support Atlas Search indexes.
+        Vector search is performed using manual cosine similarity calculation
+        in the aggregation pipeline (O(n) complexity).
+        """
+        # Always use fallback search for local MongoDB
+        self._index_created = False
 
     @property
     def async_client(self) -> AsyncIOMotorClient:
@@ -1344,9 +1090,8 @@ class AsyncVectorStorage(ValidatableService):
         """Search for similar embeddings using native Motor async."""
         await self._require_connection_async("search")
 
-        await self._wait_for_index_ready_async()
-
-        pipeline = build_search_pipeline(
+        # Use fallback pipeline for local MongoDB
+        pipeline = build_fallback_search_pipeline(
             embedding=embedding,
             top_k=top_k,
             source_filter=source_filter,
