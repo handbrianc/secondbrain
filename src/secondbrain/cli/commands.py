@@ -268,11 +268,18 @@ def ls(
     display_list_results(results)
 
 
-# Create an alias for ls -> list
-list_cmd = ls
-list_cmd.__name__ = "list"
-list_cmd.__doc__ = "List ingested documents and chunks (alias for 'ls')"
-cli.add_command(list_cmd, "list")
+# Create an alias for ls -> list using Click's command decorator
+@handle_cli_errors
+@cli.command("list", hidden=True)  # Hidden alias
+@click.option("--source", type=str, help="Filter by source file")
+@click.option("--chunk-id", type=str, help="Filter by specific chunk ID")
+@click.option("--limit", type=int, default=100, help="Maximum number of results")
+@click.option("--offset", type=int, default=0, help="Offset for pagination")
+@click.option("--all", "-a", is_flag=True, help="List all documents (ignores limit)")
+@click.pass_context
+def list_cmd_alias(ctx, source, chunk_id, limit, offset, all):
+    """Alias for ls command."""
+    return ls(ctx, source, chunk_id, limit, offset, all)
 
 
 @handle_cli_errors
