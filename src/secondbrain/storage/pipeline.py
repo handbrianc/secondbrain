@@ -1,4 +1,8 @@
-"""MongoDB search pipeline builder."""
+"""MongoDB search pipeline builder for local vector search.
+
+This module provides functions to build MongoDB aggregation pipelines
+for vector similarity search using manual cosine similarity calculation.
+"""
 
 import math
 from typing import Any
@@ -13,85 +17,30 @@ def build_search_pipeline(
 ) -> list[dict[str, Any]]:
     """Build MongoDB aggregation pipeline for vector search.
 
-    Uses anchored regex for source filtering to improve index performance.
+    Uses manual cosine similarity calculation via MongoDB aggregation
+    operators. This approach works with MongoDB Community Edition without
+    requiring Atlas Search.
+
+    The pipeline:
+    1. Filters documents by source/file type (optional)
+    2. Calculates cosine similarity between query and document vectors
+    3. Sorts by similarity score (descending)
+    4. Returns top-k most similar documents
+
+    Note: This is O(n) complexity as it scans all documents. Suitable for
+    small to medium datasets (<100k documents). For larger datasets, consider
+    specialized vector databases.
 
     Args:
         embedding: Query embedding vector.
         top_k: Number of results to return.
-        source_filter: Filter by source file.
+        source_filter: Filter by source file (prefix match).
         file_type_filter: Filter by file type.
-        use_prefix_match: If True, use anchored regex for better index usage.
+        use_prefix_match: If True, use anchored regex for better performance.
 
     Returns
     -------
         Aggregation pipeline for vector search.
-    """
-    query_filter: dict[str, Any] = {}
-    if source_filter:
-        if use_prefix_match:
-            query_filter["source_file"] = {"$regex": f"^{source_filter}"}
-        else:
-            query_filter["source_file"] = {"$regex": source_filter}
-    if file_type_filter:
-        query_filter["file_type"] = file_type_filter
-
-    pipeline: list[dict[str, Any]] = [
-        {
-            "$vectorSearch": {
-                "queryVector": embedding,
-                "path": "embedding",
-                "numCandidates": top_k * 10,
-                "limit": top_k,
-                "index": "embedding_index",
-            }
-        },
-    ]
-
-    if query_filter:
-        pipeline.append({"$match": query_filter})
-
-    pipeline.extend(
-        [
-            {
-                "$project": {
-                    "chunk_id": 1,
-                    "source_file": 1,
-                    "page_number": 1,
-                    "chunk_text": 1,
-                    "score": {"$meta": "vectorSearchScore"},
-                }
-            },
-        ]
-    )
-
-    return pipeline
-
-
-def build_fallback_search_pipeline(
-    embedding: list[float],
-    top_k: int,
-    source_filter: str | None = None,
-    file_type_filter: str | None = None,
-    use_prefix_match: bool = True,
-) -> list[dict[str, Any]]:
-    """Build fallback aggregation pipeline for manual vector search.
-
-    When Atlas Search is not available (local MongoDB), this pipeline
-    retrieves all documents and calculates cosine similarity manually.
-
-    Note: This is O(n) and may be slow for large datasets. Use only
-    when Atlas Search is unavailable.
-
-    Args:
-        embedding: Query embedding vector.
-        top_k: Number of results to return.
-        source_filter: Filter by source file.
-        file_type_filter: Filter by file type.
-        use_prefix_match: If True, use anchored regex for better index usage.
-
-    Returns
-    -------
-        Aggregation pipeline for fallback vector search.
     """
     query_filter: dict[str, Any] = {}
     if source_filter:
@@ -113,22 +62,6 @@ def build_fallback_search_pipeline(
         pipeline.append({"$match": query_filter})
 
     # Project stage with cosine similarity calculation
-    # Build the dot product calculation dynamically
-    dot_product_in = []
-    for i, val in enumerate(embedding):
-        dot_product_in.append({"$multiply": [{"$arrayElemAt": ["$embedding", i]}, val]})
-
-    magnitude_in = []
-    for i in range(embedding_dim):
-        magnitude_in.append(
-            {
-                "$multiply": [
-                    {"$arrayElemAt": ["$embedding", i]},
-                    {"$arrayElemAt": ["$embedding", i]},
-                ]
-            }
-        )
-
     pipeline.append(
         {
             "$project": {
