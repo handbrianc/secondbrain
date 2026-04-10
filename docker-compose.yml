@@ -1,6 +1,6 @@
 services:
   mongodb:
-    image: mongodb/mongodb-atlas-local:latest
+    image: mongo:8.0
     container_name: secondbrain-mongodb
     hostname: mongodb
     ports:
@@ -12,6 +12,12 @@ services:
       - mongodb-data:/data/db
       - mongodb-configdb:/data/configdb
       - mongot-data:/data/mongot
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     networks:
       - secondbrain-network
 
