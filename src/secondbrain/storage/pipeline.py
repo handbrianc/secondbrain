@@ -102,8 +102,9 @@ def build_fallback_search_pipeline(
     if file_type_filter:
         query_filter["file_type"] = file_type_filter
 
-    # Calculate query vector magnitude
+    # Calculate query vector magnitude in Python (not in MongoDB)
     query_magnitude = math.sqrt(sum(x * x for x in embedding))
+    embedding_dim = len(embedding)
 
     pipeline: list[dict[str, Any]] = []
 
@@ -112,6 +113,22 @@ def build_fallback_search_pipeline(
         pipeline.append({"$match": query_filter})
 
     # Project stage with cosine similarity calculation
+    # Build the dot product calculation dynamically
+    dot_product_in = []
+    for i, val in enumerate(embedding):
+        dot_product_in.append({"$multiply": [{"$arrayElemAt": ["$embedding", i]}, val]})
+
+    magnitude_in = []
+    for i in range(embedding_dim):
+        magnitude_in.append(
+            {
+                "$multiply": [
+                    {"$arrayElemAt": ["$embedding", i]},
+                    {"$arrayElemAt": ["$embedding", i]},
+                ]
+            }
+        )
+
     pipeline.append(
         {
             "$project": {
@@ -126,12 +143,27 @@ def build_fallback_search_pipeline(
                             "doc_magnitude": {
                                 "$sqrt": {
                                     "$reduce": {
-                                        "input": "$embedding",
+                                        "input": {"$range": [0, embedding_dim]},
                                         "initialValue": 0,
                                         "in": {
                                             "$add": [
                                                 "$$value",
-                                                {"$multiply": ["$$this", "$$this"]},
+                                                {
+                                                    "$multiply": [
+                                                        {
+                                                            "$arrayElemAt": [
+                                                                "$embedding",
+                                                                "$$this",
+                                                            ]
+                                                        },
+                                                        {
+                                                            "$arrayElemAt": [
+                                                                "$embedding",
+                                                                "$$this",
+                                                            ]
+                                                        },
+                                                    ]
+                                                },
                                             ]
                                         },
                                     }
@@ -139,7 +171,7 @@ def build_fallback_search_pipeline(
                             },
                             "dot_product": {
                                 "$reduce": {
-                                    "input": {"$range": [0, len(embedding)]},
+                                    "input": {"$range": [0, embedding_dim]},
                                     "initialValue": 0,
                                     "in": {
                                         "$add": [
@@ -170,7 +202,7 @@ def build_fallback_search_pipeline(
                                 {
                                     "$or": [
                                         {"$eq": ["$$doc_magnitude", 0]},
-                                        {"$eq": ["$$query_magnitude", 0]},
+                                        {"$eq": [query_magnitude, 0]},
                                     ]
                                 },
                                 0,
@@ -180,7 +212,7 @@ def build_fallback_search_pipeline(
                                         {
                                             "$multiply": [
                                                 "$$doc_magnitude",
-                                                "$$query_magnitude",
+                                                query_magnitude,
                                             ]
                                         },
                                     ]
