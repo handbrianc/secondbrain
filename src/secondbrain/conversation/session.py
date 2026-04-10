@@ -215,9 +215,8 @@ class ConversationSession:
     def clear_history(self) -> None:
         """Clear all messages from session.
 
-        Empties the in-memory message history. Note that this does not
-        delete the session from storage - the session document remains
-        but with an empty messages array.
+        Empties the in-memory message history and persists to storage.
+        The session document remains but with an empty messages array.
 
         Example:
         --------
@@ -229,6 +228,9 @@ class ConversationSession:
             True
         """
         self._history = []
+        # Persist the cleared history to storage
+        if self._storage:
+            self._storage.update_messages(self._session_id, [])
 
     @property
     def message_count(self) -> int:
