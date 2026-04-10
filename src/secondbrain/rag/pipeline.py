@@ -215,7 +215,7 @@ class RAGPipeline:
     def _format_context(
         self,
         chunks: list[dict[str, Any]],
-        max_chars: int = 2000,
+        max_chars: int = 8000,
     ) -> str:
         r"""Format retrieved chunks into context text.
 
