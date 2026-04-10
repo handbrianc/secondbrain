@@ -641,10 +641,24 @@ def _interactive_chat(
         context_window=config.rag_context_window,
     )
 
-    # Readline loop
+    history_file = os.path.expanduser("~/.secondbrain_chat_history")
+
+    chat_history = []
+    if os.path.exists(history_file):
+        try:
+            with open(history_file, "r") as f:
+                chat_history = [line.strip() for line in f if line.strip()]
+        except Exception:
+            chat_history = []
+
     while True:
         try:
-            user_input = input("\n[you]: ").strip()
+            user_input = click.prompt(
+                "\n[you]",
+                default="",
+                show_default=False,
+                prompt_suffix="",
+            ).strip()
 
             if not user_input:
                 continue
@@ -689,6 +703,14 @@ def _interactive_chat(
                     if len(chunk_text) > 200:
                         chunk_text = chunk_text[:200] + "..."
                     console.print(f"  [{i}] {source_file} (page {page}): {chunk_text}")
+
+            # Save to history
+            chat_history.append(user_input)
+            try:
+                with open(history_file, "a") as f:
+                    f.write(user_input + "\n")
+            except Exception:
+                pass
 
         except KeyboardInterrupt:
             console.print("\n[dim]Goodbye![/dim]")
