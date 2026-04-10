@@ -164,15 +164,15 @@ def build_search_pipeline(
     # Limit results
     pipeline.append({"$limit": top_k})
 
-    # Final projection (remove embedding from output)
+    # Final projection (exclude embedding field)
     pipeline.append(
         {
             "$project": {
-                "chunk_id": 1,
-                "source_file": 1,
-                "page_number": 1,
-                "chunk_text": 1,
-                "score": 1,
+                "chunk_id": 0,
+                "source_file": 0,
+                "page_number": 0,
+                "chunk_text": 0,
+                "score": 0,
                 "embedding": 0,
             }
         }
