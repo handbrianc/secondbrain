@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 from secondbrain.config import Config, get_config
 from secondbrain.exceptions import StorageConnectionError
 from secondbrain.storage.models import DatabaseStats
-from secondbrain.storage.pipeline import build_fallback_search_pipeline
+from secondbrain.storage.pipeline import build_search_pipeline
 from secondbrain.types import ChunkInfo, SearchResult
 from secondbrain.utils.connections import ValidatableService
 from secondbrain.utils.perf_monitor import async_timing, timing
@@ -670,8 +670,8 @@ class VectorStorage(ValidatableService):
         """
         await self._require_connection_async("search")
 
-        # Use fallback pipeline for local MongoDB
-        pipeline = build_fallback_search_pipeline(
+        # Use vector search pipeline for local MongoDB
+        pipeline = build_search_pipeline(
             embedding=embedding,
             top_k=top_k,
             source_filter=source_filter,
@@ -1090,8 +1090,8 @@ class AsyncVectorStorage(ValidatableService):
         """Search for similar embeddings using native Motor async."""
         await self._require_connection_async("search")
 
-        # Use fallback pipeline for local MongoDB
-        pipeline = build_fallback_search_pipeline(
+        # Use vector search pipeline for local MongoDB
+        pipeline = build_search_pipeline(
             embedding=embedding,
             top_k=top_k,
             source_filter=source_filter,
