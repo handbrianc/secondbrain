@@ -457,22 +457,13 @@ class VectorStorage(ValidatableService):
         # Ensure index exists and wait for it to be ready
         self._wait_for_index_ready()
 
-        # Use fallback pipeline if Atlas Search is not available
-        if not self._index_created:
-            logger.debug("Using fallback search (no Atlas Search index)")
-            pipeline = build_fallback_search_pipeline(
-                embedding=embedding,
-                top_k=top_k,
-                source_filter=source_filter,
-                file_type_filter=file_type_filter,
-            )
-        else:
-            pipeline = build_search_pipeline(
-                embedding=embedding,
-                top_k=top_k,
-                source_filter=source_filter,
-                file_type_filter=file_type_filter,
-            )
+        # Use vector search pipeline for local MongoDB
+        pipeline = build_search_pipeline(
+            embedding=embedding,
+            top_k=top_k,
+            source_filter=source_filter,
+            file_type_filter=file_type_filter,
+        )
 
         with trace_operation("storage_aggregate"):
             results: list[SearchResult] = list(self.collection.aggregate(pipeline))
