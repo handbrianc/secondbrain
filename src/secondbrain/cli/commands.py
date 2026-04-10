@@ -224,8 +224,7 @@ def search(
 
 
 @handle_cli_errors
-@cli.command("ls")
-@cli.command("list", hidden=True)  # Alias for ls
+@cli.command("ls", "list")  # Both names work, "list" is an alias
 @click.option("--source", type=str, help="Filter by source file")
 @click.option("--chunk-id", type=str, help="Filter by specific chunk ID")
 @click.option("--limit", type=int, default=100, help="Maximum number of results")
