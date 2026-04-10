@@ -295,12 +295,7 @@ class RAGPipeline:
             >>> "You are a helpful assistant" in prompt
             True
         """
-        # Build system instruction
-        system_prompt = (
-            "You are a helpful assistant. Answer questions based on the "
-            "provided context from documents. If the answer is not in the "
-            'context, say "I cannot find the answer in the provided documents."'
-        )
+        system_prompt = get_config().rag_system_prompt
 
         # Build prompt
         prompt_parts = [system_prompt]
