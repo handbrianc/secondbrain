@@ -128,8 +128,8 @@ class Config(BaseSettings):
 
     # Search settings
     default_top_k: int = Field(
-        default=5,
-        description="Default number of search results",
+        default=20,
+        description="Default number of search results (higher = more context for better answers)",
     )
 
     # Embedding settings
