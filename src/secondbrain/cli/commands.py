@@ -405,7 +405,13 @@ def metrics(ctx: click.Context, reset: bool) -> None:
 @cli.command()
 @click.argument("query", required=False)
 @click.option("--session", "-s", type=str, help="Session ID to use/create")
-@click.option("--top-k", "-k", type=int, default=5, help="Number of chunks to retrieve")
+@click.option(
+    "--top-k",
+    "-k",
+    type=int,
+    default=20,
+    help="Number of chunks to retrieve (default: 20 for better context)",
+)
 @click.option("--temperature", "-t", type=float, default=0.1, help="LLM temperature")
 @click.option("--model", "-m", type=str, default=None, help="LLM model name")
 @click.option("--show-sources", is_flag=True, help="Show retrieved sources")
