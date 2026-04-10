@@ -653,12 +653,8 @@ def _interactive_chat(
     while True:
         try:
             try:
-                user_input = click.prompt(
-                    "\n[you]",
-                    default="",
-                    show_default=False,
-                    prompt_suffix="",
-                ).strip()
+                console.print("")
+                user_input = console.input("[you] ").strip()
             except (KeyboardInterrupt, EOFError):
                 console.print("\n[dim]Goodbye![/dim]")
                 break
