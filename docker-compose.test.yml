@@ -20,18 +20,16 @@ services:
     networks:
       - secondbrain-test-network
 
-  sentence-transformers:
-    image: sentence-transformers/server:latest
-    container_name: secondbrain-embeddings-test
-    hostname: sentence-transformers
+  ollama:
+    image: ollama/ollama:latest
+    container_name: secondbrain-ollama-test
+    hostname: ollama
     ports:
       - "11435:11434"  # Different from dev port (11434)
-    environment:
-      MODEL: all-MiniLM-L6-v2
     volumes:
-      - model_cache:/root/.cache
+      - ollama_data:/root/.ollama
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/version"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -41,7 +39,7 @@ services:
 
 volumes:
   mongo_test_data:
-  model_cache:
+  ollama_data:
 
 networks:
   secondbrain-test-network:
