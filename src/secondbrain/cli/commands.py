@@ -17,6 +17,7 @@ import logging
 import os
 import readline
 import sys
+from pathlib import Path
 from typing import Any
 
 import click
@@ -213,14 +214,16 @@ def search(
         min_score if min_score is not None else DEFAULT_MIN_SIMILARITY_THRESHOLD
     )
 
-    with console.status("[cyan]Searching...", spinner="dots"):
-        with Searcher(verbose=ctx.obj.get("verbose", False)) as searcher:
-            results: list[dict[str, Any]] = searcher.search(
-                query=query,
-                top_k=top_k,
-                source_filter=source,
-                file_type_filter=file_type,
-            )
+    with (
+        console.status("[cyan]Searching...", spinner="dots"),
+        Searcher(verbose=ctx.obj.get("verbose", False)) as searcher,
+    ):
+        results: list[dict[str, Any]] = searcher.search(
+            query=query,
+            top_k=top_k,
+            source_filter=source,
+            file_type_filter=file_type,
+        )
     display_search_results(results, format, min_score=effective_min_score)
 
 
@@ -238,7 +241,7 @@ def ls(
     chunk_id: str | None,
     limit: int,
     offset: int,
-    all: bool,  # noqa: A002
+    all: bool,
 ) -> None:
     """List ingested documents and chunks."""
     from secondbrain.management import Lister
@@ -256,16 +259,18 @@ def ls(
     if offset < 0:
         raise CLIValidationError("Offset must be non-negative")
 
-    with console.status("[cyan]Loading...", spinner="dots"):
-        with Lister(verbose=ctx.obj.get("verbose", False)) as lister:
-            if all:
-                limit = MAX_LIST_LIMIT
-            results: list[ChunkInfo] = lister.list_chunks(
-                source_filter=source,
-                chunk_id=chunk_id,
-                limit=limit,
-                offset=offset,
-            )
+    with (
+        console.status("[cyan]Loading...", spinner="dots"),
+        Lister(verbose=ctx.obj.get("verbose", False)) as lister,
+    ):
+        if all:
+            limit = MAX_LIST_LIMIT
+        results: list[ChunkInfo] = lister.list_chunks(
+            source_filter=source,
+            chunk_id=chunk_id,
+            limit=limit,
+            offset=offset,
+        )
     display_list_results(results)
 
 
@@ -308,18 +313,20 @@ def delete(
                 console.print("Cancelled.")
                 return
 
-    with console.status("[cyan]Deleting...", spinner="dots"):
-        with Deleter(verbose=ctx.obj.get("verbose", False)) as deleter:
-            try:
-                count = deleter.delete(source=source, chunk_id=chunk_id, all=all)
-                console.print(f"[green]Deleted {count} document(s)[/green]")
-            except (
-                ServiceUnavailableError,
-                StorageConnectionError,
-                CLIValidationError,
-            ) as e:
-                console.print(f"[red]Error: {e}[/red]")
-                sys.exit(1)
+    with (
+        console.status("[cyan]Deleting...", spinner="dots"),
+        Deleter(verbose=ctx.obj.get("verbose", False)) as deleter,
+    ):
+        try:
+            count = deleter.delete(source=source, chunk_id=chunk_id, all=all)
+            console.print(f"[green]Deleted {count} document(s)[/green]")
+        except (
+            ServiceUnavailableError,
+            StorageConnectionError,
+            CLIValidationError,
+        ) as e:
+            console.print(f"[red]Error: {e}[/red]")
+            sys.exit(1)
 
 
 @handle_cli_errors
@@ -329,9 +336,11 @@ def status(ctx: click.Context) -> None:
     """Show statistics about the vector database."""
     from secondbrain.management import StatusChecker
 
-    with console.status("[cyan]Loading status...", spinner="dots"):
-        with StatusChecker(verbose=ctx.obj.get("verbose", False)) as status_checker:
-            stats = status_checker.get_status()
+    with (
+        console.status("[cyan]Loading status...", spinner="dots"),
+        StatusChecker(verbose=ctx.obj.get("verbose", False)) as status_checker,
+    ):
+        stats = status_checker.get_status()
     display_status(stats)
 
 
@@ -642,9 +651,9 @@ def _interactive_chat(
         context_window=config.rag_context_window,
     )
 
-    history_file = os.path.expanduser("~/.secondbrain_chat_history")
+    history_file = Path("~/.secondbrain_chat_history").expanduser()
 
-    if os.path.exists(history_file):
+    if history_file.exists():
         readline.read_history_file(history_file)
 
     readline.set_history_length(1000)
@@ -705,7 +714,7 @@ def _interactive_chat(
             # Save to history
             chat_history.append(user_input)
             try:
-                with open(history_file, "a") as f:
+                with history_file.open("a") as f:
                     f.write(user_input + "\n")
                 readline.write_history_file(history_file)
             except Exception:

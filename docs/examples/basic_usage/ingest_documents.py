@@ -97,7 +97,8 @@ def main() -> None:
             sys.exit(1)
 
     console.print(
-        "\n[blue]Ingestion complete! Use 'secondbrain search' to query documents.[/blue]"
+        "\n[blue]Ingestion complete! "
+        "Use 'secondbrain search' to query documents.[/blue]"
     )
 
 

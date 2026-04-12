@@ -1,9 +1,8 @@
 """Extended tests for circuit breaker implementation - edge cases and advanced scenarios."""
 
-import time
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from unittest.mock import patch, MagicMock
 
 import pytest
 

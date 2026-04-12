@@ -231,7 +231,6 @@ class TestMongoRealConnection:
 
     def test_storage_real_concurrent_writes(self, real_storage: VectorStorage) -> None:
         """Test concurrent batch operations."""
-        import threading
         from concurrent.futures import ThreadPoolExecutor
 
         # Clean up first

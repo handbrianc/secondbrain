@@ -44,16 +44,18 @@ class TestAsyncDocumentIngestorCoverage:
         mock_file = MagicMock()
         mock_file.name = "test.txt"
 
-        with patch.object(
-            ingestor, "_collect_and_validate_files", return_value=[mock_file]
+        with (
+            patch.object(
+                ingestor, "_collect_and_validate_files", return_value=[mock_file]
+            ),
+            patch.object(ingestor, "process_file_async", return_value=True),
         ):
-            with patch.object(ingestor, "process_file_async", return_value=True):
-                result = await ingestor.ingest_async(
-                    "/test/path", recursive=False, max_concurrent=2
-                )
+            result = await ingestor.ingest_async(
+                "/test/path", recursive=False, max_concurrent=2
+            )
 
-                assert "success" in result
-                assert "failed" in result
+            assert "success" in result
+            assert "failed" in result
 
     @pytest.mark.asyncio
     async def test_process_with_semaphore_async(self) -> None:

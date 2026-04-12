@@ -461,10 +461,7 @@ and consistent response formats.
                     return_value=mock_gen,
                 ),
             ):
-                # Measure multicore ingestion time
-                start_time = time.time()
                 result = ingestor.ingest(str(temp_test_dir), cores=num_cores)
-                multicore_time = time.time() - start_time
 
         # Verify correctness - all files processed
         assert result["success"] >= 8, (
@@ -628,9 +625,6 @@ and consistent response formats.
                 ),
             ):
                 ingestor.ingest(str(temp_test_dir))
-
-        # Get all chunks first
-        all_chunks = real_storage.list_chunks(limit=500)
 
         # Test 1: Search with source file filter
         md_files = [f for f in mixed_docs if f[0].endswith(".md")]

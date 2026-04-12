@@ -6,7 +6,6 @@ including filters, JSON output, empty results, and timeout handling.
 
 from unittest.mock import MagicMock, patch
 
-import pytest
 from click.testing import CliRunner
 
 from secondbrain.cli import cli

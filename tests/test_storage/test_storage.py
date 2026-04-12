@@ -82,7 +82,7 @@ class TestVectorStorage:
                 assert storage.validate_connection() is False
 
     def test_ensure_index_success(self) -> None:
-        """Test index creation when successful."""
+        """Test ensure_index sets up for local MongoDB (no Atlas Search)."""
         with patch("secondbrain.storage.get_config") as mock_config:
             mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
             mock_config.return_value.mongo_db = "secondbrain"
@@ -92,14 +92,14 @@ class TestVectorStorage:
             storage = VectorStorage()
 
             mock_collection = MagicMock()
-            mock_collection.create_search_index.return_value = {
-                "name": "embedding_index"
-            }
 
             with patch.object(storage, "_collection", mock_collection):
+                # Local MongoDB does not use Atlas Search indexes
                 storage.ensure_index()
-                assert storage._index_created is True
-                mock_collection.create_search_index.assert_called_once()
+                # _index_created is False because we use manual cosine similarity
+                assert storage._index_created is False
+                # No Atlas Search index creation
+                mock_collection.create_search_index.assert_not_called()
 
     def test_ensure_index_already_created(self) -> None:
         """Test index creation is skipped when already created."""
@@ -530,10 +530,10 @@ class TestStatisticsAndMetadata:
 
 
 class TestIndexReadyTimeout:
-    """Tests for index ready timeout scenarios."""
+    """Tests for index ready timeout scenarios (local MongoDB no-op behavior)."""
 
     def test_wait_for_index_timeout_after_max_retries(self) -> None:
-        """Test timeout after maximum retry attempts."""
+        """Test that _wait_for_index_ready is a no-op for local MongoDB."""
         with patch("secondbrain.storage.get_config") as mock_config:
             mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
             mock_config.return_value.mongo_db = "secondbrain"
@@ -541,27 +541,20 @@ class TestIndexReadyTimeout:
             mock_config.return_value.embedding_dimensions = 384
 
             storage = VectorStorage()
-            storage._index_ready_retry_count = 3
-            storage._index_ready_retry_delay = 0.01  # Fast timeout for testing
 
             mock_collection = MagicMock()
-            # Always return index that is not ready
-            mock_collection.list_search_indexes.return_value = [
-                {"name": "embedding_index", "status": "BUILDING"}
-            ]
 
             with (
                 patch.object(storage, "validate_connection", return_value=True),
                 patch.object(storage, "_collection", mock_collection),
-                patch("secondbrain.storage.time.sleep") as mock_sleep,
             ):
-                # Should not raise but log warning
+                # Local MongoDB does not wait for Atlas Search index
                 storage._wait_for_index_ready()
-                # Verify sleep was called for retries
-                assert mock_sleep.call_count == 3
+                # No calls to list_search_indexes (no Atlas Search)
+                mock_collection.list_search_indexes.assert_not_called()
 
     def test_wait_for_index_success_before_timeout(self) -> None:
-        """Test index becomes ready before timeout."""
+        """Test that _wait_for_index_ready succeeds immediately (no-op)."""
         with patch("secondbrain.storage.get_config") as mock_config:
             mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
             mock_config.return_value.mongo_db = "secondbrain"
@@ -569,33 +562,20 @@ class TestIndexReadyTimeout:
             mock_config.return_value.embedding_dimensions = 384
 
             storage = VectorStorage()
-            storage._index_ready_retry_count = 5
-            storage._index_ready_retry_delay = 0.01
 
             mock_collection = MagicMock()
-            # First call returns BUILDING, second returns READY
-            call_count = [0]
-
-            def list_indexes():
-                call_count[0] += 1
-                if call_count[0] == 1:
-                    return [{"name": "embedding_index", "status": "BUILDING"}]
-                return [{"name": "embedding_index", "status": "READY"}]
-
-            mock_collection.list_search_indexes.side_effect = list_indexes
 
             with (
                 patch.object(storage, "validate_connection", return_value=True),
                 patch.object(storage, "_collection", mock_collection),
-                patch("secondbrain.storage.time.sleep") as mock_sleep,
             ):
+                # Completes immediately without checking index status
                 storage._wait_for_index_ready()
-                # Should succeed after 2 attempts
-                assert call_count[0] == 2
-                mock_sleep.assert_called_once()
+                # No retry logic for local MongoDB
+                mock_collection.list_search_indexes.assert_not_called()
 
     def test_wait_for_index_retry_logic(self) -> None:
-        """Test retry count and delay are used correctly."""
+        """Test that no retry logic is used for local MongoDB."""
         with patch("secondbrain.storage.get_config") as mock_config:
             mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
             mock_config.return_value.mongo_db = "secondbrain"
@@ -603,25 +583,19 @@ class TestIndexReadyTimeout:
             mock_config.return_value.embedding_dimensions = 384
 
             storage = VectorStorage()
-            storage._index_ready_retry_count = 4
-            storage._index_ready_retry_delay = 0.05
 
             mock_collection = MagicMock()
-            mock_collection.list_search_indexes.return_value = [
-                {"name": "embedding_index", "status": "BUILDING"}
-            ]
 
             with (
                 patch.object(storage, "validate_connection", return_value=True),
                 patch.object(storage, "_collection", mock_collection),
-                patch("secondbrain.storage.time.sleep") as mock_sleep,
             ):
+                # No retries for local MongoDB
                 storage._wait_for_index_ready()
-                # Should retry exactly 4 times
-                assert mock_sleep.call_count == 4
+                mock_collection.list_search_indexes.assert_not_called()
 
     def test_wait_for_index_exception_handling(self) -> None:
-        """Test that exceptions during index check are handled gracefully."""
+        """Test that exceptions are not raised for local MongoDB."""
         with patch("secondbrain.storage.get_config") as mock_config:
             mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
             mock_config.return_value.mongo_db = "secondbrain"
@@ -629,19 +603,13 @@ class TestIndexReadyTimeout:
             mock_config.return_value.embedding_dimensions = 384
 
             storage = VectorStorage()
-            storage._index_ready_retry_count = 3
-            storage._index_ready_retry_delay = 0.01
 
             mock_collection = MagicMock()
-            # Always raise exception
-            mock_collection.list_search_indexes.side_effect = Exception("Index error")
 
             with (
                 patch.object(storage, "validate_connection", return_value=True),
                 patch.object(storage, "_collection", mock_collection),
-                patch("secondbrain.storage.time.sleep") as mock_sleep,
             ):
-                # Should not raise, just log debug
+                # No exceptions for local MongoDB (no-op)
                 storage._wait_for_index_ready()
-                # Should still retry
-                assert mock_sleep.call_count == 3
+                mock_collection.list_search_indexes.assert_not_called()

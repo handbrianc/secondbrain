@@ -108,7 +108,7 @@ convention = "numpy"
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
-"tests/**" = ["BLE001", "D103"]  # Tests may catch generic exceptions; fixtures/hooks don't need docstrings
+"tests/**" = ["BLE001", "D100", "D101", "D102", "D103", "D104", "N806", "SIM117", "F841", "B017", "PTH123", "D401", "SIM105"]  # Tests may catch generic exceptions; test classes/methods don't need docstrings; mock variable naming is acceptable; nested with statements are common in tests; unused mock variables are common; blind exceptions acceptable in tests; Path.open not required; imperative mood not required; contextlib.suppress optional
 
 [tool.mypy]
 python_version = "3.11"
