@@ -2,7 +2,6 @@
 
 import asyncio
 import threading
-import time
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest

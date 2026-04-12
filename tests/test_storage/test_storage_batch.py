@@ -207,7 +207,7 @@ class TestVectorStorageFilterCombinations:
     """Tests for various filter combinations in search."""
 
     def test_search_with_both_filters(self, storage_with_mock: VectorStorage) -> None:
-        """Test search with both source and file_type filters."""
+        """Test search with both source and file_type filters (local MongoDB)."""
         storage = storage_with_mock
 
         mock_result = [
@@ -226,9 +226,6 @@ class TestVectorStorageFilterCombinations:
         with (
             patch.object(storage, "validate_connection", return_value=True),
             patch.object(storage, "_collection", mock_collection),
-            patch.object(
-                storage, "_wait_for_index_ready", return_value=None
-            ),  # Skip timeout wait
         ):
             results = storage.search(
                 embedding=[0.1] * 384,
@@ -237,9 +234,12 @@ class TestVectorStorageFilterCombinations:
                 file_type_filter="pdf",
             )
             assert len(results) == 1
-            # Verify pipeline was built with filters
+            # Local MongoDB uses manual cosine similarity, not $vectorSearch
             call_args = mock_collection.aggregate.call_args[0][0]
-            assert "$vectorSearch" in call_args[0]
+            # Pipeline uses $match for filters and $addFields for cosine similarity
+            assert "$match" in call_args[0]
+            assert call_args[0]["$match"]["source_file"] == {"$regex": "^test.pdf"}
+            assert call_args[0]["$match"]["file_type"] == "pdf"
 
     def test_search_with_only_source_filter(
         self, storage_with_mock: VectorStorage

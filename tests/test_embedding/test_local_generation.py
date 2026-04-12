@@ -8,11 +8,7 @@ Target coverage: 90%+ for secondbrain.embedding.local module.
 
 from __future__ import annotations
 
-import random
 from unittest.mock import MagicMock, patch
-
-import pytest
-from sentence_transformers import SentenceTransformer
 
 from secondbrain.embedding import LocalEmbeddingGenerator
 from secondbrain.embedding.local import TARGET_EMBEDDING_DIMENSIONS

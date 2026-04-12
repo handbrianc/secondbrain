@@ -592,25 +592,21 @@ class TestAsyncVectorStorage:
     async def test_ensure_index_async_creates_index(
         self, async_storage: AsyncVectorStorage
     ) -> None:
-        """Test _ensure_index_async creates new index."""
-        mock_cursor = MagicMock()
-        mock_cursor.to_list = AsyncMock(return_value=[])
-
+        """Test _ensure_index_async skips index creation for local MongoDB."""
         mock_collection = MagicMock()
-        mock_collection.list_search_indexes = MagicMock(return_value=mock_cursor)
-        mock_collection.create_search_index = AsyncMock()
 
-        with (
-            patch.object(async_storage, "validate_connection_async", return_value=True),
-            patch.object(
-                type(async_storage), "async_collection", new_callable=PropertyMock
-            ) as mock_prop,
-        ):
+        with patch.object(
+            type(async_storage), "async_collection", new_callable=PropertyMock
+        ) as mock_prop:
             mock_prop.return_value = mock_collection
+            # Local MongoDB does not create Atlas Search indexes
             await async_storage._ensure_index_async()
 
-            mock_collection.create_search_index.assert_called_once()
-            assert async_storage._index_created is True
+            # No Atlas Search index creation
+            mock_collection.create_search_index.assert_not_called()
+            mock_collection.list_search_indexes.assert_not_called()
+            # _index_created is False because we use manual cosine similarity
+            assert async_storage._index_created is False
 
     @pytest.mark.asyncio
     async def test_ensure_index_async_skips_existing(

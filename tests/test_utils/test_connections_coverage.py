@@ -4,9 +4,6 @@ This module provides targeted tests to cover remaining uncovered lines
 in the connections utility module.
 """
 
-import time
-from unittest.mock import MagicMock, patch
-
 import pytest
 
 from secondbrain.utils.circuit_breaker import CircuitBreakerConfig, CircuitBreakerError

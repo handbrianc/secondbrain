@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from secondbrain.document import DocumentExtractionError, DocumentIngestor, Segment
+from secondbrain.document import DocumentExtractionError, DocumentIngestor
 
 
 class TestExtractTextPdfPages:
@@ -178,11 +178,15 @@ class TestExtractTextCorruptedPdf:
         ingestor = DocumentIngestor()
 
         # Mock docling parser raising exception for corrupted PDF
-        with patch.object(
-            ingestor.converter, "convert", side_effect=Exception("Invalid PDF format")
+        with (
+            patch.object(
+                ingestor.converter,
+                "convert",
+                side_effect=Exception("Invalid PDF format"),
+            ),
+            pytest.raises(DocumentExtractionError) as exc_info,
         ):
-            with pytest.raises(DocumentExtractionError) as exc_info:
-                ingestor._extract_text(corrupted_pdf)
+            ingestor._extract_text(corrupted_pdf)
 
         assert "Invalid PDF format" in str(exc_info.value)
 
@@ -194,11 +198,13 @@ class TestExtractTextCorruptedPdf:
         ingestor = DocumentIngestor()
 
         # Mock docling parser raising parsing error
-        with patch.object(
-            ingestor.converter, "convert", side_effect=Exception("Truncated file")
+        with (
+            patch.object(
+                ingestor.converter, "convert", side_effect=Exception("Truncated file")
+            ),
+            pytest.raises(DocumentExtractionError) as exc_info,
         ):
-            with pytest.raises(DocumentExtractionError) as exc_info:
-                ingestor._extract_text(truncated_pdf)
+            ingestor._extract_text(truncated_pdf)
 
         assert "Truncated file" in str(exc_info.value)
 
@@ -210,11 +216,13 @@ class TestExtractTextCorruptedPdf:
         ingestor = DocumentIngestor()
 
         # Mock docling parser raising format error
-        with patch.object(
-            ingestor.converter, "convert", side_effect=Exception("Malformed PDF")
+        with (
+            patch.object(
+                ingestor.converter, "convert", side_effect=Exception("Malformed PDF")
+            ),
+            pytest.raises(DocumentExtractionError) as exc_info,
         ):
-            with pytest.raises(DocumentExtractionError) as exc_info:
-                ingestor._extract_text(malformed_pdf)
+            ingestor._extract_text(malformed_pdf)
 
         assert "Malformed PDF" in str(exc_info.value)
 

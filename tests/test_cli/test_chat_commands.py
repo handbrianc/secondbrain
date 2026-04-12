@@ -8,12 +8,9 @@ This module tests the chat command functionality including:
 - LLM health checking
 """
 
-from typing import Any
 from unittest.mock import MagicMock, patch
 
-import pytest
 from click.testing import CliRunner
-from ollama import ResponseError
 
 from secondbrain.cli import cli
 from secondbrain.exceptions import ServiceUnavailableError

@@ -1,12 +1,11 @@
 """Tests for async connection handling in storage module."""
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from pymongo.errors import ConnectionFailure
 
-from secondbrain.exceptions import StorageConnectionError
 from secondbrain.storage import VectorStorage
 
 

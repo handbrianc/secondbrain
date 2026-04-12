@@ -227,9 +227,6 @@ class TestIntegrationExamples:
 
         Validates docs/examples/integrations/flask_api.py
         """
-        import threading
-        import time
-
         import requests
 
         from secondbrain.logging import setup_logging

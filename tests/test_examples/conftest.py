@@ -5,9 +5,9 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
-import tempfile
+from collections.abc import Generator
 from pathlib import Path
-from typing import Any, Generator
+from typing import Any
 
 import pytest
 
@@ -159,3 +159,15 @@ def temp_docs_dir(tmp_path: Path) -> Any:
 def example_scripts_path() -> Path:
     """Path to the example scripts directory."""
     return Path(__file__).parent.parent.parent / "docs" / "examples"
+
+
+@pytest.fixture
+def fast_test_config() -> dict:
+    """Configuration for fast tests that don't need real services.
+
+    Returns a config dict with test-friendly settings.
+    """
+    return {
+        "skip_real_services": True,
+        "mock_mode": True,
+    }

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
-import os
 import time
 from collections.abc import AsyncGenerator, Generator
 from typing import TYPE_CHECKING, Any
@@ -11,9 +9,7 @@ from typing import TYPE_CHECKING, Any
 import httpx
 import pytest
 from pymongo import MongoClient
-from pymongo.errors import ConnectionFailure
 
-from secondbrain.config import get_config
 from secondbrain.embedding import LocalEmbeddingGenerator
 from secondbrain.storage import VectorStorage
 
@@ -79,7 +75,7 @@ def wait_for_services() -> Generator[None, None, None]:
     seconds for services to become available.
 
     Raises:
-        RuntimeError: If services don't become healthy within timeout.
+        pytest.skip: If services don't become healthy within timeout.
     """
     print("\nWaiting for test services to be healthy...")
 
@@ -92,8 +88,9 @@ def wait_for_services() -> Generator[None, None, None]:
         print(".", end="", flush=True)
         time.sleep(2)
     else:
-        raise RuntimeError(
-            f"MongoDB did not become healthy within {SERVICE_HEALTH_TIMEOUT}s"
+        pytest.skip(
+            "MongoDB not available - integration tests skipped. "
+            "Start services with: docker-compose up -d"
         )
 
     # Wait for sentence-transformers
@@ -183,18 +180,17 @@ async def clean_test_database(
         None: Control point for test execution.
     """
     # Cleanup before test
-    try:
+    import contextlib
+
+    with contextlib.suppress(Exception):
         real_storage.delete_all()
-    except Exception:
-        pass
 
     yield
 
     # Cleanup after test
-    try:
-        real_storage.delete_all()
-    except Exception as e:
-        print(f"Warning: Failed to cleanup after test: {e}")
+    with contextlib.suppress(Exception) as e:
+        if e:
+            print(f"Warning: Failed to cleanup after test: {e}")
 
 
 @pytest.fixture
@@ -218,7 +214,7 @@ def sample_test_document() -> dict[str, Any]:
 
 @pytest.fixture
 def health_check_utils() -> dict[str, Any]:
-    """Utility functions for health checking services.
+    """Provide utility functions for health checking services.
 
     Returns:
         dict: Dictionary with health check functions.

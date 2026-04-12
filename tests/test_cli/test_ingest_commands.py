@@ -9,7 +9,6 @@ import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
 from click.testing import CliRunner
 
 from secondbrain.cli import cli
@@ -93,17 +92,19 @@ class TestIngestStreamingEnabled:
         mock_config.chunk_overlap = 50
         mock_config.streaming_enabled = True
 
-        with patch("secondbrain.document.DocumentIngestor", mock_ingestor_class):
-            with patch("secondbrain.cli.commands.get_config", return_value=mock_config):
-                runner = CliRunner()
-                with runner.isolated_filesystem():
-                    Path("/tmp/test_streaming").mkdir(parents=True, exist_ok=True)
+        with (
+            patch("secondbrain.document.DocumentIngestor", mock_ingestor_class),
+            patch("secondbrain.cli.commands.get_config", return_value=mock_config),
+        ):
+            runner = CliRunner()
+            with runner.isolated_filesystem():
+                Path("/tmp/test_streaming").mkdir(parents=True, exist_ok=True)
 
-                    with patch("secondbrain.document.is_supported", return_value=True):
-                        result = runner.invoke(
-                            cli,
-                            ["ingest", "/tmp/test_streaming"],
-                        )
+                with patch("secondbrain.document.is_supported", return_value=True):
+                    result = runner.invoke(
+                        cli,
+                        ["ingest", "/tmp/test_streaming"],
+                    )
 
         assert result.exit_code == 0
 
