@@ -111,12 +111,13 @@ class TestFactVerification:
         assert source_path.exists(), f"Source file not found: {source_path}"
         source_content = source_path.read_text(encoding="utf-8")
         source_lower = source_content.lower()
-        
+
         # Handle version constraints specially
         if ">=" in fact or "<=" in fact or "==" in fact:
             # Extract version pattern and check if it exists
             import re
-            version_match = re.search(r'[>=<]+[\d.]+', fact)
+
+            version_match = re.search(r"[>=<]+[\d.]+", fact)
             if version_match:
                 version_pattern = version_match.group()
                 assert version_pattern in source_content, (

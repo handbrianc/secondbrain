@@ -16,14 +16,12 @@ import asyncio
 import os
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from secondbrain.exceptions import ValidationError
 from secondbrain.search import Searcher, sanitize_query
-
 
 pytestmark = [pytest.mark.qualitative, pytest.mark.robustness]
 

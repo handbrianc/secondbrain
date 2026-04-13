@@ -2,7 +2,7 @@
 
 import asyncio
 import time
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -10,6 +10,8 @@ from secondbrain.utils.connections import (
     RateLimitedRetry,
     ServiceUnavailableError,
     ensure_service_available,
+    get_request_trace_headers,
+    inject_trace_headers,
 )
 
 
@@ -378,3 +380,59 @@ class TestValidatableServiceAsync:
         # Default async implementation should work
         result = await service._do_validate_async()
         assert result is True
+
+
+class TestInjectTraceHeaders:
+    """Tests for inject_trace_headers function."""
+
+    def test_inject_headers_when_tracing_available(self) -> None:
+        """Should inject trace headers when tracing is available."""
+        with (
+            patch("secondbrain.utils.connections.TRACE_CONTEXT_AVAILABLE", True),
+            patch("secondbrain.utils.connections.inject_trace_context") as mock_inject,
+        ):
+            mock_inject.return_value = {
+                "content-type": "application/json",
+                "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+            }
+
+            headers = {"content-type": "application/json"}
+            result = inject_trace_headers(headers)
+
+            mock_inject.assert_called_once_with(headers)
+            assert "traceparent" in result
+
+    def test_inject_headers_when_tracing_unavailable(self) -> None:
+        """Should return copy of headers when tracing is unavailable."""
+        with patch("secondbrain.utils.connections.TRACE_CONTEXT_AVAILABLE", False):
+            headers = {"content-type": "application/json"}
+            result = inject_trace_headers(headers)
+
+            assert result == headers
+            assert result is not headers  # Should be a copy
+
+
+class TestGetRequestTraceHeaders:
+    """Tests for get_request_trace_headers function."""
+
+    def test_get_headers_when_tracing_available(self) -> None:
+        """Should return trace headers when tracing is available."""
+        with (
+            patch("secondbrain.utils.connections.TRACE_CONTEXT_AVAILABLE", True),
+            patch("secondbrain.utils.connections.inject_trace_context") as mock_inject,
+        ):
+            mock_inject.return_value = {
+                "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+            }
+
+            result = get_request_trace_headers()
+
+            mock_inject.assert_called_once_with({})
+            assert "traceparent" in result
+
+    def test_get_headers_when_tracing_unavailable(self) -> None:
+        """Should return empty dict when tracing is unavailable."""
+        with patch("secondbrain.utils.connections.TRACE_CONTEXT_AVAILABLE", False):
+            result = get_request_trace_headers()
+
+            assert result == {}

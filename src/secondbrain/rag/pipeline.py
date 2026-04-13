@@ -418,3 +418,110 @@ class RAGPipeline:
             "answer": f"I apologize, but I encountered an error: {error}. Please try again.",
             "query": query,
         }
+
+    async def query_async(
+        self,
+        query: str,
+        top_k: int | None = None,
+        show_sources: bool = False,
+    ) -> dict[str, Any]:
+        """Perform single-turn async RAG query.
+
+        Args:
+            query: User query text.
+            top_k: Override default number of chunks to retrieve.
+            show_sources: Include retrieved chunks in response.
+
+        Returns:
+            Dict with keys: "answer", "sources" (if show_sources), "query".
+        """
+        try:
+            effective_top_k = top_k if top_k is not None else self._top_k
+
+            chunks = await self._searcher.search_async(query, top_k=effective_top_k)
+
+            if not chunks:
+                fallback_answer = self._handle_no_results(query)
+                result: dict[str, Any] = {"answer": fallback_answer, "query": query}
+                if show_sources:
+                    result["sources"] = []
+                return result
+
+            context_text = self._format_context(chunks)
+            prompt = self._build_prompt(query, context_text)
+
+            answer = await self._llm_provider.agenerate(
+                prompt=prompt,
+                temperature=self._config.llm_temperature,
+                max_tokens=self._config.llm_max_tokens,
+            )
+
+            result = {"answer": answer, "query": query}
+            if show_sources:
+                result["sources"] = chunks
+
+            return result
+
+        except Exception as e:
+            logger.error("Async query failed: %s: %s", type(e).__name__, e)
+            return self._create_error_response(str(e), query)
+
+    async def chat_async(
+        self,
+        query: str,
+        session: ConversationSession,
+        top_k: int | None = None,
+        show_sources: bool = False,
+    ) -> dict[str, Any]:
+        """Perform multi-turn async conversational RAG.
+
+        Args:
+            query: Current user query.
+            session: ConversationSession with history.
+            top_k: Override default number of chunks.
+            show_sources: Include retrieved chunks.
+
+        Returns:
+            Dict with keys: "answer", "sources" (if show_sources), "rewritten_query".
+        """
+        try:
+            effective_top_k = top_k if top_k is not None else self._top_k
+
+            rewritten_query = self._rewrite_query_with_history(query, session)
+
+            chunks = await self._searcher.search_async(
+                rewritten_query, top_k=effective_top_k
+            )
+
+            if not chunks:
+                fallback_answer = self._handle_no_results(query)
+                result: dict[str, Any] = {
+                    "answer": fallback_answer,
+                    "rewritten_query": rewritten_query,
+                }
+                if show_sources:
+                    result["sources"] = []
+                return result
+
+            context_text = self._format_context(chunks)
+            history = session.get_history(limit=self._context_window)
+            prompt = self._build_prompt(rewritten_query, context_text, history)
+
+            answer = await self._llm_provider.agenerate(
+                prompt=prompt,
+                temperature=self._config.llm_temperature,
+                max_tokens=self._config.llm_max_tokens,
+            )
+
+            session.add_message("user", query)
+            session.add_message("assistant", answer)
+
+            result = {"answer": answer, "rewritten_query": rewritten_query}
+            if show_sources:
+                result["sources"] = chunks
+
+            return result
+
+        except Exception as e:
+            logger.error("Async chat failed: %s: %s", type(e).__name__, e)
+            return self._create_error_response(str(e), query)

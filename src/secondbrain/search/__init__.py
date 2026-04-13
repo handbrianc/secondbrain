@@ -4,6 +4,7 @@ This module provides the Searcher class for performing semantic searches
 against the stored embeddings using vector similarity matching.
 """
 
+import asyncio
 import logging
 import re
 from collections.abc import Sequence
@@ -169,3 +170,32 @@ class Searcher:
         # Convert SearchResult to dict[str, Any] for CLI compatibility
         results: list[dict[str, Any]] = [dict(r) for r in raw_results]
         return results
+
+    async def search_async(
+        self,
+        query: str,
+        top_k: int | None = None,
+        source_filter: str | None = None,
+        file_type_filter: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Async version of search."""
+        sanitized_query = sanitize_query(query)
+        top_k = top_k or self.config.default_top_k
+
+        if not self.storage.validate_connection():
+            raise RuntimeError("Cannot connect to MongoDB")
+
+        with trace_operation("search_generate_embedding_async"):
+            query_embedding = await asyncio.to_thread(
+                self.embedding_gen.generate, sanitized_query
+            )
+
+        with trace_operation("search_storage_async"):
+            raw_results: Sequence[SearchResult] = await self.storage.search_async(
+                embedding=query_embedding,
+                top_k=top_k,
+                source_filter=source_filter,
+                file_type_filter=file_type_filter,
+            )
+
+        return [dict(r) for r in raw_results]

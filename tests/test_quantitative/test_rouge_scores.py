@@ -15,7 +15,6 @@ detailed failure messages showing actual scores.
 """
 
 import json
-import os
 from pathlib import Path
 from typing import Any
 
@@ -69,7 +68,7 @@ def load_rouge_reference_dataset() -> list[dict[str, Any]]:
     if not dataset_path.exists():
         pytest.fail(f"ROUGE reference dataset not found: {dataset_path}")
 
-    with open(dataset_path, "r", encoding="utf-8") as f:
+    with open(dataset_path, encoding="utf-8") as f:
         data = json.load(f)
 
     return data.get("queries", [])

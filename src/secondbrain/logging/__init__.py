@@ -2,9 +2,12 @@
 
 import json
 import logging
+import os
 import time
 import uuid
 from contextvars import ContextVar
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 from typing import TypedDict
 
 from rich.console import Console
@@ -63,12 +66,19 @@ def set_request_id(request_id: str | None = None) -> str:
     return request_id
 
 
-def setup_logging(verbose: bool = False, json_format: bool = False) -> None:
+def setup_logging(
+    verbose: bool = False,
+    json_format: bool = False,
+    log_file: str | None = None,
+    max_bytes: int = 10 * 1024 * 1024,  # 10MB default
+) -> None:
     """Configure logging with the specified options.
 
     Args:
         verbose: Enable DEBUG level if True, WARNING (no logs) otherwise.
         json_format: Use JSON format if True, rich text otherwise.
+        log_file: Path to log file. If None, reads from SECONDBRAIN_LOG_FILE env var.
+        max_bytes: Max log file size before rotation (default 10MB).
     """
     level = logging.DEBUG if verbose else logging.WARNING
 
@@ -79,31 +89,57 @@ def setup_logging(verbose: bool = False, json_format: bool = False) -> None:
         logging.root.setLevel(level)
         return
 
+    if log_file is None:
+        log_file = os.environ.get("SECONDBRAIN_LOG_FILE")
+
     if json_format:
-        setup_json_logging(level)
+        setup_json_logging(level, log_file, max_bytes)
     else:
-        setup_rich_logging(level)
+        setup_rich_logging(level, log_file, max_bytes)
 
 
-def setup_rich_logging(level: int) -> None:
-    """Configure rich console logging.
+def setup_rich_logging(
+    level: int,
+    log_file: str | None = None,
+    max_bytes: int = 10 * 1024 * 1024,
+) -> None:
+    """Configure rich console logging with optional file handler.
 
     Args:
         level: Logging level constant (e.g., logging.INFO).
+        log_file: Path to log file. If set, adds RotatingFileHandler.
+        max_bytes: Max log file size before rotation (default 10MB).
     """
+    handlers: list[logging.Handler] = [
+        RichHandler(console=Console(stderr=True), rich_tracebacks=True)
+    ]
+
+    # Add file handler if log file is specified
+    if log_file:
+        Path(log_file).parent.mkdir(parents=True, exist_ok=True)
+        file_handler = RotatingFileHandler(log_file, maxBytes=max_bytes, backupCount=5)
+        file_handler.setLevel(level)
+        handlers.append(file_handler)
+
     logging.basicConfig(
         level=level,
         format="%(message)s",
         datefmt="[%X]",
-        handlers=[RichHandler(console=Console(stderr=True), rich_tracebacks=True)],
+        handlers=handlers,
     )
 
 
-def setup_json_logging(level: int) -> None:
-    """Configure JSON structured logging.
+def setup_json_logging(
+    level: int,
+    log_file: str | None = None,
+    max_bytes: int = 10 * 1024 * 1024,
+) -> None:
+    """Configure JSON structured logging with optional file handler.
 
     Args:
         level: Logging level constant (e.g., logging.INFO).
+        log_file: Path to log file. If set, adds RotatingFileHandler.
+        max_bytes: Max log file size before rotation (default 10MB).
     """
 
     class JSONFormatter(logging.Formatter):
@@ -120,10 +156,20 @@ def setup_json_logging(level: int) -> None:
             }
             return json.dumps(log_entry)
 
+    handlers: list[logging.Handler] = [RichHandler()]
+
+    # Add file handler if log file is specified
+    if log_file:
+        Path(log_file).parent.mkdir(parents=True, exist_ok=True)
+        file_handler = RotatingFileHandler(log_file, maxBytes=max_bytes, backupCount=5)
+        file_handler.setLevel(level)
+        file_handler.setFormatter(JSONFormatter())
+        handlers.append(file_handler)
+
     logging.basicConfig(
         level=level,
         format="%(message)s",
-        handlers=[RichHandler(console=Console(stderr=True), rich_tracebacks=True)],
+        handlers=handlers,
     )
 
     if logging.root.handlers:

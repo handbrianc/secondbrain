@@ -14,6 +14,19 @@ from secondbrain.utils.circuit_breaker import (
     CircuitBreakerError,
 )
 
+# Optional trace context import
+try:
+    from secondbrain.utils.tracing import (
+        get_current_trace_context,
+        inject_trace_context,
+    )
+
+    TRACE_CONTEXT_AVAILABLE = True
+except ImportError:
+    TRACE_CONTEXT_AVAILABLE = False
+    get_current_trace_context = None  # type: ignore
+    inject_trace_context = None  # type: ignore
+
 logger = logging.getLogger(__name__)
 
 __all__ = [
@@ -24,6 +37,8 @@ __all__ = [
     "ServiceUnavailableError",
     "ValidatableService",
     "ensure_service_available",
+    "get_request_trace_headers",
+    "inject_trace_headers",
 ]
 
 
@@ -371,3 +386,55 @@ class ValidatableService:
                 self._circuit_breaker.record_failure()
 
         return result
+
+
+def inject_trace_headers(headers: dict[str, str]) -> dict[str, str]:
+    """Inject trace context headers into HTTP request headers.
+
+    Adds W3C traceparent (and optionally tracestate) headers to propagate
+    trace context across service boundaries.
+
+    Args:
+        headers: Dictionary of HTTP headers to inject trace context into.
+
+    Returns
+    -------
+        Updated headers dictionary with trace context injected.
+
+    Example:
+        headers = {"Content-Type": "application/json"}
+        headers = inject_trace_headers(headers)
+        # headers now contains traceparent for distributed tracing
+    """
+    if not TRACE_CONTEXT_AVAILABLE or inject_trace_context is None:
+        return headers.copy()
+
+    return inject_trace_context(headers)
+
+
+def get_request_trace_headers() -> dict[str, str]:
+    """Get trace context headers for outbound HTTP requests.
+
+    Convenience function to get trace headers ready for adding to requests.
+
+    Returns
+    -------
+        Dictionary containing traceparent (and optionally tracestate) headers.
+
+    Example:
+        # Using with requests library
+        import requests
+        headers = get_request_trace_headers()
+        response = requests.get(url, headers=headers)
+
+        # Using with aiohttp
+        import aiohttp
+        headers = get_request_trace_headers()
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers) as resp:
+                ...
+    """
+    if not TRACE_CONTEXT_AVAILABLE or inject_trace_context is None:
+        return {}
+
+    return inject_trace_context({})

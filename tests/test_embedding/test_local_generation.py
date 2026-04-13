@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from secondbrain.embedding import LocalEmbeddingGenerator
 from secondbrain.embedding.local import TARGET_EMBEDDING_DIMENSIONS
 
@@ -447,3 +449,110 @@ class TestEmbeddingClose:
         gen.close()
 
         assert gen._model is None
+
+
+class TestAsyncEmbeddingGeneration:
+    """Tests for async embedding generation methods."""
+
+    @pytest.mark.asyncio
+    async def test_async_generate_single(self) -> None:
+        """Test async single text embedding."""
+        gen = LocalEmbeddingGenerator()
+
+        # Mock the model and its encode method
+        mock_model = MagicMock()
+        mock_encode_result = MagicMock()
+        mock_encode_result.tolist.return_value = [0.1] * 512
+        mock_model.encode.return_value = mock_encode_result
+        gen._model = mock_model
+
+        # Generate async embedding
+        embedding = await gen.generate_async("test text")
+
+        # Verify encode was called correctly
+        mock_model.encode.assert_called_once_with("test text", convert_to_numpy=True)
+
+        # Verify result is truncated to target dimensions
+        assert len(embedding) == TARGET_EMBEDDING_DIMENSIONS
+        assert embedding == [0.1] * TARGET_EMBEDDING_DIMENSIONS
+
+    @pytest.mark.asyncio
+    async def test_async_generate_batch(self) -> None:
+        """Test async batch embedding generation."""
+        gen = LocalEmbeddingGenerator()
+
+        # Mock the model and its encode method
+        mock_model = MagicMock()
+        mock_encode_result = MagicMock()
+        mock_encode_result.tolist.return_value = [
+            [0.1 * (i + 1)] * 512 for i in range(5)
+        ]
+        mock_model.encode.return_value = mock_encode_result
+        gen._model = mock_model
+
+        texts = ["text1", "text2", "text3", "text4", "text5"]
+
+        # Generate async batch embeddings
+        embeddings = await gen.generate_batch_async(texts)
+
+        # Verify encode was called with all texts
+        mock_model.encode.assert_called_once()
+        call_args = mock_model.encode.call_args
+        assert call_args is not None
+        assert call_args[0][0] == texts
+
+        # Verify all embeddings are truncated to target dimensions
+        assert len(embeddings) == 5
+        for emb in embeddings:
+            assert len(emb) == TARGET_EMBEDDING_DIMENSIONS
+
+    @pytest.mark.asyncio
+    async def test_async_generate_batch_empty_list(self) -> None:
+        """Test async batch embedding generation with empty list."""
+        gen = LocalEmbeddingGenerator()
+
+        embeddings = await gen.generate_batch_async([])
+
+        assert embeddings == []
+
+    @pytest.mark.asyncio
+    async def test_async_generate_returns_same_as_sync(self) -> None:
+        """Test that async generate returns same result as sync."""
+        gen = LocalEmbeddingGenerator()
+
+        mock_model = MagicMock()
+        mock_encode_result = MagicMock()
+        expected_embedding = [0.123] * TARGET_EMBEDDING_DIMENSIONS
+        mock_encode_result.tolist.return_value = expected_embedding
+        mock_model.encode.return_value = mock_encode_result
+        gen._model = mock_model
+
+        # Generate both sync and async
+        sync_embedding = gen.generate("test")
+        async_embedding = await gen.generate_async("test")
+
+        # Both should be identical
+        assert sync_embedding == async_embedding
+        assert sync_embedding == expected_embedding
+
+    @pytest.mark.asyncio
+    async def test_async_generate_batch_returns_same_as_sync(self) -> None:
+        """Test that async batch generate returns same as sync."""
+        gen = LocalEmbeddingGenerator()
+
+        mock_model = MagicMock()
+        mock_encode_result = MagicMock()
+        expected_embeddings = [[0.1 * (i + 1)] * 384 for i in range(3)]
+        mock_encode_result.tolist.return_value = expected_embeddings
+        mock_model.encode.return_value = mock_encode_result
+        gen._model = mock_model
+
+        texts = ["text1", "text2", "text3"]
+
+        # Generate both sync and async
+        sync_embeddings = gen.generate_batch(texts)
+        async_embeddings = await gen.generate_batch_async(texts)
+
+        # Both should be identical
+        assert sync_embeddings == async_embeddings
+        assert sync_embeddings == expected_embeddings

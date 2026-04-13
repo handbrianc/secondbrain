@@ -9,6 +9,10 @@ from secondbrain.utils.circuit_breaker import (
     CircuitBreakerConfig,
     CircuitState,
 )
+from secondbrain.utils.failure_injector import (
+    FailureInjector,
+    FailureType,
+)
 
 
 @pytest.mark.chaos
@@ -211,3 +215,44 @@ class TestRecoveryPatterns:
             assert cb.state == CircuitState.OPEN
 
         assert cb.is_allowed() is False
+
+
+@pytest.mark.chaos
+class TestFailureInjectorNetworkPartitions:
+    """Tests demonstrating FailureInjector for network partition testing."""
+
+    def test_slow_response_injection(self):
+        """Test slow response injection simulates network latency."""
+        injector = FailureInjector()
+
+        start_time = time.monotonic()
+        with injector.inject_slow_response(slow_duration=0.2):
+            time.sleep(0.05)
+            elapsed = time.monotonic() - start_time
+            assert elapsed >= 0.05
+            assert injector.is_failure_active(FailureType.SLOW_RESPONSE) is True
+
+    def test_timeout_injection_opens_circuit(self):
+        """Test that injected timeouts open circuit breaker."""
+        injector = FailureInjector()
+        cb = CircuitBreaker(
+            CircuitBreakerConfig(failure_threshold=2, recovery_timeout=0.1)
+        )
+
+        with injector.inject_timeout(duration=0.5, timeout_value=1.0):
+            for _ in range(2):
+                try:
+                    injector.raise_failure(FailureType.TIMEOUT)
+                except:
+                    cb.record_failure()
+
+        assert cb.state == CircuitState.OPEN
+
+    def test_concurrent_partition_simulation(self):
+        """Test simulating concurrent network partitions."""
+        injector = FailureInjector()
+
+        with injector.inject_timeout(duration=0.5):
+            with injector.inject_connection_error(duration=0.5):
+                assert injector.is_failure_active(FailureType.TIMEOUT) is True
+                assert injector.is_failure_active(FailureType.CONNECTION_ERROR) is True

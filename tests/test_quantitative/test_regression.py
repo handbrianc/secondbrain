@@ -17,7 +17,6 @@ no unintended degradation occurs between versions.
 
 import json
 import math
-import os
 from pathlib import Path
 from typing import Any
 
@@ -62,7 +61,7 @@ def load_baseline(baseline_name: str) -> dict[str, Any]:
     if not baseline_path.exists():
         raise FileNotFoundError(f"Baseline not found: {baseline_path}")
 
-    with open(baseline_path, "r", encoding="utf-8") as f:
+    with open(baseline_path, encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -859,7 +858,7 @@ class TestRegressionMetrics:
 
         for baseline_file in baseline_files:
             try:
-                with open(baseline_file, "r", encoding="utf-8") as f:
+                with open(baseline_file, encoding="utf-8") as f:
                     data = json.load(f)
 
                 # Validate basic structure

@@ -10,6 +10,12 @@ from secondbrain.utils.circuit_breaker import (
     CircuitBreakerError,
     CircuitState,
 )
+from secondbrain.utils.failure_injector import (
+    FailureInjector,
+    FailureType,
+    InjectedConnectionError,
+    InjectedTimeoutError,
+)
 
 
 @pytest.mark.chaos
@@ -210,3 +216,45 @@ class TestGracefulDegradation:
 
         assert failures == 5
         assert cb.state == CircuitState.OPEN
+
+
+@pytest.mark.chaos
+class TestFailureInjectorIntegration:
+    """Integration tests demonstrating FailureInjector usage."""
+
+    def test_injector_with_circuit_breaker_timeout(self):
+        """Test circuit breaker with injected timeout failures."""
+        injector = FailureInjector()
+        cb = CircuitBreaker(CircuitBreakerConfig(failure_threshold=3))
+
+        with injector.inject_timeout(duration=0.5, timeout_value=1.0):
+            for _ in range(3):
+                try:
+                    injector.raise_failure(FailureType.TIMEOUT)
+                except InjectedTimeoutError:
+                    cb.record_failure()
+
+        assert cb.state == CircuitState.OPEN
+
+    def test_injector_with_circuit_breaker_connection_error(self):
+        """Test circuit breaker with injected connection errors."""
+        injector = FailureInjector()
+        cb = CircuitBreaker(CircuitBreakerConfig(failure_threshold=3))
+
+        with injector.inject_connection_error(duration=0.5):
+            for _ in range(3):
+                try:
+                    injector.raise_failure(FailureType.CONNECTION_ERROR)
+                except InjectedConnectionError:
+                    cb.record_failure()
+
+        assert cb.state == CircuitState.OPEN
+
+    def test_injector_cleanup_after_test(self):
+        """Test that injector properly cleans up after use."""
+        injector = FailureInjector()
+
+        with injector.inject_timeout(duration=10.0):
+            assert injector.is_failure_active(FailureType.TIMEOUT) is True
+
+        assert injector.is_failure_active(FailureType.TIMEOUT) is False

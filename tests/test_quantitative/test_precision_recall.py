@@ -12,6 +12,7 @@ Run with: pytest -m "precision_recall and integration"
 """
 
 import pytest
+
 from secondbrain.search import Searcher
 
 from .conftest import (

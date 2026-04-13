@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from time import monotonic
 from typing import Any
@@ -64,6 +65,30 @@ class LocalEmbeddingGenerator:
         )
         # Truncate all embeddings to target dimensions
         return [emb[:TARGET_EMBEDDING_DIMENSIONS] for emb in embeddings.tolist()]
+
+    async def generate_async(self, text: str) -> list[float]:
+        """Generate embedding for single text asynchronously.
+
+        Uses asyncio.to_thread() to run the blocking encoding operation
+        without blocking the event loop.
+
+        Truncates to TARGET_EMBEDDING_DIMENSIONS (384) for compatibility.
+        """
+        # Run the blocking encode operation in a thread pool
+        embedding = await asyncio.to_thread(self.generate, text)
+        return embedding
+
+    async def generate_batch_async(self, texts: list[str]) -> list[list[float]]:
+        """Generate embeddings for multiple texts asynchronously.
+
+        Uses asyncio.to_thread() to run the blocking batch encoding operation
+        without blocking the event loop.
+
+        Truncates each embedding to TARGET_EMBEDDING_DIMENSIONS (384).
+        """
+        # Run the blocking batch encode operation in a thread pool
+        embeddings = await asyncio.to_thread(self.generate_batch, texts)
+        return embeddings
 
     def validate_connection(self, force: bool = False) -> bool:
         """Check if the embedding model is available and working.
