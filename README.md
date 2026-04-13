@@ -156,6 +156,33 @@ pytest                         # All tests including integration
 
 See [Testing Guide](docs/developer-guide/TESTING.md) for details.
 
+### Qualitative Testing
+
+Qualitative testing evaluates safety, factual accuracy, and robustness beyond metrics:
+
+**Test Categories:**
+- **Safety**: PII detection, dangerous topic filtering, harmful content prevention
+- **Factual Accuracy**: Claim verification, hallucination detection, source attribution
+- **Citation Quality**: Format compliance, source linking, reference completeness
+- **Robustness**: Edge cases, adversarial queries, ambiguous input handling
+- **LLM Judge**: Automated quality and safety evaluation
+
+**Commands:**
+```bash
+# Run all qualitative tests
+pytest tests/test_qualitative/ -v
+
+# Run by category
+pytest -m "safety" tests/test_qualitative/ -v
+pytest -m "factual" tests/test_qualitative/ -v
+pytest -m "robustness" tests/test_qualitative/ -v
+pytest -m "llm_judge" tests/test_qualitative/ -v
+```
+
+**Quick Start:** `pip install -e ".[qualitative]"` then run tests above.
+
+See [Qualitative Testing Framework](tests/test_qualitative/README.md) for details.
+
 ### Security Scanning
 
 ```bash

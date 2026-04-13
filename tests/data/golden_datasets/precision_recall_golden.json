@@ -1,0 +1,76 @@
+{
+  "dataset_name": "precision_recall_golden",
+  "description": "Golden dataset for precision and recall metric testing",
+  "queries": [
+    {
+      "id": "pr-001",
+      "query": "What is the default chunk size in SecondBrain?",
+      "expected_answer": "The default chunk size is 4096 tokens.",
+      "relevant_chunk_ids": ["chunk-001", "chunk-002", "chunk-003"],
+      "category": "configuration"
+    },
+    {
+      "id": "pr-002",
+      "query": "How do I configure MongoDB connection URI?",
+      "expected_answer": "Set the SECONDBRAIN_MONGO_URI environment variable.",
+      "relevant_chunk_ids": ["chunk-010", "chunk-011", "chunk-012"],
+      "category": "configuration"
+    },
+    {
+      "id": "pr-003",
+      "query": "What document formats are supported for ingestion?",
+      "expected_answer": "PDF, DOCX, PPTX, XLSX, HTML, Markdown, images, and audio.",
+      "relevant_chunk_ids": ["chunk-020", "chunk-021"],
+      "category": "features"
+    },
+    {
+      "id": "pr-004",
+      "query": "How to enable circuit breaker for resilience?",
+      "expected_answer": "Set SECONDBRAIN_CIRCUIT_BREAKER_ENABLED=true.",
+      "relevant_chunk_ids": ["chunk-030", "chunk-031", "chunk-032"],
+      "category": "configuration"
+    },
+    {
+      "id": "pr-005",
+      "query": "What is the purpose of the Ingestor class?",
+      "expected_answer": "The Ingestor class handles multi-format document parsing and chunking.",
+      "relevant_chunk_ids": ["chunk-040", "chunk-041"],
+      "category": "architecture"
+    },
+    {
+      "id": "pr-006",
+      "query": "How do I perform semantic search over my documents?",
+      "expected_answer": "Use the secondbrain search command with a natural language query.",
+      "relevant_chunk_ids": ["chunk-050", "chunk-051", "chunk-052"],
+      "category": "usage"
+    },
+    {
+      "id": "pr-007",
+      "query": "What embedding models are available?",
+      "expected_answer": "Default model is all-MiniLM-L6-v2 from sentence-transformers.",
+      "relevant_chunk_ids": ["chunk-060", "chunk-061"],
+      "category": "configuration"
+    },
+    {
+      "id": "pr-008",
+      "query": "How to configure chunk size and overlap?",
+      "expected_answer": "Use SECONDBRAIN_CHUNK_SIZE and SECONDBRAIN_CHUNK_OVERLAP environment variables.",
+      "relevant_chunk_ids": ["chunk-070", "chunk-071", "chunk-072"],
+      "category": "configuration"
+    },
+    {
+      "id": "pr-009",
+      "query": "What is the rate limiting configuration?",
+      "expected_answer": "Set SECONDBRAIN_RATE_LIMIT_ENABLED=true and configure requests per second.",
+      "relevant_chunk_ids": ["chunk-080", "chunk-081"],
+      "category": "configuration"
+    },
+    {
+      "id": "pr-010",
+      "query": "How to enable structured logging?",
+      "expected_answer": "Set SECONDBRAIN_LOG_LEVEL and SECONDBRAIN_LOG_FORMAT environment variables.",
+      "relevant_chunk_ids": ["chunk-090", "chunk-091", "chunk-092"],
+      "category": "configuration"
+    }
+  ]
+}

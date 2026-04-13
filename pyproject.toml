@@ -74,6 +74,20 @@ dev = [
     "wheel>=0.45.0",  # Security fix: path traversal (CVE-2026-24049)
 ]
 
+quantitative = [
+    "scikit-learn>=1.0.0",
+    "rouge-score>=0.1.2",
+    "datasets>=2.0.0",
+    "tabulate>=0.9.0",
+    "pandas>=2.0.0",
+]
+
+qualitative = [
+    "llama-cpp-python>=0.2.0",
+    "transformers>=4.35.0",
+    "accelerate>=0.25.0",
+]
+
 opentelemetry = [
     "opentelemetry-exporter-otlp>=1.20.0",
 ]
@@ -234,6 +248,19 @@ markers = [
     "circuit_breaker: marks tests that involve circuit breaker behavior (may be slow)",
     "hypothesis: marks tests as property-based testing",
     "concurrent: marks tests as concurrency/thread safety tests (may be slow)",
+    "semantic_similarity: marks tests for semantic similarity evaluation",
+    "precision_recall: marks tests for precision and recall metrics",
+    "golden_dataset: marks tests using golden dataset benchmarks",
+    "consistency: marks tests for output consistency checks",
+    "performance: marks tests for performance benchmarks",
+    "rouge: marks tests for ROUGE score evaluation",
+    "threshold(min=...): marks tests with minimum threshold requirements",
+    "qualitative: marks tests as qualitative evaluation tests",
+    "safety: marks tests for safety-related functionality (PII, dangerous topics)",
+    "factual: marks tests for factual accuracy and verification",
+    "hallucination: marks tests for hallucination detection",
+    "robustness: marks tests for edge cases and adversarial inputs",
+    "llm_judge: marks tests using LLM-based evaluation",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning:docling",
@@ -245,6 +272,12 @@ filterwarnings = [
 [tool.pytest-timeout]
 timeout = 60
 timeout_method = "thread"  # More aggressive than signal, works with threads
+
+[tool.pytest-benchmark]
+compare_ignore = ["time_per_call", "median"]
+min_rounds = 5
+max_time = 1.0
+min_time = 0.001
 
 [tool.pre-commit]
 default_stages = ["pre-commit"]

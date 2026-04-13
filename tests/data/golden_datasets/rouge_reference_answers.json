@@ -1,0 +1,100 @@
+{
+  "metadata": {
+    "name": "rouge_reference_answers",
+    "description": "Golden dataset with high-quality reference answers for ROUGE score evaluation",
+    "version": "1.0.0",
+    "created": "2026-04-12",
+    "total_queries": 12,
+    "thresholds": {
+      "min_rouge1_f1": 0.5,
+      "min_rouge2_f1": 0.4,
+      "min_rougeL_f1": 0.4
+    }
+  },
+  "queries": [
+    {
+      "id": "rouge-001",
+      "query": "What is the default chunk size in SecondBrain?",
+      "reference_answer": "The default chunk size in SecondBrain is 4096 tokens. This configuration parameter controls how documents are split into smaller pieces for embedding and vector search.",
+      "min_rouge1": 0.5,
+      "min_rougeL": 0.4
+    },
+    {
+      "id": "rouge-002",
+      "query": "How do I configure MongoDB connection URI?",
+      "reference_answer": "To configure the MongoDB connection URI, set the SECONDBRAIN_MONGO_URI environment variable to your MongoDB connection string. This is the primary method for specifying database connectivity.",
+      "min_rouge1": 0.5,
+      "min_rougeL": 0.4
+    },
+    {
+      "id": "rouge-003",
+      "query": "What environment variables control logging?",
+      "reference_answer": "Logging is controlled by two environment variables: SECONDBRAIN_LOG_LEVEL for verbosity (DEBUG, INFO, WARNING, ERROR) and SECONDBRAIN_LOG_FORMAT for output format (pretty or json).",
+      "min_rouge1": 0.5,
+      "min_rougeL": 0.4
+    },
+    {
+      "id": "rouge-004",
+      "query": "How to enable circuit breaker protection?",
+      "reference_answer": "Enable circuit breaker protection by setting the SECONDBRAIN_CIRCUIT_BREAKER_ENABLED environment variable to true. This provides automatic failure handling and self-recovery capabilities.",
+      "min_rouge1": 0.5,
+      "min_rougeL": 0.4
+    },
+    {
+      "id": "rouge-005",
+      "query": "What is the default top-k for search results?",
+      "reference_answer": "The default top-k value is 5, meaning the search returns the 5 most relevant results by default. This can be adjusted via command-line options or configuration.",
+      "min_rouge1": 0.5,
+      "min_rougeL": 0.4
+    },
+    {
+      "id": "rouge-006",
+      "query": "What is the default embedding model?",
+      "reference_answer": "The default embedding model is all-MiniLM-L6-v2 from the sentence-transformers library. This model provides a good balance between speed and accuracy for semantic search.",
+      "min_rouge1": 0.5,
+      "min_rougeL": 0.4
+    },
+    {
+      "id": "rouge-007",
+      "query": "What is the default chunk overlap value?",
+      "reference_answer": "The default chunk overlap is 256 tokens. This overlap preserves context between adjacent chunks and improves retrieval quality for queries spanning multiple chunks.",
+      "min_rouge1": 0.5,
+      "min_rougeL": 0.4
+    },
+    {
+      "id": "rouge-008",
+      "query": "What document formats are supported for ingestion?",
+      "reference_answer": "SecondBrain supports PDF, DOCX, PPTX, XLSX, HTML, Markdown, images, and audio files. The Ingestor class uses Docling for multi-format document parsing.",
+      "min_rouge1": 0.5,
+      "min_rougeL": 0.4
+    },
+    {
+      "id": "rouge-009",
+      "query": "How does semantic search work?",
+      "reference_answer": "Semantic search works by converting queries and documents into embedding vectors using sentence-transformers, then performing vector similarity search in MongoDB using cosine similarity to find the most relevant results.",
+      "min_rouge1": 0.5,
+      "min_rougeL": 0.4
+    },
+    {
+      "id": "rouge-010",
+      "query": "What is the purpose of the Ingestor class?",
+      "reference_answer": "The Ingestor class handles multi-format document parsing and chunking. It processes various file formats, splits documents into manageable chunks, and prepares them for embedding and storage.",
+      "min_rouge1": 0.5,
+      "min_rougeL": 0.4
+    },
+    {
+      "id": "rouge-011",
+      "query": "How does the circuit breaker work?",
+      "reference_answer": "The circuit breaker automatically monitors service health and handles failures. When errors exceed a threshold, it opens the circuit to prevent cascading failures, then attempts automatic recovery after a cooldown period.",
+      "min_rouge1": 0.5,
+      "min_rougeL": 0.4
+    },
+    {
+      "id": "rouge-012",
+      "query": "What are the main components of SecondBrain architecture?",
+      "reference_answer": "The main components are: CLI layer for commands, Document Ingestor for parsing and chunking, Embedding Engine for vector generation, MongoDB for vector storage, and Searcher for semantic retrieval. These work together in a pipeline architecture.",
+      "min_rouge1": 0.5,
+      "min_rougeL": 0.4
+    }
+  ]
+}

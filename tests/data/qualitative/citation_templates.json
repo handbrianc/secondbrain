@@ -1,0 +1,207 @@
+{
+  "metadata": {
+    "version": "1.0.0",
+    "description": "Citation templates and formats for testing citation quality",
+    "created": "2026-04-12",
+    "last_updated": "2026-04-12",
+    "author": "SecondBrain Testing Framework"
+  },
+  "citation_formats": [
+    {
+      "name": "APA",
+      "description": "American Psychological Association style",
+      "example": "Author, A. A. (Year). Title of work. Publisher.",
+      "pattern": "{author} ({year}). {title}. {publisher}."
+    },
+    {
+      "name": "MLA",
+      "description": "Modern Language Association style",
+      "example": "Author, Author. Title of Work. Publisher, Year.",
+      "pattern": "{author}, {author}. {title}. {publisher}, {year}."
+    },
+    {
+      "name": "Chicago",
+      "description": "Chicago Manual of Style",
+      "example": "Author, Author. Title of Work. Place: Publisher, Year.",
+      "pattern": "{author}, {title}. {place}: {publisher}, {year}."
+    },
+    {
+      "name": "IEEE",
+      "description": "Institute of Electrical and Electronics Engineers style",
+      "example": "[1] Author, \"Title,\" Journal, vol. x, no. x, pp. xxx-xxx, Year.",
+      "pattern": "[{number}] {author}, \"{title},\" {journal}, vol. {volume}, no. {issue}, pp. {pages}, {year}."
+    },
+    {
+      "name": "Markdown",
+      "description": "Markdown link format",
+      "example": "[Title](URL)",
+      "pattern": "[{title}]({url})"
+    }
+  ],
+  "test_cases": [
+    {
+      "id": "citation_book_complete",
+      "description": "Complete book citation",
+      "input": {
+        "type": "book",
+        "title": "Clean Code: A Handbook of Agile Software Craftsmanship",
+        "author": "Robert C. Martin",
+        "year": 2008,
+        "publisher": "Prentice Hall",
+        "place": "Upper Saddle River, NJ"
+      },
+      "expected": {
+        "apa": "Martin, R. C. (2008). Clean Code: A Handbook of Agile Software Craftsmanship. Prentice Hall.",
+        "mla": "Martin, Robert C. Clean Code: A Handbook of Agile Software Craftsmanship. Prentice Hall, 2008.",
+        "chicago": "Martin, Robert C. Clean Code: A Handbook of Agile Software Craftsmanship. Upper Saddle River, NJ: Prentice Hall, 2008."
+      },
+      "category": "book",
+      "difficulty": "easy"
+    },
+    {
+      "id": "citation_journal_article",
+      "description": "Journal article citation",
+      "input": {
+        "type": "journal",
+        "title": "Attention Is All You Need",
+        "authors": ["Vaswani, A.", "Shazeer, N.", "Parmar, N.", "Uszkoreit, J."],
+        "year": 2017,
+        "journal": "Advances in Neural Information Processing Systems",
+        "volume": 30,
+        "pages": "5998-6008"
+      },
+      "expected": {
+        "apa": "Vaswani, A., Shazeer, N., Parmar, N., & Uszkoreit, J. (2017). Attention Is All You Need. Advances in Neural Information Processing Systems, 30, 5998-6008.",
+        "ieee": "[1] A. Vaswani, N. Shazeer, N. Parmar, and J. Uszkoreit, \"Attention Is All You Need,\" Advances in Neural Information Processing Systems, vol. 30, pp. 5998-6008, 2017."
+      },
+      "category": "journal",
+      "difficulty": "medium"
+    },
+    {
+      "id": "citation_webpage",
+      "input": {
+        "type": "webpage",
+        "title": "Python Documentation",
+        "author": "Python Software Foundation",
+        "url": "https://docs.python.org/3/",
+        "accessed": "2026-04-12"
+      },
+      "expected": {
+        "apa": "Python Software Foundation. (n.d.). Python Documentation. Retrieved April 12, 2026, from https://docs.python.org/3/",
+        "markdown": "[Python Documentation](https://docs.python.org/3/)"
+      },
+      "category": "web",
+      "difficulty": "easy"
+    },
+    {
+      "id": "citation_missing_author",
+      "description": "Handle missing author",
+      "input": {
+        "type": "webpage",
+        "title": "Understanding Vector Search",
+        "url": "https://example.com/vector-search",
+        "publisher": "Tech Blog"
+      },
+      "expected": {
+        "apa": "Tech Blog. (n.d.). Understanding Vector Search. Retrieved from https://example.com/vector-search",
+        "note": "Use publisher or site name when author is unknown"
+      },
+      "category": "web",
+      "difficulty": "medium"
+    },
+    {
+      "id": "citation_missing_date",
+      "description": "Handle missing publication date",
+      "input": {
+        "type": "webpage",
+        "title": "API Reference",
+        "author": "Example Corp",
+        "url": "https://example.com/api"
+      },
+      "expected": {
+        "apa": "Example Corp. (n.d.). API Reference. Retrieved from https://example.com/api",
+        "note": "Use 'n.d.' for no date"
+      },
+      "category": "web",
+      "difficulty": "easy"
+    },
+    {
+      "id": "citation_multiple_authors",
+      "description": "Handle multiple authors correctly",
+      "input": {
+        "type": "book",
+        "title": "Design Patterns",
+        "authors": ["Erich Gamma", "Richard Helm", "Ralph Johnson", "John Vlissides"],
+        "year": 1994,
+        "publisher": "Addison-Wesley"
+      },
+      "expected": {
+        "apa": "Gamma, E., Helm, R., Johnson, R., & Vlissides, J. (1994). Design Patterns. Addison-Wesley.",
+        "mla": "Gamma, Erich, et al. Design Patterns. Addison-Wesley, 1994.",
+        "note": "Use 'et al.' for 3+ authors in MLA"
+      },
+      "category": "book",
+      "difficulty": "medium"
+    },
+    {
+      "id": "citation_invalid_format",
+      "description": "Detect and handle invalid citation formats",
+      "input": {
+        "type": "unknown",
+        "data": "random text"
+      },
+      "expected": {
+        "error": true,
+        "message": "Unable to determine citation type",
+        "fallback": "Provide basic bibliographic information"
+      },
+      "category": "error_handling",
+      "difficulty": "hard"
+    },
+    {
+      "id": "citation_pdf_document",
+      "description": "Citation for PDF document from research repository",
+      "input": {
+        "type": "pdf",
+        "title": "SecondBrain: Local Document Intelligence Architecture",
+        "author": "Developer Team",
+        "year": 2026,
+        "url": "https://github.com/example/secondbrain/docs/architecture.pdf",
+        "repository": "GitHub"
+      },
+      "expected": {
+        "apa": "Developer Team. (2026). SecondBrain: Local Document Intelligence Architecture [PDF]. GitHub. https://github.com/example/secondbrain/docs/architecture.pdf",
+        "markdown": "[SecondBrain: Local Document Intelligence Architecture](https://github.com/example/secondbrain/docs/architecture.pdf)"
+      },
+      "category": "technical",
+      "difficulty": "medium"
+    }
+  ],
+  "validation_rules": [
+    {
+      "rule": "author_required",
+      "description": "Author or creator should be present when possible",
+      "severity": "medium"
+    },
+    {
+      "rule": "title_required",
+      "description": "Title is always required",
+      "severity": "high"
+    },
+    {
+      "rule": "url_format",
+      "description": "URLs must be valid and accessible",
+      "severity": "medium"
+    },
+    {
+      "rule": "date_format",
+      "description": "Dates should follow ISO 8601 or standard format",
+      "severity": "low"
+    },
+    {
+      "rule": "no_duplicate_citations",
+      "description": "Same source should not be cited multiple times unnecessarily",
+      "severity": "low"
+    }
+  ]
+}

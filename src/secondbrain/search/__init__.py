@@ -28,10 +28,13 @@ MAX_QUERY_LENGTH = 10000
 
 # Pattern to detect potential injection attempts
 INJECTION_PATTERNS = [
-    r"\.\./",  # Path traversal
+    r"\.\./",  # Path traversal Unix
+    r"\.\.\\",  # Path traversal Windows
     r"<script",  # XSS attempts
     r"javascript:",  # JavaScript protocol
     r"\x00",  # Null bytes
+    r"onerror=",  # XSS event handlers
+    r"onload=",  # XSS event handlers
 ]
 
 
