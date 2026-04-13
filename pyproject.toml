@@ -19,20 +19,21 @@ classifiers = [
 ]
 
 dependencies = [
-    "click>=8.1.0",
-    "docling>=2.81.0",
-    "docling-core>=2.48.4",
-    "pymongo>=4.6.0",
-    "motor>=3.0.0",
-    "httpx>=0.28.1",
-    "pydantic>=2.0.0",
-    "pydantic-settings>=2.0.0",
-    "rich>=14.0.0",
-    "python-dotenv>=1.2.2",
-    "sentence-transformers>=5.0.0",
-    "opentelemetry-api>=1.20.0",
-    "opentelemetry-sdk>=1.20.0",
-    "ollama>=0.1.0",
+    "click>=8.1.0",  # CLI framework; 8.1+ has improved context handling, no breaking changes
+    "docling>=2.81.0",  # Document parsing; minimum version for multi-format support (PDF, DOCX, PPTX, XLSX)
+    "docling-core>=2.48.4",  # Core types for docling; pinned to match docling version compatibility
+    "pymongo>=4.6.0",  # MongoDB driver; 4.6+ has async support improvements, connection pooling fixes
+    "motor>=3.0.0",  # Async MongoDB driver; 3.0+ required for Python 3.11+ async compatibility
+    "httpx>=0.28.1",  # HTTP client; 0.28+ has improved HTTP/2 support, connection reuse
+    "pydantic>=2.0.0",  # Data validation; 2.0+ required for v2 migration, faster validation, type adapter
+    "pydantic-settings>=2.0.0",  # Settings management; 2.0+ compatible with pydantic v2
+    "rich>=14.0.0",  # Terminal output; 14.0+ has improved table rendering, markdown support
+    "python-dotenv>=1.2.2",  # Environment variables; 1.2+ has better .env file parsing
+    "sentence-transformers>=5.0.0",  # Embedding models; 5.0+ required for latest model architectures
+    "opentelemetry-api>=1.20.0",  # Observability API; 1.20+ stable SDK integration
+    "opentelemetry-sdk>=1.20.0",  # Observability SDK; 1.20+ compatible with API, tracing exporters
+    "ollama>=0.1.0",  # Ollama client; 0.1+ for local LLM integration
+    "openai>=1.0.0",  # OpenAI client; 1.0+ for OpenAI LLM provider support
 ]
 
 [project.optional-dependencies]
@@ -55,6 +56,8 @@ dev = [
     "mongomock>=4.0.0",
     "vulture>=2.11",
     "cyclonedx-bom>=7.0.0",
+    "pipdeptree>=2.0.0",  # Dependency tree visualization for debugging
+    "openai>=1.0.0",  # OpenAI API client for LLM provider
     "mkdocs>=1.6.0",
     "mkdocstrings>=0.24.0",
     "mkdocstrings-python>=2.0.0",
@@ -261,6 +264,7 @@ markers = [
     "hallucination: marks tests for hallucination detection",
     "robustness: marks tests for edge cases and adversarial inputs",
     "llm_judge: marks tests using LLM-based evaluation",
+    "chaos: marks tests for chaos engineering (failure injection, resilience)",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning:docling",
@@ -268,6 +272,11 @@ filterwarnings = [
     "ignore:.*Benchmarks are automatically disabled.*",
     "ignore:.*This process.*is multi-threaded, use of fork.*",
 ]
+
+[tool.hypothesis]
+max_examples = 100
+deadline = 500
+database = ".hypothesis"
 
 [tool.pytest-timeout]
 timeout = 60

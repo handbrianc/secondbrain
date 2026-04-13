@@ -18,7 +18,6 @@ security vulnerabilities.
 """
 
 import json
-import math
 from typing import Any
 
 import pytest
@@ -969,7 +968,7 @@ class TestAdversarialQueries:
             f"Empty query handling test failed\n"
             f"Query ID: {query_id}\n"
             f"Query type: {query_type}\n"
-            f"Query repr: {repr(query)}\n"
+            f"Query repr: {query!r}\n"
             f"Valid outcomes: {sum(valid_outcomes)}/{len(valid_outcomes)}\n"
             f"All results: {json.dumps(results, indent=2)}"
         )

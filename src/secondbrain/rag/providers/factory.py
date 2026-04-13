@@ -7,6 +7,7 @@ based on configuration.
 from secondbrain.config import Config
 from secondbrain.rag.interfaces import LocalLLMProvider
 from secondbrain.rag.providers.ollama import OllamaLLMProvider
+from secondbrain.rag.providers.openai import OpenAILLMProvider
 
 
 class LLMProviderFactory:
@@ -29,14 +30,27 @@ class LLMProviderFactory:
         Raises:
             ValueError: If provider type is not recognized.
         """
-        # Default to Ollama for now
-        # Future: support vLLM, llama.cpp, etc.
-        return OllamaLLMProvider(
-            host=config.ollama_host,
-            model=config.llm_model,
-            temperature=config.llm_temperature,
-            timeout=config.llm_timeout,
-        )
+        provider_type = config.llm_provider.lower()
+
+        if provider_type == "ollama":
+            return OllamaLLMProvider(
+                host=config.ollama_host,
+                model=config.llm_model,
+                temperature=config.llm_temperature,
+                timeout=config.llm_timeout,
+            )
+        elif provider_type == "openai":
+            return OpenAILLMProvider(
+                model=config.llm_model,
+                temperature=config.llm_temperature,
+                max_tokens=config.llm_max_tokens,
+                timeout=config.llm_timeout,
+            )
+        else:
+            raise ValueError(
+                f"Unsupported LLM provider: {provider_type}. "
+                f"Supported providers: ollama, openai"
+            )
 
     @staticmethod
     def create_ollama(

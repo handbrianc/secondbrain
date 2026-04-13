@@ -1201,6 +1201,8 @@ class DocumentIngestor:
         send completion status via Queue, and the main process updates the progress
         bar. This enables true CPU parallelism while maintaining real-time progress.
 
+        Uses 'spawn' start method for cross-platform compatibility (Windows, macOS, Linux).
+
         Args:
             files: List of file paths to process.
             embedding_gen: EmbeddingGenerator instance.
@@ -1211,11 +1213,14 @@ class DocumentIngestor:
         -------
             Tuple of (successful_files, failed_files) counts.
         """
+        import multiprocessing
         from concurrent.futures import (
             ProcessPoolExecutor,
             as_completed,
         )
         from multiprocessing import Manager
+
+        multiprocessing.set_start_method("spawn", force=True)
 
         successful_files = 0
         failed_files = 0
@@ -1748,6 +1753,258 @@ class AsyncDocumentIngestor(DocumentIngestor):
 
         return {"success": successful, "failed": failed}
 
+    async def _stream_process_chunks_async(
+        self,
+        file_path: Path,
+        segments: list[Segment],
+        embedding_gen: Any,
+        storage: Any,
+    ) -> int:
+        """Stream process chunks asynchronously for memory efficiency.
+
+        Uses native async embedding generation to avoid blocking the event loop.
+        """
+        from secondbrain.config import get_config
+
+        config = get_config()
+        batch_size = config.streaming_chunk_batch_size
+
+        # Deduplicate chunks across all segments
+        seen_hashes = set()
+        batch_chunks: list[dict[str, Any]] = []
+        docs_stored = 0
+
+        for i, segment in enumerate(segments):
+            cleaned = segment["text"].strip()
+            if not cleaned:
+                continue
+
+            normalized = " ".join(cleaned.lower().split())
+            text_hash = hashlib.sha256(normalized.encode()).hexdigest()
+
+            if text_hash in seen_hashes:
+                continue
+            seen_hashes.add(text_hash)
+
+            batch_chunks.append(
+                {
+                    "file_path": file_path,
+                    "original_index": i,
+                    "text": cleaned,
+                    "page": segment["page"],
+                    "text_hash": text_hash,
+                }
+            )
+
+            # Process batch when full
+            if len(batch_chunks) >= batch_size:
+                docs_stored += await self._store_embedding_batch_async(
+                    file_path, batch_chunks, embedding_gen, storage
+                )
+                batch_chunks = []
+
+        # Process remaining chunks
+        if batch_chunks:
+            docs_stored += await self._store_embedding_batch_async(
+                file_path, batch_chunks, embedding_gen, storage
+            )
+
+        return docs_stored
+
+    async def _store_embedding_batch_async(
+        self,
+        file_path: Path,
+        chunks: list[dict[str, Any]],
+        embedding_gen: Any,
+        storage: Any,
+    ) -> int:
+        """Generate embeddings and store a batch of chunks asynchronously.
+
+        Uses native async batch embedding generation for improved throughput
+        without blocking the event loop.
+        """
+        chunk_to_embedding: dict[int, list[float]] = {}
+        texts_to_embed: list[str] = []
+        text_to_chunk: dict[str, dict[str, Any]] = {}
+
+        # First pass: check cache and collect uncached texts
+        for chunk in chunks:
+            cached = self.embedding_cache.get(chunk["text"])
+            if cached is not None:
+                chunk_to_embedding[chunk["text_hash"]] = cached
+                continue
+            texts_to_embed.append(chunk["text"])
+            text_to_chunk[chunk["text"]] = chunk
+
+        # Second pass: generate embeddings in async batch for uncached texts
+        if texts_to_embed:
+            try:
+                # Use native async batch embedding if available
+                if hasattr(embedding_gen, "generate_batch_async"):
+                    embeddings = await embedding_gen.generate_batch_async(
+                        texts_to_embed
+                    )
+                else:
+                    embeddings = await asyncio.to_thread(
+                        embedding_gen.generate_batch, texts_to_embed
+                    )
+
+                for text, embedding in zip(texts_to_embed, embeddings, strict=True):
+                    self.embedding_cache.set(text, embedding)
+                    chunk = text_to_chunk[text]
+                    chunk_to_embedding[chunk["text_hash"]] = embedding
+            except Exception as e:
+                logger.error(
+                    "Failed to generate async batch embeddings: %s: %s",
+                    type(e).__name__,
+                    e,
+                )
+                for text in texts_to_embed:
+                    chunk = text_to_chunk[text]
+                    try:
+                        cached = self.embedding_cache.get(text)
+                        if cached is not None:
+                            chunk_to_embedding[chunk["text_hash"]] = cached
+                            continue
+                        if hasattr(embedding_gen, "generate_async"):
+                            embedding = await embedding_gen.generate_async(text)
+                        else:
+                            embedding = await asyncio.to_thread(
+                                embedding_gen.generate, text
+                            )
+                        self.embedding_cache.set(text, embedding)
+                        chunk_to_embedding[chunk["text_hash"]] = embedding
+                    except Exception as e2:
+                        logger.error(
+                            "Failed to generate async embedding: %s: %s",
+                            type(e2).__name__,
+                            e2,
+                        )
+                        continue
+
+        # Build and store documents
+        docs_to_store: list[dict[str, Any]] = []
+        seen_doc_keys = set()
+
+        for chunk_item in chunks:
+            text_hash = chunk_item["text_hash"]
+            if text_hash not in chunk_to_embedding:
+                continue
+
+            doc_key = (str(chunk_item["file_path"]), chunk_item["page"], text_hash)
+            if doc_key in seen_doc_keys:
+                continue
+            seen_doc_keys.add(doc_key)
+
+            embedding = chunk_to_embedding[text_hash]
+            file_type = get_file_type(chunk_item["file_path"])
+            ingested_at = datetime.now(UTC).isoformat()
+
+            doc = {
+                "chunk_id": str(uuid4()),
+                "source_file": str(chunk_item["file_path"]),
+                "page_number": chunk_item["page"],
+                "chunk_text": chunk_item["text"],
+                "embedding": embedding,
+                "file_type": file_type,
+                "ingested_at": ingested_at,
+            }
+            docs_to_store.append(doc)
+
+        if docs_to_store:
+            await asyncio.to_thread(storage.store_batch, docs_to_store)
+
+        return len(docs_to_store)
+
+    async def _build_documents_with_embeddings_async(
+        self,
+        file_path: Path,
+        segments: list[Segment],
+        embedding_gen: Any,
+    ) -> list[dict[str, Any]]:
+        """Build documents with embeddings from text segments asynchronously."""
+        all_chunks = self._deduplicate_and_chunk_segments(file_path, segments)
+        chunk_to_embedding = await self._generate_embeddings_with_cache_async(
+            all_chunks, embedding_gen
+        )
+        return self._build_documents_from_chunks(all_chunks, chunk_to_embedding)
+
+    async def _generate_embeddings_with_cache_async(
+        self,
+        chunks: list[dict[str, Any]],
+        embedding_gen: Any,
+    ) -> dict[int, list[float]]:
+        """Generate embeddings for chunks with async caching and batch processing."""
+        from secondbrain.config import get_config
+
+        config = get_config()
+        batch_size = config.embedding_batch_size
+        chunk_to_embedding: dict[int, list[float]] = {}
+
+        for i in range(0, len(chunks), batch_size):
+            batch = chunks[i : i + batch_size]
+            texts = [chunk["text"] for chunk in batch]
+
+            try:
+                texts_to_embed = []
+                cached_indices = []
+
+                for idx, text in enumerate(texts):
+                    cached = self.embedding_cache.get(text)
+                    if cached is not None:
+                        chunk_to_embedding[batch[idx]["text_hash"]] = cached
+                    else:
+                        texts_to_embed.append(text)
+                        cached_indices.append(idx)
+
+                if texts_to_embed:
+                    if hasattr(embedding_gen, "generate_batch_async"):
+                        embeddings = await embedding_gen.generate_batch_async(
+                            texts_to_embed
+                        )
+                    else:
+                        embeddings = await asyncio.to_thread(
+                            embedding_gen.generate_batch, texts_to_embed
+                        )
+
+                    for idx, embedding in zip(cached_indices, embeddings, strict=True):
+                        text = texts[idx]
+                        self.embedding_cache.set(text, embedding)
+                        chunk_to_embedding[batch[idx]["text_hash"]] = embedding
+
+            except Exception as e:
+                logger.error(
+                    "Failed to generate async batch embeddings: %s: %s",
+                    type(e).__name__,
+                    e,
+                )
+                for chunk in batch:
+                    try:
+                        cached = self.embedding_cache.get(chunk["text"])
+                        if cached is not None:
+                            chunk_to_embedding[chunk["text_hash"]] = cached
+                            continue
+
+                        if hasattr(embedding_gen, "generate_async"):
+                            embedding = await embedding_gen.generate_async(
+                                chunk["text"]
+                            )
+                        else:
+                            embedding = await asyncio.to_thread(
+                                embedding_gen.generate, chunk["text"]
+                            )
+                        self.embedding_cache.set(chunk["text"], embedding)
+                        chunk_to_embedding[chunk["text_hash"]] = embedding
+                    except Exception as e2:
+                        logger.error(
+                            "Failed to generate async embedding for chunk: %s: %s",
+                            type(e2).__name__,
+                            e2,
+                        )
+                        continue
+
+        return chunk_to_embedding
+
     async def process_file_async(
         self,
         file_path: Path,
@@ -1755,6 +2012,8 @@ class AsyncDocumentIngestor(DocumentIngestor):
         storage: Any,
     ) -> bool:
         """Process a single file asynchronously.
+
+        Uses native async embedding generation to avoid blocking the event loop.
 
         Args:
             file_path: Path to file to process.
@@ -1766,7 +2025,6 @@ class AsyncDocumentIngestor(DocumentIngestor):
             True if processing succeeded, False otherwise.
         """
         try:
-            # Extract text using to_thread for blocking I/O
             segments = await asyncio.to_thread(self._extract_text, file_path)  # type: ignore[attr-defined]
 
             if not segments:
@@ -1776,29 +2034,19 @@ class AsyncDocumentIngestor(DocumentIngestor):
                 )
                 return False
 
-            # Use streaming if enabled (memory-efficient batch processing)
             from secondbrain.config import get_config
 
             config = get_config()
 
             if config.streaming_enabled:
-                # Streaming handles storage internally via _stream_process_chunks
-                docs_count = await asyncio.to_thread(
-                    self._stream_process_chunks,
-                    file_path,
-                    segments,
-                    embedding_gen,
-                    storage,
-                )  # type: ignore[attr-defined]
-                return docs_count > 0  # type: ignore[no-any-return]
+                docs_count = await self._stream_process_chunks_async(
+                    file_path, segments, embedding_gen, storage
+                )
+                return docs_count > 0
             else:
-                # Legacy batch processing
-                docs_to_store = await asyncio.to_thread(
-                    self._build_documents_with_embeddings,
-                    file_path,
-                    segments,
-                    embedding_gen,
-                )  # type: ignore[attr-defined]
+                docs_to_store = await self._build_documents_with_embeddings_async(
+                    file_path, segments, embedding_gen
+                )
                 if docs_to_store:
                     await asyncio.to_thread(storage.store_batch, docs_to_store)
                     return True

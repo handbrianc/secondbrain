@@ -52,12 +52,12 @@ def golden_datasets() -> dict[str, list[dict[str, Any]]]:
     for dataset_file in GOLDEN_DATASETS_DIR.glob("*.json"):
         dataset_name = dataset_file.stem
         try:
-            with open(dataset_file, "r", encoding="utf-8") as f:
+            with open(dataset_file, encoding="utf-8") as f:
                 data = json.load(f)
                 # Support both "test_cases" and "queries" formats
                 test_cases = data.get("test_cases", data.get("queries", []))
                 datasets[dataset_name] = test_cases
-        except (json.JSONDecodeError, IOError) as e:
+        except (OSError, json.JSONDecodeError) as e:
             pytest.fail(f"Failed to load golden dataset {dataset_name}: {e}")
 
     return datasets
@@ -134,7 +134,7 @@ def load_golden_dataset(dataset_name: str) -> list[dict[str, Any]]:
     if not dataset_path.exists():
         raise FileNotFoundError(f"Golden dataset not found: {dataset_path}")
 
-    with open(dataset_path, "r", encoding="utf-8") as f:
+    with open(dataset_path, encoding="utf-8") as f:
         data = json.load(f)
 
     # Support both "test_cases" and "queries" formats

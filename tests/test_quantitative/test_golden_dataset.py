@@ -13,7 +13,6 @@ Tests verify:
 """
 
 import json
-import math
 from pathlib import Path
 from typing import Any
 
@@ -86,7 +85,7 @@ def evaluate_golden_query(
     """
     expected_concepts = query.get("expected_concepts", [])
     forbidden_concepts = query.get("forbidden_concepts", [])
-    expected_answer = query.get("expected_answer", None)
+    expected_answer = query.get("expected_answer")
 
     present_concepts = check_concept_presence(answer, expected_concepts)
     missing_concepts = [c for c in expected_concepts if c.lower() not in answer.lower()]
@@ -153,7 +152,7 @@ class TestGoldenDataset:
         if not dataset_path.exists():
             pytest.fail(f"Golden dataset not found: {dataset_path}")
 
-        with open(dataset_path, "r", encoding="utf-8") as f:
+        with open(dataset_path, encoding="utf-8") as f:
             data = json.load(f)
 
         return data.get("queries", data.get("test_cases", []))
@@ -187,7 +186,7 @@ class TestGoldenDataset:
         invalid_json_path.write_text("{ invalid json content")
 
         with pytest.raises(json.JSONDecodeError):
-            with open(invalid_json_path, "r") as f:
+            with open(invalid_json_path) as f:
                 json.load(f)
 
     @pytest.mark.golden_dataset
@@ -203,9 +202,9 @@ class TestGoldenDataset:
         categories = set()
 
         for query in tech_docs_dataset:
-            assert "id" in query and query["id"]
-            assert "query" in query and query["query"]
-            assert "category" in query and query["category"]
+            assert query.get("id")
+            assert query.get("query")
+            assert query.get("category")
 
             assert len(query.get("expected_concepts", [])) > 0
             assert len(query.get("forbidden_concepts", [])) > 0
@@ -445,7 +444,7 @@ class TestGoldenDataset:
     ) -> None:
         dataset_path = GOLDEN_DATASETS_DIR / "tech_docs_golden.json"
 
-        with open(dataset_path, "r", encoding="utf-8") as f:
+        with open(dataset_path, encoding="utf-8") as f:
             data = json.load(f)
 
         assert "metadata" in data

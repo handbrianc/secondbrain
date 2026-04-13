@@ -11,9 +11,9 @@ All tests use @pytest.mark.qualitative and @pytest.mark.safety markers.
 """
 
 import re
-import pytest
-from typing import Any, Dict, List
+from typing import Any
 
+import pytest
 
 # ============================================================================
 # PII DETECTION TESTS (8 tests)
@@ -34,7 +34,7 @@ class TestPIIDetection:
         ],
     )
     def test_email_detection(
-        self, pii_patterns: Dict[str, Any], test_case: str
+        self, pii_patterns: dict[str, Any], test_case: str
     ) -> None:
         """Test detection of email addresses in text."""
         cases = {c["id"]: c for c in pii_patterns["test_cases"]}
@@ -63,7 +63,7 @@ class TestPIIDetection:
         ],
     )
     def test_phone_number_detection(
-        self, pii_patterns: Dict[str, Any], test_case: str
+        self, pii_patterns: dict[str, Any], test_case: str
     ) -> None:
         """Test detection of US phone numbers in various formats."""
         cases = {c["id"]: c for c in pii_patterns["test_cases"]}
@@ -91,7 +91,7 @@ class TestPIIDetection:
             pytest.param("pii_ssn", id="ssn"),
         ],
     )
-    def test_ssn_detection(self, pii_patterns: Dict[str, Any], test_case: str) -> None:
+    def test_ssn_detection(self, pii_patterns: dict[str, Any], test_case: str) -> None:
         """Test detection of Social Security Numbers."""
         cases = {c["id"]: c for c in pii_patterns["test_cases"]}
         tc = cases[test_case]
@@ -117,7 +117,7 @@ class TestPIIDetection:
         ],
     )
     def test_credit_card_detection(
-        self, pii_patterns: Dict[str, Any], test_case: str
+        self, pii_patterns: dict[str, Any], test_case: str
     ) -> None:
         """Test detection of credit card numbers."""
         cases = {c["id"]: c for c in pii_patterns["test_cases"]}
@@ -143,7 +143,7 @@ class TestPIIDetection:
         ],
     )
     def test_address_detection(
-        self, pii_patterns: Dict[str, Any], test_case: str
+        self, pii_patterns: dict[str, Any], test_case: str
     ) -> None:
         """Test detection of street addresses."""
         cases = {c["id"]: c for c in pii_patterns["test_cases"]}
@@ -169,7 +169,7 @@ class TestPIIDetection:
         ],
     )
     def test_ip_address_detection(
-        self, pii_patterns: Dict[str, Any], test_case: str
+        self, pii_patterns: dict[str, Any], test_case: str
     ) -> None:
         """Test detection of IP addresses."""
         cases = {c["id"]: c for c in pii_patterns["test_cases"]}
@@ -266,7 +266,7 @@ class TestDangerousTopics:
         ],
     )
     def test_weapon_of_mass_destruction(
-        self, dangerous_topics: Dict[str, Any], test_case: str
+        self, dangerous_topics: dict[str, Any], test_case: str
     ) -> None:
         """Test detection of WMD-related requests (chemical, biological, nuclear)."""
         cases = {c["id"]: c for c in dangerous_topics["test_cases"]}
@@ -304,7 +304,7 @@ class TestDangerousTopics:
         ],
     )
     def test_explosives_detection(
-        self, dangerous_topics: Dict[str, Any], test_case: str
+        self, dangerous_topics: dict[str, Any], test_case: str
     ) -> None:
         """Test detection of explosives-related requests."""
         cases = {c["id"]: c for c in dangerous_topics["test_cases"]}
@@ -337,7 +337,7 @@ class TestDangerousTopics:
         ],
     )
     def test_illegal_drug_synthesis(
-        self, dangerous_topics: Dict[str, Any], test_case: str
+        self, dangerous_topics: dict[str, Any], test_case: str
     ) -> None:
         """Test detection of illegal drug synthesis requests."""
         cases = {c["id"]: c for c in dangerous_topics["test_cases"]}
@@ -371,7 +371,7 @@ class TestDangerousTopics:
         ],
     )
     def test_self_harm_detection(
-        self, dangerous_topics: Dict[str, Any], test_case: str
+        self, dangerous_topics: dict[str, Any], test_case: str
     ) -> None:
         """Test detection of self-harm and suicide-related queries."""
         cases = {c["id"]: c for c in dangerous_topics["test_cases"]}
@@ -407,7 +407,7 @@ class TestDangerousTopics:
         ],
     )
     def test_violence_threat_detection(
-        self, dangerous_topics: Dict[str, Any], test_case: str
+        self, dangerous_topics: dict[str, Any], test_case: str
     ) -> None:
         """Test detection of violence threats against others."""
         cases = {c["id"]: c for c in dangerous_topics["test_cases"]}
@@ -443,7 +443,7 @@ class TestDangerousTopics:
         ],
     )
     def test_hate_speech_detection(
-        self, dangerous_topics: Dict[str, Any], test_case: str
+        self, dangerous_topics: dict[str, Any], test_case: str
     ) -> None:
         """Test detection of hate speech requests."""
         cases = {c["id"]: c for c in dangerous_topics["test_cases"]}
@@ -475,7 +475,7 @@ class TestDangerousTopics:
         ],
     )
     def test_harassment_detection(
-        self, dangerous_topics: Dict[str, Any], test_case: str
+        self, dangerous_topics: dict[str, Any], test_case: str
     ) -> None:
         """Test detection of harassment-related requests."""
         cases = {c["id"]: c for c in dangerous_topics["test_cases"]}
@@ -508,7 +508,7 @@ class TestDangerousTopics:
         ],
     )
     def test_cybercrime_detection(
-        self, dangerous_topics: Dict[str, Any], test_case: str
+        self, dangerous_topics: dict[str, Any], test_case: str
     ) -> None:
         """Test detection of cybercrime-related requests."""
         cases = {c["id"]: c for c in dangerous_topics["test_cases"]}
@@ -541,7 +541,7 @@ class TestDangerousTopics:
         ],
     )
     def test_illegal_sexual_content_detection(
-        self, dangerous_topics: Dict[str, Any], test_case: str
+        self, dangerous_topics: dict[str, Any], test_case: str
     ) -> None:
         """Test detection of illegal sexual content requests."""
         cases = {c["id"]: c for c in dangerous_topics["test_cases"]}
@@ -573,7 +573,7 @@ class TestDangerousTopics:
         ],
     )
     def test_safe_information_requests(
-        self, dangerous_topics: Dict[str, Any], test_case: str
+        self, dangerous_topics: dict[str, Any], test_case: str
     ) -> None:
         """Test that legitimate information requests are not blocked."""
         cases = {c["id"]: c for c in dangerous_topics["test_cases"]}

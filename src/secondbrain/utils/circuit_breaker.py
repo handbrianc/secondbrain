@@ -106,6 +106,8 @@ class CircuitBreaker:
         self._success_count = 0
         self._last_failure_time: float | None = None
         self._half_open_calls = 0
+        self._current_recovery_timeout: float = self.config.recovery_timeout
+        self._backoff_multiplier: int = 1
 
         self._lock = threading.Lock()
 
@@ -135,7 +137,7 @@ class CircuitBreaker:
         """
         if self._state == CircuitState.OPEN and self._last_failure_time is not None:
             elapsed = time.monotonic() - self._last_failure_time
-            if elapsed >= self.config.recovery_timeout:
+            if elapsed >= self._current_recovery_timeout:
                 logger.debug(
                     "Circuit breaker [%s]: OPEN -> HALF_OPEN (timeout elapsed: %.2fs)",
                     self.service_name,
@@ -188,6 +190,9 @@ class CircuitBreaker:
                     self._failure_count = 0
                     self._success_count = 0
                     self._half_open_calls = 0
+                    # Reset backoff on successful recovery
+                    self._backoff_multiplier = 1
+                    self._current_recovery_timeout = self.config.recovery_timeout
             elif self._state == CircuitState.CLOSED:
                 # Reset failure count on success in closed state
                 self._failure_count = 0
@@ -223,6 +228,17 @@ class CircuitBreaker:
                 self._state = CircuitState.OPEN
                 self._success_count = 0
                 self._half_open_calls = 0
+                # Double the recovery timeout with exponential backoff (max 300s)
+                self._backoff_multiplier *= 2
+                self._current_recovery_timeout = min(
+                    self.config.recovery_timeout * self._backoff_multiplier, 300.0
+                )
+                logger.debug(
+                    "Circuit breaker [%s]: Recovery timeout increased to %.2fs (multiplier: %dx)",
+                    self.service_name,
+                    self._current_recovery_timeout,
+                    self._backoff_multiplier,
+                )
 
     def reset(self) -> None:
         """Reset circuit breaker to initial closed state."""
@@ -238,6 +254,8 @@ class CircuitBreaker:
             self._success_count = 0
             self._last_failure_time = None
             self._half_open_calls = 0
+            self._backoff_multiplier = 1
+            self._current_recovery_timeout = self.config.recovery_timeout
 
     def call(self, func: Callable[[], bool]) -> bool:
         """Execute a function through the circuit breaker.
@@ -290,6 +308,8 @@ class CircuitBreaker:
                 "failure_threshold": self.config.failure_threshold,
                 "success_threshold": self.config.success_threshold,
                 "recovery_timeout": self.config.recovery_timeout,
+                "current_recovery_timeout": self._current_recovery_timeout,
+                "backoff_multiplier": self._backoff_multiplier,
                 "half_open_max_calls": self.config.half_open_max_calls,
             }
 

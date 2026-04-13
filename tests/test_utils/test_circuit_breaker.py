@@ -324,3 +324,141 @@ class TestCircuitBreakerHalfOpenCalls:
         # 4th call should be blocked (still in half-open with no successes)
         # Note: This depends on implementation - some allow all calls until successes recorded
         # For now, we just verify the first 3 work
+
+
+@pytest.mark.circuit_breaker
+@pytest.mark.slow
+class TestCircuitBreakerExponentialBackoff:
+    """Test exponential backoff for circuit breaker recovery timeout."""
+
+    def test_timeout_doubles_on_half_open_failure(self):
+        """Test that recovery timeout doubles when circuit re-opens from HALF_OPEN."""
+        config = CircuitBreakerConfig(
+            failure_threshold=3,
+            success_threshold=2,
+            recovery_timeout=1.0,
+        )
+        cb = CircuitBreaker(config)
+
+        for _ in range(3):
+            cb.record_failure()
+        assert cb.state == CircuitState.OPEN
+
+        time.sleep(1.1)
+        assert cb.state == CircuitState.HALF_OPEN
+
+        cb.record_failure()
+        assert cb.state == CircuitState.OPEN
+
+        time.sleep(1.1)
+        assert cb.state == CircuitState.OPEN
+
+        time.sleep(1.0)
+        assert cb.state == CircuitState.HALF_OPEN
+
+    def test_timeout_caps_at_300_seconds(self):
+        """Test that recovery timeout is capped at 300 seconds."""
+        import time as time_module
+
+        config = CircuitBreakerConfig(
+            failure_threshold=2,
+            success_threshold=1,
+            recovery_timeout=100.0,
+        )
+        cb = CircuitBreaker(config)
+
+        current_time = 0.0
+
+        def mock_monotonic():
+            nonlocal current_time
+            return current_time
+
+        with patch.object(time_module, "monotonic", side_effect=mock_monotonic):
+            cb.record_failure()
+            cb.record_failure()
+            assert cb.state == CircuitState.OPEN
+
+            current_time += 200.0
+            assert cb.state == CircuitState.HALF_OPEN
+            cb.record_failure()
+            assert cb.state == CircuitState.OPEN
+
+            current_time += 200.0
+            assert cb.state == CircuitState.HALF_OPEN
+            cb.record_failure()
+            assert cb.state == CircuitState.OPEN
+
+            current_time += 300.0
+            assert cb.state == CircuitState.HALF_OPEN
+            cb.record_failure()
+            assert cb.state == CircuitState.OPEN
+
+            current_time += 300.0
+            assert cb.state == CircuitState.HALF_OPEN
+            cb.record_failure()
+            assert cb.state == CircuitState.OPEN
+
+            current_time += 300.0
+            assert cb.state == CircuitState.HALF_OPEN
+            cb.record_failure()
+            assert cb.state == CircuitState.OPEN
+
+        state_info = cb.get_state_info()
+        assert state_info["backoff_multiplier"] == 32
+        assert state_info["current_recovery_timeout"] == 300.0
+
+    def test_backoff_resets_on_successful_recovery(self):
+        """Test that backoff resets when circuit successfully closes."""
+        config = CircuitBreakerConfig(
+            failure_threshold=2,
+            success_threshold=1,
+            recovery_timeout=0.05,
+        )
+        cb = CircuitBreaker(config)
+
+        cb.record_failure()
+        cb.record_failure()
+        assert cb.state == CircuitState.OPEN
+
+        time.sleep(0.07)
+        assert cb.state == CircuitState.HALF_OPEN
+        cb.record_success()
+        assert cb.state == CircuitState.CLOSED
+
+        cb.record_failure()
+        cb.record_failure()
+        assert cb.state == CircuitState.OPEN
+
+        time.sleep(0.06)
+        assert cb.state == CircuitState.HALF_OPEN
+
+    def test_multiple_half_open_failures_double_timeout_progressively(self):
+        """Test that timeout doubles on each HALF_OPEN -> OPEN transition."""
+        config = CircuitBreakerConfig(
+            failure_threshold=2,
+            success_threshold=1,
+            recovery_timeout=0.05,
+        )
+        cb = CircuitBreaker(config)
+
+        cb.record_failure()
+        cb.record_failure()
+        assert cb.state == CircuitState.OPEN
+
+        time.sleep(0.06)
+        assert cb.state == CircuitState.HALF_OPEN
+        cb.record_failure()
+        assert cb.state == CircuitState.OPEN
+
+        time.sleep(0.11)
+        assert cb.state == CircuitState.HALF_OPEN
+        cb.record_failure()
+        assert cb.state == CircuitState.OPEN
+
+        time.sleep(0.21)
+        assert cb.state == CircuitState.HALF_OPEN
+        cb.record_failure()
+        assert cb.state == CircuitState.OPEN
+
+        time.sleep(0.41)
+        assert cb.state == CircuitState.HALF_OPEN

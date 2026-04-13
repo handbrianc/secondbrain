@@ -4,7 +4,8 @@ This module provides comprehensive unit tests for the RAGPipeline class,
 covering all public and private methods, edge cases, and orchestration logic.
 """
 
-from unittest.mock import MagicMock
+import asyncio
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -19,6 +20,7 @@ def mock_searcher() -> MagicMock:
     """Create a mock Searcher instance."""
     mock = MagicMock(spec=Searcher)
     mock.search.return_value = []
+    mock.search_async = AsyncMock(return_value=[])
     return mock
 
 
@@ -28,6 +30,7 @@ def mock_llm_provider() -> MagicMock:
     mock = MagicMock(spec=LocalLLMProvider)
     mock.generate.return_value = "Generated answer"
     mock.health_check.return_value = True
+    mock.agenerate = AsyncMock(return_value="Async generated answer")
     return mock
 
 
@@ -693,3 +696,204 @@ class TestRAGPipelineThreeLayerArchitecture:
 
         assert "Source: file.pdf (page 3)" in prompt
         assert "Text" in prompt
+
+
+class TestRAGPipelineAsync:
+    """Tests for RAGPipeline async methods."""
+
+    @pytest.mark.asyncio
+    async def test_query_async_single_turn_success(
+        self,
+        pipeline_with_mocks: RAGPipeline,
+        mock_searcher: MagicMock,
+        mock_llm_provider: MagicMock,
+    ) -> None:
+        """Test async single-turn query with successful retrieval and generation."""
+        mock_chunks = [
+            {
+                "chunk_text": "Python is a programming language",
+                "source_file": "python.pdf",
+                "page": 1,
+            }
+        ]
+        mock_searcher.search_async.return_value = mock_chunks
+        mock_llm_provider.agenerate.return_value = "Python is a high-level language"
+
+        result = await pipeline_with_mocks.query_async("What is Python?")
+
+        assert result["answer"] == "Python is a high-level language"
+        assert result["query"] == "What is Python?"
+        mock_searcher.search_async.assert_called_once_with("What is Python?", top_k=5)
+        mock_llm_provider.agenerate.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_query_async_with_show_sources(
+        self,
+        pipeline_with_mocks: RAGPipeline,
+        mock_searcher: MagicMock,
+    ) -> None:
+        """Test async query with show_sources=True includes chunks."""
+        mock_chunks = [
+            {
+                "chunk_text": "Test chunk",
+                "source_file": "test.pdf",
+                "page": 1,
+            }
+        ]
+        mock_searcher.search_async.return_value = mock_chunks
+
+        result = await pipeline_with_mocks.query_async("Test query", show_sources=True)
+
+        assert "sources" in result
+        assert result["sources"] == mock_chunks
+
+    @pytest.mark.asyncio
+    async def test_query_async_with_custom_top_k(
+        self,
+        pipeline_with_mocks: RAGPipeline,
+        mock_searcher: MagicMock,
+    ) -> None:
+        """Test async query with custom top_k parameter."""
+        mock_searcher.search_async.return_value = []
+
+        await pipeline_with_mocks.query_async("Test query", top_k=10)
+
+        mock_searcher.search_async.assert_called_once_with("Test query", top_k=10)
+
+    @pytest.mark.asyncio
+    async def test_query_async_with_no_results_and_show_sources(
+        self,
+        pipeline_with_mocks: RAGPipeline,
+        mock_searcher: MagicMock,
+    ) -> None:
+        """Test async query with no results and show_sources=True."""
+        mock_searcher.search_async.return_value = []
+
+        result = await pipeline_with_mocks.query_async("Test query", show_sources=True)
+
+        assert "sources" in result
+        assert result["sources"] == []
+        assert "couldn't find" in result["answer"].lower()
+
+    @pytest.mark.asyncio
+    async def test_query_async_handles_exception_gracefully(
+        self,
+        pipeline_with_mocks: RAGPipeline,
+        mock_searcher: MagicMock,
+    ) -> None:
+        """Test async query handles exceptions and returns error response."""
+        mock_searcher.search_async.side_effect = RuntimeError("Connection failed")
+
+        result = await pipeline_with_mocks.query_async("Test query")
+
+        assert "answer" in result
+        assert (
+            "error" in result["answer"].lower()
+            or "apologize" in result["answer"].lower()
+        )
+        assert result["query"] == "Test query"
+
+    @pytest.mark.asyncio
+    async def test_chat_async_multi_turn_with_history(
+        self,
+        pipeline_with_rewriter: RAGPipeline,
+        mock_searcher: MagicMock,
+        mock_llm_provider: MagicMock,
+        mock_rewriter: MagicMock,
+    ) -> None:
+        """Test async multi-turn chat with conversation history."""
+        session = ConversationSession("test-session", MagicMock(), context_window=10)
+        session.add_message("user", "What is Python?")
+        session.add_message("assistant", "Python is a language")
+
+        mock_chunks = [
+            {"chunk_text": "Python docs", "source_file": "docs.pdf", "page": 1}
+        ]
+        mock_searcher.search_async.return_value = mock_chunks
+        mock_llm_provider.agenerate.return_value = "More Python info"
+
+        result = await pipeline_with_rewriter.chat_async(
+            "What about libraries?", session
+        )
+
+        assert result["answer"] == "More Python info"
+        assert "rewritten_query" in result
+        mock_rewriter.rewrite_query.assert_called_once()
+        assert session.message_count == 4
+
+    @pytest.mark.asyncio
+    async def test_chat_async_without_rewriter(
+        self,
+        pipeline_with_mocks: RAGPipeline,
+        mock_searcher: MagicMock,
+        mock_llm_provider: MagicMock,
+    ) -> None:
+        """Test async chat without rewriter uses original query."""
+        session = ConversationSession("test-session", MagicMock(), context_window=10)
+        session.add_message("user", "Hello")
+
+        mock_searcher.search_async.return_value = [
+            {"chunk_text": "test", "source_file": "t.pdf", "page": 1}
+        ]
+
+        result = await pipeline_with_mocks.chat_async("How are you?", session)
+
+        assert result["answer"] == "Async generated answer"
+        assert result["rewritten_query"] == "How are you?"
+
+    @pytest.mark.asyncio
+    async def test_chat_async_with_show_sources(
+        self,
+        pipeline_with_rewriter: RAGPipeline,
+        mock_searcher: MagicMock,
+    ) -> None:
+        """Test async chat with show_sources=True."""
+        session = ConversationSession("test-session", MagicMock(), context_window=10)
+        mock_chunks = [{"chunk_text": "chunk", "source_file": "f.pdf", "page": 1}]
+        mock_searcher.search_async.return_value = mock_chunks
+
+        result = await pipeline_with_rewriter.chat_async(
+            "Query", session, show_sources=True
+        )
+
+        assert "sources" in result
+        assert result["sources"] == mock_chunks
+
+    @pytest.mark.asyncio
+    async def test_chat_async_with_no_results_and_show_sources(
+        self,
+        pipeline_with_rewriter: RAGPipeline,
+        mock_searcher: MagicMock,
+    ) -> None:
+        """Test async chat with no results and show_sources=True."""
+        session = ConversationSession("test-session", MagicMock(), context_window=10)
+        mock_searcher.search_async.return_value = []
+
+        result = await pipeline_with_rewriter.chat_async(
+            "Query", session, show_sources=True
+        )
+
+        assert (
+            result["answer"]
+            == "I couldn't find relevant documents for your query: Query"
+        )
+        assert "sources" in result
+        assert result["sources"] == []
+
+    @pytest.mark.asyncio
+    async def test_chat_async_handles_exception_gracefully(
+        self,
+        pipeline_with_rewriter: RAGPipeline,
+        mock_searcher: MagicMock,
+    ) -> None:
+        """Test async chat exception handling."""
+        session = ConversationSession("test-session", MagicMock(), context_window=10)
+        mock_searcher.search_async.side_effect = RuntimeError("Search failed")
+
+        result = await pipeline_with_rewriter.chat_async("Query", session)
+
+        assert "answer" in result
+        assert (
+            "apologize" in result["answer"].lower()
+            or "error" in result["answer"].lower()
+        )

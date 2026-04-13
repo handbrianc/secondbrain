@@ -3,8 +3,11 @@
 import io
 import json
 import logging
+import os
+from pathlib import Path
 
 import pytest
+from rich.logging import RichHandler
 
 from secondbrain.logging import (
     HealthStatus,
@@ -297,3 +300,102 @@ class TestCheckServices:
         """Test that check_services values are booleans."""
         result = check_services()
         assert isinstance(result["mongodb"], bool)
+
+
+class TestFileLogging:
+    """Tests for file logging with RotatingFileHandler."""
+
+    def test_setup_logging_with_log_file_creates_file_handler(
+        self, tmp_path: Path
+    ) -> None:
+        """Test that setup_logging adds RotatingFileHandler when log_file is set."""
+        log_file = tmp_path / "test.log"
+        root_logger = logging.getLogger()
+        root_logger.handlers.clear()
+
+        setup_logging(verbose=True, log_file=str(log_file))
+
+        assert len(root_logger.handlers) == 2  # RichHandler + RotatingFileHandler
+        assert any(
+            isinstance(h, logging.handlers.RotatingFileHandler)
+            for h in root_logger.handlers
+        )
+        assert log_file.exists()
+
+    def test_setup_logging_with_env_var_creates_file_handler(
+        self, tmp_path: Path
+    ) -> None:
+        """Test that setup_logging reads SECONDBRAIN_LOG_FILE env var."""
+        log_file = tmp_path / "env_test.log"
+        os.environ["SECONDBRAIN_LOG_FILE"] = str(log_file)
+
+        root_logger = logging.getLogger()
+        root_logger.handlers.clear()
+
+        setup_logging(verbose=True)
+
+        assert len(root_logger.handlers) == 2
+        assert log_file.exists()
+
+        del os.environ["SECONDBRAIN_LOG_FILE"]
+
+    def test_setup_logging_with_log_file_and_json_format(self, tmp_path: Path) -> None:
+        """Test that file logging works with JSON format."""
+        log_file = tmp_path / "test_json.log"
+        root_logger = logging.getLogger()
+        root_logger.handlers.clear()
+
+        setup_logging(verbose=True, json_format=True, log_file=str(log_file))
+
+        assert len(root_logger.handlers) == 2
+        assert log_file.exists()
+
+        # Write a test log
+        logger = get_logger("test_file_json")
+        logger.info("Test JSON message")
+
+        # Verify file contains JSON
+        content = log_file.read_text()
+        assert "Test JSON message" in content
+        # Should be parseable as JSON
+        json.loads(content.strip())
+
+    def test_rotating_file_handler_max_bytes(self, tmp_path: Path) -> None:
+        """Test that RotatingFileHandler respects max_bytes."""
+        log_file = tmp_path / "rotate_test.log"
+        root_logger = logging.getLogger()
+        root_logger.handlers.clear()
+
+        # Use small max_bytes for testing (1KB)
+        setup_logging(verbose=True, log_file=str(log_file), max_bytes=1024)
+
+        # Find the rotating file handler
+        file_handler = next(
+            h
+            for h in root_logger.handlers
+            if isinstance(h, logging.handlers.RotatingFileHandler)
+        )
+
+        assert file_handler.maxBytes == 1024
+
+    def test_file_logging_creates_parent_directories(self, tmp_path: Path) -> None:
+        """Test that parent directories are created for log file."""
+        log_file = tmp_path / "nested" / "dir" / "test.log"
+        root_logger = logging.getLogger()
+        root_logger.handlers.clear()
+
+        setup_logging(verbose=True, log_file=str(log_file))
+
+        assert log_file.parent.exists()
+        assert log_file.exists()
+
+    def test_file_logging_does_not_create_file_when_not_configured(self) -> None:
+        """Test that no file is created when log_file is not set."""
+        root_logger = logging.getLogger()
+        root_logger.handlers.clear()
+
+        setup_logging(verbose=True)
+
+        # Should only have console handler
+        assert len(root_logger.handlers) == 1
+        assert isinstance(root_logger.handlers[0], RichHandler)
