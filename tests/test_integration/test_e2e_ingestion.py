@@ -30,6 +30,8 @@ class TestEndToEndIngestion:
         mock_text.text = "Test content"
         mock_text.prov = [MagicMock(page_no=1)]
         mock_result.document.texts = [mock_text]
+
+        # Mock the convert method to return our mock result regardless of input
         mock_converter.convert.return_value = mock_result
         mock_converter_class.return_value = mock_converter
 
@@ -44,8 +46,9 @@ class TestEndToEndIngestion:
         mock_storage.store_batch.return_value = 1
         mock_storage_class.return_value = mock_storage
 
-        test_file = tmp_path / "test.pdf"
-        test_file.write_text("Test PDF content")
+        # Create a proper test file (use .md extension which is supported)
+        test_file = tmp_path / "test.md"
+        test_file.write_text("# Test content\n\nThis is test content.")
 
         ingestor = DocumentIngestor(chunk_size=1000, verbose=False)
         result = ingestor.ingest(str(test_file))
