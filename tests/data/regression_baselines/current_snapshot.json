@@ -1,0 +1,66 @@
+{
+  "version": "1.0.0",
+  "timestamp": "baseline_creation",
+  "queries": [
+    {
+      "id": "regression-001",
+      "query": "What is the default chunk size in SecondBrain?",
+      "baseline_answer": "I don't have access to the specific document you're referring to, and I couldn't find any information about \"SecondBrain\" or its default chunk size. It seems like there's a missing context.\n\nCould you please provide more information or clarify which document you're referring to? I'll do my best to help you with your question once I have more context.",
+      "response_time": 2.16247037499852,
+      "num_chunks": 0
+    },
+    {
+      "id": "regression-002",
+      "query": "How do I configure MongoDB connection URI?",
+      "baseline_answer": "The provided context doesn't mention the configuration of a MongoDB connection URI. The documents appear to be related to pytest and chunking tests, but they don't provide information on configuring MongoDB connection URIs.\n\nIf you're looking for information on configuring a MongoDB connection URI, I'd recommend searching for official MongoDB documentation or seeking guidance from a MongoDB expert.",
+      "response_time": 2.2308115839987295,
+      "num_chunks": 0
+    },
+    {
+      "id": "regression-003",
+      "query": "What document formats are supported?",
+      "baseline_answer": "Unfortunately, I don't see any information about supported document formats in the provided context. The text only discusses a \"Custom chunking test\" and a \"Test\", but doesn't mention anything about document formats. Could you please provide more context or clarify which documents you're referring to?",
+      "response_time": 1.957912124998984,
+      "num_chunks": 0
+    },
+    {
+      "id": "regression-004",
+      "query": "How to enable circuit breaker?",
+      "baseline_answer": "I don't see any information in the provided context about enabling circuit breakers. The documents seem to be related to a custom chunking test, but there is no mention of circuit breakers. I couldn't find any relevant information in the provided documents. Can you provide more context or clarify which document contains the information about circuit breakers?",
+      "response_time": 2.065993915995932,
+      "num_chunks": 0
+    },
+    {
+      "id": "regression-005",
+      "query": "What is the purpose of the Ingestor class?",
+      "baseline_answer": "Based on the provided context, I was unable to find any information about the Ingestor class. The documents only mention a Custom Chunking Test and a Test Example, but there is no reference to an Ingestor class or its purpose. If you can provide more context or clarify where this class is mentioned, I'll be happy to try and help further.",
+      "response_time": 2.006531584003824,
+      "num_chunks": 0
+    },
+    {
+      "id": "regression-006",
+      "query": "What is semantic search?",
+      "baseline_answer": "I don't have any information about the context of \"unknown\" or its page number, so I'll focus on what I can deduce from the provided documents.\n\nFrom the provided documents, it seems that you're discussing testing and chunking. However, I couldn't find any information about \"semantic search\" in the given PDF.\n\nSemantic search refers to a type of search query optimization technique where the search engine tries to understand the context and intent behind the user's search query, rather than just matching keywords. This concept is often discussed in the context of information retrieval and natural language processing.\n\nWithout more information about the connection between chunking tests and semantic search, I couldn't provide a detailed explanation or insight into what semantic search might mean in this specific context. If you have any additional information or clarification, I'd be happy to try and help further!",
+      "response_time": 2.6469448339921655,
+      "num_chunks": 0
+    },
+    {
+      "id": "regression-007",
+      "query": "How does the circuit breaker work?",
+      "baseline_answer": "Unfortunately, I don't have access to any documents beyond the provided PDF. However, based on common knowledge and understanding of circuit breakers, I can try to provide an answer.\n\nA circuit breaker is a safety device designed to protect electrical circuits from damage caused by overcurrent conditions such as short circuits, ground faults, or excessive voltage. When the current in the circuit exceeds a predetermined threshold, the circuit breaker trips, interrupting the power supply and preventing further damage to the circuit or equipment.\n\nThe exact mechanism of operation may vary depending on the type of circuit breaker, but most modern circuit breakers use electronic or mechanical sensors to detect changes in current flow. Once the breaker trips, it typically requires manual reset before power can be restored to the circuit.\n\nIn the context of chunking and testing, I'm assuming that the circuit breaker might be related to a specific implementation or framework (as hinted by the PDF title \"test_example_custom_chunking0\"). If you have more information about this context, I'd be happy to try and provide a more tailored answer.",
+      "response_time": 2.8731614999996964,
+      "num_chunks": 0
+    },
+    {
+      "id": "regression-008",
+      "query": "What is the benefit of multicore processing?",
+      "baseline_answer": "Based on the provided context, it appears that the documents are related to testing and chunking, but there is no explicit information about multicore processing. However, I can try to provide a general answer based on common knowledge.\n\nThe benefit of multicore processing lies in its ability to significantly improve system performance, especially for computationally intensive tasks like data processing, scientific simulations, and machine learning. By utilizing multiple central processing units (CPUs) or cores within a single processor, multicore processing can distribute workload more efficiently, reducing idle times between processes and increasing overall throughput.\n\nIn the context of chunking, which involves dividing large datasets into smaller, manageable pieces for processing, multicore processing can accelerate the processing of these chunks by parallelizing the tasks. This can lead to faster computation times, improved responsiveness, and enhanced productivity.\n\nPlease note that this answer is not directly derived from the provided documents but rather a general explanation based on common knowledge about multicore processing.",
+      "response_time": 2.8833386250043986,
+      "num_chunks": 0
+    }
+  ],
+  "metadata": {
+    "total_queries": 8,
+    "model": "all-MiniLM-L6-v2"
+  }
+}
