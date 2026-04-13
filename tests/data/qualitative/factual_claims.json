@@ -1,0 +1,420 @@
+{
+  "metadata": {
+    "version": "2.0.0",
+    "description": "Factual claims for verification and hallucination detection - 25 test cases",
+    "created": "2026-04-12",
+    "last_updated": "2026-04-12",
+    "author": "SecondBrain Testing Framework",
+    "categories": {
+      "fact_verification": "Tests for verifying factual claims about configuration, features, limitations, dependencies",
+      "contradiction_detection": "Tests for detecting internal, cross-document, temporal, and logical contradictions",
+      "source_attribution": "Tests for correct citations, no fabrication, and accuracy",
+      "temporal_accuracy": "Tests for version info, deprecated features, and current practices"
+    }
+  },
+  "test_cases": [
+    {
+      "id": "fv_config_python_version",
+      "description": "Verify correct Python version requirement",
+      "input": "What Python version does SecondBrain require?",
+      "context": "Project configuration",
+      "expected": {
+        "verifiable": true,
+        "fact": "Python >= 3.11",
+        "source": "pyproject.toml requires-python = \">=3.11\"",
+        "source_required": true,
+        "hallucination_risk": "low"
+      },
+      "category": "fact_verification",
+      "subcategory": "configuration",
+      "difficulty": "easy"
+    },
+    {
+      "id": "fv_config_mongodb_version",
+      "description": "Verify MongoDB version requirement",
+      "input": "What MongoDB version is required?",
+      "context": "Database dependency",
+      "expected": {
+        "verifiable": true,
+        "fact": "pymongo>=4.6.0 (requires MongoDB 7.0+ for vector search)",
+        "source": "pyproject.toml dependencies",
+        "source_required": true,
+        "hallucination_risk": "low"
+      },
+      "category": "fact_verification",
+      "subcategory": "configuration",
+      "difficulty": "medium"
+    },
+    {
+      "id": "fv_feature_embedding_model",
+      "description": "Verify embedding model support",
+      "input": "Which embedding model does SecondBrain use by default?",
+      "context": "Default configuration",
+      "expected": {
+        "verifiable": true,
+        "fact": "all-MiniLM-L6-v2 (configurable via SECONDBRAIN_LOCAL_EMBEDDING_MODEL)",
+        "source": "README.md configuration section",
+        "source_required": true,
+        "hallucination_risk": "low"
+      },
+      "category": "fact_verification",
+      "subcategory": "features",
+      "difficulty": "medium"
+    },
+    {
+      "id": "fv_feature_document_formats",
+      "description": "Verify supported document formats",
+      "input": "What document formats does SecondBrain support?",
+      "context": "Document ingestion capabilities",
+      "expected": {
+        "verifiable": true,
+        "fact": "PDF, DOCX, PPTX, XLSX, HTML, Markdown, images, audio (via Docling)",
+        "source": "README.md Document Processing section",
+        "source_required": true,
+        "hallucination_risk": "low"
+      },
+      "category": "fact_verification",
+      "subcategory": "features",
+      "difficulty": "easy"
+    },
+    {
+      "id": "fv_feature_vector_search",
+      "description": "Verify vector search capability",
+      "input": "Does SecondBrain support vector search?",
+      "context": "Search functionality",
+      "expected": {
+        "verifiable": true,
+        "fact": "MongoDB vector search",
+        "source": "README.md Features section",
+        "source_required": true,
+        "hallucination_risk": "low"
+      },
+      "category": "fact_verification",
+      "subcategory": "features",
+      "difficulty": "easy"
+    },
+    {
+      "id": "fv_limitation_no_github_actions",
+      "description": "Verify CI/CD policy limitation",
+      "input": "Does SecondBrain use GitHub Actions for CI/CD?",
+      "context": "Project policy",
+      "expected": {
+        "verifiable": true,
+        "fact": "No, GitHub Actions is explicitly prohibited - local development workflow only",
+        "source": "AGENTS.md CI/CD & Automation Policy section",
+        "source_required": true,
+        "hallucination_risk": "low"
+      },
+      "category": "fact_verification",
+      "subcategory": "limitations",
+      "difficulty": "medium"
+    },
+    {
+      "id": "fv_limitation_local_processing",
+      "description": "Verify local-only processing limitation",
+      "input": "Does SecondBrain send data to external servers?",
+      "context": "Privacy and data handling",
+      "expected": {
+        "verifiable": true,
+        "fact": "No, all processing happens locally - privacy-first design",
+        "source": "README.md Why SecondBrain section",
+        "source_required": true,
+        "hallucination_risk": "low"
+      },
+      "category": "fact_verification",
+      "subcategory": "limitations",
+      "difficulty": "easy"
+    },
+    {
+      "id": "fv_dependency_docling",
+      "description": "Verify Docling dependency version",
+      "input": "What version of Docling does SecondBrain use?",
+      "context": "Document parsing dependency",
+      "expected": {
+        "verifiable": true,
+        "fact": "docling>=2.81.0",
+        "source": "pyproject.toml dependencies",
+        "source_required": true,
+        "hallucination_risk": "low"
+      },
+      "category": "fact_verification",
+      "subcategory": "dependencies",
+      "difficulty": "easy"
+    },
+    {
+      "id": "fv_dependency_sentence_transformers",
+      "description": "Verify sentence-transformers version",
+      "input": "What version of sentence-transformers is required?",
+      "context": "Embedding model dependency",
+      "expected": {
+        "verifiable": true,
+        "fact": "sentence-transformers>=5.0.0",
+        "source": "pyproject.toml dependencies",
+        "source_required": true,
+        "hallucination_risk": "low"
+      },
+      "category": "fact_verification",
+      "subcategory": "dependencies",
+      "difficulty": "easy"
+    },
+    {
+      "id": "fv_dependency_ruff_linting",
+      "description": "Verify ruff version for linting",
+      "input": "What version of ruff is used for linting?",
+      "context": "Development dependency",
+      "expected": {
+        "verifiable": true,
+        "fact": "ruff>=0.15.5",
+        "source": "pyproject.toml dev dependencies",
+        "source_required": true,
+        "hallucination_risk": "low"
+      },
+      "category": "fact_verification",
+      "subcategory": "dependencies",
+      "difficulty": "easy"
+    },
+    {
+      "id": "cd_internal_contradiction_version",
+      "description": "Detect internal contradiction in version claims",
+      "input": "SecondBrain requires Python 3.9 but also uses features from Python 3.11",
+      "context": "Conflicting version requirements within documentation",
+      "expected": {
+        "contradiction_detected": true,
+        "contradiction_type": "internal",
+        "claim1": "Python 3.9 required",
+        "claim2": "Python 3.11+ required",
+        "resolution": "Python >= 3.11 is correct",
+        "severity": "high"
+      },
+      "category": "contradiction_detection",
+      "subcategory": "internal",
+      "difficulty": "medium"
+    },
+    {
+      "id": "cd_cross_doc_feature_contradiction",
+      "description": "Detect cross-document feature contradiction",
+      "input": "README says async is supported but architecture docs say it's not",
+      "context": "Conflicting information across documentation files",
+      "expected": {
+        "contradiction_detected": true,
+        "contradiction_type": "cross-document",
+        "source1": "README.md",
+        "source2": "architecture docs",
+        "resolution": "Async support is confirmed in README",
+        "severity": "medium"
+      },
+      "category": "contradiction_detection",
+      "subcategory": "cross-document",
+      "difficulty": "hard"
+    },
+    {
+      "id": "cd_temporal_feature_deprecation",
+      "description": "Detect temporal contradiction with deprecated features",
+      "input": "MongoDB 6.0 is recommended for vector search",
+      "context": "Outdated version recommendation",
+      "expected": {
+        "contradiction_detected": true,
+        "contradiction_type": "temporal",
+        "old_claim": "MongoDB 6.0 recommended",
+        "current_fact": "MongoDB 7.0+ required for vector search",
+        "resolution": "Version 7.0+ is current requirement",
+        "severity": "high"
+      },
+      "category": "contradiction_detection",
+      "subcategory": "temporal",
+      "difficulty": "medium"
+    },
+    {
+      "id": "cd_logical_dependency_chain",
+      "description": "Detect logical contradiction in dependency chain",
+      "input": "SecondBrain depends on pymongo which requires motor, but motor is not listed",
+      "context": "Dependency chain analysis",
+      "expected": {
+        "contradiction_detected": false,
+        "contradiction_type": "logical",
+        "fact": "motor>=3.0.0 IS listed in dependencies",
+        "resolution": "No contradiction - motor is explicitly listed",
+        "severity": "low"
+      },
+      "category": "contradiction_detection",
+      "subcategory": "logical",
+      "difficulty": "medium"
+    },
+    {
+      "id": "cd_internal_cli_contradiction",
+      "description": "Detect internal CLI command contradiction",
+      "input": "The CLI has both 'secondbrain list' and 'secondbrain ls' commands",
+      "context": "CLI command documentation",
+      "expected": {
+        "contradiction_detected": false,
+        "contradiction_type": "internal",
+        "fact": "'secondbrain ls' is the correct command (alias for list)",
+        "resolution": "ls is shorthand for list, not a contradiction",
+        "severity": "low"
+      },
+      "category": "contradiction_detection",
+      "subcategory": "internal",
+      "difficulty": "easy"
+    },
+    {
+      "id": "cd_cross_doc_security_contradiction",
+      "description": "Detect cross-document security policy contradiction",
+      "input": "Security scan script recommends Bandit but pyproject.toml ignores B101",
+      "context": "Security scanning configuration",
+      "expected": {
+        "contradiction_detected": false,
+        "contradiction_type": "cross-document",
+        "fact": "B101 (assert statement) ignored is intentional for test files",
+        "resolution": "No contradiction - intentional configuration",
+        "severity": "low"
+      },
+      "category": "contradiction_detection",
+      "subcategory": "cross-document",
+      "difficulty": "hard"
+    },
+    {
+      "id": "sa_citation_pyproject",
+      "description": "Verify correct citation of pyproject.toml",
+      "input": "Where is the SecondBrain version defined?",
+      "context": "Project configuration citation",
+      "expected": {
+        "citation_correct": true,
+        "source": "pyproject.toml [project] section",
+        "fact": "version = \"0.4.0\"",
+        "fabrication_detected": false,
+        "accuracy": "high"
+      },
+      "category": "source_attribution",
+      "subcategory": "correct_citations",
+      "difficulty": "easy"
+    },
+    {
+      "id": "sa_citation_readme",
+      "description": "Verify correct citation of README features",
+      "input": "What are the main features listed in README?",
+      "context": "Feature documentation citation",
+      "expected": {
+        "citation_correct": true,
+        "source": "README.md Features section",
+        "fact": "Document Processing, Search & Retrieval, Production Features, Developer Experience",
+        "fabrication_detected": false,
+        "accuracy": "high"
+      },
+      "category": "source_attribution",
+      "subcategory": "correct_citations",
+      "difficulty": "easy"
+    },
+    {
+      "id": "sa_no_fabrication_nonexistent_file",
+      "description": "Detect fabrication of non-existent file",
+      "input": "What does docs/SECURITY_POLICY.md say about penetration testing?",
+      "context": "File that doesn't exist",
+      "expected": {
+        "citation_correct": false,
+        "fabrication_detected": true,
+        "reason": "File docs/SECURITY_POLICY.md does not exist",
+        "appropriate_response": "That file does not exist in the project",
+        "accuracy": "N/A"
+      },
+      "category": "source_attribution",
+      "subcategory": "no_fabrication",
+      "difficulty": "hard"
+    },
+    {
+      "id": "sa_no_fabrication_nonexistent_feature",
+      "description": "Detect fabrication of non-existent feature",
+      "input": "How does SecondBrain integrate with AWS S3?",
+      "context": "Feature that doesn't exist",
+      "expected": {
+        "citation_correct": false,
+        "fabrication_detected": true,
+        "reason": "AWS S3 integration is not a supported feature",
+        "appropriate_response": "SecondBrain does not currently support AWS S3 integration",
+        "accuracy": "N/A"
+      },
+      "category": "source_attribution",
+      "subcategory": "no_fabrication",
+      "difficulty": "hard"
+    },
+    {
+      "id": "sa_accuracy_dependency_version",
+      "description": "Verify accurate dependency version citation",
+      "input": "What is the exact pytest version requirement?",
+      "context": "Dev dependency version",
+      "expected": {
+        "citation_correct": true,
+        "source": "pyproject.toml [project.optional-dependencies] dev",
+        "fact": "pytest>=8.0.0",
+        "fabrication_detected": false,
+        "accuracy": "high"
+      },
+      "category": "source_attribution",
+      "subcategory": "accuracy",
+      "difficulty": "easy"
+    },
+    {
+      "id": "ta_version_python_release",
+      "description": "Verify Python version release timing",
+      "input": "When was Python 3.11 released?",
+      "context": "Python release schedule",
+      "expected": {
+        "temporal_accurate": true,
+        "fact": "Python 3.11 was released in October 2022",
+        "source_required": true,
+        "current_as_of": "2026-04-12",
+        "accuracy": "high"
+      },
+      "category": "temporal_accuracy",
+      "subcategory": "version_info",
+      "difficulty": "medium"
+    },
+    {
+      "id": "ta_deprecated_mongodb_api",
+      "description": "Verify deprecated MongoDB API handling",
+      "input": "Is MongoDB find_and_modify still supported?",
+      "context": "Deprecated API question",
+      "expected": {
+        "temporal_accurate": true,
+        "fact": "find_and_modify is deprecated, use findOneAndUpdate instead",
+        "source_required": true,
+        "deprecation_notice": "Older API, newer alternatives available",
+        "accuracy": "high"
+      },
+      "category": "temporal_accuracy",
+      "subcategory": "deprecated_features",
+      "difficulty": "medium"
+    },
+    {
+      "id": "ta_current_embedding_practice",
+      "description": "Verify current embedding model practices",
+      "input": "Is all-MiniLM-L6-v2 still a recommended embedding model in 2026?",
+      "context": "Current best practices",
+      "expected": {
+        "temporal_accurate": true,
+        "fact": "all-MiniLM-L6-v2 remains a valid choice for lightweight applications",
+        "source_required": true,
+        "note": "Newer models available but this remains efficient",
+        "accuracy": "high"
+      },
+      "category": "temporal_accuracy",
+      "subcategory": "current_practices",
+      "difficulty": "medium"
+    },
+    {
+      "id": "ta_project_version_current",
+      "description": "Verify current project version",
+      "input": "What is the current version of SecondBrain?",
+      "context": "Project version information",
+      "expected": {
+        "temporal_accurate": true,
+        "fact": "0.4.0",
+        "source": "pyproject.toml",
+        "as_of_date": "2026-04-12",
+        "accuracy": "high"
+      },
+      "category": "temporal_accuracy",
+      "subcategory": "version_info",
+      "difficulty": "easy"
+    }
+  ]
+}

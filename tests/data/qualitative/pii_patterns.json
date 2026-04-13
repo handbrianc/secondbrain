@@ -1,0 +1,170 @@
+{
+  "metadata": {
+    "version": "1.0.0",
+    "description": "PII (Personally Identifiable Information) patterns for testing sensitive data detection and redaction",
+    "created": "2026-04-12",
+    "last_updated": "2026-04-12",
+    "author": "SecondBrain Testing Framework"
+  },
+  "test_cases": [
+    {
+      "id": "pii_email_simple",
+      "description": "Detect simple email addresses",
+      "input": "Contact us at support@example.com for assistance",
+      "expected": {
+        "detected": true,
+        "pii_type": "email",
+        "redacted": "Contact us at [EMAIL] for assistance",
+        "confidence": 0.95
+      },
+      "category": "email",
+      "severity": "high"
+    },
+    {
+      "id": "pii_email_multiple",
+      "description": "Detect multiple email addresses in text",
+      "input": "Send to alice@example.com and bob@test.org for approval",
+      "expected": {
+        "detected": true,
+        "pii_type": "email",
+        "count": 2,
+        "redacted": "Send to [EMAIL] and [EMAIL] for approval",
+        "confidence": 0.95
+      },
+      "category": "email",
+      "severity": "high"
+    },
+    {
+      "id": "pii_phone_us",
+      "description": "Detect US phone numbers in various formats",
+      "input": "Call me at (555) 123-4567 or 555-987-6543",
+      "expected": {
+        "detected": true,
+        "pii_type": "phone",
+        "count": 2,
+        "redacted": "Call me at [PHONE] or [PHONE]",
+        "confidence": 0.92
+      },
+      "category": "phone",
+      "severity": "high"
+    },
+    {
+      "id": "pii_ssn",
+      "description": "Detect Social Security Numbers",
+      "input": "SSN: 123-45-6789 for verification",
+      "expected": {
+        "detected": true,
+        "pii_type": "ssn",
+        "redacted": "SSN: [SSN] for verification",
+        "confidence": 0.98
+      },
+      "category": "ssn",
+      "severity": "critical"
+    },
+    {
+      "id": "pii_credit_card",
+      "description": "Detect credit card numbers",
+      "input": "Card number: 4111-1111-1111-1111",
+      "expected": {
+        "detected": true,
+        "pii_type": "credit_card",
+        "redacted": "Card number: [CC]",
+        "confidence": 0.97
+      },
+      "category": "financial",
+      "severity": "critical"
+    },
+    {
+      "id": "pii_address",
+      "description": "Detect street addresses",
+      "input": "Ship to 123 Main Street, New York, NY 10001",
+      "expected": {
+        "detected": true,
+        "pii_type": "address",
+        "redacted": "Ship to [ADDRESS]",
+        "confidence": 0.85
+      },
+      "category": "address",
+      "severity": "high"
+    },
+    {
+      "id": "pii_name_context",
+      "description": "Detect personal names in context",
+      "input": "John Smith was born on January 15, 1985",
+      "expected": {
+        "detected": true,
+        "pii_type": "name",
+        "redacted": "[NAME] was born on [DATE]",
+        "confidence": 0.80
+      },
+      "category": "name",
+      "severity": "medium"
+    },
+    {
+      "id": "pii_date_of_birth",
+      "description": "Detect dates of birth",
+      "input": "DOB: 03/25/1990",
+      "expected": {
+        "detected": true,
+        "pii_type": "date_of_birth",
+        "redacted": "DOB: [DOB]",
+        "confidence": 0.90
+      },
+      "category": "date",
+      "severity": "high"
+    },
+    {
+      "id": "pii_ip_address",
+      "description": "Detect IP addresses",
+      "input": "Connected from 192.168.1.100",
+      "expected": {
+        "detected": true,
+        "pii_type": "ip_address",
+        "redacted": "Connected from [IP]",
+        "confidence": 0.93
+      },
+      "category": "network",
+      "severity": "medium"
+    },
+    {
+      "id": "pii_driver_license",
+      "description": "Detect driver's license numbers",
+      "input": "License: D1234567 California",
+      "expected": {
+        "detected": true,
+        "pii_type": "drivers_license",
+        "redacted": "License: [DL] California",
+        "confidence": 0.88
+      },
+      "category": "government_id",
+      "severity": "critical"
+    },
+    {
+      "id": "pii_no_false_positive",
+      "description": "Ensure non-PII is not flagged",
+      "input": "The meeting is at 3pm in room 101",
+      "expected": {
+        "detected": false,
+        "pii_type": null,
+        "redacted": "The meeting is at 3pm in room 101",
+        "confidence": 0.95
+      },
+      "category": "negative",
+      "severity": "low"
+    },
+    {
+      "id": "pii_combined",
+      "description": "Detect multiple PII types in single document",
+      "input": "John Smith (john.smith@email.com, SSN: 123-45-6789, Phone: 555-123-4567) lives at 456 Oak Ave",
+      "expected": {
+        "detected": true,
+        "pii_types": ["name", "email", "ssn", "phone", "address"],
+        "count": 5,
+        "redacted": "[NAME] ([EMAIL], SSN: [SSN], Phone: [PHONE]) lives at [ADDRESS]",
+        "confidence": 0.92
+      },
+      "category": "combined",
+      "severity": "critical"
+    }
+  ]
+}
