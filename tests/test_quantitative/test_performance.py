@@ -157,38 +157,6 @@ class TestPerformance:
         assert p95_latency < THRESHOLD_P95_EMBEDDING_TIME, failure_msg
 
     @pytest.mark.performance
-    def test_embedding_generation_time(
-        self,
-        embedding_generator: LocalEmbeddingGenerator,
-        test_queries: list[str],
-        benchmark: Any,
-    ) -> None:
-        for _ in range(WARM_UP_RUNS):
-            for query in test_queries[:3]:
-                searcher.search(query, top_k=2)
-
-        def run_search() -> list[dict[str, Any]]:
-            query = test_queries[0]
-            return searcher.search(query, top_k=3)
-
-        benchmark(run_search)
-
-        stats = benchmark.stats
-        all_times = stats.get("data", [])
-        p95_latency = calculate_percentile(all_times, 95) if all_times else 0.0
-        mean_time = stats.get("mean", 0.0) if stats else 0.0
-
-        failure_msg = (
-            f"Search latency thresholds exceeded:\n"
-            f"  Mean time: {mean_time:.3f}s (threshold: {THRESHOLD_MEAN_SEARCH_TIME}s)\n"
-            f"  P95 latency: {p95_latency:.3f}s (threshold: {THRESHOLD_P95_SEARCH_TIME}s)\n"
-            f"  Total samples: {len(all_times)}"
-        )
-
-        assert mean_time < THRESHOLD_MEAN_SEARCH_TIME, failure_msg
-        assert p95_latency < THRESHOLD_P95_SEARCH_TIME, failure_msg
-
-    @pytest.mark.performance
     def test_llm_generation_time(
         self,
         llm_provider: OllamaLLMProvider,

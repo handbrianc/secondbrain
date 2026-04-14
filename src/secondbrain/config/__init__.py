@@ -84,6 +84,10 @@ class Config(BaseSettings):
     )
 
     # Local LLM settings (Ollama)
+    llm_provider: str = Field(
+        default="ollama",
+        description="LLM provider type (ollama, openai)",
+    )
     ollama_host: str = Field(
         default="http://localhost:11434",
         description="Ollama API endpoint",

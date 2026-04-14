@@ -172,3 +172,25 @@ class OpenAILLMProvider(LocalLLMProvider):
             return True
         except Exception:
             return False
+
+    async def agenerate(
+        self,
+        prompt: str,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> str:
+        """Generate response asynchronously using OpenAI chat API.
+
+        Args:
+            prompt: User prompt text.
+            temperature: Override default temperature (0.0-2.0).
+            max_tokens: Override default max tokens to generate.
+
+        Returns:
+            Generated response text.
+
+        Raises:
+            ServiceUnavailableError: If OpenAI API is unreachable.
+            RuntimeError: If generation fails.
+        """
+        return await self.generate_async(prompt, temperature, max_tokens)

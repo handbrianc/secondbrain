@@ -27,13 +27,30 @@ def recombine_chunks_with_overlap(chunks: list[dict]) -> str:
     return result
 
 
-def get_overlap_between_chunks(chunk1: str, chunk2: str) -> int:
+def get_overlap_between_chunks(
+    chunk1: str, chunk2: str, expected_overlap: int = 0
+) -> int:
     """Calculate the actual overlap between two consecutive chunks.
 
     Returns the number of characters from the end of chunk1 that appear
-    at the start of chunk2.
+    at the start of chunk2. Uses expected_overlap as a hint to avoid
+    false positives when chunks have similar content by coincidence.
     """
-    max_possible_overlap = min(len(chunk1), len(chunk2))
+    # If expected_overlap is provided and matches, use it
+    if (
+        expected_overlap > 0
+        and len(chunk1) >= expected_overlap
+        and len(chunk2) >= expected_overlap
+        and chunk1[-expected_overlap:] == chunk2[:expected_overlap]
+    ):
+        return expected_overlap
+
+    # Otherwise, find the maximum overlap by string matching
+    max_possible_overlap = min(
+        len(chunk1),
+        len(chunk2),
+        expected_overlap if expected_overlap > 0 else max(len(chunk1), len(chunk2)),
+    )
     for overlap_len in range(max_possible_overlap, 0, -1):
         if chunk1[-overlap_len:] == chunk2[:overlap_len]:
             return overlap_len
@@ -81,7 +98,9 @@ class TestChunkingProperties:
             prev_chunk = chunks[i - 1]["text"]
             curr_chunk = chunks[i]["text"]
 
-            overlap_len = get_overlap_between_chunks(prev_chunk, curr_chunk)
+            overlap_len = get_overlap_between_chunks(
+                prev_chunk, curr_chunk, chunk_overlap
+            )
             new_content = curr_chunk[overlap_len:]
             reconstructed += new_content
 

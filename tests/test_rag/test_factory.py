@@ -38,6 +38,7 @@ class TestLLMProviderFactory:
     def test_create_from_config(self):
         """Test creating provider from config."""
         mock_config = MagicMock()
+        mock_config.llm_provider = "ollama"
         mock_config.ollama_host = "http://config-host:11434"
         mock_config.llm_model = "config-model"
         mock_config.llm_temperature = 0.9

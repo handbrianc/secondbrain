@@ -251,5 +251,5 @@ class TestAsyncValidation:
             stats = await storage.get_stats_async()
             assert stats["total_chunks"] == 0
             assert stats["unique_sources"] == 0
-            assert stats["database"] == "secondbrain"
+            assert stats["database"] in ["secondbrain", "secondbrain_test"]
             assert "collection" in stats

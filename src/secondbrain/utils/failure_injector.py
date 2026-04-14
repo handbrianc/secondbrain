@@ -23,7 +23,7 @@ Usage:
 import logging
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
@@ -282,11 +282,10 @@ class FailureInjector:
                         return False
 
                     # Check repeat count
-                    if config.repeat_count is not None:
-                        if self._failure_count >= config.repeat_count:
-                            return False
-
-                    return True
+                    return (
+                        config.repeat_count is None
+                        or self._failure_count < config.repeat_count
+                    )
 
             return False
 
@@ -318,14 +317,20 @@ class FailureInjector:
             msg = error_message or f"Injected timeout after {timeout_value}s"
             raise InjectedTimeoutError(msg, timeout_value)
         elif failure_type == FailureType.CONNECTION_ERROR:
-            msg = error_message or (
-                config.error_message if config else "Injected connection error"
-            )
+            if error_message is not None:
+                msg = error_message
+            elif config is not None and config.error_message is not None:
+                msg = config.error_message
+            else:
+                msg = "Injected connection error"
             raise InjectedConnectionError(msg)
         elif failure_type == FailureType.GENERAL_FAILURE:
-            msg = error_message or (
-                config.error_message if config else "Injected general failure"
-            )
+            if error_message is not None:
+                msg = error_message
+            elif config is not None and config.error_message is not None:
+                msg = config.error_message
+            else:
+                msg = "Injected general failure"
             raise InjectedFailureError(msg)
         elif failure_type == FailureType.SLOW_RESPONSE:
             # Slow response is handled differently - it delays instead of raising
@@ -536,7 +541,7 @@ def inject_timeout(
     timeout_value: float = 30.0,
     error_message: str | None = None,
 ) -> Any:
-    """Convenience function to inject timeout failures.
+    """Inject timeout failures.
 
     Args:
         duration: How long the injection lasts. None for indefinite.
@@ -560,7 +565,7 @@ def inject_connection_error(
     delay: float = 0.0,
     error_message: str | None = None,
 ) -> Any:
-    """Convenience function to inject connection errors.
+    """Inject connection errors.
 
     Args:
         duration: How long the injection lasts. None for indefinite.
@@ -583,7 +588,7 @@ def inject_general_failure(
     error_message: str | None = None,
     probability: float = 1.0,
 ) -> Any:
-    """Convenience function to inject general failures.
+    """Inject general failures.
 
     Args:
         duration: How long the injection lasts. None for indefinite.
@@ -604,7 +609,7 @@ def inject_general_failure(
 
 # Pytest fixture for automatic cleanup
 @pytest.fixture
-def failure_injector() -> FailureInjector:
+def failure_injector() -> Generator[FailureInjector, None, None]:
     """Pytest fixture providing FailureInjector with automatic cleanup.
 
     Yields:

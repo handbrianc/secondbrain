@@ -9,7 +9,7 @@ import re
 from typing import TYPE_CHECKING, Any, ClassVar
 
 if TYPE_CHECKING:
-    from secondbrain.rag.providers.ollama import OllamaLLMProvider
+    from secondbrain.rag.interfaces import LocalLLMProvider
 
 logger = logging.getLogger(__name__)
 
@@ -84,13 +84,13 @@ class QueryRewriter:
 
     def __init__(
         self,
-        llm_provider: "OllamaLLMProvider",
+        llm_provider: "LocalLLMProvider",
         context_window: int = 5,
     ) -> None:
         """Initialize rewriter with LLM provider.
 
         Args:
-            llm_provider: OllamaLLMProvider instance for generating rewrites
+            llm_provider: LocalLLMProvider instance for generating rewrites
             context_window: Number of recent turns to use for context (default: 5)
 
         Example:

@@ -83,8 +83,8 @@ def ingest(
     from secondbrain.document import DocumentIngestor
 
     config = get_config()
-    chunk_size = chunk_size or config.chunk_size
-    chunk_overlap = chunk_overlap or config.chunk_overlap
+    chunk_size = config.chunk_size if chunk_size is None else chunk_size
+    chunk_overlap = config.chunk_overlap if chunk_overlap is None else chunk_overlap
 
     # Validate and resolve core count
     if cores is not None:
