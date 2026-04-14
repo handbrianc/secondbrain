@@ -50,7 +50,7 @@ class TestConfig:
         with patch.dict(
             os.environ,
             {
-                "SECONDBRAIN_MONGO_URI": "mongodb://localhost:27017",
+                "SECONDBRAIN_MONGO_URI": "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin",
                 "SECONDBRAIN_MONGO_DB": "secondbrain",
                 "SECONDBRAIN_MONGO_COLLECTION": "embeddings",
                 "SECONDBRAIN_LOCAL_EMBEDDING_MODEL": "all-MiniLM-L6-v2",
@@ -64,7 +64,7 @@ class TestConfig:
             get_config.cache_clear()
             config = Config()
 
-            assert config.mongo_uri == "mongodb://localhost:27017"
+            assert config.mongo_uri == "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
             assert config.mongo_db == "secondbrain"
             assert config.mongo_collection == "embeddings"
             assert config.local_embedding_model == "all-MiniLM-L6-v2"
@@ -76,7 +76,7 @@ class TestConfig:
     def test_custom_config_values(self) -> None:
         """Test custom configuration values."""
         config = Config(
-            mongo_uri="mongodb://custom:27017",
+            mongo_uri="mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin",
             mongo_db="custom_db",
             mongo_collection="custom_collection",
             local_embedding_model="custom-model:latest",
@@ -86,7 +86,7 @@ class TestConfig:
             embedding_dimensions=384,
         )
 
-        assert config.mongo_uri == "mongodb://custom:27017"
+        assert config.mongo_uri == "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
         assert config.mongo_db == "custom_db"
         assert config.mongo_collection == "custom_collection"
         assert config.local_embedding_model == "custom-model:latest"
@@ -112,7 +112,7 @@ class TestConfig:
     def test_config_validation_errors(self, updates, expected) -> None:
         """Test that config validation raises errors for invalid values."""
         base = {
-            "mongo_uri": "mongodb://localhost:27017",
+            "mongo_uri": "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin",
             "chunk_size": 64,
             "chunk_overlap": 16,
             "embedding_dimensions": 128,
@@ -141,7 +141,7 @@ class TestConfig:
         """Test valid embedding_cache_size values."""
         # Test default value
         config = Config(
-            mongo_uri="mongodb://localhost:27017",
+            mongo_uri="mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin",
             chunk_size=64,
             chunk_overlap=16,
             embedding_dimensions=128,
@@ -151,7 +151,7 @@ class TestConfig:
 
         # Test custom values
         config = Config(
-            mongo_uri="mongodb://localhost:27017",
+            mongo_uri="mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin",
             chunk_size=64,
             chunk_overlap=16,
             embedding_dimensions=128,
@@ -162,7 +162,7 @@ class TestConfig:
 
         # Test zero (disables cache)
         config = Config(
-            mongo_uri="mongodb://localhost:27017",
+            mongo_uri="mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin",
             chunk_size=64,
             chunk_overlap=16,
             embedding_dimensions=128,
@@ -177,7 +177,7 @@ class TestConfig:
             ValueError, match="embedding_cache_size must be non-negative"
         ):
             Config(
-                mongo_uri="mongodb://localhost:27017",
+                mongo_uri="mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin",
                 chunk_size=64,
                 chunk_overlap=16,
                 embedding_dimensions=128,
@@ -189,7 +189,7 @@ class TestConfig:
         """Test valid embedding_batch_size values."""
         # Test default value
         config = Config(
-            mongo_uri="mongodb://localhost:27017",
+            mongo_uri="mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin",
             chunk_size=64,
             chunk_overlap=16,
             embedding_dimensions=128,
@@ -199,7 +199,7 @@ class TestConfig:
 
         # Test custom values
         config = Config(
-            mongo_uri="mongodb://localhost:27017",
+            mongo_uri="mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin",
             chunk_size=64,
             chunk_overlap=16,
             embedding_dimensions=128,
@@ -210,7 +210,7 @@ class TestConfig:
 
         # Test boundary values
         config = Config(
-            mongo_uri="mongodb://localhost:27017",
+            mongo_uri="mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin",
             chunk_size=64,
             chunk_overlap=16,
             embedding_dimensions=128,
@@ -220,7 +220,7 @@ class TestConfig:
         assert config.embedding_batch_size == 1
 
         config = Config(
-            mongo_uri="mongodb://localhost:27017",
+            mongo_uri="mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin",
             chunk_size=64,
             chunk_overlap=16,
             embedding_dimensions=128,
@@ -236,7 +236,7 @@ class TestConfig:
             ValueError, match="embedding_batch_size must be between 1 and 100"
         ):
             Config(
-                mongo_uri="mongodb://localhost:27017",
+                mongo_uri="mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin",
                 chunk_size=64,
                 chunk_overlap=16,
                 embedding_dimensions=128,
@@ -249,7 +249,7 @@ class TestConfig:
             ValueError, match="embedding_batch_size must be between 1 and 100"
         ):
             Config(
-                mongo_uri="mongodb://localhost:27017",
+                mongo_uri="mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin",
                 chunk_size=64,
                 chunk_overlap=16,
                 embedding_dimensions=128,
@@ -262,7 +262,7 @@ class TestConfig:
             ValueError, match="embedding_batch_size must be between 1 and 100"
         ):
             Config(
-                mongo_uri="mongodb://localhost:27017",
+                mongo_uri="mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin",
                 chunk_size=64,
                 chunk_overlap=16,
                 embedding_dimensions=128,

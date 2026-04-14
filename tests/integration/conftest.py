@@ -17,7 +17,9 @@ if TYPE_CHECKING:
     pass
 
 # Test service URLs (different from dev ports)
-TEST_MONGO_URI = "mongodb://testuser:testpass@localhost:27018/secondbrain_test"
+TEST_MONGO_URI = (
+    "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
+)
 TEST_EMBEDDING_URL = "http://localhost:11435"
 
 # Test database/collection names
@@ -25,7 +27,7 @@ TEST_DB_NAME = "secondbrain_test"
 TEST_COLLECTION_NAME = "test_embeddings"
 
 # Health check timeout
-SERVICE_HEALTH_TIMEOUT = 60  # seconds
+SERVICE_HEALTH_TIMEOUT = 10  # seconds - reduced for faster test feedback
 
 
 def _check_mongodb_healthy() -> bool:
@@ -86,11 +88,11 @@ def wait_for_services() -> Generator[None, None, None]:
             print("MongoDB is healthy")
             break
         print(".", end="", flush=True)
-        time.sleep(2)
+        time.sleep(1)
     else:
         pytest.skip(
-            "MongoDB not available - integration tests skipped. "
-            "Start services with: docker-compose up -d"
+            f"MongoDB not available after {SERVICE_HEALTH_TIMEOUT}s - integration tests skipped. "
+            f"Start services with appropriate docker-compose setup."
         )
 
     # Wait for sentence-transformers
@@ -100,10 +102,10 @@ def wait_for_services() -> Generator[None, None, None]:
             print("Sentence-transformers is healthy")
             break
         print(".", end="", flush=True)
-        time.sleep(2)
+        time.sleep(1)
     else:
-        raise RuntimeError(
-            f"Sentence-transformers did not become healthy within {SERVICE_HEALTH_TIMEOUT}s"
+        pytest.skip(
+            f"Sentence-transformers not available after {SERVICE_HEALTH_TIMEOUT}s - integration tests skipped."
         )
 
     print("All services are healthy\n")

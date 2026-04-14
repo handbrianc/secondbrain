@@ -124,13 +124,13 @@ def storage_with_index(test_collection: Any) -> Any:
     original_mongo_uri = os.environ.get("SECONDBRAIN_MONGO_URI")
     original_mongo_db = os.environ.get("SECONDBRAIN_MONGO_DB")
     original_mongo_collection = os.environ.get("SECONDBRAIN_MONGO_COLLECTION")
-    original_localhost = os.environ.get("SECONDBRAIN_LOCALHOST")
+    original_ollama_host = os.environ.get("SECONDBRAIN_OLLAMA_HOST")
     original_embedding_model = os.environ.get("SECONDBRAIN_LOCAL_EMBEDDING_MODEL")
 
-    os.environ["SECONDBRAIN_MONGO_URI"] = "mongodb://localhost:27017"
+    os.environ["SECONDBRAIN_MONGO_URI"] = "mongodb://localhost:27018"
     os.environ["SECONDBRAIN_MONGO_DB"] = "test_secondbrain"
     os.environ["SECONDBRAIN_MONGO_COLLECTION"] = "test_embeddings"
-    os.environ["SECONDBRAIN_LOCALHOST"] = "http://localhost:11434"
+    os.environ["SECONDBRAIN_OLLAMA_HOST"] = "http://localhost:11435"
     os.environ["SECONDBRAIN_LOCAL_EMBEDDING_MODEL"] = "all-MiniLM-L6-v2"
 
     from secondbrain.config import get_config
@@ -138,7 +138,7 @@ def storage_with_index(test_collection: Any) -> Any:
     get_config.cache_clear()
 
     storage = VectorStorage(
-        mongo_uri="mongodb://localhost:27017",
+        mongo_uri="mongodb://localhost:27018",
         db_name="test_secondbrain",
         collection_name="test_embeddings",
     )
@@ -167,10 +167,10 @@ def storage_with_index(test_collection: Any) -> Any:
         elif "SECONDBRAIN_MONGO_COLLECTION" in os.environ:
             del os.environ["SECONDBRAIN_MONGO_COLLECTION"]
 
-        if original_localhost is not None:
-            os.environ["SECONDBRAIN_LOCALHOST"] = original_localhost
-        elif "SECONDBRAIN_LOCALHOST" in os.environ:
-            del os.environ["SECONDBRAIN_LOCALHOST"]
+        if original_ollama_host is not None:
+            os.environ["SECONDBRAIN_OLLAMA_HOST"] = original_ollama_host
+        elif "SECONDBRAIN_OLLAMA_HOST" in os.environ:
+            del os.environ["SECONDBRAIN_OLLAMA_HOST"]
 
         if original_embedding_model is not None:
             os.environ["SECONDBRAIN_LOCAL_EMBEDDING_MODEL"] = original_embedding_model

@@ -18,7 +18,7 @@ def test_config_default_values() -> None:
                 del os.environ[key]
 
         config = Config()
-        assert config.mongo_uri == "mongodb://localhost:27017"
+        assert config.mongo_uri == "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
         assert config.mongo_db == "secondbrain"
         assert config.mongo_collection == "embeddings"
         assert config.local_embedding_model == "all-MiniLM-L6-v2"
@@ -32,7 +32,7 @@ def test_config_default_values() -> None:
 
 def test_config_from_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test configuration from environment variables."""
-    monkeypatch.setenv("SECONDBRAIN_MONGO_URI", "mongodb://custom:27017")
+    monkeypatch.setenv("SECONDBRAIN_MONGO_URI", "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin")
     monkeypatch.setenv("SECONDBRAIN_MONGO_DB", "custom_db")
     monkeypatch.setenv("SECONDBRAIN_MONGO_COLLECTION", "custom_collection")
     monkeypatch.setenv("SECONDBRAIN_LOCAL_EMBEDDING_MODEL", "custom-model:latest")
@@ -41,7 +41,7 @@ def test_config_from_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SECONDBRAIN_DEFAULT_TOP_K", "10")
 
     config = Config()
-    assert config.mongo_uri == "mongodb://custom:27017"
+    assert config.mongo_uri == "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
     assert config.mongo_db == "custom_db"
     assert config.mongo_collection == "custom_collection"
     assert config.local_embedding_model == "custom-model:latest"

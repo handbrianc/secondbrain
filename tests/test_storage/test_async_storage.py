@@ -16,7 +16,7 @@ class TestAsyncVectorStorage:
     def async_storage(self) -> Generator[AsyncVectorStorage, None, None]:
         """Create an AsyncVectorStorage instance with mocked config."""
         with patch("secondbrain.storage.storage.get_config") as mock_config:
-            mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
+            mock_config.return_value.mongo_uri = "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
             mock_config.return_value.mongo_db = "secondbrain_test"
             mock_config.return_value.mongo_collection = "embeddings_test"
             mock_config.return_value.embedding_dimensions = 384
@@ -31,7 +31,7 @@ class TestAsyncVectorStorage:
     @pytest.mark.asyncio
     async def test_init_with_defaults(self, async_storage: AsyncVectorStorage) -> None:
         """Test initialization with default config values."""
-        assert async_storage.mongo_uri == "mongodb://localhost:27017"
+        assert async_storage.mongo_uri == "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
         assert async_storage.db_name == "secondbrain_test"
         assert async_storage.collection_name == "embeddings_test"
         assert async_storage._index_created is False
@@ -40,7 +40,7 @@ class TestAsyncVectorStorage:
     async def test_init_with_overrides(self) -> None:
         """Test initialization with custom parameters."""
         with patch("secondbrain.storage.storage.get_config") as mock_config:
-            mock_config.return_value.mongo_uri = "mongodb://default:27017"
+            mock_config.return_value.mongo_uri = "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
             mock_config.return_value.mongo_db = "default_db"
             mock_config.return_value.mongo_collection = "default_collection"
             mock_config.return_value.embedding_dimensions = 384
@@ -50,12 +50,12 @@ class TestAsyncVectorStorage:
             mock_config.return_value.embedding_storage_format = "json"
 
             storage = AsyncVectorStorage(
-                mongo_uri="mongodb://custom:27017",
+                mongo_uri="mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin",
                 db_name="custom_db",
                 collection_name="custom_collection",
             )
 
-            assert storage.mongo_uri == "mongodb://custom:27017"
+            assert storage.mongo_uri == "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
             assert storage.db_name == "custom_db"
             assert storage.collection_name == "custom_collection"
 

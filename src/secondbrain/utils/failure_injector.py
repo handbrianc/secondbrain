@@ -20,8 +20,6 @@ Usage:
         injector.reset()
 """
 
-import asyncio
-import functools
 import logging
 import threading
 import time
@@ -36,12 +34,12 @@ import pytest
 logger = logging.getLogger(__name__)
 
 __all__ = [
+    "FailureConfig",
     "FailureInjector",
     "FailureType",
-    "FailureConfig",
-    "inject_timeout",
     "inject_connection_error",
     "inject_general_failure",
+    "inject_timeout",
 ]
 
 
@@ -134,7 +132,9 @@ class FailureInjector:
     """
 
     _instance: "FailureInjector | None" = None
-    _lock = threading.Lock()
+    _lock = (
+        threading.RLock()
+    )  # RLock for reentrant locking (reset can be called within locked context)
 
     def __init__(self) -> None:
         """Initialize failure injector."""
@@ -196,7 +196,8 @@ class FailureInjector:
         )
 
         failure_key = f"{failure_type.value}_{id(config)}"
-        self._active_failures[failure_key] = config
+        with self._lock:
+            self._active_failures[failure_key] = config
 
         logger.info(
             "Failure injection started: type=%s, duration=%s, delay=%s",
@@ -234,14 +235,15 @@ class FailureInjector:
         Returns:
             True if failure is active, False otherwise.
         """
-        for config in self._active_failures.values():
-            if config.failure_type == failure_type:
-                # Check if duration has expired
-                if config.duration is not None:
-                    # For delayed failures, check if we're within the window
-                    pass
-                return True
-        return False
+        with self._lock:
+            for config in self._active_failures.values():
+                if config.failure_type == failure_type:
+                    # Check if duration has expired
+                    if config.duration is not None:
+                        # For delayed failures, check if we're within the window
+                        pass
+                    return True
+            return False
 
     def _schedule_cleanup(self, failure_key: str, duration: float) -> None:
         """Schedule automatic cleanup after duration.
@@ -270,22 +272,23 @@ class FailureInjector:
         Returns:
             True if operation should fail, False otherwise.
         """
-        for config in self._active_failures.values():
-            if config.failure_type == failure_type:
-                # Check probability
-                import random
+        with self._lock:
+            for config in self._active_failures.values():
+                if config.failure_type == failure_type:
+                    # Check probability
+                    import random
 
-                if random.random() > config.probability:
-                    return False
-
-                # Check repeat count
-                if config.repeat_count is not None:
-                    if self._failure_count >= config.repeat_count:
+                    if random.random() > config.probability:
                         return False
 
-                return True
+                    # Check repeat count
+                    if config.repeat_count is not None:
+                        if self._failure_count >= config.repeat_count:
+                            return False
 
-        return False
+                    return True
+
+            return False
 
     def raise_failure(
         self, failure_type: FailureType, error_message: str | None = None
@@ -301,11 +304,9 @@ class FailureInjector:
             InjectedConnectionError: For connection errors.
             InjectedFailureError: For general failures.
         """
-        import random
-
         # Find any active config for this failure type
         config: FailureConfig | None = None
-        for key, cfg in self._active_failures.items():
+        for _key, cfg in self._active_failures.items():
             if cfg.failure_type == failure_type:
                 config = cfg
                 break
@@ -370,15 +371,17 @@ class FailureInjector:
             error_message=error_message,
         )
 
-        self._active_failures[f"timeout_{config_id}"] = config
+        with self._lock:
+            self._active_failures[f"timeout_{config_id}"] = config
 
         try:
             if delay > 0:
                 time.sleep(delay)
             yield
         finally:
-            if f"timeout_{config_id}" in self._active_failures:
-                del self._active_failures[f"timeout_{config_id}"]
+            with self._lock:
+                if f"timeout_{config_id}" in self._active_failures:
+                    del self._active_failures[f"timeout_{config_id}"]
             logger.info("Timeout injection ended")
 
     @contextmanager
@@ -411,15 +414,17 @@ class FailureInjector:
             error_message=error_message,
         )
 
-        self._active_failures[f"connection_error_{config_id}"] = config
+        with self._lock:
+            self._active_failures[f"connection_error_{config_id}"] = config
 
         try:
             if delay > 0:
                 time.sleep(delay)
             yield
         finally:
-            if f"connection_error_{config_id}" in self._active_failures:
-                del self._active_failures[f"connection_error_{config_id}"]
+            with self._lock:
+                if f"connection_error_{config_id}" in self._active_failures:
+                    del self._active_failures[f"connection_error_{config_id}"]
             logger.info("Connection error injection ended")
 
     @contextmanager
@@ -455,15 +460,17 @@ class FailureInjector:
             probability=probability,
         )
 
-        self._active_failures[f"general_failure_{config_id}"] = config
+        with self._lock:
+            self._active_failures[f"general_failure_{config_id}"] = config
 
         try:
             if delay > 0:
                 time.sleep(delay)
             yield
         finally:
-            if f"general_failure_{config_id}" in self._active_failures:
-                del self._active_failures[f"general_failure_{config_id}"]
+            with self._lock:
+                if f"general_failure_{config_id}" in self._active_failures:
+                    del self._active_failures[f"general_failure_{config_id}"]
             logger.info("General failure injection ended")
 
     @contextmanager
@@ -499,15 +506,17 @@ class FailureInjector:
             error_message=error_message,
         )
 
-        self._active_failures[f"slow_response_{config_id}"] = config
+        with self._lock:
+            self._active_failures[f"slow_response_{config_id}"] = config
 
         try:
             if delay > 0:
                 time.sleep(delay)
             yield
         finally:
-            if f"slow_response_{config_id}" in self._active_failures:
-                del self._active_failures[f"slow_response_{config_id}"]
+            with self._lock:
+                if f"slow_response_{config_id}" in self._active_failures:
+                    del self._active_failures[f"slow_response_{config_id}"]
             logger.info("Slow response injection ended")
 
     # Async context manager support

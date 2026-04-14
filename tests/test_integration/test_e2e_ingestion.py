@@ -90,8 +90,8 @@ class TestEndToEndIngestion:
 
         dir_path = tmp_path / "docs"
         dir_path.mkdir()
-        (dir_path / "file1.txt").write_text("File 1 content")
-        (dir_path / "file2.txt").write_text("File 2 content")
+        (dir_path / "file1.md").write_text("# File 1\nContent here")
+        (dir_path / "file2.md").write_text("# File 2\nMore content")
 
         ingestor = DocumentIngestor(chunk_size=1000, verbose=False)
         result = ingestor.ingest(str(dir_path))
