@@ -31,11 +31,11 @@ services:
     volumes:
       - ollama_data:/root/.ollama
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/version"]
+      test: ["CMD", "bash", "-c", "timeout 2 bash -c 'echo > /dev/tcp/127.0.0.1/11434' && echo 'healthy' || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 5
-      start_period: 30s
+      retries: 10
+      start_period: 60s
     networks:
       - secondbrain-test-network
 

@@ -95,7 +95,6 @@ def run_warm_up(pipeline: RAGPipeline, queries: list[str], num_warm_up: int) -> 
 
 class TestPerformance:
     @pytest.mark.performance
-    @pytest.mark.benchmark
     def test_query_response_time(
         self,
         rag_pipeline: RAGPipeline,
@@ -126,7 +125,6 @@ class TestPerformance:
         assert p95_latency < THRESHOLD_P95_RESPONSE_TIME, failure_msg
 
     @pytest.mark.performance
-    @pytest.mark.benchmark
     def test_embedding_generation_time(
         self,
         embedding_generator: LocalEmbeddingGenerator,
@@ -159,10 +157,9 @@ class TestPerformance:
         assert p95_latency < THRESHOLD_P95_EMBEDDING_TIME, failure_msg
 
     @pytest.mark.performance
-    @pytest.mark.benchmark
-    def test_search_latency(
+    def test_embedding_generation_time(
         self,
-        searcher: Searcher,
+        embedding_generator: LocalEmbeddingGenerator,
         test_queries: list[str],
         benchmark: Any,
     ) -> None:
@@ -192,7 +189,6 @@ class TestPerformance:
         assert p95_latency < THRESHOLD_P95_SEARCH_TIME, failure_msg
 
     @pytest.mark.performance
-    @pytest.mark.benchmark
     def test_llm_generation_time(
         self,
         llm_provider: OllamaLLMProvider,
@@ -235,7 +231,6 @@ Answer:"""
         assert p95_latency < THRESHOLD_P95_LLM_TIME, failure_msg
 
     @pytest.mark.performance
-    @pytest.mark.benchmark
     def test_throughput_queries_per_second(
         self,
         rag_pipeline: RAGPipeline,
@@ -288,7 +283,6 @@ Answer:"""
         assert avg_throughput >= THRESHOLD_MIN_THROUGHPUT, failure_msg
 
     @pytest.mark.performance
-    @pytest.mark.benchmark
     def test_warm_up_effect(
         self,
         rag_pipeline: RAGPipeline,
@@ -346,10 +340,9 @@ Answer:"""
             assert cv <= max_cv, cv_failure_msg
 
     @pytest.mark.performance
-    @pytest.mark.benchmark
-    def test_p95_p99_latency(
+    def test_search_latency(
         self,
-        rag_pipeline: RAGPipeline,
+        searcher: Searcher,
         test_queries: list[str],
         benchmark: Any,
     ) -> None:

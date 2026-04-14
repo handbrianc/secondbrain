@@ -1,7 +1,6 @@
 """Tests for the failure injection framework."""
 
 import time
-import unittest.mock
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import pytest
@@ -285,23 +284,16 @@ class TestThreadSafety:
     def test_concurrent_injection(self):
         """Test that injection works correctly from multiple threads."""
         injector = FailureInjector()
-        results = []
 
-        def inject_failure(failure_type: FailureType) -> bool:
-            with injector.inject_timeout(duration=0.5):
-                time.sleep(0.1)
+        def inject_and_check() -> bool:
+            with injector.inject_timeout(duration=1.0):
                 return injector.is_failure_active(FailureType.TIMEOUT)
 
-        with ThreadPoolExecutor(max_workers=3) as executor:
-            futures = [
-                executor.submit(inject_failure, FailureType.TIMEOUT),
-                executor.submit(inject_failure, FailureType.CONNECTION_ERROR),
-                executor.submit(inject_failure, FailureType.GENERAL_FAILURE),
-            ]
-            for future in as_completed(futures):
-                results.append(future.result())
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            futures = [executor.submit(inject_and_check) for _ in range(20)]
+            results = [future.result() for future in as_completed(futures)]
 
-        assert all(results)
+        assert all(results), "All threads should successfully inject and check"
 
     def test_concurrent_reset(self):
         """Test that reset can be called concurrently."""

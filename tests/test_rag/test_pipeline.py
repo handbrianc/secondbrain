@@ -4,7 +4,6 @@ This module provides comprehensive unit tests for the RAGPipeline class,
 covering all public and private methods, edge cases, and orchestration logic.
 """
 
-import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -48,7 +47,7 @@ def mock_rewriter() -> MagicMock:
 def mock_config(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
     """Mock configuration for pipeline tests."""
     config: dict[str, str] = {
-        "SECONDBRAIN_MONGO_URI": "mongodb://localhost:27017",
+        "SECONDBRAIN_MONGO_URI": "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin",
         "SECONDBRAIN_MONGO_DB": "test_secondbrain",
         "SECONDBRAIN_MONGO_COLLECTION": "test_embeddings",
         "SECONDBRAIN_LOCALHOST": "http://localhost:11434",

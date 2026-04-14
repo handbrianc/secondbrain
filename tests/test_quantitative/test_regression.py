@@ -20,6 +20,7 @@ import math
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pytest
 from sentence_transformers import SentenceTransformer
 
@@ -79,6 +80,11 @@ def save_baseline(baseline_name: str, data: dict[str, Any]) -> None:
     with open(baseline_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
+
+def calculate_embedding_similarity(
+    embedding1: np.ndarray, embedding2: np.ndarray
+) -> float:
+    """Calculate cosine similarity between two embeddings."""
     embedding1 = embedding1.reshape(1, -1)
     embedding2 = embedding2.reshape(1, -1)
 
@@ -240,7 +246,7 @@ class TestRegressionBaselines:
         # Collect current answers across multiple runs
         current_answers: list[str] = []
 
-        for run in range(NUM_BENCHMARK_RUNS):
+        for _run in range(NUM_BENCHMARK_RUNS):
             try:
                 searcher = Searcher(verbose=False)
                 llm_provider = OllamaLLMProvider()
@@ -280,7 +286,9 @@ class TestRegressionBaselines:
             f"Current answers:\n"
         )
 
-        for i, (answer, sim) in enumerate(zip(current_answers, similarities), 1):
+        for i, (answer, sim) in enumerate(
+            zip(current_answers, similarities, strict=False), 1
+        ):
             failure_message += (
                 f"  Run {i}: similarity={sim:.4f}\n           '{answer[:100]}...'\n"
             )
@@ -320,7 +328,7 @@ class TestRegressionBaselines:
         # Collect current response times
         current_times: list[float] = []
 
-        for run in range(NUM_BENCHMARK_RUNS):
+        for _run in range(NUM_BENCHMARK_RUNS):
             try:
                 searcher = Searcher(verbose=False)
                 llm_provider = OllamaLLMProvider()
@@ -787,7 +795,7 @@ class TestRegressionMetrics:
 
         throughputs: list[float] = []
 
-        for run in range(NUM_BENCHMARK_RUNS):
+        for _run in range(NUM_BENCHMARK_RUNS):
             try:
                 searcher = Searcher(verbose=False)
                 llm_provider = OllamaLLMProvider()

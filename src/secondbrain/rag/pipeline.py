@@ -10,6 +10,7 @@ from typing import Any
 from secondbrain.config import get_config
 from secondbrain.conversation import ConversationSession, QueryRewriter
 from secondbrain.rag.interfaces import LocalLLMProvider
+from secondbrain.rag.security_filter import SecurityFilter
 from secondbrain.search import Searcher
 
 logger = logging.getLogger(__name__)
@@ -72,6 +73,7 @@ class RAGPipeline:
         self._top_k = top_k
         self._context_window = context_window
         self._config = get_config()
+        self._security_filter = SecurityFilter()
 
     def query(
         self,
@@ -99,6 +101,18 @@ class RAGPipeline:
             "SecondBrain is a document intelligence CLI tool..."
         """
         try:
+            violations = self._security_filter.validate_query(query)
+            if violations:
+                logger.warning(
+                    "Security violation detected: %s",
+                    [v.violation_type for v in violations],
+                )
+                return {
+                    "answer": self._security_filter.get_safe_response(),
+                    "query": query,
+                    "security_blocked": True,
+                }
+
             effective_top_k = top_k if top_k is not None else self._top_k
 
             # Step 1: Retrieve chunks via searcher.search()

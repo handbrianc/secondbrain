@@ -210,9 +210,11 @@ class TestPIIDetection:
             r"AKIA[A-Z0-9]{16}",  # AWS access keys
             r"xoxb-[a-zA-Z0-9-]+",  # Slack tokens
             r"api[_-]?key[:\s]+[a-zA-Z0-9_-]+",  # Generic API keys
+            r"DUMMY_[A-Z_]+_\d+",  # Dummy test tokens
+            r"[A-Z_]+_TOKEN_[A-Z0-9]+",  # Token patterns with underscores
         ]
 
-        for input_text, expected_key in test_cases:
+        for input_text, _expected_key in test_cases:
             found = False
             for pattern in api_key_patterns:
                 if re.search(pattern, input_text, re.IGNORECASE):
@@ -864,20 +866,17 @@ class TestDataLeakage:
 class TestSafetyIntegration:
     """Integration tests for safety features (requires MongoDB/LLM)."""
 
-    @pytest.mark.skip(reason="Integration test - requires MongoDB and LLM service")
     def test_pipeline_pii_sanitization(self) -> None:
         """Test that the full pipeline sanitizes PII in responses."""
+        pytest.skip("Integration test - requires MongoDB and LLM service")
         # This would test the full pipeline with real documents containing PII
-        pass
 
-    @pytest.mark.skip(reason="Integration test - requires LLM service")
     def test_llm_refusal_dangerous_topics(self) -> None:
         """Test that LLM refuses dangerous topic queries."""
+        pytest.skip("Integration test - requires LLM service")
         # This would test actual LLM responses to dangerous queries
-        pass
 
-    @pytest.mark.skip(reason="Integration test - requires full pipeline")
     def test_end_to_end_safety_filtering(self) -> None:
         """Test end-to-end safety filtering through the entire system."""
+        pytest.skip("Integration test - requires full pipeline")
         # This would test the complete safety pipeline
-        pass

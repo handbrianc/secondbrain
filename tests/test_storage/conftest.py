@@ -13,7 +13,7 @@ from secondbrain.storage import VectorStorage
 def mock_storage_config() -> MagicMock:
     """Module-scoped mock config to avoid repeated Config initialization."""
     config = MagicMock()
-    config.mongo_uri = "mongodb://localhost:27017"
+    config.mongo_uri = "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
     config.mongo_db = "secondbrain"
     config.mongo_collection = "embeddings"
     config.embedding_dimensions = 384

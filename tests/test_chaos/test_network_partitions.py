@@ -243,7 +243,7 @@ class TestFailureInjectorNetworkPartitions:
             for _ in range(2):
                 try:
                     injector.raise_failure(FailureType.TIMEOUT)
-                except:
+                except Exception:
                     cb.record_failure()
 
         assert cb.state == CircuitState.OPEN

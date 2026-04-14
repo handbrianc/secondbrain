@@ -68,7 +68,7 @@ class TestFinalCoverage:
         from secondbrain.conversation.storage import ConversationStorage
 
         with patch("secondbrain.conversation.storage.get_config") as mock_config:
-            mock_config.return_value.mongo_uri = "mongodb://localhost:27017"
+            mock_config.return_value.mongo_uri = "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
             mock_config.return_value.mongo_db = "test"
             mock_config.return_value.mongo_conversation_collection = "conversations"
 
@@ -136,13 +136,20 @@ class TestFinalCoverage:
         """Test chat command with no sessions found (line 437)."""
         runner = CliRunner()
         result = runner.invoke(cli, ["chat", "--list-sessions"])
-        assert result.exit_code != 0
+        # Listing sessions is successful even when no sessions exist
+        assert result.exit_code == 0
+        assert (
+            "No sessions found" in result.output
+            or "Conversation Sessions" in result.output
+        )
 
     def test_chat_command_history(self) -> None:
         """Test chat command with history flag (lines 479-501)."""
         runner = CliRunner()
         result = runner.invoke(cli, ["chat", "--session", "test-session", "--history"])
-        assert result.exit_code != 0
+        # Showing history (even if empty) is a successful operation
+        assert result.exit_code == 0
+        assert "No history" in result.output or "Session history" in result.output
 
     def test_chat_command_history_requires_session(self) -> None:
         """Test chat command history without session (lines 479-483)."""
@@ -192,34 +199,42 @@ class TestFinalCoverage:
                 "--show-sources",
             ],
         )
-        assert result.exit_code != 0
+        # Showing sources is a successful operation
+        assert result.exit_code == 0
+        assert "Sources:" in result.output or "Answer:" in result.output
 
     def test_chat_interactive_resume_session(self) -> None:
         """Test interactive chat resuming non-empty session (lines 607-608)."""
         runner = CliRunner()
-        result = runner.invoke(cli, ["chat", "--session", "test-session"])
-        assert result.exit_code != 0
+        result = runner.invoke(
+            cli, ["chat", "--session", "test-session"], input="\n/quit\n"
+        )
+        assert result.exit_code == 0
+        assert "Interactive Chat" in result.output or "Session:" in result.output
 
     def test_chat_interactive_empty_input(self) -> None:
         """Test interactive chat with empty input (line 632)."""
         runner = CliRunner()
-        result = runner.invoke(cli, ["chat", "--session", "test"])
-        assert result.exit_code != 0
+        result = runner.invoke(cli, ["chat", "--session", "test"], input="\n/quit\n")
+        assert result.exit_code == 0
 
     def test_chat_interactive_unknown_command(self) -> None:
         """Test interactive chat with unknown command (lines 651-652)."""
         runner = CliRunner()
-        result = runner.invoke(cli, ["chat", "--session", "test"])
-        assert result.exit_code != 0
+        result = runner.invoke(
+            cli, ["chat", "--session", "test"], input="/unknown\n/quit\n"
+        )
+        assert result.exit_code == 0
 
     def test_chat_interactive_keyboard_interrupt(self) -> None:
         """Test interactive chat with KeyboardInterrupt (lines 677-679)."""
         runner = CliRunner()
-        result = runner.invoke(cli, ["chat", "--session", "test"])
-        assert result.exit_code != 0
+        result = runner.invoke(cli, ["chat", "--session", "test"], input="/quit\n")
+        assert result.exit_code == 0
 
     def test_chat_interactive_eof_error(self) -> None:
         """Test interactive chat with EOFError (lines 681-682)."""
         runner = CliRunner()
-        result = runner.invoke(cli, ["chat", "--session", "test"])
-        assert result.exit_code != 0
+        result = runner.invoke(cli, ["chat", "--session", "test"], input="")
+        assert result.exit_code == 0
+        assert "Interactive Chat" in result.output or "Session:" in result.output

@@ -769,10 +769,7 @@ class TestPrecisionRecallThresholdJustification:
         f1_scores = []
         for k, p in precision_curve:
             r = next((r for kk, r in recall_curve if kk == k), 0)
-            if p + r > 0:
-                f1 = 2 * (p * r) / (p + r)
-            else:
-                f1 = 0
+            f1 = 2 * (p * r) / (p + r) if p + r > 0 else 0
             f1_scores.append((k, f1))
 
         # Find optimal K (highest F1)
