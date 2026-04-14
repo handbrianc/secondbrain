@@ -166,6 +166,7 @@ class TestGoldenDataset:
         return data.get("queries", data.get("test_cases", []))
 
     @pytest.mark.golden_dataset
+    @pytest.mark.integration
     def test_load_valid_dataset(self, tech_docs_dataset: list[dict[str, Any]]) -> None:
         """Test that the golden dataset loads successfully with valid schema."""
         assert len(tech_docs_dataset) > 0
@@ -188,6 +189,7 @@ class TestGoldenDataset:
             assert len(query["forbidden_concepts"]) >= 1
 
     @pytest.mark.golden_dataset
+    @pytest.mark.integration
     def test_load_invalid_json(self, tmp_path: Path) -> None:
         """Test handling of invalid JSON files."""
         invalid_json_path = tmp_path / "invalid.json"
@@ -198,12 +200,14 @@ class TestGoldenDataset:
                 json.load(f)
 
     @pytest.mark.golden_dataset
+    @pytest.mark.integration
     def test_load_missing_file(self) -> None:
         """Test handling of missing dataset files."""
         missing_path = GOLDEN_DATASETS_DIR / "nonexistent_dataset.json"
         assert not missing_path.exists(), "Test setup error: file should not exist"
 
     @pytest.mark.golden_dataset
+    @pytest.mark.integration
     def test_validate_dataset_schema(
         self, tech_docs_dataset: list[dict[str, Any]]
     ) -> None:
@@ -222,6 +226,7 @@ class TestGoldenDataset:
         assert len(categories) >= 3
 
     @pytest.mark.golden_dataset
+    @pytest.mark.integration
     @pytest.mark.parametrize(
         "golden_query",
         [
@@ -298,6 +303,7 @@ class TestGoldenDataset:
             )
 
     @pytest.mark.golden_dataset
+    @pytest.mark.integration
     @pytest.mark.parametrize(
         "category",
         ["configuration", "defaults", "features", "errors", "architecture"],
@@ -346,6 +352,7 @@ class TestGoldenDataset:
         )
 
     @pytest.mark.golden_dataset
+    @pytest.mark.integration
     @pytest.mark.parametrize(
         "golden_query",
         [
@@ -393,6 +400,7 @@ class TestGoldenDataset:
         assert isinstance(similarity, float)
 
     @pytest.mark.golden_dataset
+    @pytest.mark.integration
     def test_golden_dataset_pass_rate(
         self,
         tech_docs_dataset: list[dict[str, Any]],
@@ -446,6 +454,7 @@ class TestGoldenDataset:
         )
 
     @pytest.mark.golden_dataset
+    @pytest.mark.integration
     def test_dataset_metadata_validation(
         self,
         tech_docs_dataset: list[dict[str, Any]],
@@ -464,6 +473,7 @@ class TestGoldenDataset:
         assert len(tech_docs_dataset) == metadata.get("total_queries", 0)
 
     @pytest.mark.golden_dataset
+    @pytest.mark.integration
     def test_concept_matching_case_insensitive(
         self,
     ) -> None:
@@ -479,6 +489,7 @@ class TestGoldenDataset:
         )
 
     @pytest.mark.golden_dataset
+    @pytest.mark.integration
     def test_empty_concept_lists_handled(
         self,
         rag_pipeline: RAGPipeline,

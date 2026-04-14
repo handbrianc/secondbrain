@@ -27,6 +27,22 @@ from secondbrain.rag import RAGPipeline
 from secondbrain.rag.providers import OllamaLLMProvider
 from secondbrain.search import Searcher
 
+
+def _mongo_available() -> bool:
+    """Check if MongoDB is available for integration tests."""
+    try:
+        from pymongo import MongoClient
+
+        client = MongoClient(
+            "mongodb://localhost:27017/", serverSelectionTimeoutMS=2000
+        )
+        client.admin.command("ping")
+        client.close()
+        return True
+    except Exception:
+        return False
+
+
 # Adversarial test thresholds
 MAX_QUERY_LENGTH = 10000  # Maximum acceptable query length
 MIN_QUERY_LENGTH = 1  # Minimum meaningful query length
@@ -173,7 +189,7 @@ class TestAdversarialQueries:
             {
                 "id": "adversarial-015",
                 "type": "unicode",
-                "query": "What is 中文查询？(Chinese characters)",
+                "query": "What is 中文查询? (Chinese characters)",
                 "description": "Query with non-Latin characters",
                 "expected_behavior": "should_handle_unicode",
                 "severity": "medium",
@@ -272,6 +288,7 @@ class TestAdversarialQueries:
             },
         ]
 
+    @pytest.mark.integration
     @pytest.mark.adversarial
     @pytest.mark.robustness
     @pytest.mark.parametrize(
@@ -415,6 +432,7 @@ class TestAdversarialQueries:
                     f"Run details: {json.dumps(first_result, indent=2)}"
                 )
 
+    @pytest.mark.integration
     @pytest.mark.adversarial
     @pytest.mark.robustness
     @pytest.mark.parametrize(
@@ -559,6 +577,7 @@ class TestAdversarialQueries:
                 f"Dangerous responses: {json.dumps(dangerous_responses, indent=2)}"
             )
 
+    @pytest.mark.integration
     @pytest.mark.adversarial
     @pytest.mark.robustness
     @pytest.mark.parametrize(
@@ -693,6 +712,7 @@ class TestAdversarialQueries:
                 f"Sensitive revelations: {json.dumps(sensitive_revelations, indent=2)}"
             )
 
+    @pytest.mark.integration
     @pytest.mark.adversarial
     @pytest.mark.robustness
     @pytest.mark.parametrize(
@@ -713,7 +733,7 @@ class TestAdversarialQueries:
                 {
                     "id": "unicode-002",
                     "type": "unicode",
-                    "query": "What is 中文查询？(Chinese characters)",
+                    "query": "What is 中文查询? (Chinese characters)",
                     "description": "Query with non-Latin characters",
                     "expected_behavior": "should_handle_unicode",
                     "severity": "medium",
@@ -828,6 +848,7 @@ class TestAdversarialQueries:
             f"Invalid runs: {json.dumps(invalid_utf8_runs, indent=2)}"
         )
 
+    @pytest.mark.integration
     @pytest.mark.adversarial
     @pytest.mark.robustness
     @pytest.mark.parametrize(
@@ -973,6 +994,7 @@ class TestAdversarialQueries:
             f"All results: {json.dumps(results, indent=2)}"
         )
 
+    @pytest.mark.integration
     @pytest.mark.adversarial
     @pytest.mark.robustness
     def test_adversarial_query_stress(
@@ -994,6 +1016,8 @@ class TestAdversarialQueries:
             adversarial_queries: Full set of adversarial test queries.
             embedding_model: Pre-loaded SentenceTransformer model.
         """
+        # Skip if services are not available
+
         results: dict[str, dict[str, Any]] = {}
         crashes = 0
         successful = 0

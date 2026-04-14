@@ -226,7 +226,7 @@ class TestRougeScores:
 
     @pytest.mark.rouge
     @pytest.mark.optional
-    def test_rougeL_f1_score(
+    def test_rouge_l_f1_score(
         self, rouge_reference_queries: list[dict[str, Any]]
     ) -> None:
         """Test ROUGE-L F1 score for query-answer pairs.

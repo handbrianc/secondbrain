@@ -302,6 +302,7 @@ class TestConsistency:
         ]
 
     @pytest.mark.consistency
+    @pytest.mark.integration
     @pytest.mark.parametrize(
         "test_query",
         [
@@ -441,6 +442,7 @@ class TestConsistency:
         )
 
     @pytest.mark.consistency
+    @pytest.mark.integration
     @pytest.mark.parametrize(
         "query_pair",
         [
@@ -540,19 +542,18 @@ class TestConsistency:
 
         # For high correlation pairs, answer similarity should be reasonably high
         # when query similarity is high
-        if expected_correlation == "high":
+        if expected_correlation == "high" and query_similarity >= 0.8:
             # If queries are very similar (>= 0.8), answers should also be similar
-            if query_similarity >= 0.8:
-                assert answer_similarity >= 0.5, (
-                    f"High similarity queries produced dissimilar answers.\n"
-                    f"Pair ID: {pair_id}\n"
-                    f"Query1: '{query1}'\n"
-                    f"Query2: '{query2}'\n"
-                    f"Query similarity: {query_similarity:.4f}\n"
-                    f"Answer similarity: {answer_similarity:.4f}\n"
-                    f"Answer1: '{answer1[:200]}...'\n"
-                    f"Answer2: '{answer2[:200]}...'"
-                )
+            assert answer_similarity >= 0.5, (
+                f"High similarity queries produced dissimilar answers.\n"
+                f"Pair ID: {pair_id}\n"
+                f"Query1: '{query1}'\n"
+                f"Query2: '{query2}'\n"
+                f"Query similarity: {query_similarity:.4f}\n"
+                f"Answer similarity: {answer_similarity:.4f}\n"
+                f"Answer1: '{answer1[:200]}...'\n"
+                f"Answer2: '{answer2[:200]}...'"
+            )
 
         # Test correlation across multiple query pairs
         # Build lists of query similarities and answer similarities
@@ -613,6 +614,7 @@ class TestConsistency:
                 )
 
     @pytest.mark.consistency
+    @pytest.mark.integration
     @pytest.mark.parametrize(
         "test_case",
         [
@@ -770,6 +772,7 @@ class TestConsistency:
         session.clear_history()
 
     @pytest.mark.consistency
+    @pytest.mark.integration
     @pytest.mark.parametrize(
         "test_query",
         [
@@ -919,6 +922,7 @@ class TestConsistency:
         )
 
     @pytest.mark.consistency
+    @pytest.mark.integration
     def test_consistency_variance_threshold(self, embedding_model: Any) -> None:
         """Test that consistency variance stays below threshold.
 
@@ -1001,6 +1005,7 @@ class TestConsistency:
         )
 
     @pytest.mark.consistency
+    @pytest.mark.integration
     def test_temporal_consistency(self, embedding_model: Any) -> None:
         """Test consistency across time (simulated by sequential runs).
 
@@ -1070,6 +1075,7 @@ class TestConsistency:
         )
 
     @pytest.mark.consistency
+    @pytest.mark.integration
     def test_consistency_with_seed(self, embedding_model: Any) -> None:
         """Test consistency when using fixed random seed.
 

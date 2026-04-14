@@ -29,12 +29,10 @@ class TestQuerySanitizationXSS:
             sanitize_query("JAVASCRIPT:alert('xss')")
 
     def test_sanitize_rejects_event_handlers(self) -> None:
-        """Test that event handlers like onerror are handled."""
-        # Current implementation only checks for specific patterns
-        # Event handlers are not in INJECTION_PATTERNS list
-        result = sanitize_query("<img src=x onerror=alert('xss')>")
-        # Should not raise but may sanitize
-        assert result is not None
+        """Test that event handlers like onerror are rejected."""
+        # Event handlers are in INJECTION_PATTERNS list and should be rejected
+        with pytest.raises(ValueError, match="invalid characters"):
+            sanitize_query("<img src=x onerror=alert('xss')>")
 
     def test_sanitize_allows_safe_html_entities(self) -> None:
         """Test that safe HTML entities are allowed."""

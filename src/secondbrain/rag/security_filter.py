@@ -6,7 +6,8 @@ for the SecondBrain RAG system.
 
 import re
 from dataclasses import dataclass
-from typing import Pattern
+from re import Pattern
+from typing import ClassVar
 
 
 @dataclass(frozen=True)
@@ -34,7 +35,7 @@ class SecurityFilter:
         patterns: Compiled regex patterns for injection detection.
     """
 
-    SQL_INJECTION_PATTERNS: list[str] = [
+    SQL_INJECTION_PATTERNS: ClassVar[list[str]] = [
         r"(?i)\bSELECT\s+\*\s+FROM\b",
         r"(?i)\bDROP\s+TABLE\b",
         r"(?i)\bDELETE\s+FROM\b",
@@ -45,7 +46,7 @@ class SecurityFilter:
         r"(?i)\b1\s*=\s*1\b",
     ]
 
-    XSS_INJECTION_PATTERNS: list[str] = [
+    XSS_INJECTION_PATTERNS: ClassVar[list[str]] = [
         r"<\s*script",
         r"</\s*script\s*>",
         r"javascript\s*:",
@@ -54,7 +55,7 @@ class SecurityFilter:
         r"<\s*img\s+[^>]*onerror",
     ]
 
-    COMMAND_INJECTION_PATTERNS: list[str] = [
+    COMMAND_INJECTION_PATTERNS: ClassVar[list[str]] = [
         r";\s*rm\s+",
         r"\|\s*rm\s+",
         r"&&\s*rm\s+",
@@ -65,7 +66,7 @@ class SecurityFilter:
         r"\$\([^)]+\)",
     ]
 
-    PROTOTYPE_POLLUTION_PATTERNS: list[str] = [
+    PROTOTYPE_POLLUTION_PATTERNS: ClassVar[list[str]] = [
         r"__proto__",
         r"constructor\s*\.\s*constructor",
         r"\{\{",

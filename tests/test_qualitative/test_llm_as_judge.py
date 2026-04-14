@@ -118,7 +118,8 @@ def _evaluate_with_llm(
         pytest.skip("Ollama service not available")
 
     try:
-        client = httpx.Client(timeout=60.0)
+        # Use shorter timeout (10s) to avoid long hangs
+        client = httpx.Client(timeout=10.0)
         response = client.post(
             f"{OLLAMA_BASE_URL}/api/generate",
             json={

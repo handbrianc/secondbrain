@@ -22,6 +22,10 @@ class TestCLIChunkSizeValidation:
     @patch("secondbrain.document.DocumentIngestor")
     def test_ingest_accepts_zero_chunk_size(self, mock_ingestor: MagicMock) -> None:
         """Test that zero chunk size is accepted by Click (validated by Config)."""
+        from pathlib import Path
+
+        Path(TEST_PATH).mkdir(parents=True, exist_ok=True)
+
         mock_ingestor_instance = MagicMock()
         mock_ingestor_instance.ingest.return_value = {"success": 1, "failed": 0}
         mock_ingestor.return_value = mock_ingestor_instance
