@@ -93,6 +93,7 @@ class TestChunkingProperties:
             assert not text.strip()
             return
 
+        # Reconstruct text by removing overlap between consecutive chunks
         reconstructed = chunks[0]["text"]
         for i in range(1, len(chunks)):
             prev_chunk = chunks[i - 1]["text"]
@@ -104,9 +105,19 @@ class TestChunkingProperties:
             new_content = curr_chunk[overlap_len:]
             reconstructed += new_content
 
-        original_words = text.split()
-        for word in original_words:
-            assert word in reconstructed, f"Word '{word}' missing from chunks"
+        # Verify character-level preservation (not word-level, since text may have no spaces)
+        # Strip whitespace from both for comparison since chunking strips whitespace
+        original_stripped = text.strip()
+        reconstructed_stripped = reconstructed.strip()
+
+        # Check that all non-whitespace characters are preserved
+        original_non_ws = "".join(original_stripped.split())
+        reconstructed_non_ws = "".join(reconstructed_stripped.split())
+
+        assert original_non_ws == reconstructed_non_ws, (
+            f"Text mismatch: original='{original_non_ws[:100]}...', "
+            f"reconstructed='{reconstructed_non_ws[:100]}...'"
+        )
 
     @given(
         text=st.text(min_size=1, max_size=5000),

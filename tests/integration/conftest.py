@@ -44,7 +44,7 @@ def _check_mongodb_healthy() -> bool:
 def _check_embedding_service_healthy() -> bool:
     """Check if sentence-transformers service is healthy."""
     try:
-        response = httpx.get(f"{TEST_EMBEDDING_URL}/health", timeout=5.0)
+        response = httpx.get(TEST_EMBEDDING_URL, timeout=5.0)
         return response.status_code == 200
     except Exception:
         return False
