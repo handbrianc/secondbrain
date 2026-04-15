@@ -1,7 +1,7 @@
 """CLI module for secondbrain.
 
 This module provides the main CLI entry point and exports all commands.
-Commands are now organized in separate modules:
+Commands are now, in separate modules:
 - errors.py: Error handling decorators
 - display.py: Display/output formatting functions
 - commands.py: All CLI command implementations
@@ -13,22 +13,6 @@ from rich.console import Console
 from secondbrain.logging import setup_logging
 
 console = Console(markup=True)
-
-
-def _ensure_mongodb(
-    ctx: click.Context, param: click.Parameter | None, value: bool
-) -> None:
-    if ctx.invoked_subcommand is None or ctx.invoked_subcommand == "help":
-        return
-
-    try:
-        from secondbrain.utils.docker_manager import DockerManager
-
-        verbose = ctx.obj.get("verbose", False)
-        DockerManager().ensure_mongo_running(verbose=verbose)
-    except Exception as e:
-        ctx.obj.setdefault("mongo_auto_start_failed", True)
-        ctx.obj.setdefault("mongo_auto_start_error", str(e))
 
 
 @click.group()
@@ -46,8 +30,6 @@ def cli(ctx: click.Context, verbose: bool) -> None:
     ctx.ensure_object(dict)
     ctx.obj["verbose"] = verbose
     setup_logging(verbose=verbose)
-
-    _ensure_mongodb(ctx, None, False)
 
 
 # Import and register commands after cli group is defined
