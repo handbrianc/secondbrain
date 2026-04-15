@@ -13,6 +13,15 @@ from secondbrain.rag.providers.ollama import OllamaLLMProvider
 
 
 @pytest.fixture
+def mock_client():
+    """Mock Ollama Client - creates a fresh instance for each test."""
+    mock = MagicMock()
+    mock.chat.return_value = {"message": {"content": "Test response"}}
+    mock.list.return_value = {"models": []}
+    return mock
+
+
+@pytest.fixture
 def provider(mock_client):
     """Create OllamaLLMProvider with test configuration."""
     with patch("secondbrain.rag.providers.ollama.Client", return_value=mock_client):
@@ -23,15 +32,6 @@ def provider(mock_client):
             max_tokens=1024,
             timeout=30,
         )
-
-
-@pytest.fixture
-def mock_client():
-    """Mock Ollama Client."""
-    mock = MagicMock()
-    mock.chat.return_value = {"message": {"content": "Test response"}}
-    mock.list.return_value = {"models": []}
-    return mock
 
 
 class TestOllamaProviderInit:
