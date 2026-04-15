@@ -19,14 +19,10 @@ import logging
 import subprocess
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from rich.console import Console
 
 from secondbrain.config import get_config
-
-if TYPE_CHECKING:
-    pass
 
 logger = logging.getLogger(__name__)
 console = Console()

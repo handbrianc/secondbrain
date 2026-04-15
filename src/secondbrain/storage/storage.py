@@ -7,7 +7,7 @@ import struct
 import time
 from collections.abc import Sequence
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import httpx
 from bson.binary import Binary
@@ -19,9 +19,6 @@ from pymongo.errors import (
     ConnectionFailure,
     ServerSelectionTimeoutError,
 )
-
-if TYPE_CHECKING:
-    pass
 
 from secondbrain.config import Config, get_config
 from secondbrain.exceptions import StorageConnectionError
