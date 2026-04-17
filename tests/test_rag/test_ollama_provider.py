@@ -41,7 +41,7 @@ class TestOllamaProviderInit:
         """Test initialization with default values."""
         provider = OllamaLLMProvider()
 
-        assert provider.host == "http://localhost:11434"
+        assert provider.host == "http://localhost:11435"
         assert provider.model == "llama3.2"
         assert provider.temperature == 0.1
         assert provider.max_tokens == 2048
