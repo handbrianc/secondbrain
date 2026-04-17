@@ -87,14 +87,14 @@ class TestIngestStreamingEnabled:
         mock_ingestor.ingest.return_value = {"success": 2, "failed": 0}
         mock_ingestor_class = MagicMock(return_value=mock_ingestor)
 
-        mock_config = MagicMock(spec=Config)
-        mock_config.chunk_size = 4096
-        mock_config.chunk_overlap = 50
-        mock_config.streaming_enabled = True
+        mock_config_func = MagicMock(spec=Config)
+        mock_config_func.chunk_size = 4096
+        mock_config_func.chunk_overlap = 50
+        mock_config_func.streaming_enabled = True
 
         with (
             patch("secondbrain.document.DocumentIngestor", mock_ingestor_class),
-            patch("secondbrain.cli.commands.get_config", return_value=mock_config),
+            patch("secondbrain.cli.commands.config", return_value=mock_config_func),
         ):
             runner = CliRunner()
             with runner.isolated_filesystem():
