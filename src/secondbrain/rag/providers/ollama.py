@@ -31,7 +31,7 @@ class OllamaLLMProvider(LocalLLMProvider):
 
     def __init__(
         self,
-        host: str = "http://localhost:11434",
+        host: str | None = None,
         model: str = "llama3.2",
         temperature: float = 0.1,
         max_tokens: int = 2048,
@@ -40,20 +40,22 @@ class OllamaLLMProvider(LocalLLMProvider):
         """Initialize Ollama provider with configuration.
 
         Args:
-            host: Ollama server URL (default: "http://localhost:11434").
+            host: Ollama server URL (default: from config().ollama_host).
             model: Model name to use (default: "llama3.2").
             temperature: Default temperature for generation (default: 0.1).
             max_tokens: Default max tokens for generation (default: 2048).
             timeout: Request timeout in seconds (default: 120).
         """
-        self._host = host
+        from secondbrain.config import config
+
+        self._host = host if host is not None else config().ollama_host
         self._model = model
         self._temperature = temperature
         self._max_tokens = max_tokens
         self._timeout = timeout
 
         # Initialize sync client
-        self._client = Client(host=host, timeout=timeout)
+        self._client = Client(host=self._host, timeout=timeout)
 
     def generate(
         self,

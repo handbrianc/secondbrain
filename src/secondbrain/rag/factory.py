@@ -11,7 +11,7 @@ Usage:
     rewriter = create_query_rewriter(llm_provider)
 """
 
-from secondbrain.config import get_config
+from secondbrain.config import config
 from secondbrain.conversation import QueryRewriter
 from secondbrain.rag.interfaces import LocalLLMProvider
 from secondbrain.rag.providers.factory import LLMProviderFactory
@@ -36,10 +36,10 @@ def create_llm_provider() -> LocalLLMProvider:
         >>> response = provider.generate("Hello")
         >>> print(response)
     """
-    config = get_config()
+    cfg = config()
 
     try:
-        provider = LLMProviderFactory.create_from_config(config)
+        provider = LLMProviderFactory.create_from_config(cfg)
         return provider
     except ValueError as e:
         raise ValueError(

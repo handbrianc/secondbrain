@@ -19,16 +19,13 @@ class LLMProviderFactory:
 
     @staticmethod
     def create_from_config(config: Config) -> LocalLLMProvider:
-        """Create a provider from configuration.
+        """Create an LLM provider from project configuration.
 
         Args:
-            config: Configuration instance with provider settings.
+            config: Configuration instance containing LLM settings.
 
         Returns:
             Configured LocalLLMProvider instance.
-
-        Raises:
-            ValueError: If provider type is not recognized.
         """
         provider_type = config.llm_provider.lower()
 
@@ -54,24 +51,27 @@ class LLMProviderFactory:
 
     @staticmethod
     def create_ollama(
-        host: str = "http://localhost:11434",
+        host: str | None = None,
         model: str = "llama2",
         temperature: float = 0.7,
         timeout: int = 120,
     ) -> OllamaLLMProvider:
-        """Create an Ollama provider with explicit parameters.
+        """Create an Ollama LLM provider.
 
         Args:
-            host: Ollama server URL.
+            host: Ollama host URL (defaults to config value).
             model: Model name to use.
-            temperature: Default temperature for generation.
-            timeout: HTTP timeout in seconds.
+            temperature: Generation temperature.
+            timeout: Request timeout in seconds.
 
         Returns:
             Configured OllamaLLMProvider instance.
         """
+        from secondbrain.config import config
+
+        cfg = config()
         return OllamaLLMProvider(
-            host=host,
+            host=host if host is not None else cfg.ollama_host,
             model=model,
             temperature=temperature,
             timeout=timeout,

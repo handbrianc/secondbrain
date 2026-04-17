@@ -10,7 +10,7 @@ import re
 from collections.abc import Sequence
 from typing import Any
 
-from secondbrain.config import get_config
+from secondbrain.config import config, get_config
 from secondbrain.embedding import LocalEmbeddingGenerator
 from secondbrain.storage import (
     SearchResult,
@@ -90,7 +90,7 @@ class Searcher:
             verbose: Enable verbose logging.
         """
         self.verbose = verbose
-        self.config = get_config()
+        self._config = config()
         self.embedding_gen = LocalEmbeddingGenerator()
         self.storage = VectorStorage()
 
@@ -148,7 +148,7 @@ class Searcher:
         # Sanitize query to prevent injection attacks
         sanitized_query = sanitize_query(query)
 
-        top_k = top_k or self.config.default_top_k
+        top_k = top_k or self._config.default_top_k
 
         # Validate connections
         if not self.storage.validate_connection():
@@ -180,7 +180,7 @@ class Searcher:
     ) -> list[dict[str, Any]]:
         """Async version of search."""
         sanitized_query = sanitize_query(query)
-        top_k = top_k or self.config.default_top_k
+        top_k = top_k or self._config.default_top_k
 
         if not self.storage.validate_connection():
             raise RuntimeError("Cannot connect to MongoDB")
