@@ -7,7 +7,7 @@ Retrieval-Augmented Generation workflow for conversational Q&A.
 import logging
 from typing import Any
 
-from secondbrain.config import get_config
+from secondbrain.config import config
 from secondbrain.conversation import ConversationSession, QueryRewriter
 from secondbrain.rag.interfaces import LocalLLMProvider
 from secondbrain.rag.security_filter import SecurityFilter
@@ -72,7 +72,7 @@ class RAGPipeline:
         self._rewriter = rewriter
         self._top_k = top_k
         self._context_window = context_window
-        self._config = get_config()
+        self._config = config()
         self._security_filter = SecurityFilter()
 
     def query(
@@ -309,7 +309,7 @@ class RAGPipeline:
             >>> "You are a helpful assistant" in prompt
             True
         """
-        system_prompt = get_config().rag_system_prompt
+        system_prompt = config().rag_system_prompt
 
         # Build prompt
         prompt_parts = [system_prompt]
