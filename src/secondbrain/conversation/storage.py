@@ -12,7 +12,7 @@ from pymongo.errors import (
     ServerSelectionTimeoutError,
 )
 
-from secondbrain.config import Config, get_config
+from secondbrain.config import Config, config
 from secondbrain.exceptions import StorageConnectionError
 from secondbrain.utils.connections import ValidatableService
 
@@ -76,15 +76,15 @@ class ConversationStorage(ValidatableService):
             ...     collection_name="sessions"
             ... )
         """
-        config = get_config()
-        self.mongo_uri: str = mongo_uri or config.mongo_uri
-        self.db_name: str = db_name or config.mongo_db
+        cfg = config()
+        self.mongo_uri: str = mongo_uri or cfg.mongo_uri
+        self.db_name: str = db_name or cfg.mongo_db
         self.collection_name: str = collection_name or "conversations"
-        self._config: Config = config
+        self._config: Config = cfg
         self._client: MongoClient[Any] | None = None
         self._db: Database[Any] | None = None
         self._collection: Collection[Any] | None = None
-        super().__init__(cache_ttl=config.connection_cache_ttl)
+        super().__init__(cache_ttl=cfg.connection_cache_ttl)
 
     def _require_connection(self, operation: str = "conversation operation") -> None:
         """Validate MongoDB connection and raise StorageConnectionError if unavailable.
