@@ -5,57 +5,57 @@
     {
       "id": "regression-001",
       "query": "What is the default chunk size in SecondBrain?",
-      "baseline_answer": "I'd be happy to help you with your question. However, I don't see any information about a \"chunk size\" in the provided documents. The documents appear to be related to a \"SecondBrain test\", but they don't provide any details about the default chunk size.\n\nCould you please provide more context or clarify what you mean by \"chunk size\" in this context? I'll do my best to help once I have a better understanding of your question.",
-      "response_time": 2.353815125010442,
+      "baseline_answer": "I apologize, but I encountered an error: Model 'llama3.2' not found. Please try again.",
+      "response_time": 1.4998172920022625,
       "num_chunks": 0
     },
     {
       "id": "regression-002",
       "query": "How do I configure MongoDB connection URI?",
-      "baseline_answer": "I'd be happy to help you with configuring the MongoDB connection URI.\n\nBased on the provided context, it seems that the documents are discussing machine learning, deep learning, and neural related topics. However, there is no mention of MongoDB or its configuration in the provided text.\n\nI couldn't find any information on configuring a MongoDB connection URI in the given documents. If you could provide more context or clarify which document specifically mentions MongoDB, I'd be happy to try and assist you further.",
-      "response_time": 2.897344291995978,
+      "baseline_answer": "I apologize, but I encountered an error: Model 'llama3.2' not found. Please try again.",
+      "response_time": 1.4691640839737374,
       "num_chunks": 0
     },
     {
       "id": "regression-003",
       "query": "What document formats are supported?",
-      "baseline_answer": "Based on the provided context, it appears that all three documents are samples for testing PDF ingestion with machine learning and artificial intelligence. While the exact document formats supported are not explicitly mentioned in the text, I can make an educated inference.\n\nGiven that these documents are likely to be PDFs, which is a widely used format for sharing digital content, it's reasonable to assume that they support common PDF formats such as PDF/A (Archival) and PDF/X. These formats are often used for long-term preservation and interchange of electronic documents.\n\nHowever, without further information or explicit mention in the documents, I can only provide this educated guess. If you need more specific information, please let me know how I can help further!",
-      "response_time": 3.5555670419998933,
+      "baseline_answer": "I apologize, but I encountered an error: Model 'llama3.2' not found. Please try again.",
+      "response_time": 1.4080414999916684,
       "num_chunks": 0
     },
     {
       "id": "regression-004",
       "query": "How to enable circuit breaker?",
-      "baseline_answer": "Unfortunately, I don't have direct access to the provided PDF files. However, I can try to provide a general answer based on my knowledge of circuit breakers in AI systems.\n\nA circuit breaker is a design pattern used in distributed systems to prevent cascading failures by interrupting the flow of requests when a certain number of consecutive failures occur. To enable a circuit breaker in an AI system, you would typically need to configure it to monitor the health and availability of its components, such as models or services.\n\nBased on general knowledge, here's one possible approach:\n\n1. **Configure the AI system to monitor its components**: This might involve setting up metrics collectors or monitoring tools that track the performance and availability of the model or service.\n2. **Define a threshold for consecutive failures**: Determine how many consecutive failures are allowed before the circuit breaker is triggered. This could be based on a fixed number, such as 3, or a percentage of total requests.\n3. **Implement a detection mechanism**: Write code that detects when the threshold is exceeded and triggers the circuit breaker. This might involve using a library or framework that provides circuit breaker functionality.\n\nHowever, without more specific information from the provided PDF files, I couldn't provide a detailed answer on how to enable circuit breakers in AI systems specifically. If you have more context or details about the SecondBrain test or the artificial intelligence system being discussed, I'd be happy to try and help further.",
-      "response_time": 4.224492125009419,
+      "baseline_answer": "I apologize, but I encountered an error: Model 'llama3.2' not found. Please try again.",
+      "response_time": 1.4384917089773808,
       "num_chunks": 0
     },
     {
       "id": "regression-005",
       "query": "What is the purpose of the Ingestor class?",
-      "baseline_answer": "Based on the provided context, it appears that the Ingestor class is a crucial component in the process of ingesting PDF files for analysis using machine learning and artificial intelligence. The fact that there are three separate PDF files provided, each with the same title and content, suggests that these documents are being used as test cases or examples.\n\nFrom a functional perspective, it can be inferred that the Ingestor class is designed to take in a PDF file, extract relevant information from it, and possibly preprocess the data for use in machine learning models. The fact that the documents mention \"machine learning\" and \"artificial intelligence\" suggests that the Ingestor class plays a key role in facilitating this process.\n\nHowever, without explicit information about the Ingestor class itself, its purpose remains somewhat ambiguous. It's possible that the Ingestor class is responsible for tasks such as:\n\n* Extracting relevant data from PDF files (e.g., text, images, metadata)\n* Preprocessing the extracted data for use in machine learning models\n* Providing a standardized format for the ingested data to be used with specific AI or ML algorithms\n\nTo gain a deeper understanding of the Ingestor class and its purpose, additional context or documentation would likely be necessary.",
-      "response_time": 4.728598124987911,
+      "baseline_answer": "I apologize, but I encountered an error: Model 'llama3.2' not found. Please try again.",
+      "response_time": 1.4108140829775948,
       "num_chunks": 0
     },
     {
       "id": "regression-006",
       "query": "What is semantic search?",
-      "baseline_answer": "Based on the provided context, I couldn't find a direct mention of \"semantic search\" in the documents. However, it's clear that all three sources are related to machine learning and artificial intelligence.\n\nGiven this context, I can make an educated inference about what semantic search might be. Semantic search appears to be a concept closely tied to the field of machine learning and artificial intelligence. It likely refers to a search algorithm or technique that understands the meaning and context behind user queries, rather than just matching keywords.\n\nThis understanding is similar to how machine learning models are trained to interpret and make decisions based on complex data patterns, including nuanced language and context. In this sense, semantic search might be seen as an extension of these capabilities, allowing for more accurate and informative search results that account for the subtleties of human language.\n\nIf I had to speculate further, it's possible that semantic search is a key application or use case within the broader field of machine learning and artificial intelligence, potentially involving natural language processing (NLP) techniques to improve search engine functionality. However, without direct evidence from the provided documents, this remains speculation.",
-      "response_time": 4.404169832996558,
+      "baseline_answer": "I apologize, but I encountered an error: Model 'llama3.2' not found. Please try again.",
+      "response_time": 1.4602197910135146,
       "num_chunks": 0
     },
     {
       "id": "regression-007",
       "query": "How does the circuit breaker work?",
-      "baseline_answer": "Based on the provided context, I couldn't find any information about a \"circuit breaker\" in either document. However, I can try to provide an answer based on general knowledge.\n\nA circuit breaker is a safety device designed to interrupt an electric circuit when it reaches a certain level of current or power. It's typically used to prevent overheating and potential fires in electrical systems.\n\nIf we assume that the concept of a \"circuit breaker\" applies to artificial intelligence, I can make an educated guess. In AI, a \"breaker\" might refer to a mechanism that prevents a system from overloading or becoming unstable due to excessive data processing or learning.\n\nOne possible analogy is the concept of \" regularization\" in machine learning, which helps prevent overfitting by introducing constraints on model weights and complexity. Similarly, a circuit breaker-like mechanism could be designed to limit the amount of data processed by an AI system, preventing it from becoming overwhelmed or producing inaccurate results.\n\nHowever, without more context, this is purely speculative, and I couldn't find any direct information about how a \"circuit breaker\" works in the provided documents.",
-      "response_time": 4.976303458010079,
+      "baseline_answer": "I apologize, but I encountered an error: Model 'llama3.2' not found. Please try again.",
+      "response_time": 1.4308410829980858,
       "num_chunks": 0
     },
     {
       "id": "regression-008",
       "query": "What is the benefit of multicore processing?",
-      "baseline_answer": "Based on the context provided, I couldn't find any specific information about multicore processing in the three documents. However, I can make an educated connection.\n\nMulticore processing is a technology that allows multiple processors to be integrated into a single chip, increasing the overall processing power of a system. Given the topics of machine learning, deep learning, and neural networks, which often require significant computational resources, it's likely that multicore processing would be beneficial for accelerating these tasks.\n\nIn general, multicore processing can provide several benefits, including improved performance, increased throughput, and reduced latency. By distributing workload across multiple processors, multicore systems can handle complex computations, such as those required for machine learning and artificial intelligence models, more efficiently.\n\nWhile the provided documents don't explicitly discuss multicore processing, it's reasonable to infer that this technology would be relevant to the topics of machine learning, deep learning, and neural networks.",
-      "response_time": 2.712831583019579,
+      "baseline_answer": "I apologize, but I encountered an error: Model 'llama3.2' not found. Please try again.",
+      "response_time": 1.4189780000015162,
       "num_chunks": 0
     }
   ],
