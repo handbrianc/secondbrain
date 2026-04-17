@@ -1,9 +1,30 @@
 """Root pytest fixtures for all tests."""
 
 import os
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+
+# Set test environment variables IMMEDIATELY - before ANY imports
+# This ensures config module picks up test values, not defaults
+if "SECONDBRAIN_MONGO_URI" not in os.environ:
+    os.environ["SECONDBRAIN_MONGO_URI"] = (
+        "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
+    )
+
+if "SECONDBRAIN_OLLAMA_HOST" not in os.environ:
+    os.environ["SECONDBRAIN_OLLAMA_HOST"] = "http://localhost:11435"
+
+if "SECONDBRAIN_MONGO_DB" not in os.environ:
+    os.environ["SECONDBRAIN_MONGO_DB"] = "secondbrain_test"
+
+if "SECONDBRAIN_MONGO_COLLECTION" not in os.environ:
+    os.environ["SECONDBRAIN_MONGO_COLLECTION"] = "test_embeddings"
+
+from secondbrain.config import get_config
+
+get_config.cache_clear()
 
 
 def pytest_sessionstart(session: pytest.Session) -> None:
@@ -236,31 +257,6 @@ def pytest_sessionstart(session: pytest.Session) -> None:
         pass
 
 
-# Set test environment variables before tests run
-def pytest_configure(config: pytest.Config) -> None:
-    """Set test environment variables before tests run.
-
-    This ensures all tests use the correct test service URLs
-    (ports 27018 and 11435) instead of production ports.
-    """
-    # Set test MongoDB URI with authentication (authSource=admin for root user)
-    if "SECONDBRAIN_MONGO_URI" not in os.environ:
-        os.environ["SECONDBRAIN_MONGO_URI"] = (
-            "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
-        )
-
-    # Set test Ollama host
-    if "SECONDBRAIN_OLLAMA_HOST" not in os.environ:
-        os.environ["SECONDBRAIN_OLLAMA_HOST"] = "http://localhost:11435"
-
-    # Set test database and collection
-    if "SECONDBRAIN_MONGO_DB" not in os.environ:
-        os.environ["SECONDBRAIN_MONGO_DB"] = "secondbrain_test"
-
-    if "SECONDBRAIN_MONGO_COLLECTION" not in os.environ:
-        os.environ["SECONDBRAIN_MONGO_COLLECTION"] = "test_embeddings"
-
-
 # Auto-mock DockerManager for all tests to prevent MongoDB startup
 # Integration tests that need real MongoDB will patch it back or use real setup
 original_patch = patch("secondbrain.utils.docker_manager.DockerManager")
@@ -275,3 +271,62 @@ def _mock_docker_manager():
         mock_manager = original_patch.start()
     yield
     # No cleanup needed - patch is persistent
+
+
+@pytest.fixture
+def sample_pdf_path() -> Path:
+    """Return path to a sample PDF file for testing.
+
+    Creates a temporary PDF file with test content using fpdf.
+    Skips the test if fpdf is not available.
+    """
+    try:
+        from fpdf import FPDF
+    except ImportError:
+        pytest.skip("fpdf not installed for PDF creation")
+
+    import tempfile
+
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Arial", size=12)
+        pdf.multi_cell(
+            0,
+            10,
+            "SecondBrain test document\n\n"
+            "This is sample content for testing PDF ingestion with "
+            "machine learning and artificial intelligence topics.",
+        )
+        pdf.output(tmp.name)
+        return Path(tmp.name)
+
+
+@pytest.fixture
+def sample_pdf_with_multiple_pages() -> Path:
+    """Return path to a multi-page sample PDF file for testing.
+
+    Creates a temporary multi-page PDF file with test content using fpdf.
+    Skips the test if fpdf is not available.
+    """
+    try:
+        from fpdf import FPDF
+    except ImportError:
+        pytest.skip("fpdf not installed for PDF creation")
+
+    import tempfile
+
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+        pdf = FPDF()
+        for page_num in range(1, 4):
+            pdf.add_page()
+            pdf.set_font("Arial", size=12)
+            pdf.multi_cell(0, 10, f"Page {page_num} of SecondBrain test document\n\n")
+            pdf.multi_cell(
+                0,
+                10,
+                f"This is unique content for page {page_num} covering "
+                "machine learning, deep learning, and neural networks.",
+            )
+        pdf.output(tmp.name)
+        return Path(tmp.name)

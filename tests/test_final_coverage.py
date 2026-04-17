@@ -67,10 +67,10 @@ class TestFinalCoverage:
         """Test conversation session creation."""
         from secondbrain.conversation.storage import ConversationStorage
 
-        with patch("secondbrain.conversation.storage.get_config") as mock_config:
-            mock_config.return_value.mongo_uri = "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
-            mock_config.return_value.mongo_db = "test"
-            mock_config.return_value.mongo_conversation_collection = "conversations"
+        with patch("secondbrain.conversation.storage.config") as mock_config_func:
+            mock_config_func.return_value.mongo_uri = "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
+            mock_config_func.return_value.mongo_db = "test"
+            mock_config_func.return_value.mongo_conversation_collection = "conversations"
 
             with patch("motor.motor_asyncio.AsyncIOMotorClient"):
                 storage = ConversationStorage()
