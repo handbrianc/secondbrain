@@ -13,14 +13,14 @@ class TestAsyncValidation:
     @pytest.fixture
     def storage(self):
         """Create a VectorStorage instance with mocked config."""
-        with patch("secondbrain.storage.get_config") as mock_config:
-            mock_config.return_value.mongo_uri = "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
-            mock_config.return_value.mongo_db = "secondbrain"
-            mock_config.return_value.mongo_collection = "embeddings"
-            mock_config.return_value.embedding_dimensions = 384
-            mock_config.return_value.index_ready_retry_count = 3
-            mock_config.return_value.index_ready_retry_delay = 0.01
-            mock_config.return_value.connection_cache_ttl = 60.0
+        with patch("secondbrain.storage.config") as mock_config_func:
+            mock_config_func.return_value.mongo_uri = "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
+            mock_config_func.return_value.mongo_db = "secondbrain"
+            mock_config_func.return_value.mongo_collection = "embeddings"
+            mock_config_func.return_value.embedding_dimensions = 384
+            mock_config_func.return_value.index_ready_retry_count = 3
+            mock_config_func.return_value.index_ready_retry_delay = 0.01
+            mock_config_func.return_value.connection_cache_ttl = 60.0
 
             storage = VectorStorage()
             yield storage
