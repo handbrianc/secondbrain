@@ -12,11 +12,11 @@ class TestConnectionRecovery:
 
     def test_connection_failure_recovery(self) -> None:
         """Test recovery after connection failure."""
-        with patch("secondbrain.storage.get_config") as mock_config:
-            mock_config.return_value.mongo_uri = "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
-            mock_config.return_value.mongo_db = "secondbrain"
-            mock_config.return_value.mongo_collection = "embeddings"
-            mock_config.return_value.embedding_dimensions = 384
+        with patch("secondbrain.storage.config") as mock_config_func:
+            mock_config_func.return_value.mongo_uri = "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
+            mock_config_func.return_value.mongo_db = "secondbrain"
+            mock_config_func.return_value.mongo_collection = "embeddings"
+            mock_config_func.return_value.embedding_dimensions = 384
 
             storage = VectorStorage()
 
@@ -37,11 +37,11 @@ class TestConnectionRecovery:
 
     def test_connection_cache_invalidation(self) -> None:
         """Test cache invalidation on failure."""
-        with patch("secondbrain.storage.get_config") as mock_config:
-            mock_config.return_value.mongo_uri = "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
-            mock_config.return_value.mongo_db = "secondbrain"
-            mock_config.return_value.mongo_collection = "embeddings"
-            mock_config.return_value.embedding_dimensions = 384
+        with patch("secondbrain.storage.config") as mock_config_func:
+            mock_config_func.return_value.mongo_uri = "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
+            mock_config_func.return_value.mongo_db = "secondbrain"
+            mock_config_func.return_value.mongo_collection = "embeddings"
+            mock_config_func.return_value.embedding_dimensions = 384
 
             storage = VectorStorage()
 
@@ -63,11 +63,11 @@ class TestConnectionRecovery:
         """Test async connection recovery patterns."""
         import asyncio
 
-        with patch("secondbrain.storage.get_config") as mock_config:
-            mock_config.return_value.mongo_uri = "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
-            mock_config.return_value.mongo_db = "secondbrain"
-            mock_config.return_value.mongo_collection = "embeddings"
-            mock_config.return_value.embedding_dimensions = 384
+        with patch("secondbrain.storage.config") as mock_config_func:
+            mock_config_func.return_value.mongo_uri = "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
+            mock_config_func.return_value.mongo_db = "secondbrain"
+            mock_config_func.return_value.mongo_collection = "embeddings"
+            mock_config_func.return_value.embedding_dimensions = 384
 
             storage = VectorStorage()
 
@@ -90,11 +90,11 @@ class TestConnectionRecovery:
 
     def test_connection_pool_exhaustion(self) -> None:
         """Test handling of connection pool exhaustion."""
-        with patch("secondbrain.storage.get_config") as mock_config:
-            mock_config.return_value.mongo_uri = "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
-            mock_config.return_value.mongo_db = "secondbrain"
-            mock_config.return_value.mongo_collection = "embeddings"
-            mock_config.return_value.embedding_dimensions = 384
+        with patch("secondbrain.storage.config") as mock_config_func:
+            mock_config_func.return_value.mongo_uri = "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
+            mock_config_func.return_value.mongo_db = "secondbrain"
+            mock_config_func.return_value.mongo_collection = "embeddings"
+            mock_config_func.return_value.embedding_dimensions = 384
 
             storage = VectorStorage()
 
@@ -114,11 +114,11 @@ class TestConnectionRecovery:
 
     def test_reconnection_after_close(self) -> None:
         """Test reconnection after explicit close."""
-        with patch("secondbrain.storage.get_config") as mock_config:
-            mock_config.return_value.mongo_uri = "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
-            mock_config.return_value.mongo_db = "secondbrain"
-            mock_config.return_value.mongo_collection = "embeddings"
-            mock_config.return_value.embedding_dimensions = 384
+        with patch("secondbrain.storage.config") as mock_config_func:
+            mock_config_func.return_value.mongo_uri = "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
+            mock_config_func.return_value.mongo_db = "secondbrain"
+            mock_config_func.return_value.mongo_collection = "embeddings"
+            mock_config_func.return_value.embedding_dimensions = 384
 
             storage = VectorStorage()
 
@@ -140,11 +140,11 @@ class TestConnectionRecovery:
 
     def test_context_manager_connection(self) -> None:
         """Test context manager patterns."""
-        with patch("secondbrain.storage.get_config") as mock_config:
-            mock_config.return_value.mongo_uri = "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
-            mock_config.return_value.mongo_db = "secondbrain"
-            mock_config.return_value.mongo_collection = "embeddings"
-            mock_config.return_value.embedding_dimensions = 384
+        with patch("secondbrain.storage.config") as mock_config_func:
+            mock_config_func.return_value.mongo_uri = "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
+            mock_config_func.return_value.mongo_db = "secondbrain"
+            mock_config_func.return_value.mongo_collection = "embeddings"
+            mock_config_func.return_value.embedding_dimensions = 384
 
             mock_client = MagicMock()
             mock_client.admin.command.return_value = {"ok": 1}
@@ -161,12 +161,12 @@ class TestConnectionRecovery:
 
     def test_validate_connection_caching(self) -> None:
         """Test that connection validation is cached."""
-        with patch("secondbrain.storage.get_config") as mock_config:
-            mock_config.return_value.mongo_uri = "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
-            mock_config.return_value.mongo_db = "secondbrain"
-            mock_config.return_value.mongo_collection = "embeddings"
-            mock_config.return_value.embedding_dimensions = 384
-            mock_config.return_value.connection_cache_ttl = 60.0
+        with patch("secondbrain.storage.config") as mock_config_func:
+            mock_config_func.return_value.mongo_uri = "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
+            mock_config_func.return_value.mongo_db = "secondbrain"
+            mock_config_func.return_value.mongo_collection = "embeddings"
+            mock_config_func.return_value.embedding_dimensions = 384
+            mock_config_func.return_value.connection_cache_ttl = 60.0
 
             storage = VectorStorage()
 
@@ -196,11 +196,11 @@ class TestConnectionRecovery:
 
     def test_connection_error_message_includes_context(self) -> None:
         """Test that connection errors include helpful context."""
-        with patch("secondbrain.storage.get_config") as mock_config:
-            mock_config.return_value.mongo_uri = "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
-            mock_config.return_value.mongo_db = "secondbrain"
-            mock_config.return_value.mongo_collection = "embeddings"
-            mock_config.return_value.embedding_dimensions = 384
+        with patch("secondbrain.storage.config") as mock_config_func:
+            mock_config_func.return_value.mongo_uri = "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
+            mock_config_func.return_value.mongo_db = "secondbrain"
+            mock_config_func.return_value.mongo_collection = "embeddings"
+            mock_config_func.return_value.embedding_dimensions = 384
 
             storage = VectorStorage()
 
