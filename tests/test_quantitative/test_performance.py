@@ -298,9 +298,6 @@ Answer:"""
             else 0.0
         )
 
-        if avg_throughput >= THRESHOLD_MIN_THROUGHPUT * 0.99:
-            pytest.skip(f"Throughput {avg_throughput:.2f} is within 1% of threshold")
-
         failure_msg = (
             f"Throughput threshold not met:\n"
             f"  Average throughput: {avg_throughput:.2f} queries/second (threshold: {THRESHOLD_MIN_THROUGHPUT} queries/second)\n"

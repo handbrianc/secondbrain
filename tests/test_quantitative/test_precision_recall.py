@@ -109,9 +109,7 @@ class TestPrecisionRecall:
 
         # Report average precision across all queries
         avg_precision = sum(precisions) / len(precisions) if precisions else 0.0
-        pytest.skip(
-            f"Precision@{k} test completed. Average precision: {avg_precision:.4f}"
-        )
+        print(f"Precision@{k} test completed. Average precision: {avg_precision:.4f}")
 
     @pytest.mark.parametrize("k,threshold", [(5, 0.3), (10, 0.4), (20, 0.5)])
     def test_recall_at_k(

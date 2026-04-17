@@ -362,7 +362,7 @@ class TestSimilarityThresholdSensitivity:
             )
 
         # Log empirical findings
-        pytest.skip(
+        print(
             f"Threshold {threshold}: avg_results={avg_results:.2f}, "
             f"no_results={results['no_results_count']}/{results['queries_processed']}, "
             f"avg_similarity={results['overall_avg_similarity']:.4f}"
@@ -843,7 +843,6 @@ class TestPerformanceThresholdValidation:
         """
         import time
 
-
         try:
             searcher = Searcher(verbose=False)
             llm_provider = get_llm_provider()
@@ -1186,7 +1185,7 @@ class TestThresholdRecommendations:
             },
         }
 
-        pytest.skip(f"Threshold Adjustment Guidelines:\n{guidelines}")
+        print(f"Threshold Adjustment Guidelines:\n{guidelines}")
 
     def test_threshold_monitoring_recommendations(self) -> None:
         """Document recommendations for threshold monitoring.
@@ -1213,4 +1212,4 @@ class TestThresholdRecommendations:
             ],
         }
 
-        pytest.skip(f"Threshold Monitoring Recommendations:\n{recommendations}")
+        print(f"Threshold Monitoring Recommendations:\n{recommendations}")
