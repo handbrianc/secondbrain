@@ -26,32 +26,37 @@ class TestDockerManagerBasic:
         manager = DockerManager(compose_file=str(compose_file))
         assert manager.compose_file == compose_file
 
-    @patch("secondbrain.utils.docker_manager.get_config")
-    def test_is_local_mongodb_true(self, mock_get_config):
+    @patch("secondbrain.utils.docker_manager.config")
+    def test_is_local_mongodb_true(self, mock_config):
         """Test _is_local_mongodb returns True for localhost URIs."""
-        mock_get_config.return_value.mongo_uri = "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
+        mock_config.return_value.mongo_uri = "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
         manager = DockerManager()
         assert manager._is_local_mongodb() is True
 
-    @patch("secondbrain.utils.docker_manager.get_config")
-    def test_is_local_mongodb_false(self, mock_get_config):
+    @patch("secondbrain.utils.docker_manager.config")
+    def test_is_local_mongodb_false(self, mock_config):
         """Test _is_local_mongodb returns False for Atlas URIs."""
-        mock_get_config.return_value.mongo_uri = (
+        mock_config.return_value.mongo_uri = (
             "mongodb+srv://cluster0.mongodb.net/secondbrain"
         )
         manager = DockerManager()
         assert manager._is_local_mongodb() is False
 
-    @patch("secondbrain.utils.docker_manager.get_config")
-    def test_is_local_mongodb_127_0_0_1(self, mock_get_config):
+    @patch("secondbrain.utils.docker_manager.config")
+    def test_is_local_mongodb_127_0_0_1(self, mock_config):
         """Test _is_local_mongodb returns True for 127.0.0.1."""
-        mock_get_config.return_value.mongo_uri = "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
+        mock_config.return_value.mongo_uri = "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
         manager = DockerManager()
         assert manager._is_local_mongodb() is True
 
     def test_is_local_mongodb_static_method(self):
         """Test static method is_local_mongodb_uri."""
-        assert DockerManager.is_local_mongodb_uri("mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin") is True
+        assert (
+            DockerManager.is_local_mongodb_uri(
+                "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
+            )
+            is True
+        )
         assert (
             DockerManager.is_local_mongodb_uri("mongodb+srv://cluster.mongodb.net")
             is False
@@ -161,18 +166,18 @@ class TestStartMongo:
 
 
 class TestWaitForMongoReady:
-    @patch("secondbrain.utils.docker_manager.get_config")
-    def test_wait_for_mongo_ready_skips_remote(self, mock_get_config):
-        mock_get_config.return_value.mongo_uri = "mongodb+srv://cluster.mongodb.net"
+    @patch("secondbrain.utils.docker_manager.config")
+    def test_wait_for_mongo_ready_skips_remote(self, mock_config):
+        mock_config.return_value.mongo_uri = "mongodb+srv://cluster.mongodb.net"
         manager = DockerManager()
         manager.wait_for_mongo_ready(max_wait_seconds=1)
 
     def test_wait_for_mongo_ready_success(self):
         from unittest.mock import patch
 
-        with patch("secondbrain.utils.docker_manager.get_config") as mock_get_config:
+        with patch("secondbrain.utils.docker_manager.config") as mock_config_func:
             with patch("secondbrain.storage.VectorStorage") as mock_storage_class:
-                mock_get_config.return_value.mongo_uri = "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
+                mock_config_func.return_value.mongo_uri = "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
                 mock_storage = MagicMock()
                 mock_storage.validate_connection.return_value = True
                 mock_storage._wait_for_index_ready.return_value = None
@@ -184,9 +189,9 @@ class TestWaitForMongoReady:
     def test_wait_for_mongo_ready_timeout(self):
         from unittest.mock import patch
 
-        with patch("secondbrain.utils.docker_manager.get_config") as mock_get_config:
+        with patch("secondbrain.utils.docker_manager.config") as mock_config_func:
             with patch("secondbrain.storage.VectorStorage") as mock_storage_class:
-                mock_get_config.return_value.mongo_uri = "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
+                mock_config_func.return_value.mongo_uri = "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
                 mock_storage = MagicMock()
                 mock_storage.validate_connection.return_value = False
                 mock_storage_class.return_value = mock_storage
@@ -197,9 +202,9 @@ class TestWaitForMongoReady:
 
 
 class TestEnsureMongoRunning:
-    @patch("secondbrain.utils.docker_manager.get_config")
-    def test_ensure_mongo_running_skips_remote(self, mock_get_config):
-        mock_get_config.return_value.mongo_uri = "mongodb+srv://cluster.mongodb.net"
+    @patch("secondbrain.utils.docker_manager.config")
+    def test_ensure_mongo_running_skips_remote(self, mock_config):
+        mock_config.return_value.mongo_uri = "mongodb+srv://cluster.mongodb.net"
         manager = DockerManager()
         manager.ensure_mongo_running(verbose=False)
 
@@ -219,9 +224,9 @@ class TestEnsureMongoRunning:
             with pytest.raises(DockerNotInstalledError):
                 manager.ensure_mongo_running(verbose=False)
 
-    @patch("secondbrain.utils.docker_manager.get_config")
-    def test_ensure_mongo_running_full_flow(self, mock_get_config):
-        mock_get_config.return_value.mongo_uri = "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
+    @patch("secondbrain.utils.docker_manager.config")
+    def test_ensure_mongo_running_full_flow(self, mock_config):
+        mock_config.return_value.mongo_uri = "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
 
         manager = DockerManager()
         with patch.object(manager, "check_mongo_running") as mock_check:

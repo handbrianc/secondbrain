@@ -84,7 +84,7 @@ class TestHalfOpenPartialSuccess:
             cb.record_failure()
 
         # Wait for timeout
-        time.sleep(0.07)
+        time.sleep(0.1)
 
         # Should be in HALF_OPEN
         assert cb.state == CircuitState.HALF_OPEN
@@ -99,7 +99,7 @@ class TestHalfOpenPartialSuccess:
         assert cb.state == CircuitState.OPEN  # Any failure in half-open reopens
 
         # Wait again for timeout
-        time.sleep(0.07)
+        time.sleep(0.1)
 
         # Back to HALF_OPEN
         assert cb.state == CircuitState.HALF_OPEN
