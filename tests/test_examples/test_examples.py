@@ -227,6 +227,8 @@ class TestIntegrationExamples:
 
         Validates docs/examples/integrations/flask_api.py
         """
+        import threading
+
         import requests
 
         from secondbrain.logging import setup_logging
@@ -241,30 +243,43 @@ class TestIntegrationExamples:
             / "flask_api.py"
         )
 
-        server_process = None
         port = 8765
+        server_thread = None
+        app = None
 
         try:
-            server_process = example_runner(
-                script_path=script_path,
-                args=["--port", str(port)],
-                timeout=5,
-            )
+            with open(script_path) as f:
+                exec(f.read(), globals())
+                app = globals().get("app")
 
-            time.sleep(2)
+            if app is None:
+                raise RuntimeError("Could not load Flask app from script")
 
-            try:
-                response = requests.get(f"http://localhost:{port}/health", timeout=5)
-                assert response.status_code == 200
-                assert response.json()["status"] == "healthy"
-            except requests.ConnectionError:
-                pytest.skip("Flask server did not start in time")
+            def run_server() -> None:
+                app.run(host="127.0.0.1", port=port, debug=False, use_reloader=False)
+
+            server_thread = threading.Thread(target=run_server, daemon=True)
+            server_thread.start()
+
+            max_retries = 10
+            for i in range(max_retries):
+                try:
+                    response = requests.get(
+                        f"http://127.0.0.1:{port}/health", timeout=2
+                    )
+                    if response.status_code == 200:
+                        break
+                except requests.ConnectionError:
+                    if i == max_retries - 1:
+                        raise
+                    time.sleep(0.5)
+
+            response = requests.get(f"http://127.0.0.1:{port}/health", timeout=5)
+            assert response.status_code == 200
+            assert response.json()["status"] == "healthy"
 
         except Exception as e:
-            pytest.skip(f"Flask API test skipped: {e}")
-        finally:
-            if server_process and server_process.get("command"):
-                pass
+            pytest.fail(f"Flask API test failed: {e}")
 
     def test_example_fastapi_endpoint(
         self, example_runner: Any, fast_test_config: Any
