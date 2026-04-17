@@ -23,8 +23,9 @@ from uuid import uuid4
 import typing_extensions
 from typing_extensions import TypedDict
 
-from secondbrain.config import get_config
+from secondbrain.config import config, get_config
 from secondbrain.exceptions import DocumentExtractionError, UnsupportedFileError
+from secondbrain.storage import VectorStorage
 from secondbrain.utils.embedding_cache import EmbeddingCache
 from secondbrain.utils.tracing import trace_operation
 
@@ -603,7 +604,7 @@ class DocumentIngestor:
             verbose: Enable verbose logging.
             progress_callback: Optional callback(file_path: Path, success: bool) called after each file.
         """
-        config = get_config()
+        cfg = config()
 
         if chunk_size <= 0:
             raise ValueError("chunk_size must be positive")
@@ -615,11 +616,11 @@ class DocumentIngestor:
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
         self.verbose = verbose
-        self.max_file_size_bytes: int = config.max_file_size_bytes
+        self.max_file_size_bytes: int = cfg.max_file_size_bytes
         self.progress_callback = progress_callback
 
         # Initialize embedding cache for deduplication
-        self.embedding_cache = EmbeddingCache(max_size=config.embedding_cache_size)
+        self.embedding_cache = EmbeddingCache(max_size=cfg.embedding_cache_size)
 
         # Lazily import docling to avoid 2+ second import overhead
         from docling.document_converter import DocumentConverter
@@ -739,10 +740,9 @@ class DocumentIngestor:
             list of documents if batch processing,
             None if processing failed.
         """
-        from secondbrain.config import get_config
-        from secondbrain.storage import VectorStorage
+        from secondbrain.config import config
 
-        config = get_config()
+        cfg = config()
 
         try:
             segments: list[Segment] = self._extract_text(file_path)
@@ -759,7 +759,7 @@ class DocumentIngestor:
             return None
 
         # Use streaming if enabled (memory-efficient batch processing)
-        if config.streaming_enabled:
+        if cfg.streaming_enabled:
             storage = VectorStorage()
             docs_count = self._stream_process_chunks(
                 file_path, segments, embedding_gen, storage
@@ -829,10 +829,10 @@ class DocumentIngestor:
         -------
             Dictionary mapping text_hash to embedding.
         """
-        from secondbrain.config import get_config
+        from secondbrain.config import config
 
-        config = get_config()
-        batch_size = config.embedding_batch_size
+        cfg = config()
+        batch_size = cfg.embedding_batch_size
         chunk_to_embedding: dict[int, list[float]] = {}
 
         # Process chunks in batches
@@ -1016,10 +1016,10 @@ class DocumentIngestor:
         - Memory is abundant
         - Need all embeddings in memory for post-processing
         """
-        from secondbrain.config import get_config
+        from secondbrain.config import config
 
-        config = get_config()
-        batch_size = config.streaming_chunk_batch_size  # Default: 50 chunks/batch
+        cfg = config()
+        batch_size = cfg.streaming_chunk_batch_size  # Default: 50 chunks/batch
 
         # Deduplicate chunks across all segments
         seen_hashes = set()
@@ -1179,9 +1179,9 @@ class DocumentIngestor:
         ------
             ValueError: If cores is non-positive after resolution.
         """
-        config = get_config()
+        cfg = config()
         if cores is None:
-            cores = config.max_workers or os.cpu_count() or 1
+            cores = cfg.max_workers or os.cpu_count() or 1
 
         if cores <= 0:
             raise ValueError("cores must be positive")
@@ -1226,13 +1226,11 @@ class DocumentIngestor:
         failed_files = 0
 
         # Use a Manager to create a shared Queue for progress updates
-        from secondbrain.config import get_config
-
-        config = get_config()
+        from secondbrain.config import config
 
         with Manager() as manager:
             progress_queue = manager.Queue()
-            embedding_model_name = config.local_embedding_model
+            embedding_model_name = config().local_embedding_model
 
             with (
                 trace_operation("ingest_multiprocess_progress"),
@@ -1361,7 +1359,7 @@ class DocumentIngestor:
             as_completed,
         )
 
-        from secondbrain.config import get_config
+        from secondbrain.config import config
 
         successful_files = 0
         failed_files = 0
@@ -1410,9 +1408,9 @@ class DocumentIngestor:
                             self.progress_callback(file_path, False)
                         continue
 
-                    config = get_config()
+                    cfg = config()
 
-                    if config.streaming_enabled:
+                    if cfg.streaming_enabled:
                         with trace_operation("ingest_stream_process"):
                             docs_count = self._stream_process_chunks(
                                 file_path, segments, embedding_gen, storage
@@ -1717,7 +1715,7 @@ class AsyncDocumentIngestor(DocumentIngestor):
         -------
             dict with 'success' and 'failed' counts.
         """
-        from secondbrain.config import get_config
+        from secondbrain.config import config
         from secondbrain.embedding import LocalEmbeddingGenerator
         from secondbrain.storage import VectorStorage
 
@@ -1764,10 +1762,9 @@ class AsyncDocumentIngestor(DocumentIngestor):
 
         Uses native async embedding generation to avoid blocking the event loop.
         """
-        from secondbrain.config import get_config
+        from secondbrain.config import config
 
-        config = get_config()
-        batch_size = config.streaming_chunk_batch_size
+        batch_size = config().streaming_chunk_batch_size
 
         # Deduplicate chunks across all segments
         seen_hashes = set()
@@ -1935,10 +1932,9 @@ class AsyncDocumentIngestor(DocumentIngestor):
         embedding_gen: Any,
     ) -> dict[int, list[float]]:
         """Generate embeddings for chunks with async caching and batch processing."""
-        from secondbrain.config import get_config
+        from secondbrain.config import config
 
-        config = get_config()
-        batch_size = config.embedding_batch_size
+        batch_size = config().embedding_batch_size
         chunk_to_embedding: dict[int, list[float]] = {}
 
         for i in range(0, len(chunks), batch_size):
@@ -2034,11 +2030,9 @@ class AsyncDocumentIngestor(DocumentIngestor):
                 )
                 return False
 
-            from secondbrain.config import get_config
+            from secondbrain.config import config
 
-            config = get_config()
-
-            if config.streaming_enabled:
+            if config().streaming_enabled:
                 docs_count = await self._stream_process_chunks_async(
                     file_path, segments, embedding_gen, storage
                 )
