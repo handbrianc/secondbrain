@@ -23,7 +23,7 @@ from typing import Any
 import click
 from rich.console import Console
 
-from secondbrain.config import get_config
+from secondbrain.config import config
 from secondbrain.exceptions import (
     CLIValidationError,
     ServiceUnavailableError,
@@ -31,6 +31,10 @@ from secondbrain.exceptions import (
 )
 from secondbrain.logging import get_health_status
 from secondbrain.storage import ChunkInfo
+from secondbrain.utils.docker_manager import (
+    DockerComposeError,
+    DockerNotInstalledError,
+)
 
 from . import cli
 from .display import (
@@ -82,9 +86,9 @@ def ingest(
     """
     from secondbrain.document import DocumentIngestor
 
-    config = get_config()
-    chunk_size = config.chunk_size if chunk_size is None else chunk_size
-    chunk_overlap = config.chunk_overlap if chunk_overlap is None else chunk_overlap
+    cfg = config()
+    chunk_size = cfg.chunk_size if chunk_size is None else chunk_size
+    chunk_overlap = cfg.chunk_overlap if chunk_overlap is None else chunk_overlap
 
     # Validate and resolve core count
     if cores is not None:
@@ -207,8 +211,8 @@ def search(
     from secondbrain.constants import DEFAULT_MIN_SIMILARITY_THRESHOLD
     from secondbrain.search import Searcher
 
-    config = get_config()
-    top_k = top_k or config.default_top_k
+    cfg = config()
+    top_k = top_k or cfg.default_top_k
     # Use provided min_score or fall back to default constant
     effective_min_score = (
         min_score if min_score is not None else DEFAULT_MIN_SIMILARITY_THRESHOLD
@@ -451,11 +455,11 @@ def chat(
         secondbrain chat --list-sessions
         secondbrain chat --check-llm
     """
-    from secondbrain.config import get_config
+    from secondbrain.config import config
     from secondbrain.conversation import ConversationStorage
     from secondbrain.rag.providers import OllamaLLMProvider
 
-    config = get_config()
+    cfg = config()
 
     if list_sessions:
         with ConversationStorage() as storage:
@@ -486,17 +490,13 @@ def chat(
         return
 
     if check_llm:
-        llm_provider = OllamaLLMProvider(
-            host=config.ollama_host, model=config.llm_model
-        )
+        llm_provider = OllamaLLMProvider(host=cfg.ollama_host, model=cfg.llm_model)
         if llm_provider.health_check():
             console.print(
                 f"[green]✓ Ollama is available[/green] (model: {llm_provider.model})"
             )
         else:
-            console.print(
-                f"[red]✗ Ollama is not available at {config.ollama_host}[/red]"
-            )
+            console.print(f"[red]✗ Ollama is not available at {cfg.ollama_host}[/red]")
             console.print(
                 "[yellow]Start Ollama with: sentence-transformers serve[/yellow]"
             )
@@ -559,13 +559,13 @@ def _single_turn_chat(
     show_sources: bool,
 ) -> None:
     """Handle single-turn chat with a query."""
-    from secondbrain.config import get_config
+    from secondbrain.config import config
     from secondbrain.conversation import ConversationSession, ConversationStorage
     from secondbrain.rag import RAGPipeline
     from secondbrain.rag.providers import OllamaLLMProvider
     from secondbrain.search import Searcher
 
-    config = get_config()
+    cfg = config()
 
     with ConversationStorage() as storage:
         session_obj = ConversationSession.load(session, storage)
@@ -573,16 +573,16 @@ def _single_turn_chat(
             session_obj = ConversationSession.create(session, storage)
 
     searcher = Searcher(verbose=False)
-    llm_model = model or config.llm_model
+    llm_model = model or cfg.llm_model
     llm_provider = OllamaLLMProvider(
-        host=config.ollama_host, model=llm_model, temperature=temperature
+        host=cfg.ollama_host, model=llm_model, temperature=temperature
     )
 
     pipeline = RAGPipeline(
         searcher=searcher,
         llm_provider=llm_provider,
         top_k=top_k,
-        context_window=config.rag_context_window,
+        context_window=cfg.rag_context_window,
     )
 
     with console.status("[cyan]Thinking...", spinner="dots"):
@@ -613,13 +613,13 @@ def _interactive_chat(
     show_sources: bool,
 ) -> None:
     """Handle interactive REPL mode for chat."""
-    from secondbrain.config import get_config
+    from secondbrain.config import config
     from secondbrain.conversation import ConversationSession, ConversationStorage
     from secondbrain.rag import RAGPipeline
     from secondbrain.rag.providers import OllamaLLMProvider
     from secondbrain.search import Searcher
 
-    config = get_config()
+    cfg = config()
 
     console.print("\n[bold]SecondBrain Interactive Chat[/bold]")
     console.print("=" * 60)
@@ -638,9 +638,9 @@ def _interactive_chat(
             )
 
     searcher = Searcher(verbose=False)
-    llm_model = model or config.llm_model
+    llm_model = model or cfg.llm_model
     llm_provider = OllamaLLMProvider(
-        host=config.ollama_host, model=llm_model, temperature=temperature
+        host=cfg.ollama_host, model=llm_model, temperature=temperature
     )
 
     # Initialize RAG pipeline
@@ -648,7 +648,7 @@ def _interactive_chat(
         searcher=searcher,
         llm_provider=llm_provider,
         top_k=top_k,
-        context_window=config.rag_context_window,
+        context_window=cfg.rag_context_window,
     )
 
     history_file = Path("~/.secondbrain_chat_history").expanduser()
@@ -722,3 +722,248 @@ def _interactive_chat(
 
         except Exception as e:
             console.print(f"[red]Error: {e}[/red]")
+
+
+@handle_cli_errors
+@cli.command()
+@click.option(
+    "--compose-file",
+    "-f",
+    type=click.Path(exists=True),
+    default=None,
+    help="Path to docker-compose.yml (default: auto-detect in project root)",
+)
+@click.option(
+    "--project-name",
+    "-p",
+    type=str,
+    default="secondbrain",
+    help="Docker Compose project name (default: secondbrain)",
+)
+@click.option(
+    "--wait",
+    "-w",
+    is_flag=True,
+    help="Wait for services to be fully ready before returning",
+)
+@click.pass_context
+def start(
+    ctx: click.Context,
+    compose_file: str | None,
+    project_name: str,
+    wait: bool,
+) -> None:
+    """Start the production Docker Compose stack.
+
+    Starts MongoDB and other services defined in docker-compose.yml.
+    By default, starts only MongoDB service.
+
+    Examples:
+        secondbrain start                    # Start with auto-detected compose file
+        secondbrain start -f docker-compose.prod.yml  # Use specific compose file
+        secondbrain start --wait             # Wait for services to be fully ready
+    """
+    from secondbrain.utils.docker_manager import DockerManager
+
+    # Auto-detect compose file if not specified
+    if compose_file is None:
+        # Check common locations
+        possible_paths = [
+            Path.cwd() / "docker-compose.yml",
+            Path.cwd() / "docker-compose.prod.yml",
+            Path(__file__).parent.parent.parent.parent / "docker-compose.yml",
+        ]
+        for path in possible_paths:
+            if path.exists():
+                compose_file = str(path)
+                break
+
+        if compose_file is None:
+            raise CLIValidationError(
+                "No docker-compose.yml found. Please specify --compose-file "
+                "or place docker-compose.yml in the current directory or project root."
+            )
+
+    console.print(f"[cyan]Starting Docker Compose stack from: {compose_file}[/cyan]")
+
+    try:
+        manager = DockerManager(compose_file=compose_file, project_name=project_name)
+
+        # Check if Docker is available
+        if not manager.check_docker_installed():
+            raise DockerNotInstalledError(
+                "[red]✗ Docker is not installed or not in PATH[/red]\n\n"
+                "Please install Docker Desktop (macOS/Windows) or Docker Engine (Linux):\n"
+                "  - https://docs.docker.com/get-docker/"
+            )
+
+        if not manager.check_docker_compose_installed():
+            raise DockerComposeError(
+                "[red]✗ docker compose (v2) is not installed[/red]\n\n"
+                "Please install Docker Compose plugin:\n"
+                "  - https://docs.docker.com/compose/install/"
+            )
+
+        # Start MongoDB
+        console.print("[cyan]Starting MongoDB...[/cyan]")
+        manager.start_mongo()
+
+        # Wait for ready if requested
+        if wait:
+            console.print("[cyan]Waiting for services to be ready...[/cyan]")
+            manager.wait_for_mongo_ready()
+            console.print("[green]✓ Docker Compose stack is fully ready[/green]")
+        else:
+            console.print("[green]✓ Docker Compose stack started successfully[/green]")
+            console.print(
+                "[dim]Use --wait to wait for services to be fully ready[/dim]"
+            )
+
+    except DockerNotInstalledError as e:
+        console.print(str(e))
+        sys.exit(1)
+    except DockerComposeError as e:
+        console.print(f"[red]Error: {e}[/red]")
+        sys.exit(1)
+    except Exception as e:
+        console.print(f"[red]Unexpected error: {e}[/red]")
+        sys.exit(1)
+
+
+@handle_cli_errors
+@cli.command()
+@click.option(
+    "--compose-file",
+    "-f",
+    type=click.Path(exists=True),
+    default=None,
+    help="Path to docker-compose.yml (default: auto-detect in project root)",
+)
+@click.option(
+    "--project-name",
+    "-p",
+    type=str,
+    default="secondbrain",
+    help="Docker Compose project name (default: secondbrain)",
+)
+@click.option(
+    "--remove-volumes",
+    "-v",
+    is_flag=True,
+    help="Remove named volumes as well",
+)
+@click.option(
+    "--force",
+    "-y",
+    is_flag=True,
+    help="Skip confirmation prompt",
+)
+@click.pass_context
+def stop(
+    ctx: click.Context,
+    compose_file: str | None,
+    project_name: str,
+    remove_volumes: bool,
+    force: bool,
+) -> None:
+    """Stop the production Docker Compose stack.
+
+    Stops and removes containers created by docker compose up.
+
+    Examples:
+        secondbrain stop                       # Stop with auto-detected compose file
+        secondbrain stop -f docker-compose.prod.yml  # Use specific compose file
+        secondbrain stop --remove-volumes      # Also remove volumes
+        secondbrain stop --force               # Skip confirmation
+    """
+    import subprocess
+
+    # Auto-detect compose file if not specified
+    if compose_file is None:
+        # Check common locations
+        possible_paths = [
+            Path.cwd() / "docker-compose.yml",
+            Path.cwd() / "docker-compose.prod.yml",
+            Path(__file__).parent.parent.parent.parent / "docker-compose.yml",
+        ]
+        for path in possible_paths:
+            if path.exists():
+                compose_file = str(path)
+                break
+
+        if compose_file is None:
+            raise CLIValidationError(
+                "No docker-compose.yml found. Please specify --compose-file "
+                "or place docker-compose.yml in the current directory or project root."
+            )
+
+    # Get confirmation
+    if not force:
+        action = "remove volumes" if remove_volumes else "stop containers"
+        if not click.confirm(
+            f"Stop Docker Compose stack and {action}? This will stop all services."
+        ):
+            console.print("Cancelled.")
+            return
+
+    console.print(f"[cyan]Stopping Docker Compose stack from: {compose_file}[/cyan]")
+
+    # Check if Docker is available
+    if (
+        subprocess.run(
+            ["docker", "--version"], capture_output=True, check=False
+        ).returncode
+        != 0
+    ):
+        console.print(
+            "[red]✗ Docker is not installed or not in PATH[/red]\n"
+            "Please install Docker to use this feature."
+        )
+        sys.exit(1)
+
+    try:
+        # Run docker compose down
+        cmd = [
+            "docker",
+            "compose",
+            "-f",
+            compose_file,
+            "-p",
+            project_name,
+            "down",
+        ]
+
+        if remove_volumes:
+            cmd.append("-v")
+
+        console.print("[cyan]Stopping services...[/cyan]")
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+
+        if result.returncode != 0:
+            error_msg = result.stderr or result.stdout or "Unknown error"
+            raise DockerComposeError(
+                f"Failed to stop Docker Compose stack: {error_msg}"
+            )
+
+        console.print("[green]✓ Docker Compose stack stopped successfully[/green]")
+
+        if remove_volumes:
+            console.print("[dim]Named volumes have been removed[/dim]")
+
+    except subprocess.TimeoutExpired:
+        console.print(
+            "[red]Error: Timeout while stopping Docker Compose stack[/red]\n"
+            "Please check running containers with: docker ps"
+        )
+        sys.exit(1)
+    except DockerComposeError as e:
+        console.print(f"[red]Error: {e}[/red]")
+        sys.exit(1)
+    except Exception as e:
+        console.print(f"[red]Unexpected error: {e}[/red]")
+        sys.exit(1)
