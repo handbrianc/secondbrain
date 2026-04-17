@@ -73,8 +73,11 @@ def example_runner(tmp_path: Path) -> Generator[Any, None, None]:
         if env_overrides:
             env.update(env_overrides)
 
-        # Set test-specific defaults
-        env.setdefault("SECONDBRAIN_VERBOSE", "0")
+        env["SECONDBRAIN_VERBOSE"] = "0"
+        env["SECONDBRAIN_MONGO_URI"] = (
+            "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
+        )
+        env["SECONDBRAIN_OLLAMA_HOST"] = "http://localhost:11435"
 
         # Run the script
         result = subprocess.run(
