@@ -7,7 +7,7 @@ import time
 
 from pymongo import MongoClient
 
-from secondbrain.config import get_config
+from secondbrain.config import config, get_config
 from secondbrain.exceptions import StorageConnectionError
 from secondbrain.storage.models import DatabaseStats
 from secondbrain.storage.pipeline import build_search_pipeline

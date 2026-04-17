@@ -20,7 +20,7 @@ from pymongo.errors import (
     ServerSelectionTimeoutError,
 )
 
-from secondbrain.config import Config, get_config
+from secondbrain.config import Config, config
 from secondbrain.exceptions import StorageConnectionError
 from secondbrain.storage.models import DatabaseStats
 from secondbrain.storage.pipeline import build_search_pipeline
@@ -51,20 +51,20 @@ class VectorStorage(ValidatableService):
             db_name: Override database name.
             collection_name: Override collection name.
         """
-        config = get_config()
-        self.mongo_uri: str = mongo_uri or config.mongo_uri
-        self.db_name: str = db_name or config.mongo_db
-        self.collection_name: str = collection_name or config.mongo_collection
-        self._config: Config = config
+        cfg = config()
+        self.mongo_uri: str = mongo_uri or cfg.mongo_uri
+        self.db_name: str = db_name or cfg.mongo_db
+        self.collection_name: str = collection_name or cfg.mongo_collection
+        self._config: Config = cfg
         self._client: MongoClient[Any] | None = None
         self._db: Database[Any] | None = None
         self._collection: Collection[Any] | None = None
         self._index_created: bool = False
         self._async_client: httpx.AsyncClient | None = None
         # Config-based retry settings
-        self._index_ready_retry_count: int = config.index_ready_retry_count
-        self._index_ready_retry_delay: float = config.index_ready_retry_delay
-        super().__init__(cache_ttl=config.connection_cache_ttl)
+        self._index_ready_retry_count: int = cfg.index_ready_retry_count
+        self._index_ready_retry_delay: float = cfg.index_ready_retry_delay
+        super().__init__(cache_ttl=cfg.connection_cache_ttl)
 
     def _require_connection(self, operation: str = "database operation") -> None:
         """Validate MongoDB connection and raise StorageConnectionError if unavailable.
@@ -826,18 +826,18 @@ class AsyncVectorStorage(ValidatableService):
         collection_name: str | None = None,
     ) -> None:
         """Initialize async vector storage with Motor."""
-        config = get_config()
-        self.mongo_uri: str = mongo_uri or config.mongo_uri
-        self.db_name: str = db_name or config.mongo_db
-        self.collection_name: str = collection_name or config.mongo_collection
-        self._config: Config = config
+        cfg = config()
+        self.mongo_uri: str = mongo_uri or cfg.mongo_uri
+        self.db_name: str = db_name or cfg.mongo_db
+        self.collection_name: str = collection_name or cfg.mongo_collection
+        self._config: Config = cfg
         self._async_client: AsyncIOMotorClient | None = None
         self._async_db: Any = None
         self._async_collection: Any = None
         self._index_created: bool = False
-        self._index_ready_retry_count: int = config.index_ready_retry_count
-        self._index_ready_retry_delay: float = config.index_ready_retry_delay
-        super().__init__(cache_ttl=config.connection_cache_ttl)
+        self._index_ready_retry_count: int = cfg.index_ready_retry_count
+        self._index_ready_retry_delay: float = cfg.index_ready_retry_delay
+        super().__init__(cache_ttl=config().connection_cache_ttl)
 
     async def _require_connection_async(
         self, operation: str = "database operation"
