@@ -66,6 +66,8 @@ class TestQuerySanitization:
                 and "<script" not in s.lower()
                 and "javascript:" not in s.lower()
                 and "../" not in s
+                and "onerror=" not in s.lower()
+                and "onload=" not in s.lower()
             )
         )
     )
