@@ -97,12 +97,23 @@ class TestDocumentIngestion:
         self,
         sample_pdf_path: Path,
         sample_pdf_with_multiple_pages: Path,
+        tmp_path: Path,
     ) -> None:
         """Test batch ingestion of multiple PDF files."""
+        import shutil
+
         mongomock_client = mongomock.MongoClient()
         try:
             db = mongomock_client["secondbrain"]
             collection = db["embeddings"]
+
+            # Create a temporary directory with only our test PDFs
+            test_dir = tmp_path / "test_pdfs"
+            test_dir.mkdir()
+            pdf1 = test_dir / "test1.pdf"
+            pdf2 = test_dir / "test2.pdf"
+            shutil.copy(sample_pdf_path, pdf1)
+            shutil.copy(sample_pdf_with_multiple_pages, pdf2)
 
             mock_storage = MagicMock()
             mock_storage.validate_connection.return_value = True
@@ -130,7 +141,7 @@ class TestDocumentIngestion:
                 LocalEmbeddingGenerator.generate = mock_generate
 
                 try:
-                    result = ingestor.ingest(str(sample_pdf_path.parent))
+                    result = ingestor.ingest(str(test_dir))
 
                     assert result["success"] >= 1
                     assert result["failed"] == 0

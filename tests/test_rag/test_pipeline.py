@@ -50,7 +50,7 @@ def mock_config(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
         "SECONDBRAIN_MONGO_URI": "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin",
         "SECONDBRAIN_MONGO_DB": "test_secondbrain",
         "SECONDBRAIN_MONGO_COLLECTION": "test_embeddings",
-        "SECONDBRAIN_LOCALHOST": "http://localhost:11434",
+        "SECONDBRAIN_LOCALHOST": "http://localhost:11435",
         "SECONDBRAIN_LOCAL_EMBEDDING_MODEL": "all-MiniLM-L6-v2",
         "SECONDBRAIN_CHUNK_SIZE": "512",
         "SECONDBRAIN_CHUNK_OVERLAP": "50",
