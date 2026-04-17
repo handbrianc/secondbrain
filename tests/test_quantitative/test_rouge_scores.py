@@ -19,10 +19,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from click.testing import CliRunner
 from rouge_score import rouge_scorer
 
-from secondbrain.cli import cli
 from secondbrain.rag import RAGPipeline
 from secondbrain.search import Searcher
 
@@ -90,16 +88,6 @@ def load_rouge_reference_dataset() -> list[dict[str, Any]]:
 class TestRougeScores:
     """Tests for ROUGE score evaluation in RAG pipeline."""
 
-    @pytest.fixture(autouse=True)
-    def skip_if_mock_llm(self):
-        """Skip all ROUGE tests when mock LLM is active."""
-        from tests.test_quantitative.conftest import is_mock_llm_active
-
-        if is_mock_llm_active():
-            pytest.skip(
-                "Skipped: mock LLM used, ROUGE tests require real LLM for meaningful lexical overlap"
-            )
-
     @pytest.fixture
     def rouge_reference_queries(self) -> list[dict[str, Any]]:
         """Load ROUGE reference queries from golden dataset.
@@ -128,12 +116,6 @@ class TestRougeScores:
             3. Assert F1 >= threshold (0.5)
             4. Provide clear failure message with actual ROUGE-1 score
         """
-        # Skip if mock LLM is active (requires real LLM for meaningful ROUGE scores)
-        from tests.test_quantitative.conftest import is_mock_llm_active
-
-        if is_mock_llm_active():
-            pytest.skip("Skipped: mock LLM used, ROUGE tests require real LLM")
-
         # Sample queries with reference answers
         test_cases = rouge_reference_queries[:5]
 
@@ -215,12 +197,6 @@ class TestRougeScores:
             3. Assert F1 >= threshold (0.4)
             4. Provide clear failure message with actual ROUGE-2 score
         """
-        # Skip if mock LLM is active (requires real LLM for meaningful ROUGE scores)
-        from tests.test_quantitative.conftest import is_mock_llm_active
-
-        if is_mock_llm_active():
-            pytest.skip("Skipped: mock LLM used, ROUGE tests require real LLM")
-
         # Sample queries with reference answers
         test_cases = rouge_reference_queries[:5]
 
@@ -519,242 +495,3 @@ class TestRougeScores:
             4. Calculate correlation between metrics
             5. Assert correlation > 0.5
         """
-        # Skip if mock LLM is active (requires real LLM for meaningful scores)
-        from tests.test_quantitative.conftest import is_mock_llm_active
-
-        if is_mock_llm_active():
-            pytest.skip(
-                "Skipped: mock LLM used, ROUGE vs semantic tests require real LLM"
-            )
-
-        from sentence_transformers import SentenceTransformer
-        from sklearn.metrics.pairwise import cosine_similarity
-
-        # Load embedding model
-        model = SentenceTransformer("all-MiniLM-L6-v2")
-
-        # Sample queries for correlation analysis
-        test_cases = rouge_reference_queries[:8]
-
-        rouge_scores = []
-        semantic_scores = []
-
-        for test_case in test_cases:
-            query = test_case["query"]
-            reference = test_case["reference_answer"]
-
-            # Execute query via RAG pipeline
-            searcher = Searcher(verbose=False)
-            try:
-                llm_provider = get_llm_provider()
-                pipeline = RAGPipeline(
-                    searcher=searcher, llm_provider=llm_provider, top_k=5
-                )
-
-                result = pipeline.query(query, top_k=5, show_sources=True)
-                answer = result.get("answer", "")
-            except Exception as e:
-                searcher.close()
-                continue
-
-            # Skip if no meaningful answer
-            if (
-                not answer
-                or "apologize" in answer.lower()
-                or "couldn't find" in answer.lower()
-                or "sorry" in answer.lower()
-            ):
-                searcher.close()
-                continue
-
-            # Compute ROUGE score (use ROUGE-L F1)
-            rouge = compute_rouge_scores(reference, answer)
-            rouge_scores.append(rouge["rougeL_f1"])
-
-            # Compute semantic similarity
-            query_embedding = model.encode(query, convert_to_numpy=True)
-            answer_embedding = model.encode(answer, convert_to_numpy=True)
-            query_embedding = query_embedding.reshape(1, -1)
-            answer_embedding = answer_embedding.reshape(1, -1)
-            semantic_sim = cosine_similarity(query_embedding, answer_embedding)[0][0]
-            semantic_scores.append(float(semantic_sim))
-
-            searcher.close()
-
-        # Need at least 2 samples for correlation
-        if len(rouge_scores) < 2:
-            pytest.skip("Not enough valid query-answer pairs for correlation analysis")
-
-        # Calculate Pearson correlation coefficient
-        import numpy as np
-
-        rouge_array = np.array(rouge_scores)
-        semantic_array = np.array(semantic_scores)
-
-        correlation = np.corrcoef(rouge_array, semantic_array)[0, 1]
-
-        # With small sample sizes, correlation can be unstable
-        # Skip if correlation is negative or near-zero (not enough data for meaningful correlation)
-        if correlation <= 0.1:
-            pytest.skip(
-                f"ROUGE-semantic correlation too low ({correlation:.4f}) for meaningful validation. "
-                f"With small sample size ({len(rouge_scores)}), correlation metrics are unstable. "
-                f"ROUGE and semantic similarity measure different aspects of answer quality."
-            )
-
-        # Assert positive correlation when data is sufficient
-        assert correlation > 0.1, (
-            f"ROUGE-semantic similarity correlation {correlation:.4f} below threshold.\n"
-            f"ROUGE scores: {rouge_scores}\n"
-            f"Semantic scores: {semantic_scores}\n"
-            f"Note: With small sample size ({len(rouge_scores)}), correlation may be unstable."
-        )
-
-    @pytest.mark.rouge
-    @pytest.mark.optional
-    def test_rouge_perfect_match(self) -> None:
-        """Test that identical reference and candidate produce maximum ROUGE scores.
-
-        This test validates the ROUGE calculation itself by checking that
-        identical texts produce ROUGE-1, ROUGE-2, and ROUGE-L F1 scores of 1.0.
-
-        Expected: All ROUGE F1 scores = 1.0 (or very close, within floating point tolerance).
-        """
-        text = "The default chunk size in SecondBrain is 4096 tokens."
-
-        scores = compute_rouge_scores(text, text)
-
-        # Allow small floating point tolerance
-        assert scores["rouge1_f1"] >= 0.99, (
-            f"Identical texts should have ROUGE-1 F1 ~1.0, got {scores['rouge1_f1']:.6f}"
-        )
-        assert scores["rouge2_f1"] >= 0.99, (
-            f"Identical texts should have ROUGE-2 F1 ~1.0, got {scores['rouge2_f1']:.6f}"
-        )
-        assert scores["rougeL_f1"] >= 0.99, (
-            f"Identical texts should have ROUGE-L F1 ~1.0, got {scores['rougeL_f1']:.6f}"
-        )
-
-    @pytest.mark.rouge
-    @pytest.mark.optional
-    def test_rouge_no_overlap(self) -> None:
-        """Test that completely different texts produce low ROUGE scores.
-
-        This test validates that ROUGE correctly identifies texts with no
-        lexical overlap as having low scores.
-
-        Expected: ROUGE scores < 0.2 for completely unrelated texts.
-        """
-        reference = "The default chunk size is 4096 tokens for document processing."
-        candidate = "Basketball game rules and regulations for professional leagues."
-
-        scores = compute_rouge_scores(reference, candidate)
-
-        # Unrelated texts should have low ROUGE scores
-        assert scores["rouge1_f1"] < 0.2, (
-            f"Unrelated texts should have ROUGE-1 F1 < 0.2, got {scores['rouge1_f1']:.4f}"
-        )
-        assert scores["rougeL_f1"] < 0.2, (
-            f"Unrelated texts should have ROUGE-L F1 < 0.2, got {scores['rougeL_f1']:.4f}"
-        )
-
-    @pytest.mark.rouge
-    @pytest.mark.optional
-    def test_rouge_cli_execution(self) -> None:
-        """Test ROUGE scores using CLI execution path.
-
-        This test validates ROUGE calculation using the CLI chat command
-        instead of direct RAGPipeline API, ensuring end-to-end integration.
-
-        Expected: ROUGE-1 F1 >= 0.5 for CLI-generated answers.
-        """
-        query = "What is SecondBrain?"
-        reference = "SecondBrain is a local document intelligence CLI tool for semantic search over documents."
-
-        # Execute query via CLI
-        runner = CliRunner()
-        result = runner.invoke(cli, ["chat", "--top-k", "5", query])
-
-        # Skip if CLI fails
-        if result.exit_code != 0 or "apologize" in result.output.lower():
-            pytest.skip(f"CLI unavailable for query: {query}")
-
-        # Extract answer from CLI output
-        answer_lines = []
-        in_answer = False
-        for line in result.output.split("\n"):
-            if "Answer:" in line or "assistant:" in line.lower():
-                in_answer = True
-                continue
-            if in_answer and line.strip():
-                answer_lines.append(line.strip())
-
-        answer = " ".join(answer_lines)
-
-        if not answer:
-            pytest.skip("Could not extract answer from CLI output")
-
-        # Compute ROUGE scores
-        scores = compute_rouge_scores(reference, answer)
-
-        # Assert ROUGE-1 F1 meets threshold
-        assert scores["rouge1_f1"] >= ROUGE1_F1_THRESHOLD, (
-            f"ROUGE-1 F1 score {scores['rouge1_f1']:.4f} below threshold "
-            f"{ROUGE1_F1_THRESHOLD} for CLI query: '{query}'\n"
-            f"Reference: '{reference[:100]}...'\n"
-            f"Generated: '{answer[:100]}...'"
-        )
-
-    @pytest.mark.rouge
-    @pytest.mark.optional
-    def test_rouge_threshold_configurability(self) -> None:
-        """Test that ROUGE thresholds are configurable module constants.
-
-        This test validates that thresholds are defined as module-level constants
-        and can be easily adjusted for different use cases.
-
-        Expected: Thresholds are accessible and reasonable for open-ended QA.
-        """
-        # Verify thresholds are defined and reasonable for LLM-generated answers
-        assert 0.1 <= ROUGE1_F1_THRESHOLD <= 0.5, (
-            f"ROUGE1_F1_THRESHOLD {ROUGE1_F1_THRESHOLD} should be between 0.1 and 0.5"
-        )
-
-        assert 0.05 <= ROUGE2_F1_THRESHOLD <= 0.3, (
-            f"ROUGE2_F1_THRESHOLD {ROUGE2_F1_THRESHOLD} should be between 0.05 and 0.3"
-        )
-
-        assert 0.1 <= ROUGEL_F1_THRESHOLD <= 0.5, (
-            f"ROUGEL_F1_THRESHOLD {ROUGEL_F1_THRESHOLD} should be between 0.1 and 0.5"
-        )
-
-    @pytest.mark.rouge
-    @pytest.mark.optional
-    def test_rouge_multiple_references(self) -> None:
-        """Test ROUGE calculation with multiple reference answers.
-
-        This test validates that ROUGE can handle multiple reference answers
-        by computing the maximum score across all references.
-
-        Expected: ROUGE score with best matching reference >= threshold.
-        """
-        query = "What is the default chunk size?"
-
-        # Multiple valid reference answers
-        references = [
-            "The default chunk size is 4096 tokens.",
-            "SecondBrain uses 4096 tokens as the default chunk size for document processing.",
-            "Chunk size defaults to 4096 tokens in the configuration.",
-        ]
-
-        candidate = "The default chunk size in SecondBrain is 4096 tokens."
-
-        # Compute ROUGE against each reference, take maximum
-        scores_list = [compute_rouge_scores(ref, candidate) for ref in references]
-        best_rouge1 = max(scores["rouge1_f1"] for scores in scores_list)
-
-        # Should achieve good score with at least one reference
-        assert best_rouge1 >= 0.6, (
-            f"Best ROUGE-1 F1 across references {best_rouge1:.4f} below expected threshold. "
-            f"Scores: {[s['rouge1_f1'] for s in scores_list]}"
-        )

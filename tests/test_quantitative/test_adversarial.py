@@ -41,11 +41,16 @@ def get_llm_provider():
 def _mongo_available() -> bool:
     """Check if MongoDB is available for integration tests."""
     try:
+        import os
+
         from pymongo import MongoClient
 
-        client = MongoClient(
-            "mongodb://localhost:27017/", serverSelectionTimeoutMS=2000
+        # Use test port 27018, or fall back to env var if set
+        mongo_uri = os.environ.get(
+            "SECONDBRAIN_MONGO_URI", "mongodb://localhost:27018/"
         )
+
+        client = MongoClient(mongo_uri, serverSelectionTimeoutMS=2000)
         client.admin.command("ping")
         client.close()
         return True
@@ -1011,7 +1016,9 @@ class TestAdversarialQueries:
         valid_outcomes = []
 
         for result in results:
-            if result.get("error_type") == "ValueError" or (result.get("success") and result.get("answer_is_empty")):
+            if result.get("error_type") == "ValueError" or (
+                result.get("success") and result.get("answer_is_empty")
+            ):
                 valid_outcomes.append(True)
             elif result.get("success"):
                 answer = result.get("answer", "").lower()
