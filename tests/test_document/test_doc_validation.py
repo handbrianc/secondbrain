@@ -94,8 +94,8 @@ class TestResolveCoreCount:
         """Test cores > available are clamped to max."""
         ingestor = DocumentIngestor()
 
-        with patch("secondbrain.document.get_config") as mock_config:
-            mock_config.return_value.max_workers = 4
+        with patch("secondbrain.document.config") as mock_config_func:
+            mock_config_func.return_value.max_workers = 4
 
             with patch.object(os, "cpu_count", return_value=4):
                 assert ingestor._resolve_core_count(8) == 8

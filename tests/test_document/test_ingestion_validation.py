@@ -80,9 +80,11 @@ class TestDocumentIngestorPathValidation:
         test_file.write_text("x" * 100)
 
         # Mock config to have very small max size
+        mock_config = MagicMock()
+        mock_config.max_file_size_bytes = 50  # 50 bytes max
         monkeypatch.setattr(
-            "secondbrain.document.get_config",
-            lambda: MagicMock(max_file_size_bytes=50),  # 50 bytes max
+            "secondbrain.document.config",
+            lambda: mock_config,
         )
 
         ingestor = DocumentIngestor()
@@ -98,9 +100,11 @@ class TestDocumentIngestorPathValidation:
         test_file.write_text("x" * 100)
 
         # Mock config to have larger max size
+        mock_config = MagicMock()
+        mock_config.max_file_size_bytes = 1024  # 1KB max
         monkeypatch.setattr(
-            "secondbrain.document.get_config",
-            lambda: MagicMock(max_file_size_bytes=1024),  # 1KB max
+            "secondbrain.document.config",
+            lambda: mock_config,
         )
 
         ingestor = DocumentIngestor()
