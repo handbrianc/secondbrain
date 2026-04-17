@@ -33,7 +33,13 @@ def real_embedding_generator() -> LocalEmbeddingGenerator:
 @pytest.fixture
 def real_storage(test_name: str) -> VectorStorage:
     """Create real vector storage with MongoDB connection using test-specific collection."""
-    storage = VectorStorage(collection_name=f"test_e2e_{test_name}")
+    from .conftest import TEST_DB_NAME, TEST_MONGO_URI
+
+    storage = VectorStorage(
+        mongo_uri=TEST_MONGO_URI,
+        db_name=TEST_DB_NAME,
+        collection_name=f"test_e2e_{test_name}",
+    )
     storage.validate_connection()
     storage.ensure_index()
     yield storage
