@@ -31,15 +31,7 @@ class TestChatCommands:
         with (
             patch("secondbrain.rag.RAGPipeline") as mock_pipeline_class,
             patch("secondbrain.conversation.ConversationSession") as mock_session_class,
-            patch("secondbrain.config.get_config") as mock_get_config,
         ):
-            # Mock config
-            mock_config = MagicMock()
-            mock_config.llm_model = "llama3.2"
-            mock_config.ollama_host = "http://localhost:11434"
-            mock_config.rag_context_window = 10
-            mock_get_config.return_value = mock_config
-
             # Mock session
             mock_session = MagicMock()
             mock_session.is_empty = True
@@ -88,17 +80,7 @@ class TestChatCommands:
         with (
             patch("secondbrain.rag.RAGPipeline"),
             patch("secondbrain.conversation.ConversationSession") as mock_session_class,
-            patch("secondbrain.config.get_config") as mock_get_config,
         ):
-            # Mock config
-            mock_config = MagicMock()
-            mock_config.llm_model = "llama3.2"
-            mock_config.ollama_host = "http://localhost:11434"
-            mock_config.rag_context_window = 10
-            mock_config.llm_temperature = 0.1
-            mock_config.llm_max_tokens = 2048
-            mock_get_config.return_value = mock_config
-
             # Mock session
             mock_session = MagicMock()
             mock_session.is_empty = True
@@ -146,17 +128,7 @@ class TestChatCommands:
         with (
             patch("secondbrain.rag.RAGPipeline") as mock_pipeline_class,
             patch("secondbrain.conversation.ConversationSession") as mock_session_class,
-            patch("secondbrain.config.get_config") as mock_get_config,
         ):
-            # Mock config
-            mock_config = MagicMock()
-            mock_config.llm_model = "llama3.2"
-            mock_config.ollama_host = "http://localhost:11434"
-            mock_config.rag_context_window = 10
-            mock_config.llm_temperature = 0.1
-            mock_config.llm_max_tokens = 2048
-            mock_get_config.return_value = mock_config
-
             # Mock session
             mock_session = MagicMock()
             mock_session.is_empty = True
@@ -275,16 +247,9 @@ class TestChatCommands:
         - Available Ollama shows success message with model name
         - Unavailable Ollama shows error and startup instructions
         """
-        with (
-            patch("secondbrain.rag.providers.OllamaLLMProvider") as mock_provider_class,
-            patch("secondbrain.config.get_config") as mock_get_config,
-        ):
-            # Mock config
-            mock_config = MagicMock()
-            mock_config.ollama_host = "http://localhost:11434"
-            mock_config.llm_model = "llama3.2"
-            mock_get_config.return_value = mock_config
-
+        with patch(
+            "secondbrain.rag.providers.OllamaLLMProvider"
+        ) as mock_provider_class:
             # Mock LLM provider
             mock_provider = MagicMock()
             mock_provider.model = "llama3.2"
