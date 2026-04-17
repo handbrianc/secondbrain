@@ -498,15 +498,16 @@ class Config(BaseSettings):
 def get_config() -> Config:
     """Get cached configuration instance.
 
-    Configuration supports multicore processing via `max_workers` setting
-    (or `--cores` CLI flag for ingestion command).
-
-    Returns
-    -------
-        Config: Configuration instance.
+    Returns:
+        Config: Configuration instance loaded from environment variables.
     """
     return Config()
 
 
-# Convenience function for direct access
-config = get_config()
+def config() -> Config:
+    """Get configuration instance (convenience wrapper).
+
+    Returns:
+        Config: Configuration instance loaded from environment variables.
+    """
+    return get_config()

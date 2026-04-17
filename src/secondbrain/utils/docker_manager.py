@@ -22,7 +22,7 @@ from pathlib import Path
 
 from rich.console import Console
 
-from secondbrain.config import get_config
+from secondbrain.config import config
 
 logger = logging.getLogger(__name__)
 console = Console()
@@ -72,8 +72,8 @@ class DockerManager:
             compose_file: Path to docker-compose.yml. If None, uses default location.
             project_name: Docker Compose project name (default: "secondbrain").
         """
-        config = get_config()
-        self.mongo_uri: str = config.mongo_uri
+        cfg = config()
+        self.mongo_uri: str = cfg.mongo_uri
         self.compose_file: Path = (
             Path(compose_file)
             if compose_file
