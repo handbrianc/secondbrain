@@ -29,9 +29,9 @@ class TestStreamingProcessing:
         """Test that streaming processing is used when enabled in config."""
         ingestor = DocumentIngestor(chunk_size=100, chunk_overlap=10)
 
-        with patch("secondbrain.document.get_config") as mock_config:
-            mock_config.return_value.streaming_enabled = True
-            mock_config.return_value.streaming_chunk_batch_size = 50
+        with patch("secondbrain.document.config") as mock_config_func:
+            mock_config_func.return_value.streaming_enabled = True
+            mock_config_func.return_value.streaming_chunk_batch_size = 50
 
             segments: list[Segment] = [
                 {"text": "Test content for streaming.", "page": 1}
@@ -58,11 +58,11 @@ class TestStreamingProcessing:
         mock_embedding_gen.generate.return_value = [0.1] * 384
 
         # When streaming disabled, test that config is checked
-        with patch("secondbrain.document.get_config") as mock_config:
-            mock_config.return_value.streaming_enabled = False
+        with patch("secondbrain.document.config") as mock_config_func:
+            mock_config_func.return_value.streaming_enabled = False
 
             # Test passes if no exception occurs with streaming disabled config
-            assert mock_config.return_value.streaming_enabled is False
+            assert mock_config_func.return_value.streaming_enabled is False
 
     def test_streaming_batch_size_limit(self) -> None:
         """Test that streaming respects batch size limits."""
@@ -80,8 +80,8 @@ class TestStreamingProcessing:
         mock_storage = MagicMock()
 
         # Use small batch size
-        with patch("secondbrain.document.get_config") as mock_config:
-            mock_config.return_value.streaming_chunk_batch_size = 3
+        with patch("secondbrain.document.config") as mock_config_func:
+            mock_config_func.return_value.streaming_chunk_batch_size = 3
 
             docs_count = ingestor._stream_process_chunks(
                 Path("test.pdf"), segments, mock_embedding_gen, mock_storage
@@ -234,8 +234,8 @@ class TestEmbeddingBatchGeneration:
             [0.1] * 384 for _ in range(50)
         ]
 
-        with patch("secondbrain.document.get_config") as mock_config:
-            mock_config.return_value.embedding_batch_size = 10
+        with patch("secondbrain.document.config") as mock_config_func:
+            mock_config_func.return_value.embedding_batch_size = 10
 
             result = ingestor._generate_embeddings_with_cache(
                 chunks, mock_embedding_gen
@@ -379,8 +379,8 @@ class TestMemoryEfficiency:
 
         mock_storage = MagicMock()
 
-        with patch("secondbrain.document.get_config") as mock_config:
-            mock_config.return_value.streaming_chunk_batch_size = 5
+        with patch("secondbrain.document.config") as mock_config_func:
+            mock_config_func.return_value.streaming_chunk_batch_size = 5
 
             docs_count = ingestor._stream_process_chunks(
                 Path("test.pdf"), segments, mock_embedding_gen, mock_storage
