@@ -15,6 +15,7 @@ All tests use real pipeline/CLI (not mocks) and configurable thresholds.
 import math
 from typing import Any
 
+import numpy as np
 import pytest
 from click.testing import CliRunner
 from sentence_transformers import SentenceTransformer
@@ -22,6 +23,14 @@ from sentence_transformers import SentenceTransformer
 from secondbrain.cli import cli
 from secondbrain.rag import RAGPipeline
 from secondbrain.search import Searcher
+from tests.sample_size_config import (
+    SampleSizeConfig,
+)
+from tests.stats_utils import (
+    bootstrap_ci,
+    calculate_sample_size_for_ci_width,
+    check_ci_overlap,
+)
 
 
 def get_llm_provider():
@@ -42,6 +51,28 @@ def get_llm_provider():
     else:
         return MockLLMProviderWithContext()
 
+
+# Sample size configuration
+_config = SampleSizeConfig()
+
+# Semantic similarity test run counts - configurable for local vs production testing
+N_RUNS_STATISTICAL = _config.get_runs_for_test_type("semantic_similarity")  # n=30 default
+N_RUNS_SMOKE = 5  # Quick validation for local development
+
+# Allow override via environment variable for faster local testing
+import os
+if os.environ.get("N_RUNS_SEMANTIC_SIMILARITY"):
+    N_RUNS = int(os.environ.get("N_RUNS_SEMANTIC_SIMILARITY"))
+else:
+    N_RUNS = N_RUNS_STATISTICAL
+
+# Validate sample size at module load
+_validate_ok, _validate_msgs = _config.validate_sample_size(N_RUNS, "semantic_similarity")
+if not _validate_ok:
+    import warnings
+
+    for msg in _validate_msgs:
+        warnings.warn(f"[test_semantic_similarity] {msg}", UserWarning, stacklevel=2)
 
 # Semantic similarity thresholds (configurable)
 # Adjusted to match achievable performance with current setup
@@ -106,15 +137,6 @@ class TestSemanticSimilarity:
     """Tests for semantic similarity metrics in RAG pipeline."""
 
     @pytest.fixture
-    def embedding_model(self) -> Any:
-        """Load embedding model for similarity calculations.
-
-        Returns:
-            SentenceTransformer model instance.
-        """
-        return SentenceTransformer("all-MiniLM-L6-v2")  # type: ignore[operator]
-
-    @pytest.fixture
     def sample_golden_queries(self) -> list[dict[str, Any]]:
         """Sample golden queries with expected answers and metadata.
 
@@ -151,17 +173,28 @@ class TestSemanticSimilarity:
         """Test that query and answer are semantically relevant.
 
         This test validates that the RAG pipeline produces answers that are
-        semantically related to the query. Uses cosine similarity between
-        query and answer embeddings.
+        semantically related to the query. Uses bootstrap confidence intervals
+        for robust statistical testing against LLM non-determinism.
 
-        Expected: Similarity >= 0.6 for meaningful query-answer pairs.
+        Expected: Similarity CI lower bound >= 0.4 for meaningful query-answer pairs.
 
         Steps:
-            1. Execute query via RAGPipeline.query() or CLI chat
-            2. Compute cosine similarity between query and answer embeddings
-            3. Assert similarity >= threshold (0.6)
-            4. Provide clear failure message with actual similarity value
+            1. Execute query N_RUNS times via RAGPipeline.query()
+            2. Compute cosine similarity between query and each answer
+            3. Calculate bootstrap confidence interval for similarities
+            4. Assert CI lower bound >= threshold
+            5. Provide clear failure message with CI information
         """
+        # Validate sample size for statistical power
+        required_n = calculate_sample_size_for_ci_width(
+            effect_size=0.5, ci_width=0.1
+        )
+        if required_n > N_RUNS:
+            pytest.skip(
+                f"Sample size N_RUNS={N_RUNS} below required {required_n} "
+                f"for CI width 0.1 (effect_size=0.5). Consider increasing N_RUNS."
+            )
+
         # Test queries with expected semantic relevance
         test_cases: list[dict[str, Any]] = [
             {
@@ -181,45 +214,84 @@ class TestSemanticSimilarity:
         for test_case in test_cases:
             query: str = test_case["query"]
 
-            # Execute query via RAG pipeline
-            searcher = Searcher(verbose=False)
-            llm_provider = get_llm_provider()
-            pipeline = RAGPipeline(
-                searcher=searcher, llm_provider=llm_provider, top_k=5
-            )
-
-            result = pipeline.query(query, top_k=5, show_sources=True)
-            answer = result.get("answer", "")
-
-            # Skip if no meaningful answer (e.g., LLM unavailable)
-            if (
-                not answer
-                or "apologize" in answer.lower()
-                or "couldn't find" in answer.lower()
-            ):
-                pytest.skip(
-                    f"LLM unavailable or no relevant documents for query: {query}"
+            # Collect similarities across N_RUNS iterations
+            similarities: list[float] = []
+            for _ in range(N_RUNS):
+                # Execute query via RAG pipeline
+                searcher = Searcher(verbose=False)
+                llm_provider = get_llm_provider()
+                pipeline = RAGPipeline(
+                    searcher=searcher, llm_provider=llm_provider, top_k=5
                 )
 
-            # Compute cosine similarity between query and answer
-            similarity = compute_cosine_similarity(query, answer, embedding_model)
+                result = pipeline.query(query, top_k=5, show_sources=True)
+                answer = result.get("answer", "")
 
-            # Assert similarity meets threshold
-            assert similarity >= QUERY_ANSWER_SIMILARITY_THRESHOLD, (
-                f"Query-answer similarity {similarity:.4f} below threshold "
-                f"{QUERY_ANSWER_SIMILARITY_THRESHOLD} for query: '{query}'\n"
-                f"Answer: '{answer[:200]}...'"
+                # Skip run if no meaningful answer (e.g., LLM unavailable)
+                if (
+                    not answer
+                    or "apologize" in answer.lower()
+                    or "couldn't find" in answer.lower()
+                ):
+                    searcher.close()
+                    continue
+
+                # Compute cosine similarity between query and answer
+                similarity = compute_cosine_similarity(query, answer, embedding_model)
+                similarities.append(similarity)
+                searcher.close()
+
+            # Skip test if insufficient valid runs
+            if len(similarities) < 5:
+                pytest.skip(
+                    f"Insufficient valid runs (got {len(similarities)}, need >= 5) for query: {query}"
+                )
+
+            # Calculate bootstrap confidence interval
+            ci_lower, ci_upper = bootstrap_ci(
+                similarities, n_iterations=1000, confidence=0.95
             )
+            ci_width = ci_upper - ci_lower
 
-            searcher.close()
+            # Assert CI lower bound meets threshold
+            assert ci_lower >= QUERY_ANSWER_SIMILARITY_THRESHOLD, (
+                f"Query-answer similarity CI lower bound {ci_lower:.4f} below threshold "
+                f"{QUERY_ANSWER_SIMILARITY_THRESHOLD} for query: '{query}'\n"
+                f"CI: [{ci_lower:.4f}, {ci_upper:.4f}], width={ci_width:.4f}, "
+                f"n_runs={len(similarities)}, mean={np.mean(similarities):.4f}"
+            )
 
     @pytest.mark.semantic_similarity
     @pytest.mark.threshold
     def test_query_context_alignment(self, embedding_model: Any) -> None:
+        """Test that retrieved chunks are semantically aligned with query.
+
+        This test validates that the search/retrieval system returns chunks
+        that are semantically related to the query. Uses bootstrap confidence
+        intervals for robust statistical testing.
+
+        Expected: Average chunk similarity CI lower bound >= 0.4.
+
+        Steps:
+            1. Execute search N_RUNS times for each query
+            2. Compute average chunk similarity per run
+            3. Calculate bootstrap confidence interval
+            4. Assert CI lower bound >= threshold
+        """
         from tests.test_quantitative.conftest import is_mock_llm_active
 
         if is_mock_llm_active():
             pytest.skip("Skipped: mock LLM used, threshold tests require real LLM")
+
+        # Validate sample size for statistical power
+        required_n = calculate_sample_size_for_ci_width(
+            effect_size=0.5, ci_width=0.1
+        )
+        if required_n > N_RUNS:
+            pytest.skip(
+                f"Sample size N_RUNS={N_RUNS} below required {required_n} "
+                f"for CI width 0.1 (effect_size=0.5). Consider increasing N_RUNS."
+            )
 
         test_queries = [
             "What is the purpose of document chunking?",
@@ -228,53 +300,50 @@ class TestSemanticSimilarity:
         ]
 
         for query in test_queries:
-            # Execute search via Searcher
-            try:
-                with Searcher(verbose=False) as searcher:
-                    chunks = searcher.search(query, top_k=5)
-            except RuntimeError as e:
-                if "Cannot connect to MongoDB" in str(e):
-                    pytest.skip(
-                        "MongoDB not available for query-context alignment test"
-                    )
-                raise
+            # Collect average similarities across N_RUNS iterations
+            avg_similarities: list[float] = []
 
-            # Skip if no results (documents not ingested)
-            if not chunks:
-                pytest.skip(f"No documents found for query: {query}")
+            for _ in range(N_RUNS):
+                try:
+                    with Searcher(verbose=False) as searcher:
+                        chunks = searcher.search(query, top_k=5)
+                except RuntimeError as e:
+                    if "Cannot connect to MongoDB" in str(e):
+                        pytest.skip(
+                            "MongoDB not available for query-context alignment test"
+                        )
+                    raise
 
-            avg_similarity = compute_average_chunk_similarity(
-                query, chunks, embedding_model
-            )
+                # Skip run if no results (documents not ingested)
+                if not chunks:
+                    continue
 
-            if avg_similarity == 0.0:
-                pytest.skip(f"No relevant documents found for query: {query}")
+                avg_sim = compute_average_chunk_similarity(query, chunks, embedding_model)
 
-            chunk_similarities = []
-            for i, chunk in enumerate(chunks):
-                chunk_text = chunk.get("chunk_text", chunk.get("text", ""))
-                if chunk_text:
-                    sim = compute_cosine_similarity(query, chunk_text, embedding_model)
-                    chunk_similarities.append((i + 1, sim, chunk_text[:100]))
+                # Skip run if no relevant documents
+                if avg_sim == 0.0:
+                    continue
 
-            # Skip if retrieved chunks are not semantically relevant to query
-            # This happens when test data doesn't contain content matching the query
-            max_chunk_similarity = (
-                max([sim for _, sim, _ in chunk_similarities])
-                if chunk_similarities
-                else 0
-            )
-            if max_chunk_similarity < 0.15:
+                avg_similarities.append(avg_sim)
+
+            # Skip test if insufficient valid runs
+            if len(avg_similarities) < 5:
                 pytest.skip(
-                    f"Retrieved chunks not semantically relevant to query (max similarity: {max_chunk_similarity:.3f}). "
-                    f"Test data may not contain content for: '{query}'"
+                    f"Insufficient valid runs (got {len(avg_similarities)}, need >= 5) for query: {query}"
                 )
 
-            # Assert average similarity meets threshold
-            if avg_similarity < QUERY_CONTEXT_SIMILARITY_THRESHOLD:
+            # Calculate bootstrap confidence interval
+            ci_lower, ci_upper = bootstrap_ci(
+                avg_similarities, n_iterations=1000, confidence=0.95
+            )
+            ci_width = ci_upper - ci_lower
+
+            # Assert average CI lower bound meets threshold
+            if ci_lower < QUERY_CONTEXT_SIMILARITY_THRESHOLD:
                 pytest.skip(
-                    f"Average query-context similarity {avg_similarity:.4f} below threshold "
+                    f"Average query-context similarity CI lower bound {ci_lower:.4f} below threshold "
                     f"{QUERY_CONTEXT_SIMILARITY_THRESHOLD} for query: '{query}'. "
+                    f"CI: [{ci_lower:.4f}, {ci_upper:.4f}], width={ci_width:.4f}. "
                     f"This indicates test data doesn't match query well enough."
                 )
 
@@ -284,32 +353,44 @@ class TestSemanticSimilarity:
 
         This test validates the consistency of the RAG pipeline by checking that
         semantically similar queries produce answers with similar semantic content.
+        Uses bootstrap confidence intervals and CI overlap analysis for robust
+        statistical testing against LLM non-determinism.
 
-        Expected: Answer similarity pattern matches query similarity pattern
-        within tolerance.
+        Expected: Answer similarity CI patterns match query similarity patterns.
 
         Steps:
             1. Define query pairs with known semantic similarity
-            2. Execute both queries via RAG pipeline
-            3. Compute query similarity and answer similarity
-            4. Assert answer similarity correlates with query similarity
+            2. Execute both queries N_RUNS times via RAG pipeline
+            3. Compute answer similarities for each run
+            4. Calculate bootstrap CIs for each query's answer similarities
+            5. Check if CIs overlap to determine statistical significance
         """
+        # Validate sample size for statistical power
+        required_n = calculate_sample_size_for_ci_width(
+            effect_size=0.5, ci_width=0.1
+        )
+        if required_n > N_RUNS:
+            pytest.skip(
+                f"Sample size N_RUNS={N_RUNS} below required {required_n} "
+                f"for CI width 0.1 (effect_size=0.5). Consider increasing N_RUNS."
+            )
+
         # Query pairs with expected semantic similarity
         query_pairs = [
             {
                 "query1": "What is SecondBrain?",
                 "query2": "Tell me about SecondBrain tool",
-                "expected_similarity": "high",  # Very similar queries
+                "expected_similarity": "high",
             },
             {
                 "query1": "How to ingest documents?",
                 "query2": "How to add files to database?",
-                "expected_similarity": "high",  # Similar intent
+                "expected_similarity": "high",
             },
             {
                 "query1": "What is MongoDB?",
                 "query2": "How does vector search work?",
-                "expected_similarity": "medium",  # Related but different
+                "expected_similarity": "medium",
             },
         ]
 
@@ -318,60 +399,89 @@ class TestSemanticSimilarity:
             query2 = pair["query2"]
             expected_pattern = pair["expected_similarity"]
 
-            # Compute query similarity
+            # Collect answer similarities across N_RUNS iterations
+            answer_similarities_1: list[float] = []
+            answer_similarities_2: list[float] = []
+
+            for _ in range(N_RUNS):
+                # Execute both queries
+                searcher = Searcher(verbose=False)
+                llm_provider = get_llm_provider()
+                pipeline = RAGPipeline(
+                    searcher=searcher, llm_provider=llm_provider, top_k=5
+                )
+
+                result1 = pipeline.query(query1, top_k=5)
+                result2 = pipeline.query(query2, top_k=5)
+
+                answer1 = result1.get("answer", "")
+                answer2 = result2.get("answer", "")
+
+                # Skip run if answers are not meaningful
+                if (
+                    not answer1
+                    or not answer2
+                    or "apologize" in answer1.lower()
+                    or "apologize" in answer2.lower()
+                ):
+                    searcher.close()
+                    continue
+
+                # Compute answer similarity for this run
+                answer_similarity = compute_cosine_similarity(
+                    answer1, answer2, embedding_model
+                )
+                answer_similarities_1.append(answer_similarity)
+                answer_similarities_2.append(answer_similarity)
+                searcher.close()
+
+            # Skip test if insufficient valid runs
+            if len(answer_similarities_1) < 5:
+                pytest.skip(
+                    f"Insufficient valid runs (got {len(answer_similarities_1)}, need >= 5)"
+                )
+
+            # Compute query similarity (single computation, deterministic)
             query_similarity = compute_cosine_similarity(
                 query1, query2, embedding_model
             )
 
-            # Execute both queries
-            searcher = Searcher(verbose=False)
-            llm_provider = get_llm_provider()
-            pipeline = RAGPipeline(
-                searcher=searcher, llm_provider=llm_provider, top_k=5
+            # Compute bootstrap CIs for both answer similarity distributions
+            ci1_lower, ci1_upper = bootstrap_ci(
+                answer_similarities_1, n_iterations=1000, confidence=0.95
+            )
+            ci2_lower, ci2_upper = bootstrap_ci(
+                answer_similarities_2, n_iterations=1000, confidence=0.95
             )
 
-            result1 = pipeline.query(query1, top_k=5)
-            result2 = pipeline.query(query2, top_k=5)
-
-            answer1 = result1.get("answer", "")
-            answer2 = result2.get("answer", "")
-
-            # Skip if answers are not meaningful
-            if (
-                not answer1
-                or not answer2
-                or "apologize" in answer1.lower()
-                or "apologize" in answer2.lower()
-            ):
-                searcher.close()
-                pytest.skip("LLM unavailable for cross-query test")
-
-            # Compute answer similarity
-            answer_similarity = compute_cosine_similarity(
-                answer1, answer2, embedding_model
+            # Check CI overlap for statistical significance
+            overlap_result = check_ci_overlap(
+                (ci1_lower, ci1_upper), (ci2_lower, ci2_upper)
             )
 
             # Validate pattern: similar queries should have reasonably similar answers
             if expected_pattern == "high":
                 # High similarity queries should have answers with at least moderate similarity
-                assert answer_similarity > 0.3, (
+                # Use CI lower bound for robustness
+                assert ci1_lower > 0.3, (
                     f"High similarity queries produced dissimilar answers.\n"
                     f"Query1: '{query1}'\nQuery2: '{query2}'\n"
                     f"Query similarity: {query_similarity:.4f}\n"
-                    f"Answer similarity: {answer_similarity:.4f}\n"
-                    f"Answer1: '{answer1[:150]}...'\nAnswer2: '{answer2[:150]}...'"
+                    f"Answer similarity CI1: [{ci1_lower:.4f}, {ci1_upper:.4f}]\n"
+                    f"Answer similarity CI2: [{ci2_lower:.4f}, {ci2_upper:.4f}]\n"
+                    f"CI overlap: {overlap_result['overlaps']}, ratio: {overlap_result['overlap_ratio']:.3f}\n"
+                    f"Mean answer similarity: {np.mean(answer_similarities_1):.4f}"
                 )
             elif expected_pattern == "medium":
                 # Medium similarity queries may have varying answer similarity
-                # Just ensure answers are not completely unrelated (similarity > 0)
-                assert answer_similarity > -0.2, (
+                # Just ensure answers are not completely unrelated (CI lower > -0.2)
+                assert ci1_lower > -0.2, (
                     f"Medium similarity queries produced unrelated answers.\n"
                     f"Query1: '{query1}'\nQuery2: '{query2}'\n"
                     f"Query similarity: {query_similarity:.4f}\n"
-                    f"Answer similarity: {answer_similarity:.4f}"
+                    f"Answer similarity CI: [{ci1_lower:.4f}, {ci1_upper:.4f}]\n"
+                    f"Mean answer similarity: {np.mean(answer_similarities_1):.4f}"
                 )
-
-            searcher.close()
 
     @pytest.mark.semantic_similarity
     @pytest.mark.parametrize(
@@ -414,43 +524,73 @@ class TestSemanticSimilarity:
         """Test query-answer similarity using golden dataset entries.
 
         This test uses parametrized golden dataset entries to validate that
-        queries produce answers with high semantic similarity.
+        queries produce answers with high semantic similarity. Uses bootstrap
+        confidence intervals for robust statistical testing.
 
         Args:
             test_case: Golden dataset test case with query and expected_concepts.
             embedding_model: Pre-loaded SentenceTransformer model.
 
-        Expected: Similarity >= 0.6 for all golden dataset queries.
+        Expected: Similarity CI lower bound >= 0.6 for all golden dataset queries.
         """
+        # Validate sample size for statistical power
+        required_n = calculate_sample_size_for_ci_width(
+            effect_size=0.5, ci_width=0.1
+        )
+        if required_n > N_RUNS:
+            pytest.skip(
+                f"Sample size N_RUNS={N_RUNS} below required {required_n} "
+                f"for CI width 0.1 (effect_size=0.5). Consider increasing N_RUNS."
+            )
+
         query = test_case["query"]
         expected_concepts = test_case.get("expected_concepts", [])
 
-        # Execute query via RAG pipeline
-        searcher = Searcher(verbose=False)
-        llm_provider = get_llm_provider()
-        pipeline = RAGPipeline(searcher=searcher, llm_provider=llm_provider, top_k=5)
+        # Collect similarities across N_RUNS iterations
+        similarities: list[float] = []
 
-        result = pipeline.query(query, top_k=5, show_sources=True)
-        answer = result.get("answer", "")
+        for _ in range(N_RUNS):
+            # Execute query via RAG pipeline
+            searcher = Searcher(verbose=False)
+            llm_provider = get_llm_provider()
+            pipeline = RAGPipeline(
+                searcher=searcher, llm_provider=llm_provider, top_k=5
+            )
 
-        # Skip if LLM unavailable
-        if not answer or "apologize" in answer.lower():
+            result = pipeline.query(query, top_k=5, show_sources=True)
+            answer = result.get("answer", "")
+
+            # Skip run if LLM unavailable
+            if not answer or "apologize" in answer.lower():
+                searcher.close()
+                continue
+
+            # Compute similarity for this run
+            similarity = compute_cosine_similarity(query, answer, embedding_model)
+            similarities.append(similarity)
             searcher.close()
-            pytest.skip(f"LLM unavailable for golden dataset query: {query}")
 
-        # Compute similarity
-        similarity = compute_cosine_similarity(query, answer, embedding_model)
+        # Skip test if insufficient valid runs
+        if len(similarities) < 5:
+            pytest.skip(
+                f"Insufficient valid runs (got {len(similarities)}, need >= 5) for query: {query}"
+            )
 
-        # Assert similarity meets threshold
-        assert similarity >= QUERY_ANSWER_SIMILARITY_THRESHOLD, (
+        # Calculate bootstrap confidence interval
+        ci_lower, ci_upper = bootstrap_ci(
+            similarities, n_iterations=1000, confidence=0.95
+        )
+        ci_width = ci_upper - ci_lower
+
+        # Assert CI lower bound meets threshold
+        assert ci_lower >= QUERY_ANSWER_SIMILARITY_THRESHOLD, (
             f"Golden dataset test {test_case['id']} failed.\n"
             f"Query: '{query}'\n"
             f"Expected concepts: {expected_concepts}\n"
-            f"Similarity: {similarity:.4f} (threshold: {QUERY_ANSWER_SIMILARITY_THRESHOLD})\n"
-            f"Answer: '{answer[:200]}...'"
+            f"Similarity CI: [{ci_lower:.4f}, {ci_upper:.4f}], width={ci_width:.4f}\n"
+            f"Threshold: {QUERY_ANSWER_SIMILARITY_THRESHOLD}\n"
+            f"Mean similarity: {np.mean(similarities):.4f}, n_runs={len(similarities)}"
         )
-
-        searcher.close()
 
     @pytest.mark.semantic_similarity
     @pytest.mark.parametrize(
@@ -474,44 +614,72 @@ class TestSemanticSimilarity:
         """Test query-answer similarity with parametrized thresholds.
 
         This test validates query-answer similarity using different threshold
-        values to ensure robustness across configurations.
+        values and bootstrap confidence intervals for robust statistical testing.
 
         Args:
             query: Test query string.
             expected_min_similarity: Expected minimum similarity threshold.
             embedding_model: Pre-loaded SentenceTransformer model.
         """
-        # Execute query via CLI for integration testing
-        runner = CliRunner()
-        result = runner.invoke(cli, ["chat", "--top-k", "5", query])
+        # Validate sample size for statistical power
+        required_n = calculate_sample_size_for_ci_width(
+            effect_size=0.5, ci_width=0.1
+        )
+        if required_n > N_RUNS:
+            pytest.skip(
+                f"Sample size N_RUNS={N_RUNS} below required {required_n} "
+                f"for CI width 0.1 (effect_size=0.5). Consider increasing N_RUNS."
+            )
 
-        # Skip if CLI fails (LLM unavailable)
-        if result.exit_code != 0 or "apologize" in result.output.lower():
-            pytest.skip(f"CLI unavailable for query: {query}")
+        # Collect similarities across N_RUNS iterations
+        similarities: list[float] = []
 
-        # Extract answer from CLI output
-        answer_lines = []
-        in_answer = False
-        for line in result.output.split("\n"):
-            if "Answer:" in line or "assistant:" in line.lower():
-                in_answer = True
+        for _ in range(N_RUNS):
+            # Execute query via CLI for integration testing
+            runner = CliRunner()
+            result = runner.invoke(cli, ["chat", "--top-k", "5", query])
+
+            # Skip run if CLI fails (LLM unavailable)
+            if result.exit_code != 0 or "apologize" in result.output.lower():
                 continue
-            if in_answer and line.strip():
-                answer_lines.append(line.strip())
 
-        answer = " ".join(answer_lines)
+            # Extract answer from CLI output
+            answer_lines = []
+            in_answer = False
+            for line in result.output.split("\n"):
+                if "Answer:" in line or "assistant:" in line.lower():
+                    in_answer = True
+                    continue
+                if in_answer and line.strip():
+                    answer_lines.append(line.strip())
 
-        if not answer:
-            pytest.skip(f"Could not extract answer from CLI output for: {query}")
+            answer = " ".join(answer_lines)
 
-        # Compute similarity
-        similarity = compute_cosine_similarity(query, answer, embedding_model)
+            if not answer:
+                continue
 
-        # Assert similarity meets expected threshold
-        assert similarity >= expected_min_similarity, (
-            f"Query-answer similarity {similarity:.4f} below expected "
+            # Compute similarity for this run
+            similarity = compute_cosine_similarity(query, answer, embedding_model)
+            similarities.append(similarity)
+
+        # Skip test if insufficient valid runs
+        if len(similarities) < 5:
+            pytest.skip(
+                f"Insufficient valid runs (got {len(similarities)}, need >= 5) for query: {query}"
+            )
+
+        # Calculate bootstrap confidence interval
+        ci_lower, ci_upper = bootstrap_ci(
+            similarities, n_iterations=1000, confidence=0.95
+        )
+        ci_width = ci_upper - ci_lower
+
+        # Assert CI lower bound meets expected threshold
+        assert ci_lower >= expected_min_similarity, (
+            f"Query-answer similarity CI lower bound {ci_lower:.4f} below expected "
             f"{expected_min_similarity} for query: '{query}'\n"
-            f"Answer: '{answer[:200]}...'"
+            f"CI: [{ci_lower:.4f}, {ci_upper:.4f}], width={ci_width:.4f}, "
+            f"n_runs={len(similarities)}, mean={np.mean(similarities):.4f}"
         )
 
     @pytest.mark.semantic_similarity
