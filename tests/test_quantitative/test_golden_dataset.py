@@ -16,11 +16,13 @@ import json
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pytest
 from sentence_transformers import SentenceTransformer
 
 from secondbrain.rag.pipeline import RAGPipeline
 from secondbrain.search import Searcher
+from tests.stats_utils import bootstrap_ci, check_variance_stability
 from tests.test_quantitative.conftest import cosine_similarity
 
 
@@ -39,6 +41,18 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent
 GOLDEN_DATASETS_DIR = PROJECT_ROOT / "tests" / "data" / "golden_datasets"
 PASS_RATE_THRESHOLD = 0.80
 SIMILARITY_THRESHOLD = 0.65
+# Statistical run counts for golden dataset tests
+# N_RUNS_STATISTICAL: Default for production testing (30 runs for statistical significance)
+# N_RUNS_SMOKE: Quick validation (5 runs) - use for local development
+# N_RUNS_DEEP: Deep analysis (50 runs) - use for final validation before release
+N_RUNS_STATISTICAL = 30
+N_RUNS_SMOKE = 5
+N_RUNS_DEEP = 50
+
+# Allow override via environment variable for faster local testing
+import os
+if os.environ.get("N_RUNS_STATISTICAL"):
+    N_RUNS_STATISTICAL = int(os.environ.get("N_RUNS_STATISTICAL"))
 
 
 def check_concept_presence(answer: str, concepts: list[str]) -> list[str]:
@@ -130,11 +144,6 @@ def evaluate_golden_query(
 
 class TestGoldenDataset:
     """Tests for golden dataset validation and RAG pipeline evaluation."""
-
-    @pytest.fixture(scope="function")
-    def embedding_model(self) -> SentenceTransformer:
-        """Load embedding model once per test function."""
-        return SentenceTransformer("all-MiniLM-L6-v2")
 
     @pytest.fixture(scope="function")
     def searcher(self) -> Searcher:
@@ -365,52 +374,71 @@ class TestGoldenDataset:
         if not category_queries:
             pytest.skip(f"No queries found for category: {category}")
 
-        passed = 0
-        failed_details = []
+        pass_rates: list[float] = []
 
-        for query in category_queries:
-            result = rag_pipeline.query(query["query"], top_k=5)
-            answer = result.get("answer", "")
+        for _run in range(N_RUNS_STATISTICAL):
+            passed = 0
 
-            if any(
-                phrase in answer.lower()
-                for phrase in [
-                    "couldn't find relevant documents",
-                    "don't see any information",
-                    "no source documents",
-                    "no relevant documents",
-                    "don't have any information",
-                    "not a publicly available source",
-                    "need more information",
-                    "cannot provide information",
-                    "apologize",
-                    "model not found",
-                    "error",
-                    "unavailable",
-                ]
-            ):
-                pytest.skip(f"No documents found in database for category: {category}")
+            for query in category_queries:
+                result = rag_pipeline.query(query["query"], top_k=5)
+                answer = result.get("answer", "")
 
-            eval_result = evaluate_golden_query(query, answer, embedding_model)
+                if any(
+                    phrase in answer.lower()
+                    for phrase in [
+                        "couldn't find relevant documents",
+                        "don't see any information",
+                        "no source documents",
+                        "no relevant documents",
+                        "don't have any information",
+                        "not a publicly available source",
+                        "need more information",
+                        "cannot provide information",
+                        "apologize",
+                        "model not found",
+                        "error",
+                        "unavailable",
+                    ]
+                ):
+                    continue
 
-            if eval_result["passed"]:
-                passed += 1
-            else:
-                failed_details.append(
-                    {
-                        "id": query["id"],
-                        "missing": eval_result["missing_concepts"],
-                        "forbidden_found": eval_result["present_forbidden"],
-                    }
+                eval_result = evaluate_golden_query(query, answer, embedding_model)
+
+                if eval_result["passed"]:
+                    passed += 1
+
+            valid_queries = len(category_queries) - sum(
+                1 for q in category_queries
+                if any(
+                    phrase in (rag_pipeline.query(q["query"], top_k=5).get("answer", "")).lower()
+                    for phrase in [
+                        "couldn't find relevant documents",
+                        "don't see any information",
+                        "no source documents",
+                        "no relevant documents",
+                    ]
                 )
+            )
 
-        pass_rate = passed / len(category_queries)
+            if valid_queries > 0:
+                pass_rate = passed / valid_queries
+                pass_rates.append(pass_rate)
 
-        assert pass_rate >= PASS_RATE_THRESHOLD, (
-            f"Category '{category}' pass rate {pass_rate:.2%} "
+        if not pass_rates:
+            pytest.skip(f"No valid pass rates collected for category: {category}")
+
+        ci_lower, ci_upper = bootstrap_ci(pass_rates, n_iterations=1000, confidence=0.95)
+        variance_stability = check_variance_stability(pass_rates, max_cv=0.2)
+
+        assert ci_lower >= PASS_RATE_THRESHOLD, (
+            f"Category '{category}' pass rate CI lower bound {ci_lower:.2%} "
             f"below threshold {PASS_RATE_THRESHOLD:.2%}\n"
-            f"Passed: {passed}/{len(category_queries)}\n"
-            f"Failures: {failed_details}"
+            f"Point estimate mean: {np.mean(pass_rates):.2%}\n"
+            f"95% CI: [{ci_lower:.2%}, {ci_upper:.2%}]\n"
+            f"Pass rates across {len(pass_rates)} runs: {[f'{p:.2%}' for p in pass_rates]}\n"
+            f"Variance stability: CV={variance_stability['cv']:.2%}, "
+            f"{'stable' if variance_stability['is_stable'] else 'unstable'}\n"
+            f"Recommendation: {variance_stability['recommendation']}"
         )
 
     @pytest.mark.golden_dataset
@@ -450,16 +478,45 @@ class TestGoldenDataset:
         if full_query is None or not full_query.get("expected_answer"):
             pytest.skip("No expected answer available for this query")
 
-        result = rag_pipeline.query(full_query["query"], top_k=5)
-        answer = result.get("answer", "")
-        expected_answer = full_query["expected_answer"]
+        similarity_scores: list[float] = []
 
-        similarity = cosine_similarity(
-            full_query["query"], expected_answer, embedding_model
+        for _ in range(N_RUNS_STATISTICAL):
+            result = rag_pipeline.query(full_query["query"], top_k=5)
+            answer = result.get("answer", "")
+
+            if any(
+                phrase in answer.lower()
+                for phrase in [
+                    "couldn't find relevant documents",
+                    "don't see any information",
+                    "no source documents",
+                    "no relevant documents",
+                ]
+            ):
+                continue
+
+            expected_answer = full_query["expected_answer"]
+            similarity = cosine_similarity(
+                full_query["query"], expected_answer, embedding_model
+            )
+            similarity_scores.append(similarity)
+
+        if not similarity_scores:
+            pytest.skip(f"No valid similarity scores collected for query: {golden_query['id']}")
+
+        ci_lower, ci_upper = bootstrap_ci(similarity_scores, n_iterations=1000, confidence=0.95)
+        variance_stability = check_variance_stability(similarity_scores, max_cv=0.2)
+
+        assert ci_lower >= SIMILARITY_THRESHOLD, (
+            f"Query '{golden_query['id']}' semantic similarity CI lower bound {ci_lower:.2%} "
+            f"below threshold {SIMILARITY_THRESHOLD:.2%}\n"
+            f"Point estimate mean: {np.mean(similarity_scores):.2%}\n"
+            f"95% CI: [{ci_lower:.2%}, {ci_upper:.2%}]\n"
+            f"Similarity scores across {len(similarity_scores)} runs: {[f'{s:.2%}' for s in similarity_scores]}\n"
+            f"Variance stability: CV={variance_stability['cv']:.2%}, "
+            f"{'stable' if variance_stability['is_stable'] else 'unstable'}\n"
+            f"Recommendation: {variance_stability['recommendation']}"
         )
-
-        assert similarity >= 0.0
-        assert isinstance(similarity, float)
 
     @pytest.mark.golden_dataset
     @pytest.mark.integration
@@ -495,50 +552,59 @@ class TestGoldenDataset:
             except Exception:
                 pytest.skip("Database is empty or LLM unavailable")
 
-        passed = 0
-        failed_queries = []
+        pass_rates: list[float] = []
 
-        for query in tech_docs_dataset:
-            try:
-                result = rag_pipeline.query(query["query"], top_k=5)
-                answer = result.get("answer", "")
+        for _ in range(N_RUNS_STATISTICAL):
+            passed = 0
+            failed_queries = []
 
-                eval_result = evaluate_golden_query(query, answer, embedding_model)
+            for query in tech_docs_dataset:
+                try:
+                    result = rag_pipeline.query(query["query"], top_k=5)
+                    answer = result.get("answer", "")
 
-                if eval_result["passed"]:
-                    passed += 1
-                else:
+                    eval_result = evaluate_golden_query(query, answer, embedding_model)
+
+                    if eval_result["passed"]:
+                        passed += 1
+                    else:
+                        failed_queries.append(
+                            {
+                                "id": query["id"],
+                                "query": query["query"],
+                                "missing_concepts": eval_result["missing_concepts"],
+                                "present_forbidden": eval_result["present_forbidden"],
+                                "answer": answer[:200],
+                            }
+                        )
+                except Exception as e:
                     failed_queries.append(
                         {
                             "id": query["id"],
                             "query": query["query"],
-                            "missing_concepts": eval_result["missing_concepts"],
-                            "present_forbidden": eval_result["present_forbidden"],
-                            "answer": answer[:200],
+                            "error": str(e),
                         }
                     )
-            except Exception as e:
-                failed_queries.append(
-                    {
-                        "id": query["id"],
-                        "query": query["query"],
-                        "error": str(e),
-                    }
-                )
 
-        total = len(tech_docs_dataset)
-        pass_rate = passed / total if total > 0 else 0.0
+            total = len(tech_docs_dataset)
+            if total > 0:
+                pass_rate = passed / total
+                pass_rates.append(pass_rate)
 
-        assert pass_rate >= PASS_RATE_THRESHOLD, (
-            f"Overall pass rate {pass_rate:.2%} below threshold {PASS_RATE_THRESHOLD:.2%}\n"
-            f"Passed: {passed}/{total}\n"
-            f"Failures: {len(failed_queries)}\n\n"
-            f"Failed queries:\n"
-            + "\n".join(
-                f"  - {fq.get('id', 'unknown')}: {fq.get('missing_concepts', [])} "
-                f"missing, {fq.get('present_forbidden', [])} forbidden found"
-                for fq in failed_queries[:5]
-            )
+        if not pass_rates:
+            pytest.skip("No valid pass rates collected")
+
+        ci_lower, ci_upper = bootstrap_ci(pass_rates, n_iterations=1000, confidence=0.95)
+        variance_stability = check_variance_stability(pass_rates, max_cv=0.2)
+
+        assert ci_lower >= PASS_RATE_THRESHOLD, (
+            f"Overall pass rate CI lower bound {ci_lower:.2%} below threshold {PASS_RATE_THRESHOLD:.2%}\n"
+            f"Point estimate mean: {np.mean(pass_rates):.2%}\n"
+            f"95% CI: [{ci_lower:.2%}, {ci_upper:.2%}]\n"
+            f"Pass rates across {len(pass_rates)} runs: {[f'{p:.2%}' for p in pass_rates]}\n"
+            f"Variance stability: CV={variance_stability['cv']:.2%}, "
+            f"{'stable' if variance_stability['is_stable'] else 'unstable'}\n"
+            f"Recommendation: {variance_stability['recommendation']}"
         )
 
     @pytest.mark.golden_dataset

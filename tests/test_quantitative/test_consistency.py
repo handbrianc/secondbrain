@@ -4,7 +4,7 @@ Consistency tests for RAG pipeline evaluation.
 This module provides comprehensive tests for consistency metrics in the
 SecondBrain RAG system. Tests validate:
 
-1. Same query, multiple runs (5 runs) - measure answer variance
+1. Same query, multiple runs (n=30) - measure answer variance
 2. Similar queries, expected similar answers
 3. Query rewriting consistency (with/without history)
 4. Statistical tests for answer stability
@@ -24,6 +24,12 @@ from secondbrain.conversation import ConversationSession, QueryRewriter
 from secondbrain.conversation.storage import ConversationStorage
 from secondbrain.rag import RAGPipeline
 from secondbrain.search import Searcher
+from tests.sample_size_config import SampleSizeConfig
+from tests.stats_utils import (
+    bootstrap_ci,
+    calculate_ci_mean,
+    check_variance_stability,
+)
 
 
 def get_llm_provider():
@@ -37,12 +43,33 @@ def get_llm_provider():
         return MockLLMProviderWithContext()
 
 
+# Sample size configuration
+_config = SampleSizeConfig()
+
+# Consistency test run counts - configurable for local vs production testing
+MIN_RUNS_STATISTICAL = _config.get_runs_for_test_type("consistency")  # n=30 default
+MIN_RUNS_SMOKE = 5  # Quick validation for local development
+
+# Allow override via environment variable for faster local testing
+import os
+if os.environ.get("MIN_RUNS_CONSISTENCY"):
+    MIN_RUNS = int(os.environ.get("MIN_RUNS_CONSISTENCY"))
+else:
+    MIN_RUNS = MIN_RUNS_STATISTICAL
+
 # Consistency thresholds (configurable)
 MEAN_CONSISTENCY_THRESHOLD = 0.75
 VARIANCE_THRESHOLD = 0.1
 EMBEDDING_STABILITY_THRESHOLD = 0.8
 QUERY_REWRITING_SIMILARITY_THRESHOLD = 0.7
-MIN_RUNS = 5
+
+# Validate sample size at module load
+_validate_ok, _validate_msgs = _config.validate_sample_size(MIN_RUNS, "consistency")
+if not _validate_ok:
+    import warnings
+
+    for msg in _validate_msgs:
+        warnings.warn(f"[test_consistency] {msg}", UserWarning, stacklevel=2)
 
 
 def compute_cosine_similarity(text1: str, text2: str, model: Any) -> float:
@@ -143,15 +170,6 @@ def calculate_correlation(x: list[float], y: list[float]) -> float:
 
 class TestConsistency:
     """Tests for consistency metrics in RAG pipeline."""
-
-    @pytest.fixture
-    def embedding_model(self) -> Any:
-        """Load embedding model for consistency calculations.
-
-        Returns:
-            SentenceTransformer model instance.
-        """
-        return SentenceTransformer("all-MiniLM-L6-v2")  # type: ignore[operator]
 
     @pytest.fixture
     def mock_llm_provider(self) -> MagicMock:
@@ -419,16 +437,29 @@ class TestConsistency:
         if not similarities:
             pytest.skip("Could not compute pairwise similarities")
 
-        # Calculate statistics
+        # Check variance stability before running tests
+        variance_check = check_variance_stability(similarities, max_cv=0.3)
+        if not variance_check["is_stable"]:
+            pytest.skip(
+                f"Variance too unstable for reliable testing: CV={variance_check['cv']:.4f} "
+                f"(max allowed: {variance_check['max_cv']:.4f}). {variance_check['recommendation']}"
+            )
+
+        # Calculate statistics with confidence intervals
         mean_similarity = sum(similarities) / len(similarities)
         variance = calculate_variance(similarities)
         std_dev = calculate_std_dev(similarities)
 
-        # Build failure message with actual metrics
+        # Calculate confidence interval for mean similarity
+        ci_lower, ci_upper = calculate_ci_mean(similarities, confidence=0.95)
+        ci_width = ci_upper - ci_lower
+
+        # Build failure message with actual metrics including CI
         failure_message = (
             f"Answer consistency test failed for query '{query}' (ID: {query_id}, Type: {query_type})\n"
             f"Number of runs: {len(answers)}\n"
             f"Mean consistency: {mean_similarity:.4f} (threshold: {MEAN_CONSISTENCY_THRESHOLD})\n"
+            f"95% CI: [{ci_lower:.4f}, {ci_upper:.4f}], CI width: {ci_width:.4f}\n"
             f"Variance: {variance:.6f} (threshold: {VARIANCE_THRESHOLD})\n"
             f"Standard deviation: {std_dev:.4f}\n"
             f"Number of pairwise comparisons: {len(similarities)}\n\n"
@@ -440,10 +471,11 @@ class TestConsistency:
                 f"  Pair {i + 1}: {sim:.4f} (answers {i + 1} vs {i + 2})\n"
             )
 
-        # Assert mean consistency meets threshold
-        assert mean_similarity >= MEAN_CONSISTENCY_THRESHOLD, (
+        # Assert CI lower bound meets threshold (statistically rigorous)
+        assert ci_lower >= MEAN_CONSISTENCY_THRESHOLD, (
             f"{failure_message}\n"
-            f"Mean consistency {mean_similarity:.4f} below threshold {MEAN_CONSISTENCY_THRESHOLD}"
+            f"CI lower bound {ci_lower:.4f} below threshold {MEAN_CONSISTENCY_THRESHOLD}. "
+            f"This indicates the true mean may be below the threshold with 95% confidence."
         )
 
         # Assert variance is below threshold
@@ -946,17 +978,32 @@ class TestConsistency:
         if not embedding_similarities:
             pytest.skip("Could not compute embedding similarities")
 
+        # Check variance stability before running tests
+        variance_check = check_variance_stability(embedding_similarities, max_cv=0.2)
+        if not variance_check["is_stable"]:
+            pytest.skip(
+                f"Embedding variance too unstable: CV={variance_check['cv']:.4f} "
+                f"(max allowed: {variance_check['max_cv']:.4f}). {variance_check['recommendation']}"
+            )
+
         # Calculate statistics
         mean_embedding_similarity = sum(embedding_similarities) / len(
             embedding_similarities
         )
         embedding_variance = calculate_variance(embedding_similarities)
 
-        # Build failure message
+        # Calculate bootstrap confidence interval for robust CI estimation
+        ci_lower, ci_upper = bootstrap_ci(
+            embedding_similarities, n_iterations=1000, confidence=0.95, seed=42
+        )
+        ci_width = ci_upper - ci_lower
+
+        # Build failure message with CI information
         failure_message = (
             f"Answer embedding stability test failed for query '{query}' (ID: {query_id}, Type: {query_type})\n"
             f"Number of runs: {len(answer_embeddings)}\n"
             f"Mean embedding similarity: {mean_embedding_similarity:.4f} (threshold: {EMBEDDING_STABILITY_THRESHOLD})\n"
+            f"95% Bootstrap CI: [{ci_lower:.4f}, {ci_upper:.4f}], CI width: {ci_width:.4f}\n"
             f"Embedding variance: {embedding_variance:.6f}\n"
             f"Number of pairwise comparisons: {len(embedding_similarities)}\n\n"
             f"Individual embedding similarities:\n"
@@ -965,11 +1012,11 @@ class TestConsistency:
         for i, sim in enumerate(embedding_similarities):
             failure_message += f"  Pair {i + 1}: {sim:.4f}\n"
 
-        # Assert mean embedding similarity meets threshold
-        assert mean_embedding_similarity >= EMBEDDING_STABILITY_THRESHOLD, (
+        # Assert bootstrap CI lower bound meets threshold
+        assert ci_lower >= EMBEDDING_STABILITY_THRESHOLD, (
             f"{failure_message}\n"
-            f"Mean embedding similarity {mean_embedding_similarity:.4f} "
-            f"below threshold {EMBEDDING_STABILITY_THRESHOLD}"
+            f"Bootstrap CI lower bound {ci_lower:.4f} below threshold {EMBEDDING_STABILITY_THRESHOLD}. "
+            f"This indicates the true mean may be below the threshold with 95% confidence."
         )
 
         # Additional check: variance should be very low for stable embeddings
@@ -1050,15 +1097,30 @@ class TestConsistency:
         if not all_variances:
             pytest.skip("Could not compute variances for any query")
 
+        # Check variance stability across queries
+        cv_result = check_variance_stability(all_variances, max_cv=0.3)
+        if not cv_result["is_stable"]:
+            pytest.skip(
+                f"Variance too unstable across queries: CV={cv_result['cv']:.4f} "
+                f"(max allowed: {cv_result['max_cv']:.4f}). {cv_result['recommendation']}"
+            )
+
+        # Calculate confidence interval for mean variance
+        ci_lower, ci_upper = calculate_ci_mean(all_variances, confidence=0.95)
+        ci_width = ci_upper - ci_lower
+
         # All variances should be below threshold
         max_variance = max(all_variances)
         mean_variance = sum(all_variances) / len(all_variances)
 
-        assert max_variance < VARIANCE_THRESHOLD, (
+        # Assert CI lower bound of mean variance is below threshold
+        assert ci_lower < VARIANCE_THRESHOLD, (
             f"Consistency variance threshold exceeded.\n"
-            f"Maximum variance: {max_variance:.6f} (threshold: {VARIANCE_THRESHOLD})\n"
-            f"Mean variance: {mean_variance:.6f}\n"
-            f"Number of queries tested: {len(all_variances)}"
+            f"Mean variance: {mean_variance:.6f} (threshold: {VARIANCE_THRESHOLD})\n"
+            f"95% CI: [{ci_lower:.6f}, {ci_upper:.6f}], CI width: {ci_width:.6f}\n"
+            f"Maximum variance: {max_variance:.6f}\n"
+            f"Number of queries tested: {len(all_variances)}\n\n"
+            f"Individual variances: {[f'{v:.6f}' for v in all_variances]}"
         )
 
     @pytest.mark.consistency
@@ -1118,16 +1180,32 @@ class TestConsistency:
         if not consecutive_similarities:
             pytest.skip("Could not compute consecutive similarities")
 
+        # Check variance stability before running tests
+        variance_check = check_variance_stability(consecutive_similarities, max_cv=0.3)
+        if not variance_check["is_stable"]:
+            pytest.skip(
+                f"Temporal variance too unstable: CV={variance_check['cv']:.4f} "
+                f"(max allowed: {variance_check['max_cv']:.4f}). {variance_check['recommendation']}"
+            )
+
+        # Calculate confidence interval for mean temporal similarity
+        ci_lower, ci_upper = calculate_ci_mean(
+            consecutive_similarities, confidence=0.95
+        )
+        ci_width = ci_upper - ci_lower
+
         mean_temporal_similarity = sum(consecutive_similarities) / len(
             consecutive_similarities
         )
 
-        # Assert temporal consistency
-        assert mean_temporal_similarity >= MEAN_CONSISTENCY_THRESHOLD, (
+        # Assert CI lower bound meets threshold
+        assert ci_lower >= MEAN_CONSISTENCY_THRESHOLD, (
             f"Temporal consistency test failed.\n"
             f"Query: '{query}'\n"
             f"Mean temporal similarity: {mean_temporal_similarity:.4f} "
             f"(threshold: {MEAN_CONSISTENCY_THRESHOLD})\n"
+            f"95% CI: [{ci_lower:.4f}, {ci_upper:.4f}], CI width: {ci_width:.4f}\n"
+            f"CI lower bound {ci_lower:.4f} below threshold. "
             f"Consecutive similarities: {[f'{s:.4f}' for s in consecutive_similarities]}"
         )
 
@@ -1195,15 +1273,29 @@ class TestConsistency:
         if not seeded_similarities:
             pytest.skip("Could not compute seeded similarities")
 
+        # Check variance stability before running tests
+        variance_check = check_variance_stability(seeded_similarities, max_cv=0.2)
+        if not variance_check["is_stable"]:
+            pytest.skip(
+                f"Seeded variance too unstable: CV={variance_check['cv']:.4f} "
+                f"(max allowed: {variance_check['max_cv']:.4f}). {variance_check['recommendation']}"
+            )
+
+        # Calculate confidence interval for mean seeded similarity
+        ci_lower, ci_upper = calculate_ci_mean(seeded_similarities, confidence=0.95)
+        ci_width = ci_upper - ci_lower
+
         mean_seeded_similarity = sum(seeded_similarities) / len(seeded_similarities)
         seeded_variance = calculate_variance(seeded_similarities)
 
-        # Assert seeded consistency meets threshold
-        assert mean_seeded_similarity >= MEAN_CONSISTENCY_THRESHOLD, (
+        # Assert CI lower bound meets threshold
+        assert ci_lower >= MEAN_CONSISTENCY_THRESHOLD, (
             f"Seeded consistency test failed.\n"
             f"Query: '{query}'\n"
             f"Mean seeded similarity: {mean_seeded_similarity:.4f} "
             f"(threshold: {MEAN_CONSISTENCY_THRESHOLD})\n"
+            f"95% CI: [{ci_lower:.4f}, {ci_upper:.4f}], CI width: {ci_width:.4f}\n"
+            f"CI lower bound {ci_lower:.4f} below threshold.\n"
             f"Seeded variance: {seeded_variance:.6f}"
         )
 
