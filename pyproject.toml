@@ -239,11 +239,12 @@ ignore = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--no-cov --timeout=60 -p no:warnings"
+addopts = "--no-cov --timeout=60 -p no:warnings --dist=loadfile"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
-# Mark quantitative tests as sequential-only to prevent pytest-xdist errors
-# These tests use PyTorch models that cannot be shared across worker processes
+# Pytest-xdist configuration for parallel test execution
+# --dist=loadfile ensures each test file runs in a single worker,
+# preventing model sharing issues across workers
 markers = [
     "integration: marks tests as integration tests that require external services",
     "unit: marks tests as unit tests that use mocks",
@@ -271,7 +272,7 @@ markers = [
     "threshold_validation: marks tests for threshold validation and sensitivity analysis",
     "quantitative: marks tests as part of quantitative testing framework",
     "adversarial: marks tests for adversarial query handling",
-    "sequential: marks tests that must run sequentially (not in parallel due to PyTorch model sharing issues with pytest-xdist)",
+    "xdist_group: marks tests that should run in same xdist worker (shared resources)",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning:docling",
