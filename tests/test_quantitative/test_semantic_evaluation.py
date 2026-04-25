@@ -67,6 +67,7 @@ from typing import Any
 
 import numpy as np
 import pytest
+from sentence_transformers import SentenceTransformer
 
 from secondbrain.rag import RAGPipeline
 from secondbrain.search import Searcher
@@ -454,6 +455,8 @@ class TestBERTScore:
 
 
 class TestSemScore:
+    pytestmark = [pytest.mark.xdist_group(name="embedding_model_group")]
+    
     @pytest.fixture
     def semantic_queries(self) -> list[dict[str, Any]]:
         """Load semantic evaluation queries."""
@@ -463,6 +466,7 @@ class TestSemScore:
     def test_semanticscore_query_answer(
         self,
         semantic_queries: list[dict[str, Any]],
+        embedding_model: SentenceTransformer,
     ) -> None:
         """Test semantic similarity between queries and answers with bootstrap CI.
 
@@ -475,15 +479,6 @@ class TestSemScore:
 
         Expected: Bootstrap CI lower bound for similarity >= 0.70.
         """
-        try:
-            from sentence_transformers import SentenceTransformer
-        except ImportError:
-            pytest.skip(
-                "sentence-transformers not installed. Install with: pip install sentence-transformers"
-            )
-
-        model = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")  # type: ignore
-
         test_cases = semantic_queries[:5]
 
         for test_case in test_cases:
@@ -514,8 +509,8 @@ class TestSemScore:
                 pytest.skip(f"No meaningful answer for: {query}")
 
             for _ in range(N_RUNS):
-                query_embedding = model.encode(query)
-                answer_embedding = model.encode(answer)
+                query_embedding = embedding_model.encode(query)
+                answer_embedding = embedding_model.encode(answer)
 
                 similarity = np.dot(query_embedding, answer_embedding) / (
                     np.linalg.norm(query_embedding) * np.linalg.norm(answer_embedding)
@@ -538,12 +533,11 @@ class TestSemScore:
                 f"Answer: '{answer[:100]}...'"
             )
 
-        del model
-
     @pytest.mark.semantic_evaluation
     def test_semanticscore_context_relevance(
         self,
         semantic_queries: list[dict[str, Any]],
+        embedding_model: SentenceTransformer,
     ) -> None:
         """Test semantic similarity between queries and retrieved context.
 
@@ -552,15 +546,6 @@ class TestSemScore:
 
         Expected: Context relevance >= 0.50.
         """
-        try:
-            from sentence_transformers import SentenceTransformer
-        except ImportError:
-            pytest.skip(
-                "sentence-transformers not installed. Install with: pip install sentence-transformers"
-            )
-
-        model = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")  # type: ignore
-
         test_cases = semantic_queries[:3]
 
         for test_case in test_cases:
@@ -587,8 +572,8 @@ class TestSemScore:
                 searcher.close()
                 pytest.skip(f"Search failed: {query} ({e})")
 
-            query_embedding = model.encode(query)
-            context_embedding = model.encode(context)
+            query_embedding = embedding_model.encode(query)
+            context_embedding = embedding_model.encode(context)
 
             similarity = np.dot(query_embedding, context_embedding) / (
                 np.linalg.norm(query_embedding) * np.linalg.norm(context_embedding)
@@ -601,8 +586,6 @@ class TestSemScore:
             )
 
             searcher.close()
-
-        del model
 
 
 # ============================================================================
@@ -701,6 +684,8 @@ class TestFaithfulness:
 
 
 class TestAnswerRelevance:
+    pytestmark = [pytest.mark.xdist_group(name="embedding_model_group")]
+    
     @pytest.fixture
     def semantic_queries(self) -> list[dict[str, Any]]:
         """Load semantic evaluation queries."""
@@ -710,6 +695,7 @@ class TestAnswerRelevance:
     def test_answer_relevance(
         self,
         semantic_queries: list[dict[str, Any]],
+        embedding_model: SentenceTransformer,
     ) -> None:
         """Test relevance of generated answers to queries with bootstrap CI.
 
@@ -722,15 +708,6 @@ class TestAnswerRelevance:
 
         Expected: Bootstrap CI lower bound for relevance >= 0.70.
         """
-        try:
-            from sentence_transformers import SentenceTransformer
-        except ImportError:
-            pytest.skip(
-                "sentence-transformers not installed. Install with: pip install sentence-transformers"
-            )
-
-        model = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")  # type: ignore
-
         test_cases = semantic_queries[:5]
 
         for test_case in test_cases:
@@ -755,8 +732,8 @@ class TestAnswerRelevance:
                 pytest.skip(f"No meaningful answer for: {query}")
 
             for _ in range(N_RUNS):
-                query_embedding = model.encode(query)
-                answer_embedding = model.encode(answer)
+                query_embedding = embedding_model.encode(query)
+                answer_embedding = embedding_model.encode(answer)
 
                 relevance = np.dot(query_embedding, answer_embedding) / (
                     np.linalg.norm(query_embedding) * np.linalg.norm(answer_embedding)
@@ -779,8 +756,6 @@ class TestAnswerRelevance:
                 f"Answer: '{answer[:100]}...'"
             )
 
-        del model
-
 
 # ============================================================================
 # Context Precision Tests
@@ -788,6 +763,8 @@ class TestAnswerRelevance:
 
 
 class TestContextPrecision:
+    pytestmark = [pytest.mark.xdist_group(name="embedding_model_group")]
+    
     @pytest.fixture
     def semantic_queries(self) -> list[dict[str, Any]]:
         """Load semantic evaluation queries."""
@@ -797,6 +774,7 @@ class TestContextPrecision:
     def test_context_precision(
         self,
         semantic_queries: list[dict[str, Any]],
+        embedding_model: SentenceTransformer,
     ) -> None:
         """Test precision of retrieved context ranking.
 
@@ -808,15 +786,6 @@ class TestContextPrecision:
         Note: This is a placeholder test. Full implementation requires
         relevance judgment for each retrieved document.
         """
-        try:
-            from sentence_transformers import SentenceTransformer
-        except ImportError:
-            pytest.skip(
-                "sentence-transformers not installed. Install with: pip install sentence-transformers"
-            )
-
-        model = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")  # type: ignore
-
         test_cases = semantic_queries[:3]
 
         for test_case in test_cases:
@@ -838,7 +807,7 @@ class TestContextPrecision:
                 searcher.close()
                 pytest.skip(f"Search failed: {query} ({e})")
 
-            query_embedding = model.encode(query)
+            query_embedding = embedding_model.encode(query)
 
             top_similarities: list[float] = []
             bottom_similarities: list[float] = []
@@ -846,7 +815,7 @@ class TestContextPrecision:
             for i, chunk in enumerate(chunks[:10]):
                 context_text = chunk.get("text", "")
                 if context_text:
-                    context_embedding = model.encode(context_text)
+                    context_embedding = embedding_model.encode(context_text)
                     similarity = np.dot(query_embedding, context_embedding) / (
                         np.linalg.norm(query_embedding)
                         * np.linalg.norm(context_embedding)
@@ -870,5 +839,3 @@ class TestContextPrecision:
             )
 
             searcher.close()
-
-        del model

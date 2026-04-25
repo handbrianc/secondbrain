@@ -29,22 +29,22 @@ GOLDEN_DATASETS_DIR = PROJECT_ROOT / "tests" / "data" / "golden_datasets"
 
 
 def pytest_configure(config):
-    """Warn if pytest-xdist is enabled for quantitative tests.
+    """Configure pytest-xdist for quantitative tests.
     
-    PyTorch models cannot be safely shared across xdist worker processes,
-    leading to meta tensor errors. Tests must run with --dist=no or without -n flag.
+    Automatically sets --dist=loadfile strategy when xdist is enabled
+    to ensure each test file runs in a single worker, preventing model
+    sharing issues across workers.
     """
     numprocesses = config.getoption("numprocesses", default=0)
-    if numprocesses is not None and numprocesses > 0:
-        # Check if any quantitative tests are being run
-        if config.getoption("markexpr", "") == "" or "quantitative" in config.getoption("markexpr", ""):
-            warnings.warn(
-                "Pytest-xdist is enabled for quantitative tests. "
-                "This will cause PyTorch meta tensor errors. "
-                "Run tests without -n flag or with --dist=no instead.",
-                UserWarning,
-                stacklevel=2,
-            )
+    if numprocesses and numprocesses > 0:
+        # Auto-set loadfile strategy if not explicitly set
+        dist_strategy = config.getoption("dist", default="loadfile")
+        if dist_strategy == "no":
+            # User explicitly disabled xdist - that's fine
+            pass
+        else:
+            # Recommend loadfile for model-dependent tests
+            config.option.dist = "loadfile"
 
 
 def _check_mongo_has_documents() -> bool:
@@ -269,32 +269,41 @@ def seed_test_data_session():
     _seed_test_data()
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def embedding_model() -> SentenceTransformer:
     """
-    Load embedding model for each test function.
-
-    Uses session scope to avoid PyTorch meta tensor errors that occur
-    when multiple function-scoped fixtures load SentenceTransformer
-    simultaneously during parallel test execution.
-
-    IMPORTANT: For pytest-xdist parallel execution, ensure tests are run
-    with --dist=no to disable worker process spawning, as PyTorch models
-    cannot be safely shared across processes.
-
+    Load embedding model for each test function with xdist safety.
+    
+    Uses function scope to ensure:
+    1. Model loads AFTER xdist worker spawn (not at master process startup)
+    2. Each xdist worker gets its own model instance (no sharing)
+    3. Worker-local model instances prevent meta tensor errors
+    4. Memory-efficient: ~80MB per worker, acceptable for parallel execution
+    
+    This replaces the session-scoped fixture that caused meta tensor errors
+    when shared across worker processes in pytest-xdist.
+    
     Returns:
-        SentenceTransformer: Loaded embedding model
+        SentenceTransformer: Loaded embedding model (worker-local instance)
     """
-    # Force eager loading on CPU to prevent meta tensor issues
+    # Lazy loading: model instantiated in worker process, not master
     model = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")
     
-    # Force model to materialize weights by running a dummy forward pass
-    # This prevents lazy initialization from creating meta tensors
-    _ = model.encode("dummy", convert_to_numpy=True, show_progress_bar=False)
+    # Force materialization to prevent meta tensor issues
+    _ = model.encode("dummy materialization test", convert_to_numpy=True, show_progress_bar=False)
+    
+    # Verify model is on correct device and has real tensors
+    for param in model.parameters():
+        assert param.device.type == "cpu", f"Model parameter on {param.device}, expected cpu"
+        # Accessing .data forces materialization if still meta
+        _ = param.data.shape
     
     yield model
-    # Clean up after session completes
+    
+    # Cleanup per-function (worker will cleanup on exit)
     del model
+    import gc
+    gc.collect()
 
 
 @pytest.fixture(scope="session")
