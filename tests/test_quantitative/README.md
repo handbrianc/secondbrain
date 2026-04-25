@@ -26,8 +26,7 @@ The quantitative testing framework evaluates SecondBrain across five key dimensi
 2. **Consistency** - Answer stability across multiple runs
 3. **Semantic Similarity** - Query-answer relevance and context alignment
 4. **Precision & Recall** - Search result quality and ranking metrics
-5. **ROUGE Scores** - Text generation quality against reference answers
-6. **Golden Dataset** - End-to-end validation with curated test cases
+5. **Golden Dataset** - End-to-end validation with curated test cases
 
 All tests use real pipeline execution (not mocks) with configurable thresholds for flexibility across different deployment scenarios.
 
@@ -54,6 +53,7 @@ pip install -e ".[dev]"
 
 ```bash
 # Run all quantitative tests (requires services)
+# IMPORTANT: Do NOT use -n flag (pytest-xdist) - will cause PyTorch meta tensor errors
 pytest tests/test_quantitative/ -v
 
 # Run specific test category
@@ -61,9 +61,25 @@ pytest tests/test_quantitative/ -m performance -v
 pytest tests/test_quantitative/ -m consistency -v
 pytest tests/test_quantitative/ -m semantic_similarity -v
 pytest tests/test_quantitative/ -m precision_recall -v
-pytest tests/test_quantitative/ -m rouge -v
 pytest tests/test_quantitative/ -m golden_dataset -v
 ```
+
+### ⚠️ Important: No Parallel Execution
+
+**DO NOT use pytest-xdist (`-n` flag) with quantitative tests!**
+
+```bash
+# WRONG - Will cause meta tensor errors
+pytest tests/test_quantitative/ -v -n 4
+pytest tests/test_quantitative/ -v --numprocesses=4
+
+# CORRECT - Sequential execution only
+pytest tests/test_quantitative/ -v
+```
+
+**Why?** These tests use PyTorch SentenceTransformer models that cannot be safely shared across pytest-xdist worker processes. Parallel execution causes `NotImplementedError: Cannot copy out of meta tensor` errors.
+
+**Exception**: You can use `-n` flag for other test directories (e.g., `pytest tests/test_storage/ -v -n 4`), but NOT for `tests/test_quantitative/`.
 
 ### Fast Validation (No Services Required)
 
@@ -71,6 +87,26 @@ pytest tests/test_quantitative/ -m golden_dataset -v
 # Run tests that don't require MongoDB
 pytest tests/test_quantitative/test_golden_dataset.py -v -k "load"
 ```
+
+### Test Runtime Profiles
+
+Quantitative tests support environment variable overrides for faster local testing:
+
+```bash
+# Smoke tests (fast, ~1-2 hours) - for local development
+N_RUNS_STATISTICAL=5 MIN_RUNS_CONSISTENCY=5 N_RUNS_SEMANTIC_SIMILARITY=5 N_RUNS_SEMANTIC_EVALUATION=5 pytest tests/test_quantitative/ -v
+
+# Statistical tests (full, ~3-4 hours) - for production/CI
+pytest tests/test_quantitative/ -v
+
+# Available overrides:
+# - N_RUNS_STATISTICAL: Golden dataset tests (default: 30)
+# - MIN_RUNS_CONSISTENCY: Consistency tests (default: 30)
+# - N_RUNS_SEMANTIC_SIMILARITY: Semantic similarity tests (default: 30)
+# - N_RUNS_SEMANTIC_EVALUATION: Semantic evaluation tests (default: 30)
+```
+
+**Note**: All quantitative tests run **sequentially** (no parallel execution) due to PyTorch model constraints.
 
 ---
 
@@ -85,7 +121,7 @@ The quantitative testing framework requires the following dependencies:
 pip install -e ".[dev]"
 
 # Specific quantitative testing dependencies
-pip install sentence-transformers scikit-learn rouge-score
+pip install sentence-transformers scikit-learn
 ```
 
 ### Verifying Installation
@@ -193,28 +229,7 @@ pytest tests/test_quantitative/test_precision_recall.py::TestPrecisionRecall::te
 - `test_ndcg_at_k` - Normalized Discounted Cumulative Gain
 - `test_precision_recall_tradeoff` - Verify expected P/R behavior
 
-### 5. ROUGE Score Tests (`test_rouge_scores.py`)
-
-**Marker**: `@pytest.mark.rouge` and `@pytest.mark.optional`
-
-Validates text generation quality using ROUGE metrics.
-
-**Test Commands**:
-```bash
-# Run all ROUGE tests (requires LLM)
-pytest tests/test_quantitative/test_rouge_scores.py -v -m rouge
-
-# Run specific ROUGE metric
-pytest tests/test_quantitative/test_rouge_scores.py::TestRougeScores::test_rouge1_f1_score -v
-```
-
-**Key Tests**:
-- `test_rouge1_f1_score` - Unigram overlap >= 0.5
-- `test_rouge2_f1_score` - Bigram overlap >= 0.4
-- `test_rougeL_f1_score` - Longest common subsequence >= 0.4
-- `test_rouge_vs_semantic_similarity` - Correlation analysis
-
-### 6. Golden Dataset Tests (`test_golden_dataset.py`)
+### 5. Golden Dataset Tests (`test_golden_dataset.py`)
 
 **Marker**: `@pytest.mark.golden_dataset`
 
@@ -284,14 +299,6 @@ pytest tests/test_quantitative/test_golden_dataset.py::TestGoldenDataset::test_g
 | Mean Average Precision | >= 0.50 | Overall ranking quality |
 | nDCG@10 | >= 0.60 | Ranking quality with position bias |
 
-### ROUGE Thresholds
-
-| Metric | Threshold | Rationale |
-|--------|-----------|-----------|
-| ROUGE-1 F1 | >= 0.50 | Significant unigram overlap |
-| ROUGE-2 F1 | >= 0.40 | Reasonable phrase-level overlap |
-| ROUGE-L F1 | >= 0.40 | Sentence structure similarity |
-
 ### Golden Dataset Thresholds
 
 | Metric | Threshold | Rationale |
@@ -312,7 +319,6 @@ Golden datasets are stored in `tests/data/golden_datasets/`:
 
 - `tech_docs_golden.json` - Technical documentation queries
 - `precision_recall_golden.json` - Precision/recall evaluation
-- `rouge_reference_answers.json` - ROUGE metric reference answers
 
 ### Dataset Format
 
@@ -467,11 +473,6 @@ AssertionError: Performance thresholds exceeded:
 - **mAP**: Overall ranking quality across all queries
 - **nDCG**: Ranking quality considering position importance
 
-#### ROUGE Metrics
-- **ROUGE-1**: Word-level overlap (factual accuracy)
-- **ROUGE-2**: Phrase-level overlap (coherence)
-- **ROUGE-L**: Sentence structure overlap (fluency)
-
 #### Golden Dataset Metrics
 - **Pass Rate >= 80%**: Most queries produce acceptable answers
 - **Concept Presence**: All expected concepts appear in answers
@@ -484,7 +485,6 @@ AssertionError: Performance thresholds exceeded:
 | Low consistency variance | LLM non-determinism | Increase temperature stability |
 | Low semantic similarity | Poor retrieval | Check embedding model |
 | Low precision@K | Irrelevant results | Tune similarity threshold |
-| Low ROUGE scores | Different phrasing | Adjust thresholds or improve prompt |
 | High response time | Resource constraints | Scale resources or optimize |
 
 ---
@@ -539,18 +539,6 @@ pip install sentence-transformers
 
 # Download model manually
 python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
-```
-
-#### Test Import Errors
-
-```
-ModuleNotFoundError: No module named 'rouge_score'
-```
-
-**Solution**:
-```bash
-# Install missing dependencies
-pip install rouge-score scikit-learn
 ```
 
 #### Golden Dataset Not Found
@@ -693,7 +681,6 @@ markers = [
     "consistency: Consistency validation tests",
     "semantic_similarity: Semantic similarity tests",
     "precision_recall: Information retrieval metrics",
-    "rouge: ROUGE score evaluation",
     "golden_dataset: Golden dataset validation",
     "integration: Requires external services",
     "optional: May be skipped in CI"
