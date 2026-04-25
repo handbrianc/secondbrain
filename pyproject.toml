@@ -79,7 +79,9 @@ dev = [
 
 quantitative = [
     "scikit-learn>=1.0.0",
-    "rouge-score>=0.1.2",
+    "scipy>=1.10.0",  # Statistical functions for bootstrap CI, t-tests
+    "statsmodels>=0.14.0",  # CUPED variance reduction, power analysis
+    "bert-score>=0.3.13",  # Semantic similarity metrics (BERTScore)
     "datasets>=2.0.0",
     "tabulate>=0.9.0",
     "pandas>=2.0.0",
@@ -250,11 +252,12 @@ markers = [
     "hypothesis: marks tests as property-based testing",
     "concurrent: marks tests as concurrency/thread safety tests (may be slow)",
     "semantic_similarity: marks tests for semantic similarity evaluation",
+    "semantic_evaluation: marks tests for semantic evaluation metrics (BERTScore, SemScore)",
     "precision_recall: marks tests for precision and recall metrics",
     "golden_dataset: marks tests using golden dataset benchmarks",
     "consistency: marks tests for output consistency checks",
     "performance: marks tests for performance benchmarks",
-    "rouge: marks tests for ROUGE score evaluation",
+    "deprecated: marks tests as deprecated (will be removed in future release)",
     "threshold(min=...): marks tests with minimum threshold requirements",
     "qualitative: marks tests as qualitative evaluation tests",
     "safety: marks tests for safety-related functionality (PII, dangerous topics)",
@@ -271,12 +274,20 @@ markers = [
 filterwarnings = [
     "ignore::DeprecationWarning:docling",
     "ignore::DeprecationWarning:pyparsing",
+    # Show deprecation warnings for ROUGE tests (not ignored so users see migration notice)
     "ignore:.*Benchmarks are automatically disabled.*",
     "ignore:.*This process.*is multi-threaded, use of fork.*",
+    # Suppress OpenTelemetry exporter errors during test shutdown
+    "ignore:Exception while exporting metrics:ValueError",
+    "ignore:I/O operation on closed file:ValueError:opentelemetry",
+    "ignore:Exception while exporting Span:ValueError",
 ]
 # Retry flaky tests - quantitative tests may have transient failures due to LLM variance
-reruns = 2
-reruns_delay = 1
+# Retry only for specific quantitative tests that may have transient failures
+# Override per-test using @pytest.mark.flaky(reruns=2) where needed
+# Default: no retries to prevent excessive runtimes
+reruns = 0
+reruns_delay = 0
 
 [tool.hypothesis]
 max_examples = 100
