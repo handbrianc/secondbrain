@@ -466,19 +466,24 @@ def _chunk_segments(
 
         start = 0
         while start < len(text):
+            if start + chunk_size >= len(text):
+                chunk_text = text[start:].strip()
+                if chunk_text:
+                    chunks.append({"text": chunk_text, "page": page})
+                break
+
             next_start = start + chunk_size
-            chunk_end = next_start if next_start < len(text) else len(text)
+            chunk_end = next_start
             last_space = text.rfind(" ", start, chunk_end)
             if last_space > start:
                 chunk_end = last_space
+
             chunk_text = text[start:chunk_end].strip()
             if chunk_text:
                 chunks.append({"text": chunk_text, "page": page})
 
             new_start = chunk_end - chunk_overlap
-            if new_start >= len(text) or new_start <= start:
-                break
-            start = new_start
+            start = chunk_end if new_start <= start else new_start
 
     return chunks
 
@@ -1723,33 +1728,44 @@ class AsyncDocumentIngestor(DocumentIngestor):
         embedding_gen = LocalEmbeddingGenerator()
         storage = VectorStorage()
 
-        # Collect and validate files
-        files = await asyncio.to_thread(
-            self._collect_and_validate_files, path, recursive
-        )  # type: ignore[attr-defined]
+        try:
+            # Collect and validate files
+            files = await asyncio.to_thread(
+                self._collect_and_validate_files, path, recursive
+            )  # type: ignore[attr-defined]
 
-        if not files:
-            return {"success": 0, "failed": 0}
+            if not files:
+                return {"success": 0, "failed": 0}
 
-        # Semaphore for concurrency control (backpressure)
-        semaphore = asyncio.Semaphore(max_concurrent)
+            # Semaphore for concurrency control (backpressure)
+            semaphore = asyncio.Semaphore(max_concurrent)
 
-        async def process_with_semaphore(file_path: Path) -> bool:
-            """Process a single file with semaphore control."""
-            async with semaphore:
-                return await self.process_file_async(file_path, embedding_gen, storage)
+            async def process_with_semaphore(file_path: Path) -> bool:
+                """Process a single file with semaphore control."""
+                async with semaphore:
+                    return await self.process_file_async(file_path, embedding_gen, storage)
 
-        # Create tasks for all files
-        tasks = [process_with_semaphore(f) for f in files]
+            # Create tasks for all files
+            tasks = [process_with_semaphore(f) for f in files]
 
-        # Run all tasks concurrently (limited by semaphore)
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+            # Run all tasks concurrently (limited by semaphore)
+            results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        # Count successes and failures
-        successful = sum(1 for r in results if r is True)
-        failed = len(results) - successful
+            # Count successes and failures
+            successful = sum(1 for r in results if r is True)
+            failed = len(results) - successful
 
-        return {"success": successful, "failed": failed}
+            return {"success": successful, "failed": failed}
+        finally:
+            # Clean up resources to prevent connection leaks
+            try:
+                embedding_gen.close()
+            except Exception:
+                pass
+            try:
+                storage.close()
+            except Exception:
+                pass
 
     async def _stream_process_chunks_async(
         self,

@@ -282,12 +282,11 @@ class RAGPipeline:
 
         Template:
         ```
-        You are a helpful assistant. Answer questions based on the
-        provided context from documents. If the answer is not in the
-        context, say "I cannot find the answer in the provided documents."
+        [System instructions about using context]
 
-        Context:
+        === DOCUMENT CONTEXT START ===
         {context}
+        === DOCUMENT CONTEXT END ===
 
         {conversation_history if present}
 
@@ -298,7 +297,7 @@ class RAGPipeline:
 
         Args:
             query: User query text.
-            context: Formatted context from retrieved chunks.
+            context: Formatted, context from retrieved chunks.
             conversation_history: Optional conversation history.
 
         Returns:
@@ -314,9 +313,11 @@ class RAGPipeline:
         # Build prompt
         prompt_parts = [system_prompt]
 
-        # Add context
+        # Add context with clear delimiters
         if context:
-            prompt_parts.append(f"\n\nContext:\n{context}")
+            prompt_parts.append("\n\n=== DOCUMENT CONTEXT START ===\n")
+            prompt_parts.append(context)
+            prompt_parts.append("\n=== DOCUMENT CONTEXT END ===\n")
         else:
             prompt_parts.append(
                 "\n\nNote: No relevant context was found in the documents."
