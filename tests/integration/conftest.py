@@ -1,4 +1,4 @@
-"""Pytest fixtures for integration tests with real services."""
+"""Pytest fixtures for integration tests with real services and mock fallbacks."""
 
 from __future__ import annotations
 
@@ -11,7 +11,8 @@ import pytest
 from pymongo import MongoClient
 
 from secondbrain.embedding import LocalEmbeddingGenerator
-from secondbrain.storage import VectorStorage
+from secondbrain.embedding.mock import MockEmbeddingGenerator
+from secondbrain.storage import MockVectorStorage, VectorStorage
 
 if TYPE_CHECKING:
     pass
@@ -20,7 +21,13 @@ if TYPE_CHECKING:
 TEST_MONGO_URI = (
     "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
 )
-TEST_EMBEDDING_URL = "http://localhost:11435"
+
+# Platform-aware embedding URL
+import platform
+if platform.system() == "Darwin":
+    TEST_EMBEDDING_URL = "http://localhost:11434"
+else:
+    TEST_EMBEDDING_URL = "http://localhost:11435"
 
 # Test database/collection names
 TEST_DB_NAME = "secondbrain_test"
@@ -33,7 +40,7 @@ SERVICE_HEALTH_TIMEOUT = 10  # seconds - reduced for faster test feedback
 def _check_mongodb_healthy() -> bool:
     """Check if MongoDB test service is healthy."""
     try:
-        client = MongoClient(TEST_MONGO_URI, serverSelectionTimeoutMS=5000)
+        client = MongoClient(TEST_MONGO_URI, serverSelectionTimeoutMS=10000, maxPoolSize=50)
         client.admin.command("ping")
         client.close()
         return True
@@ -145,6 +152,22 @@ def real_storage(wait_for_services: None) -> Generator[VectorStorage, None, None
 
 
 @pytest.fixture(scope="session")
+def mock_storage() -> Generator[MockVectorStorage, None, None]:
+    """Mock VectorStorage for integration tests without MongoDB.
+
+    Provides an in-memory storage implementation for testing integration
+    logic without requiring actual MongoDB connections.
+
+    Yields:
+        MockVectorStorage: In-memory storage instance.
+    """
+    storage = MockVectorStorage()
+    storage.initialize()
+    yield storage
+    storage.close()
+
+
+@pytest.fixture(scope="session")
 def real_embedding_generator(
     wait_for_services: None,
 ) -> Generator[LocalEmbeddingGenerator, None, None]:
@@ -167,6 +190,21 @@ def real_embedding_generator(
         yield generator
     finally:
         generator.close()
+
+
+@pytest.fixture(scope="session")
+def mock_embedding_generator() -> Generator[MockEmbeddingGenerator, None, None]:
+    """Mock embedding generator for integration tests.
+
+    Provides deterministic, fast embeddings for testing without
+    requiring sentence-transformers service.
+
+    Yields:
+        MockEmbeddingGenerator: Mock embedding generator instance.
+    """
+    generator = MockEmbeddingGenerator(model_name="mock-384", dimension=384)
+    yield generator
+    generator.close()
 
 
 @pytest.fixture

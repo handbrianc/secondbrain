@@ -2,7 +2,8 @@
 Shared fixtures for qualitative testing framework.
 
 This module provides pytest fixtures for loading qualitative test data
-from JSON files in the tests/data/qualitative/ directory.
+from JSON files in the tests/data/qualitative/ directory, plus mock LLM
+fixtures for running tests without external services.
 """
 
 import json
@@ -12,6 +13,18 @@ import pytest
 
 # Base path for qualitative test data
 QUALITATIVE_DATA_PATH = Path(__file__).parent.parent / "data" / "qualitative"
+
+
+@pytest.fixture(scope="session")
+def mock_llm_for_qualitative():
+    """Provide mock LLM provider for qualitative tests.
+
+    Returns:
+        MockLLMProviderWithContext instance for consistent testing.
+    """
+    from secondbrain.rag.providers.mock import MockLLMProviderWithContext
+
+    return MockLLMProviderWithContext()
 
 
 @pytest.fixture(scope="session")
