@@ -52,13 +52,16 @@ def _check_mongo_has_documents() -> bool:
     try:
         from secondbrain.config import config
 
-        uri = config.mongo_uri
-        db_name = config.mongo_db
+        cfg = config()
+        uri = cfg.mongo_uri
+        db_name = cfg.mongo_db
+        collection_name = cfg.mongo_collection
+        
         client = MongoClient(uri, serverSelectionTimeoutMS=5000, maxPoolSize=50)
         db = client.get_database(db_name)
-        # Check 'chunks' collection (tests need actual chunk data)
-        chunks_collection = db.get_collection("chunks")
-        chunks_count = chunks_collection.count_documents({}, limit=1)
+        # Check the same collection that _seed_test_data uses
+        test_collection = db.get_collection(collection_name)
+        chunks_count = test_collection.count_documents({}, limit=1)
         return chunks_count > 0
     except Exception:
         return False
@@ -151,7 +154,7 @@ def _seed_test_data() -> None:
                 "chunk_id": "test-chunk-002",
                 "source_file": "tests/config.md",
                 "page_number": 1,
-                "chunk_text": "MongoDB connection URI configuration is done through the SECONDBRAIN_MONGO_URI environment variable. The default MongoDB URI is mongodb://localhost:27017 for local development.",
+                "chunk_text": "MongoDB connection URI configuration is done through the SECONDBRAIN_MONGO_URI environment variable. The test MongoDB URI is mongodb://localhost:27018 for testing.",
                 "file_type": "markdown",
                 "metadata": {},
                 "ingested_at": datetime.now(UTC).isoformat(),
@@ -289,7 +292,21 @@ def embedding_model() -> SentenceTransformer:
         SentenceTransformer: Loaded embedding model (worker-local instance)
     """
     # Lazy loading: model instantiated in worker process, not master
-    model = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")
+    import torch
+    
+    # Create model (SentenceTransformer may use meta tensors internally for efficiency)
+    model = SentenceTransformer("all-MiniLM-L6-v2")
+    
+    # Properly migrate from meta device to CPU using to_empty()
+    # This is the PyTorch-recommended approach for meta→real device migration
+    if next(model.parameters()).device.type == "meta":
+        model = model.to_empty(device="cpu", recurse=True)
+        # Initialize parameters with small random values (to_empty creates zeros)
+        for param in model.parameters():
+            param.data.normal_(0, 0.02)
+    
+    # Ensure model is on CPU
+    model = model.to("cpu")
     
     # Force materialization to prevent meta tensor issues
     _ = model.encode("dummy materialization test", convert_to_numpy=True, show_progress_bar=False)
@@ -306,6 +323,61 @@ def embedding_model() -> SentenceTransformer:
     del model
     import gc
     gc.collect()
+
+
+@pytest.fixture(scope="function")
+def seeded_chunks_with_embeddings(embedding_model: SentenceTransformer) -> None:
+    """Generate embeddings for test chunks and update MongoDB.
+    
+    This fixture ensures test chunks have embeddings in MongoDB so that
+    the Searcher can perform vector similarity search. The embeddings are
+    generated in the worker process (after xdist spawn) to avoid meta tensor
+    errors.
+    
+    Args:
+        embedding_model: Function-scoped embedding model fixture.
+    """
+    from secondbrain.config import config
+    from pymongo import MongoClient
+    
+    cfg = config()
+    client = None
+    try:
+        client = MongoClient(cfg.mongo_uri, serverSelectionTimeoutMS=5000)
+        # Force immediate connection check with timeout
+        client.admin.command('ping', serverSelectionTimeoutMS=5000)
+        db = client.get_database(cfg.mongo_db)
+        collection = db.get_collection(cfg.mongo_collection)
+    except Exception as e:
+        pytest.skip(f"MongoDB unavailable: {e}")
+    
+    try:
+        
+        # Find test chunks without embeddings
+        test_chunks = list(collection.find(
+            {"chunk_id": {"$regex": "^test-chunk-"}, "embedding": {"$exists": False}}
+        ))
+        
+        if not test_chunks:
+            # No test chunks to embed
+            yield
+            return
+        
+        # Generate embeddings for all test chunks
+        texts = [chunk["chunk_text"] for chunk in test_chunks]
+        embeddings = embedding_model.encode(texts, convert_to_numpy=True)
+        
+        # Update documents with embeddings
+        for chunk, emb in zip(test_chunks, embeddings):
+            collection.update_one(
+                {"chunk_id": chunk["chunk_id"]},
+                {"$set": {"embedding": emb.tolist()}}
+            )
+        
+        yield
+    finally:
+        if client is not None:
+            client.close()
 
 
 @pytest.fixture(scope="session")
@@ -414,7 +486,7 @@ def load_golden_dataset(dataset_name: str) -> list[dict[str, Any]]:
 
 
 def cosine_similarity(
-    query: str, answer: str, model: SentenceTransformer | None = None
+    query: str, answer: str, model: SentenceTransformer
 ) -> float:
     """
     Calculate cosine similarity between query and answer embeddings.
@@ -422,15 +494,12 @@ def cosine_similarity(
     Args:
         query: Query text
         answer: Answer text
-        model: Optional pre-loaded embedding model (loads default if None)
+        model: Pre-loaded embedding model (required to avoid loading at wrong time)
 
     Returns:
         Cosine similarity score (range: -1 to 1)
     """
-    if model is None:
-        model = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")
-
-    # Encode both texts
+    # Encode both texts using provided model
     query_embedding = model.encode(query, convert_to_numpy=True)
     answer_embedding = model.encode(answer, convert_to_numpy=True)
 

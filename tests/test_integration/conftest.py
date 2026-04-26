@@ -130,7 +130,14 @@ def storage_with_index(test_collection: Any) -> Any:
     os.environ["SECONDBRAIN_MONGO_URI"] = "mongodb://localhost:27018"
     os.environ["SECONDBRAIN_MONGO_DB"] = "test_secondbrain"
     os.environ["SECONDBRAIN_MONGO_COLLECTION"] = "test_embeddings"
-    os.environ["SECONDBRAIN_OLLAMA_HOST"] = "http://localhost:11435"
+    
+    # Use platform-aware Ollama host
+    import platform
+    if platform.system() == "Darwin":
+        os.environ["SECONDBRAIN_OLLAMA_HOST"] = "http://localhost:11434"
+    else:
+        os.environ["SECONDBRAIN_OLLAMA_HOST"] = "http://localhost:11435"
+    
     os.environ["SECONDBRAIN_LOCAL_EMBEDDING_MODEL"] = "all-MiniLM-L6-v2"
 
     from secondbrain.config import get_config

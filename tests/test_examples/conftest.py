@@ -77,7 +77,13 @@ def example_runner(tmp_path: Path) -> Generator[Any, None, None]:
         env["SECONDBRAIN_MONGO_URI"] = (
             "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
         )
-        env["SECONDBRAIN_OLLAMA_HOST"] = "http://localhost:11435"
+        
+        # Use platform-aware Ollama host
+        import platform
+        if platform.system() == "Darwin":
+            env["SECONDBRAIN_OLLAMA_HOST"] = "http://localhost:11434"
+        else:
+            env["SECONDBRAIN_OLLAMA_HOST"] = "http://localhost:11435"
 
         # Run the script
         result = subprocess.run(
