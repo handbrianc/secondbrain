@@ -21,7 +21,6 @@ import json
 from typing import Any
 
 import pytest
-from sentence_transformers import SentenceTransformer
 
 from secondbrain.rag import RAGPipeline
 from secondbrain.search import Searcher
@@ -68,11 +67,6 @@ NUM_RUNS = 3  # Number of runs for each adversarial test
 
 class TestAdversarialQueries:
     """Adversarial tests for RAG pipeline robustness."""
-
-    @pytest.fixture
-    def embedding_model(self) -> Any:
-        """Load embedding model for similarity calculations."""
-        return SentenceTransformer("all-MiniLM-L6-v2")  # type: ignore[operator]
 
     @pytest.fixture
     def adversarial_queries(self) -> list[dict[str, Any]]:
@@ -356,9 +350,7 @@ class TestAdversarialQueries:
         ],
     )
     def test_length_edge_cases(
-        self,
-        test_case: dict[str, Any],
-        embedding_model: Any,
+        self, seeded_chunks_with_embeddings, test_case, adversarial_queries
     ) -> None:
         """Test handling of length-based edge cases.
 
@@ -500,9 +492,7 @@ class TestAdversarialQueries:
         ],
     )
     def test_special_character_injection(
-        self,
-        test_case: dict[str, Any],
-        embedding_model: Any,
+        self, seeded_chunks_with_embeddings, test_case, adversarial_queries
     ) -> None:
         """Test handling of special character injection attempts.
 
@@ -634,9 +624,7 @@ class TestAdversarialQueries:
         ],
     )
     def test_prompt_injection_attacks(
-        self,
-        test_case: dict[str, Any],
-        embedding_model: Any,
+        self, seeded_chunks_with_embeddings, test_case, adversarial_queries
     ) -> None:
         """Test resilience against prompt injection attacks.
 
@@ -787,7 +775,7 @@ class TestAdversarialQueries:
                 {
                     "id": "unicode-002",
                     "type": "unicode",
-                    "query": "What is 中文查询? (Chinese characters)",
+                    "query": "What is 中文查询？(Chinese characters)",
                     "description": "Query with non-Latin characters",
                     "expected_behavior": "should_handle_unicode",
                     "severity": "medium",
@@ -808,9 +796,7 @@ class TestAdversarialQueries:
         ],
     )
     def test_unicode_handling(
-        self,
-        test_case: dict[str, Any],
-        embedding_model: Any,
+        self, seeded_chunks_with_embeddings, test_case, adversarial_queries
     ) -> None:
         """Test handling of Unicode and encoding edge cases.
 
@@ -944,9 +930,7 @@ class TestAdversarialQueries:
         ],
     )
     def test_null_empty_queries(
-        self,
-        test_case: dict[str, Any],
-        embedding_model: Any,
+        self, seeded_chunks_with_embeddings, test_case, adversarial_queries
     ) -> None:
         """Test handling of null and empty queries.
 
@@ -1049,9 +1033,7 @@ class TestAdversarialQueries:
     @pytest.mark.adversarial
     @pytest.mark.robustness
     def test_adversarial_query_stress(
-        self,
-        adversarial_queries: list[dict[str, Any]],
-        embedding_model: Any,
+        self, seeded_chunks_with_embeddings, test_case, adversarial_queries
     ) -> None:
         """Stress test with full set of adversarial queries.
 

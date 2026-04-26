@@ -362,9 +362,7 @@ class TestConsistency:
         ],
     )
     def test_answer_consistency_across_runs(
-        self,
-        test_query: dict[str, Any],
-        embedding_model: Any,
+        self, seeded_chunks_with_embeddings, embedding_model, sample_queries_for_consistency, test_query
     ) -> None:
         """Test answer consistency across multiple runs of the same query.
 
@@ -519,9 +517,7 @@ class TestConsistency:
         ],
     )
     def test_similar_queries_similar_answers(
-        self,
-        query_pair: dict[str, Any],
-        embedding_model: Any,
+        self, seeded_chunks_with_embeddings, embedding_model, similar_query_pairs, query_pair
     ) -> None:
         """Test that similar queries produce similar answers.
 
@@ -746,11 +742,7 @@ class TestConsistency:
         ],
     )
     def test_query_rewriting_consistency(
-        self,
-        test_case: dict[str, Any],
-        embedding_model: Any,
-        mock_llm_provider: MagicMock,
-        mock_storage: MagicMock,
+        self, seeded_chunks_with_embeddings, embedding_model, query_rewriting_test_cases, test_case
     ) -> None:
         """Test query rewriting consistency with real QueryRewriter and ConversationSession.
 
@@ -892,9 +884,7 @@ class TestConsistency:
         ],
     )
     def test_answer_embedding_stability(
-        self,
-        test_query: dict[str, Any],
-        embedding_model: Any,
+        self, seeded_chunks_with_embeddings, embedding_model, sample_queries_for_consistency, test_query
     ) -> None:
         """Test that answer embeddings are stable across multiple runs.
 
@@ -1027,7 +1017,7 @@ class TestConsistency:
 
     @pytest.mark.consistency
     @pytest.mark.integration
-    def test_consistency_variance_threshold(self, embedding_model: Any) -> None:
+    def test_consistency_variance_threshold(self, embedding_model: Any, seeded_chunks_with_embeddings) -> None:
         """Test that consistency variance stays below threshold.
 
         This test validates that the variance in answer quality across
@@ -1125,7 +1115,7 @@ class TestConsistency:
 
     @pytest.mark.consistency
     @pytest.mark.integration
-    def test_temporal_consistency(self, embedding_model: Any) -> None:
+    def test_temporal_consistency(self, embedding_model: Any, seeded_chunks_with_embeddings) -> None:
         """Test consistency across time (simulated by sequential runs).
 
         This test validates that the RAG pipeline produces consistent results
@@ -1211,7 +1201,7 @@ class TestConsistency:
 
     @pytest.mark.consistency
     @pytest.mark.integration
-    def test_consistency_with_seed(self, embedding_model: Any) -> None:
+    def test_consistency_with_seed(self, embedding_model: Any, seeded_chunks_with_embeddings) -> None:
         """Test consistency when using fixed random seed.
 
         This test validates that setting a random seed produces more

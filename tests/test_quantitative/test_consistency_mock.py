@@ -294,12 +294,7 @@ class TestRAGPipelineConsistency:
 
 
 class TestEmbeddingConsistency:
-    """Tests for embedding consistency using the actual model."""
-
-    @pytest.fixture
-    def embedding_model(self) -> SentenceTransformer:
-        """Load embedding model for testing."""
-        return SentenceTransformer("all-MiniLM-L6-v2")
+    """Tests for embedding consistency using mock models."""
 
     def test_embedding_determinism(self, embedding_model: SentenceTransformer) -> None:
         """Test that embeddings are deterministic for same input."""

@@ -169,7 +169,7 @@ class TestSemanticSimilarity:
 
     @pytest.mark.semantic_similarity
     @pytest.mark.threshold
-    def test_query_answer_relevance(self, embedding_model: Any) -> None:
+    def test_query_answer_relevance(self, embedding_model: Any, seeded_chunks_with_embeddings) -> None:
         """Test that query and answer are semantically relevant.
 
         This test validates that the RAG pipeline produces answers that are
@@ -263,7 +263,7 @@ class TestSemanticSimilarity:
 
     @pytest.mark.semantic_similarity
     @pytest.mark.threshold
-    def test_query_context_alignment(self, embedding_model: Any) -> None:
+    def test_query_context_alignment(self, embedding_model: Any, seeded_chunks_with_embeddings) -> None:
         """Test that retrieved chunks are semantically aligned with query.
 
         This test validates that the search/retrieval system returns chunks
@@ -348,7 +348,7 @@ class TestSemanticSimilarity:
                 )
 
     @pytest.mark.semantic_similarity
-    def test_cross_query_similarity(self, embedding_model: Any) -> None:
+    def test_cross_query_similarity(self, embedding_model: Any, seeded_chunks_with_embeddings) -> None:
         """Test that similar queries produce similar answers.
 
         This test validates the consistency of the RAG pipeline by checking that
@@ -517,9 +517,7 @@ class TestSemanticSimilarity:
         ],
     )
     def test_golden_dataset_query_answer_similarity(
-        self,
-        test_case: dict[str, Any],
-        embedding_model: Any,
+        self, test_case, embedding_model: Any, seeded_chunks_with_embeddings, golden_datasets
     ) -> None:
         """Test query-answer similarity using golden dataset entries.
 
@@ -606,10 +604,7 @@ class TestSemanticSimilarity:
     )
     @pytest.mark.slow  # Slow test - requires LLM calls and multiple iterations
     def test_parametrized_query_answer_threshold(
-        self,
-        query: str,
-        expected_min_similarity: float,
-        embedding_model: Any,
+        self, query: str, expected_min_similarity: float, embedding_model: Any, seeded_chunks_with_embeddings
     ) -> None:
         """Test query-answer similarity with parametrized thresholds.
 
@@ -683,7 +678,7 @@ class TestSemanticSimilarity:
         )
 
     @pytest.mark.semantic_similarity
-    def test_identical_inputs_max_similarity(self, embedding_model: Any) -> None:
+    def test_identical_inputs_max_similarity(self, embedding_model: Any, seeded_chunks_with_embeddings) -> None:
         """Test that identical inputs produce maximum similarity.
 
         This test validates the similarity metric itself by checking that
@@ -707,7 +702,7 @@ class TestSemanticSimilarity:
             )
 
     @pytest.mark.semantic_similarity
-    def test_orthogonal_inputs_zero_similarity(self, embedding_model: Any) -> None:
+    def test_orthogonal_inputs_zero_similarity(self, embedding_model: Any, seeded_chunks_with_embeddings) -> None:
         """Test that semantically unrelated inputs have low similarity.
 
         This test validates that the similarity metric correctly identifies
@@ -733,8 +728,7 @@ class TestSemanticSimilarity:
 
     @pytest.mark.semantic_similarity
     def test_similarity_threshold_configurability(
-        self,
-        embedding_model: Any,
+        self, embedding_model: Any, seeded_chunks_with_embeddings
     ) -> None:
         """Test that similarity thresholds are configurable constants.
 
