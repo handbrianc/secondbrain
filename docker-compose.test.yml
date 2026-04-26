@@ -1,3 +1,6 @@
+# Test environment docker-compose configuration
+# Memory Requirements: Ollama service requires 10GB minimum for LLM model
+# The llama3.1:latest model requires ~4.8GB RAM; 10GB provides headroom
 name: secondbrain-test
 
 services:
@@ -34,6 +37,8 @@ services:
     environment:
       - OLLAMA_HOST=0.0.0.0:11434
     entrypoint: ["/startup.sh"]
+    mem_limit: 10g
+    memswap_limit: 10g
     healthcheck:
       test: ["CMD", "/bin/sh", "-c", 'pgrep -f "ollama serve" > /dev/null && exit 0 || exit 1']
       interval: 10s
