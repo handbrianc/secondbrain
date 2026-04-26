@@ -192,93 +192,100 @@ def migrate_vector_index(
     logger.info("=" * 60)
     logger.info("Target dimensions: %d", target_dimensions)
 
-    # Connect to MongoDB
-    client = get_mongo_client(mongo_uri)
-    db = client[db_name]
-    collection = db[collection_name]
-
-    # Check document count
-    doc_count = count_documents(collection)
-
-    # Check existing index
-    current_dims = check_index_dimensions(collection, index_name)
-
-    if current_dims is None:
-        # Index doesn't exist OR dimensions couldn't be read (likely mismatch)
-        if not force:
-            logger.info(
-                "Index exists but dimensions unreadable. Use --force to recreate."
-            )
-            return
-        logger.info("Dropping unreadable index and creating new one...")
-        drop_index(collection, index_name)
-        create_index(collection, target_dimensions, index_name)
-        wait_for_index_ready(collection, index_name)
-        logger.info("Migration complete!")
-        return
-
-    if current_dims == target_dimensions:
-        if force:
-            logger.info("Dimensions match but --force specified. Recreating index...")
+    client = None
+    try:
+        # Connect to MongoDB
+        client = get_mongo_client(mongo_uri)
+        db = client[db_name]
+        collection = db[collection_name]
+    
+        # Check document count
+        doc_count = count_documents(collection)
+    
+        # Check existing index
+        current_dims = check_index_dimensions(collection, index_name)
+    
+        if current_dims is None:
+            # Index doesn't exist OR dimensions couldn't be read (likely mismatch)
+            if not force:
+                logger.info(
+                    "Index exists but dimensions unreadable. Use --force to recreate."
+                )
+                return
+            logger.info("Dropping unreadable index and creating new one...")
             drop_index(collection, index_name)
             create_index(collection, target_dimensions, index_name)
             wait_for_index_ready(collection, index_name)
             logger.info("Migration complete!")
-        else:
-            logger.info(
-                "Index already has correct dimensions (%d). Nothing to do.",
+            return
+    
+        if current_dims == target_dimensions:
+            if force:
+                logger.info("Dimensions match but --force specified. Recreating index...")
+                drop_index(collection, index_name)
+                create_index(collection, target_dimensions, index_name)
+                wait_for_index_ready(collection, index_name)
+                logger.info("Migration complete!")
+            else:
+                logger.info(
+                    "Index already has correct dimensions (%d). Nothing to do.",
+                    target_dimensions,
+                )
+                logger.info("Use --force to recreate anyway.")
+            return
+    
+        # Dimensions mismatch
+        logger.error("DIMENSION MISMATCH DETECTED!")
+        logger.error("Current index: %d dimensions", current_dims)
+        logger.error("Target index: %d dimensions", target_dimensions)
+    
+        if doc_count > 0:
+            logger.warning("Collection contains %d documents", doc_count)
+            logger.warning(
+                "WARNING: Dropping and recreating index will NOT affect documents"
+            )
+            logger.warning(
+                "However, existing documents have embeddings with %d dimensions",
+                current_dims,
+            )
+            logger.warning(
+                "You may need to re-ingest documents to regenerate embeddings with %d dimensions",
                 target_dimensions,
             )
-            logger.info("Use --force to recreate anyway.")
-        return
+            logger.warning("")
+            logger.warning("Options:")
+            logger.warning("1. Re-ingest all documents: secondbrain ingest <path>")
+            logger.warning("2. Delete and re-add documents individually")
+            logger.warning("")
+    
+        if not force:
+            logger.info("Run with --force to proceed with index recreation")
+            return
+    
+        # Proceed with migration
+        logger.info("Dropping old index...")
+        drop_index(collection, index_name)
+    
+        logger.info("Creating new index with %d dimensions...", target_dimensions)
+        create_index(collection, target_dimensions, index_name)
+    
+        logger.info("Waiting for index to be ready...")
+        wait_for_index_ready(collection, index_name)
+    
+        logger.info("=" * 60)
+        logger.info("Migration complete!")
+        logger.info("=" * 60)
+    
+        if doc_count > 0:
+            logger.warning(
+                "IMPORTANT: You have %d documents with old embeddings", doc_count
+            )
+            logger.warning("Consider re-ingesting documents to regenerate embeddings")
 
-    # Dimensions mismatch
-    logger.error("DIMENSION MISMATCH DETECTED!")
-    logger.error("Current index: %d dimensions", current_dims)
-    logger.error("Target index: %d dimensions", target_dimensions)
-
-    if doc_count > 0:
-        logger.warning("Collection contains %d documents", doc_count)
-        logger.warning(
-            "WARNING: Dropping and recreating index will NOT affect documents"
-        )
-        logger.warning(
-            "However, existing documents have embeddings with %d dimensions",
-            current_dims,
-        )
-        logger.warning(
-            "You may need to re-ingest documents to regenerate embeddings with %d dimensions",
-            target_dimensions,
-        )
-        logger.warning("")
-        logger.warning("Options:")
-        logger.warning("1. Re-ingest all documents: secondbrain ingest <path>")
-        logger.warning("2. Delete and re-add documents individually")
-        logger.warning("")
-
-    if not force:
-        logger.info("Run with --force to proceed with index recreation")
-        return
-
-    # Proceed with migration
-    logger.info("Dropping old index...")
-    drop_index(collection, index_name)
-
-    logger.info("Creating new index with %d dimensions...", target_dimensions)
-    create_index(collection, target_dimensions, index_name)
-
-    logger.info("Waiting for index to be ready...")
-    wait_for_index_ready(collection, index_name)
-
-    logger.info("=" * 60)
-    logger.info("Migration complete!")
-    logger.info("=" * 60)
-
-    if doc_count > 0:
-        logger.warning(
-            "IMPORTANT: You have %d documents with old embeddings", doc_count
-        )
-        logger.warning("Consider re-ingesting documents to regenerate embeddings")
+    finally:
+        # Close MongoDB connection
+        if client is not None:
+            client.close()
 
 
 def main():

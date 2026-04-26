@@ -50,9 +50,9 @@ check_mongodb() {
     docker exec secondbrain-mongodb-test mongosh --quiet --eval "db.adminCommand('ping')" > /dev/null 2>&1
 }
 
-# Function to check sentence-transformers health
+# Function to check Ollama health
 check_embeddings() {
-    curl -sf http://localhost:11435/health > /dev/null 2>&1
+    curl -sf http://localhost:11435/api/tags > /dev/null 2>&1
 }
 
 # Wait for MongoDB
@@ -96,7 +96,7 @@ if [ $ELAPSED -ge $MAX_WAIT ]; then
     echo "ERROR: Sentence-transformers failed to become healthy within ${MAX_WAIT}s"
     echo ""
     echo "Service logs:"
-    docker logs secondbrain-embeddings-test --tail 20
+    docker logs secondbrain-ollama-test --tail 20
     ./scripts/stop_test_services.sh
     exit 1
 fi

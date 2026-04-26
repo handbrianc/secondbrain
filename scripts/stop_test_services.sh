@@ -33,13 +33,13 @@ if command -v docker-compose &> /dev/null; then
     if [ -f "$COMPOSE_FILE" ]; then
         docker-compose -f "$COMPOSE_FILE" down
     else
-        docker stop secondbrain-mongodb-test secondbrain-embeddings-test 2>/dev/null || true
+        docker stop secondbrain-mongodb-test secondbrain-ollama-test 2>/dev/null || true
     fi
 else
     if [ -f "$COMPOSE_FILE" ]; then
         docker compose -f "$COMPOSE_FILE" down
     else
-        docker stop secondbrain-mongodb-test secondbrain-embeddings-test 2>/dev/null || true
+        docker stop secondbrain-mongodb-test secondbrain-ollama-test 2>/dev/null || true
     fi
 fi
 
@@ -74,7 +74,7 @@ echo "Current service status:"
 if command -v docker-compose &> /dev/null && [ -f "$COMPOSE_FILE" ]; then
     docker-compose -f "$COMPOSE_FILE" ps 2>/dev/null || echo "No running services"
 else
-    docker ps --filter "name=secondbrain-mongodb-test" --filter "name=secondbrain-embeddings-test" 2>/dev/null || echo "No running services"
+    docker ps --filter "name=secondbrain-mongodb-test" --filter "name=secondbrain-ollama-test" 2>/dev/null || echo "No running services"
 fi
 
 echo ""
