@@ -35,10 +35,10 @@ Download from [ollama.com](https://ollama.com) and run the installer.
 
 ### 2. Pull a Model
 
-Download a model (recommended: `llama3.2` for good performance/size balance):
+Download a model (recommended: `llama3.1:latest` for good performance/size balance):
 
 ```bash
-ollama pull llama3.2
+ollama pull llama3.1:latest
 ```
 
 Other popular models:
@@ -55,7 +55,7 @@ Set environment variables in your `.env` file:
 SECONDBRAIN_OLLAMA_HOST=http://localhost:11434
 
 # LLM model to use
-SECONDBRAIN_LLM_MODEL=llama3.2
+SECONDBRAIN_LLM_MODEL=llama3.1:latest
 
 # Temperature for generation (0.0-2.0, lower = more deterministic)
 SECONDBRAIN_LLM_TEMPERATURE=0.1
@@ -230,7 +230,7 @@ secondbrain chat --delete-session project-a
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `SECONDBRAIN_OLLAMA_HOST` | Ollama API endpoint | `http://localhost:11434` |
-| `SECONDBRAIN_LLM_MODEL` | Default LLM model | `llama3.2` |
+| `SECONDBRAIN_LLM_MODEL` | Default LLM model | `llama3.1:latest` |
 | `SECONDBRAIN_LLM_TEMPERATURE` | Generation temperature | `0.1` |
 | `SECONDBRAIN_LLM_MAX_TOKENS` | Max tokens to generate | `2048` |
 | `SECONDBRAIN_LLM_TIMEOUT` | Request timeout (seconds) | `120` |
@@ -240,8 +240,8 @@ secondbrain chat --delete-session project-a
 
 Choose models based on your needs:
 
-- **`llama3.2`** (default): Good balance of speed and quality
-- **`llama3.1`**: Better quality, slower
+- **`llama3.1:latest`** (default): Good balance of speed and quality
+- **`llama3.1`**: Better quality, larger
 - **`mistral`**: Fast, good for general tasks
 - **`codellama`**: Optimized for code-related questions
 
@@ -261,9 +261,9 @@ Choose models based on your needs:
 **Problem:** Specified model isn't downloaded
 
 **Solutions:**
-1. Pull the model: `ollama pull llama3.2`
+1. Pull the model: `ollama pull llama3.1:latest`
 2. List available models: `ollama list`
-3. Update config: `SECONDBRAIN_LLM_MODEL=llama3.2`
+3. Update config: `SECONDBRAIN_LLM_MODEL=llama3.1:latest`
 
 ### Slow responses
 

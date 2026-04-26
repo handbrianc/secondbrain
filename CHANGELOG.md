@@ -28,7 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Configuration
 - **New Environment Variables**:
   - `OLLAMA_HOST`: Ollama API endpoint (default: `http://localhost:11434`)
-  - `LLM_MODEL`: LLM model name for RAG (default: `llama3.2`)
+  - `LLM_MODEL`: LLM model name for RAG (default: `llama3.1:latest`)
   - `SECONDBRAIN_CHAT_HISTORY_COLLECTION`: MongoDB collection for chat history
   - `SECONDBRAIN_SESSION_TTL`: Session expiration time in seconds
 

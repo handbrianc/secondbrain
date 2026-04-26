@@ -84,11 +84,11 @@ ollama serve
 
 ## Pulling a Model
 
-Ollama needs a model to generate responses. SecondBrain defaults to `llama3.2`, a compact model suitable for local use.
+Ollama needs a model to generate responses. SecondBrain defaults to `llama3.1:latest`, a compact model suitable for local use.
 
 ```bash
-# Pull the default model (llama3.2)
-ollama pull llama3.2
+# Pull the default model (llama3.1:latest)
+ollama pull llama3.1:latest
 
 # This downloads ~2GB. Progress will be shown.
 ```
@@ -105,7 +105,7 @@ ollama pull phi3          # Small and fast (~2GB)
 ollama pull gemma2        # Google's model (~2GB)
 ```
 
-**Recommendation**: Start with `llama3.2` for speed, switch to `llama3.1` or `mistral` for better quality if you have the resources.
+**Recommendation**: Start with `llama3.1:latest` for speed, switch to `llama3.1` or `mistral` for better quality if you have the resources.
 
 ### Verify Model is Ready
 
@@ -113,7 +113,7 @@ ollama pull gemma2        # Google's model (~2GB)
 # List available models
 ollama list
 
-# You should see llama3.2 (or your chosen model) in the list
+# You should see llama3.1:latest (or your chosen model) in the list
 ```
 
 ## First Chat Command
@@ -297,7 +297,7 @@ Here's a typical workflow from start to finish:
 ```bash
 # 1. Check Ollama is running
 secondbrain chat --check-llm
-# Output: ✓ Ollama is available (model: llama3.2)
+# Output: ✓ Ollama is available (model: llama3.1:latest)
 
 # 2. Start a new conversation session
 secondbrain chat --session project-review
@@ -333,7 +333,7 @@ Configure RAG behavior in your `.env` file:
 ```bash
 # Ollama settings
 SECONDBRAIN_OLLAMA_HOST=http://localhost:11434
-SECONDBRAIN_LLM_MODEL=llama3.2
+SECONDBRAIN_LLM_MODEL=llama3.1:latest
 SECONDBRAIN_LLM_TEMPERATURE=0.1
 SECONDBRAIN_LLM_MAX_TOKENS=2048
 SECONDBRAIN_LLM_TIMEOUT=120
@@ -349,7 +349,7 @@ SECONDBRAIN_RAG_CONTEXT_WINDOW=10
 | `--session, -s` | `default` | Session ID for conversation |
 | `--top-k, -k` | `5` | Number of chunks to retrieve |
 | `--temperature, -t` | `0.1` | LLM temperature (0.0-2.0) |
-| `--model, -m` | `llama3.2` | LLM model name |
+| `--model, -m` | `llama3.1:latest` | LLM model name |
 | `--show-sources` | `false` | Display retrieved sources |
 | `--list-sessions` | `false` | List all sessions |
 | `--history` | `false` | Show session history |
@@ -375,7 +375,7 @@ ollama list
 
 ```bash
 # Pull the model
-ollama pull llama3.2
+ollama pull llama3.1:latest
 
 # Or use a different model
 secondbrain chat "question" --model mistral
