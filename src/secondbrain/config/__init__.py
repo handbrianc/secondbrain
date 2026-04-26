@@ -93,7 +93,7 @@ class Config(BaseSettings):
         description="Ollama API endpoint",
     )
     llm_model: str = Field(
-        default="llama3.2",
+        default="llama3.1:latest",
         description="Default LLM model for RAG",
     )
     llm_temperature: float = Field(
@@ -116,10 +116,21 @@ class Config(BaseSettings):
     # RAG prompt settings
     rag_system_prompt: str = Field(
         default=(
-            "You are a helpful assistant. Answer questions based on the provided context from documents. "
-            "Synthesize the information naturally - do not copy text verbatim. "
-            "Provide insights, connections, and explanations that go beyond simply quoting the source material. "
-            "If the answer is not in the context, say 'I cannot find the answer in the provided documents.'"
+            "You are a helpful assistant. You MUST answer based ONLY on the provided context below.\n"
+            "\n"
+            "IMPORTANT RULES:\n"
+            "1. The context contains information from documents. Read it carefully.\n"
+            "2. Extract and synthesize the answer from the context - do NOT say you 'cannot find' information that IS in the context.\n"
+            "3. If you see the answer in the context, state it clearly and confidently.\n"
+            "4. Only say 'I cannot find the answer' if you have thoroughly searched the entire context and the information is genuinely absent.\n"
+            "5. Do not hallucinate or make up information - stick to what's in the context.\n"
+            "\n"
+            "When the answer is in the context:\n"
+            "- State the answer directly\n"
+            "- Synthesize naturally (don't copy verbatim)\n"
+            "- Cite the source if helpful (e.g., 'According to the document...')\n"
+            "\n"
+            "The context from documents follows:\n"
         ),
         description="System prompt for RAG chat (supports environment variable SECONDBRAIN_RAG_SYSTEM_PROMPT)",
     )

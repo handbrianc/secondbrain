@@ -31,17 +31,24 @@ class LocalEmbeddingGenerator:
         self._connection_valid: bool | None = None
         self._connection_checked_at: float = 0.0
 
-        # Suppress third-party logs
-        logging.getLogger("sentence_transformers").setLevel(logging.WARNING)
-
     @property
     def model(self) -> Any:
         """Get or create the model."""
         if self._model is None:
             from sentence_transformers import SentenceTransformer
 
-            self._model = SentenceTransformer(self.model_name)  # type: ignore[operator]
+            self._model = SentenceTransformer(self.model_name, device="cpu")  # type: ignore[operator]
         return self._model
+    
+    def __getstate__(self) -> dict:
+        """Prevent pickling of the model to avoid meta tensor issues with xdist."""
+        state = self.__dict__.copy()
+        state['_model'] = None  # Don't pickle the model
+        return state
+    
+    def __setstate__(self, state: dict) -> None:
+        """Restore state without the model."""
+        self.__dict__.update(state)
 
     def generate(self, text: str) -> list[float]:
         """Generate embedding for single text.

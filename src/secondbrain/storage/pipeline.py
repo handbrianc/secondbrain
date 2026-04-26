@@ -5,6 +5,7 @@ for vector similarity search using manual cosine similarity calculation.
 """
 
 import math
+import re
 from typing import Any
 
 
@@ -44,10 +45,12 @@ def build_search_pipeline(
     """
     query_filter: dict[str, Any] = {}
     if source_filter:
+        # Escape regex special characters to prevent regex injection
+        escaped_filter = re.escape(source_filter)
         if use_prefix_match:
-            query_filter["source_file"] = {"$regex": f"^{source_filter}"}
+            query_filter["source_file"] = {"$regex": f"^{escaped_filter}"}
         else:
-            query_filter["source_file"] = {"$regex": source_filter}
+            query_filter["source_file"] = {"$regex": escaped_filter}
     if file_type_filter:
         query_filter["file_type"] = file_type_filter
 

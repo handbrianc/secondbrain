@@ -130,9 +130,9 @@ class ConversationStorage(ValidatableService):
             self._client = MongoClient(
                 self.mongo_uri,
                 directConnection=True,
-                serverSelectionTimeoutMS=5000,
-                maxPoolSize=50,
-                minPoolSize=10,
+                serverSelectionTimeoutMS=10000,
+                maxPoolSize=100,
+                minPoolSize=20,
                 maxIdleTimeMS=300000,
             )
         return self._client

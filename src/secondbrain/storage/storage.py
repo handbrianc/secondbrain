@@ -3,6 +3,7 @@
 import asyncio
 import contextlib
 import logging
+import re
 import struct
 import time
 from collections.abc import Sequence
@@ -238,11 +239,18 @@ class VectorStorage(ValidatableService):
         pass
 
     def close(self) -> None:
-        """Close resources and release connections."""
+        """Close resources and release connections.
+
+        Closes sync MongoClient and releases async client resources.
+        Note: For proper async cleanup in async context, use aclose().
+        """
         if self._client is not None:
             self._client.close()
             self._client = None
         if self._async_client is not None:
+            # AsyncIOMotorClient.close() works in sync context
+            with contextlib.suppress(Exception):
+                self._async_client.close()
             self._async_client = None
 
     async def aclose(self) -> None:
@@ -315,11 +323,11 @@ class VectorStorage(ValidatableService):
             self._client = MongoClient(
                 self.mongo_uri,
                 directConnection=True,
-                serverSelectionTimeoutMS=5000,  # 5s: Fail fast on connection issues
-                maxPoolSize=50,  # 50 connections: Sufficient for batch processing
-                minPoolSize=10,  # 10 connections: Maintain warm pool
-                maxIdleTimeMS=300000,  # 5 min: Reap idle connections proactively
-                waitQueueTimeoutMS=5000,  # 5s: Timeout if pool exhausted
+                serverSelectionTimeoutMS=10000,
+                maxPoolSize=100,
+                minPoolSize=20,
+                maxIdleTimeMS=300000,
+                waitQueueTimeoutMS=10000,
             )
         return self._client
 
@@ -493,10 +501,12 @@ class VectorStorage(ValidatableService):
 
         query: dict[str, Any] = {}
         if source_filter:
+            # Escape regex special characters to prevent regex injection
+            escaped_filter = re.escape(source_filter)
             if use_prefix_match:
-                query["source_file"] = {"$regex": f"^{source_filter}"}
+                query["source_file"] = {"$regex": f"^{escaped_filter}"}
             else:
-                query["source_file"] = {"$regex": source_filter}
+                query["source_file"] = {"$regex": escaped_filter}
         if chunk_id:
             query["chunk_id"] = chunk_id
 
@@ -694,7 +704,7 @@ class VectorStorage(ValidatableService):
 
         query: dict[str, Any] = {}
         if source_filter:
-            query["source_file"] = {"$regex": source_filter}
+            query["source_file"] = {"$regex": re.escape(source_filter)}
         if chunk_id:
             query["chunk_id"] = chunk_id
 
@@ -899,9 +909,9 @@ class AsyncVectorStorage(ValidatableService):
         if self._async_client is None:
             self._async_client = AsyncIOMotorClient(
                 self.mongo_uri,
-                serverSelectionTimeoutMS=5000,
-                maxPoolSize=50,
-                minPoolSize=10,
+                serverSelectionTimeoutMS=10000,
+                maxPoolSize=100,
+                minPoolSize=20,
                 maxIdleTimeMS=300000,
             )
         return self._async_client
@@ -995,9 +1005,16 @@ class AsyncVectorStorage(ValidatableService):
         return result
 
     def close(self) -> None:
-        """Close resources and release async connections."""
+        """Close resources and release async connections.
+
+        Note: This cannot properly close AsyncIOMotorClient (requires aclose()).
+        Use aclose() for proper async cleanup or context manager.
+        """
         if self._async_client is not None:
-            self._async_client.close()
+            # AsyncIOMotorClient.close() exists but aclose() is preferred
+            # For sync context, we can only close the underlying resources
+            with contextlib.suppress(Exception):
+                self._async_client.close()
             self._async_client = None
 
     async def aclose(self) -> None:
@@ -1102,7 +1119,7 @@ class AsyncVectorStorage(ValidatableService):
 
         query: dict[str, Any] = {}
         if source_filter:
-            query["source_file"] = {"$regex": source_filter}
+            query["source_file"] = {"$regex": re.escape(source_filter)}
         if chunk_id:
             query["chunk_id"] = chunk_id
 
