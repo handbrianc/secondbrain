@@ -22,7 +22,7 @@ class TestDockerManagerBasic:
     def test_init_custom_compose_file(self, tmp_path):
         """Test DockerManager with custom compose file."""
         compose_file = tmp_path / "docker-compose.yml"
-        compose_file.write_text("services:\n")
+        compose_file.write_text("services:\n  mongo:\n    image: mongo:latest\n")
         manager = DockerManager(compose_file=str(compose_file))
         assert manager.compose_file == compose_file
 
@@ -121,22 +121,28 @@ class TestCheckMongoRunning:
 
 
 class TestStartMongo:
-    def test_start_mongo_docker_not_installed(self):
+    @pytest.mark.xdist_group(name="docker_manager")
+    def test_start_mongo_docker_not_installed(self, tmp_path):
         """Test start_mongo raises DockerNotInstalledError when Docker unavailable."""
+        # Create a valid compose file to avoid file not found errors
+        compose_file = tmp_path / "docker-compose.yml"
+        compose_file.write_text("services:\n  mongo:\n    image: mongo:latest\n")
+        manager = DockerManager(compose_file=str(compose_file))
         with (
-            patch.object(
-                manager := DockerManager(), "check_docker_installed", return_value=False
-            ),
+            patch.object(manager, "check_docker_installed", return_value=False),
             pytest.raises(DockerNotInstalledError),
         ):
             manager.start_mongo()
 
-    def test_start_mongo_compose_not_installed(self):
+    @pytest.mark.xdist_group(name="docker_manager")
+    def test_start_mongo_compose_not_installed(self, tmp_path):
         """Test start_mongo raises DockerComposeError when compose unavailable."""
+        # Create a valid compose file to avoid file not found errors
+        compose_file = tmp_path / "docker-compose.yml"
+        compose_file.write_text("services:\n  mongo:\n    image: mongo:latest\n")
+        manager = DockerManager(compose_file=str(compose_file))
         with (
-            patch.object(
-                manager := DockerManager(), "check_docker_installed", return_value=True
-            ),
+            patch.object(manager, "check_docker_installed", return_value=True),
             patch.object(manager, "check_docker_compose_installed", return_value=False),
             pytest.raises(DockerComposeError),
         ):
@@ -155,7 +161,7 @@ class TestStartMongo:
     def test_start_mongo_success(self, mock_run, tmp_path):
         mock_run.return_value = MagicMock(returncode=0, stdout="Started")
         compose_file = tmp_path / "docker-compose.yml"
-        compose_file.write_text("services:\n")
+        compose_file.write_text("services:\n  mongo:\n    image: mongo:latest\n")
         manager = DockerManager(compose_file=str(compose_file))
         with patch.object(manager, "check_docker_installed", return_value=True):
             with patch.object(
@@ -202,27 +208,32 @@ class TestWaitForMongoReady:
 
 
 class TestEnsureMongoRunning:
+    @pytest.mark.xdist_group(name="docker_manager")
     @patch("secondbrain.utils.docker_manager.config")
     def test_ensure_mongo_running_skips_remote(self, mock_config):
         mock_config.return_value.mongo_uri = "mongodb+srv://cluster.mongodb.net"
         manager = DockerManager()
         manager.ensure_mongo_running(verbose=False)
 
+    @pytest.mark.xdist_group(name="docker_manager")
     def test_ensure_mongo_running_already_running(self):
         with patch.object(
             manager := DockerManager(), "check_mongo_running", return_value=True
         ):
             manager.ensure_mongo_running(verbose=False)
 
-    def test_ensure_mongo_running_docker_not_installed(self):
+    @pytest.mark.xdist_group(name="docker_manager")
+    def test_ensure_mongo_running_docker_not_installed(self, tmp_path):
+        compose_file = tmp_path / "docker-compose.yml"
+        compose_file.write_text("services:\n  mongo:\n    image: mongo:latest\n")
+        manager = DockerManager(compose_file=str(compose_file))
         with (
-            patch.object(
-                manager := DockerManager(), "check_mongo_running", return_value=False
-            ),
+            patch.object(manager, "_is_local_mongodb", return_value=True),
+            patch.object(manager, "check_mongo_running", return_value=False),
             patch.object(manager, "check_docker_installed", return_value=False),
+            pytest.raises(DockerNotInstalledError),
         ):
-            with pytest.raises(DockerNotInstalledError):
-                manager.ensure_mongo_running(verbose=False)
+            manager.ensure_mongo_running(verbose=False)
 
     @patch("secondbrain.utils.docker_manager.config")
     def test_ensure_mongo_running_full_flow(self, mock_config):

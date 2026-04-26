@@ -32,7 +32,7 @@ class OllamaLLMProvider(LocalLLMProvider):
     def __init__(
         self,
         host: str | None = None,
-        model: str = "llama3.2",
+        model: str = "llama3.1:latest",
         temperature: float = 0.1,
         max_tokens: int = 2048,
         timeout: int = 120,
@@ -41,7 +41,7 @@ class OllamaLLMProvider(LocalLLMProvider):
 
         Args:
             host: Ollama server URL (default: from config().ollama_host).
-            model: Model name to use (default: "llama3.2").
+            model: Model name to use (default: "llama3.1:latest").
             temperature: Default temperature for generation (default: 0.1).
             max_tokens: Default max tokens for generation (default: 2048).
             timeout: Request timeout in seconds (default: 120).

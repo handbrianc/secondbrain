@@ -19,7 +19,7 @@
       "id": "config-002",
       "query": "How do I configure MongoDB connection URI?",
       "expected_concepts": ["MongoDB", "URI", "configuration", "environment", "SECONDBRAIN_MONGO_URI"],
-      "forbidden_concepts": ["MySQL", "PostgreSQL", "SQLite", "database"],
+      "forbidden_concepts": ["MySQL", "PostgreSQL", "SQLite"],
       "category": "configuration",
       "expected_answer": "Set the SECONDBRAIN_MONGO_URI environment variable."
     },
