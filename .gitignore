@@ -81,3 +81,15 @@ docs/site/
 
 # Secrets baseline
 .secrets.baseline
+
+# Test artifacts
+.testmondata*
+test_results.log
+QUANTITATIVE_TEST_*.md
+TEST_*.md
+
+# Generated knowledge graph
+graphify-out/
+
+# Sisyphus analysis documents (work-in-progress)
+.sisyphus/
