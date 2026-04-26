@@ -252,7 +252,7 @@ class TestChatCommands:
         ) as mock_provider_class:
             # Mock LLM provider
             mock_provider = MagicMock()
-            mock_provider.model = "llama3.2"
+            mock_provider.model = "llama3.1:latest"
 
             # Test 1: Ollama available
             mock_provider.health_check.return_value = True
@@ -263,7 +263,7 @@ class TestChatCommands:
 
             assert result.exit_code == 0
             assert "Ollama is available" in result.output
-            assert "llama3.2" in result.output
+            assert "llama3.1:latest" in result.output
             mock_provider.health_check.assert_called_once()
 
             # Test 2: Ollama unavailable

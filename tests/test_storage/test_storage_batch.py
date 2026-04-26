@@ -238,7 +238,7 @@ class TestVectorStorageFilterCombinations:
             call_args = mock_collection.aggregate.call_args[0][0]
             # Pipeline uses $match for filters and $addFields for cosine similarity
             assert "$match" in call_args[0]
-            assert call_args[0]["$match"]["source_file"] == {"$regex": "^test.pdf"}
+            assert call_args[0]["$match"]["source_file"] == {"$regex": "^test\\.pdf"}
             assert call_args[0]["$match"]["file_type"] == "pdf"
 
     def test_search_with_only_source_filter(

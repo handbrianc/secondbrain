@@ -5,7 +5,7 @@ These tests verify the actual integration between the RAG pipeline components
 and the Ollama LLM provider.
 
 Run with: pytest tests/test_rag/test_integration.py -v
-Requires: Ollama server running on http://localhost:11435
+Requires: Ollama server running on platform-appropriate port
 """
 
 from __future__ import annotations
@@ -17,14 +17,15 @@ from secondbrain.conversation.storage import ConversationStorage
 from secondbrain.rag.pipeline import RAGPipeline
 from secondbrain.rag.providers.ollama import OllamaLLMProvider
 from secondbrain.search import Searcher
+from tests.conftest import get_ollama_host
 
 
 @pytest.fixture
 def ollama_provider() -> OllamaLLMProvider:
     """Create real OllamaLLMProvider instance."""
     return OllamaLLMProvider(
-        host="http://localhost:11435",
-        model="llama3.2",
+        host=get_ollama_host(),
+        model="llama3.1:latest",
         temperature=0.1,
         max_tokens=2048,
         timeout=120,

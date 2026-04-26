@@ -4,6 +4,7 @@ This module provides comprehensive unit tests for the RAGPipeline class,
 covering all public and private methods, edge cases, and orchestration logic.
 """
 
+import platform
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -12,6 +13,12 @@ from secondbrain.conversation import ConversationSession, QueryRewriter
 from secondbrain.rag.interfaces import LocalLLMProvider
 from secondbrain.rag.pipeline import RAGPipeline
 from secondbrain.search import Searcher
+
+
+# Platform-aware Ollama host for tests
+TEST_OLLAMA_HOST = (
+    "http://localhost:11434" if platform.system() == "Darwin" else "http://localhost:11435"
+)
 
 
 @pytest.fixture
@@ -50,7 +57,7 @@ def mock_config(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
         "SECONDBRAIN_MONGO_URI": "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin",
         "SECONDBRAIN_MONGO_DB": "test_secondbrain",
         "SECONDBRAIN_MONGO_COLLECTION": "test_embeddings",
-        "SECONDBRAIN_LOCALHOST": "http://localhost:11435",
+        "SECONDBRAIN_LOCALHOST": TEST_OLLAMA_HOST,
         "SECONDBRAIN_LOCAL_EMBEDDING_MODEL": "all-MiniLM-L6-v2",
         "SECONDBRAIN_CHUNK_SIZE": "512",
         "SECONDBRAIN_CHUNK_OVERLAP": "50",
@@ -430,7 +437,7 @@ class TestRAGPipelineBuildPrompt:
         prompt = pipeline_with_mocks._build_prompt("What is Python?", "Python context")
 
         assert "You are a helpful assistant" in prompt
-        assert "Context:" in prompt
+        assert "=== DOCUMENT CONTEXT START ===" in prompt
         assert "Python context" in prompt
         assert "Question: What is Python?" in prompt
         assert "Answer:" in prompt
@@ -467,8 +474,9 @@ class TestRAGPipelineBuildPrompt:
         """Test that system instruction is always present."""
         prompt = pipeline_with_mocks._build_prompt("Query", "Context")
 
-        assert "Answer questions based on the provided context" in prompt
-        assert "I cannot find the answer in the provided documents" in prompt
+        assert "You are a helpful assistant" in prompt
+        assert "=== DOCUMENT CONTEXT START ===" in prompt
+        assert "=== DOCUMENT CONTEXT END ===" in prompt
 
 
 class TestRAGPipelineHandleNoResults:

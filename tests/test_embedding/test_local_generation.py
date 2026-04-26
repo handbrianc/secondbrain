@@ -41,8 +41,8 @@ class TestEmbeddingModelLoading:
             # Access model property
             model = gen.model
 
-            # Verify SentenceTransformer was called with correct model name
-            mock_st.assert_called_once_with("all-MiniLM-L6-v2")
+            # Verify SentenceTransformer was called with correct model name and device
+            mock_st.assert_called_once_with("all-MiniLM-L6-v2", device="cpu")
             assert model is mock_model
 
     def test_model_property_reuses_loaded_model(self) -> None:
