@@ -146,7 +146,7 @@ class TestGoldenDataset:
     """Tests for golden dataset validation and RAG pipeline evaluation."""
 
     @pytest.fixture(scope="function")
-    def searcher(self) -> Searcher:
+    def searcher(self, seeded_chunks_with_embeddings) -> Searcher:
         """Create a Searcher instance for testing."""
         return Searcher()
 
@@ -279,6 +279,7 @@ class TestGoldenDataset:
         tech_docs_dataset: list[dict[str, Any]],
         rag_pipeline: RAGPipeline,
         embedding_model: SentenceTransformer,
+        seeded_chunks_with_embeddings,
     ) -> None:
         full_query = next(
             (q for q in tech_docs_dataset if q["id"] == golden_query["id"]),

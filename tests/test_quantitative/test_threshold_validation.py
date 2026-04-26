@@ -272,15 +272,6 @@ class TestSimilarityThresholdSensitivity:
     """Test suite for analyzing similarity threshold sensitivity."""
 
     @pytest.fixture
-    def embedding_model(self) -> Any:
-        """Load embedding model for similarity calculations.
-
-        Returns:
-            SentenceTransformer model instance.
-        """
-        return SentenceTransformer("all-MiniLM-L6-v2")  # type: ignore[operator]
-
-    @pytest.fixture
     def test_queries(self) -> list[str]:
         """Sample queries for threshold testing.
 
@@ -297,10 +288,7 @@ class TestSimilarityThresholdSensitivity:
 
     @pytest.mark.parametrize("threshold", SIMILARITY_THRESHOLD_VALUES)
     def test_similarity_threshold_impact_on_result_count(
-        self,
-        threshold: float,
-        test_queries: list[str],
-        embedding_model: Any,
+        self, seeded_chunks_with_embeddings, threshold, test_queries, embedding_model
     ) -> None:
         """Test how similarity threshold affects number of results returned.
 
@@ -370,10 +358,7 @@ class TestSimilarityThresholdSensitivity:
 
     @pytest.mark.parametrize("threshold", SIMILARITY_THRESHOLD_VALUES)
     def test_similarity_threshold_impact_on_result_quality(
-        self,
-        threshold: float,
-        test_queries: list[str],
-        embedding_model: Any,
+        self, seeded_chunks_with_embeddings, threshold, test_queries, embedding_model
     ) -> None:
         """Test how similarity threshold affects average result quality.
 
@@ -422,9 +407,7 @@ class TestSimilarityThresholdSensitivity:
         )
 
     def test_similarity_threshold_tradeoff_analysis(
-        self,
-        test_queries: list[str],
-        embedding_model: Any,
+        self, seeded_chunks_with_embeddings, threshold, test_queries, embedding_model
     ) -> None:
         """Comprehensive analysis of similarity threshold tradeoffs.
 
@@ -493,30 +476,7 @@ class TestSimilarityThresholdSensitivity:
 @pytest.mark.threshold_validation
 @pytest.mark.quantitative
 class TestPrecisionRecallThresholdJustification:
-    """Test suite for validating precision/recall threshold choices.
-
-    This test suite empirically validates the precision and recall thresholds
-    used in search quality evaluation. It analyzes whether the chosen thresholds
-    are appropriate for the system's actual performance.
-
-    Rationale for thresholds:
-    - Precision@5 >= 0.4: At least 2 of top 5 results should be relevant
-    - Precision@10 >= 0.5: At least 5 of top 10 results should be relevant
-    - Recall@5 >= 0.3: Find at least 30% of relevant results in top 5
-    - Recall@10 >= 0.4: Find at least 40% of relevant results in top 10
-
-    These thresholds represent reasonable expectations for a production RAG system
-    while allowing for the inherent ambiguity in semantic search.
-    """
-
-    @pytest.fixture
-    def embedding_model(self) -> Any:
-        """Load embedding model for similarity calculations.
-
-        Returns:
-            SentenceTransformer model instance.
-        """
-        return SentenceTransformer("all-MiniLM-L6-v2")  # type: ignore[operator]
+    """Test suite for precision-recall threshold justification."""
 
     @pytest.fixture
     def sample_queries_with_relevance(self) -> list[dict[str, Any]]:
@@ -541,9 +501,7 @@ class TestPrecisionRecallThresholdJustification:
         ]
 
     def test_precision_threshold_justification(
-        self,
-        sample_queries_with_relevance: list[dict[str, Any]],
-        embedding_model: Any,
+        self, seeded_chunks_with_embeddings, threshold, test_queries, embedding_model
     ) -> None:
         """Justify precision threshold choices through empirical measurement.
 
@@ -635,9 +593,7 @@ class TestPrecisionRecallThresholdJustification:
         )
 
     def test_recall_threshold_justification(
-        self,
-        sample_queries_with_relevance: list[dict[str, Any]],
-        embedding_model: Any,
+        self, seeded_chunks_with_embeddings, threshold, test_queries, embedding_model
     ) -> None:
         """Justify recall threshold choices through empirical measurement.
 
@@ -717,9 +673,7 @@ class TestPrecisionRecallThresholdJustification:
         )
 
     def test_precision_recall_tradeoff_curve(
-        self,
-        sample_queries_with_relevance: list[dict[str, Any]],
-        embedding_model: Any,
+        self, seeded_chunks_with_embeddings, threshold, test_queries, embedding_model
     ) -> None:
         """Analyze the precision-recall tradeoff curve.
 
@@ -826,8 +780,7 @@ class TestPerformanceThresholdValidation:
         ]
 
     def test_mean_response_time_threshold(
-        self,
-        test_queries: list[str],
+        self, seeded_chunks_with_embeddings, test_queries
     ) -> None:
         """Validate mean response time threshold.
 
@@ -898,8 +851,7 @@ class TestPerformanceThresholdValidation:
         )
 
     def test_search_latency_threshold(
-        self,
-        test_queries: list[str],
+        self, seeded_chunks_with_embeddings, test_queries
     ) -> None:
         """Validate search latency threshold.
 
@@ -969,30 +921,7 @@ class TestPerformanceThresholdValidation:
 @pytest.mark.threshold_validation
 @pytest.mark.quantitative
 class TestConsistencyThresholdAnalysis:
-    """Test suite for analyzing consistency threshold choices.
-
-    This test suite empirically analyzes the consistency thresholds used
-    to evaluate answer stability. It measures actual consistency and validates
-    that the thresholds are appropriate for detecting meaningful instability.
-
-    Rationale for consistency thresholds:
-    - Mean consistency >= 0.8: Answers should be mostly stable
-    - Variance < 0.05: Low variance indicates reliability
-    - Embedding stability >= 0.95: Embeddings should be highly stable
-
-    These thresholds are based on the understanding that LLMs have some
-    inherent non-determinism, but the overall semantic content should remain
-    consistent across runs.
-    """
-
-    @pytest.fixture
-    def embedding_model(self) -> Any:
-        """Load embedding model for similarity calculations.
-
-        Returns:
-            SentenceTransformer model instance.
-        """
-        return SentenceTransformer("all-MiniLM-L6-v2")  # type: ignore[operator]
+    """Test suite for analyzing consistency threshold appropriateness."""
 
     @pytest.fixture
     def test_query(self) -> str:
@@ -1004,9 +933,7 @@ class TestConsistencyThresholdAnalysis:
         return "What is the default chunk size in SecondBrain?"
 
     def test_consistency_threshold_appropriateness(
-        self,
-        test_query: str,
-        embedding_model: Any,
+        self, seeded_chunks_with_embeddings, embedding_model, test_query
     ) -> None:
         """Test whether consistency thresholds are appropriate.
 
@@ -1058,9 +985,7 @@ class TestConsistencyThresholdAnalysis:
         )
 
     def test_consistency_threshold_sensitivity(
-        self,
-        test_query: str,
-        embedding_model: Any,
+        self, seeded_chunks_with_embeddings, test_query
     ) -> None:
         """Test sensitivity of consistency thresholds to changes.
 

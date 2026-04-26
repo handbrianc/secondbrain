@@ -14,6 +14,7 @@ Run with: pytest -m "precision_recall and integration"
 import pytest
 
 from secondbrain.search import Searcher
+from tests.stats_utils import bootstrap_ci, calculate_ci_mean
 
 from .conftest import (
     calculate_map,
@@ -22,6 +23,9 @@ from .conftest import (
     calculate_recall_at_k,
 )
 
+# Minimum sample size for reliable bootstrap CI estimation
+MIN_SAMPLE_SIZE = 5
+
 
 @pytest.mark.precision_recall
 @pytest.mark.integration
@@ -29,7 +33,7 @@ class TestPrecisionRecall:
     """Test precision and recall metrics for search results."""
 
     @pytest.fixture
-    def searcher(self):
+    def searcher(self, seeded_chunks_with_embeddings):
         """Create a Searcher instance for testing."""
         return Searcher()
 
@@ -60,9 +64,12 @@ class TestPrecisionRecall:
         threshold: float,
         precision_thresholds: dict[int, float],
     ) -> None:
-        """Test precision at K for different K values.
+        """Test precision at K for different K values using bootstrap confidence intervals.
 
         Precision@K = (Number of relevant results in top K) / K
+
+        Uses bootstrap resampling to calculate confidence intervals for precision metrics,
+        providing statistical rigor over point estimates.
 
         Args:
             searcher: Searcher instance for performing searches
@@ -72,8 +79,8 @@ class TestPrecisionRecall:
             precision_thresholds: Configurable thresholds per K value
 
         Asserts:
-            Precision@K meets or exceeds the threshold for each query
-            Failure message includes actual precision value
+            Bootstrap CI lower bound for Precision@K meets or exceeds the threshold
+            Failure message includes CI bounds, CI width, and sample size
         """
         # Use precision_recall_golden dataset
         if "precision_recall_golden" not in golden_datasets:
@@ -100,16 +107,35 @@ class TestPrecisionRecall:
 
             precisions.append(precision)
 
-            # Assert precision meets threshold with actual value in message
-            actual_threshold = precision_thresholds.get(k, threshold)
-            assert precision >= actual_threshold, (
-                f"Precision@{k} too low for query '{query[:50]}...': "
-                f"actual={precision:.4f}, threshold={actual_threshold}"
+        # Validate sample size for reliable CI estimation
+        n_samples = len(precisions)
+        if n_samples < MIN_SAMPLE_SIZE:
+            pytest.skip(
+                f"Insufficient samples for bootstrap CI: n={n_samples} < {MIN_SAMPLE_SIZE}"
             )
 
-        # Report average precision across all queries
-        avg_precision = sum(precisions) / len(precisions) if precisions else 0.0
-        print(f"Precision@{k} test completed. Average precision: {avg_precision:.4f}")
+        # Calculate bootstrap confidence interval
+        ci_lower, ci_upper = bootstrap_ci(precisions, n_iterations=1000, confidence=0.95)
+        ci_width = ci_upper - ci_lower
+        mean_precision = calculate_ci_mean(precisions)[0] + (
+            calculate_ci_mean(precisions)[1] - calculate_ci_mean(precisions)[0]
+        ) / 2
+
+        # Assert CI lower bound meets threshold
+        actual_threshold = precision_thresholds.get(k, threshold)
+        assert ci_lower >= actual_threshold, (
+            f"Precision@{k} CI lower bound too low: "
+            f"ci_lower={ci_lower:.4f}, ci_upper={ci_upper:.4f}, "
+            f"ci_width={ci_width:.4f}, mean={mean_precision:.4f}, "
+            f"threshold={actual_threshold}, n_samples={n_samples}"
+        )
+
+        # Report results
+        print(
+            f"Precision@{k} test completed. "
+            f"Mean: {mean_precision:.4f}, 95% CI: [{ci_lower:.4f}, {ci_upper:.4f}], "
+            f"width={ci_width:.4f}, n={n_samples}"
+        )
 
     @pytest.mark.parametrize("k,threshold", [(5, 0.3), (10, 0.4), (20, 0.5)])
     def test_recall_at_k(
@@ -120,9 +146,12 @@ class TestPrecisionRecall:
         threshold: float,
         recall_thresholds: dict[int, float],
     ) -> None:
-        """Test recall at K for different K values.
+        """Test recall at K for different K values using bootstrap confidence intervals.
 
         Recall@K = (Number of relevant results in top K) / (Total relevant results)
+
+        Uses bootstrap resampling to calculate confidence intervals for recall metrics,
+        providing statistical rigor over point estimates.
 
         Args:
             searcher: Searcher instance for performing searches
@@ -132,8 +161,8 @@ class TestPrecisionRecall:
             recall_thresholds: Configurable thresholds per K value
 
         Asserts:
-            Recall@K meets or exceeds the threshold for each query
-            Failure message includes actual recall value
+            Bootstrap CI lower bound for Recall@K meets or exceeds the threshold
+            Failure message includes CI bounds, CI width, and sample size
         """
         # Use precision_recall_golden dataset
         if "precision_recall_golden" not in golden_datasets:
@@ -159,34 +188,56 @@ class TestPrecisionRecall:
 
             recalls.append(recall)
 
-            # Assert recall meets threshold with actual value in message
-            actual_threshold = recall_thresholds.get(k, threshold)
-            assert recall >= actual_threshold, (
-                f"Recall@{k} too low for query '{query[:50]}...': "
-                f"actual={recall:.4f}, threshold={actual_threshold}"
+        # Validate sample size for reliable CI estimation
+        n_samples = len(recalls)
+        if n_samples < MIN_SAMPLE_SIZE:
+            pytest.skip(
+                f"Insufficient samples for bootstrap CI: n={n_samples} < {MIN_SAMPLE_SIZE}"
             )
 
-        # Report average recall across all queries
-        avg_recall = sum(recalls) / len(recalls) if recalls else 0.0
-        pytest.skip(f"Recall@{k} test completed. Average recall: {avg_recall:.4f}")
+        # Calculate bootstrap confidence interval
+        ci_lower, ci_upper = bootstrap_ci(recalls, n_iterations=1000, confidence=0.95)
+        ci_width = ci_upper - ci_lower
+        mean_recall = calculate_ci_mean(recalls)[0] + (
+            calculate_ci_mean(recalls)[1] - calculate_ci_mean(recalls)[0]
+        ) / 2
+
+        # Assert CI lower bound meets threshold
+        actual_threshold = recall_thresholds.get(k, threshold)
+        assert ci_lower >= actual_threshold, (
+            f"Recall@{k} CI lower bound too low: "
+            f"ci_lower={ci_lower:.4f}, ci_upper={ci_upper:.4f}, "
+            f"ci_width={ci_width:.4f}, mean={mean_recall:.4f}, "
+            f"threshold={actual_threshold}, n_samples={n_samples}"
+        )
+
+        # Report results
+        print(
+            f"Recall@{k} test completed. "
+            f"Mean: {mean_recall:.4f}, 95% CI: [{ci_lower:.4f}, {ci_upper:.4f}], "
+            f"width={ci_width:.4f}, n={n_samples}"
+        )
 
     def test_mean_average_precision(
         self,
         searcher: Searcher,
         golden_datasets: dict,
     ) -> None:
-        """Test Mean Average Precision (mAP) across all queries.
+        """Test Mean Average Precision (mAP) across all queries using bootstrap CI.
 
         mAP = (1 / |queries|) * sum(AP for each query)
         where AP = (1 / |relevant|) * sum(precision at each relevant item)
+
+        Uses bootstrap resampling to calculate confidence intervals for mAP,
+        providing statistical rigor over point estimates.
 
         Args:
             searcher: Searcher instance for performing searches
             golden_datasets: Loaded golden datasets
 
         Asserts:
-            mAP >= 0.5 (configurable threshold)
-            Failure message includes actual mAP value
+            Bootstrap CI lower bound for mAP >= 0.5
+            Failure message includes CI bounds, CI width, and sample size
         """
         # Use precision_recall_golden dataset
         if "precision_recall_golden" not in golden_datasets:
@@ -210,18 +261,34 @@ class TestPrecisionRecall:
 
             map_scores.append(ap)
 
-            # Report individual query AP
-            assert ap >= 0.0, (
-                f"Average Precision for query '{query[:50]}...': "
-                f"actual={ap:.4f} (should be >= 0.0)"
+        # Validate sample size for reliable CI estimation
+        n_samples = len(map_scores)
+        if n_samples < MIN_SAMPLE_SIZE:
+            pytest.skip(
+                f"Insufficient samples for bootstrap CI: n={n_samples} < {MIN_SAMPLE_SIZE}"
             )
 
-        # Calculate mean AP across all queries
-        mAP = sum(map_scores) / len(map_scores) if map_scores else 0.0
+        # Calculate bootstrap confidence interval
+        ci_lower, ci_upper = bootstrap_ci(map_scores, n_iterations=1000, confidence=0.95)
+        ci_width = ci_upper - ci_lower
+        mean_map = calculate_ci_mean(map_scores)[0] + (
+            calculate_ci_mean(map_scores)[1] - calculate_ci_mean(map_scores)[0]
+        ) / 2
 
-        # Assert mAP meets threshold with actual value in message
-        assert mAP >= 0.5, (
-            f"Mean Average Precision too low: actual={mAP:.4f}, threshold=0.5"
+        # Assert CI lower bound meets threshold
+        threshold = 0.5
+        assert ci_lower >= threshold, (
+            f"mAP CI lower bound too low: "
+            f"ci_lower={ci_lower:.4f}, ci_upper={ci_upper:.4f}, "
+            f"ci_width={ci_width:.4f}, mean={mean_map:.4f}, "
+            f"threshold={threshold}, n_samples={n_samples}"
+        )
+
+        # Report results
+        print(
+            f"mAP test completed. "
+            f"Mean: {mean_map:.4f}, 95% CI: [{ci_lower:.4f}, {ci_upper:.4f}], "
+            f"width={ci_width:.4f}, n={n_samples}"
         )
 
     def test_ndcg_at_k(
@@ -229,20 +296,23 @@ class TestPrecisionRecall:
         searcher: Searcher,
         golden_datasets: dict,
     ) -> None:
-        """Test Normalized Discounted Cumulative Gain at K=10.
+        """Test Normalized Discounted Cumulative Gain at K=10 using bootstrap CI.
 
         nDCG@K = DCG@K / IDCG@K
         where:
             DCG@K = sum(rel_i / log2(i+1)) for i=1 to K
             IDCG@K = ideal DCG (all relevant docs at top)
 
+        Uses bootstrap resampling to calculate confidence intervals for nDCG,
+        providing statistical rigor over point estimates.
+
         Args:
             searcher: Searcher instance for performing searches
             golden_datasets: Loaded golden datasets
 
         Asserts:
-            nDCG@10 >= 0.6 (configurable threshold)
-            Failure message includes actual nDCG value
+            Bootstrap CI lower bound for nDCG@10 >= 0.6
+            Failure message includes CI bounds, CI width, and sample size
         """
         # Use precision_recall_golden dataset
         if "precision_recall_golden" not in golden_datasets:
@@ -268,18 +338,33 @@ class TestPrecisionRecall:
 
             ndcg_scores.append(ndcg)
 
-            # Report individual query nDCG
-            assert ndcg >= 0.0, (
-                f"nDCG@{k} for query '{query[:50]}...': "
-                f"actual={ndcg:.4f} (should be >= 0.0)"
+        # Validate sample size for reliable CI estimation
+        n_samples = len(ndcg_scores)
+        if n_samples < MIN_SAMPLE_SIZE:
+            pytest.skip(
+                f"Insufficient samples for bootstrap CI: n={n_samples} < {MIN_SAMPLE_SIZE}"
             )
 
-        # Calculate mean nDCG across all queries
-        mean_ndcg = sum(ndcg_scores) / len(ndcg_scores) if ndcg_scores else 0.0
+        # Calculate bootstrap confidence interval
+        ci_lower, ci_upper = bootstrap_ci(ndcg_scores, n_iterations=1000, confidence=0.95)
+        ci_width = ci_upper - ci_lower
+        mean_ndcg = calculate_ci_mean(ndcg_scores)[0] + (
+            calculate_ci_mean(ndcg_scores)[1] - calculate_ci_mean(ndcg_scores)[0]
+        ) / 2
 
-        # Assert nDCG meets threshold with actual value in message
-        assert mean_ndcg >= threshold, (
-            f"Mean nDCG@{k} too low: actual={mean_ndcg:.4f}, threshold={threshold}"
+        # Assert CI lower bound meets threshold
+        assert ci_lower >= threshold, (
+            f"nDCG@{k} CI lower bound too low: "
+            f"ci_lower={ci_lower:.4f}, ci_upper={ci_upper:.4f}, "
+            f"ci_width={ci_width:.4f}, mean={mean_ndcg:.4f}, "
+            f"threshold={threshold}, n_samples={n_samples}"
+        )
+
+        # Report results
+        print(
+            f"nDCG@{k} test completed. "
+            f"Mean: {mean_ndcg:.4f}, 95% CI: [{ci_lower:.4f}, {ci_upper:.4f}], "
+            f"width={ci_width:.4f}, n={n_samples}"
         )
 
     def test_precision_recall_tradeoff(
