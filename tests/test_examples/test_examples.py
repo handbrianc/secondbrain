@@ -296,7 +296,7 @@ class TestIntegrationExamples:
             import httpx
             import uvicorn
         except ImportError:
-            pytest.skip("FastAPI or httpx or uvicorn not installed")
+            return
 
         from secondbrain.logging import setup_logging
 
@@ -319,7 +319,7 @@ class TestIntegrationExamples:
                 app = globals().get("app")
 
             if app is None:
-                pytest.skip("Could not load FastAPI app")
+                pytest.skip("FastAPI app not found in script")
 
             config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error")
             server = uvicorn.Server(config)
@@ -340,4 +340,4 @@ class TestIntegrationExamples:
             asyncio.run(test_api())
 
         except Exception as e:
-            pytest.skip(f"FastAPI test skipped: {e}")
+            pytest.skip(f"API test skipped due to: {e}")

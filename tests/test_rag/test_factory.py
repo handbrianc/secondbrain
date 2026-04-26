@@ -4,8 +4,16 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import platform
+
 from secondbrain.rag.providers.factory import LLMProviderFactory
 from secondbrain.rag.providers.ollama import OllamaLLMProvider
+
+
+# Determine expected host based on platform
+EXPECTED_OLLAMA_HOST = (
+    "http://localhost:11434" if platform.system() == "Darwin" else "http://localhost:11435"
+)
 
 
 class TestLLMProviderFactory:
@@ -16,7 +24,7 @@ class TestLLMProviderFactory:
         provider = LLMProviderFactory.create_ollama()
 
         assert isinstance(provider, OllamaLLMProvider)
-        assert provider.host == "http://localhost:11435"
+        assert provider.host == EXPECTED_OLLAMA_HOST
         assert provider.model == "llama2"
         assert provider.temperature == 0.7
 

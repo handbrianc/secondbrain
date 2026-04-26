@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import platform
 from unittest.mock import MagicMock, patch
 
 import httpx
@@ -11,27 +12,51 @@ from ollama import ResponseError
 from secondbrain.exceptions import ServiceUnavailableError
 from secondbrain.rag.providers.ollama import OllamaLLMProvider
 
+# Platform-aware default host for tests
+EXPECTED_OLLAMA_HOST = (
+    "http://localhost:11434" if platform.system() == "Darwin" else "http://localhost:11435"
+)
+
 
 @pytest.fixture
 def mock_client():
-    """Mock Ollama Client - creates a fresh instance for each test."""
-    mock = MagicMock()
+    """Mock Ollama Client - creates a fresh instance for each test.
+    
+    IMPORTANT: Each xdist worker gets its own mock instance to prevent
+    shared state corruption in parallel execution.
+    """
+    # Create a fresh MagicMock for each test invocation
+    # This prevents xdist workers from sharing mock state
+    mock = MagicMock(spec=["chat", "list", "generate", "embed"])
     mock.chat.return_value = {"message": {"content": "Test response"}}
     mock.list.return_value = {"models": []}
+    mock.generate.return_value = {"response": "Generated response"}
+    mock.embed.return_value = [[0.1, 0.2, 0.3]]
     return mock
 
 
 @pytest.fixture
 def provider(mock_client):
-    """Create OllamaLLMProvider with test configuration."""
-    with patch("secondbrain.rag.providers.ollama.Client", return_value=mock_client):
-        yield OllamaLLMProvider(
+    """Create OllamaLLMProvider with test configuration.
+    
+    Uses patch.object to ensure each worker gets isolated mock.
+    """
+    # Patch on the module level rather than class level for better xdist isolation
+    with patch(
+        "secondbrain.rag.providers.ollama.Client",
+        return_value=mock_client,
+        create=True  # Create the attribute if it doesn't exist
+    ) as mock_patch:
+        provider_instance = OllamaLLMProvider(
             host="http://test:11434",
             model="test-model",
             temperature=0.5,
             max_tokens=1024,
             timeout=30,
         )
+        # Ensure the provider uses our mock
+        provider_instance._client = mock_client
+        yield provider_instance
 
 
 class TestOllamaProviderInit:
@@ -41,8 +66,8 @@ class TestOllamaProviderInit:
         """Test initialization with default values."""
         provider = OllamaLLMProvider()
 
-        assert provider.host == "http://localhost:11435"
-        assert provider.model == "llama3.2"
+        assert provider.host == EXPECTED_OLLAMA_HOST
+        assert provider.model == "llama3.1:latest"
         assert provider.temperature == 0.1
         assert provider.max_tokens == 2048
         assert provider.timeout == 120
@@ -93,8 +118,9 @@ class TestOllamaProviderGenerate:
         mock_client = MagicMock()
         mock_client.chat.side_effect = httpx.ConnectError("Connection failed")
 
-        with patch("secondbrain.rag.providers.ollama.Client", return_value=mock_client):
+        with patch("secondbrain.rag.providers.ollama.Client", return_value=mock_client, create=True):
             provider = OllamaLLMProvider()
+            provider._client = mock_client
 
             with pytest.raises(ServiceUnavailableError, match="Ollama server"):
                 provider.generate("Test prompt")
@@ -104,8 +130,9 @@ class TestOllamaProviderGenerate:
         mock_client = MagicMock()
         mock_client.chat.side_effect = httpx.TimeoutException("Timeout")
 
-        with patch("secondbrain.rag.providers.ollama.Client", return_value=mock_client):
+        with patch("secondbrain.rag.providers.ollama.Client", return_value=mock_client, create=True):
             provider = OllamaLLMProvider()
+            provider._client = mock_client
 
             with pytest.raises(ServiceUnavailableError, match="timed out"):
                 provider.generate("Test prompt")
@@ -115,8 +142,9 @@ class TestOllamaProviderGenerate:
         mock_client = MagicMock()
         mock_client.chat.side_effect = ResponseError("Model not found", 404)
 
-        with patch("secondbrain.rag.providers.ollama.Client", return_value=mock_client):
+        with patch("secondbrain.rag.providers.ollama.Client", return_value=mock_client, create=True):
             provider = OllamaLLMProvider()
+            provider._client = mock_client
 
             with pytest.raises(RuntimeError, match="not found"):
                 provider.generate("Test prompt")
@@ -157,8 +185,9 @@ class TestOllamaProviderHealthCheck:
         mock_client = MagicMock()
         mock_client.list.side_effect = httpx.ConnectError("Failed")
 
-        with patch("secondbrain.rag.providers.ollama.Client", return_value=mock_client):
+        with patch("secondbrain.rag.providers.ollama.Client", return_value=mock_client, create=True):
             provider = OllamaLLMProvider()
+            provider._client = mock_client
 
             result = provider.health_check()
 
@@ -169,8 +198,9 @@ class TestOllamaProviderHealthCheck:
         mock_client = MagicMock()
         mock_client.list.side_effect = httpx.TimeoutException("Timeout")
 
-        with patch("secondbrain.rag.providers.ollama.Client", return_value=mock_client):
+        with patch("secondbrain.rag.providers.ollama.Client", return_value=mock_client, create=True):
             provider = OllamaLLMProvider()
+            provider._client = mock_client
 
             result = provider.health_check()
 
@@ -207,8 +237,9 @@ class TestOllamaProviderChat:
         mock_client = MagicMock()
         mock_client.chat.side_effect = httpx.ConnectError("Failed")
 
-        with patch("secondbrain.rag.providers.ollama.Client", return_value=mock_client):
+        with patch("secondbrain.rag.providers.ollama.Client", return_value=mock_client, create=True):
             provider = OllamaLLMProvider()
+            provider._client = mock_client
 
             with pytest.raises(ServiceUnavailableError):
                 provider.chat(messages)

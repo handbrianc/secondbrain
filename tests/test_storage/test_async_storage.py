@@ -91,7 +91,7 @@ class TestAsyncVectorStorage:
     ) -> None:
         """Test async validation returns True on success."""
         # Mock the async_client.admin.command to return a successful result
-        async_storage._async_client = MagicMock()
+        async_storage._async_client = AsyncMock()
         async_storage._async_client.admin.command = AsyncMock(return_value={"ok": 1})
 
         result = await async_storage._do_validate_async()
@@ -102,7 +102,7 @@ class TestAsyncVectorStorage:
         self, async_storage: AsyncVectorStorage
     ) -> None:
         """Test async validation returns False on failure."""
-        async_storage._async_client = MagicMock()
+        async_storage._async_client = AsyncMock()
         async_storage._async_client.admin.command = AsyncMock(
             side_effect=Exception("Connection failed")
         )

@@ -49,10 +49,10 @@ class TestBuildSearchPipeline:
         # Pipeline should have 5 stages: match, project (with score), sort, limit, project (final)
         assert len(pipeline) == 5
 
-        # First stage should be match with source filter (anchored regex)
+        # First stage should be match with source filter (anchored regex, escaped)
         assert "$match" in pipeline[0]
         match = pipeline[0]["$match"]
-        assert match["source_file"] == {"$regex": "^document.pdf"}
+        assert match["source_file"] == {"$regex": "^document\\.pdf"}
 
     def test_pipeline_with_file_type_filter(self) -> None:
         """Test pipeline with file type filter."""
@@ -82,10 +82,10 @@ class TestBuildSearchPipeline:
         # Pipeline should have 5 stages: match, project (with score), sort, limit, project (final)
         assert len(pipeline) == 5
 
-        # First stage should be match with both filters (anchored regex)
+        # First stage should be match with both filters (anchored regex, escaped)
         assert "$match" in pipeline[0]
         match = pipeline[0]["$match"]
-        assert match["source_file"] == {"$regex": "^report.pdf"}
+        assert match["source_file"] == {"$regex": "^report\\.pdf"}
         assert match["file_type"] == "pdf"
 
     def test_pipeline_numcandidates_scaling(self) -> None:
