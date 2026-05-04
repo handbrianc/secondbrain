@@ -1,395 +1,149 @@
 # AGENTS.md - Agent Coding Guidelines
 
-This file provides guidelines for agentic coding agents operating in this repository.
+**Last Updated:** 2026-05-03  
+**Commit:** 80fd894
+
+SecondBrain is a local document intelligence CLI for semantic search using MongoDB vector search and sentence-transformers.
+
+**Stack:** Python 3.11+, Click, Pydantic 2, Motor, sentence-transformers, Docker
 
 ---
 
-## Project Overview
+## STRUCTURE
 
-This is a Python CLI project with best practices for CLI application development.
-
----
-
-## Build / Lint / Test Commands
-
-### Running the Application
-```bash
-# Install runtime dependencies
-pip install -e .
-
-# Install with dev dependencies
-pip install -e ".[dev]"
-
-# Run the CLI
-python -m <package_name> [command] [options]
-
-# Or if entry point is configured
-<cli-name> [command] [options]
+```
+secondbrain/
+├── src/secondbrain/       # Main package (48 files, 13 modules)
+├── tests/                 # Test suite (20+ directories)
+├── scripts/               # Build/deployment utilities (9 scripts)
+├── docs/                  # MkDocs documentation
+├── docker-compose.yml     # Production services
+└── docker-compose.test.yml # Test services (MongoDB + Ollama)
 ```
 
-### Linting & Code Quality
+**Note**: Dual package structure - `src/secondbrain/` (core) + `src/secondbrain_cli/` (CLI, orphaned)
+
+---
+
+## WHERE TO LOOK
+
+| Task | Location | Notes |
+|------|----------|-------|
+| CLI commands | `src/secondbrain/cli/__init__.py` | Entry point: `secondbrain.cli:main` |
+| Core logic | `src/secondbrain/` | 13 submodules (storage, search, utils, etc.) |
+| Tests | `tests/` | 20+ specialized test directories |
+| Scripts | `scripts/` | Build, security, migration utilities |
+| Docs | `docs/` | MkDocs structure (developer-guide, user-guide, etc.) |
+| Config | `pyproject.toml` | Single source of truth for all tooling |
+
+---
+
+## CODE MAP
+
+**Entry Points**:
+- `main()` in `src/secondbrain/cli/__init__.py:39-42`
+- `cli` Click group in `src/secondbrain/cli/__init__.py:18-32`
+
+**Core Modules**:
+- `storage/` - MongoDB vector storage (5 files)
+- `utils/` - Circuit breaker, connections, tracing (8 files)
+- `rag/` - LLM providers, pipeline (5 files)
+- `document/` - Ingestion, chunking (4 files)
+- `search/` - Semantic search (3 files)
+- `conversation/` - Session management (3 files)
+- `domain/` - Entities, value objects (4 files)
+
+---
+
+## CONVENTIONS
+
+**Only deviations from standard Python CLI patterns:**
+
+1. **Entry point in `__init__.py`**: `main()` in `src/secondbrain/cli/__init__.py` instead of dedicated `cli.py`
+2. **Dual package structure**: `secondbrain_cli/` package exists but is orphaned/unused
+3. **No `__main__.py`**: Cannot run via `python -m secondbrain`
+4. **Inline Python in shell scripts**: `scripts/generate-sbom.sh` contains 60+ lines of embedded Python
+5. **Pre-commit runs full test suite**: `pytest` with `always_run: true` (slow)
+6. **Hard-coded credentials**: `scripts/init-mongo.js` contains `pwd: 'supersecretpassword123'` ⚠️
+
+**Standard patterns followed:**
+- `src/` organization ✓
+- `pyproject.toml` as single config source ✓
+- GitHub Actions CI/CD supported ✓
+- Pre-commit hooks for quality ✓
+- Docker Compose for services ✓
+
+---
+
+## ANTI-PATTERNS (THIS PROJECT)
+
+**Explicitly forbidden:**
+
+1. **Hard-coded credentials** - Use environment variables or `.env` files
+2. **Inline Python in shell scripts** - Extract to separate `.py` modules
+3. **Full test suite in pre-commit** - Use `pytest -m "not integration"` instead
+4. **Auto-installing dependencies in scripts** - Require virtual environment setup
+5. **Relative paths in scripts** - Use absolute paths or Python orchestration
+6. **Duplicate integration tests** - `tests/integration/` and `tests/test_integration/` have overlapping content
+
+---
+
+## UNIQUE STYLES
+
+**Testing:**
+- Parallel execution with `pytest-xdist` (`--dist=loadfile`)
+- 120s timeout per test
+- Extensive test markers: `integration`, `unit`, `slow`, `fast`, `qualitative`, `safety`, `factual`, `hallucination`
+- Property-based testing with Hypothesis (100 examples, 500ms deadline)
+
+**Security:**
+- Comprehensive scanning: pip-audit, safety, bandit, SBOM generation
+- Pre-commit hooks include security checks
+- CI/CD automation supported (GitHub Actions, local workflows)
+
+**Documentation:**
+- MkDocs with comprehensive structure (api/, architecture/, developer-guide/, user-guide/)
+- NumPy-style docstrings required
+- Extensive examples in `docs/examples/`
+
+---
+
+## COMMANDS
+
 ```bash
-# Run linting (ruff)
-ruff check .
+# Development
+pip install -e ".[dev]"
+pre-commit install
 
-# Run formatting (ruff)
-ruff format .
-
-# Run mypy type checking
+# Quality checks
+ruff check . && ruff format .
 mypy .
+pytest -m "not integration"  # Fast tests
+pytest                         # All tests
 
-# Run all checks
-ruff check . && ruff format --check . && mypy .
-```
+# Security
+./scripts/security_scan.sh all
+./scripts/security_scan.sh audit
+./scripts/security_scan.sh bandit
 
-### Testing
-```bash
-# Run all tests
+# Test environment
+docker-compose -f docker-compose.test.yml up -d
 pytest
-
-# Run tests with coverage
-pytest --cov=<package_name> --cov-report=html
-
-# Run a single test file
-pytest tests/test_filename.py
-
-# Run a single test by name
-pytest tests/test_filename.py::test_function_name
-
-# Run tests matching a pattern
-pytest -k "test_pattern"
-
-# Run with verbose output
-pytest -v
-
-# Run with detailed failure output
-pytest -vv
-```
-
-### Virtual Environment
-```bash
-# Create virtual environment
-python -m venv venv
-
-# Activate virtual environment
-source venv/bin/activate  # Linux/macOS
-venv\Scripts\activate  # Windows
-
-# Install dependencies (runtime only)
-pip install -e .
-
-# Or with dev dependencies
-pip install -e ".[dev]"
 ```
 
 ---
 
-## Code Style Guidelines
+## TECHNICAL DEBT
 
-### Import Conventions
+**High Priority:**
+- **Hard-coded password** in `scripts/init-mongo.js` - use env vars
+- **Inline Python** in `scripts/generate-sbom.sh` - extract to `.py` module
+- **Duplicate tests** in `tests/integration/` vs `tests/test_integration/`
+- **Orphaned package** `src/secondbrain_cli/` - safe to remove
 
-1. **Standard Library First, Then Third-Party, Then Local**
-   ```python
-   import os
-   import sys
-   from pathlib import Path
-   
-   import click
-   from typing_extensions import Protocol
-   
-   from . import utils
-   from .core import BaseClass
-   ```
+**No TODO/FIXME markers** - clean codebase with excellent hygiene.
 
-2. **Avoid Relative Imports When Possible**
-   Use absolute imports for clarity:
-   ```python
-   # Good
-   from mypackage.core import engine
-   
-   # Avoid
-   from .core import engine
-   ```
-
-3. **Sort Imports Alphabetically Within Groups**
-   ```python
-   # Good
-   import click
-   import rich
-   from typing import Any, Dict, List, Optional
-   ```
-
-### Formatting
-
-- **Line Length**: 88 characters (ruff default)
-- **Indentation**: 4 spaces
-- **No Trailing Whitespace**: Always remove
-- **Blank Lines**: Two between top-level definitions, one between methods
-- **Quotes**: Use double quotes `"string"` for regular strings, single quotes `'char'` for single characters
-
-### Type Annotations
-
-1. **Always Use Type Hints**
-   ```python
-   def process_data(users: List[Dict[str, str]]) -> Optional[Dict[str, Any]]:
-       ...
-   ```
-
-2. **Use Type Aliases for Complex Types**
-   ```python
-   UserDict = Dict[str, str]
-   ResultTuple = Tuple[int, Optional[str], List[Any]]
-   ```
-
-3. **Return Type `None` Instead of Omitting**
-   ```python
-   def log_message(message: str) -> None:  # Not just "-> None" is fine
-       ...
-   ```
-
-### Naming Conventions
-
-| Element | Convention | Example |
-|--------|----------|--------|
-| Variables | snake_case | `user_name`, `max_count` |
-| Functions | snake_case | `get_user_by_id()` |
-| Classes | PascalCase | `UserManager`, `ConfigLoader` |
-| Constants | UPPER_SNAKE | `MAX_RETRIES`, `DEFAULT_TIMEOUT` |
-| Modules | snake_case | `user_service.py` |
-| Packages | snake_case | `my_package` |
-
-### Error Handling
-
-1. **Use Specific Exception Types**
-   ```python
-   # Good - specific
-   raise ValueError("Invalid email format")
-   raise FileNotFoundError(f"Config file not found: {path}")
-   
-   # Avoid - generic
-   raise Exception("Something went wrong")
-   ```
-
-2. **Never Use Bare `except`**
-   ```python
-   # Good
-   except FileNotFoundError:
-       ...
-   except (ValueError, TypeError) as e:
-       logger.error(f"Invalid input: {e}")
-   
-   # Avoid
-   except:
-       ...
-   ```
-
-3. **Always Handle Exceptions Explicitly**
-   ```python
-   # Good
-   try:
-       result = process()
-   except ProcessingError as e:
-       logger.warning(f"Processing failed: {e}")
-       raise
-   
-   # Avoid - empty catch
-   try:
-       result = process()
-   except ProcessingError:
-       pass
-   ```
-
-4. **Provide Context in Error Messages**
-   ```python
-   # Good
-   raise ConfigurationError(
-       f"Invalid timeout value '{value}' in config file. "
-       f"Expected positive integer, got '{type(value).__name__}'."
-   )
-   ```
-
-### CLI Design (Click)
-
-1. **Use Click Decorators**
-   ```python
-   @click.group()
-   @click.option('--verbose', is_flag=True, help='Enable verbose output')
-   def cli(verbose: bool):
-       ...
-   
-   @cli.command()
-   @click.option('--output', type=click.Path(), help='Output file')
-   @click.argument('input_file', type=click.Path(exists=True))
-   def process(output: str, input_file: str):
-       ...
-   ```
-
-2. **Use Rich for Terminal Output**
-   ```python
-   from rich.console import Console
-   from rich.table import Table
-   
-   console = Console()
-   
-   table = Table(title="Results")
-   table.add_column("Name")
-   table.add_row("Test")
-   console.print(table)
-   ```
-
----
-
-## File Organization
-
-```
-project/
-├── src/
-│   └── package_name/
-│       ├── __init__.py
-│       ├── cli.py           # Entry point
-│       ├── core/            # Core logic
-│       ├── utils/           # Utilities
-│       └── models/          # Data models
-├── tests/
-│   ├── test_core/
-│   ├── test_utils/
-│   └── conftest.py
-├── pyproject.toml
-└── README.md
-```
-
----
-
-## Configuration (pyproject.toml)
-
-Use pyproject.toml for all project configuration:
-```toml
-[project]
-name = "package-name"
-version = "0.1.0"
-
-[tool.ruff]
-line-length = 88
-target-version = "py311"
-
-[tool.mypy]
-python_version = "3.11"
-strict = true
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-```
-
----
-
-## Git Conventions
-
-- **Commits**: Use conventional commits format
-  ```
-  feat: add user authentication
-  fix: resolve timeout issue in CLI
-  docs: update README
-  refactor: simplify config loading
-  ```
-- **Branches**: `feature/description`, `fix/description`, `hotfix/description`
-- **PRs**: Include summary, motivation, and testing steps
-
----
-
-## Testing Guidelines
-
-1. **Use pytest fixtures for setup**
-   ```python
-   @pytest.fixture
-   def mock_config(tmp_path):
-       config_file = tmp_path / "config.json"
-       config_file.write_text('{"key": "value"}')
-       return config_file
-   ```
-
-2. **Test Behavior, Not Implementation**
-   ```python
-   # Good - test outcome
-   def test_cli_outputs_formatted_table():
-       result = runner.invoke(cli, ['list'])
-       assert "Column1" in result.output
-   
-   # Avoid - test implementation details
-   def test_cli_calls_formatter():
-       ...
-   ```
-
-3. **Use parametrize for multiple test cases**
-   ```python
-   @pytest.mark.parametrize("input,expected", [
-       ("a", "A"),
-       ("b", "B"),
-   ])
-   def test_uppercase(input, expected):
-       assert uppercase(input) == expected
-   ```
-
----
-
-## Dependencies
-
-- **Runtime**: Keep minimal
-- **Dev**: Testing, linting, type checking
-- **Avoid**: Unnecessary dependencies
-
----
-
-## Key Principles
-
-1. **Clarity Over Cleverness**: Write readable code
-2. **Fail Fast**: Validate inputs early
-3. **Type Safety**: Use mypy, no `Any` without justification
-4. **Testing**: Test critical paths, not trivial functions
-5. **Documentation**: Docstrings for public APIs
-6. **Error Messages**: Helpful, actionable, contextual
-
----
-
-## CI/CD & Automation Policy
-
-### GitHub Actions Policy: PROHIBITED
-
-**GitHub Actions is explicitly PROHIBITED for this project. Agents MUST NOT:**
-
-- Create `.github/workflows/` directories
-- Add CI/CD pipeline configurations
-- Set up automated testing workflows
-- Configure push/PR hooks
-- Add release automation
-- Integrate with GitHub's CI/CD features
-
-**Reason**: This is a local development project with minimal deployment needs. CI/CD overhead is unnecessary and contradicts the project's 12-factor app design philosophy focused on local development workflow.
-
-**What to Do Instead**:
-
-1. **Local Development Flow**: Agents should focus on ensuring code quality through:
-   - Running `ruff check .` and `ruff format .` before committing
-   - Running `mypy .` for type safety
-   - Running `pytest` locally for testing
-   - Using `pre-commit` hooks for validation
-
-2. **Documentation > Automation**: Focus on comprehensive documentation in README.md and docstrings rather than automated CI/CD pipelines.
-
-3. **Developer Responsibility**: Code quality checks should be performed by developers locally before commits, enforced by pre-commit hooks.
-
-**If Agent Sees GitHub Actions Reference Request**:
-- Do NOT implement
-- Explain the project's local development philosophy
-- Suggest local validation commands instead
-
-**Example Response**:
-```
-Under project policy, GitHub Actions is explicitly prohibited. This is a local development CLI tool with 12-factor app principles. 
-
-The pre-commit hooks and local validation commands (ruff check, mypy, pytest) are sufficient for quality assurance. No CI/CD infrastructure is needed or desired.
-```
-
-## graphify
+### graphify
 
 This project has a graphify knowledge graph at graphify-out/.
 
