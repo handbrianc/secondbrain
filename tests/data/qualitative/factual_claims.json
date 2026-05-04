@@ -95,13 +95,13 @@
     },
     {
       "id": "fv_limitation_no_github_actions",
-      "description": "Verify CI/CD policy limitation",
+      "description": "Verify CI/CD policy - GitHub Actions support",
       "input": "Does SecondBrain use GitHub Actions for CI/CD?",
       "context": "Project policy",
       "expected": {
         "verifiable": true,
-        "fact": "No, GitHub Actions is explicitly prohibited - local development workflow only",
-        "source": "AGENTS.md CI/CD & Automation Policy section",
+        "fact": "GitHub Actions CI/CD supported - pre-commit hooks for quality",
+        "source": "AGENTS.md Conventions section",
         "source_required": true,
         "hallucination_risk": "low"
       },

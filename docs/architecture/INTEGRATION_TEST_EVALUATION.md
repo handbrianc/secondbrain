@@ -184,14 +184,14 @@ def sample_documents():
 
 ## Performance Testing
 
-### Benchmarks
+### Test Performance
 
 ```bash
-# Run benchmarks
-pytest --benchmark-only
+# See slowest tests (built-in pytest feature)
+pytest --durations=10
 
-# Compare with baseline
-pytest --benchmark-compare
+# See all test durations sorted
+pytest --durations=0
 ```
 
 ### Load Testing
