@@ -173,8 +173,8 @@ SECONDBRAIN_LOG_LEVEL=DEBUG secondbrain ingest ./docs/
 ## Performance Testing
 
 ```bash
-# Run benchmarks
-pytest --benchmark-only
+# See slowest tests (built-in pytest feature)
+pytest --durations=10
 
 # Profile code
 python -m cProfile -o profile.out -m secondbrain ingest ./docs/

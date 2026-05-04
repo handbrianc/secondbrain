@@ -46,11 +46,9 @@ dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
     "pytest-cov>=4.1.0",
-    "pytest-benchmark>=4.0.0",
-    "pytest-xdist>=3.0.0",
-    "pytest-hypothesis>=6.0.0",
+    "pytest-xdist>=3.0.0",  # Parallel test execution (note: incompatible with pytest-benchmark)
     "pytest-timeout>=2.2.0",
-    "hypothesis>=6.0.0",
+    "hypothesis>=6.0.0",  # Property-based testing (no pytest-hypothesis needed)
     "bandit>=1.7.0",
     "safety>=3.0.0",
     "pip-audit>=2.7.0",
@@ -269,11 +267,9 @@ markers = [
 filterwarnings = [
     "ignore::DeprecationWarning:docling",
     "ignore::DeprecationWarning:pyparsing",
-    # Show deprecation warnings for ROUGE tests (not ignored so users see migration notice)
-    "ignore:.*Benchmarks are automatically disabled.*",
     "ignore:.*This process.*is multi-threaded, use of fork.*",
     # Suppress OpenTelemetry exporter errors during test shutdown
-    "ignore:Exception while exporting metrics:ValueError",
+    "ignore:Exception while exporting metrics:ValueError:opentelemetry",
     "ignore:I/O operation on closed file:ValueError:opentelemetry",
     "ignore:Exception while exporting Span:ValueError",
 ]
@@ -291,12 +287,6 @@ database = ".hypothesis"
 [tool.pytest-timeout]
 timeout = 120  # Increased for LLM model loading and complex queries
 timeout_method = "thread"  # More aggressive than signal, works with threads
-
-[tool.pytest-benchmark]
-compare_ignore = ["time_per_call", "median"]
-min_rounds = 5
-max_time = 1.0
-min_time = 0.001
 
 [tool.pre-commit]
 default_stages = ["pre-commit"]
