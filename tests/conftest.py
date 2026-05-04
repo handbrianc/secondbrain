@@ -1,13 +1,14 @@
 """Root pytest fixtures for all tests with mock fallbacks."""
 
 import os
+os.environ["PYTEST_CURRENT_TEST"] = "pytest"
+
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
 import pytest
 
-# Set test environment variables IMMEDIATELY - before ANY imports
 os.environ["OTEL_TRACING_ENABLED"] = "false"
 os.environ["OTEL_METRICS_ENABLED"] = "false"
 
@@ -76,7 +77,7 @@ def pytest_sessionstart(session: pytest.Session) -> None:
 
         client = PyMongoClient(config.mongo_uri, serverSelectionTimeoutMS=10000, maxPoolSize=50)
         direct_db = client.get_database(config.mongo_db)
-        if "embeddings" in direct_db.list_collection_names():
+        if "embeddings_test" in direct_db.list_collection_names():
             direct_count = direct_db.embeddings.count_documents({})
         else:
             direct_count = 0
@@ -98,7 +99,7 @@ def pytest_sessionstart(session: pytest.Session) -> None:
         ]
 
         # Insert without embeddings - workers will generate them
-        collection = direct_db.get_collection("embeddings")
+        collection = direct_db.get_collection("embeddings_test")
         
         if test_documents:
             collection.insert_many(test_documents)

@@ -13,19 +13,27 @@ class TestAsyncValidation:
     @pytest.fixture
     def storage(self):
         """Create a VectorStorage instance with mocked config."""
-        with patch("secondbrain.storage.config") as mock_config_func:
-            from secondbrain.config import Config
-            _test_config = Config()
-            mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
-            mock_config_func.return_value.mongo_db = "secondbrain"
-            mock_config_func.return_value.mongo_collection = "embeddings"
-            mock_config_func.return_value.embedding_dimensions = 384
-            mock_config_func.return_value.index_ready_retry_count = 3
-            mock_config_func.return_value.index_ready_retry_delay = 0.01
-            mock_config_func.return_value.connection_cache_ttl = 60.0
+        import secondbrain.storage.storage as storage_module
+        from secondbrain.config import Config
+        
+        _mock_config = MagicMock()
+        _mock_config.mongo_uri = "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
+        _mock_config.mongo_db = "secondbrain_test"
+        _mock_config.mongo_collection = "embeddings_test"
+        _mock_config.embedding_dimensions = 384
+        _mock_config.index_ready_retry_count = 3
+        _mock_config.index_ready_retry_delay = 0.01
+        _mock_config.connection_cache_ttl = 60.0
+        _mock_config.embedding_storage_format = "binary"
 
+        original_config = storage_module.config
+        storage_module.config = lambda: _mock_config
+        
+        try:
             storage = VectorStorage()
             yield storage
+        finally:
+            storage_module.config = original_config
 
     @pytest.mark.asyncio
     async def test_async_store_validation(self, storage: VectorStorage) -> None:
@@ -253,5 +261,6 @@ class TestAsyncValidation:
             stats = await storage.get_stats_async()
             assert stats["total_chunks"] == 0
             assert stats["unique_sources"] == 0
-            assert stats["database"] in ["secondbrain", "secondbrain_test"]
+            assert stats["database"] == "secondbrain_test"
+            assert stats["collection"] == "embeddings_test"
             assert "collection" in stats

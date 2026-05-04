@@ -284,8 +284,8 @@ class TestStatusChecker:
         mock_storage.get_stats.return_value = {
             "total_chunks": 100,
             "unique_sources": 5,
-            "database": "secondbrain",
-            "collection": "embeddings",
+            "database": "secondbrain_test",
+            "collection": "embeddings_test",
         }
         mock_storage_class.return_value = mock_storage
 
@@ -293,8 +293,8 @@ class TestStatusChecker:
         stats = status_checker.get_status()
         assert stats["total_chunks"] == 100
         assert stats["unique_sources"] == 5
-        assert stats["database"] == "secondbrain"
-        assert stats["collection"] == "embeddings"
+        assert stats["database"] == "secondbrain_test"
+        assert stats["collection"] == "embeddings_test"
         mock_storage.get_stats.assert_called_once()
 
     @patch("secondbrain.management.VectorStorage")

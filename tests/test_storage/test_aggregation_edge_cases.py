@@ -16,8 +16,8 @@ def mock_storage_config():
     """Provide mock storage configuration for aggregation edge case tests."""
     config = MagicMock()
     config.mongo_uri = _test_config.mongo_uri
-    config.mongo_db = "secondbrain"
-    config.mongo_collection = "embeddings"
+    config.mongo_db = "secondbrain_test"
+    config.mongo_collection = "embeddings_test"
     config.embedding_dimensions = 384
     return config
 

@@ -56,8 +56,6 @@ def preload_env() -> None:
                         os.environ[key] = value
 
 
-# Preload environment variables from .env or .env.test at module import time
-preload_env()
 
 
 def _validate_mongo_uri(value: str) -> str:
@@ -132,7 +130,6 @@ class Config(BaseSettings):
             env_file_path = None
         
         # Load environment variables from file if it exists
-        # In test mode, we want to override with .env.test values
         if env_file_path and env_file_path.exists():
             with open(env_file_path, "r", encoding="utf-8") as f:
                 for line in f:
@@ -141,26 +138,23 @@ class Config(BaseSettings):
                         key, _, value = line.partition("=")
                         key = key.strip()
                         value = value.strip().strip('"').strip("'")
-                        # In test mode, always set (override any existing)
-                        # In production mode, only set if not already in environment
-                        if is_test_env or key not in os.environ:
+                        env_key = key.replace("SECONDBRAIN_", "").lower()
+                        if env_key not in values and key not in os.environ:
                             os.environ[key] = value
+                            values[env_key] = value
         
         # Set test-specific defaults if running in test environment
         if is_test_env:
-            if "mongo_db" not in values or values.get("mongo_db") == "secondbrain":
+            if "mongo_db" not in values:
                 values["mongo_db"] = "secondbrain_test"
-            if (
-                "mongo_collection" not in values
-                or values.get("mongo_collection") == "embeddings"
-            ):
+            if "mongo_collection" not in values:
                 values["mongo_collection"] = "test_embeddings"
             if "circuit_breaker_enabled" not in values:
                 values["circuit_breaker_enabled"] = False
             if "rate_limit_enabled" not in values:
                 values["rate_limit_enabled"] = False
-            if "log_level" not in values or values.get("log_level") == "INFO":
-                values["log_level"] = "DEBUG"
+            if "log_level" not in values:
+                values["log_level"] = "debug"
 
         return values
 

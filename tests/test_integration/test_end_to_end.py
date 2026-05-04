@@ -55,8 +55,8 @@ class TestDocumentIngestion:
 
         mongomock_client = mongomock.MongoClient()
         try:
-            db = mongomock_client["secondbrain"]
-            collection = db["embeddings"]
+            db = mongomock_client["secondbrain_test"]
+            collection = db["embeddings_test"]
 
             mock_storage = MagicMock()
             mock_storage.validate_connection.return_value = True
@@ -104,8 +104,8 @@ class TestDocumentIngestion:
 
         mongomock_client = mongomock.MongoClient()
         try:
-            db = mongomock_client["secondbrain"]
-            collection = db["embeddings"]
+            db = mongomock_client["secondbrain_test"]
+            collection = db["embeddings_test"]
 
             # Create a temporary directory with only our test PDFs
             test_dir = tmp_path / "test_pdfs"
@@ -289,8 +289,8 @@ class TestIntegrationDataFlow:
 
         mongomock_client = mongomock.MongoClient()
         try:
-            db = mongomock_client["secondbrain"]
-            collection = db["embeddings"]
+            db = mongomock_client["secondbrain_test"]
+            collection = db["embeddings_test"]
 
             mock_storage = MagicMock()
             mock_storage.validate_connection.return_value = True
