@@ -2,7 +2,7 @@
 
 ## Overview
 
-This directory contains the foundation for qualitative testing of the SecondBrain document intelligence system. Unlike quantitative tests that measure metrics like precision, recall, and latency, qualitative tests evaluate:
+This directory contains the foundation for qualitative testing of the SecondBrain document intelligence system. Qualitative tests evaluate:
 
 - **Safety**: Detection and handling of PII, dangerous topics, and harmful content
 - **Factual Accuracy**: Verification of factual claims and hallucination detection
@@ -247,4 +247,3 @@ The `qualitative` extra includes:
 - [ ] Implement LLM judge tests (Task 6)
 - [ ] Add more test cases to JSON datasets
 - [ ] Integrate with CI/CD pipeline
-- [ ] Add quantitative metrics for qualitative tests

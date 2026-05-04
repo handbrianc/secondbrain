@@ -27,6 +27,10 @@ Settings are case-insensitive and prefixed with `SECONDBRAIN_`.
 
 ## MongoDB Settings
 
+### MongoDB Authentication (Required for Production)
+
+For production deployments, MongoDB authentication should be enabled. See [MongoDB Authentication Setup](mongodb-authentication.md) for complete setup instructions.
+
 ### `SECONDBRAIN_MONGO_URI`
 - **Type**: `str`
 - **Default**: `mongodb://localhost:27017`
@@ -34,15 +38,28 @@ Settings are case-insensitive and prefixed with `SECONDBRAIN_`.
 - **Validation**: Must start with `mongodb://` or `mongodb+srv://`
 - **Examples**:
   ```bash
-  # Local MongoDB
+  # Local MongoDB (no authentication - development only)
   SECONDBRAIN_MONGO_URI=mongodb://localhost:27017
   
-  # MongoDB Atlas
+  # Local MongoDB (with authentication - recommended)
+  SECONDBRAIN_MONGO_URI=mongodb://username:password@localhost:27017
+  
+  # MongoDB Atlas (cloud)
   SECONDBRAIN_MONGO_URI=mongodb+srv://username:password@cluster.mongodb.net/?retryWrites=true
   
-  # With authentication
+  # With authentication database
   SECONDBRAIN_MONGO_URI=mongodb://user:pass@host:27017,host:27017/?authSource=admin
   ```
+
+**⚠️ Special Characters in Passwords**: If your password contains `@`, `:`, `/`, `#`, `?`, or `&`, URL-encode them:
+- `@` → `%40`
+- `:` → `%3A`
+- `/` → `%2F`
+- `#` → `%23`
+- `?` → `%3F`
+- `&` → `%26`
+
+Or use a `.env` file to avoid shell escaping issues.
 
 ### `SECONDBRAIN_MONGO_DB`
 - **Type**: `str`
@@ -55,6 +72,27 @@ Settings are case-insensitive and prefixed with `SECONDBRAIN_`.
 - **Default**: `embeddings`
 - **Description**: Collection name within the database
 - **Example**: `SECONDBRAIN_MONGO_COLLECTION=document_chunks`
+
+### Docker Environment Variables (for MongoDB Container)
+
+These variables configure the MongoDB container in `docker-compose.yml`:
+
+### `MONGODB_INITDB_ROOT_USERNAME`
+- **Type**: `str`
+- **Default**: `admin`
+- **Description**: MongoDB admin username (set in `.env` file)
+- **Required**: Yes, for new MongoDB installations with authentication
+- **Example**: `MONGODB_INITDB_ROOT_USERNAME=secondbrain_admin`
+
+### `MONGODB_INITDB_ROOT_PASSWORD`
+- **Type**: `str`
+- **Default**: `password`
+- **Description**: MongoDB admin password (set in `.env` file)
+- **Required**: Yes, for new MongoDB installations with authentication
+- **Security**: Use strong passwords (16+ characters, mixed case, numbers, symbols)
+- **Example**: `MONGODB_INITDB_ROOT_PASSWORD=SuperSecureP@ssw0rd123!`
+
+**⚠️ Never commit `.env` files with credentials to version control!** Add `.env` to `.gitignore`.
 
 ---
 
@@ -166,8 +204,12 @@ Settings are case-insensitive and prefixed with `SECONDBRAIN_`.
 ## Example .env File
 
 ```bash
-# Core Configuration
-SECONDBRAIN_MONGO_URI=mongodb://localhost:27017
+# MongoDB Authentication (REQUIRED for production)
+MONGODB_INITDB_ROOT_USERNAME=secondbrain_admin
+MONGODB_INITDB_ROOT_PASSWORD=SuperSecureP@ssw0rd123!
+
+# MongoDB Connection (must match credentials above)
+SECONDBRAIN_MONGO_URI=mongodb://secondbrain_admin:SuperSecureP@ssw0rd123!@localhost:27017
 SECONDBRAIN_MONGO_DB=secondbrain
 SECONDBRAIN_MONGO_COLLECTION=embeddings
 
@@ -200,5 +242,6 @@ SECONDBRAIN_VERBOSE=false
 ## Next Steps
 
 - [Quick Start](quick-start.md) - Get started quickly
+- [MongoDB Authentication Setup](mongodb-authentication.md) - Configure MongoDB authentication
 - [Troubleshooting](troubleshooting.md) - Common issues and solutions
 - [Developer Guide](../developer-guide/configuration.md) - Advanced configuration

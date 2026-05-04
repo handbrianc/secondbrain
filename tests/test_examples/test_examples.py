@@ -11,6 +11,11 @@ from typing import Any
 
 import pytest
 
+from secondbrain.config import Config
+
+# Get test config
+_test_config = Config()
+
 
 class TestBasicUsageExamples:
     """Tests for basic_usage example scripts."""

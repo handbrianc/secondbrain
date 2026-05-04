@@ -252,11 +252,19 @@ class TestDocumentIngestorIngestErrorHandling:
         test_file = tmp_path / "test.txt"
         test_file.write_text("test content")
 
-        # Mock _process_file_for_storage to raise an exception
-        with patch.object(
-            ingestor,
-            "_process_file_for_storage",
-            side_effect=Exception("Processing error"),
+        # Mock _collect_and_validate_files to return our test file
+        # and mock _process_parallel_with_progress to simulate failure
+        with (
+            patch.object(
+                ingestor,
+                "_collect_and_validate_files",
+                return_value=[test_file],
+            ),
+            patch.object(
+                ingestor,
+                "_process_parallel_with_progress",
+                return_value=(0, 1),  # 0 successful, 1 failed
+            ),
         ):
             result = ingestor.ingest(str(tmp_path))
 

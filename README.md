@@ -65,6 +65,7 @@ secondbrain search "what is this about?"
 | Section | Description |
 |---------|-------------|
 | [Getting Started](docs/getting-started/index.md) | Installation, quick start, and configuration |
+| [MongoDB Authentication](docs/getting-started/mongodb-authentication.md) | **REQUIRED**: Setup MongoDB authentication for production |
 | [User Guide](docs/user-guide/index.md) | Complete usage guide for all features |
 | [CLI Reference](docs/user-guide/cli-reference.md) | All commands and options |
 | [Developer Guide](docs/developer-guide/index.md) | Development setup and workflows |
@@ -101,8 +102,10 @@ Run `secondbrain --help` for full command reference.
 SecondBrain uses environment variables prefixed with `SECONDBRAIN_`:
 
 ```bash
-# Core configuration
-SECONDBRAIN_MONGO_URI=mongodb://localhost:27017
+# Core configuration (with MongoDB authentication)
+MONGODB_INITDB_ROOT_USERNAME=your_username
+MONGODB_INITDB_ROOT_PASSWORD=your_strong_password
+SECONDBRAIN_MONGO_URI=mongodb://your_username:your_strong_password@localhost:27017
 SECONDBRAIN_LOCAL_EMBEDDING_MODEL=all-MiniLM-L6-v2
 SECONDBRAIN_CHUNK_SIZE=4096
 
@@ -115,6 +118,8 @@ SECONDBRAIN_CIRCUIT_BREAKER_ENABLED=true
 SECONDBRAIN_LOG_LEVEL=INFO
 SECONDBRAIN_LOG_FORMAT=pretty
 ```
+
+**⚠️ Security Note**: Enable MongoDB authentication for production deployments. See [MongoDB Authentication Setup](docs/getting-started/mongodb-authentication.md) for detailed instructions.
 
 See [Configuration Reference](docs/getting-started/configuration.md) for complete options.
 
@@ -155,6 +160,32 @@ pytest                         # All tests including integration
 | Full | `pytest` | Complete validation |
 
 See [Testing Guide](docs/developer-guide/TESTING.md) for details.
+
+### Test Environment Configuration
+
+**Quick Setup**:
+```bash
+# 1. Create test environment file
+cp .env.test .env.test.local  # Customize as needed
+
+# 2. Start test services
+docker-compose -f docker-compose.test.yml up -d
+
+# 3. Run tests (automatically uses .env.test)
+pytest
+```
+
+**Environment Variables**:
+Test configuration is automatically loaded from `.env.test` when running pytest. Key variables:
+
+- `SECONDBRAIN_MONGO_URI` - Test MongoDB connection (default: localhost:27018)
+- `SECONDBRAIN_MONGO_DB` - Test database name (default: secondbrain_test)
+- `SECONDBRAIN_MONGO_COLLECTION` - Test collection (default: test_embeddings)
+- `SECONDBRAIN_OLLAMA_HOST` - Ollama endpoint (auto-detects platform)
+- `OTEL_TRACING_ENABLED=false` - Disable tracing for faster tests
+- `SECONDBRAIN_CIRCUIT_BREAKER_ENABLED=false` - Disable for faster tests
+
+See `.env.test` for complete list of test environment variables.
 
 ### Qualitative Testing
 

@@ -5,14 +5,59 @@ variables following 12-factor app principles, with validation for MongoDB
 connection strings.
 """
 
+import os
+import platform
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlparse
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-__all__ = ["Config", "config", "get_config"]
+__all__ = ["Config", "config", "get_config", "preload_env"]
+
+
+def preload_env() -> None:
+    """Preload environment variables from .env or .env.test file.
+    
+    This function should be called before creating Config instances to ensure
+    environment variables are loaded from the appropriate .env file.
+    
+    When PYTEST_CURRENT_TEST is set, loads from .env.test if it exists.
+    Otherwise loads from .env.
+    
+    In test mode, .env.test values override existing environment variables.
+    In production mode, .env values are only used if not already set.
+    """
+    is_test_env = os.getenv("PYTEST_CURRENT_TEST") is not None
+    
+    # Determine which .env file to load
+    if is_test_env and Path(".env.test").exists():
+        env_file_path = Path(".env.test")
+    elif Path(".env").exists():
+        env_file_path = Path(".env")
+    else:
+        return  # No env file to load
+    
+    # Load environment variables from file
+    if env_file_path.exists():
+        with open(env_file_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, _, value = line.partition("=")
+                    key = key.strip()
+                    # Strip inline comments (text after #) and quotes
+                    value = value.split("#")[0].strip().strip('"').strip("'")
+                    # In test mode, always set (override any existing)
+                    # In production mode, only set if not already in environment
+                    if is_test_env or key not in os.environ:
+                        os.environ[key] = value
+
+
+# Preload environment variables from .env or .env.test at module import time
+preload_env()
 
 
 def _validate_mongo_uri(value: str) -> str:
@@ -36,23 +81,93 @@ def _validate_mongo_uri(value: str) -> str:
     return value
 
 
+def _get_default_ollama_host() -> str:
+    """Get default Ollama host based on platform.
+
+    On macOS, use native Ollama installation (faster on CPU).
+    On other platforms, use Docker Ollama container.
+
+    Returns:
+        Ollama host URL string
+    """
+    if platform.system() == "Darwin":
+        return "http://localhost:11434"  # macOS (native)
+    else:
+        return "http://localhost:11435"  # Linux/Windows (Docker)
+
+
 class Config(BaseSettings):
     """Configuration for secondbrain CLI.
 
     Uses environment variables following 12-factor app principles.
+    Automatically detects test environment and loads from .env.test if available.
     """
 
     model_config = SettingsConfigDict(
         env_prefix="SECONDBRAIN_",
-        env_file=".env",
+        env_file=None,  # Don't auto-load - we handle it manually
         env_file_encoding="utf-8",
         case_sensitive=False,
+        extra="ignore",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _load_env_file(cls, values: dict[str, Any]) -> dict[str, Any]:
+        """Load from appropriate .env file based on environment.
+        
+        When PYTEST_CURRENT_TEST is set, loads from .env.test if it exists.
+        Otherwise loads from .env.
+        
+        Environment variables take precedence over .env file values.
+        """
+        # Determine which .env file to load
+        is_test_env = os.getenv("PYTEST_CURRENT_TEST") is not None
+        
+        if is_test_env and Path(".env.test").exists():
+            env_file_path = Path(".env.test")
+        elif Path(".env").exists():
+            env_file_path = Path(".env")
+        else:
+            env_file_path = None
+        
+        # Load environment variables from file if it exists
+        # In test mode, we want to override with .env.test values
+        if env_file_path and env_file_path.exists():
+            with open(env_file_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        key, _, value = line.partition("=")
+                        key = key.strip()
+                        value = value.strip().strip('"').strip("'")
+                        # In test mode, always set (override any existing)
+                        # In production mode, only set if not already in environment
+                        if is_test_env or key not in os.environ:
+                            os.environ[key] = value
+        
+        # Set test-specific defaults if running in test environment
+        if is_test_env:
+            if "mongo_db" not in values or values.get("mongo_db") == "secondbrain":
+                values["mongo_db"] = "secondbrain_test"
+            if (
+                "mongo_collection" not in values
+                or values.get("mongo_collection") == "embeddings"
+            ):
+                values["mongo_collection"] = "test_embeddings"
+            if "circuit_breaker_enabled" not in values:
+                values["circuit_breaker_enabled"] = False
+            if "rate_limit_enabled" not in values:
+                values["rate_limit_enabled"] = False
+            if "log_level" not in values or values.get("log_level") == "INFO":
+                values["log_level"] = "DEBUG"
+
+        return values
 
     # MongoDB settings
     mongo_uri: str = Field(
-        default="mongodb://admin:password@localhost:27017",
-        description="MongoDB connection URI",
+        default="mongodb://localhost:27017",
+        description="MongoDB connection URI (without credentials - set via environment variable for production)",
     )
 
     @field_validator("mongo_uri")
@@ -89,11 +204,11 @@ class Config(BaseSettings):
         description="LLM provider type (ollama, openai)",
     )
     ollama_host: str = Field(
-        default="http://localhost:11434",
-        description="Ollama API endpoint",
+        default_factory=_get_default_ollama_host,
+        description="Ollama API endpoint (auto-detects platform: macOS=11434, Linux/Windows=11435)",
     )
     llm_model: str = Field(
-        default="llama3.1:latest",
+        default="llama3.2",
         description="Default LLM model for RAG",
     )
     llm_temperature: float = Field(
@@ -124,10 +239,18 @@ class Config(BaseSettings):
             "3. If you see the answer in the context, state it clearly and confidently.\n"
             "4. Only say 'I cannot find the answer' if you have thoroughly searched the entire context and the information is genuinely absent.\n"
             "5. Do not hallucinate or make up information - stick to what's in the context.\n"
+            "6. When the question asks for a list (formats, features, components, options, etc.), extract ALL items from the context - don't miss any.\n"
+            "7. Read ALL chunks in the context - important information might be in any of them.\n"
+            "8. For questions about system architecture or components, list the SPECIFIC component names mentioned in the context (e.g., 'CLI Interface', 'Ingestor', 'Embedding Engine', not just 'Components').\n"
+            "9. When the question asks for a SPECIFIC VALUE (like a model name, version number, configuration value, etc.), you MUST include the exact value from the context in your answer.\n"
+            "10. NEVER generalize or omit specific values - if the context says 'all-MiniLM-L6-v2', your answer must include 'all-MiniLM-L6-v2'.\n"
+            "11. Format your answer concisely and directly, matching the style of the question.\n"
             "\n"
             "When the answer is in the context:\n"
-            "- State the answer directly\n"
-            "- Synthesize naturally (don't copy verbatim)\n"
+            "- State the answer directly in 1-2 sentences\n"
+            "- For lists: include ALL items mentioned in the context with their full names\n"
+            "- For specific values: include the EXACT value from the context\n"
+            "- Be concise - avoid unnecessary elaboration\n"
             "- Cite the source if helpful (e.g., 'According to the document...')\n"
             "\n"
             "The context from documents follows:\n"

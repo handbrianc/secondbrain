@@ -55,6 +55,7 @@ secondbrain chat
 - [Installation Guide](installation.md) - Detailed installation steps
 - [Quick Start](quick-start.md) - Get started in 5 minutes
 - [Configuration](configuration.md) - Essential configuration options
+- [MongoDB Authentication](mongodb-authentication.md) - **REQUIRED** for production
 - [Troubleshooting](troubleshooting.md) - Common issues and solutions
 
 ### For Users
@@ -104,8 +105,12 @@ secondbrain chat
 Create a `.env` file in your project root:
 
 ```bash
-# Core configuration
-SECONDBRAIN_MONGO_URI=mongodb://localhost:27017
+# MongoDB Authentication (REQUIRED for production)
+MONGODB_INITDB_ROOT_USERNAME=your_username
+MONGODB_INITDB_ROOT_PASSWORD=your_strong_password
+
+# MongoDB Connection (must match credentials above)
+SECONDBRAIN_MONGO_URI=mongodb://your_username:your_strong_password@localhost:27017
 SECONDBRAIN_LOCAL_EMBEDDING_MODEL=all-MiniLM-L6-v2
 SECONDBRAIN_CHUNK_SIZE=4096
 
@@ -114,15 +119,18 @@ SECONDBRAIN_MAX_WORKERS=4
 SECONDBRAIN_RATE_LIMIT_ENABLED=true
 ```
 
+**⚠️ Security Note**: Enable MongoDB authentication for production deployments. See [MongoDB Authentication Setup](mongodb-authentication.md) for detailed instructions.
+
 See [Configuration Reference](configuration.md) for complete options.
 
 ## Next Steps
 
 1. **Complete Installation**: Follow the [Installation Guide](installation.md)
 2. **Quick Tutorial**: Work through the [Quick Start](quick-start.md)
-3. **Configure**: Set up your environment with [Configuration Guide](configuration.md)
-4. **Explore Features**: Read the [User Guide](../user-guide/index.md)
-5. **Check Examples**: See practical examples in [docs/examples/](../examples/README.md)
+3. **Configure Authentication**: Set up MongoDB authentication with [MongoDB Auth Guide](mongodb-authentication.md)
+4. **Configure Settings**: Set up your environment with [Configuration Guide](configuration.md)
+5. **Explore Features**: Read the [User Guide](../user-guide/index.md)
+6. **Check Examples**: See practical examples in [docs/examples/](../examples/README.md)
 
 ## Need Help?
 

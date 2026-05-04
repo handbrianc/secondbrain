@@ -17,7 +17,7 @@ from secondbrain.embedding.local import LocalEmbeddingGenerator
 
 # Extract test chunks from conftest.py
 CONTFEST_PATH = (
-    Path(__file__).parent.parent / "tests" / "test_quantitative" / "conftest.py"
+    Path(__file__).parent.parent / "tests" / "conftest.py"
 )
 
 with open(CONTFEST_PATH) as f:

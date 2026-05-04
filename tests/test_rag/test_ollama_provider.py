@@ -2,20 +2,19 @@
 
 from __future__ import annotations
 
-import platform
 from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
 from ollama import ResponseError
 
+from secondbrain.config import Config
 from secondbrain.exceptions import ServiceUnavailableError
 from secondbrain.rag.providers.ollama import OllamaLLMProvider
 
-# Platform-aware default host for tests
-EXPECTED_OLLAMA_HOST = (
-    "http://localhost:11434" if platform.system() == "Darwin" else "http://localhost:11435"
-)
+# Get test config for Ollama host
+_test_config = Config()
+EXPECTED_OLLAMA_HOST = _test_config.ollama_host
 
 
 @pytest.fixture
@@ -67,7 +66,7 @@ class TestOllamaProviderInit:
         provider = OllamaLLMProvider()
 
         assert provider.host == EXPECTED_OLLAMA_HOST
-        assert provider.model == "llama3.1:latest"
+        assert provider.model == "llama3.2"
         assert provider.temperature == 0.1
         assert provider.max_tokens == 2048
         assert provider.timeout == 120

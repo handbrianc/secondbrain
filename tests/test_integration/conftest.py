@@ -120,6 +120,8 @@ def ingestor_with_mock_embedder(sample_embedding: list[float]) -> Any:
 @pytest.fixture
 def storage_with_index(test_collection: Any) -> Any:
     """Create a VectorStorage instance for integration testing."""
+    from secondbrain.config import Config, get_config
+
     # Save original environment variables
     original_mongo_uri = os.environ.get("SECONDBRAIN_MONGO_URI")
     original_mongo_db = os.environ.get("SECONDBRAIN_MONGO_DB")
@@ -127,26 +129,21 @@ def storage_with_index(test_collection: Any) -> Any:
     original_ollama_host = os.environ.get("SECONDBRAIN_OLLAMA_HOST")
     original_embedding_model = os.environ.get("SECONDBRAIN_LOCAL_EMBEDDING_MODEL")
 
-    os.environ["SECONDBRAIN_MONGO_URI"] = "mongodb://localhost:27018"
-    os.environ["SECONDBRAIN_MONGO_DB"] = "test_secondbrain"
+    # Use Config to get test defaults
+    get_config.cache_clear()
+    cfg = Config()
+    
+    os.environ["SECONDBRAIN_MONGO_URI"] = cfg.mongo_uri
+    os.environ["SECONDBRAIN_MONGO_DB"] = cfg.mongo_db
     os.environ["SECONDBRAIN_MONGO_COLLECTION"] = "test_embeddings"
-    
-    # Use platform-aware Ollama host
-    import platform
-    if platform.system() == "Darwin":
-        os.environ["SECONDBRAIN_OLLAMA_HOST"] = "http://localhost:11434"
-    else:
-        os.environ["SECONDBRAIN_OLLAMA_HOST"] = "http://localhost:11435"
-    
+    os.environ["SECONDBRAIN_OLLAMA_HOST"] = cfg.ollama_host
     os.environ["SECONDBRAIN_LOCAL_EMBEDDING_MODEL"] = "all-MiniLM-L6-v2"
-
-    from secondbrain.config import get_config
 
     get_config.cache_clear()
 
     storage = VectorStorage(
-        mongo_uri="mongodb://localhost:27018",
-        db_name="test_secondbrain",
+        mongo_uri=cfg.mongo_uri,
+        db_name=cfg.mongo_db,
         collection_name="test_embeddings",
     )
 

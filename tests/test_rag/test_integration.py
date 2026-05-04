@@ -12,23 +12,24 @@ from __future__ import annotations
 
 import pytest
 
+from secondbrain.config import Config
 from secondbrain.conversation import ConversationSession, QueryRewriter
 from secondbrain.conversation.storage import ConversationStorage
 from secondbrain.rag.pipeline import RAGPipeline
 from secondbrain.rag.providers.ollama import OllamaLLMProvider
 from secondbrain.search import Searcher
-from tests.conftest import get_ollama_host
+
+# Get test config
+_test_config = Config()
 
 
 @pytest.fixture
 def ollama_provider() -> OllamaLLMProvider:
-    """Create real OllamaLLMProvider instance."""
+    """Provide OllamaLLMProvider with default settings."""
     return OllamaLLMProvider(
-        host=get_ollama_host(),
-        model="llama3.1:latest",
-        temperature=0.1,
-        max_tokens=2048,
-        timeout=120,
+        host=_test_config.ollama_host,
+        model="llama3.2",
+        temperature=0.7,
     )
 
 

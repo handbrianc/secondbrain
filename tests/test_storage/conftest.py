@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from secondbrain.config import Config
 from secondbrain.storage import VectorStorage
 
 
@@ -13,9 +14,11 @@ from secondbrain.storage import VectorStorage
 def mock_storage_config() -> MagicMock:
     """Module-scoped mock config to avoid repeated Config initialization."""
     config = MagicMock()
-    config.mongo_uri = "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
-    config.mongo_db = "secondbrain"
-    config.mongo_collection = "embeddings"
+    # Use Config defaults - will use test values when PYTEST_CURRENT_TEST is set
+    cfg = Config()
+    config.mongo_uri = cfg.mongo_uri
+    config.mongo_db = cfg.mongo_db
+    config.mongo_collection = cfg.mongo_collection
     config.embedding_dimensions = 384
     return config
 

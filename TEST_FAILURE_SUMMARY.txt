@@ -1,0 +1,154 @@
+================================================================================
+TEST FAILURE ROOT CAUSE ANALYSIS - SUMMARY
+================================================================================
+
+Total Failures Analyzed: 55 tests across 10 categories
+Analysis Date: April 27, 2026
+
+================================================================================
+CATEGORIZATION BY ROOT CAUSE TYPE
+================================================================================
+
+1. TEST CODE ISSUES (Bad Assertions/Mocks) - 28 failures (51%)
+   ├─ Category 1: Core Count Tests (2 failures)
+   │  └─ Tests assume max_workers=None, but Config() defaults to 4
+   ├─ Category 6: Connection Error Tests (8 failures)
+   │  └─ Mocks don't trigger actual error paths in source code
+   ├─ Category 7: Conversation Storage Mock Issues (14 failures)
+   │  └─ Mock fixtures not applied correctly before storage initialization
+   └─ Category 8: Storage Tests (7 failures)
+      └─ Async mock chains not propagating return values correctly
+
+2. TEST EXPECTATIONS MISMATCH (Source Correct) - 12 failures (22%)
+   ├─ Category 2: Ingestion Tests (3 failures)
+   │  └─ Tests expect 0 files found, but .txt files ARE supported
+   ├─ Category 9: Docker/MongoDB Tests (2 failures)
+   │  └─ Wrong exception type expected (DockerComposeError vs DockerNotInstalledError)
+   └─ Category 4: String Comparison (1 failure)
+      └─ Test expects query rewrite, but Ollama model unavailable, returns original
+
+3. ENVIRONMENT/DEPENDENCY ISSUES - 8 failures (15%)
+   ├─ Category 3: Missing Dependencies (2 failures)
+   │  ├─ Flask not installed for API example test
+   │  └─ Ollama model 'llama3.1:latest' not found
+   └─ Category 10: Integration Tests with Ollama (3 failures)
+      └─ Tests require running Ollama server with specific models
+
+4. ASYNC/MOCK SETUP ISSUES - 5 failures (9%)
+   └─ Category 5: Async/Mock Issues (9 failures)
+      └─ MagicMock objects used where AsyncMock required for awaitable behavior
+
+================================================================================
+FILES REQUIRING FIXES (by priority)
+================================================================================
+
+HIGH PRIORITY - Test Code Fixes:
+---------------------------------
+1. tests/test_document/test_multicore_ingestion.py (lines 80-95)
+   - Fix: Mock config to return None for max_workers in test
+
+2. tests/test_storage/test_async_storage.py (lines 280-400)
+   - Fix: Use AsyncMock for methods that return awaitables
+
+3. tests/test_storage/test_conversation_storage.py (fixtures)
+   - Fix: Apply mocks before storage initialization
+
+4. tests/test_storage/test_storage.py (mock chains)
+   - Fix: Proper cursor mock chaining with .skip().limit().to_list()
+
+5. tests/test_storage/test_batch_operations.py (connection mocks)
+   - Fix: Trace actual method called (_require_connection vs validate_connection)
+
+MEDIUM PRIORITY - Environment/Configuration:
+---------------------------------------------
+6. tests/test_examples/test_examples.py (lines 220-280)
+   - Fix: Add conditional skip for Flask/requests dependencies
+
+7. tests/test_rag/test_integration.py (lines 80-115)
+   - Fix: Add Ollama health check and skip if unavailable
+
+8. pyproject.toml
+   - Fix: Add pytest markers for integration tests
+
+LOW PRIORITY - Investigation Required:
+--------------------------------------
+9. tests/test_document/test_ingestion.py (lines 137-156)
+   - Fix: Update expectations or use unsupported file extensions
+
+10. tests/test_utils/test_docker_manager.py
+    - Decision: Fix source to raise DockerNotInstalledError OR update test
+
+================================================================================
+KEY FINDINGS
+================================================================================
+
+1. CONFIG DEFAULT MISMATCH (Category 1)
+   - Test assumes Config.max_workers=None by default
+   - Actual: Config.max_workers=4 by default
+   - Fix: Mock config in test to override default
+
+2. ASYNC MOCK PATTERN (Categories 5, 7, 8)
+   - Common mistake: Using MagicMock for async methods
+   - Correct: Use AsyncMock for methods that are awaited
+   - Pattern: mock.method = AsyncMock(return_value=value)
+
+3. MOCK CHAINING (Categories 5, 8)
+   - Issue: Cursor methods like .skip() and .limit() not chaining
+   - Fix: Return self from chainable methods
+   - Pattern: mock_cursor.skip.return_value = mock_cursor
+
+4. CONNECTION CHECK PATH (Category 6)
+   - Tests mock validate_connection()
+   - Source may call _require_connection() instead
+   - Fix: Trace actual method called in source code
+
+5. INTEGRATION TEST MARKERS (Categories 4, 10)
+   - Tests requiring external services should be marked
+   - Should be skipped by default in normal test runs
+   - Use: @pytest.mark.integration and pytest.skip()
+
+================================================================================
+RECOMMENDED FIX STRATEGY
+================================================================================
+
+PHASE 1: Quick Wins (1-2 hours)
+-------------------------------
+✓ Fix core count test assertions (Category 1)
+✓ Add skip conditions for missing dependencies (Category 3)
+✓ Add Ollama health checks (Category 4, 10)
+✓ Add pytest markers to pyproject.toml
+
+PHASE 2: Mock Refactoring (4-6 hours)
+-------------------------------------
+✓ Fix async mock patterns in test_async_storage.py
+✓ Fix conversation storage fixtures
+✓ Fix mock chains in test_storage.py
+✓ Trace and fix connection error test paths
+
+PHASE 3: Investigation (2-3 hours)
+----------------------------------
+✓ Review ingestion test expectations
+✓ Decide on Docker exception handling approach
+✓ Update documentation for test patterns
+
+================================================================================
+VERIFICATION COMMANDS
+================================================================================
+
+# Run only high-priority tests after fixes
+pytest tests/test_document/test_multicore_ingestion.py -v
+pytest tests/test_storage/test_async_storage.py -v
+pytest tests/test_storage/test_conversation_storage.py -v
+
+# Run integration tests separately
+pytest -m integration -v
+
+# Exclude integration tests (default)
+pytest -m "not integration" -v
+
+# Run with coverage to verify all paths tested
+pytest --cov=secondbrain --cov-report=html -m "not integration"
+
+================================================================================
+END OF ANALYSIS
+================================================================================

@@ -9,11 +9,14 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from secondbrain.config import Config
 from secondbrain.conversation import ConversationSession, QueryRewriter
 from secondbrain.rag.interfaces import LocalLLMProvider
 from secondbrain.rag.pipeline import RAGPipeline
 from secondbrain.search import Searcher
 
+# Get test config
+_test_config = Config()
 
 # Platform-aware Ollama host for tests
 TEST_OLLAMA_HOST = (
@@ -54,7 +57,7 @@ def mock_rewriter() -> MagicMock:
 def mock_config(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
     """Mock configuration for pipeline tests."""
     config: dict[str, str] = {
-        "SECONDBRAIN_MONGO_URI": "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin",
+        "SECONDBRAIN_MONGO_URI": _test_config.mongo_uri,
         "SECONDBRAIN_MONGO_DB": "test_secondbrain",
         "SECONDBRAIN_MONGO_COLLECTION": "test_embeddings",
         "SECONDBRAIN_LOCALHOST": TEST_OLLAMA_HOST,

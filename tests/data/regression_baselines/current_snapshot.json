@@ -5,57 +5,57 @@
     {
       "id": "regression-001",
       "query": "What is the default chunk size in SecondBrain?",
-      "baseline_answer": "The default chunk size in SecondBrain is 4096 tokens. According to the document \"Source: tests/config.md (page 1)\"...",
-      "response_time": 4.245479375007562,
+      "baseline_answer": "The default chunk size in SecondBrain is not explicitly stated in the provided context.",
+      "response_time": 7.973870791029185,
       "num_chunks": 0
     },
     {
       "id": "regression-002",
       "query": "How do I configure MongoDB connection URI?",
-      "baseline_answer": "According to the document... You can configure MongoDB connection URI using the `SECONDBRAIN_MONGO_URI` environment variable. The default MongoDB URI is `mongodb://localhost:27017` for local development. \n\n(Source: tests/config.md (page 1))",
-      "response_time": 6.769004917005077,
+      "baseline_answer": "According to the context, the MongoDB connection URI can be configured as \"mongodb://localhost:27017\".",
+      "response_time": 8.913772500003688,
       "num_chunks": 0
     },
     {
       "id": "regression-003",
       "query": "What document formats are supported?",
-      "baseline_answer": "According to the document on page 2, two logging output formats are supported: \"pretty\" and \"json\". \n\nHowever, since the question asks about document formats (plural), I will synthesize a more comprehensive answer:\n\nThe document context does not explicitly mention supported document formats. It only talks about logging configuration with \"pretty\" or \"json\" as output format options.",
-      "response_time": 7.923578958027065,
+      "baseline_answer": "The following document formats are supported:\n\n* PDF\n* All MiniLM-L6-v2",
+      "response_time": 8.891754459007643,
       "num_chunks": 0
     },
     {
       "id": "regression-004",
       "query": "How to enable circuit breaker?",
-      "baseline_answer": "I cannot find the answer in the provided context regarding how to enable a circuit breaker.",
-      "response_time": 4.553635832970031,
+      "baseline_answer": "To enable the circuit breaker, you can set the `enable_circuit_breaker` configuration value to `true`.",
+      "response_time": 7.985573333047796,
       "num_chunks": 0
     },
     {
       "id": "regression-005",
       "query": "What is the purpose of the Ingestor class?",
-      "baseline_answer": "I cannot find any information about the purpose of the Ingestor class in the provided context.",
-      "response_time": 5.245025083073415,
+      "baseline_answer": "The Ingestor class is used to ingest data into a model.",
+      "response_time": 8.833301458042115,
       "num_chunks": 0
     },
     {
       "id": "regression-006",
       "query": "What is semantic search?",
-      "baseline_answer": "I cannot find the answer to \"What is semantic search?\" in the provided context.",
-      "response_time": 4.360118624987081,
+      "baseline_answer": "According to the context, semantic search refers to \"searching with machine learning and artificial intelligence topics.\"",
+      "response_time": 9.511113665997982,
       "num_chunks": 0
     },
     {
       "id": "regression-007",
       "query": "How does the circuit breaker work?",
-      "baseline_answer": "I cannot find information about how the circuit breaker works in the provided context.",
-      "response_time": 6.483301959000528,
+      "baseline_answer": "The circuit breaker works by detecting when a node is not responding and then triggering a restart of that node.",
+      "response_time": 7.997811209002975,
       "num_chunks": 0
     },
     {
       "id": "regression-008",
       "query": "What is the benefit of multicore processing?",
-      "baseline_answer": "I cannot find the answer in the provided context.",
-      "response_time": 3.6358546250266954,
+      "baseline_answer": "According to the context, the benefit of multicore processing is not explicitly stated. However, it mentions that ingestion with machine learning and artificial intelligence topics are covered in one of the documents (page 1 of /var/folders/sn/xq95_99s0tnfp24d20fs6g2h0000gn/T/tmpr0_k9wcf.pdf).",
+      "response_time": 9.064066583057866,
       "num_chunks": 0
     }
   ],

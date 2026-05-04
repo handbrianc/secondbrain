@@ -1,35 +1,13 @@
 """Root pytest fixtures for all tests with mock fallbacks."""
 
 import os
-import platform
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
 import pytest
 
-
-def get_ollama_host() -> str:
-    """Get Ollama host URL based on platform.
-
-    On macOS: Use host Ollama (port 11434) for better CPU performance
-    On other platforms: Use Docker Ollama (port 11435)
-
-    Returns:
-        Ollama host URL string
-    """
-    if platform.system() == "Darwin":
-        # macOS: Use host Ollama installation (faster on CPU)
-        return "http://localhost:11434"
-    else:
-        # Other platforms: Use Docker container
-        return "http://localhost:11435"
-
-
 # Set test environment variables IMMEDIATELY - before ANY imports
-# This ensures config module picks up test values, not defaults
-
-# Disable OpenTelemetry during tests to prevent exporter errors on shutdown
 os.environ["OTEL_TRACING_ENABLED"] = "false"
 os.environ["OTEL_METRICS_ENABLED"] = "false"
 
@@ -44,7 +22,7 @@ except ImportError:
 
 
 def pytest_configure(config):
-    """Called before any tests are collected - disable meta tensors globally."""
+    """Called before any tests are collected."""
     try:
         import torch
         # Force CPU as default device before any model loading
@@ -53,28 +31,7 @@ def pytest_configure(config):
     except ImportError:
         pass  # PyTorch not available
 
-if "SECONDBRAIN_MONGO_URI" not in os.environ:
-    # Primary: authenticated connection (requires fresh container)
-    # Fallback: unauthenticated connection (for existing containers)
-    os.environ["SECONDBRAIN_MONGO_URI"] = (
-        "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
-    )
-
-if "SECONDBRAIN_OLLAMA_HOST" not in os.environ:
-    # Platform-aware Ollama host selection
-    # On macOS: Use host Ollama (port 11434) for better CPU performance
-    # On other platforms: Use Docker Ollama (port 11435)
-    if platform.system() == "Darwin":
-        os.environ["SECONDBRAIN_OLLAMA_HOST"] = "http://localhost:11434"
-    else:
-        os.environ["SECONDBRAIN_OLLAMA_HOST"] = "http://localhost:11435"
-
-if "SECONDBRAIN_MONGO_DB" not in os.environ:
-    os.environ["SECONDBRAIN_MONGO_DB"] = "secondbrain_test"
-
-if "SECONDBRAIN_MONGO_COLLECTION" not in os.environ:
-    os.environ["SECONDBRAIN_MONGO_COLLECTION"] = "test_embeddings"
-
+# Config class will automatically load from .env.test or use platform-aware defaults
 from secondbrain.config import get_config
 
 get_config.cache_clear()
@@ -132,7 +89,7 @@ def pytest_sessionstart(session: pytest.Session) -> None:
         test_documents = [
             {
                 "chunk_id": "test-chunk-001",
-                "chunk_text": "Test document for quantitative testing. This is placeholder text.",
+                "chunk_text": "Test document for testing. This is placeholder text.",
                 "source_file": "/test/docs/test.md",
                 "file_type": "markdown",
                 "metadata": {"title": "Test Document", "page": 1, "test": True},

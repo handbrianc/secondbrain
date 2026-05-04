@@ -5,9 +5,7 @@ services:
     hostname: mongodb
     ports:
       - "27017:27017"
-    environment:
-      - MONGODB_INITDB_ROOT_USERNAME=${MONGODB_INITDB_ROOT_USERNAME:-admin}
-      - MONGODB_INITDB_ROOT_PASSWORD=${MONGODB_INITDB_ROOT_PASSWORD:-password}
+    command: mongod --auth --bind_ip_all
     volumes:
       - mongodb-data:/data/db
       - mongodb-configdb:/data/configdb

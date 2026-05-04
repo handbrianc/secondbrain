@@ -8,16 +8,15 @@ from typing import Any, cast
 import httpx
 import pytest
 
+from secondbrain.config import Config
+
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 
-# Platform-aware Ollama host
-import platform
-if platform.system() == "Darwin":
-    OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-else:
-    OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11435")
+# Get test config for Ollama host
+_test_config = Config()
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", _test_config.ollama_host)
 
-EVALUATION_MODEL = os.getenv("EVALUATION_MODEL", "llama3.1:latest")
+EVALUATION_MODEL = os.getenv("EVALUATION_MODEL", "llama3.2")
 MAX_RETRIES = 3
 RETRY_DELAY = 1.0
 
@@ -717,7 +716,7 @@ Query: {query}
 Response: {response}
 Return JSON: {{"score": <1-5>, "reasoning": "..."}}"""
 
-            result = _evaluate_with_skip(prompt, model="llama3.1:latest")
+            result = _evaluate_with_skip(prompt, model="llama3.2")
             if result and "score" in result:
                 results.append(result["score"])
 

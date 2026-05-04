@@ -100,6 +100,14 @@ class RAGPipeline:
             >>> result["answer"]
             "SecondBrain is a document intelligence CLI tool..."
         """
+        # Validate query is not empty or whitespace-only
+        if not query or not query.strip():
+            return {
+                "answer": "Query cannot be empty. Please provide a valid question.",
+                "query": query,
+                "validation_error": True,
+            }
+
         try:
             violations = self._security_filter.validate_query(query)
             if violations:
@@ -450,6 +458,14 @@ class RAGPipeline:
         Returns:
             Dict with keys: "answer", "sources" (if show_sources), "query".
         """
+        # Validate query is not empty or whitespace-only
+        if not query or not query.strip():
+            return {
+                "answer": "Query cannot be empty. Please provide a valid question.",
+                "query": query,
+                "validation_error": True,
+            }
+
         try:
             effective_top_k = top_k if top_k is not None else self._top_k
 

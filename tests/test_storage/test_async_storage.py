@@ -5,8 +5,12 @@ from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import pytest
 
+from secondbrain.config import Config
 from secondbrain.exceptions import StorageConnectionError
 from secondbrain.storage.storage import AsyncVectorStorage
+
+# Get test config at module level
+_test_config = Config()
 
 
 class TestAsyncVectorStorage:
@@ -16,7 +20,7 @@ class TestAsyncVectorStorage:
     def async_storage(self) -> Generator[AsyncVectorStorage, None, None]:
         """Create an AsyncVectorStorage instance with mocked config."""
         with patch("secondbrain.storage.storage.config") as mock_config_func:
-            mock_config_func.return_value.mongo_uri = "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
+            mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
             mock_config_func.return_value.mongo_db = "secondbrain_test"
             mock_config_func.return_value.mongo_collection = "embeddings_test"
             mock_config_func.return_value.embedding_dimensions = 384
@@ -31,7 +35,7 @@ class TestAsyncVectorStorage:
     @pytest.mark.asyncio
     async def test_init_with_defaults(self, async_storage: AsyncVectorStorage) -> None:
         """Test initialization with default config values."""
-        assert async_storage.mongo_uri == "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
+        assert async_storage.mongo_uri == _test_config.mongo_uri
         assert async_storage.db_name == "secondbrain_test"
         assert async_storage.collection_name == "embeddings_test"
         assert async_storage._index_created is False
@@ -40,7 +44,7 @@ class TestAsyncVectorStorage:
     async def test_init_with_overrides(self) -> None:
         """Test initialization with custom parameters."""
         with patch("secondbrain.storage.storage.config") as mock_config_func:
-            mock_config_func.return_value.mongo_uri = "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
+            mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
             mock_config_func.return_value.mongo_db = "default_db"
             mock_config_func.return_value.mongo_collection = "default_collection"
             mock_config_func.return_value.embedding_dimensions = 384
@@ -50,12 +54,12 @@ class TestAsyncVectorStorage:
             mock_config_func.return_value.embedding_storage_format = "json"
 
             storage = AsyncVectorStorage(
-                mongo_uri="mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin",
+                mongo_uri=_test_config.mongo_uri,
                 db_name="custom_db",
                 collection_name="custom_collection",
             )
 
-            assert storage.mongo_uri == "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
+            assert storage.mongo_uri == _test_config.mongo_uri
             assert storage.db_name == "custom_db"
             assert storage.collection_name == "custom_collection"
 
