@@ -21,8 +21,8 @@ class TestDeleteBySource:
             from secondbrain.config import Config
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
-            mock_config_func.return_value.mongo_db = "secondbrain"
-            mock_config_func.return_value.mongo_collection = "embeddings"
+            mock_config_func.return_value.mongo_db = "secondbrain_test"
+            mock_config_func.return_value.mongo_collection = "embeddings_test"
             mock_config_func.return_value.embedding_dimensions = 384
 
             storage = VectorStorage()
@@ -49,8 +49,8 @@ class TestDeleteBySource:
             from secondbrain.config import Config
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
-            mock_config_func.return_value.mongo_db = "secondbrain"
-            mock_config_func.return_value.mongo_collection = "embeddings"
+            mock_config_func.return_value.mongo_db = "secondbrain_test"
+            mock_config_func.return_value.mongo_collection = "embeddings_test"
             mock_config_func.return_value.embedding_dimensions = 384
 
             storage = VectorStorage()
@@ -77,8 +77,8 @@ class TestDeleteBySource:
             from secondbrain.config import Config
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
-            mock_config_func.return_value.mongo_db = "secondbrain"
-            mock_config_func.return_value.mongo_collection = "embeddings"
+            mock_config_func.return_value.mongo_db = "secondbrain_test"
+            mock_config_func.return_value.mongo_collection = "embeddings_test"
             mock_config_func.return_value.embedding_dimensions = 384
 
             storage = VectorStorage()
@@ -98,8 +98,8 @@ class TestDeleteBySource:
             from secondbrain.config import Config
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
-            mock_config_func.return_value.mongo_db = "secondbrain"
-            mock_config_func.return_value.mongo_collection = "embeddings"
+            mock_config_func.return_value.mongo_db = "secondbrain_test"
+            mock_config_func.return_value.mongo_collection = "embeddings_test"
             mock_config_func.return_value.embedding_dimensions = 384
 
             storage = VectorStorage()
@@ -127,8 +127,8 @@ class TestDeleteByChunkId:
             from secondbrain.config import Config
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
-            mock_config_func.return_value.mongo_db = "secondbrain"
-            mock_config_func.return_value.mongo_collection = "embeddings"
+            mock_config_func.return_value.mongo_db = "secondbrain_test"
+            mock_config_func.return_value.mongo_collection = "embeddings_test"
             mock_config_func.return_value.embedding_dimensions = 384
 
             storage = VectorStorage()
@@ -155,8 +155,8 @@ class TestDeleteByChunkId:
             from secondbrain.config import Config
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
-            mock_config_func.return_value.mongo_db = "secondbrain"
-            mock_config_func.return_value.mongo_collection = "embeddings"
+            mock_config_func.return_value.mongo_db = "secondbrain_test"
+            mock_config_func.return_value.mongo_collection = "embeddings_test"
             mock_config_func.return_value.embedding_dimensions = 384
 
             storage = VectorStorage()
@@ -183,8 +183,8 @@ class TestDeleteByChunkId:
             from secondbrain.config import Config
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
-            mock_config_func.return_value.mongo_db = "secondbrain"
-            mock_config_func.return_value.mongo_collection = "embeddings"
+            mock_config_func.return_value.mongo_db = "secondbrain_test"
+            mock_config_func.return_value.mongo_collection = "embeddings_test"
             mock_config_func.return_value.embedding_dimensions = 384
 
             storage = VectorStorage()
@@ -204,8 +204,8 @@ class TestDeleteByChunkId:
             from secondbrain.config import Config
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
-            mock_config_func.return_value.mongo_db = "secondbrain"
-            mock_config_func.return_value.mongo_collection = "embeddings"
+            mock_config_func.return_value.mongo_db = "secondbrain_test"
+            mock_config_func.return_value.mongo_collection = "embeddings_test"
             mock_config_func.return_value.embedding_dimensions = 384
 
             storage = VectorStorage()
@@ -238,8 +238,8 @@ class TestDeleteAll:
             from secondbrain.config import Config
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
-            mock_config_func.return_value.mongo_db = "secondbrain"
-            mock_config_func.return_value.mongo_collection = "embeddings"
+            mock_config_func.return_value.mongo_db = "secondbrain_test"
+            mock_config_func.return_value.mongo_collection = "embeddings_test"
             mock_config_func.return_value.embedding_dimensions = 384
 
             storage = VectorStorage()
@@ -264,8 +264,8 @@ class TestDeleteAll:
             from secondbrain.config import Config
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
-            mock_config_func.return_value.mongo_db = "secondbrain"
-            mock_config_func.return_value.mongo_collection = "embeddings"
+            mock_config_func.return_value.mongo_db = "secondbrain_test"
+            mock_config_func.return_value.mongo_collection = "embeddings_test"
             mock_config_func.return_value.embedding_dimensions = 384
 
             storage = VectorStorage()
@@ -290,8 +290,8 @@ class TestDeleteAll:
             from secondbrain.config import Config
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
-            mock_config_func.return_value.mongo_db = "secondbrain"
-            mock_config_func.return_value.mongo_collection = "embeddings"
+            mock_config_func.return_value.mongo_db = "secondbrain_test"
+            mock_config_func.return_value.mongo_collection = "embeddings_test"
             mock_config_func.return_value.embedding_dimensions = 384
 
             storage = VectorStorage()
@@ -311,8 +311,8 @@ class TestDeleteAll:
             from secondbrain.config import Config
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
-            mock_config_func.return_value.mongo_db = "secondbrain"
-            mock_config_func.return_value.mongo_collection = "embeddings"
+            mock_config_func.return_value.mongo_db = "secondbrain_test"
+            mock_config_func.return_value.mongo_collection = "embeddings_test"
             mock_config_func.return_value.embedding_dimensions = 384
 
             storage = VectorStorage()
@@ -340,8 +340,8 @@ class TestDeleteEdgeCases:
             from secondbrain.config import Config
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
-            mock_config_func.return_value.mongo_db = "secondbrain"
-            mock_config_func.return_value.mongo_collection = "embeddings"
+            mock_config_func.return_value.mongo_db = "secondbrain_test"
+            mock_config_func.return_value.mongo_collection = "embeddings_test"
             mock_config_func.return_value.embedding_dimensions = 384
 
             storage = VectorStorage()
@@ -368,8 +368,8 @@ class TestDeleteEdgeCases:
             from secondbrain.config import Config
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
-            mock_config_func.return_value.mongo_db = "secondbrain"
-            mock_config_func.return_value.mongo_collection = "embeddings"
+            mock_config_func.return_value.mongo_db = "secondbrain_test"
+            mock_config_func.return_value.mongo_collection = "embeddings_test"
             mock_config_func.return_value.embedding_dimensions = 384
 
             storage = VectorStorage()
@@ -394,8 +394,8 @@ class TestDeleteEdgeCases:
             from secondbrain.config import Config
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
-            mock_config_func.return_value.mongo_db = "secondbrain"
-            mock_config_func.return_value.mongo_collection = "embeddings"
+            mock_config_func.return_value.mongo_db = "secondbrain_test"
+            mock_config_func.return_value.mongo_collection = "embeddings_test"
             mock_config_func.return_value.embedding_dimensions = 384
 
             storage = VectorStorage()
@@ -430,8 +430,8 @@ class TestAsyncDeleteOperations:
             from secondbrain.config import Config
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
-            mock_config_func.return_value.mongo_db = "secondbrain"
-            mock_config_func.return_value.mongo_collection = "embeddings"
+            mock_config_func.return_value.mongo_db = "secondbrain_test"
+            mock_config_func.return_value.mongo_collection = "embeddings_test"
             mock_config_func.return_value.embedding_dimensions = 384
 
             storage = VectorStorage()
@@ -456,8 +456,8 @@ class TestAsyncDeleteOperations:
             from secondbrain.config import Config
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
-            mock_config_func.return_value.mongo_db = "secondbrain"
-            mock_config_func.return_value.mongo_collection = "embeddings"
+            mock_config_func.return_value.mongo_db = "secondbrain_test"
+            mock_config_func.return_value.mongo_collection = "embeddings_test"
             mock_config_func.return_value.embedding_dimensions = 384
 
             storage = VectorStorage()
@@ -482,8 +482,8 @@ class TestAsyncDeleteOperations:
             from secondbrain.config import Config
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
-            mock_config_func.return_value.mongo_db = "secondbrain"
-            mock_config_func.return_value.mongo_collection = "embeddings"
+            mock_config_func.return_value.mongo_db = "secondbrain_test"
+            mock_config_func.return_value.mongo_collection = "embeddings_test"
             mock_config_func.return_value.embedding_dimensions = 384
 
             storage = VectorStorage()
@@ -508,8 +508,8 @@ class TestAsyncDeleteOperations:
             from secondbrain.config import Config
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
-            mock_config_func.return_value.mongo_db = "secondbrain"
-            mock_config_func.return_value.mongo_collection = "embeddings"
+            mock_config_func.return_value.mongo_db = "secondbrain_test"
+            mock_config_func.return_value.mongo_collection = "embeddings_test"
             mock_config_func.return_value.embedding_dimensions = 384
 
             storage = VectorStorage()
@@ -527,8 +527,8 @@ class TestAsyncDeleteOperations:
             from secondbrain.config import Config
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
-            mock_config_func.return_value.mongo_db = "secondbrain"
-            mock_config_func.return_value.mongo_collection = "embeddings"
+            mock_config_func.return_value.mongo_db = "secondbrain_test"
+            mock_config_func.return_value.mongo_collection = "embeddings_test"
             mock_config_func.return_value.embedding_dimensions = 384
 
             storage = VectorStorage()
@@ -546,8 +546,8 @@ class TestAsyncDeleteOperations:
             from secondbrain.config import Config
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
-            mock_config_func.return_value.mongo_db = "secondbrain"
-            mock_config_func.return_value.mongo_collection = "embeddings"
+            mock_config_func.return_value.mongo_db = "secondbrain_test"
+            mock_config_func.return_value.mongo_collection = "embeddings_test"
             mock_config_func.return_value.embedding_dimensions = 384
 
             storage = VectorStorage()
@@ -568,8 +568,8 @@ class TestDeleteIntegrationScenarios:
             from secondbrain.config import Config
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
-            mock_config_func.return_value.mongo_db = "secondbrain"
-            mock_config_func.return_value.mongo_collection = "embeddings"
+            mock_config_func.return_value.mongo_db = "secondbrain_test"
+            mock_config_func.return_value.mongo_collection = "embeddings_test"
             mock_config_func.return_value.embedding_dimensions = 384
 
             storage = VectorStorage()
@@ -599,8 +599,8 @@ class TestDeleteIntegrationScenarios:
             from secondbrain.config import Config
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
-            mock_config_func.return_value.mongo_db = "secondbrain"
-            mock_config_func.return_value.mongo_collection = "embeddings"
+            mock_config_func.return_value.mongo_db = "secondbrain_test"
+            mock_config_func.return_value.mongo_collection = "embeddings_test"
             mock_config_func.return_value.embedding_dimensions = 384
 
             storage = VectorStorage()

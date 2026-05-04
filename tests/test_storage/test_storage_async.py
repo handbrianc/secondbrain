@@ -17,8 +17,8 @@ class TestVectorStorageAsync:
             from secondbrain.config import Config
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
-            mock_config_func.return_value.mongo_db = "secondbrain"
-            mock_config_func.return_value.mongo_collection = "embeddings"
+            mock_config_func.return_value.mongo_db = "secondbrain_test"
+            mock_config_func.return_value.mongo_collection = "embeddings_test"
             mock_config_func.return_value.embedding_dimensions = 384
             mock_config_func.return_value.index_ready_retry_count = 3
             mock_config_func.return_value.index_ready_retry_delay = 0.01

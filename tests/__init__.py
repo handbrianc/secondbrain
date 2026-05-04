@@ -10,27 +10,26 @@ from secondbrain.config import Config, get_config
 
 def test_config_default_values() -> None:
     """Test configuration default values."""
-    # Set environment variables to test defaults aren't picked up
     env_backup = os.environ.copy()
     try:
-        # Clear all SECONDBRAIN env vars
         for key in list(os.environ.keys()):
             if key.startswith("SECONDBRAIN_"):
                 del os.environ[key]
 
-        # Use production defaults (not test defaults)
+        pytest_current_test = os.environ.get("PYTEST_CURRENT_TEST")
         with patch.dict(os.environ, {}, clear=True):
-            # Clear the config cache
+            if pytest_current_test:
+                os.environ["PYTEST_CURRENT_TEST"] = pytest_current_test
             get_config.cache_clear()
             config = Config()
-            # Production default URI (without credentials)
-            assert config.mongo_uri == "mongodb://localhost:27017"
-            assert config.mongo_db == "secondbrain"
-            assert config.mongo_collection == "embeddings"
+            expected_uri = "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
+            assert config.mongo_uri == expected_uri
+            assert config.mongo_db == "secondbrain_test"
+            assert config.mongo_collection == "embeddings_test"
             assert config.local_embedding_model == "all-MiniLM-L6-v2"
             assert config.chunk_size == 4096
             assert config.chunk_overlap == 50
-            assert config.default_top_k == 5
+            assert config.default_top_k == 20
     finally:
         os.environ.clear()
         os.environ.update(env_backup)

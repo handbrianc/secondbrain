@@ -54,8 +54,8 @@ class TestConfig:
             os.environ,
             {
                 "SECONDBRAIN_MONGO_URI": _test_config.mongo_uri,
-                "SECONDBRAIN_MONGO_DB": "secondbrain",
-                "SECONDBRAIN_MONGO_COLLECTION": "embeddings",
+                "SECONDBRAIN_MONGO_DB": "secondbrain_test",
+                "SECONDBRAIN_MONGO_COLLECTION": "embeddings_test",
                 "SECONDBRAIN_LOCAL_EMBEDDING_MODEL": "all-MiniLM-L6-v2",
                 "SECONDBRAIN_CHUNK_SIZE": "4096",
                 "SECONDBRAIN_CHUNK_OVERLAP": "50",
@@ -68,8 +68,8 @@ class TestConfig:
             config = Config()
 
             assert config.mongo_uri == _test_config.mongo_uri
-            assert config.mongo_db == "secondbrain"
-            assert config.mongo_collection == "embeddings"
+            assert config.mongo_db == "secondbrain_test"
+            assert config.mongo_collection == "embeddings_test"
             assert config.local_embedding_model == "all-MiniLM-L6-v2"
             assert config.chunk_size == 4096
             assert config.chunk_overlap == 50

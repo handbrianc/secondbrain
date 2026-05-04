@@ -24,7 +24,7 @@ class TestStatusHealthMetrics:
             mock_checker.get_status.return_value = {
                 "total_chunks": 150,
                 "unique_sources": 12,
-                "database": "secondbrain",
+                "database": "secondbrain_test",
                 "collection": "chunks",
             }
             mock_checker_class.return_value.__enter__ = MagicMock(
