@@ -196,7 +196,6 @@ pytest
 - Integration tests with services
 - Property-based tests with Hypothesis
 - Qualitative tests for safety and accuracy
-- Quantitative tests for metrics
 
 ## Development
 

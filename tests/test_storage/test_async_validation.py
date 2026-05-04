@@ -14,7 +14,9 @@ class TestAsyncValidation:
     def storage(self):
         """Create a VectorStorage instance with mocked config."""
         with patch("secondbrain.storage.config") as mock_config_func:
-            mock_config_func.return_value.mongo_uri = "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
+            from secondbrain.config import Config
+            _test_config = Config()
+            mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
             mock_config_func.return_value.mongo_db = "secondbrain"
             mock_config_func.return_value.mongo_collection = "embeddings"
             mock_config_func.return_value.embedding_dimensions = 384

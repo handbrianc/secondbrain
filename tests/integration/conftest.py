@@ -10,6 +10,7 @@ import httpx
 import pytest
 from pymongo import MongoClient
 
+from secondbrain.config import Config
 from secondbrain.embedding import LocalEmbeddingGenerator
 from secondbrain.embedding.mock import MockEmbeddingGenerator
 from secondbrain.storage import MockVectorStorage, VectorStorage
@@ -17,20 +18,13 @@ from secondbrain.storage import MockVectorStorage, VectorStorage
 if TYPE_CHECKING:
     pass
 
-# Test service URLs (different from dev ports)
-TEST_MONGO_URI = (
-    "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
-)
-
-# Platform-aware embedding URL
-import platform
-if platform.system() == "Darwin":
-    TEST_EMBEDDING_URL = "http://localhost:11434"
-else:
-    TEST_EMBEDDING_URL = "http://localhost:11435"
+# Get test service URLs from Config (automatically uses test defaults when PYTEST_CURRENT_TEST is set)
+_config = Config()
+TEST_MONGO_URI = _config.mongo_uri
+TEST_EMBEDDING_URL = _config.ollama_host
 
 # Test database/collection names
-TEST_DB_NAME = "secondbrain_test"
+TEST_DB_NAME = _config.mongo_db
 TEST_COLLECTION_NAME = "test_embeddings"
 
 # Health check timeout

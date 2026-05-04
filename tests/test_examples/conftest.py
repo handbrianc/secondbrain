@@ -11,6 +11,11 @@ from typing import Any
 
 import pytest
 
+from secondbrain.config import Config
+
+# Get test defaults from Config
+_test_config = Config()
+
 
 @pytest.fixture
 def example_runner(tmp_path: Path) -> Generator[Any, None, None]:
@@ -74,16 +79,8 @@ def example_runner(tmp_path: Path) -> Generator[Any, None, None]:
             env.update(env_overrides)
 
         env["SECONDBRAIN_VERBOSE"] = "0"
-        env["SECONDBRAIN_MONGO_URI"] = (
-            "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
-        )
-        
-        # Use platform-aware Ollama host
-        import platform
-        if platform.system() == "Darwin":
-            env["SECONDBRAIN_OLLAMA_HOST"] = "http://localhost:11434"
-        else:
-            env["SECONDBRAIN_OLLAMA_HOST"] = "http://localhost:11435"
+        env["SECONDBRAIN_MONGO_URI"] = _test_config.mongo_uri
+        env["SECONDBRAIN_OLLAMA_HOST"] = _test_config.ollama_host
 
         # Run the script
         result = subprocess.run(

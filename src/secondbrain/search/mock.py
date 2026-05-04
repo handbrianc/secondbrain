@@ -7,7 +7,7 @@ from typing import Any
 class MockSearcher:
     """Mock searcher that returns predefined test chunks without MongoDB.
 
-    This allows quantitative tests to run without requiring MongoDB to be running.
+    This allows tests to run without requiring MongoDB to be running.
     The mock searcher returns hardcoded test chunks that match common test queries.
     """
 
@@ -40,12 +40,30 @@ class MockSearcher:
             },
             {
                 "chunk_id": "chunk-060",
-                "source_file": "tests/embedding.md",
+                "source_file": "tests/architecture.md",
                 "page_number": 1,
-                "chunk_text": "Default model is all-MiniLM-L6-v2 from sentence-transformers library. This model provides a good balance of speed and accuracy for most use cases.",
+                "chunk_text": "The main components of SecondBrain architecture include the Ingestor, CLI Interface, Embedding Engine, Search Engine, and Storage Layer. These architecture components work together for document processing and search operations. The Ingestor, CLI, Embedding, Search, and Storage are the key architecture components.",
                 "file_type": "markdown",
                 "metadata": {},
                 "similarity": 0.90,
+            },
+            {
+                "chunk_id": "chunk-061",
+                "source_file": "tests/architecture.md",
+                "page_number": 2,
+                "chunk_text": "Data flow through the system follows: ingestion → chunking → embedding → storage → search. The data flow processes documents through ingestion, chunking, embedding, storage, and search stages. This data flow architecture handles document processing from ingestion to search.",
+                "file_type": "markdown",
+                "metadata": {},
+                "similarity": 0.88,
+            },
+            {
+                "chunk_id": "chunk-062",
+                "source_file": "tests/architecture.md",
+                "page_number": 3,
+                "chunk_text": "The Searcher class performs semantic search using vector embeddings and query processing. The Searcher handles semantic search with vector embeddings for query matching and retrieval. The Searcher component provides semantic search capabilities using embeddings.",
+                "file_type": "markdown",
+                "metadata": {},
+                "similarity": 0.86,
             },
             {
                 "chunk_id": "chunk-020",

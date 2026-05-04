@@ -30,10 +30,13 @@ dependencies = [
     "rich>=14.0.0",  # Terminal output; 14.0+ has improved table rendering, markdown support
     "python-dotenv>=1.2.2",  # Environment variables; 1.2+ has better .env file parsing
     "sentence-transformers>=5.0.0",  # Embedding models; 5.0+ required for latest model architectures
+    "numpy>=2.0.0",  # Numerical computing; required for embedding arrays and model operations
+    "torch>=2.0.0",  # PyTorch; required for sentence-transformers and deep learning models
     "opentelemetry-api>=1.20.0",  # Observability API; 1.20+ stable SDK integration
     "opentelemetry-sdk>=1.20.0",  # Observability SDK; 1.20+ compatible with API, tracing exporters
     "ollama>=0.1.0",  # Ollama client; 0.1+ for local LLM integration
     "openai>=1.0.0",  # OpenAI client; 1.0+ for OpenAI LLM provider support
+    "typing_extensions>=4.0.0",  # Extended typing features (ParamSpec, TypedDict)
 ]
 
 [project.optional-dependencies]
@@ -57,7 +60,9 @@ dev = [
     "vulture>=2.11",
     "cyclonedx-bom>=7.0.0",
     "pipdeptree>=2.0.0",  # Dependency tree visualization for debugging
-    "openai>=1.0.0",  # OpenAI API client for LLM provider
+    "fastapi>=0.100.0",  # FastAPI for integration examples and API testing
+    "uvicorn>=0.1.0",  # FastAPI server for integration examples
+    "flask>=3.0.0",  # Flask for integration examples and API testing
     "mkdocs>=1.6.0",
     "mkdocstrings>=0.24.0",
     "mkdocstrings-python>=2.0.0",
@@ -75,16 +80,9 @@ dev = [
     "twisted>=25.5.0",  # Security fix: XSS, HTTP pipelining (PYSEC-2024-75, CVE-2024-41671)
     "idna>=3.10",  # Security fix: ReDoS (PYSEC-2024-60)
     "wheel>=0.45.0",  # Security fix: path traversal (CVE-2026-24049)
-]
-
-quantitative = [
-    "scikit-learn>=1.0.0",
-    "scipy>=1.10.0",  # Statistical functions for bootstrap CI, t-tests
-    "statsmodels>=0.14.0",  # CUPED variance reduction, power analysis
-    "bert-score>=0.3.13",  # Semantic similarity metrics (BERTScore)
-    "datasets>=2.0.0",
-    "tabulate>=0.9.0",
-    "pandas>=2.0.0",
+    "fpdf2>=2.7.0",
+    "reportlab>=4.0.0",  # PDF creation for example tests (tests/test_examples/)
+    "python-docx>=1.0.0",
 ]
 
 qualitative = [
@@ -239,7 +237,9 @@ ignore = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--no-cov --timeout=60 -p no:warnings --dist=loadfile"
+addopts = "--no-cov --timeout=300 -p no:warnings --dist=loadfile -n auto"
+# Use pytest-xdist with loadfile strategy for test isolation
+# Each test file runs in its own worker to prevent MongoDB state pollution
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 # Pytest-xdist configuration for parallel test execution
@@ -254,12 +254,6 @@ markers = [
     "circuit_breaker: marks tests that involve circuit breaker behavior (may be slow)",
     "hypothesis: marks tests as property-based testing",
     "concurrent: marks tests as concurrency/thread safety tests (may be slow)",
-    "semantic_similarity: marks tests for semantic similarity evaluation",
-    "semantic_evaluation: marks tests for semantic evaluation metrics (BERTScore, SemScore)",
-    "precision_recall: marks tests for precision and recall metrics",
-    "golden_dataset: marks tests using golden dataset benchmarks",
-    "consistency: marks tests for output consistency checks",
-    "performance: marks tests for performance benchmarks",
     "deprecated: marks tests as deprecated (will be removed in future release)",
     "threshold(min=...): marks tests with minimum threshold requirements",
     "qualitative: marks tests as qualitative evaluation tests",
@@ -270,8 +264,6 @@ markers = [
     "llm_judge: marks tests using LLM-based evaluation",
     "chaos: marks tests for chaos engineering (failure injection, resilience)",
     "threshold_validation: marks tests for threshold validation and sensitivity analysis",
-    "quantitative: marks tests as part of quantitative testing framework",
-    "adversarial: marks tests for adversarial query handling",
     "xdist_group: marks tests that should run in same xdist worker (shared resources)",
 ]
 filterwarnings = [
@@ -285,8 +277,7 @@ filterwarnings = [
     "ignore:I/O operation on closed file:ValueError:opentelemetry",
     "ignore:Exception while exporting Span:ValueError",
 ]
-# Retry flaky tests - quantitative tests may have transient failures due to LLM variance
-# Retry only for specific quantitative tests that may have transient failures
+# Retry flaky tests - may have transient failures due to LLM variance
 # Override per-test using @pytest.mark.flaky(reruns=2) where needed
 # Default: no retries to prevent excessive runtimes
 reruns = 0

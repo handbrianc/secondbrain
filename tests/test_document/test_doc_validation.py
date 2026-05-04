@@ -84,11 +84,17 @@ class TestResolveCoreCount:
         """Test cores=None triggers auto-detection."""
         ingestor = DocumentIngestor()
 
-        with patch.object(os, "cpu_count", return_value=8):
-            assert ingestor._resolve_core_count(None) == 8
+        # Mock config to return None for max_workers, so os.cpu_count() is used
+        with patch("secondbrain.document.config") as mock_config:
+            mock_config.return_value.max_workers = None
+            with patch.object(os, "cpu_count", return_value=8):
+                assert ingestor._resolve_core_count(None) == 8
 
-        with patch.object(os, "cpu_count", return_value=None):
-            assert ingestor._resolve_core_count(None) == 1
+        # When cpu_count returns None, fallback to 1
+        with patch("secondbrain.document.config") as mock_config:
+            mock_config.return_value.max_workers = None
+            with patch.object(os, "cpu_count", return_value=None):
+                assert ingestor._resolve_core_count(None) == 1
 
     def test_resolve_core_count_clamped(self) -> None:
         """Test cores > available are clamped to max."""

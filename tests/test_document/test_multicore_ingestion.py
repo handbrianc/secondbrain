@@ -13,6 +13,7 @@ work across process boundaries. Focus on testing:
 
 import os
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -84,14 +85,20 @@ class TestCoreCountFallback:
 
         QA: Verify os.cpu_count() is used when no config.
         """
-        config = Config()  # max_workers=None by default
+        # Test the actual _resolve_core_count method with mocked config
+        from secondbrain.document import DocumentIngestor
 
-        cores: int | None = None
-        if cores is None:
-            resolved = config.max_workers or os.cpu_count() or 1
+        ingestor = DocumentIngestor()
 
-        assert resolved == (os.cpu_count() or 1)
-        assert resolved > 0
+        with patch("secondbrain.document.config") as mock_config:
+            mock_config.return_value.max_workers = None
+            with patch.object(os, "cpu_count", return_value=18):
+                result = ingestor._resolve_core_count(None)
+                assert result == 18
+
+            with patch.object(os, "cpu_count", return_value=None):
+                result = ingestor._resolve_core_count(None)
+                assert result == 1
 
 
 class TestWorkerFunction:

@@ -405,29 +405,36 @@ def _chunk_segments(
 
     DESIGN DECISIONS:
 
-    1. Word-Boundary Splitting (rfind(" ")):
+    1. Segment Merging (MIN_SEGMENT_SIZE + Title Detection):
+       - Why: docling extracts tables/lists as many tiny segments (10-50 chars)
+       - Impact: Tiny segments create ineffective embeddings for semantic search
+       - Solution: Merge adjacent small segments before chunking
+       - Special handling: Titles/headers are merged with following content
+       - Threshold: 200 characters minimum for meaningful embeddings
+
+    2. Word-Boundary Splitting (rfind(" ")):
        - Why: Prevents breaking words mid-token
        - Impact: Better semantic coherence for embeddings
        - Trade-off: Slight size variance (< chunk_size) acceptable
 
-    2. Overlap Strategy (chunk_end - chunk_overlap):
+    3. Overlap Strategy (chunk_end - chunk_overlap):
        - Why: Maintains context across chunk boundaries
        - Impact: Prevents information loss at boundaries
        - Critical for: Semantic search continuity
        - Typical overlap: 50-200 chars (10-20% of chunk_size)
 
-    3. Single-Pass Processing:
+    4. Single-Pass Processing:
        - Why: Memory efficiency for large documents
        - Impact: O(n) time complexity, O(1) space per chunk
        - Alternative considered: Two-pass (count then split) - rejected
          due to memory overhead
 
-    4. Empty Text Skipping:
+    5. Empty Text Skipping:
        - Why: Avoid creating useless chunks from whitespace
        - Impact: Reduces storage, improves search quality
        - Check: text.strip() before processing
 
-    5. Page Number Preservation:
+    6. Page Number Preservation:
        - Why: Maintain document structure metadata
        - Impact: Enables page-aware search and filtering
        - Used in: Source attribution, debugging
@@ -455,9 +462,54 @@ def _chunk_segments(
     -------
         List of chunked segments.
     """
+    # Minimum segment size before merging - segments smaller than this
+    # will be merged with adjacent segments to create meaningful chunks
+    MIN_SEGMENT_SIZE = 200
+    
+    # First pass: merge small adjacent segments and titles with content
+    merged_segments: list[Segment] = []
+    current_text = ""
+    current_page = 0
+    
+    for i, segment in enumerate(segments):
+        text = segment["text"]
+        page = segment.get("page", 0)
+        
+        if not text.strip():
+            continue
+        
+        stripped = text.strip()
+        
+        # Check if this looks like a title/header (short, no punctuation, often ends abruptly)
+        is_likely_title = (
+            len(stripped) < 100 and
+            not any(p in stripped for p in ['.', ':', '-', '—']) and
+            not stripped.endswith('.')
+        )
+        
+        # If current accumulated text is small, keep accumulating
+        # Also merge titles with following content
+        if len(current_text) < MIN_SEGMENT_SIZE or is_likely_title:
+            if current_text:
+                # Add space between segments
+                current_text += " " + stripped
+            else:
+                current_text = stripped
+            current_page = page
+        else:
+            # Current segment is large enough and not a title, save it and start new
+            merged_segments.append({"text": current_text, "page": current_page})
+            current_text = stripped
+            current_page = page
+    
+    # Don't forget the last segment
+    if current_text:
+        merged_segments.append({"text": current_text, "page": current_page})
+    
+    # Second pass: chunk the merged segments
     chunks: list[Segment] = []
 
-    for segment in segments:
+    for segment in merged_segments:
         text = segment["text"]
         page = segment.get("page", 0)
 

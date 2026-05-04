@@ -18,14 +18,20 @@ sentence-transformers serve          # sentence-transformers
 Create a `.env` file in your project root:
 
 ```bash
-# Core settings
-SECONDBRAIN_MONGO_URI=mongodb://localhost:27017
+# MongoDB (with authentication - recommended)
+MONGODB_INITDB_ROOT_USERNAME=your_username
+MONGODB_INITDB_ROOT_PASSWORD=your_strong_password
+SECONDBRAIN_MONGO_URI=mongodb://your_username:your_strong_password@localhost:27017
+
+# Sentence Transformers
 SECONDBRAIN_SENTENCE_TRANSFORMERS_URL=http://localhost:11434
 SECONDBRAIN_MODEL=embeddinggemma:latest
 
 # Optional: adjust chunk size
 SECONDBRAIN_CHUNK_SIZE=4096
 ```
+
+**⚠️ Security Note**: Enable MongoDB authentication for production use. See [MongoDB Authentication Setup](mongodb-authentication.md) for detailed setup instructions.
 
 ## Step 3: Ingest Documents
 

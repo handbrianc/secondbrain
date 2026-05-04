@@ -146,12 +146,13 @@ def test_ingest_with_recursive(tmp_path: Path) -> None:
 
     ingestor = DocumentIngestor()
 
-    # Test non-recursive
+    # Test non-recursive - finds only root level txt files
     result = ingestor.ingest(str(tmp_path), recursive=False)
-    assert result["success"] == 0  # No supported files discovered without glob
+    assert result["success"] >= 1  # At least test1.txt at root level
 
-    # Test recursive - but we need to actually pass txt files
-    # The current implementation glob for non-recursive
+    # Test recursive - finds all txt files including subdirectories
+    result_recursive = ingestor.ingest(str(tmp_path), recursive=True)
+    assert result_recursive["success"] >= 2  # test1.txt + test2.txt in subdir
 
 
 def test_is_supported_case_sensitivity() -> None:
@@ -282,11 +283,11 @@ class TestDocumentIngestionSpecRequirements:
         # Test recursive=True should find nested files
         result_recursive = ingestor.ingest(str(tmp_path), recursive=True)
         # Should find at least root.txt and nested.txt
-        assert result_recursive["success"] >= 0  # Depends on mocking
+        assert result_recursive["success"] >= 2
 
-        # Test recursive=False should not find nested files
+        # Test recursive=False should find only root level files
         result_non_recursive = ingestor.ingest(str(tmp_path), recursive=False)
-        assert result_non_recursive["success"] == 0
+        assert result_non_recursive["success"] >= 1  # Only root.txt
 
     def test_empty_text_handling(self) -> None:
         """Test empty text chunk handling (spec: skip empty chunks)."""

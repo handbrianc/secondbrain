@@ -15,7 +15,7 @@ pytest
 
 ### Option 2: Run Full Test Suite (Requires Docker Services)
 
-For integration tests and quantitative tests:
+For integration tests:
 
 ```bash
 # 1. Start test services
@@ -37,9 +37,8 @@ pytest -m ""  # Run ALL tests including slow/integration
 |---------|---------|------|-----------------|
 | Fast (Default) | `pytest` | ~10 min | None |
 | Integration | `pytest -m "integration"` | ~20 min | MongoDB, Ollama |
-| Quantitative | `pytest tests/test_quantitative/` | ~30 min | MongoDB, Ollama |
-| Full Suite | `pytest -m ""` | ~60 min | MongoDB, Ollama |
-| Slow Tests | `pytest -m "slow"` | ~45 min | MongoDB, Ollama |
+| Full Suite | `pytest -m ""` | ~30 min | MongoDB, Ollama |
+| Slow Tests | `pytest -m "slow"` | ~25 min | MongoDB, Ollama |
 
 ## Troubleshooting
 
@@ -130,7 +129,6 @@ Tests are categorized with markers:
 - `medium` - Medium speed tests (<500ms)
 - `slow` - Slow tests (>1s)
 - `integration` - Require external services
-- `quantitative` - Performance/quality metrics
 - `performance` - Benchmark tests
 - `chaos` - Failure injection tests
 

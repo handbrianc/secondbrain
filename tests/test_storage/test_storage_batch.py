@@ -9,7 +9,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from secondbrain.config import Config
 from secondbrain.storage import StorageConnectionError, VectorStorage
+
+# Get test config
+_test_config = Config()
 
 
 @pytest.fixture(scope="module")
@@ -18,7 +22,7 @@ def mock_storage_config():
     from unittest.mock import MagicMock
 
     config = MagicMock()
-    config.mongo_uri = "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
+    config.mongo_uri = _test_config.mongo_uri
     config.mongo_db = "secondbrain"
     config.mongo_collection = "embeddings"
     config.embedding_dimensions = 384

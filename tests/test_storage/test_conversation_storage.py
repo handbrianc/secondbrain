@@ -6,8 +6,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from secondbrain.config import Config
 from secondbrain.conversation.storage import ConversationStorage
 from secondbrain.exceptions import StorageConnectionError
+
+# Get test config
+_test_config = Config()
 
 
 @pytest.fixture
@@ -40,7 +44,7 @@ def storage_with_mocks(mock_client, mock_collection):
         "secondbrain.conversation.storage.MongoClient", return_value=mock_client
     ) as mock_client_class:
         storage = ConversationStorage(
-            mongo_uri="mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin",
+            mongo_uri=_test_config.mongo_uri,
             db_name="test_db",
             collection_name="test_conversations",
         )

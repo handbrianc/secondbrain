@@ -29,7 +29,15 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
-import pytest
+# pytest is only needed for the fixture at the bottom of this file
+# Use conditional import to avoid breaking runtime installs
+try:
+    import pytest
+
+    _HAS_PYTEST = True
+except ImportError:
+    _HAS_PYTEST = False
+    pytest = None  # type: ignore
 
 logger = logging.getLogger(__name__)
 
@@ -607,20 +615,21 @@ def inject_general_failure(
     )
 
 
-# Pytest fixture for automatic cleanup
-@pytest.fixture
-def failure_injector() -> Generator[FailureInjector, None, None]:
-    """Pytest fixture providing FailureInjector with automatic cleanup.
+# Pytest fixture for automatic cleanup (only available when pytest is installed)
+if _HAS_PYTEST:
+    @pytest.fixture
+    def failure_injector() -> Generator[FailureInjector, None, None]:
+        """Pytest fixture providing FailureInjector with automatic cleanup.
 
-    Yields:
-        FailureInjector instance.
+        Yields:
+            FailureInjector instance.
 
-    Raises:
-        Exception: Re-raises any exception from the test block.
-    """
-    injector = FailureInjector.get_instance()
-    try:
-        yield injector
-    finally:
-        injector.reset()
-        FailureInjector.reset_instance()
+        Raises:
+            Exception: Re-raises any exception from the test block.
+        """
+        injector = FailureInjector.get_instance()
+        try:
+            yield injector
+        finally:
+            injector.reset()
+            FailureInjector.reset_instance()

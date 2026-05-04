@@ -68,7 +68,9 @@ class TestFinalCoverage:
         from secondbrain.conversation.storage import ConversationStorage
 
         with patch("secondbrain.conversation.storage.config") as mock_config_func:
-            mock_config_func.return_value.mongo_uri = "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
+            from secondbrain.config import Config
+            _test_config = Config()
+            mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
             mock_config_func.return_value.mongo_db = "test"
             mock_config_func.return_value.mongo_conversation_collection = "conversations"
 
