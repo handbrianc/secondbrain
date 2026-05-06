@@ -155,11 +155,21 @@ class Searcher:
             raise RuntimeError("Cannot connect to MongoDB")
 
         # Generate query embedding
-        with trace_operation("search_generate_embedding"):
+        with trace_operation("search_generate_embedding") as span:
+            if span:
+                span.set_attribute("search.query_length", len(sanitized_query))
+                span.set_attribute("search.top_k", top_k)
+                if source_filter:
+                    span.set_attribute("search.source_filter", source_filter)
+                if file_type_filter:
+                    span.set_attribute("search.file_type_filter", file_type_filter)
             query_embedding = self.embedding_gen.generate(sanitized_query)
 
         # Search in storage
-        with trace_operation("search_storage"):
+        with trace_operation("search_storage") as span:
+            if span:
+                span.set_attribute("search.top_k", top_k)
+                span.set_attribute("search.embedding_dim", len(query_embedding))
             raw_results: Sequence[SearchResult] = self.storage.search(
                 embedding=query_embedding,
                 top_k=top_k,
@@ -185,12 +195,18 @@ class Searcher:
         if not self.storage.validate_connection():
             raise RuntimeError("Cannot connect to MongoDB")
 
-        with trace_operation("search_generate_embedding_async"):
+        with trace_operation("search_generate_embedding_async") as span:
+            if span:
+                span.set_attribute("search.query_length", len(sanitized_query))
+                span.set_attribute("search.top_k", top_k)
             query_embedding = await asyncio.to_thread(
                 self.embedding_gen.generate, sanitized_query
             )
 
-        with trace_operation("search_storage_async"):
+        with trace_operation("search_storage_async") as span:
+            if span:
+                span.set_attribute("search.top_k", top_k)
+                span.set_attribute("search.embedding_dim", len(query_embedding))
             raw_results: Sequence[SearchResult] = await self.storage.search_async(
                 embedding=query_embedding,
                 top_k=top_k,
