@@ -1290,13 +1290,16 @@ class DocumentIngestor:
             embedding_model_name = config().local_embedding_model
 
             with (
-                trace_operation("ingest_multiprocess_progress"),
+                trace_operation("ingest_multiprocess_progress") as span,
                 ProcessPoolExecutor(
                     max_workers=max_workers,
                     initializer=_init_worker_with_queue,
                     initargs=(progress_queue, embedding_model_name, max_workers),
                 ) as executor,
             ):
+                if span:
+                    span.set_attribute("ingestion.files_total", len(files))
+                    span.set_attribute("ingestion.max_workers", max_workers)
                 futures = {
                     executor.submit(
                         _extract_chunk_and_embed_file,
@@ -1422,12 +1425,15 @@ class DocumentIngestor:
         failed_files = 0
 
         with (
-            trace_operation("ingest_multiprocess"),
+            trace_operation("ingest_multiprocess") as span,
             ProcessPoolExecutor(
                 max_workers=cores,
                 initializer=_init_worker,
             ) as executor,
         ):
+            if span:
+                span.set_attribute("ingestion.files_total", len(files))
+                span.set_attribute("ingestion.cores", cores)
             futures = {
                 executor.submit(
                     _extract_and_chunk_file,
