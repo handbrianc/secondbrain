@@ -49,6 +49,9 @@ try:
     from opentelemetry.sdk.trace import (
         TracerProvider as OTelTracerProvider,  # noqa: F401
     )
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
+        OTLPSpanExporter,  # noqa: F401
+    )
     from opentelemetry.sdk.trace.export import (
         BatchSpanProcessor,  # noqa: F401
         ConsoleSpanExporter,  # noqa: F401
@@ -300,13 +303,29 @@ def setup_tracing(
         return
 
     try:
-        # Create resource with service metadata
         from opentelemetry.sdk.resources import Resource as OTelResource
         from opentelemetry.sdk.trace import TracerProvider as OTelTracerProvider
+        from opentelemetry.sdk.trace.sampling import TraceIdRatioBased
         from opentelemetry.sdk.trace.export import (
             BatchSpanProcessor,
             ConsoleSpanExporter,
         )
+
+        otlp_endpoint = os.getenv(
+            "SECONDBRAIN_OTEL_EXPORTER_ENDPOINT", "http://localhost:4317"
+        )
+        sampling_rate_str = os.getenv("SECONDBRAIN_OTEL_SAMPLING_RATE", "1.0")
+        try:
+            sampling_rate = float(sampling_rate_str)
+            sampling_rate = max(0.0, min(1.0, sampling_rate))
+        except ValueError:
+            logger.warning(
+                "Invalid SECONDBRAIN_OTEL_SAMPLING_RATE: %s, using default 1.0",
+                sampling_rate_str,
+            )
+            sampling_rate = 1.0
+
+        sampler = TraceIdRatioBased(sampling_rate)
 
         resource = OTelResource.create(
             {
@@ -316,11 +335,24 @@ def setup_tracing(
             }
         )
 
-        # Create tracer provider
-        tracer_provider = OTelTracerProvider(resource=resource)
+        tracer_provider = OTelTracerProvider(resource=resource, sampler=sampler)
 
-        # Add console exporter for development
-        tracer_provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))
+        try:
+            otlp_exporter = OTLPSpanExporter(endpoint=otlp_endpoint)
+            tracer_provider.add_span_processor(BatchSpanProcessor(otlp_exporter))
+            logger.info(
+                "OpenTelemetry OTLP exporter configured for endpoint: %s",
+                otlp_endpoint,
+            )
+        except Exception as e:
+            logger.warning(
+                "Failed to configure OTLP exporter (%s), falling back to console exporter: %s",
+                e,
+                otlp_endpoint,
+            )
+            tracer_provider.add_span_processor(
+                BatchSpanProcessor(ConsoleSpanExporter())
+            )
 
         # Set as global tracer provider
         if otel_trace is not None:
