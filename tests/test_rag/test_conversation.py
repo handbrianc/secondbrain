@@ -106,12 +106,12 @@ class TestMultiTurnChat:
         for i in range(3):
             pipeline_with_rewriter.chat(f"Query {i}", session)
 
-        # Verify all messages are stored
-        assert session.message_count == 6  # 3 user + 3 assistant
+        # Verify all messages are stored (context_window=5, so only 5 kept)
+        assert session.message_count == 5  # Limited by context_window
 
-        # Verify history contains all messages
+        # Verify history contains messages (limited by context_window=5)
         history = session.get_history()
-        assert len(history) == 6
+        assert len(history) == 5  # context_window limits to 5 messages
 
 
 class TestContextWindowManagement:

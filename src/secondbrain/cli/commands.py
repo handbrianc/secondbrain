@@ -432,6 +432,12 @@ def metrics(ctx: click.Context, reset: bool) -> None:
 @click.option("--list-sessions", is_flag=True, help="List all sessions")
 @click.option("--history", is_flag=True, help="Show session history")
 @click.option("--delete-session", "-d", type=str, help="Delete a session")
+@click.option(
+    "--create",
+    "-c",
+    is_flag=True,
+    help="Create a new session with UUID (ignores --session if both specified)",
+)
 @click.option("--check-llm", is_flag=True, help="Check if Ollama is available")
 @click.pass_context
 def chat(
@@ -445,6 +451,7 @@ def chat(
     list_sessions: bool,
     history: bool,
     delete_session: str | None,
+    create: bool,
     check_llm: bool,
 ) -> None:
     """Conversational Q&A with your documents using local LLM.
@@ -481,6 +488,11 @@ def chat(
         return
 
     if delete_session:
+        confirm = console.input(f"Are you sure you want to delete session '{delete_session}'? [y/N]: ")
+        if confirm.lower() != 'y':
+            console.print("[dim]Deletion cancelled.[/dim]")
+            return
+            
         with ConversationStorage() as storage:
             deleted = storage.delete_session(delete_session)
         if deleted:
@@ -527,7 +539,9 @@ def chat(
                 console.print(f"{role_color} ({timestamp}): {content}")
         return
 
-    if session is None:
+    if create:
+        session = None
+    elif session is None:
         session = "default"
 
     if query is None:
@@ -552,7 +566,7 @@ def chat(
 
 def _single_turn_chat(
     query: str,
-    session: str,
+    session: str | None,
     top_k: int,
     temperature: float,
     model: str | None,
@@ -568,9 +582,13 @@ def _single_turn_chat(
     cfg = config()
 
     with ConversationStorage() as storage:
-        session_obj = ConversationSession.load(session, storage)
-        if session_obj is None:
-            session_obj = ConversationSession.create(session, storage)
+        if session is None:
+            session_obj = ConversationSession.create(storage=storage)
+            console.print(f"[dim]Created new session: {session_obj.session_id}[/dim]")
+        else:
+            session_obj = ConversationSession.load(session, storage)
+            if session_obj is None:
+                session_obj = ConversationSession.create(session, storage)
 
     searcher = Searcher(verbose=False)
     llm_model = model or cfg.llm_model
@@ -606,7 +624,7 @@ def _single_turn_chat(
 
 
 def _interactive_chat(
-    session: str,
+    session: str | None,
     top_k: int,
     temperature: float,
     model: str | None,
@@ -628,14 +646,18 @@ def _interactive_chat(
 
     # Load or create session
     with ConversationStorage() as storage:
-        session_obj = ConversationSession.load(session, storage)
-        if session_obj is None:
-            session_obj = ConversationSession.create(session, storage)
-            console.print(f"[dim]Created new session: {session_obj._session_id}[/dim]")
-        elif not session_obj.is_empty:
-            console.print(
-                f"[dim]Resuming session with {session_obj.message_count} messages[/dim]"
-            )
+        if session is None:
+            session_obj = ConversationSession.create(storage=storage)
+            console.print(f"[dim]Created new session: {session_obj.session_id}[/dim]")
+        else:
+            session_obj = ConversationSession.load(session, storage)
+            if session_obj is None:
+                session_obj = ConversationSession.create(session, storage)
+                console.print(f"[dim]Created new session: {session_obj.session_id}[/dim]")
+            elif not session_obj.is_empty:
+                console.print(
+                    f"[dim]Resuming session with {session_obj.message_count} messages[/dim]"
+                )
 
     searcher = Searcher(verbose=False)
     llm_model = model or cfg.llm_model

@@ -51,7 +51,9 @@ class StorageConnectionError(SecondBrainError):
     """Raised when MongoDB connection cannot be established."""
 
     def __init__(self, message: str | None = None) -> None:
-        super().__init__(message or "Cannot connect to MongoDB")
+        super().__init__(
+            message or "Session storage unavailable. Check MongoDB connection."
+        )
 
 
 class CLIValidationError(SecondBrainError):

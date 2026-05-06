@@ -6,6 +6,7 @@ based on configuration.
 
 from secondbrain.config import Config
 from secondbrain.rag.interfaces import LocalLLMProvider
+from secondbrain.rag.providers.anthropic import AnthropicLLMProvider
 from secondbrain.rag.providers.ollama import OllamaLLMProvider
 from secondbrain.rag.providers.openai import OpenAILLMProvider
 
@@ -43,10 +44,17 @@ class LLMProviderFactory:
                 max_tokens=config.llm_max_tokens,
                 timeout=config.llm_timeout,
             )
+        elif provider_type == "anthropic":
+            return AnthropicLLMProvider(
+                model=config.llm_model,
+                temperature=config.llm_temperature,
+                max_tokens=config.llm_max_tokens,
+                timeout=config.llm_timeout,
+            )
         else:
             raise ValueError(
                 f"Unsupported LLM provider: {provider_type}. "
-                f"Supported providers: ollama, openai"
+                f"Supported providers: ollama, openai, anthropic"
             )
 
     @staticmethod

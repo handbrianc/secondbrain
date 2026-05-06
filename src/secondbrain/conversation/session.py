@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
+from uuid import uuid4
 
 from secondbrain.conversation.storage import ConversationStorage
 
@@ -34,13 +35,14 @@ class ConversationSession:
         self,
         session_id: str,
         storage: ConversationStorage,
-        context_window: int = 10,
+        context_window: int = 5,
     ) -> None:
         """Initialize session with storage connection.
 
         Args:
             session_id: Unique session identifier.
             storage: ConversationStorage instance for persistence.
+            context_window: Number of recent messages to keep (default: 5 per spec).
             context_window: Number of recent messages to keep (default: 10).
 
         Example:
@@ -55,17 +57,21 @@ class ConversationSession:
 
     @classmethod
     def create(
-        cls, session_id: str, storage: ConversationStorage, context_window: int = 10
+        cls,
+        session_id: str | None = None,
+        storage: ConversationStorage | None = None,
+        context_window: int = 5,
     ) -> ConversationSession:
         """Create a new conversation session.
 
         Creates a new session in storage and returns an initialized
         ConversationSession instance with an empty message history.
+        If session_id is None, a UUID is generated automatically.
 
         Args:
-            session_id: Unique identifier for the new session.
+            session_id: Unique identifier for the new session. If None, generates UUID.
             storage: ConversationStorage instance for persistence.
-            context_window: Number of recent messages to keep (default: 10).
+            context_window: Number of recent messages to keep (default: 5 per spec).
 
         Returns:
             A new ConversationSession instance.
@@ -76,13 +82,24 @@ class ConversationSession:
             >>> session = ConversationSession.create("new-session", storage)
             >>> session.is_empty
             True
+
+            >>> # Create with auto-generated UUID
+            >>> session = ConversationSession.create(storage=storage)
+            >>> session.session_id  # UUID string
+            '550e8400-e29b-41d4-a716-446655440000'
         """
+        if session_id is None:
+            session_id = str(uuid4())
+
+        if storage is None:
+            raise ValueError("storage must be provided when creating a session")
+
         storage.create_session(session_id)
         return cls(session_id, storage, context_window)
 
     @classmethod
     def load(
-        cls, session_id: str, storage: ConversationStorage, context_window: int = 10
+        cls, session_id: str, storage: ConversationStorage, context_window: int = 5
     ) -> ConversationSession | None:
         """Load existing session from storage.
 
@@ -231,6 +248,20 @@ class ConversationSession:
         # Persist the cleared history to storage
         if self._storage:
             self._storage.update_messages(self._session_id, [])
+
+    @property
+    def session_id(self) -> str:
+        """Return the session ID.
+
+        Returns:
+            The unique session identifier (UUID if auto-generated).
+
+        Example:
+        --------
+            >>> session.session_id
+            '550e8400-e29b-41d4-a716-446655440000'
+        """
+        return self._session_id
 
     @property
     def message_count(self) -> int:

@@ -225,17 +225,26 @@ class TestChatCommands:
 
             runner = CliRunner()
 
-            # Test successful deletion
+            # Test successful deletion (with confirmation input 'y')
             result = runner.invoke(
-                cli, ["chat", "--delete-session", "session-to-delete"]
+                cli, ["chat", "--delete-session", "session-to-delete"], input="y\n"
             )
             assert result.exit_code == 0
             assert "Deleted session: session-to-delete" in result.output
             mock_storage.delete_session.assert_called_once_with("session-to-delete")
 
-            # Test deletion of non-existent session
+            # Test cancellation (input 'n')
+            mock_storage.reset_mock()
+            result = runner.invoke(
+                cli, ["chat", "--delete-session", "session-to-cancel"], input="n\n"
+            )
+            assert result.exit_code == 0
+            assert "Deletion cancelled" in result.output
+            mock_storage.delete_session.assert_not_called()
+
+            # Test deletion of non-existent session (with confirmation input 'y')
             mock_storage.delete_session.return_value = False
-            result = runner.invoke(cli, ["chat", "--delete-session", "nonexistent"])
+            result = runner.invoke(cli, ["chat", "--delete-session", "nonexistent"], input="y\n")
             assert result.exit_code == 0
             assert "Session not found: nonexistent" in result.output
 
@@ -273,3 +282,47 @@ class TestChatCommands:
             assert result.exit_code == 0
             assert "Ollama is not available" in result.output
             assert "sentence-transformers serve" in result.output
+
+    def test_create_flag(self) -> None:
+        """Test --create flag forces new session with UUID.
+
+        Verifies that:
+        - --create flag creates a new session with auto-generated UUID
+        - --create ignores --session parameter when both specified
+        - UUID session ID is displayed to user
+        """
+        with (
+            patch("secondbrain.rag.RAGPipeline") as mock_pipeline_class,
+            patch("secondbrain.conversation.ConversationSession") as mock_session_class,
+        ):
+            # Mock session with UUID
+            mock_session = MagicMock()
+            mock_session.session_id = "550e8400-e29b-41d4-a716-446655440000"
+            mock_session_class.create.return_value = mock_session
+
+            # Mock RAG pipeline
+            mock_pipeline = MagicMock()
+            mock_pipeline.chat.return_value = {
+                "answer": "Test answer",
+                "rewritten_query": "test query",
+            }
+            mock_pipeline_class.return_value = mock_pipeline
+
+            runner = CliRunner()
+
+            # Test 1: --create alone creates new session
+            result = runner.invoke(cli, ["chat", "--create", "test query"])
+            assert result.exit_code == 0
+            mock_session_class.create.assert_called()
+            mock_session_class.load.assert_not_called()
+            assert "550e8400-e29b-41d4-a716-446655440000" in result.output
+
+            # Test 2: --create with --session (should ignore --session)
+            mock_session_class.reset_mock()
+            mock_session_class.create.return_value = mock_session
+            result = runner.invoke(
+                cli, ["chat", "--create", "--session", "existing", "test query"]
+            )
+            assert result.exit_code == 0
+            mock_session_class.create.assert_called()
+            mock_session_class.load.assert_not_called()  # Should NOT load "existing"
