@@ -65,12 +65,17 @@ class LocalEmbeddingGenerator:
         """
         if not texts:
             return []
+        
+        from secondbrain.utils.rate_limiter import get_shared_rate_limiter
+        
+        rate_limiter = get_shared_rate_limiter()
+        rate_limiter.wait_and_acquire(timeout=30.0)
+        
         embeddings = self.model.encode(
             [t for t in texts if t.strip()],
             convert_to_numpy=True,
             show_progress_bar=False,
         )
-        # Truncate all embeddings to target dimensions
         return [emb[:TARGET_EMBEDDING_DIMENSIONS] for emb in embeddings.tolist()]
 
     async def generate_async(self, text: str) -> list[float]:

@@ -98,10 +98,12 @@ def _init_worker_with_queue(
     from docling.document_converter import DocumentConverter
 
     from secondbrain.embedding.local import LocalEmbeddingGenerator
+    from secondbrain.utils.rate_limiter import get_shared_rate_limiter
 
     _worker_converter = DocumentConverter()
     _worker_progress_queue = queue
     _worker_embedding_model = LocalEmbeddingGenerator(model_name=embedding_model_name)
+    _ = get_shared_rate_limiter(max_requests=100, window_seconds=60.0)
 
 
 def _extract_and_chunk_file(
