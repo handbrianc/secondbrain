@@ -1289,14 +1289,28 @@ class DocumentIngestor:
             progress_queue = manager.Queue()
             embedding_model_name = config().local_embedding_model
 
-            with (
-                trace_operation("ingest_multiprocess_progress"),
-                ProcessPoolExecutor(
-                    max_workers=max_workers,
-                    initializer=_init_worker_with_queue,
-                    initargs=(progress_queue, embedding_model_name, max_workers),
-                ) as executor,
-            ):
+            import time
+
+            from secondbrain.config import config
+
+            with trace_operation("ingest_multiprocess_progress") as span:
+                if span:
+                    span.set_attribute("file.path", str(files[0]) if files else "")
+                    span.set_attribute("processing.cores", max_workers)
+                    span.set_attribute("ingestion.total_files", len(files))
+                start_time = time.monotonic()
+                successful_files = 0
+                failed_files = 0
+
+                with Manager() as manager:
+                    progress_queue = manager.Queue()
+                    embedding_model_name = config().local_embedding_model
+
+                    with ProcessPoolExecutor(
+                        max_workers=max_workers,
+                        initializer=_init_worker_with_queue,
+                        initargs=(progress_queue, embedding_model_name, max_workers),
+                    ) as executor:
                 futures = {
                     executor.submit(
                         _extract_chunk_and_embed_file,
@@ -1390,6 +1404,11 @@ class DocumentIngestor:
 
                         time.sleep(0.01)
 
+                duration_ms = (time.monotonic() - start_time) * 1000
+                if span:
+                    span.set_attribute("ingestion.files_processed", successful_files)
+                    span.set_attribute("ingestion.duration_ms", int(duration_ms))
+
         return successful_files, failed_files
 
     def _process_multiprocessing_batch(
@@ -1421,13 +1440,19 @@ class DocumentIngestor:
         successful_files = 0
         failed_files = 0
 
-        with (
-            trace_operation("ingest_multiprocess"),
-            ProcessPoolExecutor(
+        import time
+
+        with trace_operation("ingest_multiprocess") as span:
+            if span:
+                span.set_attribute("file.path", str(files[0]) if files else "")
+                span.set_attribute("processing.cores", cores)
+                span.set_attribute("ingestion.total_files", len(files))
+            start_time = time.monotonic()
+
+            with ProcessPoolExecutor(
                 max_workers=cores,
                 initializer=_init_worker,
-            ) as executor,
-        ):
+            ) as executor:
             futures = {
                 executor.submit(
                     _extract_and_chunk_file,
@@ -1511,6 +1536,11 @@ class DocumentIngestor:
                     if self.progress_callback:
                         self.progress_callback(file_path, False)
 
+                duration_ms = (time.monotonic() - start_time) * 1000
+                if span:
+                    span.set_attribute("ingestion.files_processed", successful_files)
+                    span.set_attribute("ingestion.duration_ms", int(duration_ms))
+
         return successful_files, failed_files
 
     def _process_threadpool_batch(
@@ -1540,10 +1570,16 @@ class DocumentIngestor:
         successful_files = 0
         failed_files = 0
 
-        with (
-            trace_operation("ingest_thread_process"),
-            ThreadPoolExecutor(max_workers=batch_size) as executor,
-        ):
+        import time
+
+        with trace_operation("ingest_thread_process") as span:
+            if span:
+                span.set_attribute("file.path", str(files[0]) if files else "")
+                span.set_attribute("processing.cores", batch_size)
+                span.set_attribute("ingestion.total_files", len(files))
+            start_time = time.monotonic()
+
+            with ThreadPoolExecutor(max_workers=batch_size) as executor:
             futures_dict: dict[Any, Path] = {}
             for f in files:
                 future = executor.submit(

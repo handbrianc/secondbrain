@@ -127,7 +127,7 @@ class TestRAGPipelineInit:
         assert pipeline._llm_provider == mock_llm_provider
         assert pipeline._rewriter is None
         assert pipeline._top_k == 5
-        assert pipeline._context_window == 10
+        assert pipeline._context_window == 5  # Default per spec
 
     def test_init_custom_parameters(
         self,

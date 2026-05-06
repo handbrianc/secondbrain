@@ -192,10 +192,9 @@ class Config(BaseSettings):
         description="Sentence-transformers model for local embedding (e.g., all-MiniLM-L6-v2, all-mpnet-base-v2)",
     )
 
-    # Local LLM settings (Ollama)
     llm_provider: str = Field(
         default="ollama",
-        description="LLM provider type (ollama, openai)",
+        description="LLM provider type (ollama, openai, anthropic)",
     )
     ollama_host: str = Field(
         default_factory=_get_default_ollama_host,
@@ -218,8 +217,8 @@ class Config(BaseSettings):
         description="Request timeout in seconds for LLM",
     )
     rag_context_window: int = Field(
-        default=10,
-        description="Number of recent messages to keep in context",
+        default=5,
+        description="Number of recent messages to keep in context (default: 5 per spec)",
     )
 
     # RAG prompt settings

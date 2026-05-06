@@ -121,7 +121,7 @@ class TestOllamaProviderGenerate:
             provider = OllamaLLMProvider()
             provider._client = mock_client
 
-            with pytest.raises(ServiceUnavailableError, match="Ollama server"):
+            with pytest.raises(ServiceUnavailableError, match="Local LLM server unavailable"):
                 provider.generate("Test prompt")
 
     def test_generate_timeout(self):
@@ -133,7 +133,7 @@ class TestOllamaProviderGenerate:
             provider = OllamaLLMProvider()
             provider._client = mock_client
 
-            with pytest.raises(ServiceUnavailableError, match="timed out"):
+            with pytest.raises(ServiceUnavailableError, match="Local LLM server unavailable"):
                 provider.generate("Test prompt")
 
     def test_generate_model_not_found(self):
