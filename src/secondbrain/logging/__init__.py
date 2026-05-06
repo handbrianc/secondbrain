@@ -70,7 +70,8 @@ def setup_logging(
     verbose: bool = False,
     json_format: bool = False,
     log_file: str | None = None,
-    max_bytes: int = 10 * 1024 * 1024,  # 10MB default
+    max_bytes: int | None = None,
+    backup_count: int = 5,
 ) -> None:
     """Configure logging with the specified options.
 
@@ -78,7 +79,10 @@ def setup_logging(
         verbose: Enable DEBUG level if True, WARNING (no logs) otherwise.
         json_format: Use JSON format if True, rich text otherwise.
         log_file: Path to log file. If None, reads from SECONDBRAIN_LOG_FILE env var.
-        max_bytes: Max log file size before rotation (default 10MB).
+        max_bytes: Max log file size before rotation. If None, reads from
+            SECONDBRAIN_LOG_MAX_BYTES env var (default 10MB).
+        backup_count: Number of backup files to keep. If None, reads from
+            SECONDBRAIN_LOG_BACKUP_COUNT env var (default 5).
     """
     level = logging.DEBUG if verbose else logging.WARNING
 
@@ -97,16 +101,30 @@ def setup_logging(
     if log_file is None:
         log_file = os.environ.get("SECONDBRAIN_LOG_FILE")
 
+    if max_bytes is None:
+        max_bytes_env = os.environ.get("SECONDBRAIN_LOG_MAX_BYTES")
+        max_bytes = int(max_bytes_env) if max_bytes_env else 10 * 1024 * 1024
+
+    if backup_count == 5:
+        backup_count_env = os.environ.get("SECONDBRAIN_LOG_BACKUP_COUNT")
+        backup_count = int(backup_count_env) if backup_count_env else 5
+
+    # Auto-detect JSON format from env var if not explicitly passed
+    if not json_format:
+        log_format_env = os.environ.get("SECONDBRAIN_LOG_FORMAT", "").lower()
+        json_format = log_format_env in ("json", "true", "1", "yes")
+
     if json_format:
-        setup_json_logging(level, log_file, max_bytes)
+        setup_json_logging(level, log_file, max_bytes, backup_count)
     else:
-        setup_rich_logging(level, log_file, max_bytes)
+        setup_rich_logging(level, log_file, max_bytes, backup_count)
 
 
 def setup_rich_logging(
     level: int,
     log_file: str | None = None,
     max_bytes: int = 10 * 1024 * 1024,
+    backup_count: int = 5,
 ) -> None:
     """Configure rich console logging with optional file handler.
 
@@ -114,6 +132,7 @@ def setup_rich_logging(
         level: Logging level constant (e.g., logging.INFO).
         log_file: Path to log file. If set, adds RotatingFileHandler.
         max_bytes: Max log file size before rotation (default 10MB).
+        backup_count: Number of backup files to keep (default 5).
     """
     handlers: list[logging.Handler] = [
         RichHandler(console=Console(stderr=True), rich_tracebacks=True)
@@ -122,7 +141,9 @@ def setup_rich_logging(
     # Add file handler if log file is specified
     if log_file:
         Path(log_file).parent.mkdir(parents=True, exist_ok=True)
-        file_handler = RotatingFileHandler(log_file, maxBytes=max_bytes, backupCount=5)
+        file_handler = RotatingFileHandler(
+            log_file, maxBytes=max_bytes, backupCount=backup_count
+        )
         file_handler.setLevel(level)
         handlers.append(file_handler)
 
@@ -138,6 +159,7 @@ def setup_json_logging(
     level: int,
     log_file: str | None = None,
     max_bytes: int = 10 * 1024 * 1024,
+    backup_count: int = 5,
 ) -> None:
     """Configure JSON structured logging with optional file handler.
 
@@ -145,6 +167,7 @@ def setup_json_logging(
         level: Logging level constant (e.g., logging.INFO).
         log_file: Path to log file. If set, adds RotatingFileHandler.
         max_bytes: Max log file size before rotation (default 10MB).
+        backup_count: Number of backup files to keep (default 5).
     """
 
     class JSONFormatter(logging.Formatter):
@@ -166,7 +189,9 @@ def setup_json_logging(
     # Add file handler if log file is specified
     if log_file:
         Path(log_file).parent.mkdir(parents=True, exist_ok=True)
-        file_handler = RotatingFileHandler(log_file, maxBytes=max_bytes, backupCount=5)
+        file_handler = RotatingFileHandler(
+            log_file, maxBytes=max_bytes, backupCount=backup_count
+        )
         file_handler.setLevel(level)
         file_handler.setFormatter(JSONFormatter())
         handlers.append(file_handler)
