@@ -78,9 +78,9 @@ dev = [
     "twisted>=25.5.0",  # Security fix: XSS, HTTP pipelining (PYSEC-2024-75, CVE-2024-41671)
     "idna>=3.10",  # Security fix: ReDoS (PYSEC-2024-60)
     "wheel>=0.45.0",  # Security fix: path traversal (CVE-2026-24049)
-    "fpdf2>=2.7.0",
+    "fpdf2>=2.7.0",  # PDF generation for document processing; compatible with docling PDF export
     "reportlab>=4.0.0",  # PDF creation for example tests (tests/test_examples/)
-    "python-docx>=1.0.0",
+    "python-docx>=1.0.0",  # DOCX document parsing; 1.0+ has improved compatibility with modern Word files
 ]
 
 qualitative = [
@@ -91,6 +91,7 @@ qualitative = [
 
 opentelemetry = [
     "opentelemetry-exporter-otlp>=1.20.0",
+    "opentelemetry-instrumentation-pymongo>=0.40.0",
 ]
 
 [project.scripts]
