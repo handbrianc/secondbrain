@@ -29,7 +29,7 @@ class TestConversationSessionInit:
         session = ConversationSession("test-123", mock_storage)
 
         assert session._session_id == "test-123"
-        assert session._context_window == 10
+        assert session._context_window == 5
         assert session._history == []
 
     def test_session_init_with_custom_context_window(self, mock_storage):

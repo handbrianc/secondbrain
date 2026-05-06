@@ -59,6 +59,8 @@ class FailureType(Enum):
     GENERAL_FAILURE = "general_failure"
     SLOW_RESPONSE = "slow_response"
     PARTIAL_FAILURE = "partial_failure"
+    NETWORK_PARTITION = "network_partition"
+    LATENCY_INJECTION = "latency_injection"
 
 
 @dataclass
@@ -532,6 +534,104 @@ class FailureInjector:
                     del self._active_failures[f"slow_response_{config_id}"]
             logger.info("Slow response injection ended")
 
+    @contextmanager
+    def inject_network_partition(
+        self,
+        duration: float | None = None,
+        delay: float = 0.0,
+        partition_type: str = "complete",
+        affected_services: list[str] | None = None,
+        error_message: str | None = None,
+    ) -> Any:
+        """Context manager for injecting network partitions.
+
+        Args:
+            duration: How long the partition lasts (seconds). None for indefinite.
+            delay: Delay before partition starts. Default: 0.
+            partition_type: Type of partition - "complete", "partial", or "asymmetric".
+            affected_services: List of service names affected by partition.
+            error_message: Custom error message.
+
+        Yields:
+            None
+
+        Example:
+            with FailureInjector().inject_network_partition(duration=2.0, partition_type="complete"):
+                # Code that experiences network partition
+                pass
+        """
+        config_id = id(self)
+        config = FailureConfig(
+            failure_type=FailureType.NETWORK_PARTITION,
+            duration=duration,
+            delay=delay,
+            error_message=error_message or f"Network partition ({partition_type}) detected",
+        )
+
+        with self._lock:
+            self._active_failures[f"network_partition_{config_id}"] = config
+
+        try:
+            if delay > 0:
+                time.sleep(delay)
+            yield
+        finally:
+            with self._lock:
+                if f"network_partition_{config_id}" in self._active_failures:
+                    del self._active_failures[f"network_partition_{config_id}"]
+            logger.info("Network partition injection ended")
+
+    @contextmanager
+    def inject_latency(
+        self,
+        duration: float | None = None,
+        delay: float = 0.0,
+        latency_ms: float = 100.0,
+        jitter_ms: float = 0.0,
+    ) -> Any:
+        """Context manager for injecting network latency.
+
+        Args:
+            duration: How long the latency injection lasts (seconds). None for indefinite.
+            delay: Delay before injection starts. Default: 0.
+            latency_ms: Base latency in milliseconds. Default: 100.0.
+            jitter_ms: Random jitter added to latency. Default: 0.
+
+        Yields:
+            None
+
+        Example:
+            with FailureInjector().inject_latency(latency_ms=200, jitter_ms=50):
+                # Code that experiences network latency
+                pass
+        """
+        import random
+
+        config_id = id(self)
+        config = FailureConfig(
+            failure_type=FailureType.LATENCY_INJECTION,
+            duration=duration,
+            delay=delay,
+        )
+
+        with self._lock:
+            self._active_failures[f"latency_{config_id}"] = config
+
+        try:
+            if delay > 0:
+                time.sleep(delay)
+            # Simulate latency by sleeping
+            actual_latency = latency_ms / 1000.0
+            if jitter_ms > 0:
+                actual_latency += random.uniform(0, jitter_ms / 1000.0)
+            time.sleep(actual_latency)
+            yield
+        finally:
+            with self._lock:
+                if f"latency_{config_id}" in self._active_failures:
+                    del self._active_failures[f"latency_{config_id}"]
+            logger.info("Latency injection ended")
+
     # Async context manager support
     async def __aenter__(self) -> "FailureInjector":
         """Async context manager entry."""
@@ -612,6 +712,59 @@ def inject_general_failure(
         delay=delay,
         error_message=error_message,
         probability=probability,
+    )
+
+
+def inject_network_partition(
+    duration: float | None = None,
+    delay: float = 0.0,
+    partition_type: str = "complete",
+    affected_services: list[str] | None = None,
+    error_message: str | None = None,
+) -> Any:
+    """Inject network partition failures.
+
+    Args:
+        duration: How long the partition lasts. None for indefinite.
+        delay: Delay before partition starts. Default: 0.
+        partition_type: Type of partition - "complete", "partial", or "asymmetric".
+        affected_services: List of service names affected by partition.
+        error_message: Custom error message.
+
+    Returns:
+        Context manager for network partition injection.
+    """
+    return FailureInjector.get_instance().inject_network_partition(
+        duration=duration,
+        delay=delay,
+        partition_type=partition_type,
+        affected_services=affected_services,
+        error_message=error_message,
+    )
+
+
+def inject_latency(
+    duration: float | None = None,
+    delay: float = 0.0,
+    latency_ms: float = 100.0,
+    jitter_ms: float = 0.0,
+) -> Any:
+    """Inject network latency.
+
+    Args:
+        duration: How long the latency injection lasts. None for indefinite.
+        delay: Delay before injection starts. Default: 0.
+        latency_ms: Base latency in milliseconds. Default: 100.0.
+        jitter_ms: Random jitter added to latency (0-latency_ms). Default: 0.
+
+    Returns:
+        Context manager for latency injection.
+    """
+    return FailureInjector.get_instance().inject_latency(
+        duration=duration,
+        delay=delay,
+        latency_ms=latency_ms,
+        jitter_ms=jitter_ms,
     )
 
 
