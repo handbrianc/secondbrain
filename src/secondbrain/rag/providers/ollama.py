@@ -100,14 +100,25 @@ class OllamaLLMProvider(LocalLLMProvider):
 
         except httpx.ConnectError as e:
             # Server unreachable
-            raise ServiceUnavailableError("Ollama server unavailable") from e
+            raise ServiceUnavailableError(
+                "LLM",
+                f"Local LLM server unavailable at {self._host}. "
+                "Start your LLM server (e.g., 'ollama serve') and ensure SECONDBRAIN_LLM_ENDPOINT is correct"
+            ) from e
         except httpx.TimeoutException as e:
             # Timeout
-            raise ServiceUnavailableError("Ollama request timed out") from e
+            raise ServiceUnavailableError(
+                "LLM",
+                f"Local LLM server unavailable at {self._host}. "
+                "Start your LLM server (e.g., 'ollama serve') and ensure SECONDBRAIN_LLM_ENDPOINT is correct"
+            ) from e
         except ResponseError as e:
             # Handle response errors
             if e.status_code == 404:
-                raise RuntimeError(f"Model '{self._model}' not found") from e
+                raise RuntimeError(
+                    f"Model '{self._model}' not found on LLM server. "
+                    f"Pull the model: ollama pull {self._model} or set SECONDBRAIN_LLM_MODEL to available model"
+                ) from e
             raise RuntimeError(f"Generation failed: {e.error}") from e
 
     async def agenerate(
@@ -192,14 +203,25 @@ class OllamaLLMProvider(LocalLLMProvider):
 
         except httpx.ConnectError as e:
             # Server unreachable
-            raise ServiceUnavailableError("Ollama server unavailable") from e
+            raise ServiceUnavailableError(
+                "LLM",
+                f"Local LLM server unavailable at {self._host}. "
+                "Start your LLM server (e.g., 'ollama serve') and ensure SECONDBRAIN_LLM_ENDPOINT is correct"
+            ) from e
         except httpx.TimeoutException as e:
             # Timeout
-            raise ServiceUnavailableError("Ollama request timed out") from e
+            raise ServiceUnavailableError(
+                "LLM",
+                f"Local LLM server unavailable at {self._host}. "
+                "Start your LLM server (e.g., 'ollama serve') and ensure SECONDBRAIN_LLM_ENDPOINT is correct"
+            ) from e
         except ResponseError as e:
             # Handle response errors
             if e.status_code == 404:
-                raise RuntimeError(f"Model '{self._model}' not found") from e
+                raise RuntimeError(
+                    f"Model '{self._model}' not found on LLM server. "
+                    f"Pull the model: ollama pull {self._model} or set SECONDBRAIN_LLM_MODEL to available model"
+                ) from e
             raise RuntimeError(f"Generation failed: {e.error}") from e
 
     @property

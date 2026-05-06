@@ -5,6 +5,7 @@ Retrieval-Augmented Generation workflow for conversational Q&A.
 """
 
 import logging
+import time
 from typing import Any
 
 from secondbrain.config import config
@@ -12,6 +13,8 @@ from secondbrain.conversation import ConversationSession, QueryRewriter
 from secondbrain.rag.interfaces import LocalLLMProvider
 from secondbrain.rag.security_filter import SecurityFilter
 from secondbrain.search import Searcher
+from secondbrain.utils.perf_monitor import metrics
+from secondbrain.utils.tracing import trace_operation
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +54,7 @@ class RAGPipeline:
         llm_provider: LocalLLMProvider,
         rewriter: QueryRewriter | None = None,
         top_k: int = 5,
-        context_window: int = 10,
+        context_window: int = 5,
     ) -> None:
         """Initialize RAG pipeline with components.
 
@@ -60,7 +63,7 @@ class RAGPipeline:
             llm_provider: OllamaLLMProvider for generation.
             rewriter: QueryRewriter for context-aware queries (optional).
             top_k: Number of chunks to retrieve (default: 5).
-            context_window: Messages to keep in context (default: 10).
+            context_window: Messages to keep in context (default: 5 per spec).
 
         Example:
             >>> searcher = Searcher()
@@ -124,7 +127,19 @@ class RAGPipeline:
             effective_top_k = top_k if top_k is not None else self._top_k
 
             # Step 1: Retrieve chunks via searcher.search()
-            chunks = self._searcher.search(query, top_k=effective_top_k)
+            retrieval_start = time.perf_counter()
+            try:
+                with trace_operation("rag_retrieval") as span:
+                    if span:
+                        span.set_attribute("rag.query", query)
+                        span.set_attribute("rag.top_k", effective_top_k)
+                    chunks = self._searcher.search(query, top_k=effective_top_k)
+                    if span and chunks:
+                        span.set_attribute("rag.chunks_returned", len(chunks))
+            finally:
+                retrieval_duration = time.perf_counter() - retrieval_start
+                metrics.record("retrieval_latency", retrieval_duration)
+                logger.debug("retrieval_latency: %.3fs", retrieval_duration)
 
             # Step 2: Handle no results
             if not chunks:
@@ -141,11 +156,24 @@ class RAGPipeline:
             prompt = self._build_prompt(query, context_text)
 
             # Step 5: Generate answer via llm_provider.generate()
-            answer = self._llm_provider.generate(
-                prompt=prompt,
-                temperature=self._config.llm_temperature,
-                max_tokens=self._config.llm_max_tokens,
-            )
+            generation_start = time.perf_counter()
+            try:
+                with trace_operation("rag_generation") as span:
+                    if span:
+                        span.set_attribute("rag.prompt_length", len(prompt))
+                        span.set_attribute("rag.temperature", self._config.llm_temperature)
+                        span.set_attribute("rag.max_tokens", self._config.llm_max_tokens)
+                    answer = self._llm_provider.generate(
+                        prompt=prompt,
+                        temperature=self._config.llm_temperature,
+                        max_tokens=self._config.llm_max_tokens,
+                    )
+                    if span:
+                        span.set_attribute("rag.answer_length", len(answer))
+            finally:
+                generation_duration = time.perf_counter() - generation_start
+                metrics.record("generation_latency", generation_duration)
+                logger.debug("generation_latency: %.3fs", generation_duration)
 
             # Step 6: Build result dict
             result = {"answer": answer, "query": query}
@@ -192,7 +220,20 @@ class RAGPipeline:
             rewritten_query = self._rewrite_query_with_history(query, session)
 
             # Step 2: Retrieve chunks via searcher.search()
-            chunks = self._searcher.search(rewritten_query, top_k=effective_top_k)
+            retrieval_start = time.perf_counter()
+            try:
+                with trace_operation("rag_retrieval") as span:
+                    if span:
+                        span.set_attribute("rag.query", rewritten_query)
+                        span.set_attribute("rag.top_k", effective_top_k)
+                        span.set_attribute("rag.is_chat", True)
+                    chunks = self._searcher.search(rewritten_query, top_k=effective_top_k)
+                    if span and chunks:
+                        span.set_attribute("rag.chunks_returned", len(chunks))
+            finally:
+                retrieval_duration = time.perf_counter() - retrieval_start
+                metrics.record("retrieval_latency", retrieval_duration)
+                logger.debug("retrieval_latency: %.3fs", retrieval_duration)
 
             # Step 3: Handle no results
             if not chunks:
@@ -213,11 +254,25 @@ class RAGPipeline:
             prompt = self._build_prompt(rewritten_query, context_text, history)
 
             # Step 6: Generate answer via llm_provider.chat()
-            answer = self._llm_provider.generate(
-                prompt=prompt,
-                temperature=self._config.llm_temperature,
-                max_tokens=self._config.llm_max_tokens,
-            )
+            generation_start = time.perf_counter()
+            try:
+                with trace_operation("rag_generation") as span:
+                    if span:
+                        span.set_attribute("rag.prompt_length", len(prompt))
+                        span.set_attribute("rag.temperature", self._config.llm_temperature)
+                        span.set_attribute("rag.max_tokens", self._config.llm_max_tokens)
+                        span.set_attribute("rag.is_chat", True)
+                    answer = self._llm_provider.generate(
+                        prompt=prompt,
+                        temperature=self._config.llm_temperature,
+                        max_tokens=self._config.llm_max_tokens,
+                    )
+                    if span:
+                        span.set_attribute("rag.answer_length", len(answer))
+            finally:
+                generation_duration = time.perf_counter() - generation_start
+                metrics.record("generation_latency", generation_duration)
+                logger.debug("generation_latency: %.3fs", generation_duration)
 
             # Step 7: Add answer to session via session.add_message()
             session.add_message("user", query)
@@ -469,7 +524,23 @@ class RAGPipeline:
         try:
             effective_top_k = top_k if top_k is not None else self._top_k
 
-            chunks = await self._searcher.search_async(query, top_k=effective_top_k)
+            retrieval_start = time.perf_counter()
+            try:
+                with trace_operation("rag_retrieval_async") as span:
+                    if span:
+                        span.set_attribute("rag.query", query)
+                        span.set_attribute("rag.top_k", effective_top_k)
+                        span.set_attribute("rag.is_chat", False)
+                        span.set_attribute("rag.is_async", True)
+                    chunks = await self._searcher.search_async(
+                        query, top_k=effective_top_k
+                    )
+                    if span and chunks:
+                        span.set_attribute("rag.chunks_returned", len(chunks))
+            finally:
+                retrieval_duration = time.perf_counter() - retrieval_start
+                metrics.record("retrieval_latency_async", retrieval_duration)
+                logger.debug("retrieval_latency_async: %.3fs", retrieval_duration)
 
             if not chunks:
                 fallback_answer = self._handle_no_results(query)
@@ -481,11 +552,25 @@ class RAGPipeline:
             context_text = self._format_context(chunks)
             prompt = self._build_prompt(query, context_text)
 
-            answer = await self._llm_provider.agenerate(
-                prompt=prompt,
-                temperature=self._config.llm_temperature,
-                max_tokens=self._config.llm_max_tokens,
-            )
+            generation_start = time.perf_counter()
+            try:
+                with trace_operation("rag_generation_async") as span:
+                    if span:
+                        span.set_attribute("rag.prompt_length", len(prompt))
+                        span.set_attribute("rag.temperature", self._config.llm_temperature)
+                        span.set_attribute("rag.max_tokens", self._config.llm_max_tokens)
+                        span.set_attribute("rag.is_async", True)
+                    answer = await self._llm_provider.agenerate(
+                        prompt=prompt,
+                        temperature=self._config.llm_temperature,
+                        max_tokens=self._config.llm_max_tokens,
+                    )
+                    if span:
+                        span.set_attribute("rag.answer_length", len(answer))
+            finally:
+                generation_duration = time.perf_counter() - generation_start
+                metrics.record("generation_latency_async", generation_duration)
+                logger.debug("generation_latency_async: %.3fs", generation_duration)
 
             result = {"answer": answer, "query": query}
             if show_sources:
@@ -520,9 +605,23 @@ class RAGPipeline:
 
             rewritten_query = self._rewrite_query_with_history(query, session)
 
-            chunks = await self._searcher.search_async(
-                rewritten_query, top_k=effective_top_k
-            )
+            retrieval_start = time.perf_counter()
+            try:
+                with trace_operation("rag_retrieval_async") as span:
+                    if span:
+                        span.set_attribute("rag.query", rewritten_query)
+                        span.set_attribute("rag.top_k", effective_top_k)
+                        span.set_attribute("rag.is_chat", True)
+                        span.set_attribute("rag.is_async", True)
+                    chunks = await self._searcher.search_async(
+                        rewritten_query, top_k=effective_top_k
+                    )
+                    if span and chunks:
+                        span.set_attribute("rag.chunks_returned", len(chunks))
+            finally:
+                retrieval_duration = time.perf_counter() - retrieval_start
+                metrics.record("retrieval_latency_async", retrieval_duration)
+                logger.debug("retrieval_latency_async: %.3fs", retrieval_duration)
 
             if not chunks:
                 fallback_answer = self._handle_no_results(query)
@@ -538,11 +637,26 @@ class RAGPipeline:
             history = session.get_history(limit=self._context_window)
             prompt = self._build_prompt(rewritten_query, context_text, history)
 
-            answer = await self._llm_provider.agenerate(
-                prompt=prompt,
-                temperature=self._config.llm_temperature,
-                max_tokens=self._config.llm_max_tokens,
-            )
+            generation_start = time.perf_counter()
+            try:
+                with trace_operation("rag_generation_async") as span:
+                    if span:
+                        span.set_attribute("rag.prompt_length", len(prompt))
+                        span.set_attribute("rag.temperature", self._config.llm_temperature)
+                        span.set_attribute("rag.max_tokens", self._config.llm_max_tokens)
+                        span.set_attribute("rag.is_chat", True)
+                        span.set_attribute("rag.is_async", True)
+                    answer = await self._llm_provider.agenerate(
+                        prompt=prompt,
+                        temperature=self._config.llm_temperature,
+                        max_tokens=self._config.llm_max_tokens,
+                    )
+                    if span:
+                        span.set_attribute("rag.answer_length", len(answer))
+            finally:
+                generation_duration = time.perf_counter() - generation_start
+                metrics.record("generation_latency_async", generation_duration)
+                logger.debug("generation_latency_async: %.3fs", generation_duration)
 
             session.add_message("user", query)
             session.add_message("assistant", answer)

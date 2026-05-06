@@ -57,6 +57,13 @@ try:
         ConsoleSpanExporter,  # noqa: F401
     )
 
+    try:
+        from opentelemetry.instrumentation.pymongo import PymongoInstrumentor
+
+        PYMONGO_INSTRUMENTOR_AVAILABLE = True
+    except ImportError:
+        PYMONGO_INSTRUMENTOR_AVAILABLE = False
+
     OTTEL_AVAILABLE = True
 except ImportError:
     OTTEL_AVAILABLE = False
@@ -71,6 +78,8 @@ _tracing_enabled: bool = False
 # Global meter and metrics
 _meter: Any = None
 _metrics_enabled: bool = False
+
+_pymongo_instrumentor: Any = None
 
 # Metrics counters
 _operations_counter: Any = None
@@ -396,6 +405,21 @@ def setup_tracing(
             service_version,
         )
 
+        if PYMONGO_INSTRUMENTOR_AVAILABLE:
+            try:
+                global _pymongo_instrumentor
+                _pymongo_instrumentor = PymongoInstrumentor()
+                _pymongo_instrumentor.instrument()
+                logger.info("Pymongo auto-instrumentation enabled")
+            except Exception as e:
+                logger.warning("Failed to setup Pymongo instrumentation: %s", e)
+
+    except ImportError as e:
+        logger.warning(
+            "OpenTelemetry Pymongo instrumentation not available: %s. "
+            "Install with: pip install opentelemetry-instrumentation-pymongo",
+            e,
+        )
     except Exception as e:
         logger.warning("Failed to setup OpenTelemetry: %s", e)
 
