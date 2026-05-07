@@ -8,7 +8,7 @@ be disabled and all tracing functions will be no-ops.
 
 Usage:
     # Enable tracing via environment variable
-    export OTEL_TRACING_ENABLED=true
+    export SECONDBRAIN_TRACING_ENABLED=true
 
     # Setup tracing (call once at application startup)
     from secondbrain.utils.tracing import setup_tracing, get_tracer
@@ -258,11 +258,11 @@ def is_tracing_enabled() -> bool:
 
     Returns
     -------
-        True if OTEL_TRACING_ENABLED is set to "true" (case-insensitive).
+        True if SECONDBRAIN_TRACING_ENABLED is set to "true" (case-insensitive).
     """
     global _tracing_enabled
     if not _tracing_enabled:
-        _tracing_enabled = os.getenv("OTEL_TRACING_ENABLED", "false").lower() == "true"
+        _tracing_enabled = os.getenv("SECONDBRAIN_TRACING_ENABLED", "false").lower() == "true"
     return _tracing_enabled
 
 
@@ -308,7 +308,7 @@ def setup_tracing(
         return
 
     if not is_tracing_enabled():
-        logger.debug("Tracing not enabled (OTEL_TRACING_ENABLED not set)")
+        logger.debug("Tracing not enabled (SECONDBRAIN_TRACING_ENABLED not set)")
         return
 
     try:

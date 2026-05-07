@@ -399,3 +399,39 @@ class TestFileLogging:
         # Should only have console handler
         assert len(root_logger.handlers) == 1
         assert isinstance(root_logger.handlers[0], RichHandler)
+
+
+class TestLoggingIntegration:
+    """Test logging integration with CLI and UUID validation."""
+
+    def test_cli_verbose_flag_integration(self) -> None:
+        """Test that CLI verbose flag enables DEBUG logging.
+
+        Verifies that when verbose mode is enabled, the log level is set to DEBUG
+        and detailed logs are shown.
+        """
+        root_logger = logging.getLogger()
+        root_logger.handlers.clear()
+
+        setup_logging(verbose=True)
+
+        assert root_logger.level == logging.DEBUG
+
+    def test_uuid_format_validation(self) -> None:
+        """Test that request IDs follow UUID format.
+
+        Verifies that set_request_id() generates valid UUIDs that can be
+        parsed by the uuid.UUID constructor.
+        """
+        from secondbrain.logging import set_request_id, get_request_id
+        import uuid
+
+        request_id = set_request_id()
+
+        # Should be a valid UUID
+        parsed_uuid = uuid.UUID(request_id)
+        assert str(parsed_uuid) == request_id
+
+        # Should be a string
+        assert isinstance(request_id, str)
+        assert len(request_id) == 36  # Standard UUID length

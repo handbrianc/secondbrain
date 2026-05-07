@@ -25,9 +25,9 @@ class TestIsTracingEnabled:
     """Tests for is_tracing_enabled function."""
 
     def test_returns_false_when_not_set(self):
-        """Should return False when OTEL_TRACING_ENABLED is not set."""
+        """Should return False when SECONDBRAIN_TRACING_ENABLED is not set."""
         # Ensure env var is not set
-        os.environ.pop("OTEL_TRACING_ENABLED", None)
+        os.environ.pop("SECONDBRAIN_TRACING_ENABLED", None)
 
         # Reset internal state
         from secondbrain.utils import tracing
@@ -37,8 +37,8 @@ class TestIsTracingEnabled:
         assert is_tracing_enabled() is False
 
     def test_returns_true_when_set_to_true(self):
-        """Should return True when OTEL_TRACING_ENABLED=true."""
-        os.environ["OTEL_TRACING_ENABLED"] = "true"
+        """Should return True when SECONDBRAIN_TRACING_ENABLED=true."""
+        os.environ["SECONDBRAIN_TRACING_ENABLED"] = "true"
 
         # Reset internal state
         from secondbrain.utils import tracing
@@ -48,8 +48,8 @@ class TestIsTracingEnabled:
         assert is_tracing_enabled() is True
 
     def test_returns_true_when_set_to_true_uppercase(self):
-        """Should return True when OTEL_TRACING_ENABLED=TRUE (case-insensitive)."""
-        os.environ["OTEL_TRACING_ENABLED"] = "TRUE"
+        """Should return True when SECONDBRAIN_TRACING_ENABLED=TRUE (case-insensitive)."""
+        os.environ["SECONDBRAIN_TRACING_ENABLED"] = "TRUE"
 
         # Reset internal state
         from secondbrain.utils import tracing
@@ -59,8 +59,8 @@ class TestIsTracingEnabled:
         assert is_tracing_enabled() is True
 
     def test_returns_false_when_set_to_false(self):
-        """Should return False when OTEL_TRACING_ENABLED=false."""
-        os.environ["OTEL_TRACING_ENABLED"] = "false"
+        """Should return False when SECONDBRAIN_TRACING_ENABLED=false."""
+        os.environ["SECONDBRAIN_TRACING_ENABLED"] = "false"
 
         # Reset internal state
         from secondbrain.utils import tracing
@@ -81,7 +81,7 @@ class TestSetupTracing:
 
     def test_noop_when_tracing_not_enabled(self, caplog):
         """Should be a no-op when tracing is not enabled via env var."""
-        os.environ.pop("OTEL_TRACING_ENABLED", None)
+        os.environ.pop("SECONDBRAIN_TRACING_ENABLED", None)
 
         # Reset internal state
         from secondbrain.utils import tracing
@@ -99,7 +99,7 @@ class TestSetupTracing:
 
     def test_sets_up_tracing_when_enabled(self):
         """Should setup tracing when OpenTelemetry is available and enabled."""
-        os.environ["OTEL_TRACING_ENABLED"] = "true"
+        os.environ["SECONDBRAIN_TRACING_ENABLED"] = "true"
 
         # Reset internal state
         from secondbrain.utils import tracing
@@ -132,7 +132,7 @@ class TestGetTracer:
         tracing._tracer = None
         tracing._tracing_enabled = False
 
-        os.environ.pop("OTEL_TRACING_ENABLED", None)
+        os.environ.pop("SECONDBRAIN_TRACING_ENABLED", None)
 
         tracer = get_tracer()
         # When not initialized, should return _NoOpTracer or None wrapped
@@ -152,7 +152,7 @@ class TestTraceOperation:
 
     def test_yields_none_when_tracing_not_enabled(self):
         """Should yield None when tracing is not enabled."""
-        os.environ.pop("OTEL_TRACING_ENABLED", None)
+        os.environ.pop("SECONDBRAIN_TRACING_ENABLED", None)
 
         # Reset internal state
         from secondbrain.utils import tracing
@@ -166,7 +166,7 @@ class TestTraceOperation:
 
     def test_executes_context_normally(self):
         """Should execute context normally and yield span when enabled."""
-        os.environ["OTEL_TRACING_ENABLED"] = "true"
+        os.environ["SECONDBRAIN_TRACING_ENABLED"] = "true"
 
         # Reset internal state
         from secondbrain.utils import tracing

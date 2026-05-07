@@ -281,3 +281,47 @@ class TestHandleCliErrorsEdgeCases:
         result = test_func()
         assert result == "success"
         assert call_count == 2
+
+
+class TestLLMErrorHandling:
+    """Test LLM-related error scenarios for user-friendly messages."""
+
+    def test_llm_server_unavailable_error(self, capsys):
+        """Test LLM server connection error displays user-friendly message.
+
+        Verifies that when the LLM server (e.g., Ollama) is unreachable,
+        the CLI displays a clear error message with the endpoint that failed.
+        """
+        runner = CliRunner()
+
+        @click.command()
+        @handle_cli_errors
+        def test_cmd():
+            raise ConnectionError(
+                "Local LLM server unavailable at http://localhost:11434"
+            )
+
+        result = runner.invoke(test_cmd, [])
+        assert result.exit_code == 1
+        assert "Local LLM server unavailable" in result.output
+        assert "localhost:11434" in result.output
+
+    def test_model_not_found_error(self, capsys):
+        """Test requested model not available displays helpful message.
+
+        Verifies that when a requested LLM model is not available on the server,
+        the CLI displays an error with the model name that was not found.
+        """
+        runner = CliRunner()
+
+        @click.command()
+        @handle_cli_errors
+        def test_cmd():
+            raise RuntimeError(
+                "Model 'llama3.2' not found on LLM server"
+            )
+
+        result = runner.invoke(test_cmd, [])
+        assert result.exit_code == 1
+        assert "not found on LLM server" in result.output
+        assert "llama3.2" in result.output

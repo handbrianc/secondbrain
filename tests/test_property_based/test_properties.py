@@ -28,7 +28,7 @@ class TestQuerySanitization:
             )
         )
     )
-    @settings(max_examples=25)
+    @settings(max_examples=100)
     def test_sanitize_preserves_valid_input(self, query: str):
         """Sanitization should preserve valid queries."""
         sanitized = sanitize_query(query)
@@ -47,7 +47,7 @@ class TestQuerySanitization:
             )
         )
     )
-    @settings(max_examples=25)
+    @settings(max_examples=100)
     def test_sanitize_removes_control_characters(self, query: str):
         """Sanitization should remove control characters."""
         sanitized = sanitize_query(query)
@@ -71,7 +71,7 @@ class TestQuerySanitization:
             )
         )
     )
-    @settings(max_examples=25)
+    @settings(max_examples=100)
     def test_sanitize_strips_whitespace(self, query: str):
         """Sanitization should strip leading/trailing whitespace."""
         sanitized = sanitize_query(query)
@@ -86,7 +86,7 @@ class TestConfigValidation:
         st.integers(min_value=1, max_value=10000),
         st.integers(min_value=0, max_value=9999),
     )
-    @settings(max_examples=10)
+    @settings(max_examples=100)
     def test_chunk_size_greater_than_overlap(self, chunk_size: int, chunk_overlap: int):
         """Chunk size must be greater than overlap."""
         from pydantic import ValidationError
@@ -102,21 +102,21 @@ class TestConfigValidation:
             assert config.chunk_overlap == chunk_overlap
 
     @given(st.integers(min_value=1, max_value=1000))
-    @settings(max_examples=10)
+    @settings(max_examples=100)
     def test_embedding_dimensions_positive(self, dimensions: int):
         """Embedding dimensions must be positive."""
         config = Config(embedding_dimensions=dimensions)
         assert config.embedding_dimensions > 0
 
     @given(st.integers(min_value=1, max_value=100))
-    @settings(max_examples=10)
+    @settings(max_examples=100)
     def test_embedding_batch_size_in_range(self, batch_size: int):
         """Embedding batch size must be 1-100."""
         config = Config(embedding_batch_size=batch_size)
         assert 1 <= config.embedding_batch_size <= 100
 
     @given(st.integers(min_value=1, max_value=200))
-    @settings(max_examples=10)
+    @settings(max_examples=100)
     def test_streaming_batch_size_in_range(self, batch_size: int):
         """Streaming chunk batch size must be 1-200."""
         config = Config(streaming_chunk_batch_size=batch_size)
