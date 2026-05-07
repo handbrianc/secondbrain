@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 import pytest
 
-os.environ["OTEL_TRACING_ENABLED"] = "false"
+os.environ["SECONDBRAIN_TRACING_ENABLED"] = "false"
 os.environ["OTEL_METRICS_ENABLED"] = "false"
 
 # Disable PyTorch meta tensor mode globally to prevent xdist serialization errors
