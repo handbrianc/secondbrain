@@ -44,10 +44,12 @@ mongosh "mongodb://localhost:27017" -u your_user -p your_password
 curl http://localhost:11434/api/tags
 
 # Start sentence-transformers
-sentence-transformers serve
+docker-compose up -d sentence-transformers  # Recommended: Docker
+# sentence-transformers serve  # Alternative: Local (requires CLI)
 
 # Pull required model if not present
-sentence-transformers pull embeddinggemma:latest
+# Note: Model name should match SECONDBRAIN_LOCAL_EMBEDDING_MODEL in .env
+# Default is all-MiniLM-L6-v2
 ```
 
 ### Error: "Model not found"
@@ -59,11 +61,12 @@ sentence-transformers pull embeddinggemma:latest
 # List available models
 sentence-transformers list
 
-# Pull the model
-sentence-transformers pull embeddinggemma:latest
+# Pull the default model
+# Note: Model name should match SECONDBRAIN_LOCAL_EMBEDDING_MODEL in .env
+# Default is all-MiniLM-L6-v2
 
 # Or specify a different model in .env
-SECONDBRAIN_MODEL=all-MiniLM-L6-v2
+SECONDBRAIN_LOCAL_EMBEDDING_MODEL=all-MiniLM-L6-v2
 ```
 
 ## Ingestion Issues
@@ -139,10 +142,10 @@ cat .env | grep SECONDBRAIN_EMBEDDING_DIMENSIONS
 **Solution**:
 ```bash
 # Ensure same model is used for ingestion and search
-cat .env | grep SECONDBRAIN_MODEL
+cat .env | grep SECONDBRAIN_LOCAL_EMBEDDING_MODEL
 
 # Re-ingest with correct model if needed
-SECONDBRAIN_MODEL=all-MiniLM-L6-v2 secondbrain ingest ./docs/
+SECONDBRAIN_LOCAL_EMBEDDING_MODEL=all-MiniLM-L6-v2 secondbrain ingest ./docs/
 ```
 
 ## Performance Issues

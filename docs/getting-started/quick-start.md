@@ -6,12 +6,19 @@ Get up and running with SecondBrain in 5 minutes.
 
 ```bash
 # Install SecondBrain
+# For production use:
+pip install -e "."
+# For development:
 pip install -e ".[dev]"
 
 # Start services (Docker)
-docker-compose up -d  # MongoDB
-sentence-transformers serve          # sentence-transformers
+docker-compose up -d  # MongoDB + sentence-transformers
+
+# Alternative: Start sentence-transformers locally (requires CLI)
+# sentence-transformers serve
 ```
+
+> **Choose Your Installation Profile**: See [Dependency Installation Guide](DEPENDENCIES.md) for detailed options and external service requirements.
 
 ## Step 2: Configure
 
@@ -25,7 +32,7 @@ SECONDBRAIN_MONGO_URI=mongodb://your_username:your_strong_password@localhost:270
 
 # Sentence Transformers
 SECONDBRAIN_SENTENCE_TRANSFORMERS_URL=http://localhost:11434
-SECONDBRAIN_MODEL=embeddinggemma:latest
+SECONDBRAIN_LOCAL_EMBEDDING_MODEL=all-MiniLM-L6-v2
 
 # Optional: adjust chunk size
 SECONDBRAIN_CHUNK_SIZE=4096
