@@ -27,7 +27,10 @@ examples/
 ### Prerequisites
 
 ```bash
-# Install SecondBrain with dependencies
+# Install SecondBrain
+# For running examples:
+pip install -e "."
+# For developing examples:
 pip install -e ".[dev]"
 
 # Start MongoDB (if using Docker)
@@ -36,6 +39,8 @@ docker-compose up -d
 # Ensure sentence-transformers is running
 sentence-transformers serve
 ```
+
+> **See [Dependency Installation Guide](../getting-started/DEPENDENCIES.md) for installation profiles** and external service requirements.
 
 ### Running Examples
 

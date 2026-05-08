@@ -23,7 +23,7 @@ Complete configuration reference for SecondBrain developers.
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
 | `SECONDBRAIN_SENTENCE_TRANSFORMERS_URL` | str | `http://localhost:11434` | sentence-transformers API URL |
-| `SECONDBRAIN_MODEL` | str | `all-MiniLM-L6-v2` | Embedding model name |
+| `SECONDBRAIN_LOCAL_EMBEDDING_MODEL` | str | `all-MiniLM-L6-v2` | Embedding model name |
 | `SECONDBRAIN_EMBEDDING_DIMENSIONS` | int | `384` | Vector dimensions |
 | `SECONDBRAIN_EMBEDDING_CACHE_SIZE` | int | `1000` | Cache size |
 
@@ -80,7 +80,7 @@ SECONDBRAIN_MONGO_COLLECTION=embeddings
 
 # Embedding
 SECONDBRAIN_SENTENCE_TRANSFORMERS_URL=http://localhost:11434
-SECONDBRAIN_MODEL=all-MiniLM-L6-v2
+SECONDBRAIN_LOCAL_EMBEDDING_MODEL=all-MiniLM-L6-v2
 SECONDBRAIN_EMBEDDING_DIMENSIONS=384
 
 # Processing

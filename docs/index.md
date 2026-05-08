@@ -82,6 +82,9 @@ SecondBrain is a powerful command-line tool that transforms your documents into 
 
 ```bash
 # Install SecondBrain
+# For production use:
+pip install -e "."
+# For development:
 pip install -e ".[dev]"
 
 # Start services
@@ -91,6 +94,8 @@ sentence-transformers serve  # Embedding service
 # Verify installation
 secondbrain --help
 ```
+
+> **Choose Your Installation Profile**: See [Dependency Installation Guide](getting-started/DEPENDENCIES.md) for detailed options (runtime, development, qualitative testing, observability).
 
 ### 2. Configuration
 

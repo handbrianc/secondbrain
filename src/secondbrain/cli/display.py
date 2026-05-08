@@ -7,14 +7,11 @@ from typing import Any
 from rich.console import Console
 from rich.table import Table
 
+from secondbrain.constants import DEFAULT_MIN_SIMILARITY_THRESHOLD
 from secondbrain.logging import HealthStatus
 from secondbrain.storage import ChunkInfo, DatabaseStats
 
 console = Console(markup=True)
-
-# Minimum similarity threshold for displaying search results
-# Results below this score are considered irrelevant
-DEFAULT_MIN_SIMILARITY_THRESHOLD = 0.78
 
 
 def display_search_results(
