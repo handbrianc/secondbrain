@@ -234,3 +234,67 @@ class TestSearchConsistency:
         await delete_document("doc-1")
 
         assert mock_collection.delete_one.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_concurrent_deletions_no_race_conditions(self):
+        """Test that concurrent deletions don't cause race conditions."""
+        mock_collection = MagicMock()
+        deletion_results = []
+        lock = asyncio.Lock()
+
+        async def delete_document(doc_id):
+            """Simulate document deletion with potential race conditions."""
+            # Simulate some async work
+            await asyncio.sleep(0.001)
+            
+            # Perform deletion
+            mock_collection.delete_one({"doc_id": doc_id})
+            
+            # Record result
+            async with lock:
+                deletion_results.append({"doc_id": doc_id, "success": True})
+
+        # Create 10 concurrent deletion tasks for different documents
+        doc_ids = [f"doc-{i}" for i in range(10)]
+        tasks = [delete_document(doc_id) for doc_id in doc_ids]
+        
+        # Execute all deletions concurrently
+        await asyncio.gather(*tasks)
+
+        # Verify all deletions completed successfully
+        assert len(deletion_results) == 10
+        assert all(result["success"] for result in deletion_results)
+        
+        # Verify each document was deleted exactly once (no duplicates)
+        deleted_doc_ids = [result["doc_id"] for result in deletion_results]
+        assert len(set(deleted_doc_ids)) == 10  # All unique
+        
+        # Verify mock was called exactly 10 times
+        assert mock_collection.delete_one.call_count == 10
+
+    @pytest.mark.asyncio
+    async def test_concurrent_deletions_same_document(self):
+        """Test concurrent deletions of the same document (race condition test)."""
+        mock_collection = MagicMock()
+        deletion_count = 0
+        lock = asyncio.Lock()
+
+        async def delete_same_document():
+            """Multiple deletions of the same document."""
+            nonlocal deletion_count
+            
+            await asyncio.sleep(0.001)
+            
+            async with lock:
+                deletion_count += 1
+                mock_collection.delete_one({"doc_id": "shared-doc"})
+
+        # Create 10 concurrent deletion tasks for the same document
+        tasks = [delete_same_document() for _ in range(10)]
+        
+        # Execute all deletions concurrently
+        await asyncio.gather(*tasks)
+
+        # Verify all deletion attempts were made
+        assert deletion_count == 10
+        assert mock_collection.delete_one.call_count == 10

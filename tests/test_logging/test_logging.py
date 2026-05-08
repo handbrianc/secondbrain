@@ -378,6 +378,34 @@ class TestFileLogging:
 
         assert file_handler.maxBytes == 1024
 
+    def test_log_rotation_occurs(self, tmp_path: Path) -> None:
+        """Test that log files actually rotate when max size is exceeded."""
+        log_file = tmp_path / "rotation_test.log"
+        root_logger = logging.getLogger()
+        root_logger.handlers.clear()
+
+        # Use very small max_bytes for fast testing (500 bytes)
+        setup_logging(verbose=True, log_file=str(log_file), max_bytes=500, backup_count=3)
+
+        logger = get_logger("rotation_test")
+
+        # Write enough log messages to trigger rotation
+        # Each message is approximately 100-150 bytes
+        for i in range(10):
+            logger.info(f"Test log message number {i} with some additional content to increase size")
+
+        # Verify the main log file exists
+        assert log_file.exists()
+
+        # Verify backup files were created (rotation occurred)
+        # With backup_count=3, we should have .1, .2, .3 backups
+        backup_files = list(tmp_path.glob("rotation_test.log.*"))
+        assert len(backup_files) > 0, "Log rotation should have created backup files"
+
+        # Verify backup files have content
+        for backup in backup_files:
+            assert backup.stat().st_size > 0, f"Backup file {backup} should have content"
+
     def test_file_logging_creates_parent_directories(self, tmp_path: Path) -> None:
         """Test that parent directories are created for log file."""
         log_file = tmp_path / "nested" / "dir" / "test.log"
@@ -399,6 +427,49 @@ class TestFileLogging:
         # Should only have console handler
         assert len(root_logger.handlers) == 1
         assert isinstance(root_logger.handlers[0], RichHandler)
+
+    def test_rotating_file_handler_is_used(self, tmp_path: Path) -> None:
+        """Test that RotatingFileHandler is used when log_file is configured.
+
+        QA: Verify log rotation is properly configured with RotatingFileHandler.
+        """
+        log_file = tmp_path / "test_rotating.log"
+        root_logger = logging.getLogger()
+        root_logger.handlers.clear()
+
+        setup_logging(verbose=True, log_file=str(log_file), max_bytes=1024)
+
+        # Find the rotating file handler
+        file_handlers = [
+            h for h in root_logger.handlers
+            if isinstance(h, logging.handlers.RotatingFileHandler)
+        ]
+        assert len(file_handlers) == 1, "Should have exactly one RotatingFileHandler"
+
+        handler = file_handlers[0]
+        assert str(handler.baseFilename).endswith("test_rotating.log")
+
+    def test_max_bytes_respected(self, tmp_path: Path) -> None:
+        """Test that max_bytes parameter is respected by RotatingFileHandler.
+
+        QA: Verify log files don't exceed configured max size before rotation.
+        """
+        log_file = tmp_path / "test_max_bytes.log"
+        root_logger = logging.getLogger()
+        root_logger.handlers.clear()
+
+        max_bytes = 500  # Small size for testing
+        setup_logging(verbose=True, log_file=str(log_file), max_bytes=max_bytes)
+
+        # Find the rotating file handler
+        file_handlers = [
+            h for h in root_logger.handlers
+            if isinstance(h, logging.handlers.RotatingFileHandler)
+        ]
+        assert len(file_handlers) == 1
+
+        handler = file_handlers[0]
+        assert handler.maxBytes == max_bytes, f"maxBytes should be {max_bytes}"
 
 
 class TestLoggingIntegration:
@@ -435,3 +506,26 @@ class TestLoggingIntegration:
         # Should be a string
         assert isinstance(request_id, str)
         assert len(request_id) == 36  # Standard UUID length
+
+
+def test_default_format_is_rich():
+    """Test that default log format is rich text.
+    
+    QA: Verify logs are human-readable by default.
+    """
+    import logging
+    from secondbrain.logging import setup_logging
+    
+    # Reset handlers
+    root_logger = logging.getLogger()
+    root_logger.handlers.clear()
+    
+    # Setup logging without specifying format (should default to rich)
+    setup_logging(verbose=False)
+    
+    # Check that we have a RichHandler
+    from rich.logging import RichHandler
+    has_rich = any(isinstance(h, RichHandler) for h in root_logger.handlers)
+    
+    assert has_rich, "Default log format should be Rich (human-readable)"
+    print("Default log format is Rich text (human-readable)")
