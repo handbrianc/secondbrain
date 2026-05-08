@@ -965,3 +965,28 @@ class TestRAGPipelineExtended:
         assert "answer" in result
         # LLM should indicate it cannot answer
         assert "couldn't" in result["answer"].lower() or "not found" in result["answer"].lower()
+
+    def test_handle_ambiguous_queries(self) -> None:
+        from unittest.mock import AsyncMock, MagicMock
+
+        from secondbrain.config import Config
+        from secondbrain.rag.pipeline import RAGPipeline
+
+        mock_searcher = MagicMock()
+        mock_searcher.search.return_value = []
+        mock_searcher.search_async = AsyncMock(return_value=[])
+
+        mock_llm_provider = MagicMock()
+        mock_llm_provider.generate.return_value = "Could you clarify?"
+
+        config = Config()
+        pipeline = RAGPipeline(
+            searcher=mock_searcher,
+            llm_provider=mock_llm_provider,
+            top_k=5,
+            context_window=5,
+        )
+
+        result = pipeline.query("What about it?")
+
+        assert "answer" in result

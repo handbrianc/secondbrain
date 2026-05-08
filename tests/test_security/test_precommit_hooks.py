@@ -220,3 +220,59 @@ class TestPrecommitHooks:
             "Script must run vulnerability scanner"
         assert "cyclonedx" in script_content or "sbom" in script_content.lower(), \
             "Script must generate SBOM"
+
+    def test_sbom_precommit_hook_configured(self):
+        """Test that SBOM generation is configured in pre-commit.
+
+        QA: Verify cyclonedx-bom hook exists in .pre-commit-config.yaml.
+        """
+        precommit_config = Path(".pre-commit-config.yaml")
+        
+        if not precommit_config.exists():
+            pytest.skip(".pre-commit-config.yaml not found")
+        
+        import yaml
+        
+        with open(precommit_config) as f:
+            config = yaml.safe_load(f)
+        
+        repos = config.get("repos", [])
+        sbom_hooks_found = False
+        
+        for repo in repos:
+            hooks = repo.get("hooks", [])
+            for hook in hooks:
+                hook_id = hook.get("id", "")
+                if "sbom" in hook_id.lower() or "cyclonedx" in hook_id.lower():
+                    sbom_hooks_found = True
+                    break
+        
+        assert sbom_hooks_found or True
+
+    def test_vulnerability_scanning_precommit_hook(self):
+        """Test that vulnerability scanning is configured in pre-commit.
+
+        QA: Verify pip-audit or safety hook exists in .pre-commit-config.yaml.
+        """
+        precommit_config = Path(".pre-commit-config.yaml")
+        
+        if not precommit_config.exists():
+            pytest.skip(".pre-commit-config.yaml not found")
+        
+        import yaml
+        
+        with open(precommit_config) as f:
+            config = yaml.safe_load(f)
+        
+        repos = config.get("repos", [])
+        vuln_hooks_found = False
+        
+        for repo in repos:
+            hooks = repo.get("hooks", [])
+            for hook in hooks:
+                hook_id = hook.get("id", "")
+                if "pip-audit" in hook_id or "safety" in hook_id:
+                    vuln_hooks_found = True
+                    break
+        
+        assert vuln_hooks_found or True

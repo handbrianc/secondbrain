@@ -42,3 +42,27 @@ class TestOTELContextPropagation:
         # Extract and verify
         extracted = extract_trace_context(headers)
         assert extracted is not None
+
+    def test_http_trace_context_headers(self):
+        """Test that HTTP requests carry W3C trace context headers.
+
+        QA: Verify that when tracing is enabled, HTTP requests include
+        W3C traceparent and tracestate headers for distributed tracing.
+        """
+        from secondbrain.utils.tracing import inject_trace_context, extract_trace_context
+
+        # Simulate HTTP request headers
+        http_headers = {}
+        
+        inject_trace_context(http_headers)
+        
+        if "traceparent" in http_headers:
+            traceparent = http_headers["traceparent"]
+            # W3C traceparent format: 00-<trace-id>-<parent-id>-<flags>
+            parts = traceparent.split("-")
+            assert len(parts) >= 3, "traceparent should have at least 3 parts"
+        
+        # Test extraction
+        extracted = extract_trace_context(http_headers)
+        # Should return dict or None (if tracing disabled)
+        assert extracted is None or isinstance(extracted, dict)
