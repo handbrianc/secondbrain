@@ -3,6 +3,7 @@
 These tests verify that spans are created correctly with proper attributes
 using the OpenTelemetry SDK.
 """
+import time
 import pytest
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.sdk.trace import TracerProvider
@@ -41,6 +42,8 @@ def clear_spans():
 def get_spans():
     """Get all exported spans."""
     if _memory_exporter:
+        trace.get_tracer_provider().force_flush(timeout_millis=1000)
+        time.sleep(0.1)
         return _memory_exporter.get_finished_spans()
     return []
 
