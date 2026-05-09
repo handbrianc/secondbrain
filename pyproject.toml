@@ -4,7 +4,7 @@ version = "0.4.0"
 description = "A local document intelligence CLI tool for semantic search"
 requires-python = ">=3.11"
 authors = [
-    {name = "Developer", email = "dev@example.com"}
+    {name = "Bishal Chand", email = "bishal.chand@gmail.com"}
 ]
 license = {text = "MIT"}
 readme = "README.md"
@@ -19,78 +19,78 @@ classifiers = [
 ]
 
 dependencies = [
-    "click>=8.1.0",
-    "docling>=2.81.0",
-    "docling-core>=2.48.4",
-    "pymongo>=4.6.0",
-    "motor>=3.0.0",
-    "httpx>=0.28.1",
-    "pydantic>=2.0.0",
-    "pydantic-settings>=2.0.0",
-    "rich>=14.0.0",
-    "python-dotenv>=1.2.2",
-    "sentence-transformers>=5.0.0",
-    "numpy>=2.0.0",
-    "torch>=2.0.0",
-    "opentelemetry-api>=1.20.0",
-    "opentelemetry-sdk>=1.20.0",
-    "ollama>=0.1.0",
-    "openai>=1.0.0",
-    "typing_extensions>=4.0.0",
+    "click>=8.1.0",  # CLI framework - stable API, minor updates only
+    "docling>=2.81.0",  # Document parsing - requires recent features
+    "docling-core>=2.48.4",  # Core types - matches docling version
+    "pymongo>=4.6.0",  # MongoDB driver - async support required
+    "motor>=3.0.0",  # Async MongoDB - requires pymongo 4.x compatibility
+    "httpx>=0.28.1",  # HTTP client - async support for LLM calls
+    "pydantic>=2.0.0",  # Data validation - v2 migration for performance
+    "pydantic-settings>=2.0.0",  # Settings management - pydantic v2 compatible
+    "rich>=14.0.0",  # CLI formatting - modern terminal output
+    "python-dotenv>=1.2.2",  # Environment config - stable API
+    "sentence-transformers>=5.0.0",  # Embedding models - requires recent PyTorch
+    "numpy>=2.0.0",  # Numerical computing - array API compatibility
+    "torch>=2.0.0",  # Deep learning - embedding model runtime
+    "opentelemetry-api>=1.20.0",  # Telemetry - stable tracing API
+    "opentelemetry-sdk>=1.20.0",  # Telemetry - tracing implementation
+    "ollama>=0.1.0",  # Local LLM - early version, API may change
+    "openai>=1.0.0",  # LLM provider - v1 SDK required
+    "typing_extensions>=4.0.0",  # Type hints - backport new features
 ]
 
 [project.optional-dependencies]
 dev = [
-    "ruff>=0.15.5",
-    "mypy>=1.8.0",
-    "pytest>=8.0.0",
-    "pytest-asyncio>=0.23.0",
-    "pytest-cov>=4.1.0",
-    "pytest-xdist>=3.0.0",
-    "pytest-timeout>=2.2.0",
-    "hypothesis>=6.0.0",
-    "bandit>=1.7.0",
-    "safety>=3.0.0",
-    "pip-audit>=2.7.0",
-    "pre-commit>=3.6.0",
-    "pyinstaller>=6.0.0",
-    "mongomock>=4.0.0",
-    "vulture>=2.11",
-    "cyclonedx-bom>=7.0.0",
-    "pipdeptree>=2.0.0",
-    "fastapi>=0.100.0",
-    "uvicorn>=0.1.0",
-    "flask>=3.0.0",
-    "mkdocs>=1.6.0",
-    "mkdocstrings>=0.24.0",
-    "mkdocstrings-python>=2.0.0",
-    "mkdocs-material>=9.5.0",
-    "jinja2>=3.1.6",
-    "urllib3>=2.6.0",
-    "setuptools>=78.1.1",
-    "cryptography>=46.0.0",
-    "pillow>=11.3.0",
-    "paramiko>=3.5.0",
-    "PyJWT>=2.10.1",
-    "pyasn1>=0.6.0",
-    "pyopenssl>=25.1.0",
-    "twisted>=25.5.0",
-    "idna>=3.10",
-    "wheel>=0.45.0",
-    "fpdf2>=2.7.0",
-    "reportlab>=4.0.0",
-    "python-docx>=1.0.0",
+    "ruff>=0.15.5",  # Linting/formatting - fast Rust-based tool
+    "mypy>=1.8.0",  # Type checking - static analysis
+    "pytest>=8.0.0",  # Test framework - v8 for performance
+    "pytest-asyncio>=0.23.0",  # Async test support - modern async patterns
+    "pytest-cov>=4.1.0",  # Coverage reporting - test quality
+    "pytest-xdist>=3.0.0",  # Parallel tests - 18 workers for speed
+    "pytest-timeout>=2.2.0",  # Test timeouts - prevent hangs
+    "hypothesis>=6.0.0",  # Property-based testing - edge case discovery
+    "bandit>=1.7.0",  # Security scanning - Python security issues
+    "safety>=3.0.0",  # Vulnerability check - dependency audits
+    "pip-audit>=2.7.0",  # Security audit - PyPI vulnerability check
+    "pre-commit>=3.6.0",  # Git hooks - automated quality checks
+    "pyinstaller>=6.0.0",  # Binary packaging - standalone executables
+    "mongomock>=4.0.0",  # Test mocking - MongoDB without server
+    "vulture>=2.11",  # Dead code detection - cleanup unused code
+    "cyclonedx-bom>=7.0.0",  # SBOM generation - supply chain security
+    "pipdeptree>=2.0.0",  # Dependency tree - visualize requirements
+    "fastapi>=0.100.0",  # API framework - future REST API support
+    "uvicorn>=0.1.0",  # ASGI server - async HTTP server
+    "flask>=3.0.0",  # Web framework - alternative API option
+    "mkdocs>=1.6.0",  # Documentation - static site generator
+    "mkdocstrings>=0.24.0",  # API docs - auto-generate from docstrings
+    "mkdocstrings-python>=2.0.0",  # Python plugin - mkdocstrings support
+    "mkdocs-material>=9.5.0",  # Theme - professional documentation
+    "jinja2>=3.1.6",  # Templating - security patch required
+    "urllib3>=2.6.0",  # HTTP library - security updates
+    "setuptools>=78.1.1",  # Build tooling - modern packaging
+    "cryptography>=46.0.0",  # Crypto lib - security dependencies
+    "pillow>=11.3.0",  # Image processing - document rendering
+    "paramiko>=3.5.0",  # SSH library - secure file operations
+    "PyJWT>=2.10.1",  # JWT tokens - authentication support
+    "pyasn1>=0.6.0",  # ASN.1 parser - crypto library dependency
+    "pyopenssl>=25.1.0",  # OpenSSL wrapper - secure connections
+    "twisted>=25.5.0",  # Async framework - dependency for security libs
+    "idna>=3.10",  # International domains - URL handling
+    "wheel>=0.45.0",  # Binary wheels - package distribution
+    "fpdf2>=2.7.0",  # PDF generation - document export
+    "reportlab>=4.0.0",  # PDF library - complex document rendering
+    "python-docx>=1.0.0",  # Word documents - DOCX parsing
 ]
 
 qualitative = [
-    "llama-cpp-python>=0.2.0",
-    "transformers>=4.35.0",
-    "accelerate>=0.25.0",
+    "llama-cpp-python>=0.2.0",  # Local LLM - CPU inference support
+    "transformers>=4.35.0",  # HuggingFace - model loading
+    "accelerate>=0.25.0",  # Model optimization - GPU/CPU distribution
 ]
 
 opentelemetry = [
-    "opentelemetry-exporter-otlp>=1.20.0",
-    "opentelemetry-instrumentation-pymongo>=0.40.0",
+    "opentelemetry-exporter-otlp>=1.20.0",  # OTLP exporter - remote tracing
+    "opentelemetry-instrumentation-pymongo>=0.40.0",  # MongoDB auto-instrumentation
 ]
 
 [project.scripts]
