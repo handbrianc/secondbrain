@@ -44,12 +44,9 @@ mongosh "mongodb://localhost:27017" -u your_user -p your_password
 curl http://localhost:11434/api/tags
 
 # Start sentence-transformers
-docker-compose up -d sentence-transformers  # Recommended: Docker
-# sentence-transformers serve  # Alternative: Local (requires CLI)
-
-# Pull required model if not present
-# Note: Model name should match SECONDBRAIN_LOCAL_EMBEDDING_MODEL in .env
-# Default is all-MiniLM-L6-v2
+    docker-compose up -d sentence-transformers
+    
+    # Pull required model if not present (SECONDBRAIN_LOCAL_EMBEDDING_MODEL in .env, default: all-MiniLM-L6-v2)
 ```
 
 ### Error: "Model not found"
@@ -59,14 +56,12 @@ docker-compose up -d sentence-transformers  # Recommended: Docker
 **Solution**:
 ```bash
 # List available models
-sentence-transformers list
-
-# Pull the default model
-# Note: Model name should match SECONDBRAIN_LOCAL_EMBEDDING_MODEL in .env
-# Default is all-MiniLM-L6-v2
-
-# Or specify a different model in .env
-SECONDBRAIN_LOCAL_EMBEDDING_MODEL=all-MiniLM-L6-v2
+    sentence-transformers list
+    
+    # Pull the default model (SECONDBRAIN_LOCAL_EMBEDDING_MODEL in .env, default: all-MiniLM-L6-v2)
+    
+    # Or specify a different model in .env
+    SECONDBRAIN_LOCAL_EMBEDDING_MODEL=all-MiniLM-L6-v2
 ```
 
 ## Ingestion Issues
@@ -281,15 +276,4 @@ If you can't find your issue here:
 1. **Check logs**: Enable verbose/debug logging
 2. **Verify setup**: Run `secondbrain health` to check services
 3. **Review documentation**: [Configuration Guide](configuration.md)
-4. **Search issues**: [GitHub Issues](https://github.com/your-username/secondbrain/issues)
-5. **Open an issue**: Include error message, logs, and reproduction steps
-
-## Common Error Codes
-
-| Error | Likely Cause | Solution |
-|-------|--------------|----------|
-| ECONNREFUSED | Service not running | Start the service |
-| AUTH_FAILED | Wrong credentials | Check .env credentials |
-| NOT_FOUND | Resource missing | Verify path/resource exists |
-| TIMEOUT | Service slow/unreachable | Check service health |
-| INVALID_FORMAT | Wrong file type | Use supported format |
+4. **Search/Open issues**: [GitHub Issues](https://github.com/your-username/secondbrain/issues) - include error message, logs, and reproduction steps

@@ -93,3 +93,4 @@ graphify-out/
 
 # Sisyphus analysis documents (work-in-progress)
 .sisyphus/
+.gitnexus

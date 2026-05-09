@@ -5,16 +5,16 @@ Get up and running with SecondBrain in 5 minutes.
 ## Step 1: Installation
 
 ```bash
-# Install SecondBrain
-# For production use:
+# Production
 pip install -e "."
-# For development:
+
+# Development
 pip install -e ".[dev]"
 
 # Start services (Docker)
-docker-compose up -d  # MongoDB + sentence-transformers
+docker-compose up -d
 
-# Alternative: Start sentence-transformers locally (requires CLI)
+# Alternative: Start sentence-transformers locally
 # sentence-transformers serve
 ```
 
@@ -25,7 +25,7 @@ docker-compose up -d  # MongoDB + sentence-transformers
 Create a `.env` file in your project root:
 
 ```bash
-# MongoDB (with authentication - recommended)
+# MongoDB
 MONGODB_INITDB_ROOT_USERNAME=your_username
 MONGODB_INITDB_ROOT_PASSWORD=your_strong_password
 SECONDBRAIN_MONGO_URI=mongodb://your_username:your_strong_password@localhost:27017
@@ -34,7 +34,7 @@ SECONDBRAIN_MONGO_URI=mongodb://your_username:your_strong_password@localhost:270
 SECONDBRAIN_SENTENCE_TRANSFORMERS_URL=http://localhost:11434
 SECONDBRAIN_LOCAL_EMBEDDING_MODEL=all-MiniLM-L6-v2
 
-# Optional: adjust chunk size
+# Chunk size
 SECONDBRAIN_CHUNK_SIZE=4096
 ```
 
@@ -43,10 +43,9 @@ SECONDBRAIN_CHUNK_SIZE=4096
 ## Step 3: Ingest Documents
 
 ```bash
-# Ingest a directory of documents
 secondbrain ingest /path/to/documents/
 
-# Ingest with custom options
+# Custom options
 secondbrain ingest /path/to/documents/ \
   --chunk-size 2048 \
   --batch-size 10 \
@@ -67,23 +66,19 @@ Supported formats:
 ## Step 4: Search
 
 ```bash
-# Simple semantic search
 secondbrain search "what is this about?"
 
 # Limit results
 secondbrain search "machine learning" --top-k 10
 
-# Search with verbose output
+# Verbose output
 secondbrain search "data pipelines" --verbose
 ```
 
 ## Step 5: Manage Documents
 
 ```bash
-# List all documents
 secondbrain ls
-
-# List with details
 secondbrain ls --details
 
 # Delete a document
@@ -96,16 +91,9 @@ secondbrain status
 ## Example Workflow
 
 ```bash
-# 1. Ingest research papers
 secondbrain ingest ./research-papers/
-
-# 2. Search for relevant content
 secondbrain search "neural network architectures"
-
-# 3. List results
 secondbrain ls --details
-
-# 4. Delete outdated documents
 secondbrain delete doc-12345
 ```
 
@@ -120,15 +108,11 @@ from secondbrain.client import SecondBrainClient
 async def main():
     client = SecondBrainClient()
     
-    # Ingest documents
     await client.ingest("./documents/")
-    
-    # Search
     results = await client.search("semantic query")
     for result in results:
         print(result)
     
-    # Close client
     await client.close()
 
 asyncio.run(main())
