@@ -186,11 +186,7 @@ class TestChaosResilienceMetrics:
     """Tests for resilience metrics in chaos test reports."""
 
     def test_resilience_metrics_in_report(self):
-        """Test that chaos tests include resilience metrics in reports.
-
-        QA: Verify that chaos test results include failure recovery time,
-        error rates, and circuit breaker triggers.
-        """
+        """Test that chaos tests include resilience metrics in reports."""
         from secondbrain.utils.circuit_breaker import CircuitBreaker, CircuitBreakerConfig, CircuitState
         import time
 
@@ -231,10 +227,7 @@ class TestChaosResilienceMetrics:
         assert metrics["error_rate"] > 0
 
     def test_circuit_breaker_triggers_logged(self):
-        """Test that circuit breaker triggers are logged in chaos tests.
-
-        QA: Verify that circuit breaker state changes are captured for reporting.
-        """
+        """Test that circuit breaker triggers are logged in chaos tests."""
         from secondbrain.utils.circuit_breaker import CircuitBreaker, CircuitBreakerConfig, CircuitState
 
         config = CircuitBreakerConfig(
@@ -265,10 +258,7 @@ class TestChaosResilienceMetrics:
 
 
     def test_recovery_time_measurement(self):
-        """Test that recovery time is accurately measured in chaos tests.
-
-        QA: Verify chaos tests measure and report failure recovery time.
-        """
+        """Test that recovery time is accurately measured in chaos tests."""
         from secondbrain.utils.circuit_breaker import CircuitBreaker, CircuitBreakerConfig, CircuitState
         import time
 
@@ -295,10 +285,7 @@ class TestChaosResilienceMetrics:
 
 
     def test_error_rate_calculation(self):
-        """Test that error rates are correctly calculated in chaos scenarios.
-
-        QA: Verify chaos tests calculate and report error rates accurately.
-        """
+        """Test that error rates are correctly calculated in chaos scenarios."""
         from secondbrain.utils.circuit_breaker import CircuitBreaker, CircuitBreakerConfig, CircuitState
 
         # Use high failure threshold to keep circuit closed and track failures

@@ -360,10 +360,7 @@ class TestChatCommands:
 
 
 def test_show_sources_disabled():
-    """Test that --show-sources flag exists in CLI.
-    
-    QA: Verify --show-sources flag is properly defined in chat command.
-    """
+    """Test that --show-sources flag exists in CLI."""
     from click.testing import CliRunner
     from secondbrain.cli import cli
     
@@ -394,10 +391,7 @@ def test_show_sources_disabled():
 
 
 def test_custom_llm_endpoint():
-    """Test custom LLM endpoint configuration via environment variable.
-    
-    QA: Verify SECONDBRAIN_LLM_ENDPOINT environment variable is used.
-    """
+    """Test custom LLM endpoint configuration via environment variable."""
     import os
     from unittest.mock import patch
     
@@ -433,10 +427,7 @@ def test_custom_llm_endpoint():
 
 
 def test_custom_conversation_db():
-    """Test custom conversation database configuration via environment variable.
-    
-    QA: Verify SECONDBRAIN_CONVERSATION_DB environment variable is used.
-    """
+    """Test custom conversation database configuration via environment variable."""
     import os
     
     # Save original value

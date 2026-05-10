@@ -57,22 +57,18 @@ class TestAsyncEmbeddingNative:
 
 
 def test_async_embedding_uses_aiohttp_client():
-    """Test that async embedding uses proper async pattern.
-    
-    QA: Verify native async embedding doesn't block event loop.
-    """
-    import inspect
+    """Test that async embedding uses proper async pattern."""
     import asyncio
+    import inspect
     from secondbrain.embedding.local import LocalEmbeddingGenerator
     
-    # Check if async methods exist
     assert hasattr(LocalEmbeddingGenerator, 'generate_async'), \
         "LocalEmbeddingGenerator should have generate_async method"
     assert hasattr(LocalEmbeddingGenerator, 'generate_batch_async'), \
         "LocalEmbeddingGenerator should have generate_batch_async method"
     
     # Verify methods are async coroutines
-    gen = LocalEmbeddingGenerator(model_name="test-model")
+    gen = LocalEmbeddingGenerator()
     assert inspect.iscoroutinefunction(gen.generate_async), \
         "generate_async should be a coroutine function"
     assert inspect.iscoroutinefunction(gen.generate_batch_async), \

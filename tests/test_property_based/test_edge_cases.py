@@ -4,7 +4,7 @@ This module adds edge case coverage to the existing chunking property tests,
 testing boundary conditions and unusual inputs.
 """
 import pytest
-from hypothesis import HealthCheck, given, settings, assume
+from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
 from secondbrain.document import _chunk_segments
@@ -12,12 +12,10 @@ from secondbrain.document import _chunk_segments
 
 @pytest.mark.hypothesis
 class TestChunkingEdgeCases:
-    """Property tests for edge cases in chunking."""
 
     @given(st.just("A" * 100))
     @settings(max_examples=100)
     def test_single_word_chunking(self, text: str):
-        """Very long single word should be chunked."""
         segments = [{"text": text, "page": 0}]
         chunks = _chunk_segments(segments, chunk_size=50, chunk_overlap=10)
         assert chunks
@@ -27,7 +25,6 @@ class TestChunkingEdgeCases:
     @given(st.just("A B C D E"))
     @settings(max_examples=100)
     def test_very_short_text(self, text: str):
-        """Very short text should produce at least one chunk."""
         segments = [{"text": text, "page": 0}]
         chunks = _chunk_segments(segments, chunk_size=100, chunk_overlap=10)
         assert len(chunks) >= 1
@@ -35,7 +32,6 @@ class TestChunkingEdgeCases:
     @given(st.just("A " * 10 + "B " * 10 + "C " * 10))
     @settings(max_examples=100)
     def test_repeated_pattern_chunking(self, text: str):
-        """Text with repeated patterns should chunk correctly."""
         segments = [{"text": text, "page": 0}]
         chunks = _chunk_segments(segments, chunk_size=20, chunk_overlap=5)
         assert chunks
@@ -45,7 +41,6 @@ class TestChunkingEdgeCases:
     @given(st.integers(min_value=1, max_value=10).map(lambda n: "Word " * n))
     @settings(max_examples=100)
     def test_variable_length_text(self, text: str):
-        """Variable length text should always produce valid chunks."""
         assume(len(text.strip()) > 0)
         segments = [{"text": text, "page": 0}]
         chunks = _chunk_segments(segments, chunk_size=20, chunk_overlap=5)
@@ -57,7 +52,6 @@ class TestChunkingEdgeCases:
     )
     @settings(max_examples=100)
     def test_overlap_adjustment(self, text: str, chunk_size: int):
-        """Handle case where overlap might exceed chunk size."""
         overlap = min(chunk_size - 1, 10)
         segments = [{"text": text, "page": 0}]
         chunks = _chunk_segments(segments, chunk_size, overlap)
@@ -66,7 +60,6 @@ class TestChunkingEdgeCases:
     @given(st.just("Test\n\n\n\nTest"))
     @settings(max_examples=100)
     def test_multiple_newlines_chunking(self, text: str):
-        """Text with multiple newlines should chunk correctly."""
         segments = [{"text": text, "page": 0}]
         chunks = _chunk_segments(segments, chunk_size=20, chunk_overlap=5)
         assert chunks
@@ -74,7 +67,6 @@ class TestChunkingEdgeCases:
     @given(st.just("\t\t\tTest\t\t\t"))
     @settings(max_examples=100)
     def test_tab_characters_chunking(self, text: str):
-        """Text with tab characters should chunk correctly."""
         segments = [{"text": text, "page": 0}]
         chunks = _chunk_segments(segments, chunk_size=20, chunk_overlap=5)
         assert chunks
@@ -82,7 +74,6 @@ class TestChunkingEdgeCases:
     @given(st.just("Test " * 100))
     @settings(max_examples=100)
     def test_very_long_single_line(self, text: str):
-        """Very long single line should be chunked properly."""
         segments = [{"text": text, "page": 0}]
         chunks = _chunk_segments(segments, chunk_size=50, chunk_overlap=10)
         assert len(chunks) > 1
@@ -95,7 +86,6 @@ class TestChunkingEdgeCases:
     )
     @settings(max_examples=100)
     def test_small_chunk_size(self, text: str, chunk_size: int):
-        """Handle chunk size smaller than individual words."""
         assume(len(text.split()) > 0)
         segments = [{"text": text, "page": 0}]
         chunks = _chunk_segments(segments, chunk_size, 0)
@@ -104,7 +94,6 @@ class TestChunkingEdgeCases:
     @given(st.just("A" * 1000 + " " + "B" * 1000))
     @settings(max_examples=100)
     def test_very_long_words_chunking(self, text: str):
-        """Text with very long words should be chunked."""
         segments = [{"text": text, "page": 0}]
         chunks = _chunk_segments(segments, chunk_size=100, chunk_overlap=10)
         assert chunks
@@ -115,7 +104,6 @@ class TestChunkingEdgeCases:
     )
     @settings(max_examples=100)
     def test_zero_overlap_chunking(self, text: str, chunk_size: int):
-        """Chunking with zero overlap should work."""
         segments = [{"text": text, "page": 0}]
         chunks = _chunk_segments(segments, chunk_size, 0)
         assert chunks
@@ -131,7 +119,6 @@ class TestChunkingEdgeCases:
     )
     @settings(max_examples=100)
     def test_large_overlap_chunking(self, text: str, chunk_size: int, overlap: int):
-        """Chunking with large overlap (close to chunk_size) should work."""
         assume(overlap < chunk_size)
         segments = [{"text": text, "page": 0}]
         chunks = _chunk_segments(segments, chunk_size, overlap)

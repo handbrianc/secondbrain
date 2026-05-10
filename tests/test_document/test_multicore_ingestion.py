@@ -28,30 +28,21 @@ class TestCoreCountValidation:
     """Tests for core count validation logic."""
 
     def test_core_count_validation_zero(self, tmp_path: Path):
-        """Test core count validation for zero cores.
-
-        QA: Verify ValueError is raised for cores=0.
-        """
+        """Test core count validation for zero cores."""
         with pytest.raises(ValueError, match="cores must be positive"):
             cores = 0
             if cores is not None and cores <= 0:
                 raise ValueError("cores must be positive")
 
     def test_core_count_validation_negative(self, tmp_path: Path):
-        """Test core count validation for negative cores.
-
-        QA: Verify ValueError is raised for negative cores.
-        """
+        """Test core count validation for negative cores."""
         with pytest.raises(ValueError, match="cores must be positive"):
             cores = -1
             if cores is not None and cores <= 0:
                 raise ValueError("cores must be positive")
 
     def test_core_count_validation_excessive(self, tmp_path: Path):
-        """Test core count validation for excessive values.
-
-        QA: Verify warning is issued and clamped to available cores.
-        """
+        """Test core count validation for excessive values."""
         # Simulate CLI validation with clamping
         cores = 999
         available = os.cpu_count() or 1
@@ -67,11 +58,7 @@ class TestCoreCountFallback:
     """Tests for core count fallback logic."""
 
     def test_fallback_to_config_max_workers(self):
-        """Test fallback to config max_workers setting.
-
-        QA: Verify config.max_workers is used when cores=None.
-        """
-        # Create config with max_workers
+        """Test fallback to config max_workers setting."""
         config = Config(max_workers=6)
 
         cores: int | None = None
@@ -81,11 +68,7 @@ class TestCoreCountFallback:
         assert resolved == 6
 
     def test_fallback_to_cpu_count_auto_detection(self):
-        """Test fallback to CPU count auto-detection.
-
-        QA: Verify os.cpu_count() is used when no config.
-        """
-        # Test the actual _resolve_core_count method with mocked config
+        """Test fallback to CPU count auto-detection."""
         from secondbrain.document import DocumentIngestor
 
         ingestor = DocumentIngestor()
@@ -105,19 +88,12 @@ class TestWorkerFunction:
     """Tests for the _extract_and_chunk_file worker function."""
 
     def test_worker_function_module_level(self):
-        """Test that worker function is at module level (picklable).
-
-        QA: Verify function can be imported directly (not a method).
-        """
-        # This test verifies the function is accessible at module level
+        """Test that worker function is at module level (picklable)."""
         assert callable(_extract_and_chunk_file)
         assert _extract_and_chunk_file.__module__ == "secondbrain.document"
 
     def test_worker_function_returns_correct_structure(self, tmp_path: Path):
-        """Test worker function returns dict with required keys.
-
-        QA: Verify return structure matches specification.
-        """
+        """Test worker function returns dict with required keys."""
         test_file = tmp_path / "test.md"
         test_file.write_text("# Test\n\nThis is test content for the worker function.")
 
@@ -136,10 +112,7 @@ class TestWorkerFunction:
         assert len(result["segments"]) > 0
 
     def test_worker_function_handles_extraction_errors(self, tmp_path: Path):
-        """Test worker function handles extraction errors gracefully.
-
-        QA: Verify error info return instead of raising exception.
-        """
+        """Test worker function handles extraction errors gracefully."""
         # Create a supported format file with corrupt content that will fail parsing
         # Using .pdf extension with binary garbage - docling will try to parse it and fail
         test_file = tmp_path / "corrupted.pdf"
@@ -162,10 +135,7 @@ class TestWorkerFunction:
             assert isinstance(result["segments"], list)
 
     def test_worker_function_chunks_text_correctly(self, tmp_path: Path):
-        """Test worker function extracts segments correctly.
-
-        QA: Verify segment extraction works for long content.
-        """
+        """Test worker function extracts segments correctly."""
         # Create a long markdown file
         test_file = tmp_path / "long.md"
         long_text = "# Title\n\n" + " ".join(["word"] * 200)  # 200 words
@@ -187,19 +157,13 @@ class TestMemoryManagement:
     """Tests for memory management features."""
 
     def test_max_memory_batch_size_constant_exists(self):
-        """Test that MAX_MEMORY_BATCH_SIZE constant is defined.
-
-        QA: Verify memory limit constant exists.
-        """
+        """Test that MAX_MEMORY_BATCH_SIZE constant is defined."""
         assert isinstance(MAX_MEMORY_BATCH_SIZE, int)
         assert MAX_MEMORY_BATCH_SIZE > 0
         assert MAX_MEMORY_BATCH_SIZE == 100
 
     def test_batch_splitting_logic(self):
-        """Test batch splitting logic for memory efficiency.
-
-        QA: Verify batches are split at MAX_MEMORY_BATCH_SIZE.
-        """
+        """Test batch splitting logic for memory efficiency."""
         # Simulate a large list of documents
         large_batch = list(range(250))  # 250 items
 
@@ -219,10 +183,7 @@ class TestCLIValidation:
     """Tests for CLI core count validation."""
 
     def test_cli_validates_cores_positive(self):
-        """Test CLI validates cores > 0.
-
-        QA: Verify CLI rejects non-positive core counts.
-        """
+        """Test CLI validates cores > 0."""
         # Test cases that should fail
         invalid_cores = [0, -1, -10]
 
@@ -232,10 +193,7 @@ class TestCLIValidation:
                     raise ValueError("cores must be positive")
 
     def test_cli_clamps_excessive_cores(self):
-        """Test CLI clamps excessive core counts.
-
-        QA: Verify CLI warns and clamps to available cores.
-        """
+        """Test CLI clamps excessive core counts."""
         available = os.cpu_count() or 1
         requested = 999
 
@@ -254,10 +212,7 @@ class TestSerializationErrorHandling:
         assert True
 
     def test_mixed_success_failure_in_batch(self, tmp_path: Path):
-        """Test that batch processing continues after individual failures.
-
-        QA: Verify that when one file fails, other files are still processed.
-        """
+        """Test that batch processing continues after individual failures."""
         # Create multiple test files
         files = [tmp_path / f"test_{i}.txt" for i in range(3)]
         for f in files:
@@ -286,10 +241,7 @@ class TestSerializationErrorHandling:
 
 
 def test_short_form_cores():
-    """Test short form -c flag for core count.
-    
-    QA: Verify -c flag works same as --cores by actually invoking it.
-    """
+    """Test short form -c flag for core count."""
     import tempfile
     from pathlib import Path
     from click.testing import CliRunner
@@ -318,10 +270,7 @@ def test_short_form_cores():
 
 
 def test_single_document_single_core():
-    """Test that single document uses single core.
-    
-    QA: Verify single file doesn't spawn multiple processes.
-    """
+    """Test that single document uses single core."""
     import tempfile
     from pathlib import Path
     from click.testing import CliRunner
@@ -350,10 +299,7 @@ def test_single_document_single_core():
 
 
 def test_batch_size_with_cores():
-    """Test batch-size option combined with --cores.
-    
-    QA: Verify batch-size and --cores can be used together.
-    """
+    """Test batch-size option combined with --cores."""
     import tempfile
     from pathlib import Path
     from click.testing import CliRunner
