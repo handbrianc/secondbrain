@@ -24,8 +24,6 @@ class TestVersionDocumentation:
         with open(pyproject) as f:
             content = f.read()
         
-        # Find all dependency specifications
-        # Look for patterns like: package>=1.0.0, package==1.0.0, package~=1.0.0
         version_pattern = r'[\w-]+[<>=~!]+\s*[\d.]+'
         dependencies_with_versions = re.findall(version_pattern, content)
         
@@ -46,7 +44,6 @@ class TestVersionDocumentation:
         major_pins = []
         for i, line in enumerate(lines):
             if re.search(major_version_pattern, line):
-                # Check if previous line has a comment
                 has_comment = False
                 if i > 0 and lines[i - 1].strip().startswith("#"):
                     has_comment = True
@@ -59,7 +56,6 @@ class TestVersionDocumentation:
                     "has_rationale": has_comment
                 })
         
-        # All major version pins should have rationale
         if len(major_pins) > 0:
             pins_with_rationale = sum(1 for pin in major_pins if pin["has_rationale"])
             assert pins_with_rationale == len(major_pins), \

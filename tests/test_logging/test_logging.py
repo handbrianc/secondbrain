@@ -1,5 +1,3 @@
-"""Tests for logging module."""
-
 import io
 import json
 import logging
@@ -23,55 +21,39 @@ from secondbrain.logging import (
 
 
 def test_setup_logging_info() -> None:
-    """Test setup logging with INFO level."""
     setup_logging(verbose=False)
 
 
 def test_setup_logging_debug() -> None:
-    """Test setup logging with DEBUG level."""
     setup_logging(verbose=True)
 
 
 def test_setup_logging_json_format() -> None:
-    """Test setup_logging with JSON format."""
     setup_logging(verbose=False, json_format=True)
-    root_logger = logging.getLogger()
-    assert len(root_logger.handlers) > 0
+    assert len(logging.getLogger().handlers) > 0
 
 
 def test_setup_logging_verbose_and_json() -> None:
-    """Test setup_logging with both verbose and JSON format."""
     setup_logging(verbose=True, json_format=True)
-    root_logger = logging.getLogger()
-    assert len(root_logger.handlers) > 0
+    assert len(logging.getLogger().handlers) > 0
 
 
 def test_get_logger() -> None:
-    """Test getting a logger instance."""
     logger = get_logger("test_module")
-    assert isinstance(logger, logging.Logger)
     assert logger.name == "test_module"
 
 
 def test_setup_rich_logging() -> None:
-    """Test setup_rich_logging configures handlers."""
     root_logger = logging.getLogger()
     root_logger.handlers.clear()
 
     setup_rich_logging(logging.DEBUG)
-    root_logger = logging.getLogger()
-    assert len(root_logger.handlers) > 0
-    from rich.logging import RichHandler
-
-    assert any(isinstance(h, RichHandler) for h in root_logger.handlers)
+    assert any(isinstance(h, RichHandler) for h in logging.getLogger().handlers)
 
 
 class TestHealthStatus:
-    """Tests for health status TypedDict."""
-
     @pytest.fixture
     def sample_status(self) -> HealthStatus:
-        """Sample health status dictionary."""
         return {
             "status": "healthy",
             "timestamp": "2024-01-01T00:00:00+00:00",
@@ -81,21 +63,16 @@ class TestHealthStatus:
         }
 
     def test_health_status_has_status_field(self, sample_status: HealthStatus) -> None:
-        """Test that health status dict has status field."""
         assert "status" in sample_status
 
     def test_health_status_has_services_field(
         self, sample_status: HealthStatus
     ) -> None:
-        """Test that health status dict has services field."""
         assert "services" in sample_status
 
 
 class TestJsonLogging:
-    """Tests for JSON logging format."""
-
     def test_json_formatter_output(self) -> None:
-        """Test that JSON formatter produces valid JSON."""
         stream = io.StringIO()
         handler = logging.StreamHandler(stream)
 
@@ -109,16 +86,13 @@ class TestJsonLogging:
 
         logger.info("Test message")
 
-        output = stream.getvalue()
-        # Should be valid JSON
-        json_data = json.loads(output)
+        json_data = json.loads(stream.getvalue())
         assert json_data["level"] == "INFO"
         assert json_data["message"] == "Test message"
 
         logger.removeHandler(handler)
 
     def test_json_formatter_includes_metadata(self) -> None:
-        """Test that JSON formatter includes metadata fields."""
         stream = io.StringIO()
         handler = logging.StreamHandler(stream)
 
@@ -131,8 +105,7 @@ class TestJsonLogging:
 
         logger.info("Test message")
 
-        output = stream.getvalue()
-        json_data = json.loads(output)
+        json_data = json.loads(stream.getvalue())
         assert "logger" in json_data
         assert "module" in json_data
         assert "function" in json_data
@@ -142,10 +115,7 @@ class TestJsonLogging:
 
 
 class JsonFormatter(logging.Formatter):
-    """JSON formatter for logging."""
-
     def format(self, record: logging.LogRecord) -> str:
-        """Format log record as JSON."""
         log_entry = {
             "timestamp": self.formatTime(record, self.datefmt),
             "level": record.levelname,
@@ -159,80 +129,57 @@ class JsonFormatter(logging.Formatter):
 
 
 class TestRequestContext:
-    """Tests for request ID context management."""
-
     def test_get_request_id_default_empty(self) -> None:
-        """Test that get_request_id returns empty string by default."""
-        result = get_request_id()
-        assert result == ""
+        assert get_request_id() == ""
 
     def test_set_request_id_generates_uuid(self) -> None:
-        """Test that set_request_id generates UUID when no ID provided."""
         request_id = set_request_id()
-        assert len(request_id) > 0
-        assert isinstance(request_id, str)
+        assert request_id
 
     def test_set_request_id_with_custom_id(self) -> None:
-        """Test that set_request_id accepts custom ID."""
         custom_id = "custom-request-123"
-        request_id = set_request_id(custom_id)
-        assert request_id == custom_id
+        assert set_request_id(custom_id) == custom_id
 
     def test_get_request_id_returns_set_value(self) -> None:
-        """Test that get_request_id returns the value set by set_request_id."""
         custom_id = "test-request-456"
         set_request_id(custom_id)
-        result = get_request_id()
-        assert result == custom_id
+        assert get_request_id() == custom_id
 
     def test_request_id_isolation(self) -> None:
-        """Test that request ID is isolated between tests."""
-        # This test verifies that each test starts with a clean context
-        result = get_request_id()
-        # Should be empty or a new value, not carrying over from previous tests
-        assert isinstance(result, str)
+        assert isinstance(get_request_id(), str)
 
 
 class TestSetupJsonLogging:
-    """Tests for JSON logging setup."""
-
     def test_setup_json_logging_creates_formatter(self) -> None:
-        """Test that JSON logging setup creates proper formatter."""
         root_logger = logging.getLogger()
         root_logger.handlers.clear()
 
         setup_json_logging(logging.DEBUG)
-        root_logger = logging.getLogger()
         assert len(root_logger.handlers) > 0
 
     def test_setup_json_logging_sets_level(self) -> None:
-        """Test that JSON logging sets correct log level."""
         root_logger = logging.getLogger()
         root_logger.handlers.clear()
 
         setup_json_logging(logging.INFO)
-        root_logger = logging.getLogger()
         assert len(root_logger.handlers) > 0
 
     def test_json_formatter_includes_request_id(self) -> None:
-        """Test that JSON formatter includes request_id in output."""
         stream = io.StringIO()
         handler = logging.StreamHandler(stream)
 
         class TestJSONFormatter(logging.Formatter):
             def format(self, record: logging.LogRecord) -> str:
-                return json.dumps(
-                    {
-                        "timestamp": self.formatTime(record, self.datefmt),
-                        "level": record.levelname,
-                        "logger": record.name,
-                        "message": record.getMessage(),
-                        "module": record.module,
-                        "function": record.funcName,
-                        "line": record.lineno,
-                        "request_id": get_request_id() or "",
-                    }
-                )
+                return json.dumps({
+                    "timestamp": self.formatTime(record, self.datefmt),
+                    "level": record.levelname,
+                    "logger": record.name,
+                    "message": record.getMessage(),
+                    "module": record.module,
+                    "function": record.funcName,
+                    "line": record.lineno,
+                    "request_id": get_request_id() or "",
+                })
 
         formatter = TestJSONFormatter()
         handler.setFormatter(formatter)
@@ -245,87 +192,61 @@ class TestSetupJsonLogging:
         set_request_id("custom-req-123")
         logger.info("Test message")
 
-        output = stream.getvalue()
-        json_data = json.loads(output)
-        assert "request_id" in json_data
+        json_data = json.loads(stream.getvalue())
         assert json_data["request_id"] == "custom-req-123"
 
         logger.removeHandler(handler)
 
     def test_setup_json_logging_formats_output(self) -> None:
-        """Test that setup_json_logging formats log output correctly."""
         root_logger = logging.getLogger()
         root_logger.handlers.clear()
 
         setup_json_logging(logging.DEBUG)
         set_request_id("test-request-id")
-        test_logger = get_logger("test_json_output")
-        test_logger.info("Test message for JSON output")
+        get_logger("test_json_output").info("Test message for JSON output")
         assert len(root_logger.handlers) > 0
 
 
 class TestGetHealthStatus:
-    """Tests for get_health_status function."""
-
     def test_get_health_status_structure(self) -> None:
-        """Test that get_health_status returns correct structure."""
         status = get_health_status()
-
         assert "status" in status
         assert "timestamp" in status
         assert "services" in status
         assert "check_duration_seconds" in status
 
     def test_get_health_status_services_keys(self) -> None:
-        """Test that get_health_status has correct service keys."""
-        status = get_health_status()
-
-        assert "mongodb" in status["services"]
+        assert "mongodb" in get_health_status()["services"]
 
 
 class TestCheckServices:
-    """Tests for check_services function."""
-
     def test_check_services_returns_dict(self) -> None:
-        """Test that check_services returns a dict."""
-        result = check_services()
-        assert isinstance(result, dict)
+        assert isinstance(check_services(), dict)
 
     def test_check_services_has_required_keys(self) -> None:
-        """Test that check_services has required keys."""
-        result = check_services()
-        assert "mongodb" in result
+        assert "mongodb" in check_services()
 
     def test_check_services_values_are_booleans(self) -> None:
-        """Test that check_services values are booleans."""
-        result = check_services()
-        assert isinstance(result["mongodb"], bool)
+        assert isinstance(check_services()["mongodb"], bool)
 
 
 class TestFileLogging:
-    """Tests for file logging with RotatingFileHandler."""
-
     def test_setup_logging_with_log_file_creates_file_handler(
         self, tmp_path: Path
     ) -> None:
-        """Test that setup_logging adds RotatingFileHandler when log_file is set."""
         log_file = tmp_path / "test.log"
         root_logger = logging.getLogger()
         root_logger.handlers.clear()
 
         setup_logging(verbose=True, log_file=str(log_file))
 
-        assert len(root_logger.handlers) == 2  # RichHandler + RotatingFileHandler
-        assert any(
-            isinstance(h, logging.handlers.RotatingFileHandler)
-            for h in root_logger.handlers
-        )
+        assert len(root_logger.handlers) == 2
+        assert any(isinstance(h, logging.handlers.RotatingFileHandler) for h in root_logger.handlers)
         assert log_file.exists()
 
     def test_setup_logging_with_env_var_creates_file_handler(
         self, tmp_path: Path
     ) -> None:
-        """Test that setup_logging reads SECONDBRAIN_LOG_FILE env var."""
         log_file = tmp_path / "env_test.log"
         os.environ["SECONDBRAIN_LOG_FILE"] = str(log_file)
 
@@ -340,7 +261,6 @@ class TestFileLogging:
         del os.environ["SECONDBRAIN_LOG_FILE"]
 
     def test_setup_logging_with_log_file_and_json_format(self, tmp_path: Path) -> None:
-        """Test that file logging works with JSON format."""
         log_file = tmp_path / "test_json.log"
         root_logger = logging.getLogger()
         root_logger.handlers.clear()
@@ -350,64 +270,43 @@ class TestFileLogging:
         assert len(root_logger.handlers) == 2
         assert log_file.exists()
 
-        # Write a test log
-        logger = get_logger("test_file_json")
-        logger.info("Test JSON message")
+        get_logger("test_file_json").info("Test JSON message")
 
-        # Verify file contains JSON
         content = log_file.read_text()
         assert "Test JSON message" in content
-        # Should be parseable as JSON
         json.loads(content.strip())
 
     def test_rotating_file_handler_max_bytes(self, tmp_path: Path) -> None:
-        """Test that RotatingFileHandler respects max_bytes."""
         log_file = tmp_path / "rotate_test.log"
         root_logger = logging.getLogger()
         root_logger.handlers.clear()
 
-        # Use small max_bytes for testing (1KB)
         setup_logging(verbose=True, log_file=str(log_file), max_bytes=1024)
 
-        # Find the rotating file handler
-        file_handler = next(
-            h
-            for h in root_logger.handlers
-            if isinstance(h, logging.handlers.RotatingFileHandler)
-        )
-
+        file_handler = next(h for h in root_logger.handlers if isinstance(h, logging.handlers.RotatingFileHandler))
         assert file_handler.maxBytes == 1024
 
     def test_log_rotation_occurs(self, tmp_path: Path) -> None:
-        """Test that log files actually rotate when max size is exceeded."""
         log_file = tmp_path / "rotation_test.log"
         root_logger = logging.getLogger()
         root_logger.handlers.clear()
 
-        # Use very small max_bytes for fast testing (500 bytes)
         setup_logging(verbose=True, log_file=str(log_file), max_bytes=500, backup_count=3)
 
         logger = get_logger("rotation_test")
 
-        # Write enough log messages to trigger rotation
-        # Each message is approximately 100-150 bytes
         for i in range(10):
             logger.info(f"Test log message number {i} with some additional content to increase size")
 
-        # Verify the main log file exists
         assert log_file.exists()
 
-        # Verify backup files were created (rotation occurred)
-        # With backup_count=3, we should have .1, .2, .3 backups
         backup_files = list(tmp_path.glob("rotation_test.log.*"))
-        assert len(backup_files) > 0, "Log rotation should have created backup files"
+        assert backup_files
 
-        # Verify backup files have content
         for backup in backup_files:
-            assert backup.stat().st_size > 0, f"Backup file {backup} should have content"
+            assert backup.stat().st_size > 0
 
     def test_file_logging_creates_parent_directories(self, tmp_path: Path) -> None:
-        """Test that parent directories are created for log file."""
         log_file = tmp_path / "nested" / "dir" / "test.log"
         root_logger = logging.getLogger()
         root_logger.handlers.clear()
@@ -418,114 +317,62 @@ class TestFileLogging:
         assert log_file.exists()
 
     def test_file_logging_does_not_create_file_when_not_configured(self) -> None:
-        """Test that no file is created when log_file is not set."""
         root_logger = logging.getLogger()
         root_logger.handlers.clear()
 
         setup_logging(verbose=True)
 
-        # Should only have console handler
         assert len(root_logger.handlers) == 1
         assert isinstance(root_logger.handlers[0], RichHandler)
 
     def test_rotating_file_handler_is_used(self, tmp_path: Path) -> None:
-        """Test that RotatingFileHandler is used when log_file is configured.
-
-        QA: Verify log rotation is properly configured with RotatingFileHandler.
-        """
         log_file = tmp_path / "test_rotating.log"
         root_logger = logging.getLogger()
         root_logger.handlers.clear()
 
         setup_logging(verbose=True, log_file=str(log_file), max_bytes=1024)
 
-        # Find the rotating file handler
-        file_handlers = [
-            h for h in root_logger.handlers
-            if isinstance(h, logging.handlers.RotatingFileHandler)
-        ]
-        assert len(file_handlers) == 1, "Should have exactly one RotatingFileHandler"
+        file_handlers = [h for h in root_logger.handlers if isinstance(h, logging.handlers.RotatingFileHandler)]
+        assert len(file_handlers) == 1
 
         handler = file_handlers[0]
         assert str(handler.baseFilename).endswith("test_rotating.log")
 
     def test_max_bytes_respected(self, tmp_path: Path) -> None:
-        """Test that max_bytes parameter is respected by RotatingFileHandler.
-
-        QA: Verify log files don't exceed configured max size before rotation.
-        """
         log_file = tmp_path / "test_max_bytes.log"
         root_logger = logging.getLogger()
         root_logger.handlers.clear()
 
-        max_bytes = 500  # Small size for testing
+        max_bytes = 500
         setup_logging(verbose=True, log_file=str(log_file), max_bytes=max_bytes)
 
-        # Find the rotating file handler
-        file_handlers = [
-            h for h in root_logger.handlers
-            if isinstance(h, logging.handlers.RotatingFileHandler)
-        ]
+        file_handlers = [h for h in root_logger.handlers if isinstance(h, logging.handlers.RotatingFileHandler)]
         assert len(file_handlers) == 1
 
         handler = file_handlers[0]
-        assert handler.maxBytes == max_bytes, f"maxBytes should be {max_bytes}"
+        assert handler.maxBytes == max_bytes
 
 
 class TestLoggingIntegration:
-    """Test logging integration with CLI and UUID validation."""
-
     def test_cli_verbose_flag_integration(self) -> None:
-        """Test that CLI verbose flag enables DEBUG logging.
-
-        Verifies that when verbose mode is enabled, the log level is set to DEBUG
-        and detailed logs are shown.
-        """
         root_logger = logging.getLogger()
         root_logger.handlers.clear()
 
         setup_logging(verbose=True)
-
         assert root_logger.level == logging.DEBUG
 
     def test_uuid_format_validation(self) -> None:
-        """Test that request IDs follow UUID format.
-
-        Verifies that set_request_id() generates valid UUIDs that can be
-        parsed by the uuid.UUID constructor.
-        """
-        from secondbrain.logging import set_request_id, get_request_id
         import uuid
 
         request_id = set_request_id()
-
-        # Should be a valid UUID
         parsed_uuid = uuid.UUID(request_id)
         assert str(parsed_uuid) == request_id
-
-        # Should be a string
-        assert isinstance(request_id, str)
-        assert len(request_id) == 36  # Standard UUID length
+        assert len(request_id) == 36
 
 
-def test_default_format_is_rich():
-    """Test that default log format is rich text.
-    
-    QA: Verify logs are human-readable by default.
-    """
-    import logging
-    from secondbrain.logging import setup_logging
-    
-    # Reset handlers
+def test_default_format_is_rich() -> None:
     root_logger = logging.getLogger()
     root_logger.handlers.clear()
-    
-    # Setup logging without specifying format (should default to rich)
+
     setup_logging(verbose=False)
-    
-    # Check that we have a RichHandler
-    from rich.logging import RichHandler
-    has_rich = any(isinstance(h, RichHandler) for h in root_logger.handlers)
-    
-    assert has_rich, "Default log format should be Rich (human-readable)"
-    print("Default log format is Rich text (human-readable)")
+    assert any(isinstance(h, RichHandler) for h in root_logger.handlers)
