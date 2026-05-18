@@ -19,23 +19,23 @@ classifiers = [
 ]
 
 dependencies = [
-    "click>=8.1.0",  # CLI framework; 8.1+ has improved context handling, no breaking changes
-    "docling>=2.81.0",  # Document parsing; minimum version for multi-format support (PDF, DOCX, PPTX, XLSX)
-    "docling-core>=2.48.4",  # Core types for docling; pinned to match docling version compatibility
-    "pymongo>=4.6.0",  # MongoDB driver; 4.6+ has async support improvements, connection pooling fixes
+    "click>=8.4.0",  # CLI framework; 8.1+ has improved context handling, no breaking changes
+    "docling>=2.94.0",  # Document parsing; minimum version for multi-format support (PDF, DOCX, PPTX, XLSX)
+    "docling-core>=2.76.0",  # Core types for docling; pinned to match docling version compatibility
+    "pymongo>=4.17.0",  # MongoDB driver; 4.6+ has async support improvements, connection pooling fixes
     "motor>=3.0.0",  # Async MongoDB driver; 3.0+ required for Python 3.11+ async compatibility
     "httpx>=0.28.1",  # HTTP client; 0.28+ has improved HTTP/2 support, connection reuse
-    "pydantic>=2.0.0",  # Data validation; 2.0+ required for v2 migration, faster validation, type adapter
-    "pydantic-settings>=2.0.0",  # Settings management; 2.0+ compatible with pydantic v2
-    "rich>=14.0.0",  # Terminal output; 14.0+ has improved table rendering, markdown support
+    "pydantic>=2.13.4",  # Data validation; 2.0+ required for v2 migration, faster validation, type adapter
+    "pydantic-settings>=2.14.1",  # Settings management; 2.0+ compatible with pydantic v2
+    "rich>=15.0.0",  # Terminal output; 14.0+ has improved table rendering, markdown support
     "python-dotenv>=1.2.2",  # Environment variables; 1.2+ has better .env file parsing
-    "sentence-transformers>=5.0.0",  # Embedding models; 5.0+ required for latest model architectures
-    "numpy>=2.0.0",  # Numerical computing; required for embedding arrays and model operations
-    "torch>=2.0.0",  # PyTorch; required for sentence-transformers and deep learning models
+    "sentence-transformers>=5.5.0",  # Embedding models; 5.0+ required for latest model architectures
+    "numpy>=2.4.6",  # Numerical computing; required for embedding arrays and model operations
+    "torch>=2.12.0",  # PyTorch; required for sentence-transformers and deep learning models
     "opentelemetry-api>=1.20.0",  # Observability API; 1.20+ stable SDK integration
     "opentelemetry-sdk>=1.20.0",  # Observability SDK; 1.20+ compatible with API, tracing exporters
     "ollama>=0.1.0",  # Ollama client; 0.1+ for local LLM integration
-    "openai>=1.0.0",  # OpenAI client; 1.0+ for OpenAI LLM provider support
+    "openai>=2.37.0",  # OpenAI client; 1.0+ for OpenAI LLM provider support
     "typing_extensions>=4.0.0",  # Extended typing features (ParamSpec, TypedDict)
 ]
 
