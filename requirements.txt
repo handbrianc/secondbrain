@@ -165,6 +165,8 @@ omegaconf==2.3.0
     # via rapidocr
 openai==2.33.0
     # via -r requirements.in
+anthropic==0.104.1
+    # via -r requirements.in
 opencv-python==4.13.0.92
     # via rapidocr
 openpyxl==3.1.5

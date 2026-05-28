@@ -153,6 +153,18 @@ def setup_tracing(
     global _tracer, _tracing_enabled, _meter, _metrics_enabled
     global _operations_counter, _duration_histogram, _errors_counter
 
+    # Validate sampling rate BEFORE checking OTel availability
+    # This ensures validation happens regardless of whether OTel is installed
+    sampling_rate_str = os.getenv("SECONDBRAIN_OTEL_SAMPLING_RATE", "1.0")
+    try:
+        sampling_rate = max(0.0, min(1.0, float(sampling_rate_str)))
+    except ValueError:
+        logger.warning(
+            "Invalid SECONDBRAIN_OTEL_SAMPLING_RATE: %s, using default 1.0",
+            sampling_rate_str,
+        )
+        sampling_rate = 1.0
+
     if not OTTEL_AVAILABLE:
         logger.warning("OpenTelemetry not installed, tracing disabled")
         return
@@ -173,15 +185,6 @@ def setup_tracing(
         otlp_endpoint = os.getenv(
             "SECONDBRAIN_OTEL_EXPORTER_ENDPOINT", "http://localhost:4317"
         )
-        sampling_rate_str = os.getenv("SECONDBRAIN_OTEL_SAMPLING_RATE", "1.0")
-        try:
-            sampling_rate = max(0.0, min(1.0, float(sampling_rate_str)))
-        except ValueError:
-            logger.warning(
-                "Invalid SECONDBRAIN_OTEL_SAMPLING_RATE: %s, using default 1.0",
-                sampling_rate_str,
-            )
-            sampling_rate = 1.0
 
         sampler = TraceIdRatioBased(sampling_rate)
         resource = OTelResource.create(
