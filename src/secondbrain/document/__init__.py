@@ -27,7 +27,11 @@ from secondbrain.config import config, get_config
 from secondbrain.exceptions import DocumentExtractionError, UnsupportedFileError
 from secondbrain.storage import VectorStorage
 from secondbrain.utils.embedding_cache import EmbeddingCache
+from secondbrain.utils.mps_patch import patch_transformers_for_mps
 from secondbrain.utils.tracing import trace_operation
+
+# Apply MPS patch before docling imports (fixes float64 issue on Apple Silicon)
+patch_transformers_for_mps()
 
 # Lazy import docling to avoid 2+ second import overhead in tests
 # Only import when actually needed (DocumentConverter instantiation)
