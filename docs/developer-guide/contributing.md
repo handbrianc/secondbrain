@@ -22,12 +22,14 @@ cd secondbrain
 python -m venv venv
 source venv/bin/activate
 
-# Install dependencies
+# Install with development dependencies
 pip install -e ".[dev]"
 
 # Install pre-commit hooks
 pre-commit install
 ```
+
+> **What's included?** See [Dependency Installation Guide](../getting-started/DEPENDENCIES.md#development-dependencies) for the complete list of development tools.
 
 ## Development Workflow
 

@@ -23,7 +23,11 @@ This release adds extensive resilience, security, and documentation improvements
 #### 1. Update Dependencies
 
 ```bash
+# Update with development dependencies
 pip install -e ".[dev]"
+
+# Or update runtime dependencies only
+pip install -e "."
 ```
 
 Or with pinned versions:
@@ -31,6 +35,8 @@ Or with pinned versions:
 ```bash
 pip install -r requirements-dev.txt
 ```
+
+> **See [Dependency Installation Guide](getting-started/DEPENDENCIES.md)** for details on runtime vs development dependencies.
 
 #### 2. Enable Circuit Breaker (Optional)
 

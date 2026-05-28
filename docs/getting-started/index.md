@@ -23,6 +23,8 @@ SecondBrain is a command-line tool that transforms your documents into a searcha
 
 ```bash
 # Install SecondBrain
+# For production: pip install -e "."
+# For development: pip install -e ".[dev]"
 pip install -e ".[dev]"
 
 # Start services (Docker)
@@ -32,6 +34,8 @@ sentence-transformers serve  # sentence-transformers (macOS/Linux)
 # Verify installation
 secondbrain --help
 ```
+
+> **Choose Your Installation Profile**: See [Dependency Installation Guide](installation.md#choose-your-installation-profile) for detailed options.
 
 ### First Steps
 

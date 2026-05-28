@@ -7,14 +7,11 @@ from typing import Any
 from rich.console import Console
 from rich.table import Table
 
+from secondbrain.constants import DEFAULT_MIN_SIMILARITY_THRESHOLD
 from secondbrain.logging import HealthStatus
 from secondbrain.storage import ChunkInfo, DatabaseStats
 
 console = Console(markup=True)
-
-# Minimum similarity threshold for displaying search results
-# Results below this score are considered irrelevant
-DEFAULT_MIN_SIMILARITY_THRESHOLD = 0.78
 
 
 def display_search_results(
@@ -29,7 +26,6 @@ def display_search_results(
         format: Output format: 'table', 'json'.
         min_score: Minimum similarity score threshold (0.0-1.0).
     """
-    # JSON format always returns valid JSON, even for empty results
     if format == "json":
         console.print(json.dumps(results, indent=2))
         return
@@ -38,7 +34,6 @@ def display_search_results(
         console.print("[yellow]No results found[/yellow]")
         return
 
-    # Filter by minimum similarity threshold
     filtered_results = [r for r in results if r.get("score", 0) >= min_score]
 
     if not filtered_results:

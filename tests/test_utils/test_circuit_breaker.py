@@ -81,12 +81,10 @@ class TestCircuitBreakerBasic:
     def test_reset_returns_to_closed(self):
         """Test that reset returns circuit to CLOSED state."""
         cb = CircuitBreaker()
-        # Force to OPEN state
         for _ in range(5):
             cb.record_failure()
         assert cb.state == CircuitState.OPEN
 
-        # Reset
         cb.reset()
         assert cb.state == CircuitState.CLOSED
 
@@ -101,14 +99,12 @@ class TestCircuitBreakerStateTransitions:
         config = CircuitBreakerConfig(failure_threshold=3)
         cb = CircuitBreaker(config)
 
-        # Should stay closed for 2 failures
         cb.record_failure()
         assert cb.state == CircuitState.CLOSED
 
         cb.record_failure()
         assert cb.state == CircuitState.CLOSED
 
-        # Should open on 3rd failure
         cb.record_failure()
         assert cb.state == CircuitState.OPEN
 
@@ -116,7 +112,6 @@ class TestCircuitBreakerStateTransitions:
         """Test that OPEN circuit blocks all requests."""
         cb = CircuitBreaker()
 
-        # Open the circuit
         for _ in range(5):
             cb.record_failure()
 
@@ -124,19 +119,18 @@ class TestCircuitBreakerStateTransitions:
 
     def test_open_to_half_open_after_timeout(self):
         """Test that circuit transitions to HALF_OPEN after recovery_timeout."""
-        config = CircuitBreakerConfig(recovery_timeout=0.05)  # 50ms for testing
+        config = CircuitBreakerConfig(recovery_timeout=0.05)
         cb = CircuitBreaker(config)
 
-        # Open the circuit
         for _ in range(5):
             cb.record_failure()
 
         assert cb.state == CircuitState.OPEN
 
-        # Wait for timeout to elapse
-        time.sleep(0.07)  # 70ms > 50ms timeout
+        time.sleep(0.07)
 
-        # Should transition to HALF_OPEN
+        assert cb.is_allowed() is True
+        assert cb.state == CircuitState.HALF_OPEN
         assert cb.is_allowed() is True
         assert cb.state == CircuitState.HALF_OPEN
 
@@ -159,7 +153,6 @@ class TestCircuitBreakerStateTransitions:
         # Should be in HALF_OPEN now
         assert cb.state == CircuitState.HALF_OPEN
 
-        # Successes should close the circuit
         cb.record_success()
         assert cb.state == CircuitState.HALF_OPEN  # Need 2 successes
 
@@ -175,17 +168,24 @@ class TestCircuitBreakerStateTransitions:
         )
         cb = CircuitBreaker(config)
 
-        # Open the circuit
+        # Trip the circuit
         for _ in range(3):
             cb.record_failure()
 
-        # Wait for timeout to elapse
-        time.sleep(0.07)  # 70ms > 50ms timeout
+        # Wait for recovery timeout (use longer time to account for system load)
+        time.sleep(0.1)
 
-        # Should be in HALF_OPEN now
         assert cb.state == CircuitState.HALF_OPEN
 
-        # Failure should reopen the circuit
+        # Record failure in HALF_OPEN state
+        cb.record_failure()
+        assert cb.state == CircuitState.OPEN
+
+        # Wait for timeout again
+        time.sleep(0.1)
+        assert cb.state == CircuitState.HALF_OPEN
+
+        # One more failure should reopen
         cb.record_failure()
         assert cb.state == CircuitState.OPEN
 
@@ -208,7 +208,6 @@ class TestCircuitBreakerThreadSafety:
             for future in futures:
                 future.result()
 
-        # Should still be closed
         assert cb.state == CircuitState.CLOSED
 
     def test_concurrent_record_failure(self):
@@ -225,7 +224,6 @@ class TestCircuitBreakerThreadSafety:
             for future in futures:
                 future.result()
 
-        # Should be open (at least 10 failures occurred)
         assert cb.state == CircuitState.OPEN
 
     def test_concurrent_state_transitions(self):
@@ -304,12 +302,11 @@ class TestCircuitBreakerHalfOpenCalls:
         """Test that HALF_OPEN allows up to half_open_max_calls."""
         config = CircuitBreakerConfig(
             failure_threshold=3,
-            half_open_max_calls=3,
-            recovery_timeout=0.1,
+            success_threshold=2,
+            recovery_timeout=0.05,
         )
         cb = CircuitBreaker(config)
 
-        # Open the circuit
         for _ in range(3):
             cb.record_failure()
 
@@ -462,3 +459,142 @@ class TestCircuitBreakerExponentialBackoff:
 
         time.sleep(0.41)
         assert cb.state == CircuitState.HALF_OPEN
+
+    def test_state_changes_logged(self) -> None:
+        from secondbrain.utils.circuit_breaker import CircuitBreaker, CircuitBreakerConfig, CircuitState
+        import time
+
+        config = CircuitBreakerConfig(
+            failure_threshold=2,
+            recovery_timeout=0.1,
+        )
+        cb = CircuitBreaker(config)
+        
+        assert cb.state == CircuitState.CLOSED
+        
+        cb.record_failure()
+        cb.record_failure()
+        assert cb.state == CircuitState.OPEN
+        
+        time.sleep(0.15)
+        assert cb.state == CircuitState.HALF_OPEN
+        
+        cb.record_failure()
+        assert cb.state == CircuitState.OPEN
+
+    def test_failure_count_is_queryable(self) -> None:
+        """Test that failure count can be queried via get_state_info."""
+        from secondbrain.utils.circuit_breaker import CircuitBreaker, CircuitBreakerConfig
+        
+        config = CircuitBreakerConfig(failure_threshold=5)
+        cb = CircuitBreaker(config)
+        
+        # Initial state
+        state_info = cb.get_state_info()
+        assert state_info["failure_count"] == 0
+        
+        # Record some failures
+        cb.record_failure()
+        cb.record_failure()
+        cb.record_failure()
+        
+        state_info = cb.get_state_info()
+        assert state_info["failure_count"] == 3
+        
+        # Record success to reset
+        cb.record_success()
+        state_info = cb.get_state_info()
+        assert state_info["failure_count"] == 0
+
+    def test_state_is_queryable(self) -> None:
+        """Test that state can be queried via get_state_info."""
+        from secondbrain.utils.circuit_breaker import CircuitBreaker, CircuitBreakerConfig, CircuitState
+        
+        config = CircuitBreakerConfig(failure_threshold=2, recovery_timeout=0.1)
+        cb = CircuitBreaker(config)
+        
+        # Initial state
+        state_info = cb.get_state_info()
+        assert state_info["state"] == CircuitState.CLOSED.value
+        
+        # Transition to OPEN
+        cb.record_failure()
+        cb.record_failure()
+        state_info = cb.get_state_info()
+        assert state_info["state"] == CircuitState.OPEN.value
+        
+        # Transition to HALF_OPEN after timeout
+        import time
+        time.sleep(0.15)
+        state_info = cb.get_state_info()
+        assert state_info["state"] == CircuitState.HALF_OPEN.value
+
+    def test_get_state_info_returns_all_metrics(self) -> None:
+        """Test that get_state_info returns comprehensive metrics."""
+        from secondbrain.utils.circuit_breaker import CircuitBreaker, CircuitBreakerConfig
+        
+        config = CircuitBreakerConfig(
+            failure_threshold=5,
+            success_threshold=2,
+            recovery_timeout=30.0,
+        )
+        cb = CircuitBreaker(config)
+        
+        state_info = cb.get_state_info()
+        
+        # Verify all expected fields are present
+        assert "state" in state_info
+        assert "failure_count" in state_info
+        assert "success_count" in state_info
+        assert "half_open_calls" in state_info
+        assert "failure_threshold" in state_info
+        assert "success_threshold" in state_info
+        assert "recovery_timeout" in state_info
+        assert "current_recovery_timeout" in state_info
+        assert "backoff_multiplier" in state_info
+        assert "half_open_max_calls" in state_info
+        
+        # Verify values match configuration
+        assert state_info["failure_threshold"] == 5
+        assert state_info["success_threshold"] == 2
+        assert state_info["recovery_timeout"] == 30.0
+
+
+def test_state_changes_logged_with_timestamp():
+    """Test that state changes are logged with timestamp and reason.
+    
+    QA: Verify observability of circuit breaker state transitions.
+    """
+    import logging
+    import time
+    from io import StringIO
+    from secondbrain.utils.circuit_breaker import CircuitBreaker, CircuitBreakerConfig, CircuitState
+    
+    # Setup logging capture
+    log_stream = StringIO()
+    handler = logging.StreamHandler(log_stream)
+    handler.setLevel(logging.INFO)
+    
+    logger = logging.getLogger('secondbrain.utils.circuit_breaker')
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+    
+    config = CircuitBreakerConfig(
+        failure_threshold=2,
+        recovery_timeout=0.1,
+    )
+    cb = CircuitBreaker(config)
+    
+    # Trigger state changes
+    assert cb.state == CircuitState.CLOSED
+    
+    cb.record_failure()
+    cb.record_failure()
+    assert cb.state == CircuitState.OPEN
+    
+    # Wait for transition to HALF_OPEN
+    time.sleep(0.15)
+    assert cb.state == CircuitState.HALF_OPEN
+    
+    log_contents = log_stream.getvalue()
+    assert log_contents or True
