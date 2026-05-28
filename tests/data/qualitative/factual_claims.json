@@ -132,7 +132,7 @@
       "context": "Document parsing dependency",
       "expected": {
         "verifiable": true,
-        "fact": "docling>=2.81.0",
+        "fact": "docling>=2.95.0",
         "source": "pyproject.toml dependencies",
         "source_required": true,
         "hallucination_risk": "low"
@@ -148,7 +148,7 @@
       "context": "Embedding model dependency",
       "expected": {
         "verifiable": true,
-        "fact": "sentence-transformers>=5.0.0",
+        "fact": "sentence-transformers>=5.5.1",
         "source": "pyproject.toml dependencies",
         "source_required": true,
         "hallucination_risk": "low"
