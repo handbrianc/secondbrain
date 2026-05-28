@@ -4,7 +4,7 @@ version = "0.4.0"
 description = "A local document intelligence CLI tool for semantic search"
 requires-python = ">=3.11"
 authors = [
-    {name = "Developer", email = "dev@example.com"}
+    {name = "Bishal Chand", email = "bishal.chand@gmail.com"}
 ]
 license = {text = "MIT"}
 readme = "README.md"
@@ -19,79 +19,79 @@ classifiers = [
 ]
 
 dependencies = [
-    "click>=8.1.0",  # CLI framework; 8.1+ has improved context handling, no breaking changes
-    "docling>=2.81.0",  # Document parsing; minimum version for multi-format support (PDF, DOCX, PPTX, XLSX)
-    "docling-core>=2.48.4",  # Core types for docling; pinned to match docling version compatibility
-    "pymongo>=4.6.0",  # MongoDB driver; 4.6+ has async support improvements, connection pooling fixes
-    "motor>=3.0.0",  # Async MongoDB driver; 3.0+ required for Python 3.11+ async compatibility
-    "httpx>=0.28.1",  # HTTP client; 0.28+ has improved HTTP/2 support, connection reuse
-    "pydantic>=2.0.0",  # Data validation; 2.0+ required for v2 migration, faster validation, type adapter
-    "pydantic-settings>=2.0.0",  # Settings management; 2.0+ compatible with pydantic v2
-    "rich>=14.0.0",  # Terminal output; 14.0+ has improved table rendering, markdown support
-    "python-dotenv>=1.2.2",  # Environment variables; 1.2+ has better .env file parsing
-    "sentence-transformers>=5.0.0",  # Embedding models; 5.0+ required for latest model architectures
-    "numpy>=2.0.0",  # Numerical computing; required for embedding arrays and model operations
-    "torch>=2.0.0",  # PyTorch; required for sentence-transformers and deep learning models
-    "opentelemetry-api>=1.20.0",  # Observability API; 1.20+ stable SDK integration
-    "opentelemetry-sdk>=1.20.0",  # Observability SDK; 1.20+ compatible with API, tracing exporters
-    "ollama>=0.1.0",  # Ollama client; 0.1+ for local LLM integration
-    "openai>=1.0.0",  # OpenAI client; 1.0+ for OpenAI LLM provider support
-    "typing_extensions>=4.0.0",  # Extended typing features (ParamSpec, TypedDict)
+    "click>=8.1.0",  # CLI framework - stable API, minor updates only
+    "docling>=2.81.0",  # Document parsing - requires recent features
+    "docling-core>=2.48.4",  # Core types - matches docling version
+    "pymongo>=4.6.0",  # MongoDB driver - async support required
+    "motor>=3.0.0",  # Async MongoDB - requires pymongo 4.x compatibility
+    "httpx>=0.28.1",  # HTTP client - async support for LLM calls
+    "pydantic>=2.0.0",  # Data validation - v2 migration for performance
+    "pydantic-settings>=2.0.0",  # Settings management - pydantic v2 compatible
+    "rich>=14.0.0",  # CLI formatting - modern terminal output
+    "python-dotenv>=1.2.2",  # Environment config - stable API
+    "sentence-transformers>=5.0.0",  # Embedding models - requires recent PyTorch
+    "numpy>=2.0.0",  # Numerical computing - array API compatibility
+    "torch>=2.0.0",  # Deep learning - embedding model runtime
+    "opentelemetry-api>=1.20.0",  # Telemetry - stable tracing API
+    "opentelemetry-sdk>=1.20.0",  # Telemetry - tracing implementation
+    "ollama>=0.1.0",  # Local LLM - early version, API may change
+    "openai>=1.0.0",  # LLM provider - v1 SDK required
+    "anthropic>=0.40.0",  # LLM provider - Claude models support
+    "typing_extensions>=4.0.0",  # Type hints - backport new features
 ]
 
 [project.optional-dependencies]
 dev = [
-    "ruff>=0.15.5",
-    "mypy>=1.8.0",
-    "pytest>=8.0.0",
-    "pytest-asyncio>=0.23.0",
-    "pytest-cov>=4.1.0",
-    "pytest-xdist>=3.0.0",  # Parallel test execution (note: incompatible with pytest-benchmark)
-    "pytest-timeout>=2.2.0",
-    "hypothesis>=6.0.0",  # Property-based testing (no pytest-hypothesis needed)
-    "bandit>=1.7.0",
-    "safety>=3.0.0",
-    "pip-audit>=2.7.0",
-    "pre-commit>=3.6.0",
-    "pyinstaller>=6.0.0",
-    "mongomock>=4.0.0",
-    "vulture>=2.11",
-    "cyclonedx-bom>=7.0.0",
-    "pipdeptree>=2.0.0",  # Dependency tree visualization for debugging
-    "fastapi>=0.100.0",  # FastAPI for integration examples and API testing
-    "uvicorn>=0.1.0",  # FastAPI server for integration examples
-    "flask>=3.0.0",  # Flask for integration examples and API testing
-    "mkdocs>=1.6.0",
-    "mkdocstrings>=0.24.0",
-    "mkdocstrings-python>=2.0.0",
-    "mkdocs-material>=9.5.0",
-    # Security-critical dependencies upgraded
-    "jinja2>=3.1.6",  # Security fix: sandbox escape, XSS (CVE-2024-22195, CVE-2024-34064, CVE-2024-56326, CVE-2024-56201, CVE-2025-27516)
-    "urllib3>=2.6.0",  # Security fix: DoS, decompression bombs (CVE-2025-66418, CVE-2025-66471, CVE-2026-21441)
-    "setuptools>=78.1.1",  # Security fix: path traversal (PYSEC-2025-49)
-    "cryptography>=46.0.0",  # Security fix: PKCS12 DoS, TLS issues (CVE-2024-0727, CVE-2024-28219)
-    "pillow>=11.3.0",  # Security fix: buffer overflow (CVE-2024-28219)
-    "paramiko>=3.5.0",  # Security fix: Terrapin SSH attack (CVE-2023-48795)
-    "PyJWT>=2.10.1",  # Security fix: crit header validation (CVE-2026-32597)
-    "pyasn1>=0.6.0",  # Security fix: DoS recursion (CVE-2026-30922)
-    "pyopenssl>=25.1.0",  # Security fix: callback exceptions (CVE-2026-27448, CVE-2026-27459)
-    "twisted>=25.5.0",  # Security fix: XSS, HTTP pipelining (PYSEC-2024-75, CVE-2024-41671)
-    "idna>=3.10",  # Security fix: ReDoS (PYSEC-2024-60)
-    "wheel>=0.45.0",  # Security fix: path traversal (CVE-2026-24049)
-    "fpdf2>=2.7.0",  # PDF generation for document processing; compatible with docling PDF export
-    "reportlab>=4.0.0",  # PDF creation for example tests (tests/test_examples/)
-    "python-docx>=1.0.0",  # DOCX document parsing; 1.0+ has improved compatibility with modern Word files
+    "ruff>=0.15.5",  # Linting/formatting - fast Rust-based tool
+    "mypy>=1.8.0",  # Type checking - static analysis
+    "pytest>=8.0.0",  # Test framework - v8 for performance
+    "pytest-asyncio>=0.23.0",  # Async test support - modern async patterns
+    "pytest-cov>=4.1.0",  # Coverage reporting - test quality
+    "pytest-xdist>=3.0.0",  # Parallel tests - 18 workers for speed
+    "pytest-timeout>=2.2.0",  # Test timeouts - prevent hangs
+    "hypothesis>=6.0.0",  # Property-based testing - edge case discovery
+    "bandit>=1.7.0",  # Security scanning - Python security issues
+    "safety>=3.0.0",  # Vulnerability check - dependency audits
+    "pip-audit>=2.7.0",  # Security audit - PyPI vulnerability check
+    "pre-commit>=3.6.0",  # Git hooks - automated quality checks
+    "pyinstaller>=6.0.0",  # Binary packaging - standalone executables
+    "mongomock>=4.0.0",  # Test mocking - MongoDB without server
+    "vulture>=2.11",  # Dead code detection - cleanup unused code
+    "cyclonedx-bom>=7.0.0",  # SBOM generation - supply chain security
+    "pipdeptree>=2.0.0",  # Dependency tree - visualize requirements
+    "fastapi>=0.100.0",  # API framework - future REST API support
+    "uvicorn>=0.1.0",  # ASGI server - async HTTP server
+    "flask>=3.0.0",  # Web framework - alternative API option
+    "mkdocs>=1.6.0",  # Documentation - static site generator
+    "mkdocstrings>=0.24.0",  # API docs - auto-generate from docstrings
+    "mkdocstrings-python>=2.0.0",  # Python plugin - mkdocstrings support
+    "mkdocs-material>=9.5.0",  # Theme - professional documentation
+    "jinja2>=3.1.6",  # Templating - security patch required
+    "urllib3>=2.6.0",  # HTTP library - security updates
+    "setuptools>=78.1.1",  # Build tooling - modern packaging
+    "cryptography>=46.0.0",  # Crypto lib - security dependencies
+    "pillow>=11.3.0",  # Image processing - document rendering
+    "paramiko>=3.5.0",  # SSH library - secure file operations
+    "PyJWT>=2.10.1",  # JWT tokens - authentication support
+    "pyasn1>=0.6.0",  # ASN.1 parser - crypto library dependency
+    "pyopenssl>=25.1.0",  # OpenSSL wrapper - secure connections
+    "twisted>=25.5.0",  # Async framework - dependency for security libs
+    "idna>=3.10",  # International domains - URL handling
+    "wheel>=0.45.0",  # Binary wheels - package distribution
+    "fpdf2>=2.7.0",  # PDF generation - document export
+    "reportlab>=4.0.0",  # PDF library - complex document rendering
+    "python-docx>=1.0.0",  # Word documents - DOCX parsing
 ]
 
 qualitative = [
-    "llama-cpp-python>=0.2.0",
-    "transformers>=4.35.0",
-    "accelerate>=0.25.0",
+    "llama-cpp-python>=0.2.0",  # Local LLM - CPU inference support
+    "transformers>=4.35.0",  # HuggingFace - model loading
+    "accelerate>=0.25.0",  # Model optimization - GPU/CPU distribution
 ]
 
 opentelemetry = [
-    "opentelemetry-exporter-otlp>=1.20.0",
-    "opentelemetry-instrumentation-pymongo>=0.40.0",
+    "opentelemetry-exporter-otlp>=1.20.0",  # OTLP exporter - remote tracing
+    "opentelemetry-instrumentation-pymongo>=0.40.0",  # MongoDB auto-instrumentation
 ]
 
 [project.scripts]
@@ -124,7 +124,7 @@ convention = "numpy"
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
-"tests/**" = ["BLE001", "D100", "D101", "D102", "D103", "D104", "N806", "SIM117", "F841", "B017", "PTH123", "D401", "SIM105"]  # Tests may catch generic exceptions; test classes/methods don't need docstrings; mock variable naming is acceptable; nested with statements are common in tests; unused mock variables are common; blind exceptions acceptable in tests; Path.open not required; imperative mood not required; contextlib.suppress optional
+    "tests/**" = ["BLE001", "D100", "D101", "D102", "D103", "D104", "N806", "SIM117", "F841", "B017", "PTH123", "D401", "SIM105"]
 
 [tool.mypy]
 python_version = "3.11"
@@ -149,7 +149,6 @@ module = ["secondbrain.document"]
 warn_unused_ignores = false
 disable_error_code = ["arg-type", "attr-defined"]
 
-# Skip problematic third-party packages with namespace package issues
 [[tool.mypy.overrides]]
 module = ["google.*"]
 ignore_errors = true
@@ -173,23 +172,9 @@ follow_imports = "skip"
 ignore_missing_imports = true
 disable_error_code = ["attr-defined", "no-any-return", "valid-type", "operator", "unreachable", "has-type", "misc"]
 
-# Integration examples may have untyped decorators from Flask/FastAPI
 [[tool.mypy.overrides]]
 module = ["docs.examples.*"]
 disable_error_code = ["misc"]
-
-# OpenTelemetry SDK - type stubs have attr-defined false positives
-[[tool.mypy.overrides]]
-module = ["opentelemetry.*"]
-follow_imports = "skip"
-ignore_missing_imports = true
-disable_error_code = ["attr-defined", "no-any-return", "valid-type", "operator", "unreachable", "has-type", "misc"]
-
-[[tool.mypy.overrides]]
-module = ["docling", "docling.*"]
-follow_imports = "skip"
-ignore_missing_imports = true
-disable_error_code = ["attr-defined", "no-any-return", "valid-type", "operator", "unreachable", "has-type", "misc"]
 
 [tool.coverage.run]
 source = ["src"]
@@ -210,40 +195,32 @@ skips = ["B101", "B602"]
 exclude_dirs = ["tests"]
 
 [tool.safety]
-# Security vulnerability ignores - all ignored items are non-exploitable in this CLI context
-# Rationale: This is a local CLI tool, not a web server or template renderer
 ignore = [
-    # NLTK vulnerabilities - DEV ONLY, not used in production code
-    # WordNet browser XSS/shutdown issues are irrelevant as nltk is dev-only
-    "CVE-2026-33230",  # nltk dev dependency - WordNet XSS, not in production
-    "CVE-2026-33231",  # nltk dev dependency - WordNet shutdown, not in production  
-    "GHSA-rf74-v2fm-23pw",  # nltk dev dependency - RecursionError, not in production
+    # NLTK vulnerabilities - dev only, not used in production code
+    "CVE-2026-33230",
+    "CVE-2026-33231",
+    "GHSA-rf74-v2fm-23pw",
     
-    # Transitive dependencies - not directly used, mitigated by context
-    "54843",  # configobj transitive - ReDoS only exploitable with server-side config files
-    "CVE-2023-26112",  # configobj - same as above, ReDoS via validate() not used
+    # Transitive dependencies - mitigated by context
+    "54843",
+    "CVE-2023-26112",
     
     # Transformers - false positive for controlled model loading
-    "85102",  # transformers - RCE only via untrusted model loading, we control models
+    "85102",
     
     # System packages - not exploitable in CLI context
-    "CVE-2025-8869",  # pip - system package, PEP 706 handled by Python 3.12
-    "CVE-2026-1703",  # pip - wheel extraction, not used in runtime
+    "CVE-2025-8869",
+    "CVE-2026-1703",
     
-    # Transitive crypto dependencies - mitigated by usage context
-    "CVE-2025-69277",  # pynacl - libsodium point validation, not used in our crypto operations
+    # Transitive crypto dependencies
+    "CVE-2025-69277",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--no-cov --timeout=300 -p no:warnings --dist=loadfile -n auto"
-# Use pytest-xdist with loadfile strategy for test isolation
-# Each test file runs in its own worker to prevent MongoDB state pollution
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
-# Pytest-xdist configuration for parallel test execution
-# --dist=loadfile ensures each test file runs in a single worker,
-# preventing model sharing issues across workers
 markers = [
     "integration: marks tests as integration tests that require external services",
     "unit: marks tests as unit tests that use mocks",
@@ -274,9 +251,6 @@ filterwarnings = [
     "ignore:I/O operation on closed file:ValueError:opentelemetry",
     "ignore:Exception while exporting Span:ValueError",
 ]
-# Retry flaky tests - may have transient failures due to LLM variance
-# Override per-test using @pytest.mark.flaky(reruns=2) where needed
-# Default: no retries to prevent excessive runtimes
 reruns = 0
 reruns_delay = 0
 
@@ -286,8 +260,8 @@ deadline = 500
 database = ".hypothesis"
 
 [tool.pytest-timeout]
-timeout = 120  # Increased for LLM model loading and complex queries
-timeout_method = "thread"  # More aggressive than signal, works with threads
+timeout = 120
+timeout_method = "thread"
 
 [tool.pre-commit]
 default_stages = ["pre-commit"]
@@ -301,13 +275,13 @@ ignore_names = [
     "tearDown",
     "setUpModule",
     "tearDownModule",
-    "cls",           # Classmethod first parameter (false positive)
-    "exc_type",      # Exception context in __exit__ (false positive)
+    "cls",
+    "exc_type",
     "exc_val",
     "exc_tb",
-    "info",          # Context manager info parameter (false positive)
-    "description",   # No-op span method parameter (interface match)
-    "attributes",    # No-op span method parameter (interface match)
+    "info",
+    "description",
+    "attributes",
 ]
 min_confidence = 80
 exclude = ["venv/*", ".git/*", "tests/*", "scripts/*"]

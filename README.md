@@ -19,19 +19,27 @@ A powerful local document intelligence CLI tool that enables semantic search ove
 Get up and running in 5 minutes:
 
 ```bash
-# 1. Install SecondBrain
+# 1. Clone and setup
+git clone https://github.com/your-username/secondbrain.git
+cd secondbrain
+
+# 2. Start external services (Docker)
+docker-compose up -d  # MongoDB + sentence-transformers
+
+# 3. Install SecondBrain
+# For production use:
+pip install -e "."
+# For development:
 pip install -e ".[dev]"
 
-# 2. Start services (Docker)
-docker-compose up -d  # MongoDB
-sentence-transformers serve  # Embedding service
-
-# 3. Ingest your first documents
+# 4. Ingest your first documents
 secondbrain ingest /path/to/documents/
 
-# 4. Search semantically
+# 5. Search semantically
 secondbrain search "what is this about?"
 ```
+
+> **Choose Your Installation Profile**: See [Dependency Installation Guide](docs/getting-started/DEPENDENCIES.md) for detailed options (runtime, development, qualitative testing, observability).
 
 ## Features
 
@@ -133,9 +141,15 @@ git clone https://github.com/your-username/secondbrain.git
 cd secondbrain
 python -m venv venv
 source venv/bin/activate
+
+# Install with development dependencies
 pip install -e ".[dev]"
+
+# Install pre-commit hooks
 pre-commit install
 ```
+
+> **What's included in dev dependencies?** See [Dependency Installation Guide](docs/getting-started/DEPENDENCIES.md#development-dependencies) for the complete list of testing, linting, security, and documentation tools.
 
 ### Quality Checks
 

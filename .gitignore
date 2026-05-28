@@ -16,20 +16,6 @@ build/
 
 # OpenCode
 .opencode/
-venv/
-.venv/
-env/
-*.pyc
-__pycache__/
-.mypy_cache/
-.pytest_cache/
-.ruff_cache/
-.coverage
-*.egg-info/
-dist/
-build/
-*.egg
-.eggs/
 
 # IDE
 .idea/
@@ -52,9 +38,6 @@ htmlcov/
 .benchmarks/
 .coverage*
 
-# Lockfile (keep for reproducibility)
-# requirements.txt is tracked for reproducible installs
-
 # Local config
 config.yaml
 config.yml
@@ -62,18 +45,6 @@ config.yml
 
 # Sisyphus Loop
 .sisyphus/
-venv/
-.mypy_cache/
-.pytest_cache/
-.ruff_cache/
-.coverage
-
-# IDE
-.idea/
-.vscode/
-
-# Environment
-.env
 
 # Build artifacts
 site/
@@ -90,6 +61,4 @@ TEST_*.md
 
 # Generated knowledge graph
 graphify-out/
-
-# Sisyphus analysis documents (work-in-progress)
-.sisyphus/
+.gitnexus

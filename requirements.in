@@ -17,4 +17,5 @@ opentelemetry-api>=1.20.0
 opentelemetry-sdk>=1.20.0
 ollama>=0.1.0
 openai>=1.0.0
+anthropic>=0.40.0
 typing_extensions>=4.0.0

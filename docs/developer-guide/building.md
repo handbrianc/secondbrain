@@ -7,12 +7,14 @@ Create distributable binaries and packages for SecondBrain.
 ### Install from Source
 
 ```bash
-# Development installation
+# For development (includes testing, linting, security tools)
 pip install -e ".[dev]"
 
-# Production installation
+# For production (runtime dependencies only)
 pip install -e "."
 ```
+
+> **Choose the right installation**: See [Dependency Installation Guide](../getting-started/DEPENDENCIES.md) for details on runtime vs development dependencies.
 
 ### Build Wheel
 
@@ -66,8 +68,11 @@ pip install .
 ### Development Mode
 
 ```bash
+# Install with all development dependencies
 pip install -e ".[dev]"
 ```
+
+> **Need only runtime?** Use `pip install -e "."` for production deployments.
 
 ## Distribution Channels
 

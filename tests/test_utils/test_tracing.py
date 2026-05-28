@@ -25,11 +25,9 @@ class TestIsTracingEnabled:
     """Tests for is_tracing_enabled function."""
 
     def test_returns_false_when_not_set(self):
-        """Should return False when OTEL_TRACING_ENABLED is not set."""
-        # Ensure env var is not set
-        os.environ.pop("OTEL_TRACING_ENABLED", None)
+        """Should return False when SECONDBRAIN_TRACING_ENABLED is not set."""
+        os.environ.pop("SECONDBRAIN_TRACING_ENABLED", None)
 
-        # Reset internal state
         from secondbrain.utils import tracing
 
         tracing._tracing_enabled = False
@@ -37,10 +35,9 @@ class TestIsTracingEnabled:
         assert is_tracing_enabled() is False
 
     def test_returns_true_when_set_to_true(self):
-        """Should return True when OTEL_TRACING_ENABLED=true."""
-        os.environ["OTEL_TRACING_ENABLED"] = "true"
+        """Should return True when SECONDBRAIN_TRACING_ENABLED=true."""
+        os.environ["SECONDBRAIN_TRACING_ENABLED"] = "true"
 
-        # Reset internal state
         from secondbrain.utils import tracing
 
         tracing._tracing_enabled = False
@@ -48,10 +45,9 @@ class TestIsTracingEnabled:
         assert is_tracing_enabled() is True
 
     def test_returns_true_when_set_to_true_uppercase(self):
-        """Should return True when OTEL_TRACING_ENABLED=TRUE (case-insensitive)."""
-        os.environ["OTEL_TRACING_ENABLED"] = "TRUE"
+        """Should return True when SECONDBRAIN_TRACING_ENABLED=TRUE (case-insensitive)."""
+        os.environ["SECONDBRAIN_TRACING_ENABLED"] = "TRUE"
 
-        # Reset internal state
         from secondbrain.utils import tracing
 
         tracing._tracing_enabled = False
@@ -59,10 +55,9 @@ class TestIsTracingEnabled:
         assert is_tracing_enabled() is True
 
     def test_returns_false_when_set_to_false(self):
-        """Should return False when OTEL_TRACING_ENABLED=false."""
-        os.environ["OTEL_TRACING_ENABLED"] = "false"
+        """Should return False when SECONDBRAIN_TRACING_ENABLED=false."""
+        os.environ["SECONDBRAIN_TRACING_ENABLED"] = "false"
 
-        # Reset internal state
         from secondbrain.utils import tracing
 
         tracing._tracing_enabled = False
@@ -76,14 +71,12 @@ class TestSetupTracing:
     def test_noop_when_opentelemetry_not_available(self):
         """Should be a no-op when OpenTelemetry is not installed."""
         with patch("secondbrain.utils.tracing.OTTEL_AVAILABLE", False):
-            # Should not raise
             setup_tracing(service_name="test", service_version="1.0")
 
     def test_noop_when_tracing_not_enabled(self, caplog):
         """Should be a no-op when tracing is not enabled via env var."""
-        os.environ.pop("OTEL_TRACING_ENABLED", None)
+        os.environ.pop("SECONDBRAIN_TRACING_ENABLED", None)
 
-        # Reset internal state
         from secondbrain.utils import tracing
 
         tracing._tracing_enabled = False
@@ -94,21 +87,17 @@ class TestSetupTracing:
         ):
             setup_tracing(service_name="test", service_version="1.0")
 
-            # Should log debug message
             assert any("tracing not enabled" in msg.lower() for msg in caplog.messages)
 
     def test_sets_up_tracing_when_enabled(self):
         """Should setup tracing when OpenTelemetry is available and enabled."""
-        os.environ["OTEL_TRACING_ENABLED"] = "true"
+        os.environ["SECONDBRAIN_TRACING_ENABLED"] = "true"
 
-        # Reset internal state
         from secondbrain.utils import tracing
 
         tracing._tracer = None
         tracing._tracing_enabled = False
 
-        # Just verify it doesn't raise an exception
-        # Full integration testing would require actual OpenTelemetry setup
         with contextlib.suppress(Exception):
             setup_tracing(
                 service_name="test-service", service_version="2.0", environment="test"
@@ -126,16 +115,14 @@ class TestGetTracer:
 
     def test_returns_noop_tracer_when_not_initialized(self):
         """Should return NoOpTracer when tracing is not initialized."""
-        # Reset internal state
         from secondbrain.utils import tracing
 
         tracing._tracer = None
         tracing._tracing_enabled = False
 
-        os.environ.pop("OTEL_TRACING_ENABLED", None)
+        os.environ.pop("SECONDBRAIN_TRACING_ENABLED", None)
 
         tracer = get_tracer()
-        # When not initialized, should return _NoOpTracer or None wrapped
         assert tracer is not None
 
 
@@ -144,31 +131,24 @@ class TestTraceOperation:
 
     def test_yields_none_when_opentelemetry_not_available(self):
         """Should yield None when OpenTelemetry is not available."""
-        with (
-            patch("secondbrain.utils.tracing.OTTEL_AVAILABLE", False),
-            trace_operation("test_operation") as span,
-        ):
-            assert span is None
-
-    def test_yields_none_when_tracing_not_enabled(self):
+        with patch("secondbrain.utils.tracing.OTTEL_AVAILABLE", False):
+            with trace_operation("test_operation") as span:
+                assert span is None
         """Should yield None when tracing is not enabled."""
-        os.environ.pop("OTEL_TRACING_ENABLED", None)
+        os.environ.pop("SECONDBRAIN_TRACING_ENABLED", None)
 
-        # Reset internal state
         from secondbrain.utils import tracing
 
         tracing._tracer = None
         tracing._tracing_enabled = False
 
         with trace_operation("test_operation") as span:
-            # When tracing not enabled, span should be None or NoOp
             assert span is None or isinstance(span, _NoOpSpan)
 
     def test_executes_context_normally(self):
         """Should execute context normally and yield span when enabled."""
-        os.environ["OTEL_TRACING_ENABLED"] = "true"
+        os.environ["SECONDBRAIN_TRACING_ENABLED"] = "true"
 
-        # Reset internal state
         from secondbrain.utils import tracing
 
         tracing._tracer = None
@@ -182,10 +162,9 @@ class TestTraceOperation:
             mock_trace.get_tracer.return_value.start_as_current_span.return_value.__enter__.return_value = mock_span
 
             with trace_operation("test_operation"):
-                # Context should execute
                 pass
 
-                patch.stopall()
+            patch.stopall()
 
 
 class TestNoOpTracer:
@@ -200,11 +179,8 @@ class TestNoOpTracer:
     def test_getattr_returns_callable(self):
         """Should return a callable for any attribute access."""
         tracer = _NoOpTracer()
-        result = tracer.some_method()
-        assert result is None
-
-        result2 = tracer.another_method(arg1="value", arg2=123)
-        assert result2 is None
+        assert tracer.some_method() is None
+        assert tracer.another_method(arg1="value", arg2=123) is None
 
 
 class TestNoOpSpan:
@@ -215,33 +191,28 @@ class TestNoOpSpan:
         span = _NoOpSpan()
         span.set_attribute("key", "value")
         span.set_attribute("number", 123)
-        # Should not raise
 
     def test_set_status_is_noop(self):
         """Should not raise when setting status."""
         span = _NoOpSpan()
         span.set_status("OK")
         span.set_status("ERROR", "Something went wrong")
-        # Should not raise
 
     def test_record_exception_is_noop(self):
         """Should not raise when recording exception."""
         span = _NoOpSpan()
         span.record_exception(Exception("test error"))
-        # Should not raise
 
     def test_add_event_is_noop(self):
         """Should not raise when adding event."""
         span = _NoOpSpan()
         span.add_event("event_name")
         span.add_event("event_name", {"key": "value"})
-        # Should not raise
 
     def test_context_manager_works(self):
         """Should work as context manager."""
         with _NoOpSpan() as span:
             assert isinstance(span, _NoOpSpan)
-        # Should exit cleanly
 
 
 class TestShutdownTracing:
@@ -250,12 +221,10 @@ class TestShutdownTracing:
     def test_noop_when_opentelemetry_not_available(self):
         """Should be a no-op when OpenTelemetry is not available."""
         with patch("secondbrain.utils.tracing.OTTEL_AVAILABLE", False):
-            # Should not raise
             shutdown_tracing()
 
     def test_resets_internal_state(self):
         """Should reset internal tracing state."""
-        # Reset internal state first
         from secondbrain.utils import tracing
 
         tracing._tracer = "test_tracer"
@@ -267,7 +236,6 @@ class TestShutdownTracing:
         ):
             shutdown_tracing()
 
-            # State should be reset
             assert tracing._tracer is None
             assert tracing._tracing_enabled is False
 
@@ -313,33 +281,25 @@ class TestExtractTraceContext:
 
     def test_empty_headers(self):
         """Should return empty dict for empty headers."""
-        result = extract_trace_context({})
-
-        assert result == {}
+        assert extract_trace_context({}) == {}
 
     def test_missing_traceparent(self):
         """Should return empty dict when traceparent is missing."""
         headers = {"content-type": "application/json"}
 
-        result = extract_trace_context(headers)
-
-        assert result == {}
+        assert extract_trace_context(headers) == {}
 
     def test_invalid_traceparent_format(self):
         """Should return empty dict for invalid traceparent format."""
         headers = {"traceparent": "invalid-format"}
 
-        result = extract_trace_context(headers)
-
-        assert result == {}
+        assert extract_trace_context(headers) == {}
 
     def test_invalid_traceparent_too_short(self):
         """Should return empty dict for traceparent that is too short."""
         headers = {"traceparent": "00-short-short-01"}
 
-        result = extract_trace_context(headers)
-
-        assert result == {}
+        assert extract_trace_context(headers) == {}
 
     def test_zero_trace_id(self):
         """Should return empty dict for zero trace_id."""
@@ -347,9 +307,7 @@ class TestExtractTraceContext:
             "traceparent": "00-00000000000000000000000000000000-00f067aa0ba902b7-01"
         }
 
-        result = extract_trace_context(headers)
-
-        assert result == {}
+        assert extract_trace_context(headers) == {}
 
     def test_zero_span_id(self):
         """Should return empty dict for zero span_id."""
@@ -357,9 +315,7 @@ class TestExtractTraceContext:
             "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-0000000000000000-01"
         }
 
-        result = extract_trace_context(headers)
-
-        assert result == {}
+        assert extract_trace_context(headers) == {}
 
     def test_sampled_flag(self):
         """Should correctly extract sampled flag."""
@@ -389,14 +345,13 @@ class TestInjectTraceContext:
         assert "traceparent" in result
         assert result["content-type"] == "application/json"
 
-        # Verify traceparent format
         traceparent = result["traceparent"]
         parts = traceparent.split("-")
         assert len(parts) == 4
-        assert parts[0] == "00"  # version
-        assert len(parts[1]) == 32  # trace_id
-        assert len(parts[2]) == 16  # span_id
-        assert len(parts[3]) == 2  # flags
+        assert parts[0] == "00"
+        assert len(parts[1]) == 32
+        assert len(parts[2]) == 16
+        assert len(parts[3]) == 2
 
     def test_inject_preserves_existing_headers(self):
         """Should preserve existing headers when injecting trace context."""
@@ -458,25 +413,6 @@ class TestGetCurrentTraceContext:
             assert result["span_id"] == span_id
             assert result["flags"] == "01"
 
-    def test_context_isolation(self):
-        """Should maintain context isolation across nested contexts."""
-        trace_id_outer = "11111111111111111111111111111111"
-        span_id_outer = "1111111111111111"
-        trace_id_inner = "22222222222222222222222222222222"
-        span_id_inner = "2222222222222222"
-
-        with set_trace_context(trace_id_outer, span_id_outer, "01"):
-            outer_context = get_current_trace_context()
-            assert outer_context["trace_id"] == trace_id_outer
-
-            with set_trace_context(trace_id_inner, span_id_inner, "01"):
-                inner_context = get_current_trace_context()
-                assert inner_context["trace_id"] == trace_id_inner
-
-            # After exiting inner context, should restore outer context
-            outer_context_after = get_current_trace_context()
-            assert outer_context_after["trace_id"] == trace_id_outer
-
 
 class TestSetTraceContext:
     """Tests for set_trace_context context manager."""
@@ -502,7 +438,6 @@ class TestSetTraceContext:
             with set_trace_context(trace_id_inner, span_id_inner, "01"):
                 pass
 
-            # Should be back to outer context
             context = get_current_trace_context()
             assert context["trace_id"] == trace_id_outer
 

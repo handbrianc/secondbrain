@@ -28,10 +28,45 @@ venv\Scripts\activate     # Windows
 
 ### 3. Install Dependencies
 
+Choose the installation profile that matches your needs:
+
+**For Development (Recommended for Contributors):**
 ```bash
-# Install with dev dependencies
 pip install -e ".[dev]"
 ```
+
+**For Production/Runtime Only:**
+```bash
+pip install -e "."
+```
+
+> **What's the difference?** See [Dependency Installation Guide](../getting-started/DEPENDENCIES.md) for complete details on:
+> - Runtime dependencies (19 core packages)
+> - Development dependencies (30+ tools for testing, linting, security)
+> - Optional groups (qualitative testing, observability)
+> - External service requirements (MongoDB, Ollama, sentence-transformers)
+
+### What Development Dependencies Include
+
+The `.[dev]` extra installs tools for:
+
+- **Linting & Formatting**: ruff, mypy
+- **Testing**: pytest, hypothesis, mongomock
+- **Security Scanning**: bandit, safety, pip-audit
+- **Documentation**: mkdocs, mkdocstrings
+- **Packaging**: pyinstaller, wheel
+- **Quality Analysis**: vulture, pipdeptree
+
+Total: 30+ additional packages beyond runtime dependencies.
+
+### Do You Need Dev Dependencies?
+
+| Your Goal | Install Command |
+|-----------|----------------|
+| Just use SecondBrain | `pip install -e "."` |
+| Contribute to SecondBrain | `pip install -e ".[dev]"` |
+| Run qualitative tests | `pip install -e ".[dev]"` + `pip install -e ".[qualitative]"` |
+| Production deployment | `pip install -e "."` |
 
 ### 4. Install Pre-commit Hooks
 
@@ -210,6 +245,22 @@ pytest -s
 pip uninstall secondbrain
 pip install -e ".[dev]"
 ```
+
+### Dependency Conflicts
+
+```bash
+# Check dependency tree
+pip install pipdeptree
+pipdeptree
+
+# Create fresh virtual environment
+python -m venv venv
+source venv/bin/activate
+pip install --upgrade pip
+pip install -e ".[dev]"
+```
+
+> **More troubleshooting tips**: See [Dependency Troubleshooting Guide](../getting-started/DEPENDENCIES.md#troubleshooting)
 
 ## Next Steps
 
