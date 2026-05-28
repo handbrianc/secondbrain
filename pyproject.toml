@@ -68,7 +68,7 @@ dev = [
     "mkdocs-material>=9.5.0",  # Theme - professional documentation
     "jinja2>=3.1.6",  # Templating - security patch required
     "urllib3>=2.6.0",  # HTTP library - security updates
-    "setuptools>=78.1.1",  # Build tooling - modern packaging
+    "setuptools>=82.0.1",  # Build tooling - modern packaging
     "cryptography>=46.0.0",  # Crypto lib - security dependencies
     "pillow>=11.3.0",  # Image processing - document rendering
     "paramiko>=3.5.0",  # SSH library - secure file operations
@@ -98,7 +98,7 @@ opentelemetry = [
 secondbrain = "secondbrain.cli:main"
 
 [build-system]
-requires = ["setuptools>=65.0", "wheel"]
+requires = ["setuptools>=82.0.1", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
