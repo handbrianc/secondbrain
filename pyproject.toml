@@ -37,7 +37,7 @@ dependencies = [
     "ollama>=0.1.0",  # Local LLM - early version, API may change
     "openai>=2.38.0",  # LLM provider - v1 SDK required
     "anthropic>=0.40.0",  # LLM provider - Claude models support
-    "typing_extensions>=4.0.0",  # Type hints - backport new features
+    "typing_extensions>=4.15.0",  # Type hints - backport new features
 ]
 
 [project.optional-dependencies]
