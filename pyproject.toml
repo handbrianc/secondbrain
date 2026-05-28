@@ -36,6 +36,7 @@ dependencies = [
     "opentelemetry-sdk>=1.20.0",  # Telemetry - tracing implementation
     "ollama>=0.1.0",  # Local LLM - early version, API may change
     "openai>=1.0.0",  # LLM provider - v1 SDK required
+    "anthropic>=0.40.0",  # LLM provider - Claude models support
     "typing_extensions>=4.0.0",  # Type hints - backport new features
 ]
 

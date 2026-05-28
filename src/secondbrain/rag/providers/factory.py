@@ -4,11 +4,10 @@ Provides LLMProviderFactory class for creating provider instances
 based on configuration.
 """
 
+from __future__ import annotations
+
 from secondbrain.config import Config
 from secondbrain.rag.interfaces import LocalLLMProvider
-from secondbrain.rag.providers.anthropic import AnthropicLLMProvider
-from secondbrain.rag.providers.ollama import OllamaLLMProvider
-from secondbrain.rag.providers.openai import OpenAILLMProvider
 
 
 class LLMProviderFactory:
@@ -31,6 +30,8 @@ class LLMProviderFactory:
         provider_type = config.llm_provider.lower()
 
         if provider_type == "ollama":
+            from secondbrain.rag.providers.ollama import OllamaLLMProvider
+
             return OllamaLLMProvider(
                 host=config.ollama_host,
                 model=config.llm_model,
@@ -38,6 +39,8 @@ class LLMProviderFactory:
                 timeout=config.llm_timeout,
             )
         elif provider_type == "openai":
+            from secondbrain.rag.providers.openai import OpenAILLMProvider
+
             return OpenAILLMProvider(
                 model=config.llm_model,
                 temperature=config.llm_temperature,
@@ -45,6 +48,8 @@ class LLMProviderFactory:
                 timeout=config.llm_timeout,
             )
         elif provider_type == "anthropic":
+            from secondbrain.rag.providers.anthropic import AnthropicLLMProvider
+
             return AnthropicLLMProvider(
                 model=config.llm_model,
                 temperature=config.llm_temperature,
@@ -76,6 +81,7 @@ class LLMProviderFactory:
             Configured OllamaLLMProvider instance.
         """
         from secondbrain.config import config
+        from secondbrain.rag.providers.ollama import OllamaLLMProvider
 
         cfg = config()
         return OllamaLLMProvider(

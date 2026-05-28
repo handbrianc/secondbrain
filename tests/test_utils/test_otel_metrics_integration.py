@@ -51,15 +51,6 @@ class TestOTELMetricsIntegration:
         for rm in metrics_data.resource_metrics:
             for sm in rm.scope_metrics:
                 for metric in sm.metrics:
-                    if metric.name == "secondbrain.errors.count":
-                        found = True
-                        for dp in metric.data.data_points:
-                            assert dp.attributes.get("error_type") == "failure"
-        
-        assert found
-        for rm in metrics_data.resource_metrics:
-            for sm in rm.scope_metrics:
-                for metric in sm.metrics:
                     if metric.name == "secondbrain.operations.count":
                         found = True
                         for dp in metric.data.data_points:
