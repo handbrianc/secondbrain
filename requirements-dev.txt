@@ -41,7 +41,7 @@ pyinstaller==6.20.0
 mongomock==4.3.0
 
 # Type stubs and extensions
-typing-extensions==4.13.2
+typing-extensions==4.15.0
 
 # FastAPI examples and testing
 fastapi>=0.136.3
