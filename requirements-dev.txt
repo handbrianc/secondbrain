@@ -58,7 +58,7 @@ python-docx>=1.0.0
 # Security patches (pinned versions)
 jinja2>=3.1.6
 urllib3>=2.6.0
-setuptools>=78.1.1
+setuptools>=82.0.1
 cryptography>=46.0.0
 pillow>=11.3.0
 paramiko>=3.5.0
