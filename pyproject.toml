@@ -19,23 +19,23 @@ classifiers = [
 ]
 
 dependencies = [
-    "click>=8.1.0",  # CLI framework - stable API, minor updates only
-    "docling>=2.81.0",  # Document parsing - requires recent features
-    "docling-core>=2.48.4",  # Core types - matches docling version
-    "pymongo>=4.6.0",  # MongoDB driver - async support required
+    "click>=8.4.1",  # CLI framework - stable API, minor updates only
+    "docling>=2.95.0",  # Document parsing - requires recent features
+    "docling-core>=2.77.1",  # Core types - matches docling version
+    "pymongo>=4.17.0",  # MongoDB driver - async support required
     "motor>=3.0.0",  # Async MongoDB - requires pymongo 4.x compatibility
     "httpx>=0.28.1",  # HTTP client - async support for LLM calls
-    "pydantic>=2.0.0",  # Data validation - v2 migration for performance
-    "pydantic-settings>=2.0.0",  # Settings management - pydantic v2 compatible
-    "rich>=14.0.0",  # CLI formatting - modern terminal output
+    "pydantic>=2.13.4",  # Data validation - v2 migration for performance
+    "pydantic-settings>=2.14.1",  # Settings management - pydantic v2 compatible
+    "rich>=15.0.0",  # CLI formatting - modern terminal output
     "python-dotenv>=1.2.2",  # Environment config - stable API
-    "sentence-transformers>=5.0.0",  # Embedding models - requires recent PyTorch
-    "numpy>=2.0.0",  # Numerical computing - array API compatibility
-    "torch>=2.0.0",  # Deep learning - embedding model runtime
-    "opentelemetry-api>=1.20.0",  # Telemetry - stable tracing API
-    "opentelemetry-sdk>=1.20.0",  # Telemetry - tracing implementation
+    "sentence-transformers>=5.5.1",  # Embedding models - requires recent PyTorch
+    "numpy>=2.4.6",  # Numerical computing - array API compatibility
+    "torch>=2.12.0",  # Deep learning - embedding model runtime
+    "opentelemetry-api>=1.42.1",  # Telemetry - stable tracing API
+    "opentelemetry-sdk>=1.42.1",  # Telemetry - tracing implementation
     "ollama>=0.1.0",  # Local LLM - early version, API may change
-    "openai>=1.0.0",  # LLM provider - v1 SDK required
+    "openai>=2.38.0",  # LLM provider - v1 SDK required
     "anthropic>=0.40.0",  # LLM provider - Claude models support
     "typing_extensions>=4.0.0",  # Type hints - backport new features
 ]
