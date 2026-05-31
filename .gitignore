@@ -62,3 +62,6 @@ TEST_*.md
 # Generated knowledge graph
 graphify-out/
 .gitnexus
+
+# Claude
+.claude/

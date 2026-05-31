@@ -248,7 +248,7 @@ class TestChatCommands:
             assert result.exit_code == 0
             assert "Session not found: nonexistent" in result.output
 
-    def test_check_llm(self) -> None:
+    def test_chat_with_check_llm_flag(self) -> None:
         """Test --check-llm flag functionality.
 
         Verifies that:

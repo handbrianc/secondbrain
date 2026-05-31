@@ -294,3 +294,313 @@ class TestConversationSessionProperties:
         session._history = [{"role": "user", "content": "Test"}]
 
         assert session.is_empty is False
+
+
+class TestConversationSessionErrorPaths:
+    """Comprehensive error path tests for ConversationSession."""
+
+    def test_session_state_transitions(self, mock_storage):
+        """Test session state transitions from empty to populated.
+
+        Error Path: State changes as messages are added/removed.
+        """
+        session = ConversationSession.create("test-session", mock_storage)
+
+        # Initial state: empty
+        assert session.is_empty is True
+        assert session.message_count == 0
+
+        # Add first message
+        session.add_message("user", "Hello")
+        assert session.is_empty is False
+        assert session.message_count == 1
+
+        # Add more messages
+        session.add_message("assistant", "Hi!")
+        session.add_message("user", "How are you?")
+        assert session.message_count == 3
+
+        # Clear history
+        session.clear_history()
+        assert session.is_empty is True
+        assert session.message_count == 0
+
+    def test_session_handles_concurrent_access(self, mock_storage):
+        """Test session handles concurrent message additions.
+
+        Error Path: Thread safety under concurrent access.
+        """
+        import threading
+
+        session = ConversationSession.create("test-session", mock_storage, context_window=100)
+
+        def add_messages(count):
+            for i in range(count):
+                session.add_message("user", f"Message {i}")
+
+        threads = []
+        for _ in range(3):
+            t = threading.Thread(target=add_messages, args=(5,))
+            threads.append(t)
+            t.start()
+
+        for t in threads:
+            t.join()
+
+        assert session.message_count == 15
+
+    def test_session_persistence_error_recovery(self, mock_storage):
+        """Test session handles storage errors gracefully.
+
+        Error Path: Storage failures during message persistence.
+        """
+        # Make storage raise an error on save_message
+        mock_storage.save_message.side_effect = RuntimeError("Storage error")
+
+        session = ConversationSession.create("test-session", mock_storage)
+
+        # Should raise the storage error
+        with pytest.raises(RuntimeError, match="Storage error"):
+            session.add_message("user", "Hello")
+
+        # Verify the error occurred during save
+        mock_storage.save_message.assert_called()
+
+    def test_session_invalid_state_handling(self, mock_storage):
+        """Test session handles invalid state gracefully.
+
+        Error Path: Invalid state scenarios.
+        """
+        session = ConversationSession.create("test-session", mock_storage)
+
+        # Get history with negative limit should return empty
+        history = session.get_history(limit=-1)
+        assert history == []
+
+        # Get history with zero limit should return empty
+        history = session.get_history(limit=0)
+        assert history == []
+
+    def test_session_cleanup_on_error(self, mock_storage):
+        """Test session cleanup when errors occur.
+
+        Error Path: State cleanup after errors.
+        """
+        session = ConversationSession.create("test-session", mock_storage)
+
+        # Add some messages
+        session.add_message("user", "Hello")
+        session.add_message("assistant", "Hi!")
+        assert session.message_count == 2
+
+        # Simulate error scenario by manually clearing
+        session._history = []
+
+        # Verify cleanup
+        assert session.is_empty is True
+        assert session.message_count == 0
+
+    def test_session_timeout_handling(self, mock_storage):
+        """Test session handles timeout scenarios.
+
+        Error Path: Timeout during storage operations.
+        """
+        import time
+
+        # Make storage take a long time
+        def slow_save(*args, **kwargs):
+            time.sleep(0.1)
+            return None
+
+        mock_storage.save_message.side_effect = slow_save
+
+        session = ConversationSession.create("test-session", mock_storage)
+
+        # Should complete despite slow storage
+        start = time.time()
+        session.add_message("user", "Hello")
+        elapsed = time.time() - start
+
+        # Should complete within reasonable time
+        assert elapsed < 1.0
+        assert session.message_count == 1
+
+    def test_session_load_returns_none_for_nonexistent(self, mock_storage):
+        """Test that load returns None for non-existent session.
+
+        Error Path: Loading non-existent session.
+        """
+        # Mock empty history (session doesn't exist)
+        mock_storage.get_history.return_value = []
+
+        result = ConversationSession.load("nonexistent", mock_storage)
+
+        assert result is None
+
+    def test_session_create_raises_on_none_storage(self):
+        """Test that create raises ValueError when storage is None.
+
+        Error Path: Missing required storage parameter.
+        """
+        with pytest.raises(ValueError, match="storage must be provided"):
+            ConversationSession.create("test-session", storage=None)
+
+    def test_session_trim_context_when_under_limit(self, mock_storage):
+        """Test trim_context doesn't trim when under limit.
+
+        Error Path: trim_context with valid message count.
+        """
+        session = ConversationSession.create("test-session", mock_storage, context_window=5)
+
+        # Add 3 messages (under limit)
+        for i in range(3):
+            session.add_message("user", f"Message {i}")
+
+        # trim_context should not change anything
+        session.trim_context()
+
+        assert session.message_count == 3
+        # update_messages should not be called
+        mock_storage.update_messages.assert_not_called()
+
+    def test_session_trim_context_when_over_limit(self, mock_storage):
+        """Test trim_context removes oldest messages when over limit.
+
+        Error Path: trim_context with excessive messages.
+        """
+        session = ConversationSession.create("test-session", mock_storage, context_window=3)
+
+        # Add 5 messages (over limit)
+        for i in range(5):
+            session.add_message("user", f"Message {i}")
+
+        # Should have been trimmed during add
+        assert session.message_count == 3
+        # Should keep only the last 3 messages
+        assert session._history[0]["content"] == "Message 2"
+        assert session._history[-1]["content"] == "Message 4"
+
+    def test_session_get_history_returns_copy(self, mock_storage):
+        """Test that get_history returns a copy, not the original list.
+
+        Error Path: Modifying returned history doesn't affect internal state.
+        """
+        session = ConversationSession.create("test-session", mock_storage)
+        session.add_message("user", "Hello")
+
+        history = session.get_history()
+        history.append({"role": "user", "content": "Injected"})
+
+        # Internal state should be unchanged
+        assert session.message_count == 1
+        assert len(session._history) == 1
+
+    def test_session_clear_history_persists_to_storage(self, mock_storage):
+        """Test that clear_history persists to storage.
+
+        Error Path: Persistence after clearing history.
+        """
+        session = ConversationSession.create("test-session", mock_storage)
+        session.add_message("user", "Hello")
+
+        session.clear_history()
+
+        # Should persist empty history to storage
+        mock_storage.update_messages.assert_called_with("test-session", [])
+
+    def test_session_add_message_with_empty_content(self, mock_storage):
+        """Test adding message with empty content.
+
+        Error Path: Edge case with empty content.
+        """
+        session = ConversationSession.create("test-session", mock_storage)
+
+        # Should allow empty content (validation is not done here)
+        session.add_message("user", "")
+
+        assert session.message_count == 1
+        assert session._history[0]["content"] == ""
+
+    def test_session_add_message_with_special_characters(self, mock_storage):
+        """Test adding message with special characters.
+
+        Error Path: Special characters in content.
+        """
+        session = ConversationSession.create("test-session", mock_storage)
+
+        special_content = "Hello! @#$%^&*() 中文 🎉"
+        session.add_message("user", special_content)
+
+        assert session.message_count == 1
+        assert session._history[0]["content"] == special_content
+
+    def test_session_properties_consistency(self, mock_storage):
+        """Test that session properties are consistent.
+
+        Error Path: Property calculation consistency.
+        """
+        session = ConversationSession.create("test-session", mock_storage)
+
+        # Test consistency at various states
+        assert session.is_empty is True
+        assert session.message_count == 0
+        assert len(session.get_history()) == 0
+
+        session.add_message("user", "Hello")
+
+        assert session.is_empty is False
+        assert session.message_count == 1
+        assert len(session.get_history()) == 1
+
+        session.clear_history()
+
+        assert session.is_empty is True
+        assert session.message_count == 0
+        assert len(session.get_history()) == 0
+
+    def test_session_get_context_messages_respects_window(self, mock_storage):
+        """Test get_context_messages respects context window.
+
+        Error Path: Context window limiting.
+        """
+        session = ConversationSession.create("test-session", mock_storage, context_window=3)
+
+        # Add 5 messages
+        for i in range(5):
+            session.add_message("user", f"Message {i}")
+
+        # Should only return last 3
+        context = session.get_context_messages()
+        assert len(context) == 3
+        assert context[0]["content"] == "Message 2"
+        assert context[-1]["content"] == "Message 4"
+
+    def test_session_load_with_custom_context_window(self, mock_storage):
+        """Test load with custom context window.
+
+        Error Path: Custom context window on load.
+        """
+        mock_messages = [
+            {"role": "user", "content": "Hello"},
+            {"role": "assistant", "content": "Hi!"},
+        ]
+        mock_storage.get_history.return_value = mock_messages
+
+        session = ConversationSession.load("existing", mock_storage, context_window=10)
+
+        assert session is not None
+        assert session._context_window == 10
+        assert session.message_count == 2
+
+    def test_session_auto_generates_uuid_when_none(self, mock_storage):
+        """Test that session creates auto-generated UUID when session_id is None.
+
+        Error Path: Auto-generation of session ID.
+        """
+        session = ConversationSession.create(storage=mock_storage)
+
+        # Should have a UUID-like session ID
+        assert session.session_id is not None
+        assert len(session.session_id) > 0
+        # Should be a valid UUID format (has hyphens)
+        assert "-" in session.session_id

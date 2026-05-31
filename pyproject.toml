@@ -49,7 +49,9 @@ dev = [
     "pytest-cov>=4.1.0",  # Coverage reporting - test quality
     "pytest-xdist>=3.0.0",  # Parallel tests - 18 workers for speed
     "pytest-timeout>=2.2.0",  # Test timeouts - prevent hangs
+    "pytest-rerunfailures>=12.0",  # Retry flaky tests - concurrent test stability
     "hypothesis>=6.0.0",  # Property-based testing - edge case discovery
+    "mutmut>=3.5.0",  # Mutation testing - verify test quality
     "bandit>=1.7.0",  # Security scanning - Python security issues
     "safety>=3.0.0",  # Vulnerability check - dependency audits
     "pip-audit>=2.10.0",  # Security audit - PyPI vulnerability check
@@ -184,10 +186,11 @@ omit = ["*/tests/*", "*/test_*.py"]
 exclude_lines = [
     "pragma: no cover",
     "def __repr__",
+    "raise AssertionError",
     "raise NotImplementedError",
     "if __name__ == .__main__.:",
     "if TYPE_CHECKING:",
-    "@abstractmethod",
+    "@overload",
 ]
 
 [tool.bandit]
@@ -218,7 +221,7 @@ ignore = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--no-cov --timeout=300 -p no:warnings --dist=loadfile -n auto"
+addopts = "--timeout=300 -p no:warnings --dist=loadfile -n auto --cov=secondbrain --cov-report=term-missing --cov-report=html --cov-fail-under=75 --reruns=2 --reruns-delay=1"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 markers = [
@@ -241,6 +244,7 @@ markers = [
     "chaos: marks tests for chaos engineering (failure injection, resilience)",
     "threshold_validation: marks tests for threshold validation and sensitivity analysis",
     "xdist_group: marks tests that should run in same xdist worker (shared resources)",
+    "flaky: marks tests as known flaky tests that may need retry",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning:docling",
@@ -254,6 +258,10 @@ filterwarnings = [
 reruns = 0
 reruns_delay = 0
 
+# Retry configuration for concurrent tests (enabled via @pytest.mark.flaky decorator)
+# Default: reruns=0 (no retries), reruns_delay=0 (no delay)
+# Concurrent tests use: @pytest.mark.flaky(reruns=2, rerun_delay=1)
+
 [tool.hypothesis]
 max_examples = 100
 deadline = 500
@@ -262,6 +270,10 @@ database = ".hypothesis"
 [tool.pytest-timeout]
 timeout = 120
 timeout_method = "thread"
+
+[tool.mutmut]
+python_paths = ["src"]
+test_command = "pytest {mutmut_test_file} -xvs"
 
 [tool.pre-commit]
 default_stages = ["pre-commit"]

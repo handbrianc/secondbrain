@@ -111,7 +111,7 @@ class OpenAILLMProvider(LocalLLMProvider):
         except httpx.ConnectError as e:
             raise ServiceUnavailableError(f"OpenAI API unreachable: {e}") from e
         except APIError as e:
-            raise RuntimeError(f"OpenAI API error: {e}") from e
+            raise ServiceUnavailableError(f"OpenAI API error: {e}") from e
         except Exception as e:
             raise RuntimeError(f"Generation failed: {e}") from e
 
@@ -156,7 +156,7 @@ class OpenAILLMProvider(LocalLLMProvider):
         except httpx.ConnectError as e:
             raise ServiceUnavailableError(f"OpenAI API unreachable: {e}") from e
         except APIError as e:
-            raise RuntimeError(f"OpenAI API error: {e}") from e
+            raise ServiceUnavailableError(f"OpenAI API error: {e}") from e
         except Exception as e:
             raise RuntimeError(f"Async generation failed: {e}") from e
 
@@ -172,6 +172,26 @@ class OpenAILLMProvider(LocalLLMProvider):
             return True
         except Exception:
             return False
+
+    @property
+    def model(self) -> str:
+        """Get the model name."""
+        return self._model
+
+    @property
+    def temperature(self) -> float:
+        """Get the default temperature."""
+        return self._temperature
+
+    @property
+    def max_tokens(self) -> int:
+        """Get the default max tokens."""
+        return self._max_tokens
+
+    @property
+    def timeout(self) -> int:
+        """Get the request timeout."""
+        return self._timeout
 
     async def agenerate(
         self,

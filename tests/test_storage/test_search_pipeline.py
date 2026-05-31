@@ -6,7 +6,7 @@ from secondbrain.storage import build_search_pipeline
 class TestBuildSearchPipeline:
     """Tests for the build_search_pipeline function."""
 
-    def test_basic_pipeline_no_filters(self) -> None:
+    def test_pipeline_builds_without_filters(self) -> None:
         """Test basic pipeline without any filters."""
         embedding = [0.1] * 10
         pipeline = build_search_pipeline(embedding=embedding, top_k=5)
