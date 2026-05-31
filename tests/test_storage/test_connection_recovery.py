@@ -117,8 +117,7 @@ class TestConnectionRecovery:
                 storage.get_stats()
                 storage.get_stats()
                 storage.get_stats()
-                # Should not raise any errors
-                assert True
+                assert mock_collection.count_documents.call_count == 3
 
     def test_reconnection_after_close(self) -> None:
         """Test reconnection after explicit close."""

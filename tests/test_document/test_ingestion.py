@@ -68,7 +68,7 @@ def test_get_file_type_unknown() -> None:
 class TestDocumentIngestor:
     """Tests for DocumentIngestor class."""
 
-    def test_init(
+    def test_ingestor_initializes_with_config(
         self, cached_embedding_generator: MagicMock, mocked_pdf_extraction: MagicMock
     ) -> None:
         """Test DocumentIngestor initialization."""

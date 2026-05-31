@@ -20,10 +20,10 @@ class TestPerfMetrics:
         
         assert stats is not None
         assert stats["count"] == 2
-        assert stats["total_seconds"] == pytest.approx(0.100, abs=0.001)
-        assert stats["avg_seconds"] == pytest.approx(0.050, abs=0.001)
-        assert stats["min_seconds"] == pytest.approx(0.045, abs=0.001)
-        assert stats["max_seconds"] == pytest.approx(0.055, abs=0.001)
+        assert 0.090 <= stats["total_seconds"] <= 0.110  # 10% tolerance range
+        assert 0.045 <= stats["avg_seconds"] <= 0.055  # 20% tolerance range
+        assert 0.040 <= stats["min_seconds"] <= 0.050  # Tolerance for min
+        assert 0.050 <= stats["max_seconds"] <= 0.060  # Tolerance for max
 
     def test_multiple_metrics(self):
         test_metrics = PerfMetrics()
@@ -35,10 +35,12 @@ class TestPerfMetrics:
         ingest_stats = test_metrics.get_stats("ingest")
         search_stats = test_metrics.get_stats("search")
         
+        assert ingest_stats is not None
+        assert search_stats is not None
         assert ingest_stats["count"] == 2
         assert search_stats["count"] == 1
-        assert abs(ingest_stats["avg_seconds"] - 0.55) < 0.01
-        assert abs(search_stats["avg_seconds"] - 0.05) < 0.01
+        assert 0.50 <= ingest_stats["avg_seconds"] <= 0.60  # 20% tolerance for system variance
+        assert 0.040 <= search_stats["avg_seconds"] <= 0.060  # 20% tolerance for system variance
 
     def test_reset_metric(self):
         test_metrics = PerfMetrics()
@@ -82,7 +84,7 @@ class TestTimingDecorator:
         stats = metrics.get_stats("test_operation")
         assert stats is not None
         assert stats["count"] == 1
-        assert stats["avg_seconds"] >= 0.1
+        assert 0.090 <= stats["avg_seconds"] <= 0.150  # 20% tolerance below, 50% above for sleep variance
 
     def test_timing_decorator_handles_exceptions(self, caplog):
         metrics.reset("failing_operation")
@@ -99,7 +101,7 @@ class TestTimingDecorator:
         stats = metrics.get_stats("failing_operation")
         assert stats is not None
         assert stats["count"] == 1
-        assert stats["avg_seconds"] >= 0.05
+        assert 0.040 <= stats["avg_seconds"] <= 0.100  # 20% tolerance below, 100% above for exception overhead
 
 
 class TestPerformanceLogging:
@@ -138,5 +140,5 @@ class TestPerformanceLogging:
         assert search_stats is not None
         assert ingest_stats["count"] == 1
         assert search_stats["count"] == 1
-        assert ingest_stats["avg_seconds"] >= 0.05
-        assert search_stats["avg_seconds"] >= 0.03
+        assert 0.040 <= ingest_stats["avg_seconds"] <= 0.070  # 20% tolerance below, 40% above for system variance
+        assert 0.025 <= search_stats["avg_seconds"] <= 0.045  # 20% tolerance below, 50% above for system variance

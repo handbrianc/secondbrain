@@ -477,7 +477,7 @@ class TestSetTraceContext:
             context = get_current_trace_context()
             assert context["tracestate"] == tracestate
 
-    def test_case_normalization(self):
+    def test_trace_context_normalizes_hex_to_lowercase(self):
         """Should normalize hex characters to lowercase."""
         trace_id = "4BF92F3577B34DA6A3CE929D0E0E4736"
         span_id = "00F067AA0BA902B7"

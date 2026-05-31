@@ -21,11 +21,11 @@ class TestHandleCliErrors:
         """Test that click.BadParameter is caught and handled gracefully."""
 
         @handle_cli_errors
-        def test_func():
+        def test_catches_invalid_parameter():
             raise click.BadParameter("Invalid value for '--name'")
 
         with pytest.raises(SystemExit) as exc_info:
-            test_func()
+            test_catches_invalid_parameter()
 
         assert exc_info.value.code == 1
 
@@ -33,11 +33,11 @@ class TestHandleCliErrors:
         """Test that ValueError is caught and handled gracefully."""
 
         @handle_cli_errors
-        def test_func():
+        def test_catches_value_error():
             raise ValueError("Invalid configuration value")
 
         with pytest.raises(SystemExit) as exc_info:
-            test_func()
+            test_catches_value_error()
 
         assert exc_info.value.code == 1
 
@@ -45,11 +45,11 @@ class TestHandleCliErrors:
         """Test that FileNotFoundError is caught and handled gracefully."""
 
         @handle_cli_errors
-        def test_func():
+        def test_catches_file_not_found():
             raise FileNotFoundError("Config file not found: config.yaml")
 
         with pytest.raises(SystemExit) as exc_info:
-            test_func()
+            test_catches_file_not_found()
 
         assert exc_info.value.code == 1
 
@@ -57,11 +57,11 @@ class TestHandleCliErrors:
         """Test that CLIValidationError is caught and handled gracefully."""
 
         @handle_cli_errors
-        def test_func():
+        def test_catches_cli_validation_error():
             raise CLIValidationError("Limit must be non-negative")
 
         with pytest.raises(SystemExit) as exc_info:
-            test_func()
+            test_catches_cli_validation_error()
 
         assert exc_info.value.code == 1
 
@@ -69,11 +69,11 @@ class TestHandleCliErrors:
         """Test that generic Exception is caught and handled gracefully."""
 
         @handle_cli_errors
-        def test_func():
+        def test_catches_runtime_error():
             raise RuntimeError("Unexpected error occurred")
 
         with pytest.raises(SystemExit) as exc_info:
-            test_func()
+            test_catches_runtime_error()
 
         assert exc_info.value.code == 1
 
@@ -81,11 +81,11 @@ class TestHandleCliErrors:
         """Test that verbose suggestion is shown on error."""
 
         @handle_cli_errors
-        def test_func():
+        def test_shows_verbose_suggestion():
             raise ValueError("Test error")
 
         with pytest.raises(SystemExit):
-            test_func()
+            test_shows_verbose_suggestion()
 
         captured = capsys.readouterr()
         assert "Run with --verbose for full traceback" in captured.out
@@ -94,21 +94,21 @@ class TestHandleCliErrors:
         """Test that successful execution returns normally."""
 
         @handle_cli_errors
-        def test_func():
+        def test_executes_successfully():
             return "success"
 
-        result = test_func()
+        result = test_executes_successfully()
         assert result == "success"
 
     def test_logging_called_on_error(self, caplog):
         """Test that error is logged when exception occurs."""
 
         @handle_cli_errors
-        def test_func():
+        def test_logs_error_on_exception():
             raise ValueError("Test error for logging")
 
         with caplog.at_level(logging.WARNING), pytest.raises(SystemExit):
-            test_func()
+            test_logs_error_on_exception()
 
         assert any(
             "Test error for logging" in record.message for record in caplog.records
@@ -118,11 +118,11 @@ class TestHandleCliErrors:
         """Test that full exception is logged on unexpected error."""
 
         @handle_cli_errors
-        def test_func():
+        def test_logs_unexpected_error():
             raise RuntimeError("Unexpected error")
 
         with caplog.at_level(logging.DEBUG), pytest.raises(SystemExit):
-            test_func()
+            test_logs_unexpected_error()
 
         # Should log with exception info
         assert any("Unexpected error" in record.message for record in caplog.records)
@@ -131,13 +131,13 @@ class TestHandleCliErrors:
         """Test click.BadParameter shows full error message."""
 
         @handle_cli_errors
-        def test_func():
+        def test_shows_full_parameter_message():
             raise click.BadParameter(
                 "Invalid value for '--output': must be a valid file path"
             )
 
         with pytest.raises(SystemExit):
-            test_func()
+            test_shows_full_parameter_message()
 
         captured = capsys.readouterr()
         assert "Invalid value for '--output'" in captured.out
@@ -146,11 +146,11 @@ class TestHandleCliErrors:
         """Test FileNotFoundError shows file path in message."""
 
         @handle_cli_errors
-        def test_func():
+        def test_shows_file_path_in_error():
             raise FileNotFoundError("/path/to/file.txt")
 
         with pytest.raises(SystemExit):
-            test_func()
+            test_shows_file_path_in_error()
 
         captured = capsys.readouterr()
         assert "/path/to/file.txt" in captured.out
@@ -159,11 +159,11 @@ class TestHandleCliErrors:
         """Test CLIValidationError preserves the validation message."""
 
         @handle_cli_errors
-        def test_func():
+        def test_preserves_validation_message():
             raise CLIValidationError("Offset must be non-negative")
 
         with pytest.raises(SystemExit):
-            test_func()
+            test_preserves_validation_message()
 
         captured = capsys.readouterr()
         assert "Offset must be non-negative" in captured.out
@@ -178,10 +178,10 @@ class TestHandleCliErrorsWithCliRunner:
 
         @click.command()
         @handle_cli_errors
-        def test_cmd():
+        def test_command_with_error():
             raise ValueError("Command error")
 
-        result = runner.invoke(test_cmd, [])
+        result = runner.invoke(test_command_with_error, [])
         assert result.exit_code == 1
         assert "Error:" in result.output
 
@@ -191,10 +191,10 @@ class TestHandleCliErrorsWithCliRunner:
 
         @click.command()
         @handle_cli_errors
-        def test_cmd():
+        def test_command_succeeds():
             click.echo("Success!")
 
-        result = runner.invoke(test_cmd, [])
+        result = runner.invoke(test_command_succeeds, [])
         assert result.exit_code == 0
         assert "Success!" in result.output
 
@@ -205,12 +205,12 @@ class TestHandleCliErrorsWithCliRunner:
         @click.command()
         @click.option("--value", required=True)
         @handle_cli_errors
-        def test_cmd(value):
+        def test_command_with_missing_required_option(value):
             if not value:
                 raise click.BadParameter("Value is required")
             click.echo(f"Value: {value}")
 
-        result = runner.invoke(test_cmd, [])
+        result = runner.invoke(test_command_with_missing_required_option, [])
         assert result.exit_code != 0  # Click handles required option error
 
 
@@ -237,13 +237,13 @@ class TestHandleCliErrorsEdgeCases:
         """Test exception with None message."""
 
         @handle_cli_errors
-        def test_func():
+        def test_handles_exception_with_no_message():
             exc = Exception()
             exc.args = ()
             raise exc
 
         with pytest.raises(SystemExit) as exc_info:
-            test_func()
+            test_handles_exception_with_no_message()
 
         assert exc_info.value.code == 1
 
@@ -251,11 +251,11 @@ class TestHandleCliErrorsEdgeCases:
         """Test exception with empty string message."""
 
         @handle_cli_errors
-        def test_func():
+        def test_handles_exception_with_empty_message():
             raise Exception("")
 
         with pytest.raises(SystemExit):
-            test_func()
+            test_handles_exception_with_empty_message()
 
         captured = capsys.readouterr()
         # Should still show error message even if empty
@@ -266,7 +266,7 @@ class TestHandleCliErrorsEdgeCases:
         call_count = 0
 
         @handle_cli_errors
-        def test_func():
+        def test_handles_sequential_errors_independently():
             nonlocal call_count
             call_count += 1
             if call_count == 1:
@@ -275,10 +275,10 @@ class TestHandleCliErrorsEdgeCases:
 
         # First call should fail
         with pytest.raises(SystemExit):
-            test_func()
+            test_handles_sequential_errors_independently()
 
         # Second call should succeed
-        result = test_func()
+        result = test_handles_sequential_errors_independently()
         assert result == "success"
         assert call_count == 2
 
@@ -296,12 +296,12 @@ class TestLLMErrorHandling:
 
         @click.command()
         @handle_cli_errors
-        def test_cmd():
+        def test_shows_llm_server_unavailable_message():
             raise ConnectionError(
                 "Local LLM server unavailable at http://localhost:11434"
             )
 
-        result = runner.invoke(test_cmd, [])
+        result = runner.invoke(test_shows_llm_server_unavailable_message, [])
         assert result.exit_code == 1
         assert "Local LLM server unavailable" in result.output
         assert "localhost:11434" in result.output
@@ -316,12 +316,12 @@ class TestLLMErrorHandling:
 
         @click.command()
         @handle_cli_errors
-        def test_cmd():
+        def test_shows_model_not_found_message():
             raise RuntimeError(
                 "Model 'llama3.2' not found on LLM server"
             )
 
-        result = runner.invoke(test_cmd, [])
+        result = runner.invoke(test_shows_model_not_found_message, [])
         assert result.exit_code == 1
         assert "not found on LLM server" in result.output
         assert "llama3.2" in result.output
