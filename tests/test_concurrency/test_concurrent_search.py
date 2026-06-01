@@ -22,15 +22,24 @@ class TestConcurrentSearch:
         """Test multiple concurrent search queries."""
         results = []
         lock = asyncio.Lock()
+        completed = asyncio.Event()
 
         async def mock_search(query):
             result = [{"doc_id": f"doc-{i}", "score": 0.9 - i * 0.1} for i in range(5)]
             async with lock:
                 results.append(result)
-            await asyncio.sleep(0.001)
+            # Use Event-based completion tracking instead of sleep
+            if len(results) == 10:
+                completed.set()
 
         tasks = [mock_search(f"query-{i}") for i in range(10)]
         await asyncio.gather(*tasks)
+        
+        # Wait for completion signal instead of relying on timing
+        try:
+            await asyncio.wait_for(completed.wait(), timeout=1.0)
+        except asyncio.TimeoutError:
+            pass  # Timeout is OK if all tasks completed via gather
 
         assert len(results) == 10
 

@@ -41,7 +41,15 @@ class TestPDFIngestionE2E:
         cached_embedding_generator: MagicMock,
         mocked_pdf_extraction: MagicMock,
     ) -> None:
-        """Mock external services to speed up E2E tests."""
+        """Mock external services to speed up E2E tests and ensure determinism."""
+        # Mock MongoDB storage to avoid connection issues
+        mock_storage = MagicMock()
+        mock_storage.store = MagicMock(return_value="mocked-id-123")
+        monkeypatch.setattr(
+            "secondbrain.document.VectorStorage",
+            MagicMock(return_value=mock_storage),
+        )
+        
         del (
             monkeypatch,
             cached_embedding_generator,

@@ -89,7 +89,7 @@ def wait_for_services() -> Generator[None, None, None]:
             print("MongoDB is healthy")
             break
         print(".", end="", flush=True)
-        time.sleep(1)
+        time.sleep(0.5)  # Reduced from 1s for faster feedback
     else:
         pytest.skip(
             f"MongoDB not available after {SERVICE_HEALTH_TIMEOUT}s - integration tests skipped. "
@@ -103,7 +103,7 @@ def wait_for_services() -> Generator[None, None, None]:
             print("Sentence-transformers is healthy")
             break
         print(".", end="", flush=True)
-        time.sleep(1)
+        time.sleep(0.5)  # Reduced from 1s for faster feedback
     else:
         pytest.skip(
             f"Sentence-transformers not available after {SERVICE_HEALTH_TIMEOUT}s - integration tests skipped."

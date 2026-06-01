@@ -1,3 +1,6 @@
+# Node.js
+node_modules/
+
 # Python
 venv/
 .venv/
@@ -16,6 +19,9 @@ build/
 
 # OpenCode
 .opencode/
+
+# Omo
+.omo/
 
 # IDE
 .idea/
@@ -62,3 +68,6 @@ TEST_*.md
 # Generated knowledge graph
 graphify-out/
 .gitnexus
+
+# Claude
+.claude/

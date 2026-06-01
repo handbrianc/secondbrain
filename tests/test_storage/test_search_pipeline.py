@@ -6,7 +6,7 @@ from secondbrain.storage import build_search_pipeline
 class TestBuildSearchPipeline:
     """Tests for the build_search_pipeline function."""
 
-    def test_basic_pipeline_no_filters(self) -> None:
+    def test_pipeline_builds_without_filters(self) -> None:
         """Test basic pipeline without any filters."""
         embedding = [0.1] * 10
         pipeline = build_search_pipeline(embedding=embedding, top_k=5)
@@ -68,6 +68,24 @@ class TestBuildSearchPipeline:
         assert "$match" in pipeline[0]
         match = pipeline[0]["$match"]
         assert match["file_type"] == "pdf"
+
+    def test_pipeline_with_source_filter_no_prefix_match(self) -> None:
+        """Test pipeline with source_filter and use_prefix_match=False."""
+        embedding = [0.1] * 10
+        pipeline = build_search_pipeline(
+            embedding=embedding,
+            top_k=5,
+            source_filter="document.pdf",
+            use_prefix_match=False,
+        )
+
+        # Pipeline should have 5 stages: match, project (with score), sort, limit, project (final)
+        assert len(pipeline) == 5
+
+        # First stage should be match with unanchored regex (no ^ prefix)
+        assert "$match" in pipeline[0]
+        match = pipeline[0]["$match"]
+        assert match["source_file"] == {"$regex": "document\\.pdf"}
 
     def test_pipeline_with_both_filters(self) -> None:
         """Test pipeline with both source and file type filters."""

@@ -525,7 +525,9 @@ def _chunk_segments(
         start = 0
         while start < len(text):
             if start + chunk_size >= len(text):
-                chunk_text = text[start:].strip()
+                # Last chunk: strip only trailing whitespace, preserve leading
+                # Critical: when start is at a space, don't lose it
+                chunk_text = text[start:].rstrip()
                 if chunk_text:
                     chunks.append({"text": chunk_text, "page": page})
                 break
@@ -536,8 +538,10 @@ def _chunk_segments(
             if last_space > start:
                 chunk_end = last_space
 
-            chunk_text = text[start:chunk_end].strip()
-            if chunk_text:
+            # Preserve all characters including leading/trailing spaces within chunk
+            # Critical: when chunk_end is at a space (word boundary), don't lose it
+            chunk_text = text[start:chunk_end]
+            if chunk_text.strip():
                 chunks.append({"text": chunk_text, "page": page})
 
             new_start = chunk_end - chunk_overlap

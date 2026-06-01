@@ -9,6 +9,7 @@ import pytest
 from secondbrain.utils.connections import (
     RateLimitedRetry,
     ServiceUnavailableError,
+    ValidatableService,
     ensure_service_available,
     get_request_trace_headers,
     inject_trace_headers,
@@ -118,6 +119,40 @@ class TestRateLimitedRetry:
         result2 = retry.call(failing_then_succeeding)
         assert result2 is True
         assert call_count == 3  # Should be able to retry again
+
+    def test_retry_early_return_when_cannot_retry(self) -> None:
+        """Test that func is called even when cannot retry."""
+        retry = RateLimitedRetry(max_retries=0, base_delay=0.01)
+
+        call_count = 0
+
+        def track_calls() -> bool:
+            nonlocal call_count
+            call_count += 1
+            return False
+
+        # First call - should try (max_retries=0 means 0 retries, 1 attempt)
+        result = retry.call(track_calls)
+        assert result is False
+        assert call_count == 1
+
+        # After exhausting retries, subsequent calls still invoke func
+        result = retry.call(track_calls)
+        assert result is False
+        assert call_count == 2
+
+    def test_retry_log_exhausted(self) -> None:
+        """Test that retry logs when all attempts exhausted."""
+        retry = RateLimitedRetry(max_retries=1, base_delay=0.01)
+
+        def always_failing() -> bool:
+            raise RuntimeError("Test error")
+
+        with patch("secondbrain.utils.connections.logger") as mock_logger:
+            result = retry.call(always_failing)
+
+        assert result is False
+        mock_logger.debug.assert_called()
 
 
 class TestRateLimitedRetryEdgeCases:
@@ -293,6 +328,33 @@ class TestValidatableService:
         # Second call should revalidate
         service.validate_connection()
         assert call_count == 2
+
+    def test_circuit_breaker_failure_recording(self) -> None:
+        """Test that validation failure is recorded in circuit breaker."""
+        import asyncio
+
+        from secondbrain.utils.circuit_breaker import (
+            CircuitBreakerConfig,
+            CircuitState,
+        )
+
+        class TestService(ValidatableService):
+            def _do_validate_connection(self) -> bool:
+                return False
+
+        # Use failure_threshold=1 so single failure opens circuit
+        service = TestService(
+            circuit_breaker_config=CircuitBreakerConfig(failure_threshold=1),
+        )
+
+        # Use async version WITH circuit breaker which records state
+        result = asyncio.run(
+            service.validate_connection_async_with_circuit_breaker(force=True)
+        )
+        assert result is False
+        assert service.circuit_breaker is not None
+        # After one failure with threshold=1, circuit should be OPEN
+        assert service.circuit_breaker.state == CircuitState.OPEN
 
 
 class TestValidatableServiceAsync:

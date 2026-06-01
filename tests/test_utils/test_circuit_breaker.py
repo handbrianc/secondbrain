@@ -597,4 +597,584 @@ def test_state_changes_logged_with_timestamp():
     assert cb.state == CircuitState.HALF_OPEN
     
     log_contents = log_stream.getvalue()
-    assert log_contents or True
+
+    # Verify logs contain state changes
+    assert "CLOSED" in log_contents or "OPEN" in log_contents or "HALF_OPEN" in log_contents
+
+    # Cleanup
+    logger.removeHandler(handler)
+
+
+@pytest.mark.circuit_breaker
+@pytest.mark.slow
+class TestCircuitBreakerErrorPaths:
+    """Comprehensive error path tests for circuit breaker."""
+
+    def test_circuit_breaker_opens_after_consecutive_failures(self):
+        """Test that circuit opens after failure_threshold consecutive failures.
+
+        Error Path: CLOSED -> OPEN transition on consecutive failures.
+        """
+        config = CircuitBreakerConfig(
+            failure_threshold=3,
+            success_threshold=2,
+            recovery_timeout=30.0,
+        )
+        cb = CircuitBreaker(config)
+
+        # Circuit starts closed
+        assert cb.state == CircuitState.CLOSED
+        assert cb._failure_count == 0
+
+        # Record failures below threshold
+        cb.record_failure()
+        assert cb.state == CircuitState.CLOSED
+        assert cb._failure_count == 1
+
+        cb.record_failure()
+        assert cb.state == CircuitState.CLOSED
+        assert cb._failure_count == 2
+
+        # Third failure should open the circuit
+        cb.record_failure()
+        assert cb.state == CircuitState.OPEN
+        assert cb._failure_count == 3
+
+    def test_circuit_breaker_half_open_after_recovery_timeout(self):
+        """Test that circuit transitions to HALF_OPEN after recovery_timeout.
+
+        Error Path: OPEN -> HALF_OPEN transition after timeout.
+        """
+        config = CircuitBreakerConfig(
+            failure_threshold=2,
+            success_threshold=2,
+            recovery_timeout=0.1,
+        )
+        cb = CircuitBreaker(config)
+
+        # Open the circuit
+        cb.record_failure()
+        cb.record_failure()
+        assert cb.state == CircuitState.OPEN
+
+        # Wait for recovery timeout
+        time.sleep(0.15)
+
+        # Should transition to HALF_OPEN on next check
+        assert cb.state == CircuitState.HALF_OPEN
+        assert cb._half_open_calls == 0
+        assert cb._success_count == 0
+
+    def test_circuit_breaker_closes_on_success_in_half_open(self):
+        """Test that circuit closes after success_threshold successes in HALF_OPEN.
+
+        Error Path: HALF_OPEN -> CLOSED transition on successful recovery.
+        """
+        config = CircuitBreakerConfig(
+            failure_threshold=2,
+            success_threshold=2,
+            recovery_timeout=0.1,
+        )
+        cb = CircuitBreaker(config)
+
+        # Open the circuit
+        cb.record_failure()
+        cb.record_failure()
+        assert cb.state == CircuitState.OPEN
+
+        # Wait for HALF_OPEN
+        time.sleep(0.15)
+        assert cb.state == CircuitState.HALF_OPEN
+
+        # Record successes to close circuit
+        cb.record_success()
+        assert cb.state == CircuitState.HALF_OPEN
+        assert cb._success_count == 1
+
+        cb.record_success()
+        assert cb.state == CircuitState.CLOSED
+        assert cb._failure_count == 0
+        assert cb._success_count == 0
+
+    def test_circuit_breaker_rejects_calls_when_open(self):
+        """Test that circuit rejects all calls when in OPEN state.
+
+        Error Path: is_allowed() returns False when OPEN.
+        """
+        config = CircuitBreakerConfig(
+            failure_threshold=2,
+            recovery_timeout=30.0,
+        )
+        cb = CircuitBreaker(config)
+
+        # Open the circuit
+        cb.record_failure()
+        cb.record_failure()
+        assert cb.state == CircuitState.OPEN
+
+        # All calls should be rejected
+        assert cb.is_allowed() is False
+        assert cb.is_allowed() is False
+
+        # call() should raise CircuitBreakerError
+        with pytest.raises(CircuitBreakerError) as exc_info:
+            cb.call(lambda: True)
+
+        assert "Circuit breaker is open" in str(exc_info.value.message)
+        assert cb.service_name in exc_info.value.message
+
+    def test_circuit_breaker_state_persistence(self):
+        """Test that circuit breaker state persists across calls.
+
+        Error Path: State variables maintain consistency.
+        """
+        config = CircuitBreakerConfig(
+            failure_threshold=3,
+            success_threshold=2,
+            recovery_timeout=0.1,
+        )
+        cb = CircuitBreaker(config)
+
+        # Record some failures
+        cb.record_failure()
+        cb.record_failure()
+
+        # State should persist
+        state_info = cb.get_state_info()
+        assert state_info["failure_count"] == 2
+        assert state_info["state"] == "closed"
+
+        # Open the circuit
+        cb.record_failure()
+        state_info = cb.get_state_info()
+        assert state_info["state"] == "open"
+        assert state_info["failure_count"] == 3
+
+        # Wait for HALF_OPEN
+        time.sleep(0.15)
+        state_info = cb.get_state_info()
+        assert state_info["state"] == "half_open"
+        assert state_info["half_open_calls"] == 0
+
+    def test_circuit_breaker_custom_error_handler(self):
+        """Test circuit breaker with custom error handling via call().
+
+        Error Path: Exception handling in call() method.
+        """
+        cb = CircuitBreaker()
+
+        # Track exception handling
+        exception_raised = False
+
+        def failing_function():
+            raise ValueError("Test exception")
+
+        try:
+            cb.call(failing_function)
+        except ValueError:
+            exception_raised = True
+
+        assert exception_raised is True
+        assert cb.state == CircuitState.CLOSED
+        assert cb._failure_count == 1
+
+    def test_circuit_breaker_failure_resets_on_success_in_closed(self):
+        """Test that success in CLOSED state resets failure count.
+
+        Error Path: record_success() resets _failure_count in CLOSED state.
+        """
+        config = CircuitBreakerConfig(
+            failure_threshold=5,
+            recovery_timeout=30.0,
+        )
+        cb = CircuitBreaker(config)
+
+        # Record some failures
+        cb.record_failure()
+        cb.record_failure()
+        cb.record_failure()
+        assert cb._failure_count == 3
+
+        # Success should reset failure count
+        cb.record_success()
+        assert cb._failure_count == 0
+        assert cb.state == CircuitState.CLOSED
+
+    def test_circuit_breaker_half_open_failure_resets_counters(self):
+        """Test that failure in HALF_OPEN resets half_open_calls counter.
+
+        Error Path: record_failure() in HALF_OPEN resets counters.
+        """
+        config = CircuitBreakerConfig(
+            failure_threshold=2,
+            success_threshold=2,
+            recovery_timeout=0.1,
+        )
+        cb = CircuitBreaker(config)
+
+        # Open and transition to HALF_OPEN
+        cb.record_failure()
+        cb.record_failure()
+        time.sleep(0.15)
+        assert cb.state == CircuitState.HALF_OPEN
+
+        # Record a call
+        assert cb.is_allowed() is True
+        assert cb._half_open_calls == 0  # Incremented after is_allowed check
+
+        # Simulate a call that succeeds (manually increment)
+        cb._half_open_calls = 1
+
+        # Failure should reopen circuit and reset counters
+        cb.record_failure()
+        assert cb.state == CircuitState.OPEN
+        assert cb._half_open_calls == 0
+
+    def test_circuit_breaker_call_records_success_and_failure(self):
+        """Test that call() properly records success and failure.
+
+        Error Path: call() method tracks outcomes correctly.
+        """
+        cb = CircuitBreaker()
+
+        # Successful call
+        result = cb.call(lambda: True)
+        assert result is True
+        assert cb._failure_count == 0
+
+        # Failed call (returns False)
+        result = cb.call(lambda: False)
+        assert result is False
+        assert cb._failure_count == 1
+
+    def test_circuit_breaker_exponential_backoff_on_half_open_failure(self):
+        """Test exponential backoff increases recovery timeout.
+
+        Error Path: record_failure() in HALF_OPEN doubles recovery timeout.
+        """
+        config = CircuitBreakerConfig(
+            failure_threshold=2,
+            success_threshold=1,
+            recovery_timeout=1.0,
+        )
+        cb = CircuitBreaker(config)
+
+        # Open circuit
+        cb.record_failure()
+        cb.record_failure()
+        assert cb._current_recovery_timeout == 1.0
+        assert cb._backoff_multiplier == 1
+
+        # Transition to HALF_OPEN
+        time.sleep(1.1)
+        assert cb.state == CircuitState.HALF_OPEN
+
+        # Failure in HALF_OPEN should double timeout
+        cb.record_failure()
+        assert cb.state == CircuitState.OPEN
+        assert cb._current_recovery_timeout == 2.0
+        assert cb._backoff_multiplier == 2
+
+        # Another cycle
+        time.sleep(2.1)
+        assert cb.state == CircuitState.HALF_OPEN
+
+        cb.record_failure()
+        assert cb._current_recovery_timeout == 4.0
+        assert cb._backoff_multiplier == 4
+
+    def test_circuit_breaker_reset_clears_all_counters(self):
+        """Test that reset() clears all state counters.
+
+        Error Path: reset() method fully resets circuit breaker.
+        """
+        config = CircuitBreakerConfig(
+            failure_threshold=2,
+            success_threshold=2,
+            recovery_timeout=0.1,
+        )
+        cb = CircuitBreaker(config)
+
+        # Set circuit to OPEN state with various counters
+        cb.record_failure()
+        cb.record_failure()
+        time.sleep(0.15)  # HALF_OPEN
+        cb.record_success()  # Partial success
+        cb._half_open_calls = 2
+        cb._backoff_multiplier = 4
+        cb._current_recovery_timeout = 4.0
+
+        # Reset
+        cb.reset()
+
+        # Verify all counters reset
+        assert cb.state == CircuitState.CLOSED
+        assert cb._failure_count == 0
+        assert cb._success_count == 0
+        assert cb._half_open_calls == 0
+        assert cb._backoff_multiplier == 1
+        assert cb._current_recovery_timeout == config.recovery_timeout
+        assert cb._last_failure_time is None
+
+    def test_circuit_breaker_thread_safety_concurrent_failures(self):
+        """Test circuit breaker handles concurrent failures safely.
+
+        Error Path: Thread safety under concurrent access.
+        """
+        cb = CircuitBreaker(CircuitBreakerConfig(failure_threshold=10))
+
+        def record_failures():
+            for _ in range(5):
+                cb.record_failure()
+
+        # Run 3 threads concurrently, each recording 5 failures
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            futures = [executor.submit(record_failures) for _ in range(3)]
+            for future in futures:
+                future.result()
+
+        # Should have opened circuit (15 failures > threshold of 10)
+        assert cb.state == CircuitState.OPEN
+
+    def test_circuit_breaker_get_state_info_all_fields(self):
+        """Test get_state_info() returns all expected fields.
+
+        Error Path: State info dictionary completeness.
+        """
+        config = CircuitBreakerConfig(
+            failure_threshold=5,
+            success_threshold=3,
+            recovery_timeout=60.0,
+            half_open_max_calls=5,
+        )
+        cb = CircuitBreaker(config, service_name="test-service")
+
+        state_info = cb.get_state_info()
+
+        # Verify all expected keys exist
+        expected_keys = [
+            "state",
+            "failure_count",
+            "success_count",
+            "half_open_calls",
+            "failure_threshold",
+            "success_threshold",
+            "recovery_timeout",
+            "current_recovery_timeout",
+            "backoff_multiplier",
+            "half_open_max_calls",
+        ]
+
+        for key in expected_keys:
+            assert key in state_info, f"Missing key: {key}"
+
+        # Verify values
+        assert state_info["state"] == "closed"
+        assert state_info["failure_count"] == 0
+        assert state_info["success_count"] == 0
+        assert state_info["failure_threshold"] == 5
+        assert state_info["success_threshold"] == 3
+        assert state_info["recovery_timeout"] == 60.0
+        assert state_info["half_open_max_calls"] == 5
+
+
+class TestCircuitBreakerProperties:
+    """Tests for CircuitBreaker property getters."""
+
+    def test_failure_count_property(self):
+        """Test that failure_count property returns correct value."""
+        cb = CircuitBreaker()
+        assert cb.failure_count == 0
+
+        # Record failures while in CLOSED state
+        cb.record_failure()
+        cb.record_failure()
+        assert cb.failure_count == 2
+
+    def test_success_count_property_initial(self):
+        """Test that success_count property returns initial value."""
+        cb = CircuitBreaker()
+        assert cb.success_count == 0
+
+
+class TestCircuitBreakerEnabledService:
+    """Tests for CircuitBreakerEnabledService mixin class."""
+
+    def test_init_with_circuit_breaker(self):
+        """Test initialization with circuit breaker config."""
+        from secondbrain.utils.circuit_breaker import (
+            CircuitBreakerConfig,
+            CircuitBreakerEnabledService,
+        )
+
+        class TestService(CircuitBreakerEnabledService):
+            def validate_connection(self, force: bool = False) -> bool:
+                return True
+
+        service = TestService(
+            circuit_breaker_config=CircuitBreakerConfig(failure_threshold=3),
+            service_name="TestService",
+        )
+
+        assert service.is_circuit_breaker_enabled is True
+        assert service.circuit_breaker is not None
+        assert service.circuit_breaker.state == CircuitState.CLOSED
+
+    def test_init_without_circuit_breaker(self):
+        """Test initialization without circuit breaker config."""
+        from secondbrain.utils.circuit_breaker import CircuitBreakerEnabledService
+
+        class TestService(CircuitBreakerEnabledService):
+            def validate_connection(self, force: bool = False) -> bool:
+                return True
+
+        service = TestService()
+
+        assert service.is_circuit_breaker_enabled is False
+        assert service.circuit_breaker is None
+
+    def test_validate_connection_with_circuit_breaker_success(self):
+        """Test validate_connection_with_circuit_breaker on success."""
+        from secondbrain.utils.circuit_breaker import (
+            CircuitBreakerConfig,
+            CircuitBreakerEnabledService,
+        )
+
+        class TestService(CircuitBreakerEnabledService):
+            def validate_connection(self, force: bool = False) -> bool:
+                return True
+
+        service = TestService(
+            circuit_breaker_config=CircuitBreakerConfig(failure_threshold=3),
+            service_name="TestService",
+        )
+
+        result = service.validate_connection_with_circuit_breaker(force=True)
+        assert result is True
+        assert service.circuit_breaker is not None
+        assert service.circuit_breaker.state == CircuitState.CLOSED
+
+    def test_validate_connection_with_circuit_breaker_failure(self):
+        """Test validate_connection_with_circuit_breaker on failure."""
+        from secondbrain.utils.circuit_breaker import (
+            CircuitBreakerConfig,
+            CircuitBreakerEnabledService,
+        )
+
+        class TestService(CircuitBreakerEnabledService):
+            def validate_connection(self, force: bool = False) -> bool:
+                return False
+
+        service = TestService(
+            circuit_breaker_config=CircuitBreakerConfig(failure_threshold=1),
+            service_name="TestService",
+        )
+
+        result = service.validate_connection_with_circuit_breaker(force=True)
+        assert result is False
+        # After one failure with threshold=1, circuit should open
+        assert service.circuit_breaker is not None
+        assert service.circuit_breaker.state == CircuitState.OPEN
+
+    def test_validate_connection_with_circuit_breaker_open(self):
+        """Test validate_connection_with_circuit_breaker when circuit is open."""
+        import time
+
+        from secondbrain.utils.circuit_breaker import (
+            CircuitBreakerConfig,
+            CircuitBreakerEnabledService,
+            CircuitBreakerError,
+        )
+
+        class TestService(CircuitBreakerEnabledService):
+            def validate_connection(self, force: bool = False) -> bool:
+                return False
+
+        service = TestService(
+            circuit_breaker_config=CircuitBreakerConfig(failure_threshold=1),
+            service_name="TestService",
+        )
+
+        # Trigger circuit to open
+        service.validate_connection_with_circuit_breaker(force=True)
+        assert service.circuit_breaker is not None
+        assert service.circuit_breaker.state == CircuitState.OPEN
+
+        # Next call should raise CircuitBreakerError
+        with pytest.raises(CircuitBreakerError):
+            service.validate_connection_with_circuit_breaker(force=True)
+
+    @pytest.mark.asyncio
+    async def test_validate_connection_async_with_circuit_breaker(self):
+        """Test async validate_connection_with_circuit_breaker."""
+        from secondbrain.utils.circuit_breaker import (
+            CircuitBreakerConfig,
+            CircuitBreakerEnabledService,
+        )
+
+        class TestService(CircuitBreakerEnabledService):
+            async def validate_connection_async(self, force: bool = False) -> bool:
+                return True
+
+        service = TestService(
+            circuit_breaker_config=CircuitBreakerConfig(failure_threshold=3),
+            service_name="TestService",
+        )
+
+        result = await service.validate_connection_async_with_circuit_breaker(
+            force=True
+        )
+        assert result is True
+        assert service.circuit_breaker is not None
+        assert service.circuit_breaker.state == CircuitState.CLOSED
+
+    @pytest.mark.asyncio
+    async def test_validate_connection_async_with_circuit_breaker_failure(self):
+        """Test async validate_connection_with_circuit_breaker on failure."""
+        from secondbrain.utils.circuit_breaker import (
+            CircuitBreakerConfig,
+            CircuitBreakerEnabledService,
+        )
+
+        class TestService(CircuitBreakerEnabledService):
+            async def validate_connection_async(self, force: bool = False) -> bool:
+                return False
+
+        service = TestService(
+            circuit_breaker_config=CircuitBreakerConfig(failure_threshold=1),
+            service_name="TestService",
+        )
+
+        result = await service.validate_connection_async_with_circuit_breaker(
+            force=True
+        )
+        assert result is False
+        assert service.circuit_breaker is not None
+        assert service.circuit_breaker.state == CircuitState.OPEN
+
+    @pytest.mark.asyncio
+    async def test_validate_connection_async_with_circuit_breaker_open(self):
+        """Test async validate when circuit is already open."""
+        from secondbrain.utils.circuit_breaker import (
+            CircuitBreakerConfig,
+            CircuitBreakerEnabledService,
+            CircuitBreakerError,
+        )
+
+        class TestService(CircuitBreakerEnabledService):
+            async def validate_connection_async(self, force: bool = False) -> bool:
+                return False
+
+        service = TestService(
+            circuit_breaker_config=CircuitBreakerConfig(failure_threshold=1),
+            service_name="TestService",
+        )
+
+        # First call opens the circuit
+        await service.validate_connection_async_with_circuit_breaker(force=True)
+        assert service.circuit_breaker is not None
+        assert service.circuit_breaker.state == CircuitState.OPEN
+
+        # Second call should raise CircuitBreakerError
+        with pytest.raises(CircuitBreakerError):
+            await service.validate_connection_async_with_circuit_breaker(force=True)

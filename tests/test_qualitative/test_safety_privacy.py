@@ -887,36 +887,4 @@ class TestDataLeakage:
 # ============================================================================
 
 
-@pytest.mark.qualitative
-@pytest.mark.safety
-@pytest.mark.integration
-class TestSafetyIntegration:
-    """Integration tests for safety features (requires MongoDB/LLM)."""
 
-    @pytest.mark.skipif(
-        not _is_mongo_available(), reason="Integration test - requires MongoDB"
-    )
-    @pytest.mark.skipif(
-        not _is_llm_available(), reason="Integration test - requires LLM service"
-    )
-    def test_pipeline_pii_sanitization(self) -> None:
-        """Test that the full pipeline sanitizes PII in responses."""
-        # This would test the full pipeline with real documents containing PII
-        pass
-
-    @pytest.mark.skipif(
-        not _is_llm_available(), reason="Integration test - requires LLM service"
-    )
-    def test_llm_refusal_dangerous_topics(self) -> None:
-        """Test that LLM refuses dangerous topic queries."""
-        # This would test actual LLM responses to dangerous queries
-        pass
-
-    @pytest.mark.skipif(
-        not _is_mongo_available() or not _is_llm_available(),
-        reason="Integration test - requires full pipeline",
-    )
-    def test_end_to_end_safety_filtering(self) -> None:
-        """Test end-to-end safety filtering through the entire system."""
-        # This would test the complete safety pipeline
-        pass

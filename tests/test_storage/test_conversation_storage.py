@@ -5,6 +5,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
+from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError
 
 from secondbrain.config import Config
 from secondbrain.conversation.storage import ConversationStorage
@@ -374,3 +375,57 @@ class TestConversationStorageClose:
         assert storage._client is None
         assert storage._db is None
         assert storage._collection is None
+
+
+class TestConversationStorageDoValidate:
+    """Tests for ConversationStorage._do_validate method."""
+
+    def test_do_validate_success(self, storage_with_mocks):
+        """Test _do_validate returns True on successful ping."""
+        storage, _, _ = storage_with_mocks
+
+        result = storage._do_validate()
+
+        assert result is True
+
+    def test_do_validate_connection_failure(self, mock_collection, mock_db):
+        """Test _do_validate returns False on ConnectionFailure."""
+        mock_client = MagicMock()
+        mock_client.admin.command.side_effect = ConnectionFailure("Connection lost")
+        mock_client.__getitem__ = MagicMock(return_value=mock_db)
+
+        with patch(
+            "secondbrain.conversation.storage.MongoClient", return_value=mock_client
+        ):
+            storage = ConversationStorage(
+                mongo_uri=_test_config.mongo_uri,
+                db_name="test_db",
+                collection_name="test_conversations",
+            )
+            _ = storage.client
+
+            result = storage._do_validate()
+
+            assert result is False
+
+    def test_do_validate_server_selection_timeout(self, mock_collection, mock_db):
+        """Test _do_validate returns False on ServerSelectionTimeoutError."""
+        mock_client = MagicMock()
+        mock_client.admin.command.side_effect = ServerSelectionTimeoutError(
+            "Timeout connecting to server"
+        )
+        mock_client.__getitem__ = MagicMock(return_value=mock_db)
+
+        with patch(
+            "secondbrain.conversation.storage.MongoClient", return_value=mock_client
+        ):
+            storage = ConversationStorage(
+                mongo_uri=_test_config.mongo_uri,
+                db_name="test_db",
+                collection_name="test_conversations",
+            )
+            _ = storage.client
+
+            result = storage._do_validate()
+
+            assert result is False
