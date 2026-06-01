@@ -83,6 +83,7 @@ dev = [
     "fpdf2>=2.7.0",  # PDF generation - document export
     "reportlab>=4.0.0",  # PDF library - complex document rendering
     "python-docx>=1.0.0",  # Word documents - DOCX parsing
+    "setuptools>=60.0.0",  # Build tooling - compatible with torch 2.12
 ]
 
 qualitative = [
@@ -100,7 +101,7 @@ opentelemetry = [
 secondbrain = "secondbrain.cli:main"
 
 [build-system]
-requires = ["setuptools>=82.0.1", "wheel"]
+requires = ["setuptools>=60.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
