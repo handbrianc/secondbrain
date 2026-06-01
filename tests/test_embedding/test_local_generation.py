@@ -556,3 +556,70 @@ class TestAsyncEmbeddingGeneration:
         # Both should be identical
         assert sync_embeddings == async_embeddings
         assert sync_embeddings == expected_embeddings
+
+
+class TestEmbeddingPickleSupport:
+    """Test pickle support for multiprocessing/xdist compatibility."""
+
+    def test_getstate_excludes_model(self) -> None:
+        """Test that __getstate__ excludes the model from pickling."""
+        gen = LocalEmbeddingGenerator()
+
+        # Set up a mock model
+        mock_model = MagicMock()
+        gen._model = mock_model
+        gen._connection_valid = True
+        gen._connection_checked_at = 12345.0
+
+        # Call __getstate__
+        state = gen.__getstate__()
+
+        # Verify model is excluded
+        assert state["_model"] is None
+        assert state["_connection_valid"] is True
+        assert state["_connection_checked_at"] == 12345.0
+        assert state["model_name"] == "all-MiniLM-L6-v2"
+
+    def test_setstate_restores_state(self) -> None:
+        """Test that __setstate__ restores state without model."""
+        gen = LocalEmbeddingGenerator()
+
+        # Create a state to restore
+        state = {
+            "model_name": "all-mpnet-base-v2",
+            "_model": None,
+            "_connection_valid": False,
+            "_connection_checked_at": 54321.0,
+        }
+
+        # Call __setstate__
+        gen.__setstate__(state)
+
+        # Verify state is restored
+        assert gen.model_name == "all-mpnet-base-v2"
+        assert gen._model is None
+        assert gen._connection_valid is False
+        assert gen._connection_checked_at == 54321.0
+
+    def test_pickle_round_trip_excludes_model(self) -> None:
+        """Test that pickling and unpickling excludes the model."""
+        import pickle
+
+        gen = LocalEmbeddingGenerator()
+
+        # Set up a mock model
+        mock_model = MagicMock()
+        gen._model = mock_model
+        gen._connection_valid = True
+
+        # Pickle and unpickle
+        pickled = pickle.dumps(gen)
+        restored = pickle.loads(pickled)
+
+        # Verify model is not pickled
+        assert restored._model is None
+        assert gen._model is mock_model  # Original still has model
+
+        # Verify other state is preserved
+        assert restored.model_name == "all-MiniLM-L6-v2"
+        assert restored._connection_valid is True

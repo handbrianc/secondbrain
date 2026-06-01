@@ -119,6 +119,38 @@ class TestMockSearcherSearch:
         assert len(results) > 0
         assert any('chunk size' in chunk['chunk_text'].lower() for chunk in results)
 
+    def test_search_adds_fallback_similarity_when_missing(self):
+        """Test that search adds similarity=0.8 when chunk lacks similarity key.
+
+        This covers line 170 in mock.py where fallback similarity is applied.
+        """
+        searcher = MockSearcher()
+
+        # Clear existing chunks to ensure our chunk is the only result
+        searcher._test_chunks.clear()
+        
+        # Add a chunk without similarity key to trigger fallback
+        chunk_without_similarity = {
+            "chunk_id": "chunk-no-sim",
+            "source_file": "test.md",
+            "page_number": 1,
+            "chunk_text": "This is a test chunk without similarity score.",
+            "file_type": "markdown",
+            "metadata": {},
+        }
+        searcher._test_chunks.append(chunk_without_similarity)
+        
+        # Search for text that matches our chunk exactly
+        results = searcher.search("This is a test chunk without similarity score")
+        
+        # Verify we get our chunk
+        assert len(results) == 1
+        assert results[0]["chunk_id"] == "chunk-no-sim"
+        
+        # Chunk should have similarity added by fallback logic (line 170)
+        assert "similarity" in results[0]
+        assert results[0]["similarity"] == 0.8
+
 
 class TestMockSearcherContextManager:
     """Tests for MockSearcher context manager protocol."""

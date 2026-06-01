@@ -976,3 +976,205 @@ class TestCircuitBreakerErrorPaths:
         assert state_info["success_threshold"] == 3
         assert state_info["recovery_timeout"] == 60.0
         assert state_info["half_open_max_calls"] == 5
+
+
+class TestCircuitBreakerProperties:
+    """Tests for CircuitBreaker property getters."""
+
+    def test_failure_count_property(self):
+        """Test that failure_count property returns correct value."""
+        cb = CircuitBreaker()
+        assert cb.failure_count == 0
+
+        # Record failures while in CLOSED state
+        cb.record_failure()
+        cb.record_failure()
+        assert cb.failure_count == 2
+
+    def test_success_count_property_initial(self):
+        """Test that success_count property returns initial value."""
+        cb = CircuitBreaker()
+        assert cb.success_count == 0
+
+
+class TestCircuitBreakerEnabledService:
+    """Tests for CircuitBreakerEnabledService mixin class."""
+
+    def test_init_with_circuit_breaker(self):
+        """Test initialization with circuit breaker config."""
+        from secondbrain.utils.circuit_breaker import (
+            CircuitBreakerConfig,
+            CircuitBreakerEnabledService,
+        )
+
+        class TestService(CircuitBreakerEnabledService):
+            def validate_connection(self, force: bool = False) -> bool:
+                return True
+
+        service = TestService(
+            circuit_breaker_config=CircuitBreakerConfig(failure_threshold=3),
+            service_name="TestService",
+        )
+
+        assert service.is_circuit_breaker_enabled is True
+        assert service.circuit_breaker is not None
+        assert service.circuit_breaker.state == CircuitState.CLOSED
+
+    def test_init_without_circuit_breaker(self):
+        """Test initialization without circuit breaker config."""
+        from secondbrain.utils.circuit_breaker import CircuitBreakerEnabledService
+
+        class TestService(CircuitBreakerEnabledService):
+            def validate_connection(self, force: bool = False) -> bool:
+                return True
+
+        service = TestService()
+
+        assert service.is_circuit_breaker_enabled is False
+        assert service.circuit_breaker is None
+
+    def test_validate_connection_with_circuit_breaker_success(self):
+        """Test validate_connection_with_circuit_breaker on success."""
+        from secondbrain.utils.circuit_breaker import (
+            CircuitBreakerConfig,
+            CircuitBreakerEnabledService,
+        )
+
+        class TestService(CircuitBreakerEnabledService):
+            def validate_connection(self, force: bool = False) -> bool:
+                return True
+
+        service = TestService(
+            circuit_breaker_config=CircuitBreakerConfig(failure_threshold=3),
+            service_name="TestService",
+        )
+
+        result = service.validate_connection_with_circuit_breaker(force=True)
+        assert result is True
+        assert service.circuit_breaker is not None
+        assert service.circuit_breaker.state == CircuitState.CLOSED
+
+    def test_validate_connection_with_circuit_breaker_failure(self):
+        """Test validate_connection_with_circuit_breaker on failure."""
+        from secondbrain.utils.circuit_breaker import (
+            CircuitBreakerConfig,
+            CircuitBreakerEnabledService,
+        )
+
+        class TestService(CircuitBreakerEnabledService):
+            def validate_connection(self, force: bool = False) -> bool:
+                return False
+
+        service = TestService(
+            circuit_breaker_config=CircuitBreakerConfig(failure_threshold=1),
+            service_name="TestService",
+        )
+
+        result = service.validate_connection_with_circuit_breaker(force=True)
+        assert result is False
+        # After one failure with threshold=1, circuit should open
+        assert service.circuit_breaker is not None
+        assert service.circuit_breaker.state == CircuitState.OPEN
+
+    def test_validate_connection_with_circuit_breaker_open(self):
+        """Test validate_connection_with_circuit_breaker when circuit is open."""
+        import time
+
+        from secondbrain.utils.circuit_breaker import (
+            CircuitBreakerConfig,
+            CircuitBreakerEnabledService,
+            CircuitBreakerError,
+        )
+
+        class TestService(CircuitBreakerEnabledService):
+            def validate_connection(self, force: bool = False) -> bool:
+                return False
+
+        service = TestService(
+            circuit_breaker_config=CircuitBreakerConfig(failure_threshold=1),
+            service_name="TestService",
+        )
+
+        # Trigger circuit to open
+        service.validate_connection_with_circuit_breaker(force=True)
+        assert service.circuit_breaker is not None
+        assert service.circuit_breaker.state == CircuitState.OPEN
+
+        # Next call should raise CircuitBreakerError
+        with pytest.raises(CircuitBreakerError):
+            service.validate_connection_with_circuit_breaker(force=True)
+
+    @pytest.mark.asyncio
+    async def test_validate_connection_async_with_circuit_breaker(self):
+        """Test async validate_connection_with_circuit_breaker."""
+        from secondbrain.utils.circuit_breaker import (
+            CircuitBreakerConfig,
+            CircuitBreakerEnabledService,
+        )
+
+        class TestService(CircuitBreakerEnabledService):
+            async def validate_connection_async(self, force: bool = False) -> bool:
+                return True
+
+        service = TestService(
+            circuit_breaker_config=CircuitBreakerConfig(failure_threshold=3),
+            service_name="TestService",
+        )
+
+        result = await service.validate_connection_async_with_circuit_breaker(
+            force=True
+        )
+        assert result is True
+        assert service.circuit_breaker is not None
+        assert service.circuit_breaker.state == CircuitState.CLOSED
+
+    @pytest.mark.asyncio
+    async def test_validate_connection_async_with_circuit_breaker_failure(self):
+        """Test async validate_connection_with_circuit_breaker on failure."""
+        from secondbrain.utils.circuit_breaker import (
+            CircuitBreakerConfig,
+            CircuitBreakerEnabledService,
+        )
+
+        class TestService(CircuitBreakerEnabledService):
+            async def validate_connection_async(self, force: bool = False) -> bool:
+                return False
+
+        service = TestService(
+            circuit_breaker_config=CircuitBreakerConfig(failure_threshold=1),
+            service_name="TestService",
+        )
+
+        result = await service.validate_connection_async_with_circuit_breaker(
+            force=True
+        )
+        assert result is False
+        assert service.circuit_breaker is not None
+        assert service.circuit_breaker.state == CircuitState.OPEN
+
+    @pytest.mark.asyncio
+    async def test_validate_connection_async_with_circuit_breaker_open(self):
+        """Test async validate when circuit is already open."""
+        from secondbrain.utils.circuit_breaker import (
+            CircuitBreakerConfig,
+            CircuitBreakerEnabledService,
+            CircuitBreakerError,
+        )
+
+        class TestService(CircuitBreakerEnabledService):
+            async def validate_connection_async(self, force: bool = False) -> bool:
+                return False
+
+        service = TestService(
+            circuit_breaker_config=CircuitBreakerConfig(failure_threshold=1),
+            service_name="TestService",
+        )
+
+        # First call opens the circuit
+        await service.validate_connection_async_with_circuit_breaker(force=True)
+        assert service.circuit_breaker is not None
+        assert service.circuit_breaker.state == CircuitState.OPEN
+
+        # Second call should raise CircuitBreakerError
+        with pytest.raises(CircuitBreakerError):
+            await service.validate_connection_async_with_circuit_breaker(force=True)

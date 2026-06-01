@@ -77,6 +77,8 @@ def stored_chunks(test_collection: Any, sample_embedding: list[float]) -> list[s
     import random
     from uuid import uuid4
 
+    random.seed(123)  # Fixed seed for reproducibility
+
     chunks = []
     for i in range(5):
         chunk = {

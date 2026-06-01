@@ -221,7 +221,7 @@ ignore = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--timeout=300 -p no:warnings --dist=loadfile -n auto --cov=secondbrain --cov-report=term-missing --cov-report=html --cov-fail-under=75 --reruns=2 --reruns-delay=1"
+addopts = "--timeout=300 -p no:warnings --dist=loadfile -n auto --cov=secondbrain --cov-report=term-missing --cov-report=html --cov-fail-under=75 --reruns=2 --reruns-delay=1 --cov-config=.coveragerc"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 markers = [

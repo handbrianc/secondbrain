@@ -561,7 +561,7 @@ class TestConfigAdditionalValidations:
     def test_text_compression_algorithm_invalid(self) -> None:
         """Test text_compression_algorithm validation with invalid value."""
         with pytest.raises(
-            ValueError, match="text_compression_algorithm must be 'gzip', 'brotli', or 'zstd'"
+            ValueError, match="text_compression_algorithm must be 'zstd' or 'gzip'"
         ):
             Config(
                 mongo_uri=_test_config.mongo_uri,
@@ -572,6 +572,76 @@ class TestConfigAdditionalValidations:
                 text_compression_algorithm="invalid",
             )
 
+    def test_streaming_chunk_batch_size_zero(self, _test_config) -> None:
+        """Test streaming_chunk_batch_size validation with zero value."""
+        with pytest.raises(
+            ValueError, match="streaming_chunk_batch_size must be between 1 and 200"
+        ):
+            Config(
+                mongo_uri=_test_config.mongo_uri,
+                chunk_size=64,
+                chunk_overlap=16,
+                embedding_dimensions=128,
+                default_top_k=8,
+                streaming_chunk_batch_size=0,
+            )
+
+    def test_streaming_chunk_batch_size_too_large(self, _test_config) -> None:
+        """Test streaming_chunk_batch_size validation with value > 200."""
+        with pytest.raises(
+            ValueError, match="streaming_chunk_batch_size must be between 1 and 200"
+        ):
+            Config(
+                mongo_uri=_test_config.mongo_uri,
+                chunk_size=64,
+                chunk_overlap=16,
+                embedding_dimensions=128,
+                default_top_k=8,
+                streaming_chunk_batch_size=201,
+            )
+
+    def test_embedding_dtype_invalid(self, _test_config) -> None:
+        """Test embedding_dtype validation with invalid value."""
+        with pytest.raises(
+            ValueError, match="embedding_dtype must be 'float32' or 'float64'"
+        ):
+            Config(
+                mongo_uri=_test_config.mongo_uri,
+                chunk_size=64,
+                chunk_overlap=16,
+                embedding_dimensions=128,
+                default_top_k=8,
+                embedding_dtype="float16",
+            )
+
+    def test_embedding_storage_format_invalid(self, _test_config) -> None:
+        """Test embedding_storage_format validation with invalid value."""
+        with pytest.raises(
+            ValueError, match="embedding_storage_format must be 'binary' or 'array'"
+        ):
+            Config(
+                mongo_uri=_test_config.mongo_uri,
+                chunk_size=64,
+                chunk_overlap=16,
+                embedding_dimensions=128,
+                default_top_k=8,
+                embedding_storage_format="json",
+            )
+
+    def test_text_compression_algorithm_invalid(self, _test_config) -> None:
+        """Test text_compression_algorithm validation with invalid value."""
+        with pytest.raises(
+            ValueError,
+            match="text_compression_algorithm must be 'gzip', 'brotli', or 'zstd'",
+        ):
+            Config(
+                mongo_uri=_test_config.mongo_uri,
+                chunk_size=64,
+                chunk_overlap=16,
+                embedding_dimensions=128,
+                default_top_k=8,
+                text_compression_algorithm="lzma",
+            )
 
 
 class TestConfigFunction:

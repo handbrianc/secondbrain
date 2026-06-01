@@ -359,3 +359,18 @@ class TestRateLimiterEdgeCases:
 
         # Third should also fail
         assert limiter.acquire() is False
+
+    def test_wait_and_acquire_empty_timestamps(self):
+        """Test wait_and_acquire when timestamps list is empty (edge case)."""
+        manager = Manager()
+        limiter = SharedRateLimiter(manager, max_requests=1, window_seconds=0.1)
+
+        # First acquire succeeds
+        assert limiter.acquire() is True
+
+        # Wait for window to expire so timestamps are cleaned
+        time.sleep(0.15)
+
+        # Now wait_and_acquire should work with empty timestamps path
+        result = limiter.wait_and_acquire(timeout=0.5)
+        assert result is True

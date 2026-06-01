@@ -45,13 +45,19 @@ def recombine_chunks_preserving_overlap(chunks: list[dict], max_overlap: int) ->
         curr_text = chunks[i]["text"]
 
         # Find maximum overlap (up to max_overlap)
+        # Constraints:
+        # 1. Overlap cannot exceed max_overlap (the actual overlap used during chunking)
+        # 2. Overlap cannot exceed prev_text length (nothing to overlap from)
+        # 3. Overlap cannot exceed curr_text length (can't overlap more than chunk has)
+        # 4. If entire curr_text matches end of prev_text, that's valid (full overlap)
         actual_overlap = 0
-        for overlap_len in range(min(max_overlap, len(prev_text), len(curr_text)), 0, -1):
+        max_possible_overlap = min(max_overlap, len(prev_text), len(curr_text))
+        for overlap_len in range(max_possible_overlap, 0, -1):
             if prev_text[-overlap_len:] == curr_text[:overlap_len]:
                 actual_overlap = overlap_len
                 break
 
-        # Append non-overlapping part
+        # Append non-overlapping part (may be empty if full overlap)
         result += curr_text[actual_overlap:]
 
     return result

@@ -61,7 +61,6 @@ class TestRateLimiting:
         finally:
             manager.shutdown()
 
-    @pytest.mark.flaky(reruns=2, rerun_delay=1)
     def test_rate_limiter_shared_across_processes(self):
         """Test that rate limiter state is shared across processes."""
         from secondbrain.utils.rate_limiter import get_shared_rate_limiter
@@ -124,7 +123,6 @@ class TestBatchSplitting:
 class TestParallelPerformance:
     """Test parallel execution performance characteristics."""
 
-    @pytest.mark.flaky(reruns=2, rerun_delay=1)
     def test_parallel_execution_speedup(self):
         """Test that parallel execution provides speedup for I/O-bound tasks."""
         results_sequential = []
@@ -161,7 +159,6 @@ class TestParallelPerformance:
                 f"faster than sequential ({sequential_time:.2f}s) for I/O tasks"
             )
 
-    @pytest.mark.flaky(reruns=2, rerun_delay=1)
     def test_parallel_text_extraction_timing(self, tmp_path: Path):
         """Test timing comparison between sequential and parallel processing."""
         # Create test files
@@ -200,7 +197,6 @@ class TestParallelPerformance:
 class TestWorkerPoolManagement:
     """Test worker pool lifecycle management."""
 
-    @pytest.mark.flaky(reruns=2, rerun_delay=1)
     def test_worker_pool_reuse(self):
         """Test that worker pools can be reused efficiently."""
         # Create pool and reuse it
@@ -220,7 +216,6 @@ class TestWorkerPoolManagement:
         except Exception as e:
             pytest.fail(f"Worker pool test failed: {e}")
 
-    @pytest.mark.flaky(reruns=2, rerun_delay=1)
     def test_thread_pool_execution(self):
         """Test ThreadPoolExecutor for I/O-bound tasks."""
         import time

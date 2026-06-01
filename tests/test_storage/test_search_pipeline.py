@@ -69,6 +69,24 @@ class TestBuildSearchPipeline:
         match = pipeline[0]["$match"]
         assert match["file_type"] == "pdf"
 
+    def test_pipeline_with_source_filter_no_prefix_match(self) -> None:
+        """Test pipeline with source_filter and use_prefix_match=False."""
+        embedding = [0.1] * 10
+        pipeline = build_search_pipeline(
+            embedding=embedding,
+            top_k=5,
+            source_filter="document.pdf",
+            use_prefix_match=False,
+        )
+
+        # Pipeline should have 5 stages: match, project (with score), sort, limit, project (final)
+        assert len(pipeline) == 5
+
+        # First stage should be match with unanchored regex (no ^ prefix)
+        assert "$match" in pipeline[0]
+        match = pipeline[0]["$match"]
+        assert match["source_file"] == {"$regex": "document\\.pdf"}
+
     def test_pipeline_with_both_filters(self) -> None:
         """Test pipeline with both source and file type filters."""
         embedding = [0.1] * 10

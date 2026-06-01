@@ -5,7 +5,7 @@ for the OpenAI LLM provider implementation.
 """
 
 import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from openai import APIError
@@ -158,3 +158,79 @@ class TestOpenAILLMProviderGenerate:
                 with pytest.raises(ServiceUnavailableError):
                     provider.generate("Test prompt")
 
+
+class TestOpenAILLMProviderAGenerate:
+    """Tests for OpenAILLMProvider agenerate_async method."""
+
+    @pytest.mark.asyncio
+    async def test_agenerate_async_success(self):
+        """Test successful async generation."""
+        with patch.dict(os.environ, {"SECONDBRAIN_OPENAI_API_KEY": "test-key"}):
+            with patch("secondbrain.rag.providers.openai.AsyncOpenAI") as mock_client_class:
+                mock_response = MagicMock()
+                mock_response.choices = [MagicMock(message=MagicMock(content="Test response"))]
+                mock_client = MagicMock()
+                mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+                mock_client_class.return_value = mock_client
+
+                provider = OpenAILLMProvider()
+                response = await provider.generate_async("Test prompt")
+
+                assert response == "Test response"
+
+    @pytest.mark.asyncio
+    async def test_agenerate_async_with_custom_params(self):
+        """Test async generation with custom parameters."""
+        with patch.dict(os.environ, {"SECONDBRAIN_OPENAI_API_KEY": "test-key"}):
+            with patch("secondbrain.rag.providers.openai.AsyncOpenAI") as mock_client_class:
+                mock_response = MagicMock()
+                mock_response.choices = [MagicMock(message=MagicMock(content="Response"))]
+                mock_client = MagicMock()
+                mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+                mock_client_class.return_value = mock_client
+
+                provider = OpenAILLMProvider()
+                response = await provider.generate_async("Test", temperature=0.8, max_tokens=512)
+
+                call_kwargs = mock_client.chat.completions.create.call_args[1]
+                assert call_kwargs["temperature"] == 0.8
+                assert call_kwargs["max_tokens"] == 512
+
+    @pytest.mark.asyncio
+    async def test_agenerate_async_raises_service_unavailable_on_connect_error(self):
+        """Test that ConnectError raises ServiceUnavailableError."""
+        import httpx
+
+        with patch.dict(os.environ, {"SECONDBRAIN_OPENAI_API_KEY": "test-key"}):
+            with patch("secondbrain.rag.providers.openai.AsyncOpenAI") as mock_client_class:
+                mock_client = MagicMock()
+                mock_client.chat.completions.create = AsyncMock(
+                    side_effect=httpx.ConnectError("Connection failed")
+                )
+                mock_client_class.return_value = mock_client
+
+                provider = OpenAILLMProvider()
+
+                with pytest.raises(ServiceUnavailableError, match="OpenAI API unreachable"):
+                    await provider.generate_async("Test prompt")
+
+    @pytest.mark.asyncio
+    async def test_agenerate_async_raises_service_unavailable_on_api_error(self):
+        """Test that APIError raises ServiceUnavailableError."""
+        with patch.dict(os.environ, {"SECONDBRAIN_OPENAI_API_KEY": "test-key"}):
+            with patch("secondbrain.rag.providers.openai.AsyncOpenAI") as mock_client_class:
+                mock_client = MagicMock()
+                mock_request = MagicMock()
+                mock_client.chat.completions.create = AsyncMock(
+                    side_effect=APIError(
+                        message="API Error",
+                        request=mock_request,
+                        body={}
+                    )
+                )
+                mock_client_class.return_value = mock_client
+
+                provider = OpenAILLMProvider()
+
+                with pytest.raises(ServiceUnavailableError, match="OpenAI API error"):
+                    await provider.generate_async("Test prompt")
