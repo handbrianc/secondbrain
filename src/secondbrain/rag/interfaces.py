@@ -34,7 +34,7 @@ class LocalLLMProvider(Protocol):
             TimeoutError: If the request times out.
             RuntimeError: If the LLM returns an error.
         """
-        ...
+        ...  # pragma: no cover
 
     async def agenerate(
         self,
@@ -52,7 +52,7 @@ class LocalLLMProvider(Protocol):
         Returns:
             Generated response text.
         """
-        ...
+        ...  # pragma: no cover
 
     def health_check(self) -> bool:
         """Check if the LLM server is available.
@@ -60,4 +60,4 @@ class LocalLLMProvider(Protocol):
         Returns:
             True if the server is responsive, False otherwise.
         """
-        ...
+        ...  # pragma: no cover

@@ -148,6 +148,18 @@ class TestOllamaProviderGenerate:
             with pytest.raises(RuntimeError, match="not found"):
                 provider.generate("Test prompt")
 
+    def test_generate_response_error(self):
+        """Test generation when response error occurs (non-404)."""
+        mock_client = MagicMock()
+        mock_client.chat.side_effect = ResponseError("Internal error", 500)
+
+        with patch("secondbrain.rag.providers.ollama.Client", return_value=mock_client, create=True):
+            provider = OllamaLLMProvider()
+            provider._client = mock_client
+
+            with pytest.raises(RuntimeError, match="Generation failed"):
+                provider.generate("Test prompt")
+
 
 class TestOllamaProviderAGenerate:
     """Tests for OllamaLLMProvider.agenerate method."""
@@ -167,6 +179,58 @@ class TestOllamaProviderAGenerate:
         )
 
         assert response == "Test response"
+
+    @pytest.mark.asyncio
+    async def test_agenerate_server_unavailable(self):
+        """Test async generation when server is unavailable."""
+        mock_client = MagicMock()
+        mock_client.chat.side_effect = httpx.ConnectError("Connection failed")
+
+        with patch("secondbrain.rag.providers.ollama.Client", return_value=mock_client, create=True):
+            provider = OllamaLLMProvider()
+            provider._client = mock_client
+
+            with pytest.raises(ServiceUnavailableError, match="Local LLM server unavailable"):
+                await provider.agenerate("Test prompt")
+
+    @pytest.mark.asyncio
+    async def test_agenerate_timeout(self):
+        """Test async generation timeout."""
+        mock_client = MagicMock()
+        mock_client.chat.side_effect = httpx.TimeoutException("Timeout")
+
+        with patch("secondbrain.rag.providers.ollama.Client", return_value=mock_client, create=True):
+            provider = OllamaLLMProvider()
+            provider._client = mock_client
+
+            with pytest.raises(ServiceUnavailableError, match="Local LLM server unavailable"):
+                await provider.agenerate("Test prompt")
+
+    @pytest.mark.asyncio
+    async def test_agenerate_model_not_found(self):
+        """Test async generation when model not found."""
+        mock_client = MagicMock()
+        mock_client.chat.side_effect = ResponseError("Model not found", 404)
+
+        with patch("secondbrain.rag.providers.ollama.Client", return_value=mock_client, create=True):
+            provider = OllamaLLMProvider()
+            provider._client = mock_client
+
+            with pytest.raises(RuntimeError, match="not found"):
+                await provider.agenerate("Test prompt")
+
+    @pytest.mark.asyncio
+    async def test_agenerate_response_error(self):
+        """Test async generation when response error occurs (non-404)."""
+        mock_client = MagicMock()
+        mock_client.chat.side_effect = ResponseError("Internal error", 500)
+
+        with patch("secondbrain.rag.providers.ollama.Client", return_value=mock_client, create=True):
+            provider = OllamaLLMProvider()
+            provider._client = mock_client
+
+            with pytest.raises(RuntimeError, match="Generation failed"):
+                await provider.agenerate("Test prompt")
 
 
 class TestOllamaProviderHealthCheck:
@@ -241,6 +305,45 @@ class TestOllamaProviderChat:
             provider._client = mock_client
 
             with pytest.raises(ServiceUnavailableError):
+                provider.chat(messages)
+
+    def test_chat_timeout(self):
+        """Test chat timeout."""
+        messages = [{"role": "user", "content": "Test"}]
+        mock_client = MagicMock()
+        mock_client.chat.side_effect = httpx.TimeoutException("Timeout")
+
+        with patch("secondbrain.rag.providers.ollama.Client", return_value=mock_client, create=True):
+            provider = OllamaLLMProvider()
+            provider._client = mock_client
+
+            with pytest.raises(ServiceUnavailableError, match="Local LLM server unavailable"):
+                provider.chat(messages)
+
+    def test_chat_model_not_found(self):
+        """Test chat when model not found."""
+        messages = [{"role": "user", "content": "Test"}]
+        mock_client = MagicMock()
+        mock_client.chat.side_effect = ResponseError("Model not found", 404)
+
+        with patch("secondbrain.rag.providers.ollama.Client", return_value=mock_client, create=True):
+            provider = OllamaLLMProvider()
+            provider._client = mock_client
+
+            with pytest.raises(RuntimeError, match="not found"):
+                provider.chat(messages)
+
+    def test_chat_response_error(self):
+        """Test chat when response error occurs (non-404)."""
+        messages = [{"role": "user", "content": "Test"}]
+        mock_client = MagicMock()
+        mock_client.chat.side_effect = ResponseError("Internal error", 500)
+
+        with patch("secondbrain.rag.providers.ollama.Client", return_value=mock_client, create=True):
+            provider = OllamaLLMProvider()
+            provider._client = mock_client
+
+            with pytest.raises(RuntimeError, match="Generation failed"):
                 provider.chat(messages)
 
 

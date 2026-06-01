@@ -84,7 +84,7 @@ secondbrain/
 3. **Full test suite in pre-commit** - Use `pytest -m "not integration"` instead
 4. **Auto-installing dependencies in scripts** - Require virtual environment setup
 5. **Relative paths in scripts** - Use absolute paths or Python orchestration
-6. **Duplicate integration tests** - `tests/integration/` and `tests/test_integration/` have overlapping content
+6. **Duplicate integration tests** - ✅ RESOLVED: Consolidated `tests/test_integration/` into `tests/integration/mocked/` (May 2026)
 
 ---
 
@@ -138,7 +138,7 @@ pytest
 **High Priority:**
 - **Hard-coded password** in `scripts/init-mongo.js` - use env vars
 - **Inline Python** in `scripts/generate-sbom.sh` - extract to `.py` module
-- **Duplicate tests** in `tests/integration/` vs `tests/test_integration/`
+- **Duplicate tests** - ✅ RESOLVED: Removed `tests/test_integration/` directory (consolidated into `tests/integration/mocked/`)
 - **Orphaned package** `src/secondbrain_cli/` - safe to remove
 
 **No TODO/FIXME markers** - clean codebase with excellent hygiene.

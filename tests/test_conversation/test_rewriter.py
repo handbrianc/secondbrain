@@ -227,3 +227,18 @@ class TestQueryRewriterIsStandaloneQuery:
     def test_is_standalone_with_contract(self, rewriter):
         """Test that 'the contract' makes query non-standalone."""
         assert rewriter._is_standalone_query("What about the contract?") is False
+
+    def test_rewrite_fallback_when_not_meaningful(self, mock_llm_provider, rewriter):
+        """Test fallback when LLM returns non-meaningful result."""
+        mock_llm_provider.generate.return_value = "it"
+        history = [{"role": "user", "content": "Previous context"}]
+        result = rewriter.rewrite("How does it work?", history)
+        assert result == "How does it work?"
+
+    def test_rewrite_query_alias(self, rewriter):
+        """Test that rewrite_query is an alias for rewrite."""
+        assert callable(rewriter.rewrite_query)
+        history = [{"role": "user", "content": "Test"}]
+        result1 = rewriter.rewrite("What?", history)
+        result2 = rewriter.rewrite_query("What?", history)
+        assert result1 == result2
