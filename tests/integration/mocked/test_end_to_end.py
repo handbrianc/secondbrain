@@ -320,6 +320,7 @@ class TestIntegrationDataFlow:
 
                     assert result["success"] >= 1
 
+                    random.seed(456)  # Fixed seed for reproducibility
                     mock_storage._collection.insert_many(
                         [
                             {

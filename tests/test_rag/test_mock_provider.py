@@ -390,3 +390,43 @@ class TestMockLLMProviderChat:
 
         # Should use "Third" as the prompt (last user message)
         assert "prompt_hash:" in response
+
+
+class TestMockLLMProviderWithContext:
+    """Tests for MockLLMProviderWithContext class."""
+
+    def test_generate_with_question_prefix(self):
+        """Test that generate extracts question after 'Question:' prefix."""
+        from secondbrain.rag.providers.mock import MockLLMProviderWithContext
+
+        provider = MockLLMProviderWithContext()
+
+        prompt = "Some context\nQuestion:What is chunk size?"
+        response = provider.generate(prompt)
+
+        # Should match "chunk size" pattern and return configured response
+        assert "4096 tokens" in response
+
+    def test_generate_with_q_prefix(self):
+        """Test that generate extracts question after 'Q:' prefix."""
+        from secondbrain.rag.providers.mock import MockLLMProviderWithContext
+
+        provider = MockLLMProviderWithContext()
+
+        prompt = "Context here\nQ:What document formats are supported?"
+        response = provider.generate(prompt)
+
+        # Should match "document formats" pattern (case-insensitive)
+        assert "PDF" in response or "DOCX" in response or "formats" in response.lower()
+
+    def test_generate_fallback_to_hash(self):
+        """Test fallback to hash-based response when no pattern matches."""
+        from secondbrain.rag.providers.mock import MockLLMProviderWithContext
+
+        provider = MockLLMProviderWithContext()
+
+        prompt = "Random question with no matching pattern"
+        response = provider.generate(prompt)
+
+        # Should fall back to parent's hash-based response
+        assert "[MOCK]" in response

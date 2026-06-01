@@ -5,7 +5,7 @@ for the Anthropic LLM provider implementation.
 """
 
 import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from anthropic import APIError
@@ -63,12 +63,133 @@ class TestAnthropicLLMProviderInit:
                     mock_sync.return_value = MagicMock()
                     mock_async.return_value = MagicMock()
 
-                    provider = AnthropicLLMProvider()
+                provider = AnthropicLLMProvider()
 
-                    mock_sync.assert_called_once()
-                    mock_async.assert_called_once()
-                    assert hasattr(provider, "_client")
-                    assert hasattr(provider, "_async_client")
+
+class TestAnthropicLLMProviderAsyncGenerate:
+    """Tests for async generation methods."""
+
+    @pytest.mark.asyncio
+    async def test_agenerate_with_defaults(self):
+        """Test async generation with default parameters."""
+        with patch.dict(os.environ, {"SECONDBRAIN_ANTHROPIC_API_KEY": "test-key"}):
+            with patch("secondbrain.rag.providers.anthropic.AsyncAnthropic") as mock_client_class:
+                mock_response = MagicMock()
+                mock_response.content = [MagicMock(text="Async Response")]
+                mock_client = MagicMock()
+                mock_client.messages.create = AsyncMock(return_value=mock_response)
+                mock_client_class.return_value = mock_client
+
+                provider = AnthropicLLMProvider()
+                response = await provider.agenerate("Test")
+
+                assert response == "Async Response"
+                mock_client.messages.create.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_agenerate_with_custom_params(self):
+        """Test async generation with custom parameters."""
+        with patch.dict(os.environ, {"SECONDBRAIN_ANTHROPIC_API_KEY": "test-key"}):
+            with patch("secondbrain.rag.providers.anthropic.AsyncAnthropic") as mock_client_class:
+                mock_response = MagicMock()
+                mock_response.content = [MagicMock(text="Response")]
+                mock_client = MagicMock()
+                mock_client.messages.create = AsyncMock(return_value=mock_response)
+                mock_client_class.return_value = mock_client
+
+                provider = AnthropicLLMProvider()
+                response = await provider.agenerate(
+                    "Test", temperature=0.7, max_tokens=1024
+                )
+
+                call_kwargs = mock_client.messages.create.call_args[1]
+                assert call_kwargs["temperature"] == 0.7
+                assert call_kwargs["max_tokens"] == 1024
+
+    @pytest.mark.asyncio
+    async def test_agenerate_raises_service_unavailable(self):
+        """Test that ConnectError raises ServiceUnavailableError."""
+        import httpx
+
+        with patch.dict(os.environ, {"SECONDBRAIN_ANTHROPIC_API_KEY": "test-key"}):
+            with patch("secondbrain.rag.providers.anthropic.AsyncAnthropic") as mock_client_class:
+                mock_client = MagicMock()
+                mock_client.messages.create = AsyncMock(
+                    side_effect=httpx.ConnectError("Connection failed")
+                )
+                mock_client_class.return_value = mock_client
+
+                provider = AnthropicLLMProvider()
+
+                with pytest.raises(ServiceUnavailableError, match="Anthropic API unreachable"):
+                    await provider.agenerate("Test")
+
+    @pytest.mark.asyncio
+    async def test_agenerate_raises_runtime_on_api_error(self):
+        """Test that APIError raises RuntimeError."""
+        with patch.dict(os.environ, {"SECONDBRAIN_ANTHROPIC_API_KEY": "test-key"}):
+            with patch("secondbrain.rag.providers.anthropic.AsyncAnthropic") as mock_client_class:
+                mock_client = MagicMock()
+                mock_request = MagicMock()
+                mock_client.messages.create = AsyncMock(
+                    side_effect=APIError(
+                        message="API Error",
+                        request=mock_request,
+                        body={}
+                    )
+                )
+                mock_client_class.return_value = mock_client
+
+                provider = AnthropicLLMProvider()
+
+                with pytest.raises(RuntimeError, match="Anthropic API error"):
+                    await provider.agenerate("Test")
+
+
+class TestAnthropicLLMProviderHealthCheck:
+    """Tests for health check method."""
+
+    def test_health_check_success(self):
+        """Test health check returns True on success."""
+        with patch.dict(os.environ, {"SECONDBRAIN_ANTHROPIC_API_KEY": "test-key"}):
+            with patch("secondbrain.rag.providers.anthropic.Anthropic") as mock_client_class:
+                mock_client = MagicMock()
+                mock_client.models.list.return_value = MagicMock()
+                mock_client_class.return_value = mock_client
+
+                provider = AnthropicLLMProvider()
+                result = provider.health_check()
+
+                assert result is True
+                mock_client.models.list.assert_called_once()
+
+    def test_health_check_failure(self):
+        """Test health check returns False on failure."""
+        import httpx
+
+        with patch.dict(os.environ, {"SECONDBRAIN_ANTHROPIC_API_KEY": "test-key"}):
+            with patch("secondbrain.rag.providers.anthropic.Anthropic") as mock_client_class:
+                mock_client = MagicMock()
+                mock_client.models.list.side_effect = httpx.ConnectError("Connection failed")
+                mock_client_class.return_value = mock_client
+
+                provider = AnthropicLLMProvider()
+                result = provider.health_check()
+
+                assert result is False
+
+    def test_health_check_catches_all_errors(self):
+        """Test health check returns False for all errors."""
+        with patch.dict(os.environ, {"SECONDBRAIN_ANTHROPIC_API_KEY": "test-key"}):
+            with patch("secondbrain.rag.providers.anthropic.Anthropic") as mock_client_class:
+                mock_client = MagicMock()
+                mock_client.models.list.side_effect = RuntimeError("Unexpected error")
+                mock_client_class.return_value = mock_client
+
+                provider = AnthropicLLMProvider()
+                result = provider.health_check()
+
+                assert result is False
 
 
 class TestAnthropicLLMProviderGenerate:

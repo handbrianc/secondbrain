@@ -990,3 +990,366 @@ class TestRAGPipelineExtended:
         result = pipeline.query("What about it?")
 
         assert "answer" in result
+
+
+class TestRAGPipelineCoverageGaps:
+    """Tests specifically designed to cover missing coverage lines."""
+
+    def test_query_with_empty_string_returns_validation_error(
+        self,
+        pipeline_with_mocks: RAGPipeline,
+    ) -> None:
+        """Test that empty query returns validation error.
+
+        Covers line 108: validation error return path.
+        """
+        result = pipeline_with_mocks.query("")
+
+        assert result["answer"] == "Query cannot be empty. Please provide a valid question."
+        assert result["query"] == ""
+        assert result["validation_error"] is True
+
+    def test_query_with_whitespace_only_returns_validation_error(
+        self,
+        pipeline_with_mocks: RAGPipeline,
+    ) -> None:
+        """Test that whitespace-only query returns validation error.
+
+        Covers line 108: validation error return path for whitespace.
+        """
+        result = pipeline_with_mocks.query("   \t\n  ")
+
+        assert result["answer"] == "Query cannot be empty. Please provide a valid question."
+        assert result["validation_error"] is True
+
+    def test_query_with_security_violation_returns_safe_response(
+        self,
+        pipeline_with_mocks: RAGPipeline,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test that security violation returns safe response.
+
+        Covers lines 117-121: security filter violation logging and response.
+        """
+        from secondbrain.rag.security_filter import SecurityViolation
+
+        # Mock security filter to return a violation
+        mock_violation = SecurityViolation(
+            violation_type="sql_injection",
+            pattern_matched="DROP TABLE",
+            severity="high",
+        )
+
+        # Patch validate_query to return violation
+        monkeypatch.setattr(
+            pipeline_with_mocks._security_filter,
+            "validate_query",
+            lambda q: [mock_violation],
+        )
+
+        # Patch get_safe_response
+        monkeypatch.setattr(
+            pipeline_with_mocks._security_filter,
+            "get_safe_response",
+            lambda: "I cannot process potentially malicious queries.",
+        )
+
+        result = pipeline_with_mocks.query("DROP TABLE users;")
+
+        assert result["answer"] == "I cannot process potentially malicious queries."
+        assert result["query"] == "DROP TABLE users;"
+        assert result["security_blocked"] is True
+
+    async def test_query_async_with_empty_query_returns_validation_error(
+        self,
+        pipeline_with_mocks: RAGPipeline,
+    ) -> None:
+        """Test that async query with empty query returns validation error.
+
+        Covers line 518: async validation error return path.
+        """
+        result = await pipeline_with_mocks.query_async("")
+
+        assert result["answer"] == "Query cannot be empty. Please provide a valid question."
+        assert result["validation_error"] is True
+
+
+class TestRAGPipelineTracing:
+    """Tests for RAGPipeline tracing span attributes."""
+
+    def test_query_with_tracing_enabled_sets_span_attributes(
+        self,
+        pipeline_with_mocks: RAGPipeline,
+        mock_searcher: MagicMock,
+        mock_llm_provider: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test that query method sets tracing span attributes when tracing is enabled.
+
+        Covers lines 134-138: retrieval span attributes (query, top_k, chunks_returned).
+        Covers lines 163-165: generation span attributes (prompt_length, temperature, max_tokens).
+        Covers line 172: generation span answer_length attribute.
+        """
+        from unittest.mock import MagicMock as MockSpan
+
+        # Create a mock span with set_attribute tracking
+        mock_span = MockSpan()
+        mock_span.set_attribute = MagicMock()
+
+        # Create a mock context manager that yields the mock span
+        mock_context_manager = MagicMock()
+        mock_context_manager.__enter__ = MagicMock(return_value=mock_span)
+        mock_context_manager.__exit__ = MagicMock(return_value=False)
+
+        # Patch trace_operation to return our mock span
+        monkeypatch.setattr(
+            "secondbrain.rag.pipeline.trace_operation",
+            lambda op: mock_context_manager,
+        )
+
+        # Enable tracing by setting the environment variable
+        monkeypatch.setenv("SECONDBRAIN_TRACING_ENABLED", "true")
+
+        # Setup mocks to return data
+        mock_chunks = [
+            {"chunk_text": "Test chunk 1", "source_file": "test.pdf", "score": 0.9},
+        ]
+        mock_searcher.search.return_value = mock_chunks
+        mock_llm_provider.generate.return_value = "Test answer"
+
+        # Execute query
+        result = pipeline_with_mocks.query("Test query", top_k=5)
+
+        # Verify retrieval span attributes were set
+        retrieval_set_attribute_calls = [
+            call
+            for call in mock_span.set_attribute.call_args_list
+            if call[0][0].startswith("rag.")
+        ]
+
+        # Check retrieval attributes (lines 134-138)
+        assert any("rag.query" in str(call) for call in retrieval_set_attribute_calls)
+        assert any("rag.top_k" in str(call) for call in retrieval_set_attribute_calls)
+        assert any("rag.chunks_returned" in str(call) for call in retrieval_set_attribute_calls)
+
+        # Check generation attributes (lines 163-165, 172)
+        assert any("rag.prompt_length" in str(call) for call in retrieval_set_attribute_calls)
+        assert any("rag.temperature" in str(call) for call in retrieval_set_attribute_calls)
+        assert any("rag.max_tokens" in str(call) for call in retrieval_set_attribute_calls)
+        assert any("rag.answer_length" in str(call) for call in retrieval_set_attribute_calls)
+
+        assert result["answer"] == "Test answer"
+
+    def test_chat_with_tracing_enabled_sets_span_attributes(
+        self,
+        pipeline_with_rewriter: RAGPipeline,
+        mock_searcher: MagicMock,
+        mock_llm_provider: MagicMock,
+        mock_rewriter: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test that chat method sets tracing span attributes when tracing is enabled.
+
+        Covers lines 227-232: retrieval span attributes (query, top_k, is_chat, chunks_returned).
+        Covers lines 261-264: generation span attributes (prompt_length, temperature, max_tokens, is_chat).
+        Covers line 271: generation span answer_length attribute.
+        """
+        from unittest.mock import MagicMock as MockSpan
+
+        # Create a mock span with set_attribute tracking
+        mock_span = MockSpan()
+        mock_span.set_attribute = MagicMock()
+
+        # Create a mock context manager that yields the mock span
+        mock_context_manager = MagicMock()
+        mock_context_manager.__enter__ = MagicMock(return_value=mock_span)
+        mock_context_manager.__exit__ = MagicMock(return_value=False)
+
+        # Patch trace_operation to return our mock span
+        monkeypatch.setattr(
+            "secondbrain.rag.pipeline.trace_operation",
+            lambda op: mock_context_manager,
+        )
+
+        # Enable tracing
+        monkeypatch.setenv("SECONDBRAIN_TRACING_ENABLED", "true")
+
+        # Setup mocks
+        mock_chunks = [
+            {"chunk_text": "Test chunk", "source_file": "test.pdf", "score": 0.9},
+        ]
+        mock_searcher.search.return_value = mock_chunks
+        mock_llm_provider.generate.return_value = "Chat answer"
+        mock_rewriter.should_rewrite.return_value = True
+        mock_rewriter.rewrite_query.return_value = "rewritten query"
+
+        # Create session with history
+        session = ConversationSession("test-session", MagicMock(), context_window=10)
+        session.add_message("user", "Previous query")
+        session.add_message("assistant", "Previous answer")
+
+        # Execute chat
+        result = pipeline_with_rewriter.chat("Current query", session=session)
+
+        # Verify span attributes were set
+        span_calls = [
+            call for call in mock_span.set_attribute.call_args_list if call[0][0].startswith("rag.")
+        ]
+
+        # Check retrieval attributes including is_chat (lines 227-232)
+        assert any("rag.query" in str(call) for call in span_calls)
+        assert any("rag.top_k" in str(call) for call in span_calls)
+        assert any("rag.is_chat" in str(call) for call in span_calls)
+        assert any("rag.chunks_returned" in str(call) for call in span_calls)
+
+        # Check generation attributes including is_chat (lines 261-264, 271)
+        assert any("rag.prompt_length" in str(call) for call in span_calls)
+        assert any("rag.temperature" in str(call) for call in span_calls)
+        assert any("rag.max_tokens" in str(call) for call in span_calls)
+        assert any("rag.is_chat" in str(call) for call in span_calls)
+        assert any("rag.answer_length" in str(call) for call in span_calls)
+
+        assert result["answer"] == "Chat answer"
+        assert "rewritten_query" in result
+
+    async def test_query_async_with_tracing_enabled_sets_span_attributes(
+        self,
+        pipeline_with_mocks: RAGPipeline,
+        mock_searcher: MagicMock,
+        mock_llm_provider: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test that async query method sets tracing span attributes.
+
+        Covers lines 531-534: async retrieval span attributes (query, top_k, is_chat, is_async).
+        Covers line 539: async retrieval chunks_returned attribute.
+        Covers lines 559-562: async generation span attributes (prompt_length, temperature, max_tokens, is_async).
+        Covers line 569: async generation answer_length attribute.
+        """
+        from unittest.mock import MagicMock as MockSpan
+
+        # Create a mock span
+        mock_span = MockSpan()
+        mock_span.set_attribute = MagicMock()
+
+        # Create a mock context manager
+        mock_context_manager = MagicMock()
+        mock_context_manager.__enter__ = MagicMock(return_value=mock_span)
+        mock_context_manager.__exit__ = MagicMock(return_value=False)
+
+        # Patch trace_operation
+        monkeypatch.setattr(
+            "secondbrain.rag.pipeline.trace_operation",
+            lambda op: mock_context_manager,
+        )
+
+        # Enable tracing
+        monkeypatch.setenv("SECONDBRAIN_TRACING_ENABLED", "true")
+
+        # Setup async mocks
+        mock_chunks = [
+            {"chunk_text": "Async chunk", "source_file": "test.pdf", "score": 0.9},
+        ]
+        mock_searcher.search_async = AsyncMock(return_value=mock_chunks)
+        mock_llm_provider.agenerate = AsyncMock(return_value="Async answer")
+
+        # Execute async query
+        result = await pipeline_with_mocks.query_async("Async test query", top_k=5)
+
+        # Verify span attributes
+        span_calls = [
+            call for call in mock_span.set_attribute.call_args_list if call[0][0].startswith("rag.")
+        ]
+
+        # Check async retrieval attributes (lines 531-534, 539)
+        assert any("rag.query" in str(call) for call in span_calls)
+        assert any("rag.top_k" in str(call) for call in span_calls)
+        assert any("rag.is_chat" in str(call) for call in span_calls)
+        assert any("rag.is_async" in str(call) for call in span_calls)
+        assert any("rag.chunks_returned" in str(call) for call in span_calls)
+
+        # Check async generation attributes (lines 559-562, 569)
+        assert any("rag.prompt_length" in str(call) for call in span_calls)
+        assert any("rag.temperature" in str(call) for call in span_calls)
+        assert any("rag.max_tokens" in str(call) for call in span_calls)
+        assert any("rag.is_async" in str(call) for call in span_calls)
+        assert any("rag.answer_length" in str(call) for call in span_calls)
+
+        assert result["answer"] == "Async answer"
+
+    async def test_chat_async_with_tracing_enabled_sets_span_attributes(
+        self,
+        pipeline_with_rewriter: RAGPipeline,
+        mock_searcher: MagicMock,
+        mock_llm_provider: MagicMock,
+        mock_rewriter: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test that async chat method sets tracing span attributes.
+
+        Covers lines 612-615: async chat retrieval span attributes (query, top_k, is_chat, is_async).
+        Covers line 620: async chat retrieval chunks_returned attribute.
+        Covers lines 644-648: async chat generation span attributes (prompt_length, temperature, max_tokens, is_chat, is_async).
+        Covers line 655: async chat generation answer_length attribute.
+        """
+        from unittest.mock import MagicMock as MockSpan
+
+        # Create a mock span
+        mock_span = MockSpan()
+        mock_span.set_attribute = MagicMock()
+
+        # Create a mock context manager
+        mock_context_manager = MagicMock()
+        mock_context_manager.__enter__ = MagicMock(return_value=mock_span)
+        mock_context_manager.__exit__ = MagicMock(return_value=False)
+
+        # Patch trace_operation
+        monkeypatch.setattr(
+            "secondbrain.rag.pipeline.trace_operation",
+            lambda op: mock_context_manager,
+        )
+
+        # Enable tracing
+        monkeypatch.setenv("SECONDBRAIN_TRACING_ENABLED", "true")
+
+        # Setup mocks
+        mock_chunks = [
+            {"chunk_text": "Async chat chunk", "source_file": "test.pdf", "score": 0.9},
+        ]
+        mock_searcher.search_async = AsyncMock(return_value=mock_chunks)
+        mock_llm_provider.agenerate = AsyncMock(return_value="Async chat answer")
+        mock_rewriter.should_rewrite.return_value = True
+        mock_rewriter.rewrite_query.return_value = "rewritten async query"
+
+        # Create session
+        session = ConversationSession("async-test-session", MagicMock(), context_window=10)
+        session.add_message("user", "Previous")
+        session.add_message("assistant", "Previous answer")
+
+        # Execute async chat
+        result = await pipeline_with_rewriter.chat_async(
+            "Async chat query", session=session, top_k=5
+        )
+
+        # Verify span attributes
+        span_calls = [
+            call for call in mock_span.set_attribute.call_args_list if call[0][0].startswith("rag.")
+        ]
+
+        # Check async chat retrieval attributes (lines 612-615, 620)
+        assert any("rag.query" in str(call) for call in span_calls)
+        assert any("rag.top_k" in str(call) for call in span_calls)
+        assert any("rag.is_chat" in str(call) for call in span_calls)
+        assert any("rag.is_async" in str(call) for call in span_calls)
+        assert any("rag.chunks_returned" in str(call) for call in span_calls)
+
+        # Check async chat generation attributes (lines 644-648, 655)
+        assert any("rag.prompt_length" in str(call) for call in span_calls)
+        assert any("rag.temperature" in str(call) for call in span_calls)
+        assert any("rag.max_tokens" in str(call) for call in span_calls)
+        assert any("rag.is_chat" in str(call) for call in span_calls)
+        assert any("rag.is_async" in str(call) for call in span_calls)
+        assert any("rag.answer_length" in str(call) for call in span_calls)
+
+        assert result["answer"] == "Async chat answer"
+        assert "rewritten_query" in result

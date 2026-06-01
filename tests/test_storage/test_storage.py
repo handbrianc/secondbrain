@@ -661,3 +661,116 @@ class TestIndexReadyTimeout:
                 # No exceptions for local MongoDB (no-op)
                 storage._wait_for_index_ready()
                 mock_collection.list_search_indexes.assert_not_called()
+
+    def test_add_ingestion_timestamp_flat_format(self) -> None:
+        """Test _add_ingestion_timestamp with flat ingested_at format."""
+        with patch("secondbrain.storage.config") as mock_config_func:
+            from secondbrain.config import Config
+            _test_config = Config()
+            mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
+            mock_config_func.return_value.mongo_db = "secondbrain_test"
+            mock_config_func.return_value.mongo_collection = "embeddings_test"
+            mock_config_func.return_value.embedding_dimensions = 384
+
+            storage = VectorStorage()
+
+            doc = {"text": "test", "ingested_at": "2024-01-01T00:00:00Z"}
+            result = storage._add_ingestion_timestamp(doc)
+
+            # Should update the flat ingested_at field
+            assert "ingested_at" in result
+            assert result["ingested_at"] != "2024-01-01T00:00:00Z"
+            assert result["text"] == "test"
+
+    def test_add_ingestion_timestamp_nested_format(self) -> None:
+        """Test _add_ingestion_timestamp with nested metadata.ingested_at format."""
+        with patch("secondbrain.storage.config") as mock_config_func:
+            from secondbrain.config import Config
+            _test_config = Config()
+            mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
+            mock_config_func.return_value.mongo_db = "secondbrain_test"
+            mock_config_func.return_value.mongo_collection = "embeddings_test"
+            mock_config_func.return_value.embedding_dimensions = 384
+
+            storage = VectorStorage()
+
+            doc = {"text": "test", "metadata": {"ingested_at": "2024-01-01T00:00:00Z"}}
+            result = storage._add_ingestion_timestamp(doc)
+
+            # Should update the nested metadata.ingested_at field
+            assert "metadata" in result
+            assert result["metadata"]["ingested_at"] != "2024-01-01T00:00:00Z"
+            assert result["text"] == "test"
+
+    def test_close_closes_async_client(self) -> None:
+        """Test that close method closes async client with suppress."""
+        with patch("secondbrain.storage.config") as mock_config_func:
+            from secondbrain.config import Config
+            _test_config = Config()
+            mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
+            mock_config_func.return_value.mongo_db = "secondbrain_test"
+            mock_config_func.return_value.mongo_collection = "embeddings_test"
+            mock_config_func.return_value.embedding_dimensions = 384
+
+            storage = VectorStorage()
+
+            # Mock async client
+            mock_async_client = MagicMock()
+            storage._async_client = mock_async_client
+
+            storage.close()
+
+            # Should call close on async client
+            mock_async_client.close.assert_called_once()
+            assert storage._async_client is None
+
+    def test_close_handles_async_client_error(self) -> None:
+        """Test that close suppresses exceptions from async client close."""
+        with patch("secondbrain.storage.config") as mock_config_func:
+            from secondbrain.config import Config
+            _test_config = Config()
+            mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
+            mock_config_func.return_value.mongo_db = "secondbrain_test"
+            mock_config_func.return_value.mongo_collection = "embeddings_test"
+            mock_config_func.return_value.embedding_dimensions = 384
+
+            storage = VectorStorage()
+
+            # Mock async client that raises exception
+            mock_async_client = MagicMock()
+            mock_async_client.close.side_effect = Exception("Close error")
+            storage._async_client = mock_async_client
+
+            # Should not raise
+            storage.close()
+
+            assert storage._async_client is None
+
+    def test_list_chunks_exact_match_regex(self) -> None:
+        """Test list_chunks with exact match (no prefix) regex on source_file."""
+        with patch("secondbrain.storage.config") as mock_config_func:
+            from secondbrain.config import Config
+            _test_config = Config()
+            mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
+            mock_config_func.return_value.mongo_db = "secondbrain_test"
+            mock_config_func.return_value.mongo_collection = "embeddings_test"
+            mock_config_func.return_value.embedding_dimensions = 384
+
+            storage = VectorStorage()
+
+            mock_chunk = {"chunk_id": "1", "source_file": "test.pdf"}
+            mock_collection = MagicMock()
+            mock_collection.find.return_value = [mock_chunk]
+
+            with (
+                patch.object(storage, "validate_connection", return_value=True),
+                patch.object(storage, "_collection", mock_collection),
+            ):
+                # Use a filter that won't match prefix but will match exact
+                result = storage.list_chunks(source_filter="exact", use_prefix_match=False)
+
+                # Should use exact regex (no ^ prefix)
+                call_args = mock_collection.find.call_args[0][0]
+                assert "$regex" in call_args["source_file"]
+                # Exact match regex should not have ^ prefix
+                assert not call_args["source_file"]["$regex"].startswith("^")
