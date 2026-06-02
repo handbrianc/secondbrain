@@ -57,6 +57,7 @@ dev = [
     "pytest-rerunfailures>=12.0",  # Retry flaky tests - concurrent test stability
     "hypothesis>=6.0.0",  # Property-based testing - edge case discovery
     "mutmut>=3.5.0",  # Mutation testing - verify test quality
+    "factory-boy>=3.3.0",  # Test factories - factory_boy for test data
     "bandit>=1.7.0",  # Security scanning - Python security issues
     "safety>=3.0.0",  # Vulnerability check - dependency audits
     "pip-audit>=2.10.0",  # Security audit - PyPI vulnerability check
