@@ -79,19 +79,7 @@ def _validate_mongo_uri(value: str) -> str:
     return value
 
 
-def _get_default_ollama_host() -> str:
-    """Get default Ollama host based on platform.
 
-    On macOS, use native Ollama installation (faster on CPU).
-    On other platforms, use Docker Ollama container.
-
-    Returns:
-        Ollama host URL string
-    """
-    if platform.system() == "Darwin":
-        return "http://localhost:11434"  # macOS (native)
-    else:
-        return "http://localhost:11435"  # Linux/Windows (Docker)
 
 
 class Config(BaseSettings):
@@ -193,15 +181,19 @@ class Config(BaseSettings):
     )
 
     llm_provider: str = Field(
-        default="ollama",
-        description="LLM provider type (ollama, openai, anthropic)",
+        default="openai",
+        description="LLM provider type (openai, anthropic)",
     )
-    ollama_host: str = Field(
-        default_factory=_get_default_ollama_host,
-        description="Ollama API endpoint (auto-detects platform: macOS=11434, Linux/Windows=11435)",
+    openai_base_url: str | None = Field(
+        default=None,
+        description="OpenAI-compatible API base URL (optional, defaults to OpenAI). Use for self-hosted endpoints like vLLM, LM Studio, Azure OpenAI, Groq, etc.",
+    )
+    openai_api_key: str | None = Field(
+        default=None,
+        description="OpenAI-compatible API key (optional for self-hosted endpoints without auth). Defaults to SECONDBRAIN_OPENAI_API_KEY env var.",
     )
     llm_model: str = Field(
-        default="llama3.2",
+        default="gpt-4o-mini",
         description="Default LLM model for RAG",
     )
     llm_temperature: float = Field(
