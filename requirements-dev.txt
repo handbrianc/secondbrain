@@ -19,6 +19,9 @@ pytest-timeout==2.4.0
 hypothesis==6.131.0
 pytest-hypothesis==6.0.0
 
+# Test factories
+factory-boy==3.3.0
+
 # Security scanning
 bandit==1.8.3
 safety==3.2.10
