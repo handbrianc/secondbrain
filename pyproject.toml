@@ -37,7 +37,7 @@ dependencies = [
     "openai>=2.38.0",  # LLM provider - v1 SDK required
     "anthropic>=0.40.0",  # LLM provider - Claude models support
     "typing_extensions>=4.15.0",  # Type hints - backport new features
-    "pyobjc-core>=12.1; sys_platform == 'darwin'",  # MacOS Objective-C bridge - required for ocrmac
+    "pyobjc-core>=12.2; sys_platform == 'darwin'",  # MacOS Objective-C bridge - required for ocrmac
     "pyobjc-framework-cocoa>=12.1; sys_platform == 'darwin'",  # MacOS Cocoa framework - required for ocrmac
     "pyobjc-framework-coreml>=12.1; sys_platform == 'darwin'",  # MacOS Core ML - required for ocrmac
     "pyobjc-framework-quartz>=12.1; sys_platform == 'darwin'",  # MacOS Quartz - required for ocrmac
