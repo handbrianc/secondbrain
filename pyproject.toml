@@ -106,7 +106,7 @@ opentelemetry = [
 secondbrain = "secondbrain.cli:main"
 
 [build-system]
-requires = ["setuptools>=60.0.0", "wheel"]
+requires = ["setuptools>=60.0.0", "wheel"]  # setuptools v60+ required for pyproject.toml build backend support
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
