@@ -16,14 +16,14 @@ echo ""
 echo "Running hallucination detection tests..."
 pytest tests/test_qualitative/test_hallucination_detection.py -v
 
-# Integration tests (require MongoDB + Ollama)
+# Integration tests (require MongoDB)
 echo ""
-echo "Running integration tests (requires MongoDB + Ollama)..."
-if pgrep -x "mongo" > /dev/null && pgrep -x "ollama" > /dev/null; then
+echo "Running integration tests (requires MongoDB)..."
+if pgrep -x "mongo" > /dev/null; then
     pytest tests/test_qualitative/ -m "integration" -v
 else
-    echo "Skipping integration tests (services not running)"
-    echo "Start services with: docker-compose up -d && ollama serve"
+    echo "Skipping integration tests (MongoDB not running)"
+    echo "Start services with: docker-compose up -d"
 fi
 
 echo ""

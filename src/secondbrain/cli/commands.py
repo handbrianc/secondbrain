@@ -464,7 +464,7 @@ def chat(
     """
     from secondbrain.config import config
     from secondbrain.conversation import ConversationStorage
-    from secondbrain.rag.providers import OllamaLLMProvider
+    from secondbrain.rag.providers import LLMProviderFactory
 
     cfg = config()
 
@@ -502,16 +502,18 @@ def chat(
         return
 
     if check_llm:
-        llm_provider = OllamaLLMProvider(host=cfg.ollama_host, model=cfg.llm_model)
-        if llm_provider.health_check():
-            console.print(
-                f"[green]✓ Ollama is available[/green] (model: {llm_provider.model})"
-            )
-        else:
-            console.print(f"[red]✗ Ollama is not available at {cfg.ollama_host}[/red]")
-            console.print(
-                "[yellow]Start Ollama with: sentence-transformers serve[/yellow]"
-            )
+        try:
+            llm_provider = LLMProviderFactory.create_from_config(cfg)
+            if llm_provider.health_check():
+                console.print(
+                    f"[green]✓ LLM provider ({cfg.llm_provider}) is healthy[/green]"
+                )
+            else:
+                console.print(
+                    f"[red]✗ LLM provider ({cfg.llm_provider}) health check failed[/red]"
+                )
+        except Exception as e:
+            console.print(f"[red]✗ LLM provider error: {str(e)}[/red]")
         return
 
     if history:
@@ -576,7 +578,7 @@ def _single_turn_chat(
     from secondbrain.config import config
     from secondbrain.conversation import ConversationSession, ConversationStorage
     from secondbrain.rag import RAGPipeline
-    from secondbrain.rag.providers import OllamaLLMProvider
+    from secondbrain.rag.providers import LLMProviderFactory
     from secondbrain.search import Searcher
 
     cfg = config()
@@ -591,10 +593,7 @@ def _single_turn_chat(
                 session_obj = ConversationSession.create(session, storage)
 
     searcher = Searcher(verbose=False)
-    llm_model = model or cfg.llm_model
-    llm_provider = OllamaLLMProvider(
-        host=cfg.ollama_host, model=llm_model, temperature=temperature
-    )
+    llm_provider = LLMProviderFactory.create_from_config(cfg)
 
     pipeline = RAGPipeline(
         searcher=searcher,
@@ -634,7 +633,7 @@ def _interactive_chat(
     from secondbrain.config import config
     from secondbrain.conversation import ConversationSession, ConversationStorage
     from secondbrain.rag import RAGPipeline
-    from secondbrain.rag.providers import OllamaLLMProvider
+    from secondbrain.rag.providers import LLMProviderFactory
     from secondbrain.search import Searcher
 
     cfg = config()
@@ -660,10 +659,7 @@ def _interactive_chat(
                 )
 
     searcher = Searcher(verbose=False)
-    llm_model = model or cfg.llm_model
-    llm_provider = OllamaLLMProvider(
-        host=cfg.ollama_host, model=llm_model, temperature=temperature
-    )
+    llm_provider = LLMProviderFactory.create_from_config(cfg)
 
     # Initialize RAG pipeline
     pipeline = RAGPipeline(

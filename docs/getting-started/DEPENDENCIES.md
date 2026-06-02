@@ -44,8 +44,7 @@ pip install -e "."
 | `torch` | PyTorch for deep learning models | >=2.0.0 |
 | `opentelemetry-api` | Observability API | >=1.20.0 |
 | `opentelemetry-sdk` | Observability SDK | >=1.20.0 |
-| `ollama` | Ollama local LLM client | >=0.1.0 |
-| `openai` | OpenAI LLM client | >=1.0.0 |
+| `openai` | OpenAI-compatible LLM client | >=1.0.0 |
 | `typing_extensions` | Extended typing features | >=4.0.0 |
 
 **Total size**: ~2-3 GB (mostly PyTorch and sentence-transformers models)
@@ -208,24 +207,39 @@ brew services start mongodb-community
 
 ---
 
-### Ollama (Optional - for Local LLM)
+### OpenAI-Compatible API (Optional - for Conversational Q&A)
 
-**Purpose**: Local large language model provider for conversational Q&A
+**Purpose**: Large language model provider for conversational Q&A via OpenAI-compatible APIs
 
-**Installation**:
+**Supported Providers**:
+- **OpenAI API** - `gpt-4o-mini`, `gpt-4o`, `gpt-4-turbo`
+- **Azure OpenAI** - Deployed models via Azure
+- **Groq** - Fast inference with Llama, Mixtral models
+- **Anthropic** - Claude models via API
+- **Self-hosted vLLM** - Local deployment with OpenAI-compatible endpoint
+- **Self-hosted LM Studio** - Local LLM server with OpenAI compatibility
+- **Self-hosted Ollama** - Ollama with OpenAI-compatible endpoint (`/v1/chat/completions`)
 
-#### macOS/Linux
+**Installation**: No additional pip packages required - `openai` package is already included in runtime dependencies.
+
+**Configuration**: Set environment variables in `.env`:
 ```bash
-curl -fsSL https://ollama.ai/install.sh | sh
-ollama pull llama3.2  # Or your preferred model
+# Choose provider: openai, anthropic, azure, groq
+SECONDBRAIN_LLM_PROVIDER=openai
+
+# OpenAI-compatible API configuration
+SECONDBRAIN_OPENAI_BASE_URL=https://api.openai.com/v1  # Optional (default: OpenAI)
+SECONDBRAIN_OPENAI_API_KEY=sk-your-api-key-here  # Required for most providers
+SECONDBRAIN_OPENAI_MODEL=gpt-4o-mini  # Default model
 ```
 
-#### Docker
+**Self-Hosted Example** (vLLM, LM Studio, Ollama):
 ```bash
-docker run -d -v ollama:/root/.ollama -p 11434:11434 ollama/ollama
+SECONDBRAIN_LLM_PROVIDER=openai
+SECONDBRAIN_OPENAI_BASE_URL=http://localhost:8080/v1
+SECONDBRAIN_OPENAI_API_KEY=  # Leave empty if no authentication
+SECONDBRAIN_OPENAI_MODEL=local-model
 ```
-
-**Configuration**: Set `SECONDBRAIN_LLM_PROVIDER=ollama` and `SECONDBRAIN_OLLAMA_HOST=http://localhost:11434`
 
 ---
 
@@ -363,8 +377,8 @@ pip install -e ".[dev]"
 # Add qualitative testing dependencies
 pip install -e ".[qualitative]"
 
-# Pull LLM model for evaluation
-ollama pull llama3.2
+# Configure LLM provider for evaluation
+# See MIGRATION_OLLAMA_TO_OPENAI.md for migration guide
 
 # Run qualitative tests
 pytest tests/test_qualitative/ -v
@@ -562,7 +576,7 @@ For other issues, consult:
 |----------|---------|-------------------|
 | **Runtime only** | `pip install -e "."` | MongoDB, sentence-transformers |
 | **Development** | `pip install -e ".[dev]"` | MongoDB, sentence-transformers |
-| **Qualitative tests** | `pip install -e ".[dev]"` + `pip install -e ".[qualitative]"` | MongoDB, sentence-transformers, Ollama |
+| **Qualitative tests** | `pip install -e ".[dev]"` + `pip install -e ".[qualitative]"` | MongoDB, sentence-transformers, OpenAI-compatible API |
 | **Observability** | `pip install -e ".[opentelemetry]"` | MongoDB, sentence-transformers, OTEL collector |
 
 ### External Services Quick Start

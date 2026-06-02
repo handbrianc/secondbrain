@@ -33,6 +33,7 @@ class OpenAILLMProvider(LocalLLMProvider):
         temperature: float = 0.1,
         max_tokens: int = 2048,
         timeout: int = 120,
+        base_url: str | None = None,
         api_key: str | None = None,
     ) -> None:
         """Initialize OpenAI provider with configuration.
@@ -42,6 +43,7 @@ class OpenAILLMProvider(LocalLLMProvider):
             temperature: Default temperature for generation (default: 0.1).
             max_tokens: Default max tokens for generation (default: 2048).
             timeout: Request timeout in seconds (default: 120).
+            base_url: OpenAI-compatible API base URL (optional, defaults to OpenAI).
             api_key: OpenAI API key (defaults to SECONDBRAIN_OPENAI_API_KEY env var).
 
         Raises:
@@ -51,6 +53,7 @@ class OpenAILLMProvider(LocalLLMProvider):
         self._temperature = temperature
         self._max_tokens = max_tokens
         self._timeout = timeout
+        self._base_url = base_url
 
         # Get API key from parameter or environment
         self._api_key = api_key or os.getenv("SECONDBRAIN_OPENAI_API_KEY")
@@ -63,10 +66,12 @@ class OpenAILLMProvider(LocalLLMProvider):
         # Initialize clients
         self._client = OpenAI(
             api_key=self._api_key,
+            base_url=base_url,  # Optional - None means use OpenAI default
             timeout=httpx.Timeout(timeout),
         )
         self._async_client = AsyncOpenAI(
             api_key=self._api_key,
+            base_url=base_url,  # Optional - None means use OpenAI default
             timeout=httpx.Timeout(timeout),
         )
 

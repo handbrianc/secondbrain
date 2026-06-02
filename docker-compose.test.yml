@@ -1,6 +1,6 @@
 # Test environment docker-compose configuration
-# Memory Requirements: Ollama service requires 10GB minimum for LLM model
-# The llama3.1:latest model requires ~4.8GB RAM; 10GB provides headroom
+# Memory Requirements: sentence-transformers service requires 4GB minimum
+# The all-MiniLM-L6-v2 model requires ~1.2GB RAM; 4GB provides headroom
 name: secondbrain-test
 
 services:
@@ -25,33 +25,8 @@ services:
     networks:
       - secondbrain-test-network
 
-  ollama:
-    image: ollama/ollama:latest
-    container_name: secondbrain-ollama-test
-    hostname: ollama
-    ports:
-      - "11435:11434"  # Different from dev port (11434)
-    volumes:
-      - ollama_data:/root/.ollama
-      - ./scripts/ollama-startup.sh:/startup.sh:ro
-    environment:
-      - OLLAMA_HOST=0.0.0.0:11434
-    entrypoint: ["/startup.sh"]
-    mem_limit: 10g
-    memswap_limit: 10g
-    healthcheck:
-      test: ["CMD", "/bin/sh", "-c", 'pgrep -f "ollama serve" > /dev/null && exit 0 || exit 1']
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 300s
-    networks:
-      - secondbrain-test-network
-
 volumes:
   mongo_test_data:
-    driver: local
-  ollama_data:
     driver: local
 
 networks:
