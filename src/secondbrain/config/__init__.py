@@ -187,9 +187,26 @@ class Config(BaseSettings):
         description="Collection name for embeddings",
     )
 
+    # Embedding provider settings
+    embedding_provider: str = Field(
+        default="local",
+        description="Embedding provider type (local, openai). OpenAI provider supports OpenAI-compatible endpoints like LiteLLM.",
+    )
+    embedding_model: str = Field(
+        default="all-MiniLM-L6-v2",
+        description="Embedding model name (local: sentence-transformers model, openai: text-embedding-3-small or custom models via LiteLLM)",
+    )
+    embedding_api_key: str | None = Field(
+        default=None,
+        description="API key for embedding provider (required for OpenAI, optional for local/OpenAI-compatible endpoints like LiteLLM)",
+    )
+    embedding_api_base: str | None = Field(
+        default=None,
+        description="Base URL for OpenAI-compatible API endpoints (e.g., LiteLLM proxy). Required when not using OpenAI directly.",
+    )
     local_embedding_model: str = Field(
         default="all-MiniLM-L6-v2",
-        description="Sentence-transformers model for local embedding (e.g., all-MiniLM-L6-v2, all-mpnet-base-v2)",
+        description="Sentence-transformers model for local embedding (deprecated, use embedding_model instead)",
     )
 
     llm_provider: str = Field(
@@ -280,7 +297,8 @@ class Config(BaseSettings):
         description=(
             "Dimensionality of embedding vectors (must match model). "
             "384 = sentence-transformers/all-MiniLM-L6-v2 default. "
-            "Other models: 768 (all-mpnet-base-v2), 1024 (large models)"
+            "768 = all-mpnet-base-v2, google/embeddinggemma. "
+            "1024+ = large models. OpenAI: 1536 (text-embedding-3-small)"
         ),
     )
     embedding_cache_size: int = Field(
@@ -569,6 +587,29 @@ class Config(BaseSettings):
             raise ValueError("rag_context_window must be positive")
         return v
 
+    @field_validator("embedding_provider")
+    @classmethod
+    def validate_embedding_provider(cls, v: str) -> str:
+        """Validate embedding provider type.
+
+        Args:
+            v: Provider type to validate.
+
+        Returns
+        -------
+            Validated provider type (lowercase).
+
+        Raises
+        ------
+            ValueError: If provider type is unsupported.
+        """
+        if v.lower() not in ("local", "openai"):
+            raise ValueError(
+                "embedding_provider must be 'local' or 'openai', got: "
+                f"{v}. Supported providers: local, openai"
+            )
+        return v.lower()
+
     @model_validator(mode="after")
     def validate_config_values(self) -> "Config":
         """Validate configuration values.
@@ -606,6 +647,7 @@ class Config(BaseSettings):
             raise ValueError(
                 "text_compression_algorithm must be 'gzip', 'brotli', or 'zstd'"
             )
+        
         return self
 
     @property

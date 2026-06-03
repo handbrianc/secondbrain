@@ -11,7 +11,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from secondbrain.config import config, get_config
-from secondbrain.embedding import LocalEmbeddingGenerator
+from secondbrain.embedding import EmbeddingProvider, EmbeddingProviderFactory
 from secondbrain.storage import (
     SearchResult,
     StorageConnectionError,
@@ -91,7 +91,9 @@ class Searcher:
         """
         self.verbose = verbose
         self._config = config()
-        self.embedding_gen = LocalEmbeddingGenerator()
+        self.embedding_gen: EmbeddingProvider = EmbeddingProviderFactory.create_from_config(
+            self._config
+        )
         self.storage = VectorStorage()
 
     def close(self) -> None:

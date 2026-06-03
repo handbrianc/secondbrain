@@ -1,4 +1,4 @@
-"""Local embedding generator using sentence-transformers."""
+"""Local embedding provider using sentence-transformers."""
 
 from __future__ import annotations
 
@@ -6,6 +6,8 @@ import asyncio
 import logging
 from time import monotonic
 from typing import Any
+
+from .interfaces import EmbeddingProvider
 
 logger = logging.getLogger(__name__)
 
@@ -16,16 +18,23 @@ TARGET_EMBEDDING_DIMENSIONS = 384
 CONNECTION_CACHE_TTL = 300  # 5 minutes
 
 
-class LocalEmbeddingGenerator:
-    """Local embedding generator using sentence-transformers.
+class LocalEmbeddingProvider(EmbeddingProvider):
+    """Local embedding provider using sentence-transformers.
 
     Runs entirely in Python with no HTTP calls.
     Uses all-MiniLM-L6-v2 model by default (~80MB, fast, good quality).
     Truncates embeddings to 384 dimensions for compatibility.
+
+    This class implements the EmbeddingProvider protocol for compatibility
+    with the provider factory pattern.
     """
 
     def __init__(self, model_name: str = "all-MiniLM-L6-v2") -> None:
-        """Initialize local embedding generator."""
+        """Initialize local embedding provider.
+
+        Args:
+            model_name: Sentence-transformers model name to use.
+        """
         self.model_name = model_name
         self._model: Any = None
         self._connection_valid: bool | None = None
@@ -147,3 +156,7 @@ class LocalEmbeddingGenerator:
             self._connection_valid = None
             self._connection_checked_at = 0.0
             logger.info("Embedding model closed successfully")
+
+
+# Backward compatibility alias
+LocalEmbeddingGenerator = LocalEmbeddingProvider

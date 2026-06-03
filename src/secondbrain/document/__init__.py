@@ -38,7 +38,7 @@ patch_transformers_for_mps()
 if TYPE_CHECKING:
     from docling.document_converter import DocumentConverter
 
-    from secondbrain.embedding.local import LocalEmbeddingGenerator
+    from secondbrain.embedding.interfaces import EmbeddingProvider
 
 logger = logging.getLogger(__name__)
 
@@ -71,13 +71,36 @@ _worker_embedding_model: Any = None
 def _init_worker() -> None:
     """Initialize worker process with DocumentConverter."""
     global _worker_converter
-    from docling.document_converter import DocumentConverter
+    import logging
+    
+    logging.getLogger("RapidOCR").setLevel(logging.ERROR)
+    logging.getLogger("docling").setLevel(logging.WARNING)
+    
+    from docling.datamodel.accelerator_options import (
+        AcceleratorDevice,
+        AcceleratorOptions,
+    )
+    from docling.datamodel.base_models import InputFormat
+    from docling.datamodel.pipeline_options import PdfPipelineOptions
+    from docling.document_converter import DocumentConverter, PdfFormatOption
 
-    _worker_converter = DocumentConverter()
+    pdf_options = PdfFormatOption(
+        pipeline_options=PdfPipelineOptions(
+            do_ocr=False,
+            do_table_structure=False,
+            accelerator_options=AcceleratorOptions(
+                device=AcceleratorDevice.CPU,
+                num_threads=4
+            ),
+        )
+    )
+    _worker_converter = DocumentConverter(
+        format_options={InputFormat.PDF: pdf_options}
+    )
 
 
 def _init_worker_with_queue(
-    queue: Any, embedding_model_name: str, num_workers: int
+    queue: Any, embedding_provider_type: str, embedding_model: str, num_workers: int
 ) -> None:
     """Initialize worker process with DocumentConverter, progress queue, and embedding model."""
     global _worker_converter, _worker_progress_queue, _worker_embedding_model
@@ -101,12 +124,30 @@ def _init_worker_with_queue(
 
     from docling.document_converter import DocumentConverter
 
-    from secondbrain.embedding.local import LocalEmbeddingGenerator
+    from secondbrain.embedding import EmbeddingProviderFactory
     from secondbrain.utils.rate_limiter import get_shared_rate_limiter
 
     _worker_converter = DocumentConverter()
     _worker_progress_queue = queue
-    _worker_embedding_model = LocalEmbeddingGenerator(model_name=embedding_model_name)
+    
+    # Create embedding provider based on type
+    if embedding_provider_type == "local":
+        _worker_embedding_model = EmbeddingProviderFactory.create_local(
+            model_name=embedding_model
+        )
+    elif embedding_provider_type == "openai":
+        from secondbrain.config import config
+        
+        cfg = config()
+        _worker_embedding_model = EmbeddingProviderFactory.create_openai(
+            model=embedding_model,
+            api_key=cfg.embedding_api_key,
+            api_base=cfg.embedding_api_base,
+            dimensions=cfg.embedding_dimensions,
+        )
+    else:
+        raise ValueError(f"Unsupported embedding provider: {embedding_provider_type}")
+    
     _ = get_shared_rate_limiter(max_requests=100, window_seconds=60.0)
 
 
@@ -209,9 +250,32 @@ def _extract_chunk_and_embed_file(
     try:
         converter = _worker_converter
         if converter is None:
-            from docling.document_converter import DocumentConverter
+            import logging
+            
+            logging.getLogger("RapidOCR").setLevel(logging.ERROR)
+            logging.getLogger("docling").setLevel(logging.WARNING)
+            
+            from docling.datamodel.accelerator_options import (
+                AcceleratorDevice,
+                AcceleratorOptions,
+            )
+            from docling.datamodel.base_models import InputFormat
+            from docling.datamodel.pipeline_options import PdfPipelineOptions
+            from docling.document_converter import DocumentConverter, PdfFormatOption
 
-            converter = DocumentConverter()
+            pdf_options = PdfFormatOption(
+                pipeline_options=PdfPipelineOptions(
+                    do_ocr=False,
+                    do_table_structure=False,
+                    accelerator_options=AcceleratorOptions(
+                        device=AcceleratorDevice.CPU,
+                        num_threads=4
+                    ),
+                )
+            )
+            converter = DocumentConverter(
+                format_options={InputFormat.PDF: pdf_options}
+            )
 
         result = converter.convert(file_path)
         content = result.document
@@ -341,9 +405,32 @@ def _extract_and_chunk_file_with_progress(
         # Use pre-initialized converter if available, otherwise create one
         converter = _worker_converter
         if converter is None:
-            from docling.document_converter import DocumentConverter
+            import logging
+            
+            logging.getLogger("RapidOCR").setLevel(logging.ERROR)
+            logging.getLogger("docling").setLevel(logging.WARNING)
+            
+            from docling.datamodel.accelerator_options import (
+                AcceleratorDevice,
+                AcceleratorOptions,
+            )
+            from docling.datamodel.base_models import InputFormat
+            from docling.datamodel.pipeline_options import PdfPipelineOptions
+            from docling.document_converter import DocumentConverter, PdfFormatOption
 
-            converter = DocumentConverter()
+            pdf_options = PdfFormatOption(
+                pipeline_options=PdfPipelineOptions(
+                    do_ocr=False,
+                    do_table_structure=False,
+                    accelerator_options=AcceleratorOptions(
+                        device=AcceleratorDevice.CPU,
+                        num_threads=4
+                    ),
+                )
+            )
+            converter = DocumentConverter(
+                format_options={InputFormat.PDF: pdf_options}
+            )
 
         result = converter.convert(file_path)
         content = result.document
@@ -690,9 +777,32 @@ class DocumentIngestor:
         self.embedding_cache = EmbeddingCache(max_size=cfg.embedding_cache_size)
 
         # Lazily import docling to avoid 2+ second import overhead
-        from docling.document_converter import DocumentConverter
+        import logging
+        
+        logging.getLogger("RapidOCR").setLevel(logging.ERROR)
+        logging.getLogger("docling").setLevel(logging.WARNING)
+        
+        from docling.datamodel.accelerator_options import (
+            AcceleratorDevice,
+            AcceleratorOptions,
+        )
+        from docling.datamodel.base_models import InputFormat
+        from docling.datamodel.pipeline_options import PdfPipelineOptions
+        from docling.document_converter import DocumentConverter, PdfFormatOption
 
-        self.converter = DocumentConverter()
+        pdf_options = PdfFormatOption(
+            pipeline_options=PdfPipelineOptions(
+                do_ocr=False,
+                do_table_structure=False,
+                accelerator_options=AcceleratorOptions(
+                    device=AcceleratorDevice.CPU,
+                    num_threads=4
+                ),
+            )
+        )
+        self.converter = DocumentConverter(
+            format_options={InputFormat.PDF: pdf_options}
+        )
 
     def _validate_file_path(self, path: Path) -> None:
         """Validate file path for security.
@@ -1297,14 +1407,16 @@ class DocumentIngestor:
 
         with Manager() as manager:
             progress_queue = manager.Queue()
-            embedding_model_name = config().local_embedding_model
+            cfg = config()
+            embedding_provider_type = cfg.embedding_provider
+            embedding_model_name = cfg.embedding_model
 
             with (
                 trace_operation("ingest_multiprocess_progress") as span,
                 ProcessPoolExecutor(
                     max_workers=max_workers,
                     initializer=_init_worker_with_queue,
-                    initargs=(progress_queue, embedding_model_name, max_workers),
+                    initargs=(progress_queue, embedding_provider_type, embedding_model_name, max_workers),
                 ) as executor,
             ):
                 if span:
