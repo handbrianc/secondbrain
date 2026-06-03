@@ -41,7 +41,6 @@ updates:
           - "torch"
           - "opentelemetry-api"
           - "opentelemetry-sdk"
-          - "ollama"
           - "openai"
           - "typing_extensions"
 

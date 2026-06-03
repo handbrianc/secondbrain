@@ -21,8 +21,8 @@ def create_llm_provider() -> LocalLLMProvider:
     """Create an LLM provider based on project configuration.
 
     This function reads the project configuration and creates the appropriate
-    LLM provider instance. It supports multiple backends including Ollama
-    (default) and OpenAI.
+    LLM provider instance. It supports multiple backends including OpenAI-compatible
+    providers.
 
     Returns:
         Configured LocalLLMProvider instance.

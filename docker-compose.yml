@@ -1,6 +1,6 @@
 services:
   mongodb:
-    image: mongo:8.0
+    image: mongo:7.0.34
     container_name: secondbrain-mongodb
     hostname: mongodb
     ports:

@@ -21,7 +21,7 @@ For integration tests:
 # 1. Start test services
 ./scripts/start_test_services.sh
 
-# 2. Wait for services to be healthy (MongoDB + Ollama)
+# 2. Wait for services to be healthy (MongoDB)
 # This takes ~2-5 minutes
 
 # 3. Run all tests
@@ -36,9 +36,9 @@ pytest -m ""  # Run ALL tests including slow/integration
 | Profile | Command | Time | Services Needed |
 |---------|---------|------|-----------------|
 | Fast (Default) | `pytest` | ~10 min | None |
-| Integration | `pytest -m "integration"` | ~20 min | MongoDB, Ollama |
-| Full Suite | `pytest -m ""` | ~30 min | MongoDB, Ollama |
-| Slow Tests | `pytest -m "slow"` | ~25 min | MongoDB, Ollama |
+| Integration | `pytest -m "integration"` | ~20 min | MongoDB |
+| Full Suite | `pytest -m ""` | ~30 min | MongoDB |
+| Slow Tests | `pytest -m "slow"` | ~25 min | MongoDB |
 
 ## Troubleshooting
 
@@ -68,7 +68,7 @@ docker ps | grep secondbrain-mongodb-test
 docker logs secondbrain-mongodb-test
 ```
 
-### Issue: Ollama Service Not Available
+### Issue: LLM Provider Unavailable
 
 ```
 pytest.skip("LLM unavailable")
@@ -76,12 +76,11 @@ pytest.skip("LLM unavailable")
 
 **Solution**:
 ```bash
-# Check if Ollama is running
-curl http://localhost:11435/api/tags
+# Configure LLM provider in .env
+# Set SECONDBRAIN_LLM_PROVIDER, SECONDBRAIN_OPENAI_BASE_URL, etc.
 
-# If not running, restart services
-./scripts/stop_test_services.sh
-./scripts/start_test_services.sh
+# Or skip LLM-dependent tests
+pytest -m "not integration"
 ```
 
 ### Issue: OpenTelemetry Errors

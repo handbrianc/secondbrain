@@ -91,7 +91,7 @@ class TestStartCommandBasic:
 
         # Create a test compose file
         compose_file = tmp_path / "docker-compose.test.yml"
-        compose_file.write_text("services:\n  mongodb:\n    image: mongo:8.0\n")
+        compose_file.write_text("services:\n  mongodb:\n    image: mongodb/mongodb-community-server:7.0\n")
 
         with patch(
             "secondbrain.utils.docker_manager.DockerManager"
@@ -534,7 +534,7 @@ class TestTestComposeStack:
             """name: secondbrain-test
 services:
   mongodb:
-    image: mongo:8.0
+    image: mongodb/mongodb-community-server:7.0
     container_name: secondbrain-mongodb-test
 """
         )
@@ -563,7 +563,7 @@ services:
             """name: secondbrain-test
 services:
   mongodb:
-    image: mongo:8.0
+    image: mongodb/mongodb-community-server:7.0
 """
         )
 

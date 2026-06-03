@@ -128,7 +128,7 @@ def storage_with_index(test_collection: Any) -> Any:
     original_mongo_uri = os.environ.get("SECONDBRAIN_MONGO_URI")
     original_mongo_db = os.environ.get("SECONDBRAIN_MONGO_DB")
     original_mongo_collection = os.environ.get("SECONDBRAIN_MONGO_COLLECTION")
-    original_ollama_host = os.environ.get("SECONDBRAIN_OLLAMA_HOST")
+    original_llm_host = os.environ.get("SECONDBRAIN_OPENAI_BASE_URL")
     original_embedding_model = os.environ.get("SECONDBRAIN_LOCAL_EMBEDDING_MODEL")
 
     # Use Config to get test defaults
@@ -138,7 +138,6 @@ def storage_with_index(test_collection: Any) -> Any:
     os.environ["SECONDBRAIN_MONGO_URI"] = cfg.mongo_uri
     os.environ["SECONDBRAIN_MONGO_DB"] = cfg.mongo_db
     os.environ["SECONDBRAIN_MONGO_COLLECTION"] = "test_embeddings"
-    os.environ["SECONDBRAIN_OLLAMA_HOST"] = cfg.ollama_host
     os.environ["SECONDBRAIN_LOCAL_EMBEDDING_MODEL"] = "all-MiniLM-L6-v2"
 
     get_config.cache_clear()
@@ -172,11 +171,6 @@ def storage_with_index(test_collection: Any) -> Any:
             os.environ["SECONDBRAIN_MONGO_COLLECTION"] = original_mongo_collection
         elif "SECONDBRAIN_MONGO_COLLECTION" in os.environ:
             del os.environ["SECONDBRAIN_MONGO_COLLECTION"]
-
-        if original_ollama_host is not None:
-            os.environ["SECONDBRAIN_OLLAMA_HOST"] = original_ollama_host
-        elif "SECONDBRAIN_OLLAMA_HOST" in os.environ:
-            del os.environ["SECONDBRAIN_OLLAMA_HOST"]
 
         if original_embedding_model is not None:
             os.environ["SECONDBRAIN_LOCAL_EMBEDDING_MODEL"] = original_embedding_model

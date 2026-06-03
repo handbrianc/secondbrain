@@ -44,7 +44,7 @@ pip install -e "."
 > - Runtime dependencies (19 core packages)
 > - Development dependencies (30+ tools for testing, linting, security)
 > - Optional groups (qualitative testing, observability)
-> - External service requirements (MongoDB, Ollama, sentence-transformers)
+> - External service requirements (MongoDB, sentence-transformers, configured LLM provider)
 
 ### What Development Dependencies Include
 

@@ -47,7 +47,7 @@ The `docker-compose.yml` already includes authentication configuration:
 ```yaml
 services:
   mongodb:
-    image: mongo:8.0
+    image: mongodb/mongodb-community-server:7.0
     environment:
       - MONGODB_INITDB_ROOT_USERNAME=${MONGODB_INITDB_ROOT_USERNAME:-admin}
       - MONGODB_INITDB_ROOT_PASSWORD=${MONGODB_INITDB_ROOT_PASSWORD:-password}
@@ -157,7 +157,7 @@ Full `docker-compose.yml` with authentication:
 ```yaml
 services:
   mongodb:
-    image: mongo:8.0
+    image: mongodb/mongodb-community-server:7.0
     container_name: secondbrain-mongodb
     hostname: mongodb
     ports:
@@ -269,7 +269,7 @@ If you lose your MongoDB password:
 docker-compose stop mongodb
 
 # Step 2: Start without auth
-docker run -d --name secondbrain-mongodb-nopass -p 27017:27017 mongo:8.0
+docker run -d --name secondbrain-mongodb-nopass -p 27017:27017 mongodb/mongodb-community-server:7.0
 
 # Step 3: Reset password
 docker exec -it secondbrain-mongodb-nopass mongosh << EOF
@@ -320,7 +320,7 @@ For production environments:
 # Example: Production docker-compose with network isolation
 services:
   mongodb:
-    image: mongo:8.0
+    image: mongodb/mongodb-community-server:7.0
     ports: []  # No public port exposure
     environment:
       - MONGODB_INITDB_ROOT_USERNAME=${MONGODB_INITDB_ROOT_USERNAME}

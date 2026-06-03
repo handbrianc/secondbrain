@@ -1,4 +1,4 @@
-"""Mock LLM provider for testing when Ollama is unavailable.
+"""Mock LLM provider for testing.
 
 Provides MockLLMProvider class that implements the LocalLLMProvider protocol
 with deterministic, predictable responses for testing.
@@ -11,10 +11,10 @@ from secondbrain.rag.interfaces import LocalLLMProvider
 
 
 class MockLLMProvider(LocalLLMProvider):
-    """Mock LLM provider for testing without Ollama.
+    """Mock LLM provider for testing.
 
     Provides deterministic, predictable responses based on input prompts.
-    Useful for testing when Ollama server is unavailable.
+    Useful for testing without requiring a live LLM server.
 
     Attributes:
         default_response: Default response text for any prompt.

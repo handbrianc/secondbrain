@@ -1,6 +1,6 @@
 # Conversational Q&A with Documents
 
-This guide explains how to use the conversational RAG (Retrieval-Augmented Generation) feature to have multi-turn conversations with your ingested documents using a local LLM (Ollama).
+This guide explains how to use the conversational RAG (Retrieval-Augmented Generation) feature to have multi-turn conversations with your ingested documents using a local LLM.
 
 ## Overview
 
@@ -8,67 +8,25 @@ The `secondbrain chat` command enables you to:
 - Ask questions about your documents in natural language
 - Have multi-turn conversations with context preservation
 - Get answers based on retrieved document chunks
-- Use local LLMs (Ollama) for privacy and cost efficiency
+- Use local LLMs for privacy and cost efficiency
 
 Unlike the `search` command which returns ranked results, `chat` provides conversational responses that maintain context across multiple turns.
 
 ## Prerequisites
 
-### 1. Install Ollama
+### 1. Configure LLM Provider
 
-Ollama is required to run local LLMs. Install it for your platform:
-
-**macOS:**
-```bash
-brew install ollama
-ollama serve
-```
-
-**Linux:**
-```bash
-curl -fsSL https://ollama.com/install.sh | sh
-ollama serve
-```
-
-**Windows:**
-Download from [ollama.com](https://ollama.com) and run the installer.
-
-### 2. Pull a Model
-
-Download a model (recommended: `llama3.1:latest` for good performance/size balance):
+Configure your LLM provider in the `.env` file:
 
 ```bash
-ollama pull llama3.1:latest
-```
-
-Other popular models:
-- `llama3.1` - Larger, more capable
-- `mistral` - Good general-purpose model
-- `codellama` - Optimized for code
-
-### 3. Configure Environment (Optional)
-
-Set environment variables in your `.env` file:
-
-```bash
-# Ollama API endpoint
-SECONDBRAIN_OLLAMA_HOST=http://localhost:11434
-
-# LLM model to use
+# For LiteLLM proxy or OpenAI-compatible servers
+SECONDBRAIN_LLM_PROVIDER=openai
+SECONDBRAIN_OPENAI_BASE_URL=http://your-llm-server:4000
+SECONDBRAIN_OPENAI_API_KEY=your-api-key
 SECONDBRAIN_LLM_MODEL=llama3.1:latest
-
-# Temperature for generation (0.0-2.0, lower = more deterministic)
-SECONDBRAIN_LLM_TEMPERATURE=0.1
-
-# Maximum tokens to generate
-SECONDBRAIN_LLM_MAX_TOKENS=2048
-
-# Request timeout in seconds
-SECONDBRAIN_LLM_TIMEOUT=120
-
-# Number of recent messages to keep in context
-SECONDBRAIN_RAG_CONTEXT_WINDOW=10
 ```
+
+See [RAG Quick Start](../getting-started/rag-quickstart.md) for detailed LLM setup instructions.
 
 ## Quick Start
 
@@ -139,7 +97,7 @@ secondbrain chat [QUERY] [OPTIONS]
 | `--list-sessions` | List all conversation sessions | `false` |
 | `--history` | Show current session history | `false` |
 | `--delete-session`, `-d` | Delete a session by ID | - |
-| `--check-llm` | Verify Ollama is running | `false` |
+| `--check-llm` | Verify LLM is accessible | `false` |
 
 ### Examples
 
@@ -229,7 +187,9 @@ secondbrain chat --delete-session project-a
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `SECONDBRAIN_OLLAMA_HOST` | Ollama API endpoint | `http://localhost:11434` |
+| `SECONDBRAIN_LLM_PROVIDER` | LLM provider type | `openai` |
+| `SECONDBRAIN_OPENAI_BASE_URL` | LLM server endpoint | (OpenAI) |
+| `SECONDBRAIN_OPENAI_API_KEY` | API key for LLM server | (required) |
 | `SECONDBRAIN_LLM_MODEL` | Default LLM model | `llama3.1:latest` |
 | `SECONDBRAIN_LLM_TEMPERATURE` | Generation temperature | `0.1` |
 | `SECONDBRAIN_LLM_MAX_TOKENS` | Max tokens to generate | `2048` |
@@ -247,31 +207,32 @@ Choose models based on your needs:
 
 ## Troubleshooting
 
-### "Ollama server unavailable"
+### LLM Server Unavailable
 
-**Problem:** Can't connect to Ollama
-
-**Solutions:**
-1. Verify Ollama is running: `ollama list`
-2. Check the host: `secondbrain chat --check-llm`
-3. Ensure correct URL: `SECONDBRAIN_OLLAMA_HOST=http://localhost:11434`
-
-### "Model not found"
-
-**Problem:** Specified model isn't downloaded
+**Problem:** Can't connect to LLM server
 
 **Solutions:**
-1. Pull the model: `ollama pull llama3.1:latest`
-2. List available models: `ollama list`
-3. Update config: `SECONDBRAIN_LLM_MODEL=llama3.1:latest`
+1. Verify LLM server is running
+2. Check the endpoint: `SECONDBRAIN_OPENAI_BASE_URL`
+3. Verify API key: `SECONDBRAIN_OPENAI_API_KEY`
+4. Run: `secondbrain chat --check-llm`
+
+### Model Not Found
+
+**Problem:** Specified model isn't available
+
+**Solutions:**
+1. Verify model is available on your LLM server
+2. Update config: `SECONDBRAIN_LLM_MODEL=llama3.1:latest`
+3. Try a different model
 
 ### Slow responses
 
 **Problem:** LLM generation takes too long
 
 **Solutions:**
-1. Use a smaller model: `ollama pull mistral`
-2. Reduce max tokens: `secondbrain chat --temperature 0.1`
+1. Use a smaller/faster model
+2. Reduce max tokens: `SECONDBRAIN_LLM_MAX_TOKENS=1024`
 3. Increase timeout: `SECONDBRAIN_LLM_TIMEOUT=180`
 
 ### No relevant documents found

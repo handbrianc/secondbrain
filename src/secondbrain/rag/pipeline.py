@@ -34,14 +34,14 @@ class RAGPipeline:
 
     Attributes:
         searcher: Searcher instance for semantic search.
-        llm_provider: OllamaLLMProvider for generation.
+        llm_provider: LocalLLMProvider for generation.
         rewriter: Optional QueryRewriter for context-aware queries.
         top_k: Default number of context chunks to retrieve.
         context_window: Number of messages to keep in conversation context.
 
     Example:
         >>> searcher = Searcher()
-        >>> llm_provider = OllamaLLMProvider()
+        >>> # llm_provider = get_llm_provider()  # Get your configured provider
         >>> rewriter = QueryRewriter(llm_provider)
         >>> pipeline = RAGPipeline(searcher, llm_provider, rewriter)
         >>> result = pipeline.query("What is machine learning?")
@@ -60,14 +60,14 @@ class RAGPipeline:
 
         Args:
             searcher: Searcher instance for semantic search.
-            llm_provider: OllamaLLMProvider for generation.
+            llm_provider: LocalLLMProvider for generation.
             rewriter: QueryRewriter for context-aware queries (optional).
             top_k: Number of chunks to retrieve (default: 5).
             context_window: Messages to keep in context (default: 5 per spec).
 
         Example:
             >>> searcher = Searcher()
-            >>> llm_provider = OllamaLLMProvider()
+            >>> # llm_provider = get_llm_provider()  # Get your configured provider
             >>> pipeline = RAGPipeline(searcher, llm_provider, top_k=10)
         """
         self._searcher = searcher

@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 # Get test service URLs from Config (automatically uses test defaults when PYTEST_CURRENT_TEST is set)
 _config = Config()
 TEST_MONGO_URI = _config.mongo_uri
-TEST_EMBEDDING_URL = _config.ollama_host
+TEST_EMBEDDING_URL = "http://localhost:11434"  # Default LLM endpoint for tests
 
 # Test database/collection names
 TEST_DB_NAME = _config.mongo_db
