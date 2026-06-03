@@ -1,8 +1,8 @@
 # Runtime dependencies (pinned for reproducibility)
 # Generated from pyproject.toml dependencies section
 click>=8.4.1
-docling>=2.95.0
-docling-core>=2.77.1
+docling>=2.96.1
+docling-core>=2.78.0
 pymongo>=4.17.0
 motor>=3.0.0
 httpx>=0.28.1
@@ -15,6 +15,6 @@ numpy>=2.4.6
 torch>=2.12.0
 opentelemetry-api>=1.42.1
 opentelemetry-sdk>=1.42.1
-openai>=2.38.0
+openai>=2.40.0
 anthropic>=0.40.0
 typing_extensions>=4.15.0
