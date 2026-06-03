@@ -1,5 +1,37 @@
-"""Embedding generation using sentence-transformers."""
+"""Embedding generation with pluggable provider support.
 
-from .local import LocalEmbeddingGenerator
+This module provides embedding providers for generating text embeddings:
+- LocalEmbeddingProvider: sentence-transformers for local embedding generation
+- OpenAIEmbeddingProvider: OpenAI API or OpenAI-compatible endpoints
+- MockEmbeddingProvider: Fast mock embeddings for testing
 
-__all__ = ["LocalEmbeddingGenerator"]
+The EmbeddingProviderFactory creates provider instances based on configuration.
+"""
+
+from .interfaces import EmbeddingProvider
+from .local import LocalEmbeddingGenerator, LocalEmbeddingProvider
+from .mock import MockEmbeddingGenerator, MockEmbeddingProvider
+
+__all__ = [
+    "EmbeddingProvider",
+    "EmbeddingProviderFactory",
+    "LocalEmbeddingGenerator",
+    "LocalEmbeddingProvider",
+    "MockEmbeddingGenerator",
+    "MockEmbeddingProvider",
+    "OpenAIEmbeddingProvider",
+]
+
+
+def __getattr__(name: str):
+    """Lazy import for EmbeddingProviderFactory and OpenAIEmbeddingProvider to avoid circular imports."""
+    if name == "EmbeddingProviderFactory":
+        from .providers.factory import EmbeddingProviderFactory
+
+        return EmbeddingProviderFactory
+    elif name == "OpenAIEmbeddingProvider":
+        from .providers.openai import OpenAIEmbeddingProvider
+
+        return OpenAIEmbeddingProvider
+
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
