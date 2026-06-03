@@ -212,13 +212,13 @@ brew services start mongodb-community
 **Purpose**: Large language model provider for conversational Q&A via OpenAI-compatible APIs
 
 **Supported Providers**:
-- **OpenAI API** - `gpt-4o-mini`, `gpt-4o`, `gpt-4-turbo`
-- **Azure OpenAI** - Deployed models via Azure
-- **Groq** - Fast inference with Llama, Mixtral models
-- **Anthropic** - Claude models via API
-- **Self-hosted vLLM** - Local deployment with OpenAI-compatible endpoint
-- **Self-hosted LM Studio** - Local LLM server with OpenAI compatibility
-- **Self-hosted Ollama** - Ollama with OpenAI-compatible endpoint (`/v1/chat/completions`)
+ - **OpenAI API** - `gpt-4o-mini`, `gpt-4o`, `gpt-4-turbo`
+ - **Azure OpenAI** - Deployed models via Azure
+ - **Groq** - Fast inference with Llama, Mixtral models
+ - **Anthropic** - Claude models via API
+ - **Self-hosted vLLM** - Local deployment with OpenAI-compatible endpoint
+ - **Self-hosted LM Studio** - Local LLM server with OpenAI compatibility
+ - **LiteLLM Proxy** - Unified interface for multiple LLM providers
 
 **Installation**: No additional pip packages required - `openai` package is already included in runtime dependencies.
 
@@ -233,7 +233,7 @@ SECONDBRAIN_OPENAI_API_KEY=sk-your-api-key-here  # Required for most providers
 SECONDBRAIN_OPENAI_MODEL=gpt-4o-mini  # Default model
 ```
 
-**Self-Hosted Example** (vLLM, LM Studio, Ollama):
+**Self-Hosted Example** (vLLM, LM Studio, LiteLLM):
 ```bash
 SECONDBRAIN_LLM_PROVIDER=openai
 SECONDBRAIN_OPENAI_BASE_URL=http://localhost:8080/v1
@@ -301,11 +301,11 @@ secondbrain health
 ```
 
 **What You Get**:
-- ✅ Full SecondBrain functionality
-- ✅ Semantic search
-- ✅ Document ingestion
-- ✅ Conversational Q&A (with Ollama)
-- ❌ No development tools (linting, testing, etc.)
+ - ✅ Full SecondBrain functionality
+ - ✅ Semantic search
+ - ✅ Document ingestion
+ - ✅ Conversational Q&A (with configured LLM provider)
+ - ❌ No development tools (linting, testing, etc.)
 
 **Disk Space**: ~3 GB
 
@@ -378,7 +378,7 @@ pip install -e ".[dev]"
 pip install -e ".[qualitative]"
 
 # Configure LLM provider for evaluation
-# See MIGRATION_OLLAMA_TO_OPENAI.md for migration guide
+# Set SECONDBRAIN_LLM_PROVIDER, SECONDBRAIN_OPENAI_BASE_URL, etc. in .env
 
 # Run qualitative tests
 pytest tests/test_qualitative/ -v

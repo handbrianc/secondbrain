@@ -195,7 +195,7 @@ Test configuration is automatically loaded from `.env.test` when running pytest.
 - `SECONDBRAIN_MONGO_URI` - Test MongoDB connection (default: localhost:27018)
 - `SECONDBRAIN_MONGO_DB` - Test database name (default: secondbrain_test)
 - `SECONDBRAIN_MONGO_COLLECTION` - Test collection (default: test_embeddings)
-- `SECONDBRAIN_OLLAMA_HOST` - Ollama endpoint (auto-detects platform)
+- `SECONDBRAIN_LOG_LEVEL` - Logging verbosity (default: DEBUG)
 - `OTEL_TRACING_ENABLED=false` - Disable tracing for faster tests
 - `SECONDBRAIN_CIRCUIT_BREAKER_ENABLED=false` - Disable for faster tests
 

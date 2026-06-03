@@ -218,7 +218,7 @@ secondbrain chat [QUERY] [OPTIONS]
 | `--list-sessions` | List all sessions | false |
 | `--history` | Show session history | false |
 | `--delete-session`, `-d` | Delete a session | - |
-| `--check-llm` | Check if Ollama is available | false |
+| `--check-llm` | Check if LLM provider is available | false |
 
 **Interactive Mode Commands:**
 When running in interactive mode (no query provided), you can use:

@@ -9,7 +9,7 @@ Conversational RAG combines semantic search with large language models to provid
 - **Understands context**: Remembers previous questions in a conversation
 - **Provides answers**: Generates natural language responses, not just document snippets
 - **Shows sources**: Tells you which documents informed each answer
-- **Runs locally**: Uses Ollama for private, offline LLM processing
+- **Runs locally**: Uses local LLMs for private, offline processing
 
 Think of it as having a conversation with your document collection. Ask follow-up questions, get summarized answers, and trace responses back to their source material.
 
@@ -24,96 +24,71 @@ Before using conversational RAG, ensure you have:
 
 If you haven't set these up yet, start with the [Quick Start Guide](quick-start.md).
 
-## Installing Ollama
+## Setting Up a Local LLM
 
-Ollama is a local LLM server that runs models on your machine. SecondBrain uses it for generating conversational responses.
+SecondBrain uses a local LLM for generating responses. You need to set up an LLM server and choose a model.
 
-### macOS
+### Using LiteLLM Proxy
+
+For production deployments, you can use a LiteLLM proxy server:
 
 ```bash
-# Install via Homebrew
-brew install ollama
-
-# Or download from ollama.ai
-curl -fsSL https://ollama.ai/install.sh | sh
-
-# Start Ollama service
-ollama serve
+# Configure in your .env file
+SECONDBRAIN_LLM_PROVIDER=openai
+SECONDBRAIN_OPENAI_BASE_URL=http://your-litellm-server:4000
+SECONDBRAIN_OPENAI_API_KEY=your-api-key
+SECONDBRAIN_LLM_MODEL=Qwen/Qwen3.5-122B-A10B-FP8
 ```
 
-Ollama will run in the background on `http://localhost:11434`.
+### Using Local LLM Servers
 
-### Linux
+For local development, you can run LLM servers like vLLM, LM Studio, or other OpenAI-compatible servers. Configure the endpoint in your `.env` file:
 
 ```bash
-# Install using the official install script
-curl -fsSL https://ollama.ai/install.sh | sh
-
-# Start Ollama
-ollama serve
-
-# Optional: Run as a system service
-sudo systemctl enable ollama
-sudo systemctl start ollama
+# Example configuration for local LLM server
+SECONDBRAIN_LLM_PROVIDER=openai
+SECONDBRAIN_OPENAI_BASE_URL=http://localhost:8080
+SECONDBRAIN_OPENAI_API_KEY=your-local-key
 ```
 
-### Windows
+Refer to your LLM server's documentation for installation and setup instructions.
 
-1. Download the installer from [ollama.ai](https://ollama.ai)
-2. Run the installer (`.exe` file)
-3. Ollama will start automatically in your system tray
-4. Verify it's running by opening `http://localhost:11434` in your browser
-
-### Verify Installation
+### Verify LLM Setup
 
 ```bash
-# Check Ollama is running
-ollama list
+# Check if LLM server is accessible
+secondbrain chat --check-llm
 
-# You should see a list of installed models (may be empty initially)
+# You should see: ✓ LLM provider is available
 ```
 
-If you see connection errors, make sure Ollama is running:
+## Selecting a Model
+
+SecondBrain defaults to `llama3.1:latest` for local deployments, but you can configure any compatible model.
+
+### Configure Model in .env
 
 ```bash
-# macOS/Linux: Start the service
-ollama serve
-
-# Windows: Ollama should auto-start, check system tray
-```
-
-## Pulling a Model
-
-Ollama needs a model to generate responses. SecondBrain defaults to `llama3.1:latest`, a compact model suitable for local use.
-
-```bash
-# Pull the default model (llama3.1:latest)
-ollama pull llama3.1:latest
-
-# This downloads ~2GB. Progress will be shown.
+# Set your preferred model
+SECONDBRAIN_LLM_MODEL=llama3.1:latest
 ```
 
 ### Alternative Models
 
-You can use other models if preferred:
+You can use other models depending on your needs:
 
-```bash
-# Pull alternative models
-ollama pull llama3.1      # More capable, larger (~4GB)
-ollama pull mistral       # Good balance (~4GB)
-ollama pull phi3          # Small and fast (~2GB)
-ollama pull gemma2        # Google's model (~2GB)
-```
+- `llama3.1` - More capable, larger (~4GB)
+- `mistral` - Good balance (~4GB)
+- `phi3` - Small and fast (~2GB)
+- `gemma2` - Google's model (~2GB)
 
 **Recommendation**: Start with `llama3.1:latest` for speed, switch to `llama3.1` or `mistral` for better quality if you have the resources.
 
-### Verify Model is Ready
+### Verify Model is Available
 
 ```bash
-# List available models
-ollama list
-
-# You should see llama3.1:latest (or your chosen model) in the list
+# Check available models (depends on your LLM server)
+# Consult your LLM server documentation for model listing
 ```
 
 ## First Chat Command
@@ -295,33 +270,9 @@ SECONDBRAIN_RAG_CONTEXT_WINDOW=20
 Here's a typical workflow from start to finish:
 
 ```bash
-# 1. Check Ollama is running
+# 1. Check LLM is available
 secondbrain chat --check-llm
-# Output: ✓ Ollama is available (model: llama3.1:latest)
-
-# 2. Start a new conversation session
-secondbrain chat --session project-review
-
-# 3. Ask high-level questions
-secondbrain chat --session project-review "What is this project?"
-
-# 4. Dive deeper
-secondbrain chat --session project-review "How does document ingestion work?"
-
-# 5. Ask follow-ups that reference earlier context
-secondbrain chat --session project-review "Can it handle large files?"
-
-# 6. See sources for verification
-secondbrain chat --session project-review "What formats are supported?" --show-sources
-
-# 7. Check session status
-secondbrain chat --list-sessions
-
-# 8. View the conversation
-secondbrain chat --session project-review --history
-
-# 9. When done, delete the session
-secondbrain chat --delete-session project-review
+# Output: ✓ LLM provider is available
 ```
 
 ## Configuration Options
@@ -331,8 +282,10 @@ secondbrain chat --delete-session project-review
 Configure RAG behavior in your `.env` file:
 
 ```bash
-# Ollama settings
-SECONDBRAIN_OLLAMA_HOST=http://localhost:11434
+# LLM settings
+SECONDBRAIN_LLM_PROVIDER=openai
+SECONDBRAIN_OPENAI_BASE_URL=http://your-litellm-server:4000
+SECONDBRAIN_OPENAI_API_KEY=your-api-key
 SECONDBRAIN_LLM_MODEL=llama3.1:latest
 SECONDBRAIN_LLM_TEMPERATURE=0.1
 SECONDBRAIN_LLM_MAX_TOKENS=2048
@@ -354,28 +307,25 @@ SECONDBRAIN_RAG_CONTEXT_WINDOW=10
 | `--list-sessions` | `false` | List all sessions |
 | `--history` | `false` | Show session history |
 | `--delete-session, -d` | - | Delete a session |
-| `--check-llm` | `false` | Check Ollama availability |
+| `--check-llm` | `false` | Check LLM availability |
 
 ## Troubleshooting
 
-### Ollama Unreachable
+### LLM Unreachable
 
 ```bash
-# Check if Ollama is running
+# Check if LLM is accessible
 secondbrain chat --check-llm
 
-# If not running, start it
-ollama serve
-
-# Verify model is downloaded
-ollama list
+# If not accessible, verify your configuration
+# Check SECONDBRAIN_OPENAI_BASE_URL and SECONDBRAIN_OPENAI_API_KEY in .env
 ```
 
 ### Model Not Found
 
 ```bash
-# Pull the model
-ollama pull llama3.1:latest
+# Verify model is available on your LLM server
+# Consult your LLM server documentation for model listing
 
 # Or use a different model
 secondbrain chat "question" --model mistral
@@ -429,7 +379,7 @@ secondbrain chat "question" --show-sources
 # List sessions
 secondbrain chat --list-sessions
 
-# Check Ollama
+# Check LLM availability
 secondbrain chat --check-llm
 
 # Exit interactive mode

@@ -29,7 +29,7 @@ Test configuration is automatically managed by the `Config` class. When running 
 
 - **Automatic detection**: Tests are detected via `PYTEST_CURRENT_TEST` environment variable
 - **Automatic file loading**: `.env.test` is loaded if it exists
-- **Platform-aware defaults**: Ollama host auto-detects macOS (11434) vs Linux/Windows (11435)
+- **Platform-aware defaults**: LLM endpoint configuration via environment variables
 
 #### Test-Specific Environment Variables
 
@@ -38,7 +38,6 @@ Test configuration is automatically managed by the `Config` class. When running 
 | `SECONDBRAIN_MONGO_URI` | `mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin` | Test MongoDB connection |
 | `SECONDBRAIN_MONGO_DB` | `secondbrain_test` | Test database name |
 | `SECONDBRAIN_MONGO_COLLECTION` | `test_embeddings` | Test collection name |
-| `SECONDBRAIN_OLLAMA_HOST` | Auto-detected (11434/11435) | Ollama API endpoint |
 | `SECONDBRAIN_LOG_LEVEL` | `DEBUG` | Verbose logging for tests |
 | `OTEL_TRACING_ENABLED` | `false` | Disable OpenTelemetry tracing |
 | `OTEL_METRICS_ENABLED` | `false` | Disable OpenTelemetry metrics |

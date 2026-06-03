@@ -28,7 +28,7 @@ Evaluation framework for SecondBrain integration tests.
 version: '3.8'
 services:
   mongo:
-    image: mongo:8.0
+    image: mongodb/mongodb-community-server:7.0
     ports:
       - "27017:27017"
   

@@ -25,12 +25,12 @@ class QueryRewriter:
     and falls back to the original query on failure.
 
     Attributes:
-        llm_provider: Ollama LLM provider for generating rewrites.
+        llm_provider: Local LLM provider for generating rewrites.
         context_window: Number of recent turns to use for context.
 
     Example:
-        >>> from secondbrain.rag.providers.ollama import OllamaLLMProvider
-        >>> provider = OllamaLLMProvider()
+        >>> from secondbrain.rag.interfaces import LocalLLMProvider
+        >>> # provider = get_llm_provider()  # Get your configured provider
         >>> rewriter = QueryRewriter(provider, context_window=5)
         >>> history = [
         ...     {"role": "user", "content": "Tell me about ACME contract"},
@@ -94,8 +94,7 @@ class QueryRewriter:
             context_window: Number of recent turns to use for context (default: 5)
 
         Example:
-            >>> from secondbrain.rag.providers.ollama import OllamaLLMProvider
-            >>> provider = OllamaLLMProvider()
+            >>> # provider = get_llm_provider()  # Get your configured provider
             >>> rewriter = QueryRewriter(provider, context_window=10)
         """
         self._llm_provider = llm_provider

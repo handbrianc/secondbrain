@@ -26,7 +26,7 @@ class TestDockerManagerBasic:
     def test_init_custom_compose_file(self, tmp_path):
         """Test DockerManager with custom compose file."""
         compose_file = tmp_path / "docker-compose.yml"
-        compose_file.write_text("services:\n  mongo:\n    image: mongo:latest\n")
+        compose_file.write_text("services:\n  mongo:\n    image: mongodb/mongodb-community-server:7.0\n")
         manager = DockerManager(compose_file=str(compose_file))
         assert manager.compose_file == compose_file
 
@@ -130,7 +130,7 @@ class TestStartMongo:
         """Test start_mongo raises DockerNotInstalledError when Docker unavailable."""
         # Create a valid compose file to avoid file not found errors
         compose_file = tmp_path / "docker-compose.yml"
-        compose_file.write_text("services:\n  mongo:\n    image: mongo:latest\n")
+        compose_file.write_text("services:\n  mongo:\n    image: mongodb/mongodb-community-server:7.0\n")
         manager = DockerManager(compose_file=str(compose_file))
         with (
             patch.object(manager, "check_docker_installed", return_value=False),
@@ -143,7 +143,7 @@ class TestStartMongo:
         """Test start_mongo raises DockerComposeError when compose unavailable."""
         # Create a valid compose file to avoid file not found errors
         compose_file = tmp_path / "docker-compose.yml"
-        compose_file.write_text("services:\n  mongo:\n    image: mongo:latest\n")
+        compose_file.write_text("services:\n  mongo:\n    image: mongodb/mongodb-community-server:7.0\n")
         manager = DockerManager(compose_file=str(compose_file))
         with (
             patch.object(manager, "check_docker_installed", return_value=True),
@@ -165,7 +165,7 @@ class TestStartMongo:
     def test_start_mongo_success(self, mock_run, tmp_path):
         mock_run.return_value = MagicMock(returncode=0, stdout="Started")
         compose_file = tmp_path / "docker-compose.yml"
-        compose_file.write_text("services:\n  mongo:\n    image: mongo:latest\n")
+        compose_file.write_text("services:\n  mongo:\n    image: mongodb/mongodb-community-server:7.0\n")
         manager = DockerManager(compose_file=str(compose_file))
         with patch.object(manager, "check_docker_installed", return_value=True):
             with patch.object(
@@ -233,7 +233,7 @@ class TestEnsureMongoRunning:
     @pytest.mark.xdist_group(name="docker_manager")
     def test_ensure_mongo_running_docker_not_installed(self, tmp_path):
         compose_file = tmp_path / "docker-compose.yml"
-        compose_file.write_text("services:\n  mongo:\n    image: mongo:latest\n")
+        compose_file.write_text("services:\n  mongo:\n    image: mongodb/mongodb-community-server:7.0\n")
         manager = DockerManager(compose_file=str(compose_file))
         with (
             patch.object(manager, "_is_local_mongodb", return_value=True),
@@ -286,7 +286,7 @@ class TestDockerManagerCoverage:
     def test_start_mongo_handles_compose_failure(self, mock_run, tmp_path):
         """Test start_mongo handles docker compose failure (lines 263-264)."""
         compose_file = tmp_path / "docker-compose.yml"
-        compose_file.write_text("services:\n  mongo:\n    image: mongo:latest\n")
+        compose_file.write_text("services:\n  mongo:\n    image: mongodb/mongodb-community-server:7.0\n")
 
         manager = DockerManager(compose_file=str(compose_file))
         mock_run.return_value = MagicMock(returncode=0)
@@ -304,7 +304,7 @@ class TestDockerManagerCoverage:
     def test_start_mongo_handles_container_not_running_after_start(self, mock_run, tmp_path):
         """Test start_mongo raises MongoDBStartupError when container not running (lines 270-276)."""
         compose_file = tmp_path / "docker-compose.yml"
-        compose_file.write_text("services:\n  mongo:\n    image: mongo:latest\n")
+        compose_file.write_text("services:\n  mongo:\n    image: mongodb/mongodb-community-server:7.0\n")
 
         manager = DockerManager(compose_file=str(compose_file))
         mock_run.return_value = MagicMock(returncode=0)
@@ -320,7 +320,7 @@ class TestDockerManagerCoverage:
     def test_start_mongo_handles_timeout_expired(self, mock_run, tmp_path):
         """Test start_mongo handles subprocess.TimeoutExpired (lines 275-279)."""
         compose_file = tmp_path / "docker-compose.yml"
-        compose_file.write_text("services:\n  mongo:\n    image: mongo:latest\n")
+        compose_file.write_text("services:\n  mongo:\n    image: mongodb/mongodb-community-server:7.0\n")
 
         manager = DockerManager(compose_file=str(compose_file))
         with patch.object(manager, "check_docker_installed", return_value=True):
@@ -402,7 +402,7 @@ class TestDockerManagerCoverage:
         mock_config.return_value.mongo_uri = _test_config.mongo_uri
 
         compose_file = tmp_path / "docker-compose.yml"
-        compose_file.write_text("services:\n  mongo:\n    image: mongo:latest\n")
+        compose_file.write_text("services:\n  mongo:\n    image: mongodb/mongodb-community-server:7.0\n")
 
         manager = DockerManager(compose_file=str(compose_file))
         with patch.object(manager, "check_mongo_running", return_value=False):
@@ -420,7 +420,7 @@ class TestDockerManagerCoverage:
         mock_config.return_value.mongo_uri = _test_config.mongo_uri
 
         compose_file = tmp_path / "docker-compose.yml"
-        compose_file.write_text("services:\n  mongo:\n    image: mongo:latest\n")
+        compose_file.write_text("services:\n  mongo:\n    image: mongodb/mongodb-community-server:7.0\n")
 
         manager = DockerManager(compose_file=str(compose_file))
         with patch.object(manager, "check_mongo_running", return_value=False):
@@ -438,7 +438,7 @@ class TestDockerManagerCoverage:
         mock_config.return_value.mongo_uri = _test_config.mongo_uri
 
         compose_file = tmp_path / "docker-compose.yml"
-        compose_file.write_text("services:\n  mongo:\n    image: mongo:latest\n")
+        compose_file.write_text("services:\n  mongo:\n    image: mongodb/mongodb-community-server:7.0\n")
 
         manager = DockerManager(compose_file=str(compose_file))
         with patch.object(manager, "check_mongo_running", return_value=False):
@@ -457,7 +457,7 @@ class TestDockerManagerCoverage:
         mock_config.return_value.mongo_uri = _test_config.mongo_uri
 
         compose_file = tmp_path / "docker-compose.yml"
-        compose_file.write_text("services:\n  mongo:\n    image: mongo:latest\n")
+        compose_file.write_text("services:\n  mongo:\n    image: mongodb/mongodb-community-server:7.0\n")
 
         manager = DockerManager(compose_file=str(compose_file))
         with patch.object(manager, "check_mongo_running", return_value=False):

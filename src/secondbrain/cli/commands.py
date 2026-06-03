@@ -438,7 +438,7 @@ def metrics(ctx: click.Context, reset: bool) -> None:
     is_flag=True,
     help="Create a new session with UUID (ignores --session if both specified)",
 )
-@click.option("--check-llm", is_flag=True, help="Check if Ollama is available")
+@click.option("--check-llm", is_flag=True, help="Check if LLM provider is available")
 @click.pass_context
 def chat(
     ctx: click.Context,
