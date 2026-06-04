@@ -18,10 +18,15 @@ import os
 import readline
 import sys
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from secondbrain.conversation import ConversationSession
+    from secondbrain.rag import RAGPipeline
 
 import click
 from rich.console import Console
+from rich.panel import Panel
 
 from secondbrain.config import config
 from secondbrain.exceptions import (
@@ -429,6 +434,8 @@ def metrics(ctx: click.Context, reset: bool) -> None:
 @click.option("--temperature", "-t", type=float, default=0.1, help="LLM temperature")
 @click.option("--model", "-m", type=str, default=None, help="LLM model name")
 @click.option("--show-sources", is_flag=True, help="Show retrieved sources")
+@click.option("--stream", is_flag=True, help="Enable streaming mode")
+@click.option("--show-thinking", is_flag=True, help="Display thinking process separately")
 @click.option("--list-sessions", is_flag=True, help="List all sessions")
 @click.option("--history", is_flag=True, help="Show session history")
 @click.option("--delete-session", "-d", type=str, help="Delete a session")
@@ -448,6 +455,8 @@ def chat(
     temperature: float,
     model: str | None,
     show_sources: bool,
+    stream: bool,
+    show_thinking: bool,
     list_sessions: bool,
     history: bool,
     delete_session: str | None,
@@ -548,6 +557,8 @@ def chat(
             temperature=temperature,
             model=model,
             show_sources=show_sources,
+            stream=stream,
+            show_thinking=show_thinking,
         )
         return
 
@@ -558,6 +569,8 @@ def chat(
         temperature=temperature,
         model=model,
         show_sources=show_sources,
+        stream=stream,
+        show_thinking=show_thinking,
     )
 
 
@@ -568,6 +581,8 @@ def _single_turn_chat(
     temperature: float,
     model: str | None,
     show_sources: bool,
+    stream: bool = False,
+    show_thinking: bool = False,
 ) -> None:
     """Handle single-turn chat with a query."""
     from secondbrain.config import config
@@ -589,9 +604,7 @@ def _single_turn_chat(
 
     searcher = Searcher(verbose=False)
     
-    # Use factory to respect SECONDBRAIN_LLM_PROVIDER config
     if model:
-        # Override model if specified via CLI
         cfg.llm_model = model
         cfg.llm_temperature = temperature
     
@@ -604,31 +617,116 @@ def _single_turn_chat(
         context_window=cfg.rag_context_window,
     )
 
-    # Call pipeline (retry logic handled inside pipeline.chat())
-    with console.status("[cyan]Thinking...", spinner="dots"):
-        result = pipeline.chat(
-            query, session_obj, top_k=top_k, show_sources=show_sources
+    if stream:
+        _streaming_chat_display(
+            query=query,
+            session=session_obj,
+            pipeline=pipeline,
+            show_sources=show_sources,
+            show_thinking=show_thinking,
         )
-
-    console.print("\n[bold green]Answer:[/bold green]")
-
-    # Handle empty or error responses
-    answer = result.get("answer", "")
-    if not answer or not answer.strip():
-        console.print("[yellow]No response generated. Please try again.[/yellow]")
-        logger.warning("Empty response received from pipeline for query: %s", query[:50])
     else:
-        console.print(answer)
+        with console.status("[cyan]Thinking...", spinner="dots"):
+            result = pipeline.chat(
+                query, session_obj, top_k=top_k, show_sources=show_sources
+            )
 
-        if show_sources and result and result.get("sources"):
-            console.print("\n[bold blue]Sources:[/bold blue]")
-            for i, chunk in enumerate(result["sources"], 1):
-                source_file = chunk.get("source_file", chunk.get("source", "unknown"))
-                page = chunk.get("page", chunk.get("page_number", "unknown"))
-                chunk_text = chunk.get("chunk_text", chunk.get("text", ""))
-                if len(chunk_text) > 200:
-                    chunk_text = chunk_text[:200] + "..."
-                console.print(f"  [{i}] {source_file} (page {page}): {chunk_text}")
+        console.print("\n[bold green]Answer:[/bold green]")
+
+        answer = result.get("answer", "")
+        if not answer or not answer.strip():
+            console.print("[yellow]No response generated. Please try again.[/yellow]")
+            logger.warning("Empty response received from pipeline for query: %s", query[:50])
+        else:
+            console.print(answer)
+
+            if show_sources and result and result.get("sources"):
+                console.print("\n[bold blue]Sources:[/bold blue]")
+                for i, chunk in enumerate(result["sources"], 1):
+                    source_file = chunk.get("source_file", chunk.get("source", "unknown"))
+                    page = chunk.get("page", chunk.get("page_number", "unknown"))
+                    chunk_text = chunk.get("chunk_text", chunk.get("text", ""))
+                    if len(chunk_text) > 200:
+                        chunk_text = chunk_text[:200] + "..."
+                    console.print(f"  [{i}] {source_file} (page {page}): {chunk_text}")
+
+
+def _streaming_chat_display(
+    query: str,
+    session: "ConversationSession",
+    pipeline: "RAGPipeline",
+    show_sources: bool,
+    show_thinking: bool,
+) -> None:
+    """Handle streaming chat with real-time streaming display."""
+    thinking_parts: list[str] = []
+    answer_parts: list[str] = []
+    full_thinking = ""
+    full_answer = ""
+    thinking_displayed = False
+    answer_started = False
+    
+    def on_chunk(content: str, reasoning: str | None) -> None:
+        nonlocal full_thinking, full_answer, thinking_displayed, answer_started
+        if reasoning:
+            full_thinking += reasoning
+            thinking_parts.append(reasoning)
+            # Display thinking in real-time
+            if not thinking_displayed:
+                console.print("\n[dim]💭 Thinking...[/dim]")
+                thinking_displayed = True
+            console.print(reasoning, end="", style="dim blue")
+            sys.stdout.flush()
+        
+        if content:
+            full_answer += content
+            answer_parts.append(content)
+            # Display answer in real-time
+            if not answer_started:
+                if thinking_displayed:
+                    console.print()  # Newline after thinking
+                console.print("\n[bold green]Answer:[/bold green]")
+                answer_started = True
+            console.print(content, end="", style="green")
+            sys.stdout.flush()
+    
+    # No spinner - stream directly to terminal
+    result = pipeline.chat_stream(
+        query,
+        session,
+        on_chunk=on_chunk,
+        show_thinking=show_thinking,
+        show_sources=show_sources,
+    )
+    
+    # Final newline
+    console.print()
+    
+    # If thinking was shown but we want to display it in a panel
+    if show_thinking and thinking_parts and not thinking_displayed:
+        thinking_text = "".join(thinking_parts)
+        console.print(
+            Panel(
+                thinking_text,
+                title="Thinking Process",
+                border_style="blue",
+            )
+        )
+    
+    # If no answer was streamed, show the result
+    if not answer_started:
+        console.print("\n[bold green]Answer:[/bold green]")
+        console.print(full_answer if full_answer else result.get("answer", ""))
+    
+    if show_sources and result.get("sources"):
+        console.print("\n[bold blue]Sources:[/bold blue]")
+        for i, chunk in enumerate(result["sources"], 1):
+            source_file = chunk.get("source_file", chunk.get("source", "unknown"))
+            page = chunk.get("page", chunk.get("page_number", "unknown"))
+            chunk_text = chunk.get("chunk_text", chunk.get("text", ""))
+            if len(chunk_text) > 200:
+                chunk_text = chunk_text[:200] + "..."
+            console.print(f"  [{i}] {source_file} (page {page}): {chunk_text}")
 
 
 def _interactive_chat(
@@ -637,6 +735,8 @@ def _interactive_chat(
     temperature: float,
     model: str | None,
     show_sources: bool,
+    stream: bool = False,
+    show_thinking: bool = False,
 ) -> None:
     """Handle interactive REPL mode for chat."""
     from secondbrain.config import config

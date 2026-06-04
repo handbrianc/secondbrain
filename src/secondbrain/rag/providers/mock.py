@@ -6,8 +6,9 @@ Useful for testing when LLM server is unavailable.
 
 import asyncio
 import hashlib
+import time
 
-from secondbrain.rag.interfaces import LocalLLMProvider
+from secondbrain.rag.interfaces import LocalLLMProvider, StreamingCallback
 
 
 class MockLLMProvider(LocalLLMProvider):
@@ -100,6 +101,44 @@ class MockLLMProvider(LocalLLMProvider):
             True (mock is always available).
         """
         return True
+
+    def stream_chat(
+        self,
+        messages: list[dict[str, str]],
+        on_chunk: StreamingCallback,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> str:
+        """Stream mock response with simulated delays."""
+        last_user_message = ""
+        for msg in reversed(messages):
+            if msg.get("role") == "user":
+                last_user_message = msg.get("content", "")
+                break
+
+        full_response = self.generate(last_user_message, temperature, max_tokens)
+        
+        chunk_size = 5
+        for i in range(0, len(full_response), chunk_size):
+            chunk = full_response[i : i + chunk_size]
+            on_chunk(chunk, None)
+            time.sleep(0.01)
+
+        return full_response
+
+    async def stream_chat_async(
+        self,
+        messages: list[dict[str, str]],
+        on_chunk: StreamingCallback,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> str:
+        """Async streaming mock response."""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            None,
+            lambda: self.stream_chat(messages, on_chunk, temperature, max_tokens),
+        )
 
     def chat(
         self,

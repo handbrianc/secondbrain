@@ -1,10 +1,13 @@
 services:
   mongodb:
-    image: mongo:8.0
+    image: mongo:7.0.34
     container_name: secondbrain-mongodb
     hostname: mongodb
     ports:
       - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: SecondBrainDev2026!
     command: mongod --auth --bind_ip_all
     volumes:
       - mongodb-data:/data/db

@@ -6,11 +6,11 @@ Retrieval-Augmented Generation workflow for conversational Q&A.
 
 import logging
 import time
-from typing import Any
+from typing import Any, Callable
 
 from secondbrain.config import config
 from secondbrain.conversation import ConversationSession, QueryRewriter
-from secondbrain.rag.interfaces import LocalLLMProvider
+from secondbrain.rag.interfaces import LocalLLMProvider, StreamingCallback
 from secondbrain.rag.security_filter import SecurityFilter
 from secondbrain.search import Searcher
 from secondbrain.utils.perf_monitor import metrics
@@ -717,4 +717,202 @@ class RAGPipeline:
 
         except Exception as e:
             logger.error("Async chat failed: %s: %s", type(e).__name__, e)
+            return self._create_error_response(str(e), query)
+
+    def chat_stream(
+        self,
+        query: str,
+        session: ConversationSession,
+        on_chunk: StreamingCallback,
+        show_thinking: bool = False,
+        top_k: int | None = None,
+        show_sources: bool = False,
+    ) -> dict[str, Any]:
+        """Stream chat response with real-time callbacks.
+
+        Args:
+            query: Current user query.
+            session: ConversationSession with history.
+            on_chunk: Callback(chunk_content, reasoning_content) for streaming.
+            show_thinking: Include thinking content in callbacks.
+            top_k: Override default number of chunks.
+            show_sources: Include retrieved chunks in response.
+
+        Returns:
+            Dict with keys:
+            - "answer": Generated answer
+            - "rewritten_query": Query after rewriting
+            - "sources": Retrieved chunks (if show_sources)
+        """
+        try:
+            effective_top_k = top_k if top_k is not None else self._top_k
+
+            rewritten_query = self._rewrite_query_with_history(query, session)
+
+            retrieval_start = time.perf_counter()
+            try:
+                with trace_operation("rag_retrieval") as span:
+                    if span:
+                        span.set_attribute("rag.query", rewritten_query)
+                        span.set_attribute("rag.top_k", effective_top_k)
+                        span.set_attribute("rag.is_chat", True)
+                        span.set_attribute("rag.is_streaming", True)
+                    chunks = self._searcher.search(rewritten_query, top_k=effective_top_k)
+                    if span and chunks:
+                        span.set_attribute("rag.chunks_returned", len(chunks))
+            finally:
+                retrieval_duration = time.perf_counter() - retrieval_start
+                metrics.record("retrieval_latency", retrieval_duration)
+
+            if not chunks:
+                fallback_answer = self._handle_no_results(query)
+                result: dict[str, Any] = {
+                    "answer": fallback_answer,
+                    "rewritten_query": rewritten_query,
+                    "streaming": True,
+                }
+                if show_sources:
+                    result["sources"] = []
+                return result
+
+            context_text = self._format_context(chunks)
+            history = session.get_history(limit=self._context_window)
+            prompt = self._build_prompt(rewritten_query, context_text, history)
+
+            generation_start = time.perf_counter()
+            try:
+                with trace_operation("rag_generation") as span:
+                    if span:
+                        span.set_attribute("rag.prompt_length", len(prompt))
+                        span.set_attribute("rag.temperature", self._config.llm_temperature)
+                        span.set_attribute("rag.max_tokens", self._config.llm_max_tokens)
+                        span.set_attribute("rag.is_chat", True)
+                        span.set_attribute("rag.is_streaming", True)
+                    
+                    messages = [{"role": "user", "content": prompt}]
+                    answer = self._llm_provider.stream_chat(
+                        messages=messages,
+                        on_chunk=on_chunk,
+                        temperature=self._config.llm_temperature,
+                        max_tokens=self._config.llm_max_tokens,
+                    )
+                    
+                    if span:
+                        span.set_attribute("rag.answer_length", len(answer))
+            finally:
+                generation_duration = time.perf_counter() - generation_start
+                metrics.record("generation_latency", generation_duration)
+
+            session.add_message("user", query)
+            session.add_message("assistant", answer)
+
+            result = {"answer": answer, "rewritten_query": rewritten_query, "streaming": True}
+            if show_sources:
+                result["sources"] = chunks
+
+            return result
+
+        except Exception as e:
+            logger.error("Streaming chat failed: %s: %s", type(e).__name__, e)
+            return self._create_error_response(str(e), query)
+
+    async def chat_stream_async(
+        self,
+        query: str,
+        session: ConversationSession,
+        on_chunk: StreamingCallback,
+        show_thinking: bool = False,
+        top_k: int | None = None,
+        show_sources: bool = False,
+    ) -> dict[str, Any]:
+        """Async streaming chat response.
+
+        Args:
+            query: Current user query.
+            session: ConversationSession with history.
+            on_chunk: Callback(chunk_content, reasoning_content) for streaming.
+            show_thinking: Include thinking content in callbacks.
+            top_k: Override default number of chunks.
+            show_sources: Include retrieved chunks in response.
+
+        Returns:
+            Dict with keys:
+            - "answer": Generated answer
+            - "rewritten_query": Query after rewriting
+            - "sources": Retrieved chunks (if show_sources)
+        """
+        try:
+            effective_top_k = top_k if top_k is not None else self._top_k
+
+            rewritten_query = self._rewrite_query_with_history(query, session)
+
+            retrieval_start = time.perf_counter()
+            try:
+                with trace_operation("rag_retrieval_async") as span:
+                    if span:
+                        span.set_attribute("rag.query", rewritten_query)
+                        span.set_attribute("rag.top_k", effective_top_k)
+                        span.set_attribute("rag.is_chat", True)
+                        span.set_attribute("rag.is_streaming", True)
+                        span.set_attribute("rag.is_async", True)
+                    chunks = await self._searcher.search_async(
+                        rewritten_query, top_k=effective_top_k
+                    )
+                    if span and chunks:
+                        span.set_attribute("rag.chunks_returned", len(chunks))
+            finally:
+                retrieval_duration = time.perf_counter() - retrieval_start
+                metrics.record("retrieval_latency_async", retrieval_duration)
+
+            if not chunks:
+                fallback_answer = self._handle_no_results(query)
+                result: dict[str, Any] = {
+                    "answer": fallback_answer,
+                    "rewritten_query": rewritten_query,
+                    "streaming": True,
+                }
+                if show_sources:
+                    result["sources"] = []
+                return result
+
+            context_text = self._format_context(chunks)
+            history = session.get_history(limit=self._context_window)
+            prompt = self._build_prompt(rewritten_query, context_text, history)
+
+            generation_start = time.perf_counter()
+            try:
+                with trace_operation("rag_generation_async") as span:
+                    if span:
+                        span.set_attribute("rag.prompt_length", len(prompt))
+                        span.set_attribute("rag.temperature", self._config.llm_temperature)
+                        span.set_attribute("rag.max_tokens", self._config.llm_max_tokens)
+                        span.set_attribute("rag.is_chat", True)
+                        span.set_attribute("rag.is_streaming", True)
+                        span.set_attribute("rag.is_async", True)
+                    
+                    messages = [{"role": "user", "content": prompt}]
+                    answer = await self._llm_provider.stream_chat_async(
+                        messages=messages,
+                        on_chunk=on_chunk,
+                        temperature=self._config.llm_temperature,
+                        max_tokens=self._config.llm_max_tokens,
+                    )
+                    
+                    if span:
+                        span.set_attribute("rag.answer_length", len(answer))
+            finally:
+                generation_duration = time.perf_counter() - generation_start
+                metrics.record("generation_latency_async", generation_duration)
+
+            session.add_message("user", query)
+            session.add_message("assistant", answer)
+
+            result = {"answer": answer, "rewritten_query": rewritten_query, "streaming": True}
+            if show_sources:
+                result["sources"] = chunks
+
+            return result
+
+        except Exception as e:
+            logger.error("Async streaming chat failed: %s: %s", type(e).__name__, e)
             return self._create_error_response(str(e), query)
