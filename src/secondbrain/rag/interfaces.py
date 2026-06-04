@@ -9,7 +9,7 @@ from typing import Protocol
 class LocalLLMProvider(Protocol):
     """Protocol for local LLM providers.
 
-    All local LLM backends (Ollama, vLLM, llama.cpp, etc.) must implement
+    All local LLM backends (OpenAI, Anthropic, vLLM, llama.cpp, etc.) must implement
     this interface to be used with the RAG pipeline.
     """
 

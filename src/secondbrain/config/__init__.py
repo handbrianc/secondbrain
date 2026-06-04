@@ -79,19 +79,7 @@ def _validate_mongo_uri(value: str) -> str:
     return value
 
 
-def _get_default_ollama_host() -> str:
-    """Get default Ollama host based on platform.
 
-    On macOS, use native Ollama installation (faster on CPU).
-    On other platforms, use Docker Ollama container.
-
-    Returns:
-        Ollama host URL string
-    """
-    if platform.system() == "Darwin":
-        return "http://localhost:11434"  # macOS (native)
-    else:
-        return "http://localhost:11435"  # Linux/Windows (Docker)
 
 
 class Config(BaseSettings):
@@ -210,16 +198,12 @@ class Config(BaseSettings):
     )
 
     llm_provider: str = Field(
-        default="ollama",
-        description="LLM provider type (ollama, openai, anthropic)",
-    )
-    ollama_host: str = Field(
-        default_factory=_get_default_ollama_host,
-        description="Ollama API endpoint (auto-detects platform: macOS=11434, Linux/Windows=11435)",
+        default="openai",
+        description="LLM provider type (openai, anthropic)",
     )
     llm_model: str = Field(
-        default="llama3.2",
-        description="Default LLM model for RAG",
+        default="gpt-4o-mini",
+        description="Default LLM model for RAG (OpenAI: gpt-4o-mini, gpt-4o; Anthropic: claude-3-haiku-20240307, claude-3-sonnet-20240229)",
     )
     llm_temperature: float = Field(
         default=0.1,
@@ -232,6 +216,10 @@ class Config(BaseSettings):
     llm_timeout: int = Field(
         default=120,
         description="Request timeout in seconds for LLM",
+    )
+    llm_api_key: str | None = Field(
+        default=None,
+        description="API key for LLM provider (required for OpenAI/Anthropic, optional for local endpoints)",
     )
     rag_context_window: int = Field(
         default=5,

@@ -86,7 +86,7 @@ def _init_worker() -> None:
 
     pdf_options = PdfFormatOption(
         pipeline_options=PdfPipelineOptions(
-            do_ocr=False,
+            do_ocr=True,
             do_table_structure=False,
             accelerator_options=AcceleratorOptions(
                 device=AcceleratorDevice.CPU,
@@ -265,7 +265,7 @@ def _extract_chunk_and_embed_file(
 
             pdf_options = PdfFormatOption(
                 pipeline_options=PdfPipelineOptions(
-                    do_ocr=False,
+                    do_ocr=True,
                     do_table_structure=False,
                     accelerator_options=AcceleratorOptions(
                         device=AcceleratorDevice.CPU,
@@ -420,7 +420,7 @@ def _extract_and_chunk_file_with_progress(
 
             pdf_options = PdfFormatOption(
                 pipeline_options=PdfPipelineOptions(
-                    do_ocr=False,
+                    do_ocr=True,
                     do_table_structure=False,
                     accelerator_options=AcceleratorOptions(
                         device=AcceleratorDevice.CPU,
@@ -792,7 +792,7 @@ class DocumentIngestor:
 
         pdf_options = PdfFormatOption(
             pipeline_options=PdfPipelineOptions(
-                do_ocr=False,
+                do_ocr=True,
                 do_table_structure=False,
                 accelerator_options=AcceleratorOptions(
                     device=AcceleratorDevice.CPU,

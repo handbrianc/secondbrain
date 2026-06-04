@@ -4,6 +4,7 @@ Provides OpenAILLMProvider class that implements the LocalLLMProvider protocol
 for using OpenAI API as an LLM backend.
 """
 
+import logging
 import os
 
 import httpx
@@ -12,6 +13,8 @@ from openai import APIError, AsyncOpenAI, OpenAI
 from secondbrain.exceptions import ServiceUnavailableError
 
 from ..interfaces import LocalLLMProvider
+
+logger = logging.getLogger(__name__)
 
 
 class OpenAILLMProvider(LocalLLMProvider):
@@ -34,6 +37,7 @@ class OpenAILLMProvider(LocalLLMProvider):
         max_tokens: int = 2048,
         timeout: int = 120,
         api_key: str | None = None,
+        base_url: str | None = None,
     ) -> None:
         """Initialize OpenAI provider with configuration.
 
@@ -43,32 +47,51 @@ class OpenAILLMProvider(LocalLLMProvider):
             max_tokens: Default max tokens for generation (default: 2048).
             timeout: Request timeout in seconds (default: 120).
             api_key: OpenAI API key (defaults to SECONDBRAIN_OPENAI_API_KEY env var).
+            base_url: OpenAI API base URL (defaults to SECONDBRAIN_OPENAI_BASE_URL env var).
 
         Raises:
-            ValueError: If API key is not provided.
+            ValueError: If API key is not provided or model format is invalid.
         """
+        # Validate model name format for litellm compatibility
+        if base_url and "/" not in model.split("/")[-1]:
+            # Using proxy (litellm) - ensure model has provider prefix
+            provider_prefixes = ("dashscope/", "ollama", "ollama_chat/", "openai/", "bedrock/", "together_ai/", "groq/")
+            if not model.lower().startswith(provider_prefixes) and "/" in model:
+                # Model contains "/" but no recognized prefix - likely Qwen model
+                # This is common for litellm proxy setups
+                logger.warning(
+                    "Model '%s' may need provider prefix for litellm proxy. "
+                    "Common prefixes: dashscope/, ollama/, openai/. "
+                    "If using litellm proxy, ensure the model is configured on the server.",
+                    model
+                )
+
         self._model = model
         self._temperature = temperature
         self._max_tokens = max_tokens
         self._timeout = timeout
 
-        # Get API key from parameter or environment
-        self._api_key = api_key or os.getenv("SECONDBRAIN_OPENAI_API_KEY")
+        # Get API key from parameter or environment (with backward compatibility)
+        self._api_key = api_key or os.getenv("SECONDBRAIN_LLM_API_KEY") or os.getenv("SECONDBRAIN_OPENAI_API_KEY")
         if not self._api_key:
             raise ValueError(
-                "OpenAI API key required. Set SECONDBRAIN_OPENAI_API_KEY "
+                "OpenAI API key required. Set SECONDBRAIN_LLM_API_KEY (or SECONDBRAIN_OPENAI_API_KEY for backward compatibility) "
                 "environment variable or provide api_key parameter"
             )
 
+        # Get base URL from parameter or environment (for LiteLLM or other proxies)
+        self._base_url = base_url or os.getenv("SECONDBRAIN_OPENAI_BASE_URL")
+
         # Initialize clients
-        self._client = OpenAI(
-            api_key=self._api_key,
-            timeout=httpx.Timeout(timeout),
-        )
-        self._async_client = AsyncOpenAI(
-            api_key=self._api_key,
-            timeout=httpx.Timeout(timeout),
-        )
+        client_kwargs = {
+            "api_key": self._api_key,
+            "timeout": httpx.Timeout(timeout),
+        }
+        if self._base_url:
+            client_kwargs["base_url"] = self._base_url
+
+        self._client = OpenAI(**client_kwargs)  # type: ignore
+        self._async_client = AsyncOpenAI(**client_kwargs)  # type: ignore
 
     def generate(
         self,
@@ -106,7 +129,33 @@ class OpenAILLMProvider(LocalLLMProvider):
                 max_tokens=tokens,
             )
 
-            return response.choices[0].message.content or ""
+            response_content = response.choices[0].message.content or ""
+
+            # Empty response triggers retry in pipeline.py chat() method
+            if not response_content or not response_content.strip():
+                finish_reason = response.choices[0].finish_reason if response.choices else "N/A"
+                usage_info = response.usage.model_dump() if hasattr(response, 'usage') and response.usage else "N/A"
+                model_configured = hasattr(response, 'model') and response.model
+
+                logger.error(
+                    "CRITICAL: Empty response from LLM endpoint. "
+                    "Model: %s, Finish reason: %s, Usage: %s, Model returned: %s. "
+                    "Common causes: (1) Model not configured in litellm proxy, "
+                    "(2) Streaming-only model called without stream=True, "
+                    "(3) Timeout exceeded, (4) Content filtering blocked response.",
+                    self._model, finish_reason, usage_info, model_configured
+                )
+
+                # Raise explicit error for empty responses to trigger retry logic
+                raise RuntimeError(
+                    f"LLM endpoint returned empty response for model '{self._model}'. "
+                    f"Check: (1) Model is configured in litellm proxy, "
+                    f"(2) Model name format is correct (e.g., 'dashscope/qwen-...'), "
+                    f"(3) Streaming requirements met for QwQ/QVQ models, "
+                    f"(4) Timeout is sufficient for large models."
+                )
+
+            return response_content
 
         except httpx.ConnectError as e:
             raise ServiceUnavailableError(f"OpenAI API unreachable: {e}") from e
@@ -151,7 +200,30 @@ class OpenAILLMProvider(LocalLLMProvider):
                 max_tokens=tokens,
             )
 
-            return response.choices[0].message.content or ""
+            response_content = response.choices[0].message.content or ""
+
+            if not response_content or not response_content.strip():
+                finish_reason = response.choices[0].finish_reason if response.choices else "N/A"
+                usage_info = response.usage.model_dump() if hasattr(response, 'usage') and response.usage else "N/A"
+
+                logger.error(
+                    "CRITICAL: Empty async response from LLM endpoint. "
+                    "Model: %s, Finish reason: %s, Usage: %s. "
+                    "Common causes: (1) Model not configured in litellm proxy, "
+                    "(2) Streaming-only model called without stream=True, "
+                    "(3) Timeout exceeded, (4) Content filtering blocked response.",
+                    self._model, finish_reason, usage_info
+                )
+
+                raise RuntimeError(
+                    f"LLM endpoint returned empty async response for model '{self._model}'. "
+                    f"Check: (1) Model is configured in litellm proxy, "
+                    f"(2) Model name format is correct (e.g., 'dashscope/qwen-...'), "
+                    f"(3) Streaming requirements met for QwQ/QVQ models, "
+                    f"(4) Timeout is sufficient for large models."
+                )
+
+            return response_content
 
         except httpx.ConnectError as e:
             raise ServiceUnavailableError(f"OpenAI API unreachable: {e}") from e
