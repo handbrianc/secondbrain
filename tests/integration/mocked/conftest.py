@@ -138,7 +138,7 @@ def storage_with_index(test_collection: Any) -> Any:
     os.environ["SECONDBRAIN_MONGO_URI"] = cfg.mongo_uri
     os.environ["SECONDBRAIN_MONGO_DB"] = cfg.mongo_db
     os.environ["SECONDBRAIN_MONGO_COLLECTION"] = "test_embeddings"
-    os.environ["SECONDBRAIN_OLLAMA_HOST"] = cfg.ollama_host
+    os.environ["SECONDBRAIN_OLLAMA_HOST"] = os.getenv("SECONDBRAIN_OLLAMA_HOST", "http://localhost:11434")
     os.environ["SECONDBRAIN_LOCAL_EMBEDDING_MODEL"] = "all-MiniLM-L6-v2"
 
     get_config.cache_clear()

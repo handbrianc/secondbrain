@@ -11,7 +11,7 @@ from secondbrain.search import Searcher
 class TestSearcher:
     """Tests for Searcher class."""
 
-    @patch("secondbrain.search.LocalEmbeddingGenerator")
+    @patch("secondbrain.embedding.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_init_default(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
@@ -20,7 +20,7 @@ class TestSearcher:
         searcher = Searcher()
         assert searcher.verbose is False
 
-    @patch("secondbrain.search.LocalEmbeddingGenerator")
+    @patch("secondbrain.embedding.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_search_basic(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
@@ -45,7 +45,7 @@ class TestSearcher:
         mock_embed.generate.assert_called_once_with("test query")
         mock_storage.search.assert_called_once()
 
-    @patch("secondbrain.search.LocalEmbeddingGenerator")
+    @patch("secondbrain.embedding.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_search_with_top_k(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
@@ -67,7 +67,7 @@ class TestSearcher:
         call_args = mock_storage.search.call_args
         assert call_args.kwargs["top_k"] == 10
 
-    @patch("secondbrain.search.LocalEmbeddingGenerator")
+    @patch("secondbrain.embedding.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_search_with_source_filter(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
@@ -88,7 +88,7 @@ class TestSearcher:
         call_args = mock_storage.search.call_args
         assert call_args.kwargs["source_filter"] == "test.pdf"
 
-    @patch("secondbrain.search.LocalEmbeddingGenerator")
+    @patch("secondbrain.embedding.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_search_with_file_type_filter(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
@@ -109,7 +109,7 @@ class TestSearcher:
         call_args = mock_storage.search.call_args
         assert call_args.kwargs["file_type_filter"] == "pdf"
 
-    @patch("secondbrain.search.LocalEmbeddingGenerator")
+    @patch("secondbrain.embedding.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_search_sentence_transformers_unavailable(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
@@ -125,7 +125,7 @@ class TestSearcher:
         except RuntimeError as e:
             assert "Cannot connect to SentenceTransformers service" in str(e)
 
-    @patch("secondbrain.search.LocalEmbeddingGenerator")
+    @patch("secondbrain.embedding.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_search_mongodb_unavailable(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
@@ -150,7 +150,7 @@ class TestSearcher:
 class TestSemanticSearchSpecRequirements:
     """Tests for semantic search specification requirements."""
 
-    @patch("secondbrain.search.LocalEmbeddingGenerator")
+    @patch("secondbrain.embedding.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_search_uses_cosine_similarity(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
@@ -172,7 +172,7 @@ class TestSemanticSearchSpecRequirements:
         # Verify search was called
         mock_storage.search.assert_called_once()
 
-    @patch("secondbrain.search.LocalEmbeddingGenerator")
+    @patch("secondbrain.embedding.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_search_default_top_k(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
@@ -198,7 +198,7 @@ class TestSemanticSearchSpecRequirements:
         call_args = mock_storage.search.call_args
         assert call_args.kwargs["top_k"] == config.default_top_k
 
-    @patch("secondbrain.search.LocalEmbeddingGenerator")
+    @patch("secondbrain.embedding.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_search_results_include_score(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
@@ -229,7 +229,7 @@ class TestSemanticSearchSpecRequirements:
         assert "score" in results[0]
         assert 0 <= results[0]["score"] <= 1
 
-    @patch("secondbrain.search.LocalEmbeddingGenerator")
+    @patch("secondbrain.embedding.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_search_results_include_chunk_text(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
@@ -258,7 +258,7 @@ class TestSemanticSearchSpecRequirements:
 
         assert "chunk_text" in results[0]
 
-    @patch("secondbrain.search.LocalEmbeddingGenerator")
+    @patch("secondbrain.embedding.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_search_results_include_source_file(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
@@ -287,7 +287,7 @@ class TestSemanticSearchSpecRequirements:
 
         assert "source_file" in results[0]
 
-    @patch("secondbrain.search.LocalEmbeddingGenerator")
+    @patch("secondbrain.embedding.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_search_results_include_page_number(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
@@ -317,7 +317,7 @@ class TestSemanticSearchSpecRequirements:
         assert "page_number" in results[0]
         assert results[0]["page_number"] == 5
 
-    @patch("secondbrain.search.LocalEmbeddingGenerator")
+    @patch("secondbrain.embedding.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_search_empty_results(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
@@ -338,7 +338,7 @@ class TestSemanticSearchSpecRequirements:
 
         assert results == []
 
-    @patch("secondbrain.search.LocalEmbeddingGenerator")
+    @patch("secondbrain.embedding.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_search_generates_embedding_via_sentence_transformers(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
@@ -360,7 +360,7 @@ class TestSemanticSearchSpecRequirements:
         # Verify embedding was generated
         mock_embed.generate.assert_called_once_with("test query")
 
-    @patch("secondbrain.search.LocalEmbeddingGenerator")
+    @patch("secondbrain.embedding.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_search_uses_vector_index(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
@@ -382,7 +382,7 @@ class TestSemanticSearchSpecRequirements:
         # Verify storage search was called
         mock_storage.search.assert_called_once()
 
-    @patch("secondbrain.search.LocalEmbeddingGenerator")
+    @patch("secondbrain.embedding.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_search_with_span_attributes_source_filter(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
@@ -416,7 +416,7 @@ class TestSemanticSearchSpecRequirements:
         )
         assert source_filter_set
 
-    @patch("secondbrain.search.LocalEmbeddingGenerator")
+    @patch("secondbrain.embedding.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_search_with_span_attributes_file_type_filter(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
@@ -450,7 +450,7 @@ class TestSemanticSearchSpecRequirements:
         )
         assert file_type_filter_set
 
-    @patch("secondbrain.search.LocalEmbeddingGenerator")
+    @patch("secondbrain.embedding.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     def test_search_with_span_attributes_embedding_dim(
         self, mock_storage_class: MagicMock, mock_embed_class: MagicMock
@@ -488,7 +488,7 @@ class TestSemanticSearchSpecRequirements:
         )
         assert embedding_dim_set
 
-    @patch("secondbrain.search.LocalEmbeddingGenerator")
+    @patch("secondbrain.embedding.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     @pytest.mark.asyncio
     async def test_search_async_basic(
@@ -517,7 +517,7 @@ class TestSemanticSearchSpecRequirements:
         assert results[0]["chunk_id"] == "1"
         assert results[1]["chunk_id"] == "2"
 
-    @patch("secondbrain.search.LocalEmbeddingGenerator")
+    @patch("secondbrain.embedding.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     @pytest.mark.asyncio
     async def test_search_async_with_top_k(
@@ -541,7 +541,7 @@ class TestSemanticSearchSpecRequirements:
         call_args = mock_storage.search_async.call_args
         assert call_args.kwargs["top_k"] == 10
 
-    @patch("secondbrain.search.LocalEmbeddingGenerator")
+    @patch("secondbrain.embedding.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     @pytest.mark.asyncio
     async def test_search_async_with_source_filter(
@@ -565,7 +565,7 @@ class TestSemanticSearchSpecRequirements:
         call_args = mock_storage.search_async.call_args
         assert call_args.kwargs["source_filter"] == "test.pdf"
 
-    @patch("secondbrain.search.LocalEmbeddingGenerator")
+    @patch("secondbrain.embedding.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     @pytest.mark.asyncio
     async def test_search_async_with_file_type_filter(
@@ -589,7 +589,7 @@ class TestSemanticSearchSpecRequirements:
         call_args = mock_storage.search_async.call_args
         assert call_args.kwargs["file_type_filter"] == "pdf"
 
-    @patch("secondbrain.search.LocalEmbeddingGenerator")
+    @patch("secondbrain.embedding.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     @pytest.mark.asyncio
     async def test_search_async_span_attributes(
@@ -631,7 +631,7 @@ class TestSemanticSearchSpecRequirements:
         assert any(call[0][0] == "search.top_k" for call in storage_calls)
         assert any(call[0][0] == "search.embedding_dim" for call in storage_calls)
 
-    @patch("secondbrain.search.LocalEmbeddingGenerator")
+    @patch("secondbrain.embedding.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     @pytest.mark.asyncio
     async def test_search_async_empty_results(
@@ -654,7 +654,7 @@ class TestSemanticSearchSpecRequirements:
         assert results == []
         assert isinstance(results, list)
 
-    @patch("secondbrain.search.LocalEmbeddingGenerator")
+    @patch("secondbrain.embedding.LocalEmbeddingGenerator")
     @patch("secondbrain.search.VectorStorage")
     @pytest.mark.asyncio
     async def test_search_async_connection_error(

@@ -164,7 +164,7 @@ class TestIngestionE2E:
         temp_test_dir: Path,
         real_embedding_generator: LocalEmbeddingGenerator,
         real_storage: VectorStorage,
-        clean_database: None,
+        clean_database: None,  # noqa: F841
     ) -> None:
         """Test full ingestion pipeline with PDF: create → ingest → verify → search."""
         from unittest.mock import MagicMock, patch
@@ -244,7 +244,7 @@ class TestIngestionE2E:
         temp_test_dir: Path,
         real_embedding_generator: LocalEmbeddingGenerator,
         real_storage: VectorStorage,
-        clean_database: None,
+        clean_database: None,  # noqa: F841
     ) -> None:
         """Test full ingestion pipeline with DOCX: create → ingest → verify chunks → check embeddings."""
         # Create test DOCX
@@ -319,7 +319,7 @@ class TestIngestionE2E:
         temp_test_dir: Path,
         real_embedding_generator: LocalEmbeddingGenerator,
         real_storage: VectorStorage,
-        clean_database: None,
+        clean_database: None,  # noqa: F841
     ) -> None:
         """Test full ingestion pipeline with Markdown: create → ingest → verify text extraction → check chunking."""
         # Create test Markdown with structured content
@@ -395,7 +395,7 @@ and consistent response formats.
         temp_test_dir: Path,
         real_embedding_generator: LocalEmbeddingGenerator,
         real_storage: VectorStorage,
-        clean_database: None,
+        clean_database: None,  # noqa: F841
     ) -> None:
         """Test batch ingestion of 10+ documents: create → batch ingest → verify all stored → check performance."""
         # Create 12 test documents of mixed types
@@ -488,7 +488,7 @@ and consistent response formats.
         temp_test_dir: Path,
         real_embedding_generator: LocalEmbeddingGenerator,
         real_storage: VectorStorage,
-        clean_database: None,
+        clean_database: None,  # noqa: F841
     ) -> None:
         """Test parallel ingestion with cores=4: verify parallelism → check speedup → validate correctness."""
         # Create 8 test documents
@@ -563,7 +563,7 @@ and consistent response formats.
         temp_test_dir: Path,
         real_embedding_generator: LocalEmbeddingGenerator,
         real_storage: VectorStorage,
-        clean_database: None,
+        clean_database: None,  # noqa: F841
     ) -> None:
         """Test semantic search: ingest documents → run semantic search → verify relevant results → check similarity scores."""
         # Ingest diverse documents
@@ -662,7 +662,7 @@ and consistent response formats.
         temp_test_dir: Path,
         real_embedding_generator: LocalEmbeddingGenerator,
         real_storage: VectorStorage,
-        clean_database: None,
+        clean_database: None,  # noqa: F841
     ) -> None:
         """Test search with filters: ingest mixed document types → search with filters → verify filtered results → check filter combinations."""
         # Ingest mixed document types

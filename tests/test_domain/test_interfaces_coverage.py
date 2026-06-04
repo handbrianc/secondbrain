@@ -3,7 +3,6 @@
 from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
-from typing import Protocol
 
 import pytest
 
@@ -166,7 +165,7 @@ class TestVectorStoreProtocol:
                 self,
                 embedding: list[float],
                 top_k: int = 5,
-                source_filter: str | None = None,
+                _source_filter: str | None = None  # noqa: F841,
             ) -> Sequence[DocumentChunk]:
                 return []
             
@@ -207,7 +206,7 @@ class TestVectorStoreProtocol:
                 self,
                 embedding: list[float],
                 top_k: int = 5,
-                source_filter: str | None = None,
+                _source_filter: str | None = None  # noqa: F841,
             ) -> Sequence[DocumentChunk]:
                 chunk1 = DocumentChunk(
                     chunk_id=ChunkId("chunk-1"),

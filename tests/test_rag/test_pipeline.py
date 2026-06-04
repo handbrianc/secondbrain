@@ -60,7 +60,7 @@ def mock_config(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
         "SECONDBRAIN_MONGO_URI": _test_config.mongo_uri,
         "SECONDBRAIN_MONGO_DB": "test_secondbrain",
         "SECONDBRAIN_MONGO_COLLECTION": "test_embeddings",
-        "SECONDBRAIN_LOCALHOST": TEST_OLLAMA_HOST,
+        "SECONDBRAIN_OLLAMA_HOST": TEST_OLLAMA_HOST,
         "SECONDBRAIN_LOCAL_EMBEDDING_MODEL": "all-MiniLM-L6-v2",
         "SECONDBRAIN_CHUNK_SIZE": "512",
         "SECONDBRAIN_CHUNK_OVERLAP": "50",
@@ -1044,7 +1044,7 @@ class TestRAGPipelineCoverageGaps:
         monkeypatch.setattr(
             pipeline_with_mocks._security_filter,
             "validate_query",
-            lambda q: [mock_violation],
+            lambda _q: [mock_violation],
         )
 
         # Patch get_safe_response
@@ -1104,7 +1104,7 @@ class TestRAGPipelineTracing:
         # Patch trace_operation to return our mock span
         monkeypatch.setattr(
             "secondbrain.rag.pipeline.trace_operation",
-            lambda op: mock_context_manager,
+            lambda _op: mock_context_manager,
         )
 
         # Enable tracing by setting the environment variable
@@ -1168,7 +1168,7 @@ class TestRAGPipelineTracing:
         # Patch trace_operation to return our mock span
         monkeypatch.setattr(
             "secondbrain.rag.pipeline.trace_operation",
-            lambda op: mock_context_manager,
+            lambda _op: mock_context_manager,
         )
 
         # Enable tracing
@@ -1240,7 +1240,7 @@ class TestRAGPipelineTracing:
         # Patch trace_operation
         monkeypatch.setattr(
             "secondbrain.rag.pipeline.trace_operation",
-            lambda op: mock_context_manager,
+            lambda _op: mock_context_manager,
         )
 
         # Enable tracing
@@ -1306,7 +1306,7 @@ class TestRAGPipelineTracing:
         # Patch trace_operation
         monkeypatch.setattr(
             "secondbrain.rag.pipeline.trace_operation",
-            lambda op: mock_context_manager,
+            lambda _op: mock_context_manager,
         )
 
         # Enable tracing

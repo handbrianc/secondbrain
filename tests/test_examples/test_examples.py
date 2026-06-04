@@ -45,7 +45,7 @@ class TestBasicUsageExamples:
         assert "Ingested:" in result["stdout"] or "chunks" in result["stdout"].lower()
 
     def test_example_basic_usage_search(
-        self, example_runner: Any, fast_test_config: Any
+        self, example_runner: Any
     ) -> None:
         """Test basic semantic search example.
 
@@ -69,7 +69,7 @@ class TestBasicUsageExamples:
         )
 
     def test_example_basic_usage_list(
-        self, example_runner: Any, fast_test_config: Any
+        self, example_runner: Any
     ) -> None:
         """Test basic document listing example.
 
@@ -132,7 +132,7 @@ class TestAdvancedExamples:
         assert "Tracing" in result["stdout"] or "span" in result["stdout"].lower()
 
     def test_example_async_workflow(
-        self, example_runner: Any, tmp_path: Path, fast_test_config: Any
+        self, example_runner: Any, tmp_path: Path
     ) -> None:
         """Test async workflow example.
 
@@ -168,7 +168,7 @@ class TestAdvancedExamples:
         assert result["success"] or has_service_error
 
     def test_example_batch_ingestion(
-        self, example_runner: Any, tmp_path: Path, fast_test_config: Any
+        self, example_runner: Any, tmp_path: Path
     ) -> None:
         """Test batch ingestion example.
 
@@ -226,7 +226,7 @@ class TestIntegrationExamples:
     """Tests for integration example scripts."""
 
     def test_example_flask_api(
-        self, example_runner: Any, fast_test_config: Any
+        self, example_runner: Any
     ) -> None:
         """Test Flask API integration example.
 
@@ -287,7 +287,7 @@ class TestIntegrationExamples:
             pytest.fail(f"Flask API test failed: {e}")
 
     def test_example_fastapi_endpoint(
-        self, example_runner: Any, fast_test_config: Any
+        self, example_runner: Any
     ) -> None:
         """Test FastAPI endpoint example.
 

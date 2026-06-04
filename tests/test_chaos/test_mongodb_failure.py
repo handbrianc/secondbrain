@@ -52,7 +52,7 @@ class TestMongoDBFailureDuringIngestion:
         return test_file
 
     def test_mongodb_unavailability_during_ingestion(
-        self, temp_text_file: Path, failure_injector: FailureInjector
+        self, _temp_text_file: Path, failure_injector: FailureInjector
     ) -> None:
         """Test that ingestion handles MongoDB unavailability gracefully.
 
@@ -153,7 +153,7 @@ class TestMongoDBFailureDuringIngestion:
                 assert cb.failure_count >= 1
 
     def test_graceful_error_handling_with_circuit_breaker(
-        self, temp_text_file: Path, failure_injector: FailureInjector
+        self, _temp_text_file: Path, failure_injector: FailureInjector
     ) -> None:
         """Test that circuit breaker provides graceful failure handling.
 
@@ -198,7 +198,7 @@ class TestMongoDBFailureDuringIngestion:
         assert "unavailable" in error_msg
 
     def test_mongodb_failure_recovery_after_timeout(
-        self, temp_text_file: Path, failure_injector: FailureInjector
+        self, _temp_text_file: Path, failure_injector: FailureInjector
     ) -> None:
         """Test that system recovers after MongoDB becomes available again.
 
