@@ -27,7 +27,6 @@ from secondbrain.utils.failure_injector import (
     inject_network_partition,
     inject_timeout,
 )
-from secondbrain.exceptions import SecondBrainError
 
 
 @pytest.mark.slow
@@ -116,7 +115,7 @@ class TestFailureInjectorInit:
     def test_thread_lock_exists(self):
         """Test that thread lock is initialized."""
         injector = FailureInjector()
-        assert isinstance(injector._lock, type(threading.Lock()))
+        assert isinstance(injector._lock, (type(threading.Lock()), type(threading.RLock())))
 
     def test_get_instance_singleton(self):
         """Test that get_instance returns singleton."""

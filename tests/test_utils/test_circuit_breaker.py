@@ -1008,7 +1008,7 @@ class TestCircuitBreakerEnabledService:
         )
 
         class TestService(CircuitBreakerEnabledService):
-            def validate_connection(self, force: bool = False) -> bool:
+            def validate_connection(self, force: bool = False) -> bool:  # noqa: F841
                 return True
 
         service = TestService(
@@ -1025,7 +1025,7 @@ class TestCircuitBreakerEnabledService:
         from secondbrain.utils.circuit_breaker import CircuitBreakerEnabledService
 
         class TestService(CircuitBreakerEnabledService):
-            def validate_connection(self, force: bool = False) -> bool:
+            def validate_connection(self, force: bool = False) -> bool:  # noqa: F841
                 return True
 
         service = TestService()
@@ -1041,7 +1041,7 @@ class TestCircuitBreakerEnabledService:
         )
 
         class TestService(CircuitBreakerEnabledService):
-            def validate_connection(self, force: bool = False) -> bool:
+            def validate_connection(self, force: bool = False) -> bool:  # noqa: F841
                 return True
 
         service = TestService(
@@ -1062,7 +1062,7 @@ class TestCircuitBreakerEnabledService:
         )
 
         class TestService(CircuitBreakerEnabledService):
-            def validate_connection(self, force: bool = False) -> bool:
+            def validate_connection(self, force: bool = False) -> bool:  # noqa: F841
                 return False
 
         service = TestService(
@@ -1087,7 +1087,7 @@ class TestCircuitBreakerEnabledService:
         )
 
         class TestService(CircuitBreakerEnabledService):
-            def validate_connection(self, force: bool = False) -> bool:
+            def validate_connection(self, force: bool = False) -> bool:  # noqa: F841
                 return False
 
         service = TestService(
@@ -1113,7 +1113,7 @@ class TestCircuitBreakerEnabledService:
         )
 
         class TestService(CircuitBreakerEnabledService):
-            async def validate_connection_async(self, force: bool = False) -> bool:
+            async def validate_connection_async(self, force: bool = False) -> bool:  # noqa: F841
                 return True
 
         service = TestService(
@@ -1137,7 +1137,7 @@ class TestCircuitBreakerEnabledService:
         )
 
         class TestService(CircuitBreakerEnabledService):
-            async def validate_connection_async(self, force: bool = False) -> bool:
+            async def validate_connection_async(self, force: bool = False) -> bool:  # noqa: F841
                 return False
 
         service = TestService(
@@ -1162,7 +1162,7 @@ class TestCircuitBreakerEnabledService:
         )
 
         class TestService(CircuitBreakerEnabledService):
-            async def validate_connection_async(self, force: bool = False) -> bool:
+            async def validate_connection_async(self, force: bool = False) -> bool:  # noqa: F841
                 return False
 
         service = TestService(

@@ -80,7 +80,7 @@ def example_runner(tmp_path: Path) -> Generator[Any, None, None]:
 
         env["SECONDBRAIN_VERBOSE"] = "0"
         env["SECONDBRAIN_MONGO_URI"] = _test_config.mongo_uri
-        env["SECONDBRAIN_OLLAMA_HOST"] = _test_config.ollama_host
+        env["SECONDBRAIN_OLLAMA_HOST"] = os.getenv("SECONDBRAIN_OLLAMA_HOST", "http://localhost:11434")
 
         # Run the script
         result = subprocess.run(

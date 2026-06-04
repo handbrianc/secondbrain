@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import time
 from collections.abc import AsyncGenerator, Generator
 from typing import TYPE_CHECKING, Any
@@ -21,7 +22,7 @@ if TYPE_CHECKING:
 # Get test service URLs from Config (automatically uses test defaults when PYTEST_CURRENT_TEST is set)
 _config = Config()
 TEST_MONGO_URI = _config.mongo_uri
-TEST_EMBEDDING_URL = _config.ollama_host
+TEST_EMBEDDING_URL = os.getenv("SECONDBRAIN_OLLAMA_HOST", "http://localhost:11434")
 
 # Test database/collection names
 TEST_DB_NAME = _config.mongo_db
@@ -114,7 +115,7 @@ def wait_for_services() -> Generator[None, None, None]:
 
 
 @pytest.fixture(scope="session")
-def real_storage(wait_for_services: None) -> Generator[VectorStorage, None, None]:
+def real_storage(wait_for_services: None) -> Generator[VectorStorage, None, None]:  # noqa: F841
     """VectorStorage with real MongoDB connection.
 
     Creates a VectorStorage instance connected to the test MongoDB database.
@@ -163,7 +164,7 @@ def mock_storage() -> Generator[MockVectorStorage, None, None]:
 
 @pytest.fixture(scope="session")
 def real_embedding_generator(
-    wait_for_services: None,
+    wait_for_services: None,  # noqa: F841
 ) -> Generator[LocalEmbeddingGenerator, None, None]:
     """Real embedding generator using sentence-transformers service.
 

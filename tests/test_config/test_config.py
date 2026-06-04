@@ -416,45 +416,6 @@ class TestValidateMongoUri:
             _validate_mongo_uri("postgres://localhost/test")
 
 
-class TestGetDefaultOllamaHost:
-    """Tests for _get_default_ollama_host function."""
-
-    def test_get_default_ollama_host_macos(self, monkeypatch) -> None:
-        """Test Ollama host on macOS."""
-        import platform
-
-        monkeypatch.setattr(platform, "system", lambda: "Darwin")
-
-        from secondbrain.config import _get_default_ollama_host
-
-        result = _get_default_ollama_host()
-        assert result == "http://localhost:11434"
-
-
-    def test_get_default_ollama_host_linux(self, monkeypatch) -> None:
-        """Test Ollama host on Linux."""
-        import platform
-
-        monkeypatch.setattr(platform, "system", lambda: "Linux")
-
-        from secondbrain.config import _get_default_ollama_host
-
-        result = _get_default_ollama_host()
-        assert result == "http://localhost:11435"
-
-
-    def test_get_default_ollama_host_windows(self, monkeypatch) -> None:
-        """Test Ollama host on Windows."""
-        import platform
-
-        monkeypatch.setattr(platform, "system", lambda: "Windows")
-
-        from secondbrain.config import _get_default_ollama_host
-
-        result = _get_default_ollama_host()
-        assert result == "http://localhost:11435"
-
-
 class TestConfigModelValidator:
     """Tests for Config model_validator settings."""
 

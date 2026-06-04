@@ -133,7 +133,7 @@ class TestValidateConnectionWithCircuitBreaker:
             async def _do_validate_async(self) -> bool:
                 return True
 
-            def validate_connection(self, force: bool = False) -> bool:
+            def validate_connection(self, force: bool = False) -> bool:  # noqa: F841
                 return True
 
         service = TestService()
@@ -164,7 +164,7 @@ class TestValidateConnectionWithCircuitBreaker:
             async def _do_validate_async(self) -> bool:
                 return True
 
-            def validate_connection(self, force: bool = False) -> bool:
+            def validate_connection(self, force: bool = False) -> bool:  # noqa: F841
                 return True
 
         service = TestService()
@@ -199,10 +199,10 @@ class TestAsyncValidationWithCircuitBreaker:
             async def _do_validate_async(self) -> bool:
                 return True
 
-            def validate_connection(self, force: bool = False) -> bool:
+            def validate_connection(self, force: bool = False) -> bool:  # noqa: F841
                 return True
 
-            async def validate_connection_async(self, force: bool = False) -> bool:
+            async def validate_connection_async(self, force: bool = False) -> bool:  # noqa: F841
                 return True
 
         service = TestService()
@@ -232,10 +232,10 @@ class TestAsyncValidationWithCircuitBreaker:
             async def _do_validate_async(self) -> bool:
                 return True
 
-            def validate_connection(self, force: bool = False) -> bool:
+            def validate_connection(self, force: bool = False) -> bool:  # noqa: F841
                 return True
 
-            async def validate_connection_async(self, force: bool = False) -> bool:
+            async def validate_connection_async(self, force: bool = False) -> bool:  # noqa: F841
                 return True
 
         service = TestService()

@@ -1,6 +1,5 @@
 """Tests for RAG interfaces to improve coverage."""
 
-from typing import Protocol
 
 import pytest
 

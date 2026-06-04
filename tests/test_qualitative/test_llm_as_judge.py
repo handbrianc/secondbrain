@@ -12,9 +12,7 @@ from secondbrain.config import Config
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 
-# Get test config for Ollama host
-_test_config = Config()
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", _test_config.ollama_host)
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", os.getenv("SECONDBRAIN_OLLAMA_HOST", "http://localhost:11434"))
 
 EVALUATION_MODEL = os.getenv("EVALUATION_MODEL", "llama3.2")
 MAX_RETRIES = 3

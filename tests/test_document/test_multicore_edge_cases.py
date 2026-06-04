@@ -8,7 +8,6 @@ Consolidated from:
 
 import inspect
 import multiprocessing
-import signal
 import time
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
