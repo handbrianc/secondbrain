@@ -87,7 +87,6 @@ httpcore==1.0.9
 httpx==0.28.1
     # via
     #   -r requirements.in
-    #   ollama
     #   openai
 huggingface-hub==0.36.2
     # via
@@ -159,8 +158,6 @@ numpy==2.4.3
     #   transformers
 ocrmac==1.0.1
     # via docling
-ollama==0.6.2
-    # via -r requirements.in
 omegaconf==2.3.0
     # via rapidocr
 openai==2.33.0
@@ -215,7 +212,6 @@ pydantic==2.12.5
     #   docling-core
     #   docling-ibm-models
     #   docling-parse
-    #   ollama
     #   openai
     #   pydantic-settings
 pydantic-core==2.41.5

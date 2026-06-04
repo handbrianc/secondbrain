@@ -1,7 +1,7 @@
-"""Mock LLM provider for testing when Ollama is unavailable.
+"""Mock LLM provider for testing.
 
-Provides MockLLMProvider class that implements the LocalLLMProvider protocol
-with deterministic, predictable responses for testing.
+Provides MockLLMProvider class for testing without a real LLM server.
+Useful for testing when LLM server is unavailable.
 """
 
 import asyncio

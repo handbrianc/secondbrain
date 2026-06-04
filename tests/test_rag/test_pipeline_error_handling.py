@@ -239,6 +239,121 @@ class TestRAGPipelineErrorHandling:
         # Should handle empty response (may return empty answer or error)
         assert "answer" in result
 
+    def test_chat_retries_on_empty_response(
+        self,
+        mock_searcher: MagicMock,
+        mock_config: dict[str, str],
+    ) -> None:
+        """Verify chat retries on empty LLM responses (up to 3 times)."""
+        from secondbrain.conversation import ConversationSession
+        from secondbrain.conversation.storage import ConversationStorage
+        
+        # Create a mock session
+        mock_storage = MagicMock(spec=ConversationStorage)
+        session = ConversationSession(
+            session_id="test-session",
+            storage=mock_storage,
+        )
+        
+        # Mock successful search
+        mock_searcher.search.return_value = [
+            {"chunk_text": "test context", "source_file": "test.pdf", "page": 1}
+        ]
+        
+        # Mock LLM provider that returns empty twice, then succeeds
+        mock_llm_provider = MagicMock(spec=LocalLLMProvider)
+        mock_llm_provider.generate.side_effect = ["", "", "Valid answer after retries"]
+        
+        pipeline = RAGPipeline(
+            searcher=mock_searcher,
+            llm_provider=mock_llm_provider,
+            top_k=5,
+        )
+        
+        result = pipeline.chat("Test query", session)
+        
+        # Should have retried and eventually succeeded
+        assert mock_llm_provider.generate.call_count == 3
+        assert "answer" in result
+        assert result["answer"] == "Valid answer after retries"
+        assert result.get("empty_response_retries") is None  # No retries needed in final result
+
+    def test_chat_returns_fallback_after_max_empty_retries(
+        self,
+        mock_searcher: MagicMock,
+        mock_config: dict[str, str],
+    ) -> None:
+        """Verify chat returns fallback response after max retries with empty responses."""
+        from secondbrain.conversation import ConversationSession
+        from secondbrain.conversation.storage import ConversationStorage
+        
+        # Create a mock session
+        mock_storage = MagicMock(spec=ConversationStorage)
+        session = ConversationSession(
+            session_id="test-session",
+            storage=mock_storage,
+        )
+        
+        # Mock successful search
+        mock_searcher.search.return_value = [
+            {"chunk_text": "test context", "source_file": "test.pdf", "page": 1}
+        ]
+        
+        # Mock LLM provider that always returns empty
+        mock_llm_provider = MagicMock(spec=LocalLLMProvider)
+        mock_llm_provider.generate.return_value = ""
+        
+        pipeline = RAGPipeline(
+            searcher=mock_searcher,
+            llm_provider=mock_llm_provider,
+            top_k=5,
+        )
+        
+        result = pipeline.chat("Test query", session)
+        
+        # Should have retried max times and returned fallback
+        assert mock_llm_provider.generate.call_count == 3
+        assert "answer" in result
+        assert "couldn't find relevant documents" in result["answer"].lower()
+        assert result.get("empty_response_retries") == 3
+
+    def test_chat_accepts_whitespace_only_as_empty(
+        self,
+        mock_searcher: MagicMock,
+        mock_config: dict[str, str],
+    ) -> None:
+        """Verify pipeline treats whitespace-only responses as empty and retries."""
+        from secondbrain.conversation import ConversationSession
+        from secondbrain.conversation.storage import ConversationStorage
+        
+        # Create a mock session
+        mock_storage = MagicMock(spec=ConversationStorage)
+        session = ConversationSession(
+            session_id="test-session",
+            storage=mock_storage,
+        )
+        
+        # Mock successful search
+        mock_searcher.search.return_value = [
+            {"chunk_text": "test context", "source_file": "test.pdf", "page": 1}
+        ]
+        
+        # Mock LLM provider that returns whitespace then valid
+        mock_llm_provider = MagicMock(spec=LocalLLMProvider)
+        mock_llm_provider.generate.side_effect = ["   ", "\n\t", "Valid answer"]
+        
+        pipeline = RAGPipeline(
+            searcher=mock_searcher,
+            llm_provider=mock_llm_provider,
+            top_k=5,
+        )
+        
+        result = pipeline.chat("Test query", session)
+        
+        # Should have retried 3 times (whitespace counts as empty)
+        assert mock_llm_provider.generate.call_count == 3
+        assert result["answer"] == "Valid answer"
+
     def test_chat_handles_session_failure(
         self,
         mock_searcher: MagicMock,

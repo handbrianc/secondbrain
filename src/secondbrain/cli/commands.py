@@ -438,7 +438,7 @@ def metrics(ctx: click.Context, reset: bool) -> None:
     is_flag=True,
     help="Create a new session with UUID (ignores --session if both specified)",
 )
-@click.option("--check-llm", is_flag=True, help="Check if Ollama is available")
+@click.option("--check-llm", is_flag=True, help="Check if LLM provider is available")
 @click.pass_context
 def chat(
     ctx: click.Context,
@@ -464,7 +464,6 @@ def chat(
     """
     from secondbrain.config import config
     from secondbrain.conversation import ConversationStorage
-    from secondbrain.rag.providers import OllamaLLMProvider
 
     cfg = config()
 
@@ -502,16 +501,14 @@ def chat(
         return
 
     if check_llm:
-        llm_provider = OllamaLLMProvider(host=cfg.ollama_host, model=cfg.llm_model)
+        from secondbrain.rag.providers.factory import LLMProviderFactory
+        
+        llm_provider = LLMProviderFactory.create_from_config(cfg)
         if llm_provider.health_check():
-            console.print(
-                f"[green]✓ Ollama is available[/green] (model: {llm_provider.model})"
-            )
+            console.print(f"[green]✓ {cfg.llm_provider.capitalize()} is available[/green]")
         else:
-            console.print(f"[red]✗ Ollama is not available at {cfg.ollama_host}[/red]")
-            console.print(
-                "[yellow]Start Ollama with: sentence-transformers serve[/yellow]"
-            )
+            console.print(f"[red]✗ {cfg.llm_provider.capitalize()} is not available[/red]")
+            console.print(f"[yellow]Check your {cfg.llm_provider.upper()} API configuration[/yellow]")
         return
 
     if history:
@@ -576,7 +573,7 @@ def _single_turn_chat(
     from secondbrain.config import config
     from secondbrain.conversation import ConversationSession, ConversationStorage
     from secondbrain.rag import RAGPipeline
-    from secondbrain.rag.providers import OllamaLLMProvider
+    from secondbrain.rag.providers.factory import LLMProviderFactory
     from secondbrain.search import Searcher
 
     cfg = config()
@@ -591,10 +588,14 @@ def _single_turn_chat(
                 session_obj = ConversationSession.create(session, storage)
 
     searcher = Searcher(verbose=False)
-    llm_model = model or cfg.llm_model
-    llm_provider = OllamaLLMProvider(
-        host=cfg.ollama_host, model=llm_model, temperature=temperature
-    )
+    
+    # Use factory to respect SECONDBRAIN_LLM_PROVIDER config
+    if model:
+        # Override model if specified via CLI
+        cfg.llm_model = model
+        cfg.llm_temperature = temperature
+    
+    llm_provider = LLMProviderFactory.create_from_config(cfg)
 
     pipeline = RAGPipeline(
         searcher=searcher,
@@ -603,24 +604,31 @@ def _single_turn_chat(
         context_window=cfg.rag_context_window,
     )
 
+    # Call pipeline (retry logic handled inside pipeline.chat())
     with console.status("[cyan]Thinking...", spinner="dots"):
         result = pipeline.chat(
             query, session_obj, top_k=top_k, show_sources=show_sources
         )
 
     console.print("\n[bold green]Answer:[/bold green]")
-    console.print(result["answer"])
 
-    # Show sources if requested
-    if show_sources and result.get("sources"):
-        console.print("\n[bold blue]Sources:[/bold blue]")
-        for i, chunk in enumerate(result["sources"], 1):
-            source_file = chunk.get("source_file", chunk.get("source", "unknown"))
-            page = chunk.get("page", chunk.get("page_number", "unknown"))
-            chunk_text = chunk.get("chunk_text", chunk.get("text", ""))
-            if len(chunk_text) > 200:
-                chunk_text = chunk_text[:200] + "..."
-            console.print(f"  [{i}] {source_file} (page {page}): {chunk_text}")
+    # Handle empty or error responses
+    answer = result.get("answer", "")
+    if not answer or not answer.strip():
+        console.print("[yellow]No response generated. Please try again.[/yellow]")
+        logger.warning("Empty response received from pipeline for query: %s", query[:50])
+    else:
+        console.print(answer)
+
+        if show_sources and result and result.get("sources"):
+            console.print("\n[bold blue]Sources:[/bold blue]")
+            for i, chunk in enumerate(result["sources"], 1):
+                source_file = chunk.get("source_file", chunk.get("source", "unknown"))
+                page = chunk.get("page", chunk.get("page_number", "unknown"))
+                chunk_text = chunk.get("chunk_text", chunk.get("text", ""))
+                if len(chunk_text) > 200:
+                    chunk_text = chunk_text[:200] + "..."
+                console.print(f"  [{i}] {source_file} (page {page}): {chunk_text}")
 
 
 def _interactive_chat(
@@ -634,7 +642,7 @@ def _interactive_chat(
     from secondbrain.config import config
     from secondbrain.conversation import ConversationSession, ConversationStorage
     from secondbrain.rag import RAGPipeline
-    from secondbrain.rag.providers import OllamaLLMProvider
+    from secondbrain.rag.providers.factory import LLMProviderFactory
     from secondbrain.search import Searcher
 
     cfg = config()
@@ -660,10 +668,14 @@ def _interactive_chat(
                 )
 
     searcher = Searcher(verbose=False)
-    llm_model = model or cfg.llm_model
-    llm_provider = OllamaLLMProvider(
-        host=cfg.ollama_host, model=llm_model, temperature=temperature
-    )
+    
+    # Use factory to respect SECONDBRAIN_LLM_PROVIDER config
+    if model:
+        # Override model if specified via CLI
+        cfg.llm_model = model
+        cfg.llm_temperature = temperature
+    
+    llm_provider = LLMProviderFactory.create_from_config(cfg)
 
     # Initialize RAG pipeline
     pipeline = RAGPipeline(
@@ -712,35 +724,42 @@ def _interactive_chat(
                     console.print(f"[yellow]Unknown command: {user_input}[/yellow]")
                     continue
 
+            # Call pipeline (retry logic handled inside pipeline.chat())
             with console.status("[cyan]Thinking...", spinner="dots"):
                 result = pipeline.chat(
                     user_input, session_obj, top_k=top_k, show_sources=show_sources
                 )
 
+            # Validate and display response
             console.print("\n[bold green]Assistant:[/bold green]")
-            console.print(result["answer"])
+            answer = result.get("answer", "")
+            if not answer or not answer.strip():
+                console.print("[yellow]No response generated. Please try again.[/yellow]")
+                logger.warning("Empty response received from pipeline for query: %s", user_input[:50])
+            else:
+                console.print(answer)
 
-            # Show sources if requested
-            if show_sources and result.get("sources"):
-                console.print("\n[bold blue]Sources:[/bold blue]")
-                for i, chunk in enumerate(result["sources"], 1):
-                    source_file = chunk.get(
-                        "source_file", chunk.get("source", "unknown")
-                    )
-                    page = chunk.get("page", chunk.get("page_number", "unknown"))
-                    chunk_text = chunk.get("chunk_text", chunk.get("text", ""))
-                    if len(chunk_text) > 200:
-                        chunk_text = chunk_text[:200] + "..."
-                    console.print(f"  [{i}] {source_file} (page {page}): {chunk_text}")
+                # Show sources if requested
+                if show_sources and result.get("sources"):
+                    console.print("\n[bold blue]Sources:[/bold blue]")
+                    for i, chunk in enumerate(result["sources"], 1):
+                        source_file = chunk.get(
+                            "source_file", chunk.get("source", "unknown")
+                        )
+                        page = chunk.get("page", chunk.get("page_number", "unknown"))
+                        chunk_text = chunk.get("chunk_text", chunk.get("text", ""))
+                        if len(chunk_text) > 200:
+                            chunk_text = chunk_text[:200] + "..."
+                        console.print(f"  [{i}] {source_file} (page {page}): {chunk_text}")
 
-            # Save to history
-            chat_history.append(user_input)
-            try:
-                with history_file.open("a") as f:
-                    f.write(user_input + "\n")
-                readline.write_history_file(history_file)
-            except Exception:
-                pass
+                # Save to history
+                chat_history.append(user_input)
+                try:
+                    with history_file.open("a") as f:
+                        f.write(user_input + "\n")
+                    readline.write_history_file(history_file)
+                except Exception:
+                    pass
 
         except Exception as e:
             console.print(f"[red]Error: {e}[/red]")

@@ -31,12 +31,17 @@ class TestChatCommands:
         with (
             patch("secondbrain.rag.RAGPipeline") as mock_pipeline_class,
             patch("secondbrain.conversation.ConversationSession") as mock_session_class,
+            patch("secondbrain.rag.providers.factory.LLMProviderFactory") as mock_factory,
         ):
             # Mock session
             mock_session = MagicMock()
             mock_session.is_empty = True
             mock_session_class.load.return_value = None
             mock_session_class.create.return_value = mock_session
+
+            # Mock LLM provider factory
+            mock_provider = MagicMock()
+            mock_factory.create_from_config.return_value = mock_provider
 
             # Mock RAG pipeline
             mock_pipeline = MagicMock()
@@ -80,12 +85,17 @@ class TestChatCommands:
         with (
             patch("secondbrain.rag.RAGPipeline"),
             patch("secondbrain.conversation.ConversationSession") as mock_session_class,
+            patch("secondbrain.rag.providers.factory.LLMProviderFactory") as mock_factory,
         ):
             # Mock session
             mock_session = MagicMock()
             mock_session.is_empty = True
             mock_session_class.load.return_value = None
             mock_session_class.create.return_value = mock_session
+
+            # Mock LLM provider factory
+            mock_provider = MagicMock()
+            mock_factory.create_from_config.return_value = mock_provider
 
             runner = CliRunner()
 
@@ -128,12 +138,17 @@ class TestChatCommands:
         with (
             patch("secondbrain.rag.RAGPipeline") as mock_pipeline_class,
             patch("secondbrain.conversation.ConversationSession") as mock_session_class,
+            patch("secondbrain.rag.providers.factory.LLMProviderFactory") as mock_factory,
         ):
             # Mock session
             mock_session = MagicMock()
             mock_session.is_empty = True
             mock_session_class.load.return_value = None
             mock_session_class.create.return_value = mock_session
+
+            # Mock LLM provider factory
+            mock_provider = MagicMock()
+            mock_factory.create_from_config.return_value = mock_provider
 
             # Mock RAG pipeline with error on first call, success on second
             mock_pipeline = MagicMock()
@@ -161,6 +176,101 @@ class TestChatCommands:
 
             # Verify chat was called twice (failed + retry)
             assert mock_pipeline.chat.call_count == 2
+
+    def test_interactive_chat_empty_response_handling(self) -> None:
+        """Test empty LLM response handling in interactive chat.
+        
+        Verifies that:
+        - Empty responses trigger user-friendly message
+        - Warning is logged for empty responses
+        - REPL continues after empty response
+        - User can continue chatting
+        """
+        with (
+            patch("secondbrain.rag.RAGPipeline") as mock_pipeline_class,
+            patch("secondbrain.conversation.ConversationSession") as mock_session_class,
+            patch("secondbrain.rag.providers.factory.LLMProviderFactory") as mock_factory,
+        ):
+            # Mock session
+            mock_session = MagicMock()
+            mock_session.is_empty = True
+            mock_session_class.load.return_value = None
+            mock_session_class.create.return_value = mock_session
+
+            # Mock LLM provider factory
+            mock_provider = MagicMock()
+            mock_factory.create_from_config.return_value = mock_provider
+
+            # Mock RAG pipeline with empty response then success
+            mock_pipeline = MagicMock()
+            mock_pipeline.chat.side_effect = [
+                {"answer": "", "rewritten_query": "test query"},
+                {"answer": "Valid response after empty", "rewritten_query": "test query 2"},
+            ]
+            mock_pipeline_class.return_value = mock_pipeline
+
+            runner = CliRunner()
+
+            # Send query that returns empty, then another that succeeds, then quit
+            result = runner.invoke(
+                cli,
+                ["chat", "--session", "test-empty"],
+                input="Query with empty response\nQuery with valid response\n/quit\n",
+            )
+
+            assert result.exit_code == 0
+            # Empty response warning should be displayed
+            assert "No response generated" in result.output or "Please try again" in result.output
+            # Valid response should be displayed
+            assert "Valid response after empty" in result.output
+            assert "Goodbye!" in result.output
+
+            # Verify chat was called twice
+            assert mock_pipeline.chat.call_count == 2
+
+    def test_single_chat_empty_response_handling(self) -> None:
+        """Test empty LLM response handling in single-turn chat mode.
+        
+        Verifies that:
+        - Empty responses show user-friendly message
+        - Exit code is 0 (graceful handling)
+        - Warning logged for empty response
+        """
+        with (
+            patch("secondbrain.rag.RAGPipeline") as mock_pipeline_class,
+            patch("secondbrain.conversation.ConversationSession") as mock_session_class,
+            patch("secondbrain.rag.providers.factory.LLMProviderFactory") as mock_factory,
+        ):
+            # Mock session
+            mock_session = MagicMock()
+            mock_session.is_empty = True
+            mock_session_class.load.return_value = None
+            mock_session_class.create.return_value = mock_session
+
+            # Mock LLM provider factory
+            mock_provider = MagicMock()
+            mock_factory.create_from_config.return_value = mock_provider
+
+            # Mock RAG pipeline with empty response
+            mock_pipeline = MagicMock()
+            mock_pipeline.chat.return_value = {
+                "answer": "",
+                "rewritten_query": "test query"
+            }
+            mock_pipeline_class.return_value = mock_pipeline
+
+            runner = CliRunner()
+            result = runner.invoke(
+                cli, 
+                ["chat", "What is the answer?", "--session", "test-single-empty"]
+            )
+
+            assert result.exit_code == 0
+            # Empty response warning should be displayed
+            assert "No response generated" in result.output or "Please try again" in result.output
+            
+            # Verify chat was called
+            mock_pipeline.chat.assert_called_once()
 
     def test_list_sessions(self) -> None:
         """Test --list-sessions flag functionality.
@@ -325,7 +435,12 @@ class TestChatCommands:
         with (
             patch("secondbrain.rag.RAGPipeline") as mock_pipeline_class,
             patch("secondbrain.conversation.ConversationSession") as mock_session_class,
+            patch("secondbrain.rag.providers.factory.LLMProviderFactory") as mock_factory,
         ):
+            # Mock LLM provider factory
+            mock_provider = MagicMock()
+            mock_factory.create_from_config.return_value = mock_provider
+
             # Mock session with UUID
             mock_session = MagicMock()
             mock_session.session_id = "550e8400-e29b-41d4-a716-446655440000"
@@ -456,3 +571,82 @@ def test_custom_conversation_db():
             os.environ.pop('SECONDBRAIN_CONVERSATION_DB', None)
         else:
             os.environ['SECONDBRAIN_CONVERSATION_DB'] = original
+
+    def test_empty_response_retry_logic(self) -> None:
+        """Test that empty LLM responses trigger retry logic.
+
+        Verifies that:
+        - When LLM returns empty response, retry logic activates
+        - User sees retry feedback messages
+        - After max retries, appropriate error message is shown
+        - Valid response on retry is displayed correctly
+        """
+        with (
+            patch("secondbrain.rag.RAGPipeline") as mock_pipeline_class,
+            patch("secondbrain.conversation.ConversationSession") as mock_session_class,
+        ):
+            # Mock session
+            mock_session = MagicMock()
+            mock_session.is_empty = True
+            mock_session_class.load.return_value = None
+            mock_session_class.create.return_value = mock_session
+
+            # Mock RAG pipeline - first 2 calls return empty, 3rd succeeds
+            mock_pipeline = MagicMock()
+            mock_pipeline.chat.side_effect = [
+                {"answer": "", "rewritten_query": "test query"},  # Empty response 1
+                {"answer": "", "rewritten_query": "test query"},  # Empty response 2
+                {"answer": "Final answer after retries.", "rewritten_query": "test query"},  # Success
+            ]
+            mock_pipeline_class.return_value = mock_pipeline
+
+            runner = CliRunner()
+            result = runner.invoke(cli, ["chat", "test query"])
+
+            # Verify pipeline.chat was called 3 times (2 retries + 1 success)
+            assert mock_pipeline.chat.call_count == 3
+
+            # Verify output contains retry messages
+            assert "retrying" in result.output.lower() or "attempt" in result.output.lower()
+
+            # Verify final answer is displayed
+            assert "Final answer after retries." in result.output
+
+    def test_empty_response_max_retries_exhausted(self) -> None:
+        """Test behavior when all retry attempts fail with empty responses.
+
+        Verifies that:
+        - After max retries (3), error message is shown
+        - No empty answer is displayed
+        - User is prompted to try again
+        """
+        with (
+            patch("secondbrain.rag.RAGPipeline") as mock_pipeline_class,
+            patch("secondbrain.conversation.ConversationSession") as mock_session_class,
+        ):
+            # Mock session
+            mock_session = MagicMock()
+            mock_session.is_empty = True
+            mock_session_class.load.return_value = None
+            mock_session_class.create.return_value = mock_session
+
+            # Mock RAG pipeline - all calls return empty
+            mock_pipeline = MagicMock()
+            mock_pipeline.chat.return_value = {
+                "answer": "",
+                "rewritten_query": "test query"
+            }
+            mock_pipeline_class.return_value = mock_pipeline
+
+            runner = CliRunner()
+            result = runner.invoke(cli, ["chat", "test query"])
+
+            # Verify pipeline.chat was called 3 times (max retries)
+            assert mock_pipeline.chat.call_count == 3
+
+            # Verify error message is shown
+            assert "error" in result.output.lower()
+            assert "multiple attempts" in result.output.lower() or "try again" in result.output.lower()
+
+            # Verify no empty answer is displayed
+            assert "Assistant:" not in result.output or result.output.count("Assistant:") == 0

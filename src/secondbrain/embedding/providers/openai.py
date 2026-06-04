@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from typing import Any
 
 import httpx
 from openai import APIError, AsyncOpenAI, OpenAI
@@ -63,18 +64,16 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         # Get API key from parameter or environment (truly optional for OpenAI-compatible APIs)
         self._api_key = api_key or os.getenv("SECONDBRAIN_EMBEDDING_API_KEY")
 
-        # Initialize clients - api_key is optional for OpenAI-compatible endpoints
-        # If no API key provided, use a placeholder (custom endpoints may ignore it)
-        client_kwargs: dict[str, str | httpx.Timeout] = {
+        client_kwargs: dict[str, Any] = {
             "timeout": httpx.Timeout(timeout),
         }
         if self._api_key:
             client_kwargs["api_key"] = self._api_key
         else:
-            # Use placeholder for endpoints that don't require authentication
             client_kwargs["api_key"] = "no-api-key-provided"
         if api_base:
             client_kwargs["base_url"] = api_base
+            client_kwargs["default_query"] = {"drop_params": "true"}
 
         self._client = OpenAI(**client_kwargs)  # type: ignore[arg-type]
         self._async_client = AsyncOpenAI(**client_kwargs)  # type: ignore[arg-type]
@@ -97,7 +96,9 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
                 "input": text,
                 "model": self._model,
             }
-            if self._dimensions:
+            # Only pass dimensions for models that support it (text-embedding-3-* series)
+            # Custom models via LiteLLM may not support this parameter
+            if self._dimensions and self._model.startswith("text-embedding-3-"):
                 kwargs["dimensions"] = self._dimensions
 
             response = self._client.embeddings.create(**kwargs)  # type: ignore[arg-type]
@@ -147,7 +148,9 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
                 "input": valid_texts,
                 "model": self._model,
             }
-            if self._dimensions:
+            # Only pass dimensions for models that support it (text-embedding-3-* series)
+            # Custom models via LiteLLM may not support this parameter
+            if self._dimensions and self._model.startswith("text-embedding-3-"):
                 kwargs["dimensions"] = self._dimensions
 
             response = self._client.embeddings.create(**kwargs)  # type: ignore[arg-type]
