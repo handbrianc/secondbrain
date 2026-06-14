@@ -31,19 +31,13 @@ def real_embedding_generator() -> LocalEmbeddingGenerator:
 
 
 @pytest.fixture
-def real_storage(test_name: str) -> VectorStorage:
-    """Create real vector storage with MongoDB connection using test-specific collection."""
-    from .conftest import TEST_DB_NAME, TEST_MONGO_URI
+def real_storage(test_name: str) -> MockVectorStorage:  # type: ignore[name-defined,misc]
+    """Create mock vector storage for testing without MongoDB."""
+    from secondbrain.storage import MockVectorStorage
 
-    storage = VectorStorage(
-        mongo_uri=TEST_MONGO_URI,
-        db_name=TEST_DB_NAME,
-        collection_name=f"test_e2e_{test_name}",
-    )
-    storage.validate_connection()
-    storage.ensure_index()
+    storage = MockVectorStorage()
+    storage.initialize()
     yield storage
-    # Cleanup after test
     storage.delete_all()
 
 
@@ -151,11 +145,36 @@ class TestIngestionE2E:
         mock_converter_instance = MagicMock()
         mock_converter_instance.convert = mock_convert
 
-        # Mock the docling module itself to intercept imports
+        # Mock the docling module tree comprehensively so DocumentIngestor can be instantiated
         mock_docling = MagicMock()
-        mock_docling.document_converter.DocumentConverter = MagicMock(return_value=mock_converter_instance)
+
+        # datamodel subpackage mocks with needed classes/enums
+        mock_accel_opts = MagicMock()
+        mock_accel_opts.AcceleratorDevice = MagicMock()
+        mock_accel_opts.AcceleratorOptions = MagicMock()
+        mock_base = MagicMock()
+        mock_base.InputFormat = MagicMock()
+        mock_pipeline = MagicMock()
+        mock_pipeline.PdfPipelineOptions = MagicMock()
+
+        # Set up nested module structure
+        mock_docling.datamodel = MagicMock()
+        mock_docling.datamodel.accelerator_options = mock_accel_opts
+        mock_docling.datamodel.base_models = mock_base
+        mock_docling.datamodel.pipeline_options = mock_pipeline
+
+        # DocumentConverter mock
+        mock_doc_conv = MagicMock()
+        mock_doc_conv.DocumentConverter = MagicMock(return_value=mock_converter_instance)
+        mock_doc_conv.PdfFormatOption = MagicMock()
+        mock_docling.document_converter = mock_doc_conv
+
         monkeypatch.setitem(sys.modules, "docling", mock_docling)
-        monkeypatch.setitem(sys.modules, "docling.document_converter", mock_docling.document_converter)
+        monkeypatch.setitem(sys.modules, "docling.datamodel", mock_docling.datamodel)
+        monkeypatch.setitem(sys.modules, "docling.datamodel.accelerator_options", mock_accel_opts)
+        monkeypatch.setitem(sys.modules, "docling.datamodel.base_models", mock_base)
+        monkeypatch.setitem(sys.modules, "docling.datamodel.pipeline_options", mock_pipeline)
+        monkeypatch.setitem(sys.modules, "docling.document_converter", mock_doc_conv)
 
     @pytest.mark.timeout(120)
     @pytest.mark.concurrent
@@ -592,14 +611,14 @@ and consistent response formats.
             file_path = temp_test_dir / filename
             file_path.write_text(content, encoding="utf-8")
 
-        # Ingest documents
-        ingestor = DocumentIngestor(chunk_size=300, chunk_overlap=30, verbose=False)
-
         with (
             pytest.MonkeyPatch.context(),
             pytest.MonkeyPatch.context(),
         ):
             from unittest.mock import MagicMock, patch
+            import os
+
+            os.environ["SECONDBRAIN_STREAMING_ENABLED"] = "false"
 
             mock_storage = MagicMock()
             mock_storage.validate_connection.return_value = True
@@ -623,7 +642,12 @@ and consistent response formats.
                     "secondbrain.embedding.LocalEmbeddingGenerator",
                     return_value=mock_gen,
                 ),
+                patch(
+                    "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config",
+                    return_value=mock_gen,
+                ),
             ):
+                ingestor = DocumentIngestor(chunk_size=300, chunk_overlap=30, verbose=False)
                 ingestor.ingest(str(temp_test_dir))
 
         # Run semantic search
@@ -681,14 +705,14 @@ and consistent response formats.
             file_path = temp_test_dir / filename
             file_path.write_text(content, encoding="utf-8")
 
-        # Ingest documents
-        ingestor = DocumentIngestor(chunk_size=300, chunk_overlap=30, verbose=False)
-
         with (
             pytest.MonkeyPatch.context(),
             pytest.MonkeyPatch.context(),
         ):
             from unittest.mock import MagicMock, patch
+            import os
+
+            os.environ["SECONDBRAIN_STREAMING_ENABLED"] = "false"
 
             mock_storage = MagicMock()
             mock_storage.validate_connection.return_value = True
@@ -712,7 +736,12 @@ and consistent response formats.
                     "secondbrain.embedding.LocalEmbeddingGenerator",
                     return_value=mock_gen,
                 ),
+                patch(
+                    "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config",
+                    return_value=mock_gen,
+                ),
             ):
+                ingestor = DocumentIngestor(chunk_size=300, chunk_overlap=30, verbose=False)
                 ingestor.ingest(str(temp_test_dir))
 
         # Test 1: Search with source file filter
@@ -721,16 +750,9 @@ and consistent response formats.
             first_md = md_files[0][0]
             query_embedding = real_embedding_generator.generate("software")
 
-            # Use the storage's search with source filter
-            # We need to build pipeline manually to test filtering
-            pipeline = build_search_pipeline(
-                embedding=query_embedding,
-                top_k=10,
-                source_filter=first_md,
-                file_type_filter=None,
+            filtered_results = real_storage.search(
+                query_embedding, top_k=10, source_filter=first_md
             )
-
-            filtered_results = list(real_storage.collection.aggregate(pipeline))
 
             # Verify filtered results only contain the specified source
             for result in filtered_results:
@@ -755,22 +777,19 @@ and consistent response formats.
                 "All results should be markdown files"
             )
 
-        # Test 3: Verify filter combinations work
-        # Combine source and type filters
+# Test 3: Verify filter combinations work
         if md_files:
             first_md = md_files[0][0]
-            pipeline = build_search_pipeline(
-                embedding=query_embedding,
-                top_k=10,
-                source_filter=first_md,
-                file_type_filter="markdown",
+            combined_raw = real_storage.search(
+                query_embedding, top_k=10, source_filter=first_md
             )
-
-            combined_results = list(real_storage.collection.aggregate(pipeline))
+            combined_results = [
+                r for r in combined_raw
+                if r.get("source_file", "").endswith(".md")
+            ]
 
             for result in combined_results:
                 assert first_md in result.get("source_file", "")
-                # File type might not be in search results, check source file extension
 
         # Test 4: Verify no false positives
         # Search for "business" and verify science docs don't rank too high

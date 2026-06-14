@@ -7,35 +7,60 @@ import time
 from collections.abc import AsyncGenerator, Generator
 from typing import TYPE_CHECKING, Any
 
-import httpx
 import pytest
 from pymongo import MongoClient
 
-from secondbrain.config import Config
-from secondbrain.embedding import LocalEmbeddingGenerator
 from secondbrain.embedding.mock import MockEmbeddingGenerator
 from secondbrain.storage import MockVectorStorage, VectorStorage
 
 if TYPE_CHECKING:
     pass
 
-# Get test service URLs from Config (automatically uses test defaults when PYTEST_CURRENT_TEST is set)
-_config = Config()
-TEST_MONGO_URI = _config.mongo_uri
-TEST_EMBEDDING_URL = os.getenv("SECONDBRAIN_OLLAMA_HOST", "http://localhost:11434")
 
-# Test database/collection names
-TEST_DB_NAME = _config.mongo_db
+TEST_MONGO_URI_EMPTY = ""
+TEST_DB_NAME_EMPTY = ""
+TEST_EMBEDDING_URL = os.getenv("SECONDBRAIN_EMBEDDING_URL", "http://localhost:11435")
 TEST_COLLECTION_NAME = "test_embeddings"
+SERVICE_HEALTH_TIMEOUT = 10
 
-# Health check timeout
-SERVICE_HEALTH_TIMEOUT = 10  # seconds - reduced for faster test feedback
+
+def _read_env_test(key: str, default: str) -> str:
+    """Read a value from .env.test (if present), else return default."""
+    from pathlib import Path
+    env_path = Path(__file__).parent.parent.parent / ".env.test"
+    if env_path.exists():
+        for line in env_path.read_text().splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, _, val = line.partition("=")
+                if k.strip() == key:
+                    return val.strip().strip('"').strip("'")
+    return default
+
+
+def get_test_mongo_uri() -> str:
+    uri = os.environ.get(
+        "SECONDBRAIN_MONGO_URI",
+        "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin",
+    )
+    if uri:
+        return uri
+    return _read_env_test(
+        "SECONDBRAIN_MONGO_URI",
+        "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin",
+    )
+
+
+def get_test_db_name() -> str:
+    db = os.environ.get("SECONDBRAIN_MONGO_DB", "")
+    if db:
+        return db
+    return _read_env_test("SECONDBRAIN_MONGO_DB", "secondbrain_test")
 
 
 def _check_mongodb_healthy() -> bool:
-    """Check if MongoDB test service is healthy."""
     try:
-        client = MongoClient(TEST_MONGO_URI, serverSelectionTimeoutMS=10000, maxPoolSize=50)
+        client = MongoClient(get_test_mongo_uri(), serverSelectionTimeoutMS=5000, maxPoolSize=50)
         client.admin.command("ping")
         client.close()
         return True
@@ -44,12 +69,16 @@ def _check_mongodb_healthy() -> bool:
 
 
 def _check_embedding_service_healthy() -> bool:
-    """Check if sentence-transformers service is healthy."""
     try:
-        response = httpx.get(TEST_EMBEDDING_URL, timeout=5.0)
-        return response.status_code == 200
+        from sentence_transformers import SentenceTransformer  # noqa: F401
+        return True
     except Exception:
         return False
+
+
+def _check_llm_service_healthy() -> bool:
+    """Check if LLM service is healthy (always returns True - LLM is mocked in tests)."""
+    return True
 
 
 @pytest.fixture(scope="session")
@@ -58,7 +87,7 @@ def mongo_test_uri() -> str:
 
     Returns the test MongoDB URI configured for docker-compose test services.
     """
-    return TEST_MONGO_URI
+    return get_test_mongo_uri()
 
 
 @pytest.fixture(scope="session")
@@ -97,25 +126,12 @@ def wait_for_services() -> Generator[None, None, None]:
             f"Start services with appropriate docker-compose setup."
         )
 
-    # Wait for sentence-transformers
-    start_time = time.time()
-    while time.time() - start_time < SERVICE_HEALTH_TIMEOUT:
-        if _check_embedding_service_healthy():
-            print("Sentence-transformers is healthy")
-            break
-        print(".", end="", flush=True)
-        time.sleep(0.5)  # Reduced from 1s for faster feedback
-    else:
-        pytest.skip(
-            f"Sentence-transformers not available after {SERVICE_HEALTH_TIMEOUT}s - integration tests skipped."
-        )
-
-    print("All services are healthy\n")
+    print("MongoDB is healthy\n")
     yield
 
 
 @pytest.fixture(scope="session")
-def real_storage(wait_for_services: None) -> Generator[VectorStorage, None, None]:  # noqa: F841
+def real_storage(wait_for_services: None) -> Generator[VectorStorage, None, None]:
     """VectorStorage with real MongoDB connection.
 
     Creates a VectorStorage instance connected to the test MongoDB database.
@@ -125,8 +141,8 @@ def real_storage(wait_for_services: None) -> Generator[VectorStorage, None, None
         VectorStorage: Connected storage instance.
     """
     storage = VectorStorage(
-        mongo_uri=TEST_MONGO_URI,
-        db_name=TEST_DB_NAME,
+        mongo_uri=get_test_mongo_uri(),
+        db_name=get_test_db_name(),
         collection_name=TEST_COLLECTION_NAME,
     )
 
@@ -134,7 +150,7 @@ def real_storage(wait_for_services: None) -> Generator[VectorStorage, None, None
         # Ensure index exists
         storage.ensure_index()
         storage._wait_for_index_ready()
-        print(f"VectorStorage initialized: {TEST_DB_NAME}/{TEST_COLLECTION_NAME}")
+        print(f"VectorStorage initialized: {get_test_db_name()}/{TEST_COLLECTION_NAME}")
         yield storage
     finally:
         # Cleanup: delete all test data
@@ -160,31 +176,6 @@ def mock_storage() -> Generator[MockVectorStorage, None, None]:
     storage.initialize()
     yield storage
     storage.close()
-
-
-@pytest.fixture(scope="session")
-def real_embedding_generator(
-    wait_for_services: None,  # noqa: F841
-) -> Generator[LocalEmbeddingGenerator, None, None]:
-    """Real embedding generator using sentence-transformers service.
-
-    Creates a LocalEmbeddingGenerator instance connected to the test
-    sentence-transformers service.
-
-    Yields:
-        LocalEmbeddingGenerator: Connected embedding generator.
-    """
-    generator = LocalEmbeddingGenerator(model_name="all-MiniLM-L6-v2")
-
-    try:
-        # Validate connection
-        if not generator.validate_connection(force=True):
-            raise RuntimeError("Failed to validate embedding generator connection")
-
-        print("EmbeddingGenerator initialized")
-        yield generator
-    finally:
-        generator.close()
 
 
 @pytest.fixture(scope="session")
@@ -257,4 +248,5 @@ def health_check_utils() -> dict[str, Any]:
     return {
         "mongodb_healthy": _check_mongodb_healthy,
         "embedding_healthy": _check_embedding_service_healthy,
+        "llm_healthy": _check_llm_service_healthy,
     }

@@ -200,13 +200,23 @@ class TestFinalCoverage:
             assert result.exit_code == 0
 
     @patch("secondbrain.conversation.ConversationStorage")
-    def test_chat_command_show_sources(self, mock_storage: MagicMock) -> None:
+    @patch("secondbrain.search.Searcher")
+    @patch("secondbrain.rag.providers.factory.LLMProviderFactory.create_from_config")
+    def test_chat_command_show_sources(self, mock_llm_factory, mock_searcher, mock_storage: MagicMock) -> None:
         """Test chat command with show-sources flag (lines 570-577)."""
         mock_storage_instance = MagicMock()
         mock_storage_instance.__enter__ = MagicMock(return_value=mock_storage_instance)
         mock_storage_instance.__exit__ = MagicMock(return_value=False)
         mock_storage_instance.load.return_value = None
         mock_storage.return_value = mock_storage_instance
+
+        mock_searcher_instance = MagicMock()
+        mock_searcher_instance.search.return_value = []
+        mock_searcher.return_value = mock_searcher_instance
+
+        mock_llm_provider = MagicMock()
+        mock_llm_provider.generate.return_value = "Test response"
+        mock_llm_factory.return_value = mock_llm_provider
 
         runner = CliRunner()
         result = runner.invoke(
@@ -223,7 +233,9 @@ class TestFinalCoverage:
         assert result.exit_code == 0
 
     @patch("secondbrain.conversation.ConversationStorage")
-    def test_chat_interactive_resume_session(self, mock_storage: MagicMock) -> None:
+    @patch("secondbrain.search.Searcher")
+    @patch("secondbrain.rag.providers.factory.LLMProviderFactory.create_from_config")
+    def test_chat_interactive_resume_session(self, mock_llm_factory, mock_searcher, mock_storage: MagicMock) -> None:
         """Test interactive chat resuming non-empty session (lines 607-608)."""
         mock_session = MagicMock()
         mock_session.is_empty = False
@@ -236,6 +248,12 @@ class TestFinalCoverage:
         mock_storage_instance.load.return_value = mock_session
         mock_storage.return_value = mock_storage_instance
 
+        mock_searcher_instance = MagicMock()
+        mock_searcher.return_value = mock_searcher_instance
+
+        mock_llm_provider = MagicMock()
+        mock_llm_factory.return_value = mock_llm_provider
+
         runner = CliRunner()
         result = runner.invoke(
             cli, ["chat", "--session", "test-session"], input="\n/quit\n"
@@ -243,7 +261,9 @@ class TestFinalCoverage:
         assert result.exit_code == 0
 
     @patch("secondbrain.conversation.ConversationStorage")
-    def test_chat_interactive_empty_input(self, mock_storage: MagicMock) -> None:
+    @patch("secondbrain.search.Searcher")
+    @patch("secondbrain.rag.providers.factory.LLMProviderFactory.create_from_config")
+    def test_chat_interactive_empty_input(self, mock_llm_factory, mock_searcher, mock_storage: MagicMock) -> None:
         """Test interactive chat with empty input (line 632)."""
         mock_session = MagicMock()
         mock_session.is_empty = True
@@ -256,12 +276,20 @@ class TestFinalCoverage:
         mock_storage_instance.create.return_value = mock_session
         mock_storage.return_value = mock_storage_instance
 
+        mock_searcher_instance = MagicMock()
+        mock_searcher.return_value = mock_searcher_instance
+
+        mock_llm_provider = MagicMock()
+        mock_llm_factory.return_value = mock_llm_provider
+
         runner = CliRunner()
         result = runner.invoke(cli, ["chat", "--session", "test"], input="\n/quit\n")
         assert result.exit_code == 0
 
     @patch("secondbrain.conversation.ConversationStorage")
-    def test_chat_interactive_unknown_command(self, mock_storage: MagicMock) -> None:
+    @patch("secondbrain.search.Searcher")
+    @patch("secondbrain.rag.providers.factory.LLMProviderFactory.create_from_config")
+    def test_chat_interactive_unknown_command(self, mock_llm_factory, mock_searcher, mock_storage: MagicMock) -> None:
         """Test interactive chat with unknown command (lines 651-652)."""
         mock_session = MagicMock()
         mock_session.is_empty = True
@@ -274,6 +302,12 @@ class TestFinalCoverage:
         mock_storage_instance.create.return_value = mock_session
         mock_storage.return_value = mock_storage_instance
 
+        mock_searcher_instance = MagicMock()
+        mock_searcher.return_value = mock_searcher_instance
+
+        mock_llm_provider = MagicMock()
+        mock_llm_factory.return_value = mock_llm_provider
+
         runner = CliRunner()
         result = runner.invoke(
             cli, ["chat", "--session", "test"], input="/unknown\n/quit\n"
@@ -281,7 +315,9 @@ class TestFinalCoverage:
         assert result.exit_code == 0
 
     @patch("secondbrain.conversation.ConversationStorage")
-    def test_chat_interactive_keyboard_interrupt(self, mock_storage: MagicMock) -> None:
+    @patch("secondbrain.search.Searcher")
+    @patch("secondbrain.rag.providers.factory.LLMProviderFactory.create_from_config")
+    def test_chat_interactive_keyboard_interrupt(self, mock_llm_factory, mock_searcher, mock_storage: MagicMock) -> None:
         """Test interactive chat with KeyboardInterrupt (lines 677-679)."""
         mock_session = MagicMock()
         mock_session.is_empty = True
@@ -294,12 +330,20 @@ class TestFinalCoverage:
         mock_storage_instance.create.return_value = mock_session
         mock_storage.return_value = mock_storage_instance
 
+        mock_searcher_instance = MagicMock()
+        mock_searcher.return_value = mock_searcher_instance
+
+        mock_llm_provider = MagicMock()
+        mock_llm_factory.return_value = mock_llm_provider
+
         runner = CliRunner()
         result = runner.invoke(cli, ["chat", "--session", "test"], input="/quit\n")
         assert result.exit_code == 0
 
     @patch("secondbrain.conversation.ConversationStorage")
-    def test_chat_interactive_eof_error(self, mock_storage: MagicMock) -> None:
+    @patch("secondbrain.search.Searcher")
+    @patch("secondbrain.rag.providers.factory.LLMProviderFactory.create_from_config")
+    def test_chat_interactive_eof_error(self, mock_llm_factory, mock_searcher, mock_storage: MagicMock) -> None:
         """Test interactive chat with EOFError (lines 681-682)."""
         mock_session = MagicMock()
         mock_session.is_empty = True
@@ -311,6 +355,12 @@ class TestFinalCoverage:
         mock_storage_instance.load.return_value = None
         mock_storage_instance.create.return_value = mock_session
         mock_storage.return_value = mock_storage_instance
+
+        mock_searcher_instance = MagicMock()
+        mock_searcher.return_value = mock_searcher_instance
+
+        mock_llm_provider = MagicMock()
+        mock_llm_factory.return_value = mock_llm_provider
 
         runner = CliRunner()
         result = runner.invoke(cli, ["chat", "--session", "test"], input="")

@@ -37,7 +37,7 @@ def test_config_default_values() -> None:
 
 def test_config_from_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test configuration from environment variables."""
-    monkeypatch.setenv("SECONDBRAIN_MONGO_URI", "mongodb://localhost:27017")
+    monkeypatch.setenv("SECONDBRAIN_MONGO_URI", "mongodb://localhost:27019")
     monkeypatch.setenv("SECONDBRAIN_MONGO_DB", "custom_db")
     monkeypatch.setenv("SECONDBRAIN_MONGO_COLLECTION", "custom_collection")
     monkeypatch.setenv("SECONDBRAIN_LOCAL_EMBEDDING_MODEL", "custom-model:latest")
@@ -48,7 +48,7 @@ def test_config_from_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     # Clear cache to pick up new env vars
     get_config.cache_clear()
     config = Config()
-    assert config.mongo_uri == "mongodb://localhost:27017"
+    assert config.mongo_uri == "mongodb://localhost:27019"
     assert config.mongo_db == "custom_db"
     assert config.mongo_collection == "custom_collection"
     assert config.local_embedding_model == "custom-model:latest"

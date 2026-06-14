@@ -197,6 +197,7 @@ class TestVectorStorage:
                 patch.object(storage, "validate_connection", return_value=False),
                 pytest.raises(StorageConnectionError),
             ):
+                storage.invalidate_connection_cache()
                 storage.store(
                     {
                         "chunk_id": "test-chunk",
@@ -359,10 +360,7 @@ class TestVectorStorage:
 
             storage = VectorStorage()
 
-            mock_cursor = MagicMock()
-            mock_cursor.skip.return_value = mock_cursor
-            mock_cursor.limit.return_value = mock_cursor
-            mock_cursor.__iter__.return_value = [
+            mock_chunks = [
                 {
                     "chunk_id": "chunk1",
                     "source_file": "test.pdf",
@@ -377,6 +375,10 @@ class TestVectorStorage:
                 },
             ]
 
+            mock_cursor = MagicMock()
+            mock_cursor.skip.return_value = mock_cursor
+            mock_cursor.limit.return_value = iter(mock_chunks)
+
             mock_collection = MagicMock()
             mock_collection.find.return_value = mock_cursor
 
@@ -384,6 +386,8 @@ class TestVectorStorage:
                 patch.object(storage, "validate_connection", return_value=True),
                 patch.object(storage, "_collection", mock_collection),
             ):
+                # Clear connection cache to avoid xdist pollution
+                storage.invalidate_connection_cache()
                 chunks = storage.list_chunks(source_filter="test.pdf", limit=50)
                 assert len(chunks) == 2
                 assert chunks[0]["chunk_id"] == "chunk1"
@@ -760,7 +764,10 @@ class TestIndexReadyTimeout:
 
             mock_chunk = {"chunk_id": "1", "source_file": "test.pdf"}
             mock_collection = MagicMock()
-            mock_collection.find.return_value = [mock_chunk]
+            mock_cursor = MagicMock()
+            mock_cursor.skip.return_value = mock_cursor
+            mock_cursor.limit.return_value = [mock_chunk]
+            mock_collection.find.return_value = mock_cursor
 
             with (
                 patch.object(storage, "validate_connection", return_value=True),

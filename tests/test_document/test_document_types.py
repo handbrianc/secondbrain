@@ -32,7 +32,7 @@ class TestOfficeFormats:
         mock_converter.convert.return_value = mock_result
         monkeypatch.setattr(
             "docling.document_converter.DocumentConverter",
-            lambda: mock_converter,
+            lambda **_: mock_converter,
         )
         return mock_converter
 

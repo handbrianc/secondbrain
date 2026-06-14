@@ -62,103 +62,14 @@ warnings.filterwarnings(
 # - Can be tuned based on available RAM and typical document sizes
 MAX_MEMORY_BATCH_SIZE = 100
 
-# Global variables for worker processes (set by ProcessPoolExecutor initializers)
-_worker_converter: DocumentConverter | None = None
-_worker_progress_queue: Any = None
-_worker_embedding_model: Any = None
-
-
-def _init_worker() -> None:
-    """Initialize worker process with DocumentConverter."""
-    global _worker_converter
-    import logging
-    
-    logging.getLogger("RapidOCR").setLevel(logging.ERROR)
-    logging.getLogger("docling").setLevel(logging.WARNING)
-    
-    from docling.datamodel.accelerator_options import (
-        AcceleratorDevice,
-        AcceleratorOptions,
-    )
-    from docling.datamodel.base_models import InputFormat
-    from docling.datamodel.pipeline_options import PdfPipelineOptions
-    from docling.document_converter import DocumentConverter, PdfFormatOption
-
-    pdf_options = PdfFormatOption(
-        pipeline_options=PdfPipelineOptions(
-            do_ocr=True,
-            do_table_structure=False,
-            accelerator_options=AcceleratorOptions(
-                device=AcceleratorDevice.CPU,
-                num_threads=4
-            ),
-        )
-    )
-    _worker_converter = DocumentConverter(
-        format_options={InputFormat.PDF: pdf_options}
-    )
-
-
-def _init_worker_with_queue(
-    queue: Any, embedding_provider_type: str, embedding_model: str, num_workers: int
-) -> None:
-    """Initialize worker process with DocumentConverter, progress queue, and embedding model."""
-    global _worker_converter, _worker_progress_queue, _worker_embedding_model
-    import os
-
-    # CRITICAL: Limit PyTorch threads to prevent oversubscription
-    total_cores = os.cpu_count() or 4
-    threads_per_worker = max(1, total_cores // num_workers)
-
-    # Set thread limits for PyTorch/OpenMP
-    try:
-        import torch
-
-        torch.set_num_threads(threads_per_worker)
-    except ImportError:
-        pass
-
-    # Also set OpenMP environment variables
-    os.environ["OMP_NUM_THREADS"] = str(threads_per_worker)
-    os.environ["MKL_NUM_THREADS"] = str(threads_per_worker)
-
-    from docling.document_converter import DocumentConverter
-
-    from secondbrain.embedding import EmbeddingProviderFactory
-    from secondbrain.utils.rate_limiter import get_shared_rate_limiter
-
-    _worker_converter = DocumentConverter()
-    _worker_progress_queue = queue
-    
-    # Create embedding provider based on type
-    if embedding_provider_type == "local":
-        _worker_embedding_model = EmbeddingProviderFactory.create_local(
-            model_name=embedding_model
-        )
-    elif embedding_provider_type == "openai":
-        from secondbrain.config import config
-        
-        cfg = config()
-        _worker_embedding_model = EmbeddingProviderFactory.create_openai(
-            model=embedding_model,
-            api_key=cfg.embedding_api_key,
-            api_base=cfg.embedding_api_base,
-            dimensions=cfg.embedding_dimensions,
-        )
-    else:
-        raise ValueError(f"Unsupported embedding provider: {embedding_provider_type}")
-    
-    _ = get_shared_rate_limiter(max_requests=100, window_seconds=60.0)
-
-
 def _extract_and_chunk_file(
     file_path_str: str, chunk_size: int, chunk_overlap: int
 ) -> dict[str, Any]:
-    """Worker function for multiprocessing: extract and chunk a single file.
+    """Worker function for threading: extract and chunk a single file.
 
-    This function runs in a separate process and returns extracted chunks.
-    Must be at module level to be picklable for ProcessPoolExecutor.
-    Uses the global _worker_converter if initialized, otherwise creates one.
+    This function runs in a separate thread and returns extracted chunks.
+    Must be at module level to be picklable for ThreadPoolExecutor.
+    Creates its own DocumentConverter instance.
 
     Args:
         file_path_str: String path to the file to process.
@@ -172,14 +83,10 @@ def _extract_and_chunk_file(
     """
     file_path = Path(file_path_str)
     try:
-        # Use pre-initialized converter if available, otherwise create one
-        # This allows the function to work both in ProcessPoolExecutor workers
-        # (where _init_worker is called) and in tests (where it's called directly)
-        converter = _worker_converter
-        if converter is None:
-            from docling.document_converter import DocumentConverter
+        # Create converter for this thread
+        from docling.document_converter import DocumentConverter
 
-            converter = DocumentConverter()
+        converter = DocumentConverter()
 
         result = converter.convert(file_path)
         content = result.document
@@ -230,15 +137,15 @@ def _extract_chunk_and_embed_file(
 ) -> dict[str, Any]:
     """Worker function that extracts, chunks, embeds, and reports progress.
 
-    This function runs in a separate process and returns documents with embeddings.
-    All CPU/GPU intensive work (extraction, chunking, embedding) happens in worker.
-    Main process only handles storage.
+    This function runs in a separate thread and returns documents with embeddings.
+    All CPU/GPU intensive work (extraction, chunking, embedding) happens in thread.
+    Main thread only handles storage.
 
     Args:
         file_path_str: String path to the file to process.
         chunk_size: Maximum chunk size in characters.
         chunk_overlap: Overlap between consecutive chunks.
-        progress_queue: Multiprocessing Queue for progress updates.
+        progress_queue: Thread-safe Queue for progress updates.
         embedding_model_name: Name of embedding model to use.
 
     Returns
@@ -248,39 +155,36 @@ def _extract_chunk_and_embed_file(
     """
     file_path = Path(file_path_str)
     try:
-        converter = _worker_converter
-        if converter is None:
-            import logging
-            
-            logging.getLogger("RapidOCR").setLevel(logging.ERROR)
-            logging.getLogger("docling").setLevel(logging.WARNING)
-            
-            from docling.datamodel.accelerator_options import (
-                AcceleratorDevice,
-                AcceleratorOptions,
-            )
-            from docling.datamodel.base_models import InputFormat
-            from docling.datamodel.pipeline_options import PdfPipelineOptions
-            from docling.document_converter import DocumentConverter, PdfFormatOption
+        import logging
+        
+        logging.getLogger("RapidOCR").setLevel(logging.ERROR)
+        logging.getLogger("docling").setLevel(logging.WARNING)
+        
+        from docling.datamodel.accelerator_options import (
+            AcceleratorDevice,
+            AcceleratorOptions,
+        )
+        from docling.datamodel.base_models import InputFormat
+        from docling.datamodel.pipeline_options import PdfPipelineOptions
+        from docling.document_converter import DocumentConverter, PdfFormatOption
 
-            pdf_options = PdfFormatOption(
-                pipeline_options=PdfPipelineOptions(
-                    do_ocr=True,
-                    do_table_structure=False,
-                    accelerator_options=AcceleratorOptions(
-                        device=AcceleratorDevice.CPU,
-                        num_threads=4
-                    ),
-                )
+        pdf_options = PdfFormatOption(
+            pipeline_options=PdfPipelineOptions(
+                do_ocr=True,
+                do_table_structure=False,
+                accelerator_options=AcceleratorOptions(
+                    device=AcceleratorDevice.CPU,
+                    num_threads=4
+                ),
             )
-            converter = DocumentConverter(
-                format_options={InputFormat.PDF: pdf_options}
-            )
+        )
+        converter = DocumentConverter(
+            format_options={InputFormat.PDF: pdf_options}
+        )
 
         result = converter.convert(file_path)
         content = result.document
 
-        # Extract segments
         segments: list[Segment] = []
         if hasattr(content, "texts") and content.texts:
             for text_item in content.texts:
@@ -298,17 +202,14 @@ def _extract_chunk_and_embed_file(
                 text = f.read()
             segments = [{"text": text, "page": 1}]
 
-        # Chunk segments
         chunks = _chunk_segments(segments, chunk_size, chunk_overlap)
 
-        # Generate embeddings using worker's pre-loaded model
-        embedding_model = _worker_embedding_model
-        if embedding_model is None:
-            from secondbrain.embedding.local import LocalEmbeddingGenerator
+        from secondbrain.config import config
+        cfg = config()
+        from secondbrain.embedding import EmbeddingProviderFactory
 
-            embedding_model = LocalEmbeddingGenerator(model_name=embedding_model_name)
+        embedding_model = EmbeddingProviderFactory.create_from_config(cfg)
 
-        # Deduplicate chunks
         seen_hashes = set()
         unique_chunks = []
         for chunk in chunks:
@@ -327,14 +228,12 @@ def _extract_chunk_and_embed_file(
                     }
                 )
 
-        # Generate embeddings in batch (GPU efficient)
         if unique_chunks:
             texts = [c["text"] for c in unique_chunks]
             embeddings = embedding_model.generate_batch(texts)
         else:
             embeddings = []
 
-        # Build documents with embeddings
         from datetime import UTC, datetime
         from uuid import uuid4
 
@@ -354,10 +253,9 @@ def _extract_chunk_and_embed_file(
             }
             documents.append(doc)
 
-        # Send progress update
-        if _worker_progress_queue is not None:
+        if progress_queue is not None:
             with contextlib.suppress(Exception):
-                _worker_progress_queue.put_nowait((str(file_path), len(documents) > 0))
+                progress_queue.put_nowait((str(file_path), len(documents) > 0))
 
         return {
             "success": True,
@@ -366,9 +264,9 @@ def _extract_chunk_and_embed_file(
             "error": None,
         }
     except Exception as e:
-        if _worker_progress_queue is not None:
+        if progress_queue is not None:
             with contextlib.suppress(Exception):
-                _worker_progress_queue.put_nowait((str(file_path), False))
+                progress_queue.put_nowait((str(file_path), False))
         return {
             "success": False,
             "file_path": file_path,
@@ -385,15 +283,14 @@ def _extract_and_chunk_file_with_progress(
 ) -> dict[str, Any]:
     """Worker function that extracts, chunks, and reports progress via queue.
 
-    This function runs in a separate process and returns extracted chunks.
-    Additionally sends progress updates to the main process via the queue.
-    Must be at module level to be picklable for ProcessPoolExecutor.
+    This function runs in a separate thread and returns extracted chunks.
+    Additionally sends progress updates to the main thread via the queue.
 
     Args:
         file_path_str: String path to the file to process.
         chunk_size: Maximum chunk size in characters.
         chunk_overlap: Overlap between consecutive chunks.
-        progress_queue: Multiprocessing Queue for progress updates.
+        progress_queue: Thread-safe Queue for progress updates.
 
     Returns
     -------
@@ -402,40 +299,36 @@ def _extract_and_chunk_file_with_progress(
     """
     file_path = Path(file_path_str)
     try:
-        # Use pre-initialized converter if available, otherwise create one
-        converter = _worker_converter
-        if converter is None:
-            import logging
-            
-            logging.getLogger("RapidOCR").setLevel(logging.ERROR)
-            logging.getLogger("docling").setLevel(logging.WARNING)
-            
-            from docling.datamodel.accelerator_options import (
-                AcceleratorDevice,
-                AcceleratorOptions,
-            )
-            from docling.datamodel.base_models import InputFormat
-            from docling.datamodel.pipeline_options import PdfPipelineOptions
-            from docling.document_converter import DocumentConverter, PdfFormatOption
+        import logging
+        
+        logging.getLogger("RapidOCR").setLevel(logging.ERROR)
+        logging.getLogger("docling").setLevel(logging.WARNING)
+        
+        from docling.datamodel.accelerator_options import (
+            AcceleratorDevice,
+            AcceleratorOptions,
+        )
+        from docling.datamodel.base_models import InputFormat
+        from docling.datamodel.pipeline_options import PdfPipelineOptions
+        from docling.document_converter import DocumentConverter, PdfFormatOption
 
-            pdf_options = PdfFormatOption(
-                pipeline_options=PdfPipelineOptions(
-                    do_ocr=True,
-                    do_table_structure=False,
-                    accelerator_options=AcceleratorOptions(
-                        device=AcceleratorDevice.CPU,
-                        num_threads=4
-                    ),
-                )
+        pdf_options = PdfFormatOption(
+            pipeline_options=PdfPipelineOptions(
+                do_ocr=True,
+                do_table_structure=False,
+                accelerator_options=AcceleratorOptions(
+                    device=AcceleratorDevice.CPU,
+                    num_threads=4
+                ),
             )
-            converter = DocumentConverter(
-                format_options={InputFormat.PDF: pdf_options}
-            )
+        )
+        converter = DocumentConverter(
+            format_options={InputFormat.PDF: pdf_options}
+        )
 
         result = converter.convert(file_path)
         content = result.document
 
-        # Extract segments from document
         segments: list[Segment] = []
 
         if hasattr(content, "texts") and content.texts:
@@ -451,18 +344,14 @@ def _extract_and_chunk_file_with_progress(
 
                 segments.append({"text": text_item.text, "page": page_num})
 
-        # Fallback: read file directly for plain text formats
         if not segments:
             with file_path.open(encoding="utf-8", errors="ignore") as f:
                 text = f.read()
             segments = [{"text": text, "page": 1}]
 
-        # Send progress update before returning
-        if _worker_progress_queue is not None:
+        if progress_queue is not None:
             with contextlib.suppress(Exception):
-                _worker_progress_queue.put_nowait(
-                    (str(file_path), True)
-                )  # Queue might be full or closed, ignore
+                progress_queue.put_nowait((str(file_path), True))
 
         return {
             "success": True,
@@ -471,10 +360,9 @@ def _extract_and_chunk_file_with_progress(
             "error": None,
         }
     except Exception as e:
-        # Send failure progress update
-        if _worker_progress_queue is not None:
+        if progress_queue is not None:
             with contextlib.suppress(Exception):
-                _worker_progress_queue.put_nowait((str(file_path), False))
+                progress_queue.put_nowait((str(file_path), False))
 
         return {
             "success": False,
@@ -1372,148 +1260,131 @@ class DocumentIngestor:
         storage: Any,
         max_workers: int,
     ) -> tuple[int, int]:
-        """Process files using multiprocessing with progress callback support.
+        """Process files using threading with progress callback support.
 
-        Uses ProcessPoolExecutor with a Queue for progress updates. Worker processes
-        send completion status via Queue, and the main process updates the progress
-        bar. This enables true CPU parallelism while maintaining real-time progress.
-
-        Uses 'spawn' start method for cross-platform compatibility (Windows, macOS, Linux).
+        Uses ThreadPoolExecutor with a Queue for progress updates. Worker threads
+        send completion status via Queue, and the main thread updates the progress
+        bar. This enables parallel processing while maintaining real-time progress.
 
         Args:
             files: List of file paths to process.
             embedding_gen: EmbeddingGenerator instance.
             storage: VectorStorage instance.
-            max_workers: Number of worker processes.
+            max_workers: Number of worker threads.
 
         Returns
         -------
             Tuple of (successful_files, failed_files) counts.
         """
-        import multiprocessing
+        import queue
         from concurrent.futures import (
-            ProcessPoolExecutor,
+            ThreadPoolExecutor,
             as_completed,
         )
-        from multiprocessing import Manager
-
-        multiprocessing.set_start_method("spawn", force=True)
 
         successful_files = 0
         failed_files = 0
 
-        # Use a Manager to create a shared Queue for progress updates
+        progress_queue: queue.Queue[tuple[str, bool]] = queue.Queue()
         from secondbrain.config import config
 
-        with Manager() as manager:
-            progress_queue = manager.Queue()
-            cfg = config()
-            embedding_provider_type = cfg.embedding_provider
-            embedding_model_name = cfg.embedding_model
+        cfg = config()
+        embedding_model_name = cfg.embedding_model
 
-            with (
-                trace_operation("ingest_multiprocess_progress") as span,
-                ProcessPoolExecutor(
-                    max_workers=max_workers,
-                    initializer=_init_worker_with_queue,
-                    initargs=(progress_queue, embedding_provider_type, embedding_model_name, max_workers),
-                ) as executor,
-            ):
-                if span:
-                    span.set_attribute("ingestion.files_total", len(files))
-                    span.set_attribute("ingestion.max_workers", max_workers)
-                futures = {
-                    executor.submit(
-                        _extract_chunk_and_embed_file,
-                        str(f),
-                        self.chunk_size,
-                        self.chunk_overlap,
-                        progress_queue,
-                        embedding_model_name,
-                    ): f
-                    for f in files
-                }
+        with (
+            trace_operation("ingest_thread_progress") as span,
+            ThreadPoolExecutor(max_workers=max_workers) as executor,
+        ):
+            if span:
+                span.set_attribute("ingestion.files_total", len(files))
+                span.set_attribute("ingestion.max_workers", max_workers)
+            futures = {
+                executor.submit(
+                    _extract_chunk_and_embed_file,
+                    str(f),
+                    self.chunk_size,
+                    self.chunk_overlap,
+                    progress_queue,
+                    embedding_model_name,
+                ): f
+                for f in files
+            }
 
-                # Process futures and handle progress updates from queue
-                completed = 0
-                # Process futures and handle progress updates from queue
-                completed = 0
-                pending_futures = dict(futures)
+            completed = 0
+            pending_futures = dict(futures)
 
-                while pending_futures:
-                    # Drain any pending queue messages
-                    while not progress_queue.empty():
-                        try:
-                            progress_queue.get_nowait()
-                        except Exception:
-                            break
+            while pending_futures:
+                while not progress_queue.empty():
+                    try:
+                        progress_queue.get_nowait()
+                    except Exception:
+                        break
 
-                    # Process completed futures
-                    done_futures = []
-                    for future in as_completed(pending_futures, timeout=3600):
-                        file_path = futures[future]
-                        try:
-                            result = future.result(timeout=300)
+                done_futures = []
+                for future in as_completed(pending_futures, timeout=3600):
+                    file_path = futures[future]
+                    try:
+                        result = future.result(timeout=300)
 
-                            if not result["success"]:
-                                if self.verbose:
-                                    logger.error(
-                                        "Failed to process %s: %s",
-                                        file_path,
-                                        result.get("error", "Unknown error"),
-                                    )
-                                failed_files += 1
-                                completed += 1
-                                if self.progress_callback:
-                                    self.progress_callback(file_path, False)
-                                done_futures.append(future)
-                                continue
-
-                            documents = result.get("documents", [])
-                            if not documents:
-                                if self.verbose:
-                                    logger.warning(
-                                        "No documents produced from %s", file_path
-                                    )
-                                failed_files += 1
-                                completed += 1
-                                if self.progress_callback:
-                                    self.progress_callback(file_path, False)
-                                done_futures.append(future)
-                                continue
-
-                            for i in range(0, len(documents), MAX_MEMORY_BATCH_SIZE):
-                                storage.store_batch(
-                                    documents[i : i + MAX_MEMORY_BATCH_SIZE]
-                                )
-
-                            successful_files += 1
-                            completed += 1
-                            if self.progress_callback:
-                                self.progress_callback(file_path, True)
-                            done_futures.append(future)
-
-                        except Exception as e:
+                        if not result["success"]:
                             if self.verbose:
                                 logger.error(
-                                    "Unexpected error processing file %s: %s: %s",
+                                    "Failed to process %s: %s",
                                     file_path,
-                                    type(e).__name__,
-                                    e,
+                                    result.get("error", "Unknown error"),
                                 )
                             failed_files += 1
                             completed += 1
                             if self.progress_callback:
                                 self.progress_callback(file_path, False)
                             done_futures.append(future)
+                            continue
 
-                    for future in done_futures:
-                        del pending_futures[future]
+                        documents = result.get("documents", [])
+                        if not documents:
+                            if self.verbose:
+                                logger.warning(
+                                    "No documents produced from %s", file_path
+                                )
+                            failed_files += 1
+                            completed += 1
+                            if self.progress_callback:
+                                self.progress_callback(file_path, False)
+                            done_futures.append(future)
+                            continue
 
-                    if pending_futures:
-                        import time
+                        for i in range(0, len(documents), MAX_MEMORY_BATCH_SIZE):
+                            storage.store_batch(
+                                documents[i : i + MAX_MEMORY_BATCH_SIZE]
+                            )
 
-                        time.sleep(0.01)
+                        successful_files += 1
+                        completed += 1
+                        if self.progress_callback:
+                            self.progress_callback(file_path, True)
+                        done_futures.append(future)
+
+                    except Exception as e:
+                        if self.verbose:
+                            logger.error(
+                                "Unexpected error processing file %s: %s: %s",
+                                file_path,
+                                type(e).__name__,
+                                e,
+                            )
+                        failed_files += 1
+                        completed += 1
+                        if self.progress_callback:
+                            self.progress_callback(file_path, False)
+                        done_futures.append(future)
+
+                for future in done_futures:
+                    del pending_futures[future]
+
+                if pending_futures:
+                    import time
+
+                    time.sleep(0.01)
 
         return successful_files, failed_files
 
@@ -1524,7 +1395,7 @@ class DocumentIngestor:
         storage: Any,
         cores: int,
     ) -> tuple[int, int]:
-        """Process files using multiprocessing with ProcessPoolExecutor.
+        """Process files using threading with ThreadPoolExecutor.
 
         Args:
             files: List of file paths to process.
@@ -1537,7 +1408,7 @@ class DocumentIngestor:
             Tuple of (successful_files, failed_files) counts.
         """
         from concurrent.futures import (
-            ProcessPoolExecutor,
+            ThreadPoolExecutor,
             as_completed,
         )
 
@@ -1547,11 +1418,8 @@ class DocumentIngestor:
         failed_files = 0
 
         with (
-            trace_operation("ingest_multiprocess") as span,
-            ProcessPoolExecutor(
-                max_workers=cores,
-                initializer=_init_worker,
-            ) as executor,
+            trace_operation("ingest_thread") as span,
+            ThreadPoolExecutor(max_workers=cores) as executor,
         ):
             if span:
                 span.set_attribute("ingestion.files_total", len(files))
@@ -1721,7 +1589,7 @@ class DocumentIngestor:
             path: Path to file or directory to ingest.
             recursive: Recursively process subdirectories.
             batch_size: Number of files to process in parallel (ThreadPool).
-            cores: Number of CPU cores for multiprocessing. If None, uses
+            cores: Number of CPU cores for threading. If None, uses
                 config.max_workers or auto-detects CPU count.
 
         Returns
@@ -1733,11 +1601,13 @@ class DocumentIngestor:
             as_completed,
         )
 
-        from secondbrain.embedding import LocalEmbeddingGenerator
+        from secondbrain.config import config
+        from secondbrain.embedding import EmbeddingProviderFactory
         from secondbrain.storage import VectorStorage
 
         # Initialize services
-        embedding_gen = LocalEmbeddingGenerator()
+        cfg = config()
+        embedding_gen = EmbeddingProviderFactory.create_from_config(cfg)
         storage = VectorStorage()
 
         # Collect and validate files
@@ -1901,11 +1771,12 @@ class AsyncDocumentIngestor(DocumentIngestor):
             dict with 'success' and 'failed' counts.
         """
         from secondbrain.config import config
-        from secondbrain.embedding import LocalEmbeddingGenerator
+        from secondbrain.embedding import EmbeddingProviderFactory
         from secondbrain.storage import VectorStorage
 
         # Initialize services
-        embedding_gen = LocalEmbeddingGenerator()
+        cfg = config()
+        embedding_gen = EmbeddingProviderFactory.create_from_config(cfg)
         storage = VectorStorage()
 
         try:

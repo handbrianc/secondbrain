@@ -193,7 +193,7 @@ class MockLLMProviderWithContext(MockLLMProvider):
             
             # Configuration patterns
             "chunk size": "The default chunk size is 4096 tokens. This is a configuration setting that can be adjusted using the SECONDBRAIN_CHUNK_SIZE environment variable.",
-            "MongoDB": "MongoDB connection errors occur when the connection URI is invalid or network connectivity fails. Proper URI validation helps prevent these connection errors. The URI is configured using the SECONDBRAIN_MONGO_URI environment variable. The default MongoDB URI for local development is mongodb://localhost:27017.",
+            "MongoDB": "MongoDB connection errors occur when the connection URI is invalid or network connectivity fails. Proper URI validation helps prevent these connection errors. The URI is configured using the SECONDBRAIN_MONGO_URI environment variable - there is no default and the variable MUST be set.",
             "circuit breaker": "Circuit breaker protection can be enabled by setting SECONDBRAIN_CIRCUIT_BREAKER_ENABLED=true. This provides automatic failure handling with recovery mechanisms for production reliability.",
             "circuit breaker work": "The circuit breaker provides protection by automatically monitoring service health and handling failures. When errors exceed a threshold, it opens the circuit and returns fallback responses until the service recovers automatically with built-in recovery logic.",
             "Ingestor": "The Ingestor class handles multi-format document parsing and automatic chunking using Docling library for document ingestion.",

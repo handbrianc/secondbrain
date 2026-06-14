@@ -35,15 +35,11 @@ from secondbrain.exceptions import (
 class TestEmbeddingFailureScenarios:
     """Tests for embedding generation failure handling."""
 
+    @patch("secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config")
     def test_ingest_handles_embedding_failure_gracefully(
-        self, tmp_path: Path, mocked_pdf_extraction: MagicMock
+        self, mock_factory: MagicMock, tmp_path: Path, mocked_pdf_extraction: MagicMock
     ) -> None:
         """Test that ingestion handles embedding failures gracefully."""
-        ingestor = DocumentIngestor(verbose=True)
-
-        test_file = tmp_path / "test.pdf"
-        test_file.write_bytes(b"fake pdf content")
-
         mock_embedding = MagicMock()
         mock_embedding.generate_batch.side_effect = EmbeddingGenerationError(
             "Embedding API failed"
@@ -51,6 +47,12 @@ class TestEmbeddingFailureScenarios:
         mock_embedding.generate.side_effect = EmbeddingGenerationError(
             "Single embedding failed"
         )
+        mock_factory.return_value = mock_embedding
+
+        ingestor = DocumentIngestor(verbose=True)
+
+        test_file = tmp_path / "test.pdf"
+        test_file.write_bytes(b"fake pdf content")
 
         result = ingestor.ingest(str(tmp_path), recursive=False)
 
@@ -85,15 +87,11 @@ class TestEmbeddingFailureScenarios:
         assert "success" in result
         assert "failed" in result
 
+    @patch("secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config")
     def test_embedding_timeout_handling(
-        self, tmp_path: Path, mocked_pdf_extraction: MagicMock
+        self, mock_factory: MagicMock, tmp_path: Path, mocked_pdf_extraction: MagicMock
     ) -> None:
         """Test timeout handling during embedding generation."""
-        ingestor = DocumentIngestor(verbose=True)
-
-        test_file = tmp_path / "test.pdf"
-        test_file.write_bytes(b"fake pdf content")
-
         mock_embedding = MagicMock()
         mock_embedding.generate_batch.side_effect = TimeoutError(
             "Embedding generation timed out"
@@ -101,6 +99,12 @@ class TestEmbeddingFailureScenarios:
         mock_embedding.generate.side_effect = TimeoutError(
             "Single embedding timed out"
         )
+        mock_factory.return_value = mock_embedding
+
+        ingestor = DocumentIngestor(verbose=True)
+
+        test_file = tmp_path / "test.pdf"
+        test_file.write_bytes(b"fake pdf content")
 
         result = ingestor.ingest(str(tmp_path), recursive=False)
 
@@ -150,7 +154,7 @@ class TestEmbeddingFailureScenarios:
         mock_storage = MagicMock()
 
         with patch(
-            "secondbrain.embedding.LocalEmbeddingGenerator",
+            "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config",
             return_value=mock_embedding,
         ):
             with patch(
@@ -325,7 +329,7 @@ class TestMemoryExhaustion:
         mock_embedding.generate = MagicMock(return_value=[0.1] * 384)
 
         with patch(
-            "secondbrain.embedding.LocalEmbeddingGenerator",
+            "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config",
             return_value=mock_embedding,
         ):
             with patch(

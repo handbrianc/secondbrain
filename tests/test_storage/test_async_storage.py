@@ -18,7 +18,7 @@ class TestAsyncVectorStorage:
 
     @pytest.fixture
     def async_storage(self) -> Generator[AsyncVectorStorage, None, None]:
-        """Create an AsyncVectorStorage instance with mocked config."""
+        """Create an AsyncVectorStorage instance with mocked config and fresh state."""
         with patch("secondbrain.storage.storage.config") as mock_config_func:
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
             mock_config_func.return_value.mongo_db = "secondbrain_test"
@@ -30,6 +30,7 @@ class TestAsyncVectorStorage:
             mock_config_func.return_value.embedding_storage_format = "json"
 
             storage = AsyncVectorStorage()
+            storage._connection_valid = None
             yield storage
 
     @pytest.mark.asyncio

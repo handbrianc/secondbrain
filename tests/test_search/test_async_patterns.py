@@ -15,12 +15,12 @@ class TestAsyncClosePatterns:
     async def test_async_close_releases_resources(self) -> None:
         """Test that aclose properly releases all resources."""
         with (
-            patch("secondbrain.search.LocalEmbeddingGenerator") as mock_embed_class,
+            patch("secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config") as mock_create_from_config,
             patch("secondbrain.search.VectorStorage") as mock_storage_class,
         ):
             mock_embed = MagicMock()
             mock_embed.aclose = AsyncMock()
-            mock_embed_class.return_value = mock_embed
+            mock_create_from_config.return_value = mock_embed
 
             mock_storage = MagicMock()
             mock_storage.aclose = AsyncMock()
@@ -36,13 +36,13 @@ class TestAsyncClosePatterns:
     async def test_async_close_idempotent(self) -> None:
         """Test that calling aclose multiple times is safe."""
         with (
-            patch("secondbrain.search.LocalEmbeddingGenerator") as mock_embed_class,
+            patch("secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config") as mock_create_from_config,
             patch("secondbrain.search.VectorStorage") as mock_storage_class,
         ):
             mock_embed = MagicMock()
             mock_aclose = AsyncMock()
             mock_embed.aclose = mock_aclose
-            mock_embed_class.return_value = mock_embed
+            mock_create_from_config.return_value = mock_embed
 
             mock_storage = MagicMock()
             mock_storage_aclose = AsyncMock()
@@ -61,7 +61,7 @@ class TestAsyncClosePatterns:
     async def test_async_search_releases_resources(self) -> None:
         """Test that resources are properly managed during async search."""
         with (
-            patch("secondbrain.search.LocalEmbeddingGenerator") as mock_embed_class,
+            patch("secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config") as mock_create_from_config,
             patch("secondbrain.search.VectorStorage") as mock_storage_class,
         ):
             mock_embed = MagicMock()
@@ -69,7 +69,7 @@ class TestAsyncClosePatterns:
             mock_embed.generate.return_value = [0.1] * 384
             mock_aclose = AsyncMock()
             mock_embed.aclose = mock_aclose
-            mock_embed_class.return_value = mock_embed
+            mock_create_from_config.return_value = mock_embed
 
             mock_storage = MagicMock()
             mock_storage.validate_connection.return_value = True
@@ -90,12 +90,12 @@ class TestAsyncClosePatterns:
     def test_context_manager_async(self) -> None:
         """Test context manager pattern for synchronous usage."""
         with (
-            patch("secondbrain.search.LocalEmbeddingGenerator") as mock_embed_class,
+            patch("secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config") as mock_create_from_config,
             patch("secondbrain.search.VectorStorage") as mock_storage_class,
         ):
             mock_embed = MagicMock()
             mock_embed.validate_connection.return_value = True
-            mock_embed_class.return_value = mock_embed
+            mock_create_from_config.return_value = mock_embed
 
             mock_storage = MagicMock()
             mock_storage.validate_connection.return_value = True
@@ -114,14 +114,14 @@ class TestAsyncClosePatterns:
     async def test_async_close_handles_missing_aclose(self) -> None:
         """Test that aclose handles objects without aclose method gracefully."""
         with (
-            patch("secondbrain.search.LocalEmbeddingGenerator") as mock_embed_class,
+            patch("secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config") as mock_create_from_config,
             patch("secondbrain.search.VectorStorage") as mock_storage_class,
         ):
             # Embedding generator without aclose
             mock_embed = MagicMock()
             mock_embed.aclose = None
             del mock_embed.aclose
-            mock_embed_class.return_value = mock_embed
+            mock_create_from_config.return_value = mock_embed
 
             mock_storage = MagicMock()
             mock_storage.aclose = AsyncMock()

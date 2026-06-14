@@ -11,10 +11,11 @@ from typing import Any
 
 import pytest
 
-from secondbrain.config import Config
-
-# Get test defaults from Config
-_test_config = Config()
+_test_config_mongo_uri = os.environ.get(
+    "SECONDBRAIN_MONGO_URI",
+    "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin",
+)
+_test_config_mongo_db = os.environ.get("SECONDBRAIN_MONGO_DB", "secondbrain_test")
 
 
 @pytest.fixture
@@ -79,8 +80,8 @@ def example_runner(tmp_path: Path) -> Generator[Any, None, None]:
             env.update(env_overrides)
 
         env["SECONDBRAIN_VERBOSE"] = "0"
-        env["SECONDBRAIN_MONGO_URI"] = _test_config.mongo_uri
-        env["SECONDBRAIN_OLLAMA_HOST"] = os.getenv("SECONDBRAIN_OLLAMA_HOST", "http://localhost:11434")
+        env["SECONDBRAIN_MONGO_URI"] = _test_config_mongo_uri
+        env["SECONDBRAIN_MONGO_DB"] = _test_config_mongo_db
 
         # Run the script
         result = subprocess.run(

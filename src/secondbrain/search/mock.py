@@ -33,7 +33,7 @@ class MockSearcher:
                 "chunk_id": "chunk-010",
                 "source_file": "tests/config.md",
                 "page_number": 2,
-                "chunk_text": "MongoDB connection URI is configured via the SECONDBRAIN_MONGO_URI environment variable. The default for local development is mongodb://localhost:27017.",
+                "chunk_text": "MongoDB connection URI is configured via the SECONDBRAIN_MONGO_URI environment variable - there is no default and the variable MUST be set.",
                 "file_type": "markdown",
                 "metadata": {},
                 "similarity": 0.92,

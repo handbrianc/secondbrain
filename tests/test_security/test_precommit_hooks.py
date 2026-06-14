@@ -157,7 +157,7 @@ class TestPrecommitHooks:
                 capture_output=True,
                 text=True,
                 timeout=60,
-                cwd="/Users/bchand/Documents/secondbrain"
+                cwd=os.getcwd()
             )
             
             if result.returncode != 0:
