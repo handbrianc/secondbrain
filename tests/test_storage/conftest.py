@@ -4,9 +4,9 @@ from collections.abc import Generator
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import os
 import pytest
 
-from secondbrain.config import Config
 from secondbrain.storage import VectorStorage
 
 
@@ -14,11 +14,12 @@ from secondbrain.storage import VectorStorage
 def mock_storage_config() -> MagicMock:
     """Module-scoped mock config to avoid repeated Config initialization."""
     config = MagicMock()
-    # Use Config defaults - will use test values when PYTEST_CURRENT_TEST is set
-    cfg = Config()
-    config.mongo_uri = cfg.mongo_uri
-    config.mongo_db = cfg.mongo_db
-    config.mongo_collection = cfg.mongo_collection
+    config.mongo_uri = os.environ.get(
+        "SECONDBRAIN_MONGO_URI",
+        "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin",
+    )
+    config.mongo_db = os.environ.get("SECONDBRAIN_MONGO_DB", "secondbrain_test")
+    config.mongo_collection = os.environ.get("SECONDBRAIN_MONGO_COLLECTION", "embeddings_test")
     config.embedding_dimensions = 384
     return config
 
@@ -39,3 +40,9 @@ def storage_with_mock(mock_storage_config: MagicMock) -> Generator[Any, None, No
     with patch("secondbrain.storage.get_config", return_value=mock_storage_config):
         storage = VectorStorage()
         yield storage
+        storage._client = None
+        storage._db = None
+        storage._collection = None
+        storage._async_client = None
+        storage._index_created = False
+        storage.invalidate_connection_cache()

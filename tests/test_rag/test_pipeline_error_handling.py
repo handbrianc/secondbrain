@@ -34,7 +34,7 @@ def mock_llm_provider() -> MagicMock:
 def mock_config(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
     """Mock configuration for pipeline tests."""
     config = {
-        "SECONDBRAIN_MONGO_URI": "mongodb://localhost:27017",
+        "SECONDBRAIN_MONGO_URI": "mongodb://localhost:27018",
         "SECONDBRAIN_MONGO_DB": "test_secondbrain",
         "SECONDBRAIN_MONGO_COLLECTION": "test_embeddings",
         "SECONDBRAIN_LOCALHOST": "http://localhost:11434",

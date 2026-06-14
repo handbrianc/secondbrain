@@ -239,6 +239,7 @@ class TestVectorStorageBatchOperations:
                 patch.object(storage, "validate_connection", return_value=False),
                 pytest.raises(StorageConnectionError),
             ):
+                storage.invalidate_connection_cache()
                 storage.store_batch(
                     [
                         {

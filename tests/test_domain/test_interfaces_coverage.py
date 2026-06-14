@@ -206,7 +206,7 @@ class TestVectorStoreProtocol:
                 self,
                 embedding: list[float],
                 top_k: int = 5,
-                _source_filter: str | None = None  # noqa: F841,
+                source_filter: str | None = None,
             ) -> Sequence[DocumentChunk]:
                 chunk1 = DocumentChunk(
                     chunk_id=ChunkId("chunk-1"),

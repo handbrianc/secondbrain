@@ -16,6 +16,7 @@ Usage:
 """
 
 import logging
+import os
 import subprocess
 import time
 from pathlib import Path
@@ -91,7 +92,7 @@ class DockerManager:
 
         Examples:
             >>> manager = DockerManager()
-            >>> manager.mongo_uri = "mongodb://localhost:27017"
+            >>> manager.mongo_uri = os.getenv("SECONDBRAIN_MONGO_URI", "")
             >>> manager._is_local_mongodb()
             True
             >>> manager.mongo_uri = "mongodb+srv://cluster0.mongodb.net"
@@ -405,7 +406,7 @@ class DockerManager:
                 "Please ensure:\n"
                 "  1. Docker is running\n"
                 "  2. docker-compose.yml exists in project root\n"
-                "  3. Port 27017 is not in use\n"
+                "  3. MongoDB port (from SECONDBRAIN_MONGO_URI) is not in use\n"
                 "  4. You have permission to run Docker commands"
             ) from e
 

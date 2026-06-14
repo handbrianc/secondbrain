@@ -124,6 +124,8 @@ class TestVectorStorageBatchOperations:
             patch.object(storage, "validate_connection", return_value=False),
             pytest.raises(StorageConnectionError, match="Cannot connect"),
         ):
+            # Clear connection cache to avoid xdist pollution
+            storage.invalidate_connection_cache()
             storage.store_batch([{"test": "doc"}])
 
 

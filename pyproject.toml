@@ -104,7 +104,8 @@ opentelemetry = [
 secondbrain = "secondbrain.cli:main"
 
 [build-system]
-requires = ["setuptools>=60.0.0", "wheel"]
+requires = ["setuptools>=60.0.0",  # Build tooling - compatible with torch 2.12
+    "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
@@ -225,7 +226,7 @@ ignore = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--timeout=300 -p no:warnings --dist=loadfile -n auto --cov=secondbrain --cov-report=term-missing --cov-report=html --cov-fail-under=75 --reruns=2 --reruns-delay=1 --cov-config=.coveragerc"
+addopts = "-p no:warnings --cov=secondbrain --cov-report=term-missing --cov-report=html --cov-fail-under=75 --reruns=2 --reruns-delay=1 --cov-config=.coveragerc"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 markers = [

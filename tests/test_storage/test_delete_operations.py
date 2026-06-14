@@ -87,6 +87,7 @@ class TestDeleteBySource:
                 patch.object(storage, "validate_connection", return_value=False),
                 pytest.raises(StorageConnectionError) as exc_info,
             ):
+                storage._connection_valid = None
                 storage.delete_by_source("test.pdf")
 
             assert "Cannot connect to MongoDB" in str(exc_info.value)
@@ -193,6 +194,7 @@ class TestDeleteByChunkId:
                 patch.object(storage, "validate_connection", return_value=False),
                 pytest.raises(StorageConnectionError) as exc_info,
             ):
+                storage._connection_valid = None
                 storage.delete_by_chunk_id("chunk-123")
 
             assert "Cannot connect to MongoDB" in str(exc_info.value)
@@ -300,6 +302,7 @@ class TestDeleteAll:
                 patch.object(storage, "validate_connection", return_value=False),
                 pytest.raises(StorageConnectionError) as exc_info,
             ):
+                storage.invalidate_connection_cache()
                 storage.delete_all()
 
             assert "Cannot connect to MongoDB" in str(exc_info.value)

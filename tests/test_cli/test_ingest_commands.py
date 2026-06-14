@@ -49,13 +49,18 @@ class TestIngestProgressCallback:
 class TestIngestCoresValidation:
     """Tests for ingest command cores parameter validation."""
 
-    def test_ingest_cores_validation(self) -> None:
+    def test_ingest_cores_validation(self, tmp_path) -> None:
         runner = CliRunner()
         available_cores = os.cpu_count() or 1
 
+        # Use a temp dir with one file instead of /tmp (which has 133 files, causing 164s traversal)
+        test_file = tmp_path / "dummy.txt"
+        test_file.write_text("hello world")
+        test_dir = str(tmp_path)
+
         result = runner.invoke(
             cli,
-            ["ingest", "/tmp", "--cores", "0"],
+            ["ingest", test_dir, "--cores", "0"],
         )
         assert result.exit_code != 0
         assert result.exception is not None
@@ -63,7 +68,7 @@ class TestIngestCoresValidation:
 
         result = runner.invoke(
             cli,
-            ["ingest", "/tmp", "--cores", "-1"],
+            ["ingest", test_dir, "--cores", "-1"],
         )
         assert result.exit_code != 0
         assert result.exception is not None
@@ -72,7 +77,7 @@ class TestIngestCoresValidation:
         excessive_cores = available_cores + 10
         result = runner.invoke(
             cli,
-            ["ingest", "/tmp", "--cores", str(excessive_cores)],
+            ["ingest", test_dir, "--cores", str(excessive_cores)],
         )
         assert result.exit_code == 0
         assert "Warning" in result.output

@@ -148,9 +148,20 @@ class Config(BaseSettings):
 
     # MongoDB settings
     mongo_uri: str = Field(
-        default="mongodb://localhost:27017",
-        description="MongoDB connection URI (without credentials - set via environment variable for production)",
+        default="",
+        description="MongoDB connection URI - MUST be set via SECONDBRAIN_MONGO_URI environment variable or .env file (never empty)",
     )
+
+    @model_validator(mode="after")
+    def _ensure_mongo_uri_set(self) -> "Config":
+        """Ensure mongo_uri is always set from environment - never use empty default."""
+        if not self.mongo_uri:
+            raise ValueError(
+                "SECONDBRAIN_MONGO_URI environment variable or .env file must set mongo_uri. "
+                "In tests, .env.test is loaded automatically. "
+                "In production, ensure .env sets SECONDBRAIN_MONGO_URI or export the env var."
+            )
+        return self
 
     @field_validator("mongo_uri")
     @classmethod

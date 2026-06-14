@@ -151,7 +151,7 @@ class FailureInjector:
         self._active_failures: dict[str, FailureConfig] = {}
         self._failure_count = 0
         self._start_time: float | None = None
-        self._cleanup_callbacks: list[Callable[[], None]] = []
+        self._cleanup_callbacks: list[Any] = []
 
     @classmethod
     def get_instance(cls) -> "FailureInjector":
@@ -268,9 +268,12 @@ class FailureInjector:
                 if failure_key in self._active_failures:
                     del self._active_failures[failure_key]
                     logger.info("Failure cleanup: %s", failure_key)
+                if timer in self._cleanup_callbacks:
+                    self._cleanup_callbacks.remove(timer)
 
         timer = threading.Timer(duration, cleanup)
         timer.daemon = True
+        self._cleanup_callbacks.append(timer)
         timer.start()
 
     def should_fail(self, failure_type: FailureType) -> bool:

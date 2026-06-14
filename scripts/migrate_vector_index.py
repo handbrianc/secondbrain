@@ -305,14 +305,14 @@ Examples:
   python scripts/migrate_vector_index.py --verbose
 
   # Custom MongoDB URI
-  SECONDBRAIN_MONGO_URI=mongodb://localhost:27017 python scripts/migrate_vector_index.py
+  SECONDBRAIN_MONGO_URI=$SECONDBRAIN_MONGO_URI python scripts/migrate_vector_index.py
         """,
     )
 
     parser.add_argument(
         "--mongo-uri",
         default=None,
-        help="MongoDB URI (default: from SECONDBRAIN_MONGO_URI env var or mongodb://localhost:27017)",
+        help="MongoDB URI (required: set SECONDBRAIN_MONGO_URI env var)",
     )
     parser.add_argument(
         "--db-name",
@@ -353,7 +353,15 @@ Examples:
     if mongo_uri is None:
         import os
 
-        mongo_uri = os.getenv("SECONDBRAIN_MONGO_URI", "mongodb://localhost:27017")
+        mongo_uri = os.getenv("SECONDBRAIN_MONGO_URI", "")
+
+    if not mongo_uri:
+        print(
+            "ERROR: SECONDBRAIN_MONGO_URI environment variable or --mongo-uri argument is required.\n"
+            "Example: SECONDBRAIN_MONGO_URI='mongodb://user:pass@localhost:27017/db' python scripts/migrate_vector_index.py",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
     try:
         migrate_vector_index(

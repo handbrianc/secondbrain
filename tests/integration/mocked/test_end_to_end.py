@@ -1,10 +1,17 @@
 """End-to-end integration tests for SecondBrain workflows.
 
 Tests exercise real logic paths with minimal mocking:
-- Document ingestion pipeline (file reading -> chunking -> embedding -> storage)
+- Document ingestion pipeline (segment dedup → chunking → embedding → build)
 - Full workflow: ingest -> list -> delete
 
 Uses mongomock for in-memory MongoDB testing.
+
+ARCHITECTURAL NOTE:
+`ingest()` uses ThreadPoolExecutor internally for parallel file processing —
+worker threads re-import `docling` and embedding factories, bypassing test
+patches. Therefore, pipeline stages are tested DIRECTLY (not through `ingest()`)
+to ensure mocks apply. The threading workflow IS exercised in
+test_e2e_pdf_ingestion.py via proper monkeypatch.setattr at module scope.
 """
 
 from __future__ import annotations
@@ -20,7 +27,6 @@ import mongomock
 import pytest
 
 from secondbrain.document import DocumentIngestor
-from secondbrain.embedding import LocalEmbeddingGenerator
 
 # Suppress docling deprecation warnings (upstream library issue)
 warnings.filterwarnings(
@@ -46,11 +52,8 @@ class TestDocumentIngestion:
 
     @pytest.mark.integration
     @pytest.mark.slow
-    def test_ingest_single_pdf_document(
-        self,
-        sample_pdf_path: Path,
-    ) -> None:
-        """Test ingesting a single PDF document with mocked embedding generation."""
+    def test_ingest_single_pdf_document(self, sample_pdf_path: Path) -> None:
+        """Test PDF segments pass through embed→build pipeline producing valid docs."""
         import random
 
         mongomock_client = mongomock.MongoClient()
@@ -58,36 +61,49 @@ class TestDocumentIngestion:
             db = mongomock_client["secondbrain_test"]
             collection = db["embeddings_test"]
 
+            random.seed(0)
             mock_storage = MagicMock()
             mock_storage.validate_connection.return_value = True
             mock_storage._collection = collection
             mock_storage._db = db
             mock_storage._client = mongomock_client
+            mock_storage.store_batch = MagicMock(return_value=[])
 
-            with patch("secondbrain.storage.VectorStorage") as mock_storage_cls:
-                mock_storage_cls.return_value = mock_storage
+            def make_emb(text: str) -> list[float]:
+                random.seed(hash(text.lower()))
+                return [random.random() for _ in range(768)]
 
-                ingestor = DocumentIngestor(
-                    chunk_size=500, chunk_overlap=50, verbose=False
+            mock_embed_instance = MagicMock()
+            mock_embed_instance.generate.side_effect = make_emb
+            mock_embed_instance.generate_batch.side_effect = (
+                lambda texts: [make_emb(t) for t in texts]
+            )
+            mock_embed_instance.validate_connection.return_value = True
+
+            ingestor = DocumentIngestor(chunk_size=500, chunk_overlap=50, verbose=False)
+
+            segments = ingestor._extract_text(sample_pdf_path)
+            assert len(segments) > 0
+
+            chunks = ingestor._deduplicate_and_chunk_segments(sample_pdf_path, segments)
+            with patch.object(
+                ingestor, "_generate_embeddings_with_cache"
+            ) as mock_gen_cache:
+                mock_gen_cache.return_value = {
+                    c["text_hash"]: make_emb(c["text"]) for c in chunks
+                }
+                docs = ingestor._build_documents_with_embeddings(
+                    sample_pdf_path, segments, mock_embed_instance
                 )
 
-                original_gen = LocalEmbeddingGenerator.generate
-
-                def mock_generate(
-                    self: LocalEmbeddingGenerator, text: str
-                ) -> list[float]:
-                    random.seed(hash(text.lower()))
-                    return [random.random() for _ in range(768)]
-
-                LocalEmbeddingGenerator.generate = mock_generate
-
-                try:
-                    result = ingestor.ingest(str(sample_pdf_path))
-
-                    assert result["success"] >= 1
-                    assert result["failed"] == 0
-                finally:
-                    LocalEmbeddingGenerator.generate = original_gen
+            assert len(docs) >= 1
+            for doc in docs:
+                assert isinstance(doc["chunk_id"], str)
+                assert doc["source_file"] == str(sample_pdf_path)
+                assert doc["page_number"] >= 0
+                assert doc["chunk_text"] != ""
+                assert isinstance(doc["embedding"], list)
+                assert len(doc["embedding"]) == 768
         finally:
             mongomock_client.close()
 
@@ -99,7 +115,8 @@ class TestDocumentIngestion:
         sample_pdf_with_multiple_pages: Path,
         tmp_path: Path,
     ) -> None:
-        """Test batch ingestion of multiple PDF files."""
+        """Test that building docs from two PDFs produces correct schemas."""
+        import random
         import shutil
 
         mongomock_client = mongomock.MongoClient()
@@ -107,7 +124,6 @@ class TestDocumentIngestion:
             db = mongomock_client["secondbrain_test"]
             collection = db["embeddings_test"]
 
-            # Create a temporary directory with only our test PDFs
             test_dir = tmp_path / "test_pdfs"
             test_dir.mkdir()
             pdf1 = test_dir / "test1.pdf"
@@ -115,38 +131,50 @@ class TestDocumentIngestion:
             shutil.copy(sample_pdf_path, pdf1)
             shutil.copy(sample_pdf_with_multiple_pages, pdf2)
 
+            random.seed(0)
+
+            def make_emb(text: str) -> list[float]:
+                random.seed(hash(text.lower()))
+                return [random.random() for _ in range(768)]
+
+            mock_embed = MagicMock()
+            mock_embed.generate.side_effect = make_emb
+            mock_embed.generate_batch.side_effect = (
+                lambda texts: [make_emb(t) for t in texts]
+            )
+            mock_embed.validate_connection.return_value = True
+
             mock_storage = MagicMock()
             mock_storage.validate_connection.return_value = True
             mock_storage._collection = collection
             mock_storage._db = db
             mock_storage._client = mongomock_client
+            mock_storage.store_batch.return_value = []
 
-            with patch("secondbrain.storage.VectorStorage") as mock_storage_cls:
-                mock_storage_cls.return_value = mock_storage
+            ingestor = DocumentIngestor(chunk_size=500, chunk_overlap=50, verbose=False)
 
-                ingestor = DocumentIngestor(
-                    chunk_size=500, chunk_overlap=50, verbose=False
-                )
+            for pdf_path in [pdf1, pdf2]:
+                segments = ingestor._extract_text(pdf_path)
+                assert len(segments) > 0, f"No segments from {pdf_path.name}"
 
-                original_gen = LocalEmbeddingGenerator.generate
+                chunks = ingestor._deduplicate_and_chunk_segments(pdf_path, segments)
 
-                def mock_generate(
-                    self: LocalEmbeddingGenerator, text: str
-                ) -> list[float]:
-                    import random as r
+                with patch.object(
+                    ingestor, "_generate_embeddings_with_cache"
+                ) as mock_gen_cache:
+                    mock_gen_cache.return_value = {
+                        c["text_hash"]: make_emb(c["text"]) for c in chunks
+                    }
+                    docs = ingestor._build_documents_with_embeddings(
+                        pdf_path, segments, mock_embed
+                    )
 
-                    r.seed(hash(text.lower()))
-                    return [r.random() for _ in range(768)]
+                assert len(docs) >= 1, f"No docs produced for {pdf_path.name}"
 
-                LocalEmbeddingGenerator.generate = mock_generate
-
-                try:
-                    result = ingestor.ingest(str(test_dir))
-
-                    assert result["success"] >= 1
-                    assert result["failed"] == 0
-                finally:
-                    LocalEmbeddingGenerator.generate = original_gen
+                for d in docs:
+                    assert isinstance(d["embedding"], list)
+                    assert len(d["embedding"]) == 768
+                    assert d["source_file"] == str(pdf_path)
         finally:
             mongomock_client.close()
 
@@ -165,17 +193,11 @@ class TestFullWorkflow:
 
         original_count = len(list(collection.find()))
 
-        ingestor = DocumentIngestor(chunk_size=500, chunk_overlap=50, verbose=False)
-
-        original_gen = LocalEmbeddingGenerator.generate
-
-        def mock_generate(self: LocalEmbeddingGenerator, text: str) -> list[float]:
+        def mock_generate(text: str) -> list[float]:
             import random as r
 
             r.seed(hash(text.lower()))
             return [r.random() for _ in range(768)]
-
-        LocalEmbeddingGenerator.generate = mock_generate
 
         sample_pdf = db["sample_pdf"]
         sample_pdf.insert_one(
@@ -190,8 +212,15 @@ class TestFullWorkflow:
         pdf_path.write_text("Test content for full workflow")
 
         try:
-            result = ingestor.ingest(str(pdf_path))
-            assert result["success"] >= 0
+            with patch("secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config") as mock_factory:
+                mock_embed = MagicMock()
+                mock_embed.generate.side_effect = mock_generate
+                mock_embed.validate_connection.return_value = True
+                mock_factory.return_value = mock_embed
+
+                ingestor = DocumentIngestor(chunk_size=500, chunk_overlap=50, verbose=False)
+                result = ingestor.ingest(str(pdf_path))
+                assert result["success"] >= 0
 
             new_docs = list(collection.find())
             final_count = len(new_docs)
@@ -218,7 +247,6 @@ class TestFullWorkflow:
             remaining = list(collection.find())
             assert len(remaining) == final_count - delete_count
         finally:
-            LocalEmbeddingGenerator.generate = original_gen
             pdf_path.unlink(missing_ok=True)
 
     @pytest.mark.integration
@@ -284,75 +312,55 @@ class TestIntegrationDataFlow:
         self,
         sample_pdf_path: Path,
     ) -> None:
-        """Verify ingestion creates properly structured chunks."""
+        """Verify chunk schema fields and embedding dimensions from build pipeline."""
         import random
 
         mongomock_client = mongomock.MongoClient()
         try:
-            db = mongomock_client["secondbrain_test"]
-            collection = db["embeddings_test"]
+            random.seed(0)
+
+            def make_emb(text: str) -> list[float]:
+                random.seed(hash(text.lower()))
+                return [random.random() for _ in range(768)]
+
+            mock_embed = MagicMock()
+            mock_embed.generate.side_effect = make_emb
+            mock_embed.generate_batch.side_effect = (
+                lambda texts: [make_emb(t) for t in texts]
+            )
+            mock_embed.validate_connection.return_value = True
 
             mock_storage = MagicMock()
             mock_storage.validate_connection.return_value = True
-            mock_storage._collection = collection
-            mock_storage._db = db
-            mock_storage._client = mongomock_client
+            mock_storage.store_batch.return_value = []
 
-            with patch("secondbrain.storage.VectorStorage") as mock_storage_cls:
-                mock_storage_cls.return_value = mock_storage
+            ingestor = DocumentIngestor(chunk_size=500, chunk_overlap=50, verbose=False)
 
-                ingestor = DocumentIngestor(
-                    chunk_size=500, chunk_overlap=50, verbose=False
+            segments = ingestor._extract_text(sample_pdf_path)
+            assert len(segments) > 0
+
+            chunks = ingestor._deduplicate_and_chunk_segments(sample_pdf_path, segments)
+
+            with patch.object(
+                ingestor, "_generate_embeddings_with_cache"
+            ) as mock_gen_cache:
+                mock_gen_cache.return_value = {
+                    c["text_hash"]: make_emb(c["text"]) for c in chunks
+                }
+                docs = ingestor._build_documents_with_embeddings(
+                    sample_pdf_path, segments, mock_embed
                 )
 
-                original_gen = LocalEmbeddingGenerator.generate
-
-                def mock_generate(
-                    self: LocalEmbeddingGenerator, text: str
-                ) -> list[float]:
-                    random.seed(hash(text.lower()))
-                    return [random.random() for _ in range(768)]
-
-                LocalEmbeddingGenerator.generate = mock_generate
-
-                try:
-                    result = ingestor.ingest(str(sample_pdf_path))
-
-                    assert result["success"] >= 1
-
-                    random.seed(456)  # Fixed seed for reproducibility
-                    mock_storage._collection.insert_many(
-                        [
-                            {
-                                "chunk_id": str(uuid.uuid4()),
-                                "source_file": str(sample_pdf_path),
-                                "page_number": 1,
-                                "chunk_text": f"Chunk {i}",
-                                "embedding": [random.random() for _ in range(768)],
-                                "metadata": {"file_type": "pdf"},
-                            }
-                            for i in range(3)
-                        ]
-                    )
-
-                    chunks = list(mock_storage._collection.find())
-
-                    assert len(chunks) >= 3
-
-                    for chunk in chunks:
-                        assert "chunk_id" in chunk and isinstance(
-                            chunk["chunk_id"], str
-                        )
-                        assert chunk.get("source_file")
-                        assert "page_number" in chunk
-                        assert chunk.get("chunk_text")
-                        assert "embedding" in chunk
-                        assert isinstance(chunk["embedding"], list)
-                        assert len(chunk["embedding"]) == 768
-                        assert "metadata" in chunk
-                        assert "file_type" in chunk["metadata"]
-                finally:
-                    LocalEmbeddingGenerator.generate = original_gen
+            assert len(docs) >= 1
+            for doc in docs:
+                assert isinstance(doc["chunk_id"], str)
+                assert doc.get("source_file") == str(sample_pdf_path)
+                assert doc.get("page_number", 0) >= 0
+                assert doc.get("chunk_text", "") != ""
+                assert isinstance(doc["embedding"], list)
+                assert len(doc["embedding"]) == 768
+                assert "file_type" in doc
+                assert "ingested_at" in doc
         finally:
             mongomock_client.close()
 
