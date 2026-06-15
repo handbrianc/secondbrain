@@ -30,7 +30,7 @@ class TestChaosAdvanced:
         def run_with_latency():
             try:
                 with injector.inject_latency(duration=1.0, latency_ms=100):
-                    time.sleep(0.1)
+                    time.sleep(0.05)
                     if injector.should_fail(FailureType.LATENCY_INJECTION):
                         injector.raise_failure(FailureType.LATENCY_INJECTION)
                     results.append("latency_done")
@@ -40,7 +40,7 @@ class TestChaosAdvanced:
         def run_with_failure():
             try:
                 with injector.inject_general_failure(duration=1.0, probability=1.0):
-                    time.sleep(0.1)
+                    time.sleep(0.05)
                     if injector.should_fail(FailureType.GENERAL_FAILURE):
                         injector.raise_failure(FailureType.GENERAL_FAILURE)
                     results.append("failure_done")
@@ -50,7 +50,7 @@ class TestChaosAdvanced:
         with ThreadPoolExecutor(max_workers=2) as executor:
             executor.submit(run_with_latency)
             executor.submit(run_with_failure)
-            time.sleep(0.3)
+            time.sleep(0.15)
         
         assert len(results) >= 1
 
@@ -207,7 +207,7 @@ class TestChaosResilienceMetrics:
 
         # Measure recovery time
         start_time = time.time()
-        time.sleep(0.25)  # Wait for recovery
+        time.sleep(0.25)  # Wait for recovery (>= recovery_timeout=0.2s)
         recovery_time = time.time() - start_time
 
         # Verify circuit recovered to HALF_OPEN
@@ -245,7 +245,7 @@ class TestChaosResilienceMetrics:
         cb.record_failure()
         transitions.append(("AFTER_FAILURES", cb.state))
 
-        # Wait for recovery
+        # Wait for recovery (>= recovery_timeout=0.1s)
         time.sleep(0.15)
         transitions.append(("AFTER_RECOVERY", cb.state))
 

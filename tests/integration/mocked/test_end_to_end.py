@@ -6,6 +6,10 @@ Tests exercise real logic paths with minimal mocking:
 
 Uses mongomock for in-memory MongoDB testing.
 
+# Group mocked integration tests on same xdist worker to share mongomock client
+pytestmark = [pytest.mark.integration, pytest.mark.xdist_group("mocked_integration")]
+
+
 ARCHITECTURAL NOTE:
 `ingest()` uses ThreadPoolExecutor internally for parallel file processing —
 worker threads re-import `docling` and embedding factories, bypassing test

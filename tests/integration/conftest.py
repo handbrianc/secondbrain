@@ -119,7 +119,7 @@ def wait_for_services() -> Generator[None, None, None]:
             print("MongoDB is healthy")
             break
         print(".", end="", flush=True)
-        time.sleep(0.5)  # Reduced from 1s for faster feedback
+        time.sleep(0.1)  # Poll interval scaled down from 0.5 for faster test execution
     else:
         pytest.skip(
             f"MongoDB not available after {SERVICE_HEALTH_TIMEOUT}s - integration tests skipped. "

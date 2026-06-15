@@ -18,8 +18,7 @@ from secondbrain.embedding.local import LocalEmbeddingGenerator
 from secondbrain.storage import VectorStorage
 from secondbrain.storage.pipeline import build_search_pipeline
 
-# Mark all tests as integration (not slow - with mocked services they're fast)
-pytestmark = [pytest.mark.integration]
+pytestmark = [pytest.mark.integration, pytest.mark.xdist_group("ingestion")]
 
 
 @pytest.fixture(scope="module")
