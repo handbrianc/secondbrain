@@ -58,30 +58,38 @@ class TestIngestCoresValidation:
         test_file.write_text("hello world")
         test_dir = str(tmp_path)
 
-        result = runner.invoke(
-            cli,
-            ["ingest", test_dir, "--cores", "0"],
-        )
-        assert result.exit_code != 0
-        assert result.exception is not None
-        assert "positive" in str(result.exception).lower()
+        # Mock DocumentIngestor to bypass costly docling/SentenceTransformer init.
+        # All three invoke cases below exercise CLI arg-validation and warning-logic
+        # only — none depend on actual document ingestion, so a bare mock suffices.
+        mock_ingestor = MagicMock()
+        mock_ingestor.ingest.return_value = {"success": 1, "failed": 0}
+        mock_ingestor_class = MagicMock(return_value=mock_ingestor)
 
-        result = runner.invoke(
-            cli,
-            ["ingest", test_dir, "--cores", "-1"],
-        )
-        assert result.exit_code != 0
-        assert result.exception is not None
-        assert "positive" in str(result.exception).lower()
+        with patch("secondbrain.document.DocumentIngestor", mock_ingestor_class):
+            result = runner.invoke(
+                cli,
+                ["ingest", test_dir, "--cores", "0"],
+            )
+            assert result.exit_code != 0
+            assert result.exception is not None
+            assert "positive" in str(result.exception).lower()
 
-        excessive_cores = available_cores + 10
-        result = runner.invoke(
-            cli,
-            ["ingest", test_dir, "--cores", str(excessive_cores)],
-        )
-        assert result.exit_code == 0
-        assert "Warning" in result.output
-        assert str(available_cores) in result.output
+            result = runner.invoke(
+                cli,
+                ["ingest", test_dir, "--cores", "-1"],
+            )
+            assert result.exit_code != 0
+            assert result.exception is not None
+            assert "positive" in str(result.exception).lower()
+
+            excessive_cores = available_cores + 10
+            result = runner.invoke(
+                cli,
+                ["ingest", test_dir, "--cores", str(excessive_cores)],
+            )
+            assert result.exit_code == 0
+            assert "Warning" in result.output
+            assert str(available_cores) in result.output
 
 
 class TestIngestStreamingEnabled:

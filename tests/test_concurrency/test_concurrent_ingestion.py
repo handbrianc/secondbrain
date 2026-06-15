@@ -16,6 +16,7 @@ from secondbrain.utils.circuit_breaker import (
 
 @pytest.mark.concurrent
 @pytest.mark.slow
+@pytest.mark.xdist_group("concurrent")  # Isolate concurrent tests on same worker
 class TestConcurrentIngestion:
     """Test concurrent document ingestion scenarios."""
 

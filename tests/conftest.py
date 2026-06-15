@@ -146,10 +146,58 @@ def sample_pdf_with_multiple_pages() -> Path:
         return Path(tmp.name)
 
 
-from typing import Any
+# Module-level cache: populated once when shared_embedding_model is first used
+_SB_WARM_MODEL: Any = None
 
 
 @pytest.fixture(scope="session")
+def shared_embedding_model() -> Any:
+    """Session-scoped pre-loaded embedding model.
+
+    Lazily warms a LocalEmbeddingProvider("all-MiniLM-L6-v2") on first use,
+    then installs a __init__ patch so all subsequent default-model constructions
+    share the already-loaded model — avoiding the ~17-25 s SentenceTransformer
+    cold-load tax on every new instantiation.
+
+    Tests that construct LocalEmbeddingProvider with a custom model name are
+    unaffected (patched __init__ delegates to real __init__).  Tests that wrap
+    sentence_transformers.SentenceTransformer in a mock context are also
+    unaffected (_model is pre-set by the mock block, triggering the passthrough).
+    """
+    from secondbrain.embedding.local import LocalEmbeddingProvider
+
+    global _SB_WARM_MODEL
+
+    if _SB_WARM_MODEL is None:
+        _SB_WARM_MODEL = LocalEmbeddingProvider(model_name="all-MiniLM-L6-v2").model
+
+    orig_init = LocalEmbeddingProvider.__init__
+
+    def patched_init(
+        self: Any, model_name: str = "all-MiniLM-L6-v2", **kwargs: Any
+    ) -> None:
+        if model_name == "all-MiniLM-L6-v2":
+            # Passthrough if a test already initialised _model under a mock
+            if getattr(self, "_model", None) is not None:
+                orig_init(self, model_name=model_name, **kwargs)
+                return
+            self.model_name = model_name
+            self._model = _SB_WARM_MODEL
+            self._connection_valid = True
+            self._connection_checked_at = 0.0
+        else:
+            orig_init(self, model_name=model_name, **kwargs)
+
+    LocalEmbeddingProvider.__init__ = patched_init  # type: ignore[method-assign]
+
+    yield _SB_WARM_MODEL
+
+    LocalEmbeddingProvider.__init__ = orig_init  # type: ignore[method-assign]
+
+
+@pytest.fixture(scope="session")
+
+
 def embedding_cache() -> Any:
     cache: dict[str, list[float]] = {}
 
