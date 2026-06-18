@@ -20,6 +20,7 @@ _test_config = Config()
 class TestBasicUsageExamples:
     """Tests for basic_usage example scripts."""
 
+    @pytest.mark.integration
     def test_example_basic_usage_ingest(
         self, example_runner: Any, create_test_pdf: Any, tmp_path: Path
     ) -> None:
@@ -45,7 +46,7 @@ class TestBasicUsageExamples:
         assert "Ingested:" in result["stdout"] or "chunks" in result["stdout"].lower()
 
     def test_example_basic_usage_search(
-        self, example_runner: Any, fast_test_config: Any
+        self, example_runner: Any
     ) -> None:
         """Test basic semantic search example.
 
@@ -69,7 +70,7 @@ class TestBasicUsageExamples:
         )
 
     def test_example_basic_usage_list(
-        self, example_runner: Any, fast_test_config: Any
+        self, example_runner: Any
     ) -> None:
         """Test basic document listing example.
 
@@ -96,6 +97,7 @@ class TestBasicUsageExamples:
 class TestAdvancedExamples:
     """Tests for advanced example scripts."""
 
+    @pytest.mark.integration
     def test_example_circuit_breaker(self, example_runner: Any) -> None:
         """Test circuit breaker usage example.
 
@@ -131,8 +133,9 @@ class TestAdvancedExamples:
         assert result["success"], f"Tracing example failed: {result['stderr']}"
         assert "Tracing" in result["stdout"] or "span" in result["stdout"].lower()
 
+    @pytest.mark.integration
     def test_example_async_workflow(
-        self, example_runner: Any, tmp_path: Path, fast_test_config: Any
+        self, example_runner: Any, tmp_path: Path
     ) -> None:
         """Test async workflow example.
 
@@ -167,8 +170,9 @@ class TestAdvancedExamples:
         )
         assert result["success"] or has_service_error
 
+    @pytest.mark.integration
     def test_example_batch_ingestion(
-        self, example_runner: Any, tmp_path: Path, fast_test_config: Any
+        self, example_runner: Any, tmp_path: Path
     ) -> None:
         """Test batch ingestion example.
 
@@ -193,6 +197,7 @@ class TestAdvancedExamples:
         # Should process files or handle errors gracefully
         assert result["success"] or "No files found" in result["stdout"]
 
+    @pytest.mark.integration
     def test_example_custom_chunking(
         self, example_runner: Any, create_test_pdf: Any, tmp_path: Path
     ) -> None:
@@ -226,7 +231,7 @@ class TestIntegrationExamples:
     """Tests for integration example scripts."""
 
     def test_example_flask_api(
-        self, example_runner: Any, fast_test_config: Any
+        self, example_runner: Any
     ) -> None:
         """Test Flask API integration example.
 
@@ -287,7 +292,7 @@ class TestIntegrationExamples:
             pytest.fail(f"Flask API test failed: {e}")
 
     def test_example_fastapi_endpoint(
-        self, example_runner: Any, fast_test_config: Any
+        self, example_runner: Any
     ) -> None:
         """Test FastAPI endpoint example.
 

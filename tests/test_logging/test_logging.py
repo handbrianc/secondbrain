@@ -7,6 +7,8 @@ from pathlib import Path
 import pytest
 from rich.logging import RichHandler
 
+from unittest.mock import patch
+
 from secondbrain.logging import (
     HealthStatus,
     check_services,
@@ -18,6 +20,7 @@ from secondbrain.logging import (
     setup_logging,
     setup_rich_logging,
 )
+from secondbrain.storage import MockVectorStorage
 
 
 def test_setup_logging_info() -> None:
@@ -129,6 +132,11 @@ class JsonFormatter(logging.Formatter):
 
 
 class TestRequestContext:
+    @pytest.fixture(autouse=True)
+    def _reset_request_id(self):
+        prev = get_request_id()
+        yield
+        set_request_id(prev)
     def test_get_request_id_default_empty(self) -> None:
         assert get_request_id() == ""
 
@@ -209,25 +217,30 @@ class TestSetupJsonLogging:
 
 class TestGetHealthStatus:
     def test_get_health_status_structure(self) -> None:
-        status = get_health_status()
-        assert "status" in status
-        assert "timestamp" in status
-        assert "services" in status
-        assert "check_duration_seconds" in status
+        with patch("secondbrain.storage.VectorStorage", return_value=MockVectorStorage(), create=True):
+            status = get_health_status()
+            assert "status" in status
+            assert "timestamp" in status
+            assert "services" in status
+            assert "check_duration_seconds" in status
 
     def test_get_health_status_services_keys(self) -> None:
-        assert "mongodb" in get_health_status()["services"]
+        with patch("secondbrain.storage.VectorStorage", return_value=MockVectorStorage(), create=True):
+            assert "mongodb" in get_health_status()["services"]
 
 
 class TestCheckServices:
     def test_check_services_returns_dict(self) -> None:
-        assert isinstance(check_services(), dict)
+        with patch("secondbrain.storage.VectorStorage", return_value=MockVectorStorage(), create=True):
+            assert isinstance(check_services(), dict)
 
     def test_check_services_has_required_keys(self) -> None:
-        assert "mongodb" in check_services()
+        with patch("secondbrain.storage.VectorStorage", return_value=MockVectorStorage(), create=True):
+            assert "mongodb" in check_services()
 
     def test_check_services_values_are_booleans(self) -> None:
-        assert isinstance(check_services()["mongodb"], bool)
+        with patch("secondbrain.storage.VectorStorage", return_value=MockVectorStorage(), create=True):
+            assert isinstance(check_services()["mongodb"], bool)
 
 
 class TestFileLogging:

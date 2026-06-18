@@ -1,6 +1,7 @@
 """Conversation storage implementation for MongoDB."""
 
 import logging
+import os
 from datetime import UTC, datetime
 from typing import Any
 
@@ -71,7 +72,7 @@ class ConversationStorage(ValidatableService):
         --------
             >>> storage = ConversationStorage()
             >>> storage = ConversationStorage(
-            ...     mongo_uri="mongodb://localhost:27017",
+            ...     mongo_uri=os.getenv("SECONDBRAIN_MONGO_URI"),
             ...     db_name="chat_db",
             ...     collection_name="sessions"
             ... )

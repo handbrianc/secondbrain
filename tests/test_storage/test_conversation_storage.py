@@ -49,7 +49,12 @@ def storage_with_mocks(mock_client, mock_collection):
             db_name="test_db",
             collection_name="test_conversations",
         )
-        # Force initialization of properties
+        # Reset internal state to ensure collection property re-resolves through mocks
+        # This prevents any cached reference to a different mock collection
+        storage._client = None
+        storage._db = None
+        storage._collection = None
+        # Force initialization of properties through mocked client
         _ = storage.collection
         yield storage, mock_collection, mock_client_class
 

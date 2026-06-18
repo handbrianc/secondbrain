@@ -23,6 +23,9 @@ class MockVectorStorage:
         self._chunks: dict[str, dict[str, Any]] = {}
         self._chunk_ids: list[str] = []
         self._initialized = False
+        self._collection_stub: Any = None
+        self._db_stub: Any = None
+        self._client_stub: Any = None
 
     def _calculate_cosine_similarity(
         self, vec1: list[float], vec2: list[float]
@@ -94,6 +97,7 @@ class MockVectorStorage:
         query_embedding: list[float],
         top_k: int = 5,
         threshold: float = 0.0,
+        source_filter: str | None = None,
         **kwargs: Any,
     ) -> list[dict[str, Any]]:
         """Search for similar chunks.
@@ -111,9 +115,11 @@ class MockVectorStorage:
             return []
 
         scored_chunks = []
-        for chunk_id, chunk in self._chunks.items():
+        for chunk in self._chunks.values():
             chunk_embedding = chunk.get("embedding", [])
             if not chunk_embedding:
+                continue
+            if source_filter and chunk.get("source_file") != source_filter:
                 continue
 
             similarity = self._calculate_cosine_similarity(
@@ -201,6 +207,84 @@ class MockVectorStorage:
             self.delete(cid)
         return len(to_delete)
 
+    def delete_by_chunk_id(self, chunk_id: str) -> None:
+        """Delete a chunk by its chunk_id.
+
+        Args:
+            chunk_id: The chunk_id to delete.
+        """
+        if chunk_id in self._chunks:
+            del self._chunks[chunk_id]
+            if chunk_id in self._chunk_ids:
+                self._chunk_ids.remove(chunk_id)
+
+    def delete_by_source(self, source_file: str) -> int:
+        """Delete all chunks from a given source file.
+
+        Args:
+            source_file: The source_file name to filter by.
+
+        Returns:
+            Number of chunks deleted.
+        """
+        to_delete = [
+            cid for cid, chunk in self._chunks.items()
+            if chunk.get("source_file") == source_file
+        ]
+        for cid in to_delete:
+            self.delete(cid)
+        return len(to_delete)
+
+    def list_chunks(
+        self,
+        source_filter: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        """List chunks with optional source filtering and pagination.
+
+        Args:
+            source_filter: Optional source_file to filter by.
+            limit: Maximum number of chunks to return.
+            offset: Number of chunks to skip.
+
+        Returns:
+            List of chunk dictionaries.
+        """
+        chunks = list(self._chunks.values())
+        if source_filter:
+            chunks = [c for c in chunks if c.get("source_file") == source_filter]
+        return chunks[offset : offset + limit]
+
+    def paginate(
+        self,
+        page: int = 1,
+        page_size: int = 10,
+        source_filter: str | None = None,
+    ) -> dict[str, Any]:
+        """Paginated list of chunks.
+
+        Args:
+            page: Page number (1-indexed).
+            page_size: Number of items per page.
+            source_filter: Optional source_file to filter by.
+
+        Returns:
+            Dict with items, total, page, page_size, total_pages.
+        """
+        all_chunks = self.list_chunks(source_filter=source_filter, limit=999999)
+        total = len(all_chunks)
+        total_pages = (total + page_size - 1) // page_size if page_size > 0 else 0
+        start = (page - 1) * page_size
+        end = start + page_size
+        return {
+            "items": all_chunks[start:end],
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": total_pages,
+        }
+
     def delete_all(self) -> int:
         """Delete all chunks.
 
@@ -287,3 +371,30 @@ class MockVectorStorage:
     def __contains__(self, chunk_id: str) -> bool:
         """Check if chunk exists."""
         return chunk_id in self._chunks
+
+    @property
+    def collection(self) -> Any:
+        """Stub for MongoDB collection attribute (returns stable mock across accesses)."""
+        if self._collection_stub is None:
+            from unittest.mock import MagicMock
+
+            self._collection_stub = MagicMock()
+        return self._collection_stub
+
+    @property
+    def db(self) -> Any:
+        """Stub for MongoDB db attribute (returns stable mock across accesses)."""
+        if self._db_stub is None:
+            from unittest.mock import MagicMock
+
+            self._db_stub = MagicMock()
+        return self._db_stub
+
+    @property
+    def client(self) -> Any:
+        """Stub for MongoDB client attribute (returns stable mock across accesses)."""
+        if self._client_stub is None:
+            from unittest.mock import MagicMock
+
+            self._client_stub = MagicMock()
+        return self._client_stub

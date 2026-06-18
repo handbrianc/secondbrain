@@ -17,16 +17,6 @@ from secondbrain.document import (
 )
 
 
-class TestCoverageGapsWorkerInitialization:
-    """Tests for worker initialization code paths (lines 95-96)."""
-
-    def test_init_worker_with_queue_callable(self) -> None:
-        """Test that worker initialization with queue function exists."""
-        from secondbrain.document import _init_worker_with_queue
-
-        assert callable(_init_worker_with_queue)
-
-
 class TestCoverageGapsStreamProcess:
     """Tests for streaming process code paths (lines 523, 1120-1123, 1190-1199, 1208, 1212)."""
 

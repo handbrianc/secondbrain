@@ -19,8 +19,11 @@ class TestOpenAILLMProviderInit:
 
     def test_init_with_defaults(self):
         """Test initialization with default parameters."""
-        # Mock the API key environment variable
-        with patch.dict(os.environ, {"SECONDBRAIN_OPENAI_API_KEY": "test-key"}):
+        with patch.dict(
+            os.environ,
+            {"SECONDBRAIN_OPENAI_API_KEY": "test-key"},
+            clear=True,
+        ):
             provider = OpenAILLMProvider()
 
             assert provider._model == "gpt-4o-mini"
@@ -31,7 +34,7 @@ class TestOpenAILLMProviderInit:
 
     def test_init_with_custom_parameters(self):
         """Test initialization with custom parameters."""
-        with patch.dict(os.environ, {"SECONDBRAIN_OPENAI_API_KEY": "test-key"}):
+        with patch.dict(os.environ, {"SECONDBRAIN_OPENAI_API_KEY": "test-key"}, clear=True):
             provider = OpenAILLMProvider(
                 model="gpt-4",
                 temperature=0.7,

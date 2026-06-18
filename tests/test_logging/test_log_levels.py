@@ -59,15 +59,17 @@ class TestStructuredLoggingLevels:
 
     def test_request_id_in_logs(self):
         """Test that request ID can be included in logs."""
+        from secondbrain.logging import set_request_id
         setup_logging(verbose=False)
         logger = get_logger(__name__)
-        
-        from secondbrain.logging import set_request_id
-        set_request_id("test-request-123")
-        
+
+        req_id = set_request_id("test-request-123")
+
         logger.info("Test with request ID")
-        
-        assert True
+
+        assert req_id == "test-request-123"
+
+        set_request_id("")
 
     def test_file_handler_with_rotation(self):
         """Test file handler with rotation can be configured."""

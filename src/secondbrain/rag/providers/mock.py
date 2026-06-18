@@ -1,13 +1,14 @@
 """Mock LLM provider for testing.
 
-Provides MockLLMProvider class that implements the LocalLLMProvider protocol
-with deterministic, predictable responses for testing.
+Provides MockLLMProvider class for testing without a real LLM server.
+Useful for testing when LLM server is unavailable.
 """
 
 import asyncio
 import hashlib
+import time
 
-from secondbrain.rag.interfaces import LocalLLMProvider
+from secondbrain.rag.interfaces import LocalLLMProvider, StreamingCallback
 
 
 class MockLLMProvider(LocalLLMProvider):
@@ -101,6 +102,44 @@ class MockLLMProvider(LocalLLMProvider):
         """
         return True
 
+    def stream_chat(
+        self,
+        messages: list[dict[str, str]],
+        on_chunk: StreamingCallback,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> str:
+        """Stream mock response with simulated delays."""
+        last_user_message = ""
+        for msg in reversed(messages):
+            if msg.get("role") == "user":
+                last_user_message = msg.get("content", "")
+                break
+
+        full_response = self.generate(last_user_message, temperature, max_tokens)
+        
+        chunk_size = 5
+        for i in range(0, len(full_response), chunk_size):
+            chunk = full_response[i : i + chunk_size]
+            on_chunk(chunk, None)
+            time.sleep(0.01)
+
+        return full_response
+
+    async def stream_chat_async(
+        self,
+        messages: list[dict[str, str]],
+        on_chunk: StreamingCallback,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> str:
+        """Async streaming mock response."""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            None,
+            lambda: self.stream_chat(messages, on_chunk, temperature, max_tokens),
+        )
+
     def chat(
         self,
         messages: list[dict[str, str]],
@@ -154,7 +193,7 @@ class MockLLMProviderWithContext(MockLLMProvider):
             
             # Configuration patterns
             "chunk size": "The default chunk size is 4096 tokens. This is a configuration setting that can be adjusted using the SECONDBRAIN_CHUNK_SIZE environment variable.",
-            "MongoDB": "MongoDB connection errors occur when the connection URI is invalid or network connectivity fails. Proper URI validation helps prevent these connection errors. The URI is configured using the SECONDBRAIN_MONGO_URI environment variable. The default MongoDB URI for local development is mongodb://localhost:27017.",
+            "MongoDB": "MongoDB connection errors occur when the connection URI is invalid or network connectivity fails. Proper URI validation helps prevent these connection errors. The URI is configured using the SECONDBRAIN_MONGO_URI environment variable - there is no default and the variable MUST be set.",
             "circuit breaker": "Circuit breaker protection can be enabled by setting SECONDBRAIN_CIRCUIT_BREAKER_ENABLED=true. This provides automatic failure handling with recovery mechanisms for production reliability.",
             "circuit breaker work": "The circuit breaker provides protection by automatically monitoring service health and handling failures. When errors exceed a threshold, it opens the circuit and returns fallback responses until the service recovers automatically with built-in recovery logic.",
             "Ingestor": "The Ingestor class handles multi-format document parsing and automatic chunking using Docling library for document ingestion.",
