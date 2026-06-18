@@ -18,7 +18,11 @@ from secondbrain.embedding.local import LocalEmbeddingGenerator
 from secondbrain.storage import VectorStorage
 from secondbrain.storage.pipeline import build_search_pipeline
 
-pytestmark = [pytest.mark.integration, pytest.mark.xdist_group("ingestion")]
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.xdist_group("ingestion"),
+    pytest.mark.flaky(reruns=2, rerun_delay=1),
+]
 
 
 @pytest.fixture(scope="module")
