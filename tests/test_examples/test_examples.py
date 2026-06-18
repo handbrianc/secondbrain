@@ -20,6 +20,7 @@ _test_config = Config()
 class TestBasicUsageExamples:
     """Tests for basic_usage example scripts."""
 
+    @pytest.mark.slow
     def test_example_basic_usage_ingest(
         self, example_runner: Any, create_test_pdf: Any, tmp_path: Path
     ) -> None:
@@ -96,6 +97,7 @@ class TestBasicUsageExamples:
 class TestAdvancedExamples:
     """Tests for advanced example scripts."""
 
+    @pytest.mark.slow
     def test_example_circuit_breaker(self, example_runner: Any) -> None:
         """Test circuit breaker usage example.
 
@@ -131,6 +133,7 @@ class TestAdvancedExamples:
         assert result["success"], f"Tracing example failed: {result['stderr']}"
         assert "Tracing" in result["stdout"] or "span" in result["stdout"].lower()
 
+    @pytest.mark.slow
     def test_example_async_workflow(
         self, example_runner: Any, tmp_path: Path
     ) -> None:
@@ -167,6 +170,7 @@ class TestAdvancedExamples:
         )
         assert result["success"] or has_service_error
 
+    @pytest.mark.slow
     def test_example_batch_ingestion(
         self, example_runner: Any, tmp_path: Path
     ) -> None:
@@ -193,6 +197,7 @@ class TestAdvancedExamples:
         # Should process files or handle errors gracefully
         assert result["success"] or "No files found" in result["stdout"]
 
+    @pytest.mark.slow
     def test_example_custom_chunking(
         self, example_runner: Any, create_test_pdf: Any, tmp_path: Path
     ) -> None:
