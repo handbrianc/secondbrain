@@ -12,14 +12,17 @@ from secondbrain.rag.providers.openai import OpenAILLMProvider
 class TestOpenAILLMProviderInit:
     """Test OpenAILLMProvider initialization."""
 
-    def test_init_requires_api_key(self):
+    def test_init_requires_api_key(self, monkeypatch):
         """Test initialization fails without API key."""
+        monkeypatch.delenv("SECONDBRAIN_LLM_API_KEY", raising=False)
+        monkeypatch.delenv("SECONDBRAIN_OPENAI_API_KEY", raising=False)
         with pytest.raises(ValueError, match="OpenAI API key"):
             OpenAILLMProvider(api_key=None)
 
     def test_init_uses_env_var_api_key(self, monkeypatch):
         """Test initialization uses environment variable for API key."""
         monkeypatch.setenv("SECONDBRAIN_OPENAI_API_KEY", "test-key-123")
+        monkeypatch.delenv("SECONDBRAIN_LLM_API_KEY", raising=False)
         provider = OpenAILLMProvider()
         
         assert provider._api_key == "test-key-123"
@@ -186,9 +189,9 @@ class TestOpenAILLMProviderEdgeCases:
         mock_client.chat.completions.create.return_value = mock_completion
         
         provider = OpenAILLMProvider(api_key="test-key")
-        response = provider.generate("")
         
-        assert response == ""
+        with pytest.raises(RuntimeError, match="Generation failed"):
+            provider.generate("")
 
     @patch('secondbrain.rag.providers.openai.OpenAI')
     def test_generate_with_very_long_prompt(self, mock_client_class):

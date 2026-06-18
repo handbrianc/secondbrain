@@ -28,20 +28,6 @@ def _is_mongo_available() -> bool:
         return False
 
 
-def _is_llm_available() -> bool:
-    try:
-        import httpx
-        
-        # Use platform-aware port
-        import platform
-        port = 11434 if platform.system() == "Darwin" else 11435
-        
-        response = httpx.get(f"http://localhost:{port}/api/version", timeout=2)
-        return response.status_code == 200
-    except Exception:
-        return False
-
-
 # ============================================================================
 # PII DETECTION TESTS (8 tests)
 # ============================================================================

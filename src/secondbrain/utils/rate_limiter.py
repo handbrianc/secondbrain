@@ -1,22 +1,20 @@
-"""Shared rate limiter for multiprocessing environments.
+"""Shared rate limiter for threading environments.
 
-This module provides a rate limiter that can be shared across ProcessPoolExecutor
-workers using multiprocessing.Manager() for shared state.
+This module provides a rate limiter that can be shared across threads
+using threading primitives for shared state.
 """
 
 from __future__ import annotations
 
+import threading
 import time
-from multiprocessing.managers import BaseManager, SyncManager
-from typing import Any
 
 
 class SharedRateLimiter:
-    """Rate limiter with shared state across multiprocessing workers.
+    """Rate limiter with shared state across threads.
 
-    Uses multiprocessing.Manager() to create shared state that can be
-    accessed by multiple processes. Implements a token bucket algorithm
-    for rate limiting.
+    Uses threading.Lock() to create thread-safe shared state.
+    Implements a token bucket algorithm for rate limiting.
 
     Attributes
     ----------
@@ -28,22 +26,19 @@ class SharedRateLimiter:
 
     def __init__(
         self,
-        manager: SyncManager,
         max_requests: int = 100,
         window_seconds: float = 60.0,
     ) -> None:
         """Initialize shared rate limiter.
 
         Args:
-            manager: Multiprocessing Manager instance for shared state.
             max_requests: Maximum requests allowed in window.
             window_seconds: Time window in seconds.
         """
-        self._manager = manager
         self._max_requests = max_requests
         self._window_seconds = window_seconds
-        self._timestamps = manager.list()
-        self._lock = manager.Lock()
+        self._timestamps: list[float] = []
+        self._lock = threading.Lock()
 
     def acquire(self) -> bool:
         """Try to acquire a rate limit slot.
@@ -131,7 +126,6 @@ class SharedRateLimiter:
 
 # Global singleton instance
 _shared_rate_limiter: SharedRateLimiter | None = None
-_manager: BaseManager | None = None
 
 
 def get_shared_rate_limiter(
@@ -139,7 +133,7 @@ def get_shared_rate_limiter(
 ) -> SharedRateLimiter:
     """Get or create the shared rate limiter singleton.
 
-    Creates a Manager and SharedRateLimiter on first call, then
+    Creates a SharedRateLimiter on first call, then
     returns the same instance on subsequent calls.
 
     Args:
@@ -150,28 +144,21 @@ def get_shared_rate_limiter(
     -------
         SharedRateLimiter instance.
     """
-    global _shared_rate_limiter, _manager
+    global _shared_rate_limiter
 
     if _shared_rate_limiter is None:
-        # Create a manager for shared state
-        _manager = SyncManager()
-        _manager.start()
         _shared_rate_limiter = SharedRateLimiter(
-            _manager, max_requests=max_requests, window_seconds=window_seconds
+            max_requests=max_requests, window_seconds=window_seconds
         )
 
     return _shared_rate_limiter
 
 
 def shutdown_shared_rate_limiter() -> None:
-    """Shutdown the shared rate limiter and manager.
+    """Shutdown the shared rate limiter.
 
     Call this when the application exits to clean up resources.
     """
-    global _shared_rate_limiter, _manager
-
-    if _manager is not None:
-        _manager.shutdown()
-        _manager = None
+    global _shared_rate_limiter
 
     _shared_rate_limiter = None

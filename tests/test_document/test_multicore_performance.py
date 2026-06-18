@@ -9,8 +9,7 @@ Consolidated from:
 
 import os
 import time
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
-from multiprocessing import Pool
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from pathlib import Path
 
 import pytest
@@ -40,26 +39,21 @@ class TestRateLimiting:
         default parameters (100 req/s) on first call, so this test creates a fresh
         SharedRateLimiter directly to test the actual rate limiting behavior.
         """
-        from multiprocessing import Manager
         from secondbrain.utils.rate_limiter import SharedRateLimiter
         
-        # Create a fresh rate limiter with proper Manager for this test
-        manager = Manager()
-        limiter = SharedRateLimiter(manager, max_requests=10, window_seconds=1.0)
+        # Create a fresh rate limiter for this test (thread-safe)
+        limiter = SharedRateLimiter(max_requests=10, window_seconds=1.0)
         
-        try:
-            # First 10 requests should succeed
-            success_count = 0
-            for _ in range(10):
-                if limiter.acquire():
-                    success_count += 1
-            
-            assert success_count == 10
-            
-            # 11th request should fail (rate limited)
-            assert not limiter.acquire()
-        finally:
-            manager.shutdown()
+        # First 10 requests should succeed
+        success_count = 0
+        for _ in range(10):
+            if limiter.acquire():
+                success_count += 1
+        
+        assert success_count == 10
+        
+        # 11th request should fail (rate limited)
+        assert not limiter.acquire()
 
     def test_rate_limiter_shared_across_processes(self):
         """Test that rate limiter state is shared across processes."""
@@ -178,7 +172,7 @@ class TestParallelPerformance:
         # Time parallel processing with timeout handling
         start_parallel = time.time()
         try:
-            with ProcessPoolExecutor(max_workers=2) as executor:
+            with ThreadPoolExecutor(max_workers=2) as executor:
                 futures = [
                     executor.submit(_extract_and_chunk_file, str(f), 100, 10)
                     for f in test_files
@@ -201,15 +195,15 @@ class TestWorkerPoolManagement:
         """Test that worker pools can be reused efficiently."""
         # Create pool and reuse it
         try:
-            with Pool(processes=2) as pool:
+            with ThreadPoolExecutor(max_workers=2) as pool:
                 # First batch
-                result1 = pool.map_async(_simple_task, range(5))
-                results1 = result1.get(timeout=30)
+                futures1 = [pool.submit(_simple_task, i) for i in range(5)]
+                results1 = [f.result(timeout=30) for f in futures1]
                 assert results1 == [0, 2, 4, 6, 8]
 
                 # Second batch (pool reused)
-                result2 = pool.map_async(_simple_task, range(5, 10))
-                results2 = result2.get(timeout=30)
+                futures2 = [pool.submit(_simple_task, i) for i in range(5, 10)]
+                results2 = [f.result(timeout=30) for f in futures2]
                 assert results2 == [10, 12, 14, 16, 18]
         except FuturesTimeoutError:
             pytest.fail("Worker pool operation timed out after 30s")

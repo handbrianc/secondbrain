@@ -14,7 +14,7 @@ class TestAsyncConnection:
 
     @pytest.fixture
     def storage(self):
-        """Create a VectorStorage instance with mocked config."""
+        """Create a VectorStorage instance with mocked config and fresh state."""
         with patch("secondbrain.storage.config") as mock_config_func:
             from secondbrain.config import Config
             _test_config = Config()
@@ -27,6 +27,7 @@ class TestAsyncConnection:
             mock_config_func.return_value.connection_cache_ttl = 60.0
 
             storage = VectorStorage()
+            storage._connection_valid = None
             yield storage
 
     @pytest.mark.asyncio

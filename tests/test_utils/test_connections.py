@@ -48,6 +48,7 @@ class TestEnsureServiceAvailable:
         """Test that ensure_service_available raises when service is unavailable."""
         # Create fresh mock per test to avoid xdist worker pollution
         validator = MagicMock(return_value=False)
+        validator.side_effect = None  # Clear any residual side-effects from prior tests
         with pytest.raises(ServiceUnavailableError) as exc_info:
             ensure_service_available("test-service", validator)
         assert "test-service" in str(exc_info.value)

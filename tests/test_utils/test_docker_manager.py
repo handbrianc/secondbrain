@@ -11,7 +11,6 @@ from secondbrain.utils.docker_manager import (
     MongoDBStartupError,
 )
 
-# Get test config
 _test_config = Config()
 
 
@@ -125,7 +124,6 @@ class TestCheckMongoRunning:
 
 
 class TestStartMongo:
-    @pytest.mark.xdist_group(name="docker_manager")
     def test_start_mongo_docker_not_installed(self, tmp_path):
         """Test start_mongo raises DockerNotInstalledError when Docker unavailable."""
         # Create a valid compose file to avoid file not found errors
@@ -138,7 +136,6 @@ class TestStartMongo:
         ):
             manager.start_mongo()
 
-    @pytest.mark.xdist_group(name="docker_manager")
     def test_start_mongo_compose_not_installed(self, tmp_path):
         """Test start_mongo raises DockerComposeError when compose unavailable."""
         # Create a valid compose file to avoid file not found errors
@@ -216,21 +213,18 @@ class TestWaitForMongoReady:
 
 
 class TestEnsureMongoRunning:
-    @pytest.mark.xdist_group(name="docker_manager")
     @patch("secondbrain.utils.docker_manager.config")
     def test_ensure_mongo_running_skips_remote(self, mock_config):
         mock_config.return_value.mongo_uri = "mongodb+srv://cluster.mongodb.net"
         manager = DockerManager()
         manager.ensure_mongo_running(verbose=False)
 
-    @pytest.mark.xdist_group(name="docker_manager")
     def test_ensure_mongo_running_already_running(self):
         with patch.object(
             manager := DockerManager(), "check_mongo_running", return_value=True
         ):
             manager.ensure_mongo_running(verbose=False)
 
-    @pytest.mark.xdist_group(name="docker_manager")
     def test_ensure_mongo_running_docker_not_installed(self, tmp_path):
         compose_file = tmp_path / "docker-compose.yml"
         compose_file.write_text("services:\n  mongo:\n    image: mongodb/mongodb-community-server:7.0\n")

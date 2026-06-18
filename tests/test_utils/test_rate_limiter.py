@@ -1,7 +1,6 @@
-"""Tests for SharedRateLimiter in multiprocessing environments."""
+"""Tests for SharedRateLimiter."""
 
 import time
-from multiprocessing import Manager
 
 import pytest
 
@@ -17,8 +16,7 @@ class TestSharedRateLimiterInit:
 
     def test_init_with_defaults(self):
         """Test initialization with default parameters."""
-        manager = Manager()
-        limiter = SharedRateLimiter(manager)
+        limiter = SharedRateLimiter(max_requests=100, window_seconds=60.0)
 
         assert limiter.max_requests == 100
         assert limiter.window_seconds == 60.0
@@ -26,18 +24,16 @@ class TestSharedRateLimiterInit:
 
     def test_init_with_custom_values(self):
         """Test initialization with custom rate limit parameters."""
-        manager = Manager()
-        limiter = SharedRateLimiter(manager, max_requests=50, window_seconds=30.0)
+        limiter = SharedRateLimiter(max_requests=50, window_seconds=30.0)
 
         assert limiter.max_requests == 50
         assert limiter.window_seconds == 30.0
 
     def test_init_creates_shared_state(self):
         """Test that initialization creates shared list and lock."""
-        manager = Manager()
-        limiter = SharedRateLimiter(manager)
+        limiter = SharedRateLimiter(max_requests=100, window_seconds=60.0)
 
-        # Verify timestamps is a manager.list
+        # Verify timestamps is a list
         assert hasattr(limiter._timestamps, 'append')
         assert hasattr(limiter._timestamps, 'pop')
         assert hasattr(limiter._lock, 'acquire')
@@ -49,8 +45,7 @@ class TestSharedRateLimiterAcquire:
 
     def test_acquire_allows_requests_under_limit(self):
         """Test that acquire allows requests when under the limit."""
-        manager = Manager()
-        limiter = SharedRateLimiter(manager, max_requests=5, window_seconds=60.0)
+        limiter = SharedRateLimiter(max_requests=5, window_seconds=60.0)
 
         # Should allow 5 requests
         for i in range(5):
@@ -61,8 +56,7 @@ class TestSharedRateLimiterAcquire:
 
     def test_acquire_rejects_over_limit(self):
         """Test that acquire rejects requests when over the limit."""
-        manager = Manager()
-        limiter = SharedRateLimiter(manager, max_requests=3, window_seconds=60.0)
+        limiter = SharedRateLimiter(max_requests=3, window_seconds=60.0)
 
         # Fill the limit
         for _ in range(3):
@@ -74,8 +68,7 @@ class TestSharedRateLimiterAcquire:
 
     def test_acquire_allows_after_window_expires(self):
         """Test that acquire allows requests after time window expires."""
-        manager = Manager()
-        limiter = SharedRateLimiter(manager, max_requests=2, window_seconds=0.1)
+        limiter = SharedRateLimiter(max_requests=2, window_seconds=0.1)
 
         # Use up the limit
         assert limiter.acquire() is True
@@ -90,8 +83,7 @@ class TestSharedRateLimiterAcquire:
 
     def test_acquire_cleans_old_timestamps(self):
         """Test that acquire removes timestamps outside the window."""
-        manager = Manager()
-        limiter = SharedRateLimiter(manager, max_requests=2, window_seconds=0.1)
+        limiter = SharedRateLimiter(max_requests=2, window_seconds=0.1)
 
         # Make 2 requests
         limiter.acquire()
@@ -111,8 +103,7 @@ class TestSharedRateLimiterAcquire:
         """Test that acquire handles concurrent access correctly."""
         import threading
 
-        manager = Manager()
-        limiter = SharedRateLimiter(manager, max_requests=10, window_seconds=60.0)
+        limiter = SharedRateLimiter(max_requests=10, window_seconds=60.0)
 
         results = []
         lock = threading.Lock()
@@ -139,16 +130,14 @@ class TestSharedRateLimiterWaitAndAcquire:
 
     def test_wait_and_acquire_immediate_success(self):
         """Test wait_and_acquire when slot is immediately available."""
-        manager = Manager()
-        limiter = SharedRateLimiter(manager, max_requests=5, window_seconds=60.0)
+        limiter = SharedRateLimiter(max_requests=5, window_seconds=60.0)
 
         # Should succeed immediately
         assert limiter.wait_and_acquire(timeout=1.0) is True
 
     def test_wait_and_acquire_waits_for_slot(self):
         """Test wait_and_acquire waits for slot to become available."""
-        manager = Manager()
-        limiter = SharedRateLimiter(manager, max_requests=2, window_seconds=0.2)
+        limiter = SharedRateLimiter(max_requests=2, window_seconds=0.2)
 
         # Use up the limit
         limiter.acquire()
@@ -164,8 +153,7 @@ class TestSharedRateLimiterWaitAndAcquire:
 
     def test_wait_and_acquire_respects_timeout(self):
         """Test wait_and_acquire returns False on timeout."""
-        manager = Manager()
-        limiter = SharedRateLimiter(manager, max_requests=1, window_seconds=10.0)
+        limiter = SharedRateLimiter(max_requests=1, window_seconds=10.0)
 
         # Use the limit
         limiter.acquire()
@@ -181,8 +169,7 @@ class TestSharedRateLimiterWaitAndAcquire:
 
     def test_wait_and_acquire_with_no_timeout(self):
         """Test wait_and_acquire waits indefinitely without timeout."""
-        manager = Manager()
-        limiter = SharedRateLimiter(manager, max_requests=2, window_seconds=0.1)
+        limiter = SharedRateLimiter(max_requests=2, window_seconds=0.1)
 
         # Use up the limit
         limiter.acquire()
@@ -202,15 +189,13 @@ class TestSharedRateLimiterGetRemaining:
 
     def test_get_remaining_starts_at_max(self):
         """Test that get_remaining returns max_requests initially."""
-        manager = Manager()
-        limiter = SharedRateLimiter(manager, max_requests=10, window_seconds=60.0)
+        limiter = SharedRateLimiter(max_requests=10, window_seconds=60.0)
 
         assert limiter.get_remaining() == 10
 
     def test_get_remaining_decreases_with_requests(self):
         """Test that get_remaining decreases after each acquire."""
-        manager = Manager()
-        limiter = SharedRateLimiter(manager, max_requests=5, window_seconds=60.0)
+        limiter = SharedRateLimiter(max_requests=5, window_seconds=60.0)
 
         assert limiter.get_remaining() == 5
         limiter.acquire()
@@ -220,8 +205,7 @@ class TestSharedRateLimiterGetRemaining:
 
     def test_get_remaining_respects_window(self):
         """Test that get_remaining increases after window expires."""
-        manager = Manager()
-        limiter = SharedRateLimiter(manager, max_requests=3, window_seconds=0.1)
+        limiter = SharedRateLimiter(max_requests=3, window_seconds=0.1)
 
         # Use up the limit
         limiter.acquire()
@@ -238,8 +222,7 @@ class TestSharedRateLimiterGetRemaining:
 
     def test_get_remaining_never_negative(self):
         """Test that get_remaining never returns negative value."""
-        manager = Manager()
-        limiter = SharedRateLimiter(manager, max_requests=1, window_seconds=60.0)
+        limiter = SharedRateLimiter(max_requests=1, window_seconds=60.0)
 
         limiter.acquire()
         # Multiple acquires should not affect remaining
@@ -309,8 +292,7 @@ class TestRateLimiterEdgeCases:
 
     def test_zero_max_requests(self):
         """Test rate limiter with max_requests=0."""
-        manager = Manager()
-        limiter = SharedRateLimiter(manager, max_requests=0, window_seconds=60.0)
+        limiter = SharedRateLimiter(max_requests=0, window_seconds=60.0)
 
         # Should never allow requests
         assert limiter.acquire() is False
@@ -319,8 +301,7 @@ class TestRateLimiterEdgeCases:
 
     def test_very_short_window(self):
         """Test rate limiter with very short time window."""
-        manager = Manager()
-        limiter = SharedRateLimiter(manager, max_requests=5, window_seconds=0.1)
+        limiter = SharedRateLimiter(max_requests=5, window_seconds=0.1)
 
         # Should allow requests initially
         for _ in range(5):
@@ -335,8 +316,7 @@ class TestRateLimiterEdgeCases:
 
     def test_very_large_max_requests(self):
         """Test rate limiter with very large max_requests."""
-        manager = Manager()
-        limiter = SharedRateLimiter(manager, max_requests=10000, window_seconds=60.0)
+        limiter = SharedRateLimiter(max_requests=10000, window_seconds=60.0)
 
         # Should allow many requests
         for _ in range(1000):
@@ -346,8 +326,7 @@ class TestRateLimiterEdgeCases:
 
     def test_exact_limit_boundary(self):
         """Test behavior exactly at the limit boundary."""
-        manager = Manager()
-        limiter = SharedRateLimiter(manager, max_requests=1, window_seconds=60.0)
+        limiter = SharedRateLimiter(max_requests=1, window_seconds=60.0)
 
         # First request should succeed
         assert limiter.acquire() is True
@@ -362,8 +341,7 @@ class TestRateLimiterEdgeCases:
 
     def test_wait_and_acquire_empty_timestamps(self):
         """Test wait_and_acquire when timestamps list is empty (edge case)."""
-        manager = Manager()
-        limiter = SharedRateLimiter(manager, max_requests=1, window_seconds=0.1)
+        limiter = SharedRateLimiter(max_requests=1, window_seconds=0.1)
 
         # First acquire succeeds
         assert limiter.acquire() is True

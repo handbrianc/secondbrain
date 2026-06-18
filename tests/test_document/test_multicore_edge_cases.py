@@ -7,10 +7,8 @@ Consolidated from:
 """
 
 import inspect
-import multiprocessing
-import signal
 import time
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -29,24 +27,23 @@ def _simple_task(x):
     return x * 2
 
 
-class TestMultiprocessingConfiguration:
-    """Test multiprocessing configuration and setup."""
+class TestThreadingConfiguration:
+    """Test threading configuration and setup."""
 
-    def test_multiprocessing_start_method_configured(self):
-        """Test that multiprocessing start method is properly configured."""
-        # On macOS, spawn is preferred for compatibility
-        # This test verifies the module is importable and usable
-        assert multiprocessing.cpu_count() > 0
+    def test_threading_executor_available(self):
+        """Test that ThreadPoolExecutor is available."""
+        assert ThreadPoolExecutor is not None
 
     def test_cpu_count_detection(self):
         """CPU count should be detectable."""
-        count = multiprocessing.cpu_count()
+        import os
+        count = os.cpu_count()
         assert count > 0
 
-    def test_multiprocessing_available(self):
-        """multiprocessing module should be available."""
-        assert multiprocessing.Pool is not None
-        assert multiprocessing.Process is not None
+    def test_threading_available(self):
+        """Threading should be available."""
+        import threading
+        assert threading.Thread is not None
 
 
 class TestWorkerPickling:
@@ -106,7 +103,7 @@ class TestGracefulShutdown:
 
     def test_executor_context_manager_cleanup(self):
         """Test that executor context manager properly cleans up resources."""
-        with ProcessPoolExecutor(max_workers=2) as executor:
+        with ThreadPoolExecutor(max_workers=2) as executor:
             futures = [executor.submit(_simple_task, i) for i in range(5)]
             results = [f.result() for f in futures]
 
@@ -114,7 +111,7 @@ class TestGracefulShutdown:
 
     def test_executor_basic_shutdown(self):
         """Test that executor shuts down after use."""
-        with ProcessPoolExecutor(max_workers=2) as executor:
+        with ThreadPoolExecutor(max_workers=2) as executor:
             assert executor is not None
 
 
@@ -122,12 +119,14 @@ class TestCrossPlatformCompatibility:
     """Test cross-platform compatibility."""
 
     def test_cross_platform_compatibility(self):
-        """Test that multiprocessing works across platforms."""
-        cpu_count = multiprocessing.cpu_count()
+        """Test that threading works across platforms."""
+        import os
+        cpu_count = os.cpu_count()
         assert cpu_count > 0
 
-        with multiprocessing.Pool(processes=2) as pool:
-            results = pool.map(_simple_task, range(5))
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [pool.submit(_simple_task, i) for i in range(5)]
+            results = [f.result() for f in futures]
             assert results == [0, 2, 4, 6, 8]
 
 

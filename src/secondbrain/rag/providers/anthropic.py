@@ -11,7 +11,7 @@ from anthropic import Anthropic, APIError, AsyncAnthropic
 
 from secondbrain.exceptions import ServiceUnavailableError
 
-from ..interfaces import LocalLLMProvider
+from ..interfaces import LocalLLMProvider, StreamingCallback
 
 
 class AnthropicLLMProvider(LocalLLMProvider):
@@ -101,7 +101,7 @@ class AnthropicLLMProvider(LocalLLMProvider):
             # Call Anthropic API
             response = self._client.messages.create(
                 model=self._model,
-                messages=messages,
+                messages=messages,  # type: ignore
                 temperature=temp,
                 max_tokens=tokens,
             )
@@ -146,7 +146,7 @@ class AnthropicLLMProvider(LocalLLMProvider):
             # Call Anthropic API asynchronously
             response = await self._async_client.messages.create(
                 model=self._model,
-                messages=messages,
+                messages=messages,  # type: ignore
                 temperature=temp,
                 max_tokens=tokens,
             )
@@ -192,3 +192,85 @@ class AnthropicLLMProvider(LocalLLMProvider):
     def timeout(self) -> int:
         """Get the request timeout."""
         return self._timeout
+
+    def stream_chat(
+        self,
+        messages: list[dict[str, str]],
+        on_chunk: StreamingCallback,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> str:
+        """Stream chat response with thinking content support."""
+        try:
+            temp = temperature if temperature is not None else self._temperature
+            tokens = max_tokens if max_tokens is not None else self._max_tokens
+
+            response = self._client.messages.create(
+                model=self._model,
+                messages=messages,  # type: ignore
+                temperature=temp,
+                max_tokens=tokens,
+                stream=True,
+            )
+
+            full_content = ""
+            full_reasoning = ""
+
+            for event in response:
+                if event.type == "content_block_delta":
+                    if hasattr(event.delta, "text") and event.delta.text:  # type: ignore
+                        full_content += event.delta.text
+                        on_chunk(event.delta.text, None)
+
+                    if hasattr(event.delta, "thinking") and event.delta.thinking:  # type: ignore
+                        full_reasoning += event.delta.thinking
+                        on_chunk("", event.delta.thinking)
+
+            return full_content
+
+        except httpx.ConnectError as e:
+            raise ServiceUnavailableError(f"Anthropic API unreachable: {e}") from e
+        except APIError as e:
+            raise ServiceUnavailableError(f"Anthropic API error: {e}") from e
+        except Exception as e:
+            raise RuntimeError(f"Streaming failed: {e}") from e
+
+    async def stream_chat_async(
+        self,
+        messages: list[dict[str, str]],
+        on_chunk: StreamingCallback,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> str:
+        """Async streaming chat response with thinking content support."""
+        try:
+            temp = temperature if temperature is not None else self._temperature
+            tokens = max_tokens if max_tokens is not None else self._max_tokens
+
+            response = await self._async_client.messages.create(
+                model=self._model,
+                messages=messages,  # type: ignore
+                temperature=temp,
+                max_tokens=tokens,
+                stream=True,
+            )
+
+            full_content = ""
+
+            async for event in response:
+                if event.type == "content_block_delta":
+                    if hasattr(event.delta, "text") and event.delta.text:  # type: ignore
+                        full_content += event.delta.text
+                        on_chunk(event.delta.text, None)
+
+                    if hasattr(event.delta, "thinking") and event.delta.thinking:  # type: ignore
+                        on_chunk("", event.delta.thinking)
+
+            return full_content
+
+        except httpx.ConnectError as e:
+            raise ServiceUnavailableError(f"Anthropic API unreachable: {e}") from e
+        except APIError as e:
+            raise ServiceUnavailableError(f"Anthropic API error: {e}") from e
+        except Exception as e:
+            raise RuntimeError(f"Async streaming failed: {e}") from e

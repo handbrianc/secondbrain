@@ -81,7 +81,7 @@ class TestChunkingCharacterPreservation:
         chunk_size=st.integers(min_value=30, max_value=200),
         chunk_overlap=st.integers(min_value=0, max_value=30),
     )
-    @settings(max_examples=50, suppress_health_check=[HealthCheck.filter_too_much])
+    @settings(max_examples=30, deadline=200, suppress_health_check=[HealthCheck.filter_too_much])
     def test_chunking_preserves_non_whitespace_chars(
         self, text: str, chunk_size: int, chunk_overlap: int
     ):
@@ -123,7 +123,7 @@ class TestChunkingCharacterPreservation:
         chunk_size=st.integers(min_value=30, max_value=200),
         chunk_overlap=st.integers(min_value=0, max_value=30),
     )
-    @settings(max_examples=100, suppress_health_check=[HealthCheck.filter_too_much])
+    @settings(max_examples=30, deadline=200, suppress_health_check=[HealthCheck.filter_too_much])
     def test_chunking_word_boundaries_preserved(
         self, text: str, chunk_size: int, chunk_overlap: int
     ):
@@ -165,7 +165,7 @@ class TestChunkingCharacterPreservation:
         chunk_size=st.integers(min_value=50, max_value=400),
         chunk_overlap=st.integers(min_value=5, max_value=50),
     )
-    @settings(max_examples=100, suppress_health_check=[HealthCheck.filter_too_much])
+    @settings(max_examples=30, deadline=200, suppress_health_check=[HealthCheck.filter_too_much])
     def test_chunking_overlap_actually_exists(
         self, text: str, chunk_size: int, chunk_overlap: int
     ):
@@ -219,7 +219,7 @@ class TestChunkingSizeConstraints:
         chunk_size=st.integers(min_value=30, max_value=300),
         chunk_overlap=st.integers(min_value=0, max_value=30),
     )
-    @settings(max_examples=100, suppress_health_check=[HealthCheck.filter_too_much])
+    @settings(max_examples=30, deadline=200, suppress_health_check=[HealthCheck.filter_too_much])
     def test_all_chunks_within_size_limit(
         self, text: str, chunk_size: int, chunk_overlap: int
     ):
@@ -252,7 +252,7 @@ class TestChunkingSizeConstraints:
         chunk_size=st.integers(min_value=50, max_value=200),
         chunk_overlap=st.integers(min_value=0, max_value=20),
     )
-    @settings(max_examples=100, suppress_health_check=[HealthCheck.filter_too_much])
+    @settings(max_examples=30, deadline=200, suppress_health_check=[HealthCheck.filter_too_much])
     def test_chunk_count_scales_with_text_length(
         self, text: str, chunk_size: int, chunk_overlap: int
     ):

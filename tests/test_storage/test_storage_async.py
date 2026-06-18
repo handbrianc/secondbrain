@@ -12,10 +12,10 @@ class TestVectorStorageAsync:
 
     @pytest.fixture
     def storage(self):
-        """Create a VectorStorage instance with mocked config."""
+        """Create a VectorStorage instance with mocked config and fresh state."""
+        from secondbrain.config import get_config
         with patch("secondbrain.storage.config") as mock_config_func:
-            from secondbrain.config import Config
-            _test_config = Config()
+            _test_config = get_config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
             mock_config_func.return_value.mongo_db = "secondbrain_test"
             mock_config_func.return_value.mongo_collection = "embeddings_test"
@@ -25,6 +25,7 @@ class TestVectorStorageAsync:
             mock_config_func.return_value.connection_cache_ttl = 60.0
 
             storage = VectorStorage()
+            storage._connection_valid = None
             yield storage
 
     @pytest.mark.asyncio
@@ -93,7 +94,7 @@ class TestVectorStorageAsync:
         mock_collection.insert_one = MagicMock(return_value=mock_result)
 
         with (
-            patch.object(storage, "validate_connection_async", return_value=True),
+            patch.object(storage, "_require_connection_async", return_value=None),
             patch.object(storage, "_collection", mock_collection),
         ):
             doc = {
