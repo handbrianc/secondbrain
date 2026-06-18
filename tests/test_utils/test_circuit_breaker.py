@@ -14,6 +14,48 @@ from secondbrain.utils.circuit_breaker import (
 )
 
 
+@pytest.fixture(autouse=True, scope="class")
+def _fast_circuit_breaker_time():
+    """Accelerate circuit-breaker timeout tests by advancing time programmatically.
+
+    The CircuitBreaker tracks time using ``time.monotonic()``.  The tests use
+    ``time.sleep(dt)`` to wait for recovery timeouts to elapse.  Here we replace
+    ``time.sleep`` with a noop and wrap ``time.monotonic`` with a shared,
+    lazily-initialised offset that grows by the sleep duration on every call —
+    simulating elapsed time without any actual waiting.
+
+    Effect: CB state transitions fire instantly, cutting ~6 s of dead wait time
+    per exponential-backoff test to near-zero without breaking the state machine.
+    """
+    _orig_sleep = time.sleep
+    _orig_monotonic = time.monotonic
+
+    _lazy_base: float | None = None
+
+    def _fast_monotonic() -> float:
+        nonlocal _lazy_base
+        if _lazy_base is None:
+            _lazy_base = _orig_monotonic()
+        return _lazy_base  # type: ignore[return-value]
+
+    def _fast_sleep(seconds: float) -> None:
+        if seconds <= 0:
+            return
+        nonlocal _lazy_base
+        if _lazy_base is None:
+            _lazy_base = _orig_monotonic()
+        # Guard against FP boundary: 0.1 * 2 = 0.1 exactly in IEEE-754,
+        # so accumulated _lazy_base can undershoot by microepsilon.  The +1e-6
+        # ensures elapsed >= current_recovery_timeout reliably passes.
+        _lazy_base += seconds + 1e-6
+
+    time.sleep = _fast_sleep  # type: ignore[method-assign]
+    time.monotonic = _fast_monotonic  # type: ignore[method-assign]
+    yield
+    time.sleep = _orig_sleep  # type: ignore[method-assign]
+    time.monotonic = _orig_monotonic
+
+
 @pytest.mark.circuit_breaker
 @pytest.mark.slow
 class TestCircuitState:
