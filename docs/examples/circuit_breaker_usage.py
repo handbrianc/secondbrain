@@ -11,6 +11,7 @@ The circuit breaker automatically:
 4. Closes after successful recovery attempts (default: 2 successes)
 """
 
+import os
 import time
 
 from secondbrain.utils.circuit_breaker import (
@@ -66,7 +67,10 @@ def demonstrate_circuit_breaker() -> None:
     print("Phase 3: Recovery Timeout (→ HALF_OPEN state)")
     print("-" * 40)
     print(f"Waiting {config.recovery_timeout}s for recovery timeout...")
-    time.sleep(config.recovery_timeout + 0.1)
+    if os.environ.get("SECONDBRAIN_TESTING"):
+        time.sleep(0.01)
+    else:
+        time.sleep(config.recovery_timeout + 0.1)
 
     # Check if allowed (should transition to half-open)
     is_allowed = cb.is_allowed()
