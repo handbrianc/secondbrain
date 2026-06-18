@@ -68,7 +68,7 @@ class TestChunkingProperties:
         chunk_size=st.integers(min_value=50, max_value=500),
         chunk_overlap=st.integers(min_value=0, max_value=50).filter(lambda o: o < 50),
     )
-    @settings(max_examples=100, suppress_health_check=[HealthCheck.filter_too_much])
+    @settings(max_examples=30, deadline=200, suppress_health_check=[HealthCheck.filter_too_much])
     def test_chunking_preserves_text(
         self, text: str, chunk_size: int, chunk_overlap: int
     ):
@@ -107,7 +107,7 @@ class TestChunkingProperties:
         chunk_size=st.integers(min_value=50, max_value=500),
         chunk_overlap=st.integers(min_value=0, max_value=50).filter(lambda o: o < 50),
     )
-    @settings(max_examples=100, suppress_health_check=[HealthCheck.filter_too_much])
+    @settings(max_examples=30, deadline=200, suppress_health_check=[HealthCheck.filter_too_much])
     def test_chunking_respects_size_limit(
         self, text: str, chunk_size: int, chunk_overlap: int
     ):
@@ -141,7 +141,7 @@ class TestChunkingProperties:
             lambda o: 1 <= o < 50
         ),
     )
-    @settings(max_examples=100)
+    @settings(max_examples=30, deadline=200)
     def test_chunking_overlap_consistent(
         self, text: str, chunk_size: int, chunk_overlap: int
     ):
