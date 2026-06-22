@@ -64,9 +64,6 @@ class TestFactVerification:
         "claim",
         [
             pytest.param("fv_dependency_docling", id="docling"),
-            pytest.param(
-                "fv_dependency_sentence_transformers", id="sentence_transformers"
-            ),
             pytest.param("fv_dependency_ruff_linting", id="ruff_linting"),
         ],
     )
@@ -135,9 +132,47 @@ class TestFactVerification:
     def _verify_dependency_in_pyproject(
         self, dep_name: str, version: str, claim_id: str
     ) -> None:
+        """Semantically verify version constraint: claim '>=2.95.0' satisfied by '>=2.96.1'."""
+        from packaging.version import InvalidVersion, Version
+
         pyproject_path = PROJECT_ROOT / "pyproject.toml"
         assert pyproject_path.exists()
         content = pyproject_path.read_text(encoding="utf-8")
+
+        # Try semantic version comparison for >=, <=, ==
+        op_match = re.match(r"^([><=]+)", version)
+        version_num_match = re.search(r"[\d.]+", version)
+        if op_match and version_num_match and op_match.group(1) in (">=", "<=", "=="):
+            op = op_match.group(1)
+            try:
+                claimed_version = Version(version_num_match.group())
+                # Extract actual version from pyproject.toml
+                dep_pattern = rf"{re.escape(dep_name)}\s*{re.escape(op)}\s*([\d.]+)"
+                match = re.search(dep_pattern, content)
+                if match:
+                    actual_version = Version(match.group(1))
+                    if op == ">=":
+                        assert actual_version >= claimed_version, (
+                            f"Insufficient version: claim {dep_name}>={claimed_version}, "
+                            f"actual {dep_name}>={actual_version}"
+                        )
+                        return
+                    elif op == "<=":
+                        assert actual_version <= claimed_version, (
+                            f"Version too high: claim {dep_name}<={claimed_version}, "
+                            f"actual {dep_name}>={actual_version}"
+                        )
+                        return
+                    elif op == "==":
+                        assert actual_version == claimed_version, (
+                            f"Mismatch: claim {dep_name}=={claimed_version}, "
+                            f"actual {dep_name}>={actual_version}"
+                        )
+                        return
+            except (InvalidVersion, ValueError, ImportError):
+                pass
+
+        # Fallback: exact substring match for simpler constraints
         pattern = rf"{re.escape(dep_name)}\s*{re.escape(version)}"
         assert re.search(pattern, content), (
             f"Dependency '{dep_name}{version}' not found in pyproject.toml"

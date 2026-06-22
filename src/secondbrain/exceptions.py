@@ -84,8 +84,4 @@ class ServiceUnavailableError(ServiceError):
         self.service_name = service_name
 
 
-class SentenceTransformersUnavailableError(ServiceUnavailableError):
-    """Raised when sentence-transformers service is unavailable."""
 
-    def __init__(self, message: str | None = None) -> None:
-        super().__init__("sentence-transformers", message)

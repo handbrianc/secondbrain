@@ -5,7 +5,7 @@ The SecondBrain CLI tool has achieved excellent code quality (4.5/5) but lacks s
 ## What Changes
 
 **Priority 1 - Critical Issues:**
-- Fix mypy type checking with proper `[[tool.mypy.overrides]]` for problematic third-party packages (google, pymongo, sentence-transformers)
+- Fix mypy type checking with proper `[[tool.mypy.overrides]]` for problematic third-party packages (google, pymongo, OpenAI-compatible API)
 - Create comprehensive configuration documentation with centralized reference for 30+ config options
 - Add example `.env` file with all options commented and validation rules
 - Document complex algorithms: streaming logic in `document/__init__.py:400-580`, index retry logic in `storage/storage.py:126-210`

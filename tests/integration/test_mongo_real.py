@@ -1,25 +1,25 @@
-"""Integration tests with real MongoDB connection.
+"""Interface tests for VectorStorage backed by MockVectorStorage.
 
-These tests require MongoDB to be running via docker-compose.test.yml
+These tests validate the VectorStorage interface contract using a mock
+backend. They are fast and do not require MongoDB running. For real
+MongoDB integration tests, use tests/integration/mocked/ instead.
 """
 
 import pytest
 
-from secondbrain.storage import MockVectorStorage, VectorStorage
+from secondbrain.storage import MockVectorStorage
 
 
-@pytest.mark.integration
-class TestMongoRealConnection:
-    """Test VectorStorage with real MongoDB connection."""
+class TestVectorStorageContract:
+    """Test VectorStorage interface contract with mock backend."""
 
-    def test_storage_real_mongo_connection(self, mock_storage: MockVectorStorage) -> None:
-        """Test real MongoDB connection is established."""
+    def test_contract_mongo_connection(self, mock_storage: MockVectorStorage) -> None:
+        """Test storage connection interface is satisfied."""
         assert mock_storage is not None
-        # Validate connection by pinging
         assert mock_storage.validate_connection() is True
 
-    def test_storage_real_store_and_retrieve(self, mock_storage: MockVectorStorage) -> None:
-        """Test store and retrieve with real MongoDB."""
+    def test_contract_store_and_retrieve(self, mock_storage: MockVectorStorage) -> None:
+        """Test store and retrieve through interface."""
         # Clean up first
         mock_storage.delete_all()
 
@@ -42,8 +42,8 @@ class TestMongoRealConnection:
         # Cleanup
         mock_storage.delete_by_chunk_id("test_chunk_1")
 
-    def test_storage_real_batch_operations(self, mock_storage: MockVectorStorage) -> None:
-        """Test batch store with real MongoDB."""
+    def test_contract_batch_operations(self, mock_storage: MockVectorStorage) -> None:
+        """Test batch store through interface."""
         # Clean up first
         mock_storage.delete_all()
 
@@ -69,7 +69,7 @@ class TestMongoRealConnection:
         # Cleanup
         mock_storage.delete_by_source("batch_test.pdf")
 
-    def test_storage_real_search_similarity(self, mock_storage: MockVectorStorage) -> None:
+    def test_contract_search_similarity(self, mock_storage: MockVectorStorage) -> None:
         """Test semantic search with real MongoDB."""
         # Clean up first
         mock_storage.delete_all()
@@ -97,7 +97,7 @@ class TestMongoRealConnection:
         # Cleanup
         mock_storage.delete_by_source("sim_test.pdf")
 
-    def test_storage_real_filter_by_source(self, mock_storage: MockVectorStorage) -> None:
+    def test_contract_filter_by_source(self, mock_storage: MockVectorStorage) -> None:
         """Test source file filtering."""
         # Clean up first
         mock_storage.delete_all()
@@ -134,7 +134,7 @@ class TestMongoRealConnection:
         # Cleanup
         mock_storage.delete_all()
 
-    def test_storage_real_filter_by_file_type(
+    def test_contract_filter_by_file_type(
         self, mock_storage: MockVectorStorage
     ) -> None:
         """Test file type filtering."""
@@ -171,7 +171,7 @@ class TestMongoRealConnection:
         # Cleanup
         mock_storage.delete_all()
 
-    def test_storage_real_delete_operations(self, mock_storage: MockVectorStorage) -> None:
+    def test_contract_delete_operations(self, mock_storage: MockVectorStorage) -> None:
         """Test delete operations with real MongoDB."""
         # Clean up first
         mock_storage.delete_all()
@@ -203,7 +203,7 @@ class TestMongoRealConnection:
         results = mock_storage.search([0.1] * 384, top_k=10)
         assert len(results) == 0
 
-    def test_storage_real_pagination(self, mock_storage: MockVectorStorage) -> None:
+    def test_contract_pagination(self, mock_storage: MockVectorStorage) -> None:
         """Test pagination with limit and offset."""
         # Clean up first
         mock_storage.delete_all()
@@ -232,7 +232,7 @@ class TestMongoRealConnection:
         # Cleanup
         mock_storage.delete_by_source("page_test.pdf")
 
-    def test_storage_real_concurrent_writes(self, mock_storage: MockVectorStorage) -> None:
+    def test_contract_concurrent_writes(self, mock_storage: MockVectorStorage) -> None:
         """Test concurrent batch operations."""
         from concurrent.futures import ThreadPoolExecutor
 
@@ -266,7 +266,7 @@ class TestMongoRealConnection:
         # Cleanup
         mock_storage.delete_all()
 
-    def test_storage_real_connection_recovery(
+    def test_contract_connection_recovery(
         self, mock_storage: MockVectorStorage
     ) -> None:
         """Test reconnection after connection loss."""

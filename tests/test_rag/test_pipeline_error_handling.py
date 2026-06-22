@@ -49,8 +49,8 @@ def mock_config(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
         "SECONDBRAIN_LLM_TEMPERATURE": "0.7",
         "SECONDBRAIN_LLM_MAX_TOKENS": "4096",
         "SECONDBRAIN_RAG_SYSTEM_PROMPT": "You are a helpful assistant.",
-        "SECONDBRAIN_LLM_PROVIDER": "ollama",
-        "SECONDBRAIN_LLM_MODEL": "llama2",
+        "SECONDBRAIN_LLM_PROVIDER": "openai",
+        "SECONDBRAIN_LLM_MODEL": "gpt-4o-mini",
         "SECONDBRAIN_LLM_TIMEOUT": "120",
     }
     for key, value in config.items():

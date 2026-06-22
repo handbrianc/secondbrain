@@ -1,8 +1,7 @@
 """Embedding provider factory for creating provider instances.
 
 Provides EmbeddingProviderFactory class for creating provider instances
-based on configuration, supporting local (sentence-transformers) and
-OpenAI API-based embedding providers.
+based on configuration, supporting OpenAI API-based embedding providers.
 """
 
 from __future__ import annotations
@@ -13,7 +12,6 @@ from secondbrain.config import Config
 from secondbrain.embedding.interfaces import EmbeddingProvider
 
 if TYPE_CHECKING:
-    from secondbrain.embedding.local import LocalEmbeddingProvider
     from secondbrain.embedding.providers.openai import OpenAIEmbeddingProvider
 
 
@@ -21,7 +19,7 @@ class EmbeddingProviderFactory:
     """Factory for creating embedding providers.
 
     Creates provider instances based on configuration settings.
-    Supports local (sentence-transformers) and OpenAI providers.
+    Supports OpenAI and OpenAI-compatible providers.
 
     Example:
         >>> from secondbrain.config import config
@@ -46,11 +44,13 @@ class EmbeddingProviderFactory:
         provider_type = config.embedding_provider.lower()
 
         if provider_type == "local":
-            from secondbrain.embedding.local import LocalEmbeddingProvider
+            raise ValueError(
+                "The 'local' embedding provider has been removed. "
+                "Use embedding_provider='openai' and configure a compatible API "
+                "(e.g., SECONDBRAIN_OPENAI_BASE_URL for Ollama, LM Studio, vLLM)."
+            )
 
-            return LocalEmbeddingProvider(model_name=config.embedding_model)
-
-        elif provider_type == "openai":
+        if provider_type == "openai":
             from secondbrain.embedding.providers.openai import OpenAIEmbeddingProvider
 
             return OpenAIEmbeddingProvider(
@@ -60,30 +60,9 @@ class EmbeddingProviderFactory:
                 dimensions=config.embedding_dimensions,
             )
 
-        else:
-            raise ValueError(
-                f"Unsupported embedding provider: {provider_type}. "
-                f"Supported providers: local, openai"
-            )
-
-    @staticmethod
-    def create_local(
-        model_name: str | None = None,
-    ) -> LocalEmbeddingProvider:
-        """Create a local embedding provider.
-
-        Args:
-            model_name: Sentence-transformers model name (defaults to config).
-
-        Returns:
-            Configured LocalEmbeddingProvider instance.
-        """
-        from secondbrain.config import config
-        from secondbrain.embedding.local import LocalEmbeddingProvider
-
-        cfg = config()
-        return LocalEmbeddingProvider(
-            model_name=model_name or cfg.embedding_model,
+        raise ValueError(
+            f"Unsupported embedding provider: {provider_type}. "
+            f"Supported providers: openai"
         )
 
     @staticmethod
@@ -93,7 +72,7 @@ class EmbeddingProviderFactory:
         api_base: str | None = None,
         dimensions: int | None = None,
     ) -> OpenAIEmbeddingProvider:
-        """Create an OpenAI embedding provider.
+        """Create an OpenAI-compatible embedding provider.
 
         Args:
             model: Model name (defaults to config).
@@ -103,14 +82,11 @@ class EmbeddingProviderFactory:
 
         Returns:
             Configured OpenAIEmbeddingProvider instance.
-
-        Raises:
-            ValueError: If API key is not provided.
         """
-        from secondbrain.config import config
+        from secondbrain.config import config as _get_config
         from secondbrain.embedding.providers.openai import OpenAIEmbeddingProvider
 
-        cfg = config()
+        cfg = _get_config()
         return OpenAIEmbeddingProvider(
             model=model or cfg.embedding_model,
             api_key=api_key or cfg.embedding_api_key,

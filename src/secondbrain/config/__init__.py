@@ -175,11 +175,6 @@ class Config(BaseSettings):
         description="Collection name for embeddings",
     )
 
-    local_embedding_model: str = Field(
-        default="all-MiniLM-L6-v2",
-        description="Sentence-transformers model for local embedding (e.g., all-MiniLM-L6-v2, all-mpnet-base-v2)",
-    )
-
     llm_provider: str = Field(
         default="openai",
         description="LLM provider type (openai, anthropic)",
@@ -267,12 +262,32 @@ class Config(BaseSettings):
     )
 
     # Embedding settings
+    embedding_provider: str = Field(
+        default="openai",
+        description="Embedding provider type (openai, or any OpenAI-compatible API)",
+    )
+    embedding_model: str = Field(
+        default="text-embedding-3-small",
+        description=(
+            "Embedding model name. For OpenAI: 'text-embedding-3-small', 'text-embedding-3-large', "
+            "'text-embedding-ada-002'. For OpenAI-compatible providers (Ollama, LM Studio, vLLM): "
+            "use the model name configured in the server (e.g., 'mxbai-embed-large', 'all-MiniLM-L6-v2')."
+        ),
+    )
+    embedding_api_key: str | None = Field(
+        default=None,
+        description="API key for embedding provider (openai). Defaults to SECONDBRAIN_EMBEDDING_API_KEY env var.",
+    )
+    embedding_api_base: str | None = Field(
+        default=None,
+        description="Base URL for embedding API (openai). Defaults to OpenAI endpoint.",
+    )
     embedding_dimensions: int = Field(
-        default=384,
+        default=1536,
         description=(
             "Dimensionality of embedding vectors (must match model). "
-            "384 = sentence-transformers/all-MiniLM-L6-v2 default. "
-            "Other models: 768 (all-mpnet-base-v2), 1024 (large models)"
+            "1536 = OpenAI text-embedding-3-small default. "
+            "Other common sizes: 384, 768, 1024, 3072 depending on provider/model."
         ),
     )
     embedding_cache_size: int = Field(
@@ -288,7 +303,6 @@ class Config(BaseSettings):
         description=(
             "Batch size for embedding generation (1-100). "
             "Higher = better throughput, lower = less memory. "
-            "sentence-transformers API typically handles 20-50 well. "
             "Max 100 to prevent timeout on slow networks"
         ),
     )
@@ -321,8 +335,8 @@ class Config(BaseSettings):
         default=10,
         description=(
             "Maximum requests per rate limit window. "
-            "Protects sentence-transformers API from overload. "
-            "10 req/s = 600 req/min, sufficient for batch processing"
+            "Adjust based on your embedding provider's rate limits. "
+            "10 req/s = 600 req/min, sufficient for typical batch processing."
         ),
     )
     rate_limit_window_seconds: float = Field(

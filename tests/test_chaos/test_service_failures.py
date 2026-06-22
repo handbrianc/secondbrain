@@ -69,53 +69,6 @@ class TestMongoDBFailureScenarios:
 
 @pytest.mark.chaos
 @pytest.mark.slow
-class TestSentenceTransformersFailureScenarios:
-    """Test sentence-transformers service failures."""
-
-    def test_embedding_service_unavailable_handling(self):
-        """Test handling of sentence-transformers service unavailability."""
-        embedding_cb = CircuitBreaker(CircuitBreakerConfig(failure_threshold=5))
-
-        for _ in range(6):
-            embedding_cb.record_failure()
-
-        assert embedding_cb.state == CircuitState.OPEN
-
-    def test_embedding_service_timeout_handling(self):
-        """Test handling of embedding service timeout."""
-        embedding_cb = CircuitBreaker(CircuitBreakerConfig(failure_threshold=5))
-
-        for _ in range(6):
-            embedding_cb.record_failure()
-
-        assert embedding_cb.state == CircuitState.OPEN
-
-    def test_embedding_service_recovery(self):
-        """Test recovery after embedding service becomes available."""
-        config = CircuitBreakerConfig(
-            failure_threshold=3,
-            success_threshold=2,
-            recovery_timeout=0.1,
-        )
-        embedding_cb = CircuitBreaker(config)
-
-        for _ in range(3):
-            embedding_cb.record_failure()
-
-        assert embedding_cb.state == CircuitState.OPEN
-
-        time.sleep(0.15)
-
-        assert embedding_cb.is_allowed() is True
-
-        embedding_cb.record_success()
-        embedding_cb.record_success()
-
-        assert embedding_cb.state == CircuitState.CLOSED
-
-
-@pytest.mark.chaos
-@pytest.mark.slow
 class TestCircuitBreakerResponse:
     """Test circuit breaker response to service failures."""
 

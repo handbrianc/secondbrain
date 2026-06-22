@@ -5,6 +5,7 @@ These tests validate that example scripts work correctly with real services.
 
 from __future__ import annotations
 
+import subprocess
 import time
 from pathlib import Path
 from typing import Any
@@ -17,10 +18,33 @@ from secondbrain.config import Config
 _test_config = Config()
 
 
+def _docker_services_available() -> bool:
+    try:
+        result = subprocess.run(
+            ["docker", "ps", "--format", "{{.Names}}"],
+            capture_output=True,
+            timeout=5,
+        )
+        if result.returncode != 0:
+            return False
+        containers = result.stdout.decode("utf-8", errors="ignore").lower()
+        has_mongo = "mongo" in containers or "secondbrain-mongo" in containers
+        return has_mongo
+    except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
+        return False
+
+
+_needs_docker = pytest.mark.skipif(
+    not _docker_services_available(),
+    reason="Docker services (MongoDB) not available",
+)
+
+
 class TestBasicUsageExamples:
     """Tests for basic_usage example scripts."""
 
     @pytest.mark.integration
+    @_needs_docker
     def test_example_basic_usage_ingest(
         self, example_runner: Any, create_test_pdf: Any, tmp_path: Path
     ) -> None:
@@ -98,6 +122,7 @@ class TestAdvancedExamples:
     """Tests for advanced example scripts."""
 
     @pytest.mark.integration
+    @_needs_docker
     def test_example_circuit_breaker(self, example_runner: Any) -> None:
         """Test circuit breaker usage example.
 
@@ -134,6 +159,7 @@ class TestAdvancedExamples:
         assert "Tracing" in result["stdout"] or "span" in result["stdout"].lower()
 
     @pytest.mark.integration
+    @_needs_docker
     def test_example_async_workflow(
         self, example_runner: Any, tmp_path: Path
     ) -> None:
@@ -171,6 +197,7 @@ class TestAdvancedExamples:
         assert result["success"] or has_service_error
 
     @pytest.mark.integration
+    @_needs_docker
     def test_example_batch_ingestion(
         self, example_runner: Any, tmp_path: Path
     ) -> None:
@@ -198,6 +225,7 @@ class TestAdvancedExamples:
         assert result["success"] or "No files found" in result["stdout"]
 
     @pytest.mark.integration
+    @_needs_docker
     def test_example_custom_chunking(
         self, example_runner: Any, create_test_pdf: Any, tmp_path: Path
     ) -> None:
@@ -338,7 +366,7 @@ class TestIntegrationExamples:
             thread.daemon = True
             thread.start()
 
-            time.sleep(2)
+            time.sleep(0.3)
 
             async def test_api() -> None:
                 async with httpx.AsyncClient(timeout=5.0) as client:

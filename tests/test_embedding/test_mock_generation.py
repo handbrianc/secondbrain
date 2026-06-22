@@ -249,23 +249,3 @@ class TestMockEmbeddingRepr:
         assert "model=custom" in result
         assert "dimension=768" in result
 
-
-class TestMockEmbeddingBackwardsCompatibility:
-    """Test backwards compatibility alias."""
-
-    def test_mock_local_embedding_generator_alias_exists(self) -> None:
-        """Test that MockLocalEmbeddingGenerator alias exists."""
-        from secondbrain.embedding.mock import MockLocalEmbeddingGenerator
-        
-        # Should be the same as MockEmbeddingGenerator
-        assert MockLocalEmbeddingGenerator is MockEmbeddingGenerator
-
-    def test_mock_local_embedding_generator_works(self) -> None:
-        """Test that alias works correctly."""
-        from secondbrain.embedding.mock import MockLocalEmbeddingGenerator
-        
-        gen = MockLocalEmbeddingGenerator(dimension=256)
-        
-        result = gen.generate("test")
-        
-        assert len(result) == 256

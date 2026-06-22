@@ -89,7 +89,6 @@ def setup_logging(
     # Suppress verbose third-party library logs
     logging.getLogger("pymongo").setLevel(logging.WARNING)
     logging.getLogger("motor").setLevel(logging.WARNING)
-    logging.getLogger("sentence_transformers").setLevel(logging.WARNING)
 
     # If handlers are already configured, just update the level
     if logging.root.handlers:

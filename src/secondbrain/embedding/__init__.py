@@ -1,22 +1,18 @@
 """Embedding generation with pluggable provider support.
 
 This module provides embedding providers for generating text embeddings:
-- LocalEmbeddingProvider: sentence-transformers for local embedding generation
-- OpenAIEmbeddingProvider: OpenAI API or OpenAI-compatible endpoints
+- OpenAIEmbeddingProvider: OpenAI API or OpenAI-compatible endpoints (default)
 - MockEmbeddingProvider: Fast mock embeddings for testing
 
 The EmbeddingProviderFactory creates provider instances based on configuration.
 """
 
 from .interfaces import EmbeddingProvider
-from .local import LocalEmbeddingGenerator, LocalEmbeddingProvider
 from .mock import MockEmbeddingGenerator, MockEmbeddingProvider
 
 __all__ = [
     "EmbeddingProvider",
     "EmbeddingProviderFactory",
-    "LocalEmbeddingGenerator",
-    "LocalEmbeddingProvider",
     "MockEmbeddingGenerator",
     "MockEmbeddingProvider",
     "OpenAIEmbeddingProvider",

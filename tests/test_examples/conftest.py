@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import os
+import runpy
 import subprocess
 import sys
-from collections.abc import Generator
+from io import StringIO
 from pathlib import Path
 from typing import Any
 
@@ -13,19 +14,45 @@ import pytest
 
 from secondbrain.config import Config
 
-# Get test defaults from Config
-_test_config = Config()
+_ENV_CACHE: dict[str, str] = {}
+_env_loaded = False
+
+
+def _get_cached_env() -> dict[str, str]:
+    """Load and cache environment from .env file (once per test session)."""
+    global _ENV_CACHE, _env_loaded
+    if _env_loaded:
+        return _ENV_CACHE
+
+    env = os.environ.copy()
+    env_file = Path(__file__).parent.parent.parent / ".env"
+    if env_file.exists():
+        with open(env_file) as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, value = line.split("=", 1)
+                    key = key.strip()
+                    value = value.strip().strip('"').strip("'")
+                    if key and value:
+                        env[key] = value
+
+    test_config = Config()
+    env["SECONDBRAIN_VERBOSE"] = "0"
+    env["SECONDBRAIN_MONGO_URI"] = test_config.mongo_uri
+
+    _ENV_CACHE = env
+    _env_loaded = True
+    return _ENV_CACHE
 
 
 @pytest.fixture
-def example_runner(tmp_path: Path) -> Generator[Any, None, None]:
-    """Fixture to run example scripts with timeout and output capture.
+def example_runner(tmp_path: Path) -> Any:
+    """Fixture to run example scripts in-process via runpy.
 
-    This fixture provides a runner function that:
-    - Executes example scripts with a 30s timeout
-    - Captures stdout/stderr
-    - Loads environment from .env file
-    - Validates exit codes and output patterns
+    Runs script main() directly in the current Python process instead of
+    spawning a subprocess, eliminating interpreter startup and module reload
+    overhead. Stdout/stderr are captured by redirecting print/rich streams.
 
     Args:
         tmp_path: Temporary directory for test files
@@ -41,62 +68,86 @@ def example_runner(tmp_path: Path) -> Generator[Any, None, None]:
         timeout: int = 30,
         env_overrides: dict[str, str] | None = None,
     ) -> dict[str, Any]:
-        """Run an example script and return results.
+        """Run an example script in-process and return results.
 
         Args:
             script_path: Path to the example script
-            args: Additional command line arguments
-            timeout: Maximum execution time in seconds
+            args: Command-line arguments to inject via sys.argv
+            timeout: Maximum execution time (currently unused, in-process is fast)
             env_overrides: Environment variable overrides
 
         Returns:
             Dictionary with keys:
-            - returncode: Exit code
+            - returncode: Exit code (0 for success, 1 for SystemExit)
             - stdout: Captured stdout
             - stderr: Captured stderr
             - success: Boolean indicating success
-            - output_patterns: Dict of pattern check results
+            - command: String showing what was run
         """
-        cmd = [sys.executable, str(script_path)]
-        if args:
-            cmd.extend(args)
+        # Preserve original state
+        orig_argv = sys.argv.copy()
+        orig_stdout = sys.stdout
+        orig_stderr = sys.stderr
 
-        # Build environment
-        env = os.environ.copy()
+        # Set up fake argv for argparser
+        sys.argv = [str(script_path)] + (args or [])
 
-        # Load .env if exists
-        env_file = Path(__file__).parent.parent.parent / ".env"
-        if env_file.exists():
-            with open(env_file) as f:
-                for line in f:
-                    line = line.strip()
-                    if line and not line.startswith("#") and "=" in line:
-                        key, value = line.split("=", 1)
-                        env[key.strip()] = value.strip().strip('"')
+        # Capture stdout/stderr
+        stdout_capture = StringIO()
+        stderr_capture = StringIO()
 
-        # Apply overrides
-        if env_overrides:
-            env.update(env_overrides)
+        # Also capture rich console output by swapping stdout at file-object level
+        rich_console_outputs: list[StringIO] = []
 
-        env["SECONDBRAIN_VERBOSE"] = "0"
-        env["SECONDBRAIN_MONGO_URI"] = _test_config.mongo_uri
+        # Monkeypatch Rich's Console._file_wrapper to capture rich console prints
+        # We'll just rely on sys.stdout redirection since rich writes to whatever stdout points to
 
-        # Run the script
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            env=env,
-            cwd=tmp_path,
-        )
+        returncode = 0
+        error_msg = None
+
+        try:
+            # Apply env overrides to current process
+            if env_overrides:
+                for k, v in env_overrides.items():
+                    os.environ[k] = v
+
+            sys.stdout = stdout_capture
+            sys.stderr = stderr_capture
+
+            try:
+                runpy.run_path(str(script_path), run_name="__main__")
+            except SystemExit as e:
+                returncode = e.code if isinstance(e.code, int) else (0 if e.code is None else 1)
+            except Exception as e:
+                returncode = 1
+                error_msg = repr(e)
+
+        finally:
+            sys.stdout = orig_stdout
+            sys.stderr = orig_stderr
+            sys.argv = orig_argv
+
+            # Restore env overrides
+            if env_overrides:
+                for k in env_overrides.keys():
+                    if k in _get_cached_env() and k not in os.environ:
+                        del os.environ[k]
+                    elif k in _get_cached_env():
+                        os.environ[k] = _get_cached_env()[k]
+
+        stdout = stdout_capture.getvalue()
+        stderr = stderr_capture.getvalue()
+
+        # Append error to stderr if we caught an exception
+        if error_msg:
+            stderr += f"\n{error_msg}"
 
         return {
-            "returncode": result.returncode,
-            "stdout": result.stdout,
-            "stderr": result.stderr,
-            "success": result.returncode == 0,
-            "command": " ".join(cmd),
+            "returncode": returncode,
+            "stdout": stdout,
+            "stderr": stderr,
+            "success": returncode == 0,
+            "command": f"runpy.run_path({script_path}, args={args})",
         }
 
     yield run_example

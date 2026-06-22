@@ -10,13 +10,27 @@ uses float64 for intermediate calculations.
 Solution: Monkey-patch the function to use float32 throughout.
 """
 
-import torch
+import importlib.util
 import logging
 
 logger = logging.getLogger(__name__)
 
+_mps_patched = False
+
+
+def _mps_is_available_without_import() -> bool:
+    """Detect MPS support WITHOUT importing torch (avoids ~1.7s import penalty)."""
+    return importlib.util.find_spec("torch.backends.mps") is not None
+
 
 def patch_transformers_for_mps() -> None:
+    global _mps_patched
+    if _mps_patched:
+        return
+    if not _mps_is_available_without_import():
+        logger.debug("MPS not available (torch.backends.mps not found)")
+        return
+    import torch
     """Patch transformers library to avoid float64 on MPS.
     
     This must be called before any docling imports that use the

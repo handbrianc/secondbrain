@@ -46,7 +46,7 @@ curl http://localhost:11434/api/tags
 # Start sentence-transformers
     docker-compose up -d sentence-transformers
     
-    # Pull required model if not present (SECONDBRAIN_LOCAL_EMBEDDING_MODEL in .env, default: all-MiniLM-L6-v2)
+    # Pull required model if not present (SECONDBRAIN_EMBEDDING_MODEL in .env, default: all-MiniLM-L6-v2)
 ```
 
 ### Error: "Model not found"
@@ -58,10 +58,10 @@ curl http://localhost:11434/api/tags
 # List available models
     sentence-transformers list
     
-    # Pull the default model (SECONDBRAIN_LOCAL_EMBEDDING_MODEL in .env, default: all-MiniLM-L6-v2)
+    # Pull the default model (SECONDBRAIN_EMBEDDING_MODEL in .env, default: all-MiniLM-L6-v2)
     
     # Or specify a different model in .env
-    SECONDBRAIN_LOCAL_EMBEDDING_MODEL=all-MiniLM-L6-v2
+    SECONDBRAIN_EMBEDDING_MODEL=all-MiniLM-L6-v2
 ```
 
 ## Ingestion Issues
@@ -137,10 +137,10 @@ cat .env | grep SECONDBRAIN_EMBEDDING_DIMENSIONS
 **Solution**:
 ```bash
 # Ensure same model is used for ingestion and search
-cat .env | grep SECONDBRAIN_LOCAL_EMBEDDING_MODEL
+cat .env | grep SECONDBRAIN_EMBEDDING_MODEL
 
 # Re-ingest with correct model if needed
-SECONDBRAIN_LOCAL_EMBEDDING_MODEL=all-MiniLM-L6-v2 secondbrain ingest ./docs/
+SECONDBRAIN_EMBEDDING_MODEL=all-MiniLM-L6-v2 secondbrain ingest ./docs/
 ```
 
 ## Performance Issues

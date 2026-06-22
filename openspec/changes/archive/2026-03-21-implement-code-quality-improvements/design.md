@@ -13,7 +13,7 @@ The SecondBrain CLI tool currently has excellent code quality but lacks several 
 - Must maintain backward compatibility with existing sync API
 - Python 3.11+ requirement
 - MongoDB 8.0+ with Atlas Vector Search
-- sentence-transformers API for embeddings
+- OpenAI-compatible API API for embeddings
 - Minimal dependency bloat
 
 ## Goals / Non-Goals
@@ -111,7 +111,7 @@ HALF_OPEN --failure--> OPEN
 - Document ingestion pipeline (timing per file)
 - Search queries (embedding generation, MongoDB aggregation)
 - Storage operations (insert, delete, batch operations)
-- External service calls (sentence-transformers API)
+- External service calls (OpenAI-compatible API API)
 
 **Alternatives Considered:**
 - Custom tracing: Would reinvent wheel, vendor lock-in

@@ -253,26 +253,69 @@ class RAGPipeline:
             # Step 5: Build prompt with system instruction + context + query
             prompt = self._build_prompt(rewritten_query, context_text, history)
 
-            # Step 6: Generate answer via llm_provider.chat()
+            # Step 6: Generate answer via llm_provider.generate() with retry logic
             generation_start = time.perf_counter()
+            answer = ""
+            max_retries = 3
+            retry_count = 0
             try:
-                with trace_operation("rag_generation") as span:
-                    if span:
-                        span.set_attribute("rag.prompt_length", len(prompt))
-                        span.set_attribute("rag.temperature", self._config.llm_temperature)
-                        span.set_attribute("rag.max_tokens", self._config.llm_max_tokens)
-                        span.set_attribute("rag.is_chat", True)
-                    answer = self._llm_provider.generate(
-                        prompt=prompt,
-                        temperature=self._config.llm_temperature,
-                        max_tokens=self._config.llm_max_tokens,
+                while retry_count < max_retries:
+                    with trace_operation("rag_generation") as span:
+                        if span:
+                            span.set_attribute("rag.prompt_length", len(prompt))
+                            span.set_attribute("rag.temperature", self._config.llm_temperature)
+                            span.set_attribute("rag.max_tokens", self._config.llm_max_tokens)
+                            span.set_attribute("rag.is_chat", True)
+                            span.set_attribute("rag.retry_attempt", retry_count + 1)
+                        answer = self._llm_provider.generate(
+                            prompt=prompt,
+                            temperature=self._config.llm_temperature,
+                            max_tokens=self._config.llm_max_tokens,
+                        )
+                        if span:
+                            span.set_attribute("rag.answer_length", len(answer))
+
+                    # Check if answer is valid (non-empty and not just whitespace)
+                    if answer and answer.strip():
+                        logger.debug(
+                            "Generation successful on attempt %d, answer length: %d",
+                            retry_count + 1, len(answer),
+                        )
+                        break
+
+                    # Empty response - log and retry
+                    retry_count += 1
+                    logger.warning(
+                        "Empty LLM response received (attempt %d/%d). Retrying...",
+                        retry_count, max_retries,
                     )
-                    if span:
-                        span.set_attribute("rag.answer_length", len(answer))
+
+                    if retry_count < max_retries:
+                        # Small delay before retry to allow LLM to recover
+                        time.sleep(0.5)
+
+                # If we exhausted all retries with empty responses
+                if not answer or not answer.strip():
+                    logger.error(
+                        "Empty LLM response after %d attempts. Returning fallback response.",
+                        max_retries,
+                    )
+                    fallback_answer = self._handle_no_results(query)
+                    result = {
+                        "answer": fallback_answer,
+                        "rewritten_query": rewritten_query,
+                        "empty_response_retries": max_retries,
+                    }
+                    if show_sources:
+                        result["sources"] = chunks
+                    return result
+
             finally:
                 generation_duration = time.perf_counter() - generation_start
                 metrics.record("generation_latency", generation_duration)
                 logger.debug("generation_latency: %.3fs", generation_duration)
+                if retry_count > 0:
+                    metrics.record("generation_retries", retry_count)
 
             # Step 7: Add answer to session via session.add_message()
             session.add_message("user", query)

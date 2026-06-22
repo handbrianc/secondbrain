@@ -11,27 +11,27 @@ from pathlib import Path
 from typing import Any
 import pytest
 
-# Disable PyTorch meta tensor mode globally to prevent xdist serialization errors
-try:
-    import torch
-
-    if hasattr(torch, "set_default_device"):
-        torch.set_default_device("cpu")
-except ImportError:
-    pass
-
 
 def pytest_configure(config: Any) -> None:
     from secondbrain.config import get_config
-    try:
-        import torch
-
-        if hasattr(torch, "set_default_device"):
-            torch.set_default_device("cpu")
-    except ImportError:
-        pass
 
     get_config.cache_clear()
+
+    # Stub docling at the earliest possible moment to prevent ~2s import
+    # overhead each time DocumentIngestor is instantiated in tests.
+    # DocumentIngestor.__init__ eagerly imports docling.datamodel submodules.
+    import sys
+    from unittest.mock import MagicMock
+    for mod_name in (
+        "docling",
+        "docling.datamodel",
+        "docling.datamodel.accelerator_options",
+        "docling.datamodel.base_models",
+        "docling.datamodel.pipeline_options",
+        "docling.document_converter",
+    ):
+        if mod_name not in sys.modules:
+            sys.modules[mod_name] = MagicMock()
 
     try:
         import secondbrain.utils.tracing as tracing_mod
@@ -146,69 +146,6 @@ def sample_pdf_with_multiple_pages() -> Path:
         return Path(tmp.name)
 
 
-# Module-level cache: populated once when shared_embedding_model is first used
-_SB_WARM_MODEL: Any = None
-
-
-@pytest.fixture(scope="session")
-def shared_embedding_model() -> Any:
-    """Session-scoped pre-loaded embedding model.
-
-    Lazily warms a LocalEmbeddingProvider("all-MiniLM-L6-v2") on first use,
-    then installs a __init__ patch so all subsequent default-model constructions
-    share the already-loaded model — avoiding the ~17-25 s SentenceTransformer
-    cold-load tax on every new instantiation.
-
-    Tests that construct LocalEmbeddingProvider with a custom model name are
-    unaffected (patched __init__ delegates to real __init__).  Tests that wrap
-    sentence_transformers.SentenceTransformer in a mock context are also
-    unaffected (_model is pre-set by the mock block, triggering the passthrough).
-    """
-    from secondbrain.embedding.local import LocalEmbeddingProvider
-
-    global _SB_WARM_MODEL
-
-    if _SB_WARM_MODEL is None:
-        _SB_WARM_MODEL = LocalEmbeddingProvider(model_name="all-MiniLM-L6-v2").model
-
-    orig_init = LocalEmbeddingProvider.__init__
-
-    def patched_init(
-        self: Any, model_name: str = "all-MiniLM-L6-v2", **kwargs: Any
-    ) -> None:
-        if model_name == "all-MiniLM-L6-v2":
-            # Passthrough if a test already initialised _model under a mock
-            if getattr(self, "_model", None) is not None:
-                orig_init(self, model_name=model_name, **kwargs)
-                return
-            self.model_name = model_name
-            self._model = _SB_WARM_MODEL
-            self._connection_valid = True
-            self._connection_checked_at = 0.0
-        else:
-            orig_init(self, model_name=model_name, **kwargs)
-
-    LocalEmbeddingProvider.__init__ = patched_init  # type: ignore[method-assign]
-
-    yield _SB_WARM_MODEL
-
-    LocalEmbeddingProvider.__init__ = orig_init  # type: ignore[method-assign]
-
-
-@pytest.fixture(scope="session")
-
-
-def embedding_cache() -> Any:
-    cache: dict[str, list[float]] = {}
-
-    def get_or_create(text: str, embed_gen: Any) -> list[float]:
-        if text not in cache:
-            cache[text] = embed_gen.generate(text)
-        return cache[text]
-
-    return get_or_create
-
-
 # Global mock fixtures for service-independent testing
 
 
@@ -256,6 +193,8 @@ def cleanup_mongo_connections() -> Generator[None, None, None]:
         "SECONDBRAIN_OPENAI_BASE_URL",
     ):
         os.environ.pop(_key, None)
+    # Restore test-only dummy key so chat tests remain functional
+    os.environ.setdefault("SECONDBRAIN_OPENAI_API_KEY", "test-secret-key-for-chat-tests")
     # Reset global tracing cache to prevent stale flag from earlier tests
     import secondbrain.utils.tracing as _tm
 
@@ -266,7 +205,15 @@ def cleanup_mongo_connections() -> Generator[None, None, None]:
     import secondbrain.config as _cm
 
     _cm.get_config.cache_clear()
-    
+    # Reset CLI state to prevent pollution between tests under pytest-xdist
+    # parallel execution. Tests importing from secondbrain.cli vs
+    # secondbrain.cli.commands can resolve to stale cli references.
+    # Reloading commands.py reapplies all @cli.command() decorators (which
+    # register options like --chunk-size, --batch-size on the ingest command).
+    import importlib
+
+    importlib.reload(importlib.import_module("secondbrain.cli.commands"))
+
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:

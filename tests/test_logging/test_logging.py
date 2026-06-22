@@ -61,7 +61,7 @@ class TestHealthStatus:
             "status": "healthy",
             "timestamp": "2024-01-01T00:00:00+00:00",
             "uptime": 3600.0,
-            "services": {"sentence-transformers": True, "mongodb": True},
+            "services": {"mongodb": True},
             "check_duration_seconds": 0.5,
         }
 

@@ -1,1 +1,1 @@
-"""Integration tests with real services (MongoDB, sentence-transformers)."""
+"""Integration tests with real services (MongoDB, OpenAI-compatible embedding API)."""

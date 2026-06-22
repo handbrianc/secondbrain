@@ -1,18 +1,18 @@
 ## ADDED Requirements
 
 ### Requirement: Embedding Generation
-The system SHALL generate semantic embeddings for text chunks using sentence-transformers with embeddinggemma:latest model.
+The system SHALL generate semantic embeddings for text chunks using OpenAI-compatible API with embeddinggemma:latest model.
 
 #### Scenario: Generate embedding for text
 - **WHEN** user ingests a document with extracted text
 - **THEN** the system chunks text into segments
-- **AND** generates embedding vector for each chunk using sentence-transformers API
+- **AND** generates embedding vector for each chunk using OpenAI-compatible API API
 - **AND** returns 384-dimensional vectors (embeddinggemma output)
 
-#### Scenario: sentence-transformers service unavailable
-- **WHEN** user attempts ingestion but sentence-transformers is not running
+#### Scenario: OpenAI-compatible API service unavailable
+- **WHEN** user attempts ingestion but OpenAI-compatible API is not running
 - **THEN** the system reports connection error
-- **AND** suggests checking if sentence-transformers service is started
+- **AND** suggests checking if OpenAI-compatible API service is started
 - **AND** does not proceed without valid connection
 
 #### Scenario: Model not pulled
@@ -29,11 +29,11 @@ The system SHALL generate semantic embeddings for text chunks using sentence-tra
 #### Scenario: Custom embedding model
 - **WHEN** user sets SECONDBRAIN_MODEL environment variable
 - **THEN** the system uses specified model instead of default
-- **AND** validates model is available in sentence-transformers
+- **AND** validates model is available in OpenAI-compatible API
 
 #### Scenario: Batch embedding generation
 - **WHEN** system has multiple chunks to embed
-- **THEN** the system sends batches to sentence-transformers API
+- **THEN** the system sends batches to OpenAI-compatible API API
 - **AND** processes efficiently to minimize API calls
 
 ### Requirement: Text Chunking
@@ -54,19 +54,19 @@ The system SHALL split documents into overlapping text chunks for embedding.
 - **THEN** the system skips generating embedding for that chunk
 - **AND** logs warning
 
-### Requirement: sentence-transformers Configuration
-The system SHALL connect to sentence-transformers via configurable URL and validate connectivity.
+### Requirement: OpenAI-compatible API Configuration
+The system SHALL connect to OpenAI-compatible API via configurable URL and validate connectivity.
 
-#### Scenario: Default sentence-transformers URL
+#### Scenario: Default OpenAI-compatible API URL
 - **WHEN** SECONDBRAIN_SENTENCE_TRANSFORMERS_URL is not set
 - **THEN** system connects to http://localhost:local embedding
 
-#### Scenario: Custom sentence-transformers URL
+#### Scenario: Custom OpenAI-compatible API URL
 - **WHEN** user sets SECONDBRAIN_SENTENCE_TRANSFORMERS_URL to custom URL
 - **THEN** system connects to specified URL
 - **AND** validates connection before operations
 
 #### Scenario: Connection timeout
-- **WHEN** sentence-transformers does not respond within timeout
+- **WHEN** OpenAI-compatible API does not respond within timeout
 - **THEN** system reports timeout error
 - **AND** allows retry

@@ -9,7 +9,7 @@ Create a `.env` file in your project root:
 ```bash
 # Essential settings
 SECONDBRAIN_MONGO_URI=mongodb://localhost:27017
-SECONDBRAIN_LOCAL_EMBEDDING_MODEL=all-MiniLM-L6-v2
+SECONDBRAIN_EMBEDDING_MODEL=all-MiniLM-L6-v2
 SECONDBRAIN_CHUNK_SIZE=4096
 ```
 
@@ -98,7 +98,7 @@ These variables configure the MongoDB container in `docker-compose.yml`:
 
 ## Embedding Settings
 
-### `SECONDBRAIN_LOCAL_EMBEDDING_MODEL`
+### `SECONDBRAIN_EMBEDDING_MODEL`
 - **Type**: `str`
 - **Default**: `all-MiniLM-L6-v2`
 - **Description**: Sentence-transformers model for local embedding generation
@@ -214,7 +214,7 @@ SECONDBRAIN_MONGO_DB=secondbrain
 SECONDBRAIN_MONGO_COLLECTION=embeddings
 
 # Embedding Configuration
-SECONDBRAIN_LOCAL_EMBEDDING_MODEL=all-MiniLM-L6-v2
+SECONDBRAIN_EMBEDDING_MODEL=all-MiniLM-L6-v2
 SECONDBRAIN_EMBEDDING_DIMENSIONS=384
 SECONDBRAIN_EMBEDDING_CACHE_SIZE=1000
 SECONDBRAIN_SENTENCE_TRANSFORMERS_URL=http://localhost:11434

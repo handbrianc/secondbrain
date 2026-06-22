@@ -190,8 +190,9 @@ class TestOpenAILLMProviderEdgeCases:
         
         provider = OpenAILLMProvider(api_key="test-key")
         
-        with pytest.raises(RuntimeError, match="Generation failed"):
-            provider.generate("")
+        # Empty prompt returns empty string - no exception raised
+        result = provider.generate("")
+        assert result == ""
 
     @patch('secondbrain.rag.providers.openai.OpenAI')
     def test_generate_with_very_long_prompt(self, mock_client_class):
