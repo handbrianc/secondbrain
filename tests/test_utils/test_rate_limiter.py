@@ -2,7 +2,43 @@
 
 import time
 
+import pytest
+
 from secondbrain.utils.rate_limiter import SharedRateLimiter
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _fast_rate_limiter_time():
+    """Accelerate rate-limiter tests by advancing time virtually.
+
+    Shares the same time-mocking approach as _fast_circuit_breaker_time.
+    Patch time.sleep to accumulate virtual time; time.monotonic returns
+    the virtual base.  Eliminates ~750ms of artificial time.sleep calls.
+    """
+    _orig_sleep = time.sleep
+    _orig_monotonic = time.monotonic
+
+    _lazy_base: float | None = None
+
+    def _fast_monotonic() -> float:
+        nonlocal _lazy_base
+        if _lazy_base is None:
+            _lazy_base = _orig_monotonic()
+        return _lazy_base  # type: ignore[return-value]
+
+    def _fast_sleep(seconds: float) -> None:
+        if seconds <= 0:
+            return
+        nonlocal _lazy_base
+        if _lazy_base is None:
+            _lazy_base = _orig_monotonic()
+        _lazy_base += seconds + 1e-6
+
+    time.sleep = _fast_sleep  # type: ignore[method-assign]
+    time.monotonic = _fast_monotonic  # type: ignore[method-assign]
+    yield
+    time.sleep = _orig_sleep  # type: ignore[method-assign]
+    time.monotonic = _orig_monotonic
 
 
 class TestSharedRateLimiterInit:
