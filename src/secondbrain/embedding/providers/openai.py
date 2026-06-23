@@ -6,7 +6,6 @@ protocol for using OpenAI API or OpenAI-compatible endpoints for embedding gener
 
 from __future__ import annotations
 
-import asyncio
 import os
 from typing import Any
 

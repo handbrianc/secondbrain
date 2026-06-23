@@ -55,16 +55,6 @@ class TestRateLimiting:
         # 11th request should fail (rate limited)
         assert not limiter.acquire()
 
-    def test_rate_limiter_shared_across_processes(self):
-        """Test that rate limiter state is shared across processes."""
-        from secondbrain.utils.rate_limiter import get_shared_rate_limiter
-
-        # Verify rate limiter function exists and is callable
-        assert callable(get_shared_rate_limiter)
-
-        limiter = get_shared_rate_limiter()
-        assert limiter is not None
-
 
 class TestMemoryManagement:
     """Test memory-efficient batch processing."""

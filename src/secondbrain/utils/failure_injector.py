@@ -23,7 +23,7 @@ Usage:
 import logging
 import threading
 import time
-from collections.abc import Callable, Generator
+from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum

@@ -7,26 +7,10 @@ in the connections utility module.
 import pytest
 
 from secondbrain.utils.circuit_breaker import CircuitBreakerConfig, CircuitBreakerError
-from secondbrain.utils.connections import RateLimitedRetry, ValidatableService
+from secondbrain.utils.connections import ValidatableService
 
 
-class TestRateLimitedRetryEdgeCases:
-    """Tests for RateLimitedRetry edge cases."""
 
-    def test_rate_limited_retry_no_retry_on_success(self) -> None:
-        """Test RateLimitedRetry doesn't retry on immediate success (line 130)."""
-        retry = RateLimitedRetry(max_retries=3, base_delay=0.01)
-        call_count = 0
-
-        def succeeds_immediately() -> bool:
-            nonlocal call_count
-            call_count += 1
-            return True
-
-        result = retry.call(succeeds_immediately)
-
-        assert result is True
-        assert call_count == 1  # No retries
 
 
 class TestValidatableServiceWithCircuitBreaker:

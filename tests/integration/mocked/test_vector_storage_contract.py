@@ -1,8 +1,7 @@
-"""Interface tests for VectorStorage backed by MockVectorStorage.
+"""Interface contract tests for VectorStorage backed by MockVectorStorage.
 
 These tests validate the VectorStorage interface contract using a mock
-backend. They are fast and do not require MongoDB running. For real
-MongoDB integration tests, use tests/integration/mocked/ instead.
+backend. They are fast and do not require MongoDB running.
 """
 
 import pytest

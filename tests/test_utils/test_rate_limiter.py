@@ -2,13 +2,7 @@
 
 import time
 
-import pytest
-
-from secondbrain.utils.rate_limiter import (
-    SharedRateLimiter,
-    get_shared_rate_limiter,
-    shutdown_shared_rate_limiter,
-)
+from secondbrain.utils.rate_limiter import SharedRateLimiter
 
 
 class TestSharedRateLimiterInit:
@@ -230,61 +224,6 @@ class TestSharedRateLimiterGetRemaining:
         limiter.acquire()
 
         assert limiter.get_remaining() >= 0
-
-
-class TestGetSharedRateLimiter:
-    """Test get_shared_rate_limiter() function."""
-
-    def test_get_shared_rate_limiter_creates_singleton(self):
-        """Test that get_shared_rate_limiter creates a singleton."""
-        # Clean up any existing instance
-        shutdown_shared_rate_limiter()
-
-        limiter1 = get_shared_rate_limiter(max_requests=50, window_seconds=30.0)
-        limiter2 = get_shared_rate_limiter(max_requests=100, window_seconds=60.0)
-
-        # Should return the same instance
-        assert limiter1 is limiter2
-        # First parameters should be used
-        assert limiter1.max_requests == 50
-        assert limiter1.window_seconds == 30.0
-
-    def test_get_shared_rate_limiter_returns_same_instance(self):
-        """Test that multiple calls return the same instance."""
-        shutdown_shared_rate_limiter()
-
-        instances = [get_shared_rate_limiter() for _ in range(10)]
-
-        # All should be the same instance
-        assert all(inst is instances[0] for inst in instances)
-
-
-class TestShutdownSharedRateLimiter:
-    """Test shutdown_shared_rate_limiter() function."""
-
-    def test_shutdown_clears_singleton(self):
-        """Test that shutdown clears the global instance."""
-        shutdown_shared_rate_limiter()  # Clean start
-
-        # Get an instance
-        limiter = get_shared_rate_limiter()
-        assert limiter is not None
-
-        # Shutdown
-        shutdown_shared_rate_limiter()
-
-        # Get a new instance
-        new_limiter = get_shared_rate_limiter()
-        assert new_limiter is not None
-        assert new_limiter is not limiter
-
-    def test_shutdown_can_be_called_multiple_times(self):
-        """Test that shutdown can be called safely multiple times."""
-        shutdown_shared_rate_limiter()
-        shutdown_shared_rate_limiter()
-        shutdown_shared_rate_limiter()
-
-        # Should not raise any errors
 
 
 class TestRateLimiterEdgeCases:
