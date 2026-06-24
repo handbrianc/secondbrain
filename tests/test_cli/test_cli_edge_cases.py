@@ -334,18 +334,22 @@ class TestCLIHealthEdgeCases:
         assert result.exit_code == 0
         assert "degraded" in result.output.lower()
 
-    @patch("secondbrain.logging.get_health_status")
+    @patch("secondbrain.cli.commands.get_health_status")
     def test_health_command_json_format(
         self, mock_get_health_status: MagicMock
     ) -> None:
         """Test health command with JSON output."""
-        mock_status = MagicMock()
-        mock_status.mongo_healthy = True
-        mock_status.degraded = False
-        mock_get_health_status.return_value = mock_status
+        mock_get_health_status.return_value = {
+            "status": "healthy",
+            "timestamp": "2026-01-01T00:00:00+00:00",
+            "uptime": None,
+            "services": {"mongodb": True},
+            "check_duration_seconds": 0.1,
+        }
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["health", "--output", "json"])
+        with patch("time.sleep", return_value=None):
+            result = runner.invoke(cli, ["health", "--output", "json"])
         assert result.exit_code == 0
 
     @patch("secondbrain.logging.get_health_status")
