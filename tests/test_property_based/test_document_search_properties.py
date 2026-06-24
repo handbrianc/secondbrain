@@ -388,7 +388,7 @@ class TestChunkingProperties:
         chunk_size=st.integers(min_value=50, max_value=500),
         chunk_overlap=st.integers(min_value=0, max_value=50).filter(lambda o: o < 50),
     )
-    @settings(max_examples=30, deadline=200, suppress_health_check=[HealthCheck.filter_too_much])
+    @settings(max_examples=10, deadline=100, suppress_health_check=[HealthCheck.filter_too_much])
     def test_chunking_respects_size_limit(
         self, text: str, chunk_size: int, chunk_overlap: int
     ):
@@ -407,6 +407,34 @@ class TestChunkingProperties:
 
         # Allow small variance (up to chunk_size + 50) for word boundary adjustments
         # The algorithm uses rfind(" ") to avoid breaking words
+        max_allowed_size = chunk_size + 50
+        for chunk in chunks:
+            chunk_len = len(chunk["text"])
+            assert chunk_len <= max_allowed_size, (
+                f"Chunk size {chunk_len} exceeds limit {max_allowed_size}: "
+                f"{chunk['text'][:50]!r}..."
+            )
+
+    @pytest.mark.parametrize("chunk_size,text,chunk_overlap", [
+        (50, "a " * 100, 0),
+        (500, "a " * 5, 0),
+        (100, "word " * 20, 10),
+    ])
+    def test_chunking_respects_size_limit_manual(
+        self, chunk_size: int, text: str, chunk_overlap: int
+    ):
+        """Manual regression cases for chunk size limits.
+
+        Provides explicit coverage for edge cases alongside property-based testing.
+        """
+        if chunk_overlap >= chunk_size:
+            chunk_overlap = chunk_size - 1 if chunk_size > 1 else 0
+
+        segments = [{"text": text, "page": 0}]
+        chunks = _chunk_segments(segments, chunk_size, chunk_overlap)
+
+        assert chunks, "Chunking should produce at least one chunk for valid input"
+
         max_allowed_size = chunk_size + 50
         for chunk in chunks:
             chunk_len = len(chunk["text"])

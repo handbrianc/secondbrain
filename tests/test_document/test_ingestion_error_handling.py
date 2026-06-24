@@ -13,6 +13,7 @@ Tests cover:
 """
 
 import asyncio
+import os
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -60,12 +61,11 @@ class TestEmbeddingFailureScenarios:
         assert result["failed"] >= 1
 
     @patch("secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config")
+    @patch("secondbrain.storage.VectorStorage")
     def test_ingest_continues_on_single_embedding_error(
-        self, mock_factory: MagicMock, tmp_path: Path, mocked_pdf_extraction: MagicMock
+        self, mock_vs: MagicMock, mock_factory: MagicMock, tmp_path: Path, mocked_pdf_extraction: MagicMock
     ) -> None:
-        """Test that ingestion continues when some embeddings fail."""
         mock_embedding = MagicMock()
-
         call_count = 0
 
         def embedding_side_effect(texts: list[str]) -> list[list[float]]:
@@ -76,8 +76,9 @@ class TestEmbeddingFailureScenarios:
             return [[0.1] * 384 for _ in range(len(texts))]
 
         mock_embedding.generate_batch = MagicMock(side_effect=embedding_side_effect)
-        mock_embedding.generate.side_effect = lambda x: [0.1] * 384
+        mock_embedding.generate = MagicMock(side_effect=lambda x: [0.1] * 384)
         mock_factory.return_value = mock_embedding
+        mock_vs.return_value = MagicMock()
 
         ingestor = DocumentIngestor(verbose=True)
 
@@ -86,7 +87,8 @@ class TestEmbeddingFailureScenarios:
         test_file2 = tmp_path / "test2.pdf"
         test_file2.write_bytes(b"fake pdf 2")
 
-        result = ingestor.ingest(str(tmp_path), recursive=False)
+        with patch("time.sleep", return_value=None):
+            result = ingestor.ingest(str(tmp_path), recursive=False)
 
         assert "success" in result
         assert "failed" in result
@@ -330,8 +332,9 @@ class TestMemoryExhaustion:
 
         assert isinstance(result, dict)
 
+    @patch("secondbrain.storage.VectorStorage")
     def test_progress_callback_handles_memory_pressure(
-        self, tmp_path: Path, mocked_pdf_extraction: MagicMock
+        self, mock_vs: MagicMock, tmp_path: Path, mocked_pdf_extraction: MagicMock
     ) -> None:
         """Test progress callback handling under memory pressure."""
         callback_errors = []
@@ -354,15 +357,11 @@ class TestMemoryExhaustion:
         )
         mock_embedding.generate = MagicMock(return_value=[0.1] * 384)
 
-        with patch(
-            "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config",
-            return_value=mock_embedding,
-        ):
-            with patch(
-                "secondbrain.storage.storage.VectorStorage",
-                return_value=MagicMock(),
-            ):
-                result = ingestor.ingest(str(tmp_path), recursive=False, cores=1)
+        with patch("time.sleep", return_value=None), \
+             patch("gc.collect", return_value=None), \
+             patch("secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config", return_value=mock_embedding), \
+             patch("secondbrain.storage.VectorStorage.store_batch", return_value=None):
+            result = ingestor.ingest(str(tmp_path), recursive=False, cores=1)
 
         assert isinstance(result, dict)
 
