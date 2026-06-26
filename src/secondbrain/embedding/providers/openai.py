@@ -6,6 +6,7 @@ protocol for using OpenAI API or OpenAI-compatible endpoints for embedding gener
 
 from __future__ import annotations
 
+import contextlib
 import os
 from typing import Any
 
@@ -277,18 +278,29 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
             return False
 
     def close(self) -> None:
-        """Close clients and release resources."""
-        # Close httpx client explicitly to avoid resource warnings
+        """Close clients and release resources.
+
+        Note: For proper async cleanup in async context, use aclose() instead.
+        This method closes the sync httpx client but does not close the async
+        client — the async client must be closed with aclose() to avoid
+        RuntimeWarnings from unawaited coroutines.
+        """
         if self._client is not None:
-            try:
+            with contextlib.suppress(Exception):
                 self._client.close()
-            except Exception:
-                pass  # Already closed or error during close
+            self._client = None  # type: ignore[assignment]
+
+    async def aclose(self) -> None:
+        """Asynchronously close both sync and async HTTP clients.
+
+        Releases all held resources including async connection pools to prevent
+        resource leaks and RuntimeWarnings from unawaited coroutines.
+        """
+        if self._client is not None:
+            with contextlib.suppress(Exception):
+                self._client.close()
             self._client = None  # type: ignore[assignment]
         if self._async_client is not None:
-            try:
-                self._async_client.close()
-            except Exception:
-                pass  # Already closed or error during close
+            await self._async_client.close()  # type: ignore[attr-defined]
             self._async_client = None  # type: ignore[assignment]
         self._api_key = None
