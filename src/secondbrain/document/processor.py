@@ -29,6 +29,41 @@ from secondbrain.utils.mps_patch import patch_transformers_for_mps
 
 patch_transformers_for_mps()
 
+
+def create_docling_converter() -> "DocumentConverter":  # noqa: UP037
+    """Create a configured DocumentConverter supporting all docling formats.
+
+    Returns a converter pre-configured with:
+    - PDF: OCR enabled, CPU-accelerated, table structure disabled
+    - All other formats use docling defaults
+
+    Factory exists to centralize format configuration and avoid bare
+    DocumentConverter() instantiations that miss format options.
+    """
+    import logging as _logging
+
+    _logging.getLogger("RapidOCR").setLevel(_logging.ERROR)
+    _logging.getLogger("docling").setLevel(_logging.WARNING)
+
+    from docling.datamodel.accelerator_options import (
+        AcceleratorDevice,
+        AcceleratorOptions,
+    )
+    from docling.datamodel.base_models import InputFormat
+    from docling.datamodel.pipeline_options import PdfPipelineOptions
+    from docling.document_converter import DocumentConverter, PdfFormatOption
+
+    pdf_options = PdfFormatOption(
+        pipeline_options=PdfPipelineOptions(
+            do_ocr=True,
+            do_table_structure=False,
+            accelerator_options=AcceleratorOptions(
+                device=AcceleratorDevice.CPU, num_threads=4
+            ),
+        )
+    )
+    return DocumentConverter(format_options={InputFormat.PDF: pdf_options})
+
 if TYPE_CHECKING:
     from docling.document_converter import DocumentConverter
 
@@ -154,9 +189,7 @@ def _extract_and_chunk_file(
     """
     file_path = Path(file_path_str)
     try:
-        from docling.document_converter import DocumentConverter
-
-        converter = DocumentConverter()
+        converter = create_docling_converter()
 
         result = converter.convert(file_path)
         content = result.document

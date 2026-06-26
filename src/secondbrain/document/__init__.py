@@ -87,10 +87,30 @@ def _extract_and_chunk_file(
     """
     file_path = Path(file_path_str)
     try:
-        # Create converter for this thread
-        from docling.document_converter import DocumentConverter
+        # Create configured converter for all docling-supported formats
+        import logging as _log
 
-        converter = DocumentConverter()
+        _log.getLogger("RapidOCR").setLevel(_log.ERROR)
+        _log.getLogger("docling").setLevel(_log.WARNING)
+
+        from docling.datamodel.accelerator_options import (
+            AcceleratorDevice,
+            AcceleratorOptions,
+        )
+        from docling.datamodel.base_models import InputFormat
+        from docling.datamodel.pipeline_options import PdfPipelineOptions
+        from docling.document_converter import DocumentConverter, PdfFormatOption
+
+        pdf_options = PdfFormatOption(
+            pipeline_options=PdfPipelineOptions(
+                do_ocr=True,
+                do_table_structure=False,
+                accelerator_options=AcceleratorOptions(
+                    device=AcceleratorDevice.CPU, num_threads=4
+                ),
+            )
+        )
+        converter = DocumentConverter(format_options={InputFormat.PDF: pdf_options})
 
         result = converter.convert(file_path)
         content = result.document
