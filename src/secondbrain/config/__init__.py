@@ -20,18 +20,18 @@ __all__ = ["Config", "config", "get_config", "preload_env"]
 
 def preload_env() -> None:
     """Preload environment variables from .env or .env.test file.
-    
+
     This function should be called before creating Config instances to ensure
     environment variables are loaded from the appropriate .env file.
-    
+
     When PYTEST_CURRENT_TEST is set, loads from .env.test if it exists.
     Otherwise loads from .env.
-    
+
     In test mode, .env.test values override existing environment variables.
     In production mode, .env values are only used if not already set.
     """
     is_test_env = os.getenv("PYTEST_CURRENT_TEST") is not None
-    
+
     # Determine which .env file to load
     if is_test_env and Path(".env.test").exists():
         env_file_path = Path(".env.test")
@@ -39,10 +39,10 @@ def preload_env() -> None:
         env_file_path = Path(".env")
     else:
         return  # No env file to load
-    
+
     # Load environment variables from file
     if env_file_path.exists():
-        with open(env_file_path, "r", encoding="utf-8") as f:
+        with open(env_file_path, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line and not line.startswith("#") and "=" in line:
@@ -54,8 +54,6 @@ def preload_env() -> None:
                     # In production mode, only set if not already in environment
                     if is_test_env or key not in os.environ:
                         os.environ[key] = value
-
-
 
 
 def _validate_mongo_uri(value: str) -> str:
@@ -79,9 +77,6 @@ def _validate_mongo_uri(value: str) -> str:
     return value
 
 
-
-
-
 class Config(BaseSettings):
     """Configuration for secondbrain CLI.
 
@@ -101,25 +96,25 @@ class Config(BaseSettings):
     @classmethod
     def _load_env_file(cls, values: dict[str, Any]) -> dict[str, Any]:
         """Load from appropriate .env file based on environment.
-        
+
         When PYTEST_CURRENT_TEST is set, loads from .env.test if it exists.
         Otherwise loads from .env.
-        
+
         Environment variables take precedence over .env file values.
         """
         # Determine which .env file to load
         is_test_env = os.getenv("PYTEST_CURRENT_TEST") is not None
-        
+
         if is_test_env and Path(".env.test").exists():
             env_file_path = Path(".env.test")
         elif Path(".env").exists():
             env_file_path = Path(".env")
         else:
             env_file_path = None
-        
+
         # Load environment variables from file if it exists
         if env_file_path and env_file_path.exists():
-            with open(env_file_path, "r", encoding="utf-8") as f:
+            with open(env_file_path, encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
                     if line and not line.startswith("#") and "=" in line:
@@ -130,7 +125,7 @@ class Config(BaseSettings):
                         if env_key not in values and key not in os.environ:
                             os.environ[key] = value
                             values[env_key] = value
-        
+
         # Set test-specific defaults if running in test environment
         if is_test_env:
             if "mongo_db" not in values:
@@ -206,6 +201,34 @@ class Config(BaseSettings):
     rag_context_window: int = Field(
         default=5,
         description="Number of recent messages to keep in context (default: 5 per spec)",
+    )
+    rag_max_retries: int = Field(
+        default=3,
+        ge=1,
+        description="Maximum retry attempts for LLM generation in RAG chat (default: 3)",
+    )
+
+    # RAG formatting settings
+    rag_max_context_chars: int = Field(
+        default=8000,
+        ge=1000,
+        le=500000,
+        description=(
+            "Maximum total context length in characters for RAG prompt construction. "
+            "Controls how much retrieved document text is included in the LLM prompt. "
+            "Defaults to 8000 (appropriate for 8k-context models). Increase for "
+            "longer-context models (e.g., 32000 for claude-3-5 Sonnet)."
+        ),
+    )
+    rag_chunk_preview_chars: int = Field(
+        default=500,
+        ge=100,
+        le=10000,
+        description=(
+            "Maximum character length of each individual chunk's text in the RAG context. "
+            "Chunks longer than this are truncated to prevent any single chunk from "
+            "dominating the context window. Defaults to 500."
+        ),
     )
 
     # RAG prompt settings
@@ -382,7 +405,12 @@ class Config(BaseSettings):
 
     embedding_storage_format: str = Field(
         default="array",
-        description="Embedding storage format: 'array' (JSON array, required for vector search) or 'binary' (BSON Binary, compact but breaks vector search). Default: 'array'.",
+        description=(
+            "Embedding storage format: 'array' (JSON array, required for vector search) or "
+            "'binary' (BSON Binary, DEPRECATED and INCOMPATIBLE with vector search - "
+            "cosine similarity computations will produce incorrect results. "
+            "Supported for backward compatibility only. Default: 'array'."
+        ),
     )
 
     text_compression_enabled: bool = Field(
@@ -575,6 +603,20 @@ class Config(BaseSettings):
             raise ValueError("rag_context_window must be positive")
         return v
 
+    @field_validator("rag_max_context_chars")
+    @classmethod
+    def validate_rag_max_context_chars(cls, v: int) -> int:
+        if v < 1000 or v > 500000:
+            raise ValueError("rag_max_context_chars must be between 1000 and 500000")
+        return v
+
+    @field_validator("rag_chunk_preview_chars")
+    @classmethod
+    def validate_rag_chunk_preview_chars(cls, v: int) -> int:
+        if v < 100 or v > 10000:
+            raise ValueError("rag_chunk_preview_chars must be between 100 and 10000")
+        return v
+
     @model_validator(mode="after")
     def validate_config_values(self) -> "Config":
         """Validate configuration values.
@@ -611,6 +653,23 @@ class Config(BaseSettings):
         if self.text_compression_algorithm not in ("gzip", "brotli", "zstd"):
             raise ValueError(
                 "text_compression_algorithm must be 'gzip', 'brotli', or 'zstd'"
+            )
+        if self.rag_chunk_preview_chars >= self.rag_max_context_chars:
+            raise ValueError(
+                "rag_chunk_preview_chars must be less than rag_max_context_chars"
+            )
+
+        # Warn if deprecated binary format is selected
+        if self.embedding_storage_format == "binary":
+            import warnings
+
+            warnings.warn(
+                "embedding_storage_format='binary' is deprecated and incompatible with "
+                "vector search operations. Binary format produces incorrect cosine similarity "
+                "scores. Please use 'array' format. See: "
+                "https://github.com/your-repo/docs/embedding-storage",
+                DeprecationWarning,
+                stacklevel=1,
             )
         return self
 

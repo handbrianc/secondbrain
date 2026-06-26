@@ -4,7 +4,6 @@ These tests validate the VectorStorage interface contract using a mock
 backend. They are fast and do not require MongoDB running.
 """
 
-import pytest
 
 from secondbrain.storage import MockVectorStorage
 

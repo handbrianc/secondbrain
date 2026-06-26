@@ -7,7 +7,7 @@ import pytest
 
 from secondbrain.config import Config
 from secondbrain.exceptions import StorageConnectionError
-from secondbrain.storage.storage import AsyncVectorStorage
+from secondbrain.storage.storage import AsyncVectorStorage, ValidatableService
 
 # Get test config at module level
 _test_config = Config()
@@ -19,7 +19,10 @@ class TestAsyncVectorStorage:
     @pytest.fixture
     def async_storage(self) -> Generator[AsyncVectorStorage, None, None]:
         """Create an AsyncVectorStorage instance with mocked config and fresh state."""
-        with patch("secondbrain.storage.storage.config") as mock_config_func:
+        with (
+            patch("secondbrain.storage.storage.config") as mock_config_func,
+            patch.object(ValidatableService, "_do_validate", return_value=True),
+        ):
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
             mock_config_func.return_value.mongo_db = "secondbrain_test"
             mock_config_func.return_value.mongo_collection = "embeddings_test"
@@ -44,7 +47,10 @@ class TestAsyncVectorStorage:
     @pytest.mark.asyncio
     async def test_init_with_overrides(self) -> None:
         """Test initialization with custom parameters."""
-        with patch("secondbrain.storage.storage.config") as mock_config_func:
+        with (
+            patch("secondbrain.storage.storage.config") as mock_config_func,
+            patch.object(ValidatableService, "_do_validate", return_value=True),
+        ):
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
             mock_config_func.return_value.mongo_db = "default_db"
             mock_config_func.return_value.mongo_collection = "default_collection"

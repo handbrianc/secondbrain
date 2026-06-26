@@ -4,7 +4,6 @@ This file specifically targets the 203 missing lines in src/secondbrain/document
 to achieve 90%+ coverage.
 """
 
-import asyncio
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 

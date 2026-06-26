@@ -13,8 +13,6 @@ from typing import TypedDict
 from rich.console import Console
 from rich.logging import RichHandler
 
-from secondbrain.types import ChunkInfo, SearchResult
-
 __all__ = [
     "HealthStatus",
     "get_health_status",

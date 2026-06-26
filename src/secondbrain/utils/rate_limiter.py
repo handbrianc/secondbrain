@@ -6,6 +6,7 @@ using threading primitives for shared state.
 
 from __future__ import annotations
 
+import collections
 import threading
 import time
 
@@ -37,7 +38,7 @@ class SharedRateLimiter:
         """
         self._max_requests = max_requests
         self._window_seconds = window_seconds
-        self._timestamps: list[float] = []
+        self._timestamps: collections.deque[float] = collections.deque()
         self._lock = threading.Lock()
 
     def acquire(self) -> bool:
@@ -53,7 +54,7 @@ class SharedRateLimiter:
         with self._lock:
             # Clean old timestamps
             while self._timestamps and self._timestamps[0] < window_start:
-                self._timestamps.pop(0)
+                self._timestamps.popleft()
 
             # Check if under limit
             if len(self._timestamps) < self._max_requests:
@@ -119,9 +120,6 @@ class SharedRateLimiter:
         with self._lock:
             # Clean old timestamps
             while self._timestamps and self._timestamps[0] < window_start:
-                self._timestamps.pop(0)
+                self._timestamps.popleft()
 
             return max(0, self._max_requests - len(self._timestamps))
-
-
-

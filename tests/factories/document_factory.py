@@ -1,10 +1,10 @@
 """Factory for creating test DocumentMetadata and DocumentChunk objects."""
 
-from datetime import datetime
 
-from factory import Faker, Sequence, Factory, SubFactory
+from factory import Factory, Faker, Sequence, SubFactory
+
 from secondbrain.domain.entities import DocumentChunk, DocumentMetadata
-from secondbrain.domain.value_objects import ChunkId, SourcePath
+from secondbrain.domain.value_objects import ChunkId
 
 
 class DocumentMetadataFactory(Factory):

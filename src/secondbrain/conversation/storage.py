@@ -351,6 +351,33 @@ class ConversationStorage(ValidatableService):
 
         return messages
 
+    def session_exists(self, session_id: str) -> bool:
+        """Check if a session exists in storage.
+
+        Args:
+            session_id: Session identifier to check.
+
+        Returns
+        -------
+            True if session exists, False otherwise.
+
+        Raises
+        ------
+            StorageConnectionError: If MongoDB connection is unavailable.
+
+        Example:
+        --------
+            >>> storage = ConversationStorage()
+            >>> storage.create_session("session-123")
+            >>> storage.session_exists("session-123")
+            True
+            >>> storage.session_exists("nonexistent")
+            False
+        """
+        self._require_connection("session exists check")
+
+        return self.collection.count_documents({"session_id": session_id}, limit=1) > 0
+
     def delete_session(self, session_id: str) -> bool:
         """Delete a conversation session.
 

@@ -6,11 +6,11 @@ Consolidated from:
 """
 
 import pytest
-from hypothesis import given, settings, assume
+from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
-from secondbrain.document import _chunk_segments
 from secondbrain.config import Config
+from secondbrain.document import _chunk_segments
 
 
 @pytest.mark.hypothesis

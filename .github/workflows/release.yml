@@ -1,0 +1,93 @@
+name: Release
+
+'on':
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install build dependencies
+        run: pip install build twine
+
+      - name: Parse version from tag
+        id: version
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify version consistency
+        run: |
+          PKG_VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
+          TAG_VERSION="${{ steps.version.outputs.version }}"
+          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+            echo "ERROR: pyproject.toml version ($PKG_VERSION) != tag version ($TAG_VERSION)"
+            exit 1
+          fi
+          echo "Version $PKG_VERSION verified."
+
+      - name: Collect release notes
+        id: notes
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          # Get previous tag for changelog-style notes
+          PREV_TAG=$(git tag --sort=-v:refname | grep -E '^v[0-9]' | awk 'NR==2')
+          if [ -z "$PREV_TAG" ]; then
+            NOTES="Initial release of $TAG"
+          else
+            NOTES=$(git log "$PREV_TAG..HEAD" --oneline --format="- %s" | grep -v "^Merge " | head -20 | paste -sd " " -)
+          fi
+          echo "notes=${NOTES}" >> "$GITHUB_OUTPUT"
+
+      - name: Build package
+        run: python -m build
+
+      - name: Validate package
+        run: twine check dist/*
+
+      - name: Publish to PyPI
+        env:
+          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+          TWINE_USERNAME: __token__
+        run: twine upload dist/*
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ steps.version.outputs.tag }}
+          tag_name: ${{ steps.version.outputs.tag }}
+          body: ${{ steps.notes.outputs.notes }}
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.tag, '-alpha') || contains(steps.version.outputs.tag, '-beta') || contains(steps.version.outputs.tag, '-rc') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  smoke-test:
+    runs-on: ubuntu-latest
+    needs: release
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: dist
+          path: dist
+
+      - name: Install package
+        run: pip install dist/*.whl --force-reinstall --no-deps
+
+      - name: Smoke test
+        run: secondbrain --version

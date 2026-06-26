@@ -300,7 +300,7 @@ class TestChatCommands:
 
             runner = CliRunner()
             result = runner.invoke(
-                cli, 
+                cli,
                 ["chat", "What is the answer?", "--session", "test-single-empty"]
             )
 
@@ -516,17 +516,18 @@ class TestChatCommands:
 def test_show_sources_disabled():
     """Test that --show-sources flag exists in CLI."""
     from click.testing import CliRunner
+
     from secondbrain.cli import cli
-    
+
     runner = CliRunner()
-    
+
     # Invoke chat command help to verify flag exists
     result = runner.invoke(cli, ['chat', '--help'])
     assert result.exit_code == 0, f"Chat help should work. Output: {result.output}"
-    
+
     # Verify --show-sources flag is documented with a description
     assert '--show-sources' in result.output, "CLI should have --show-sources flag"
-    
+
     # Verify the flag has proper click option format (with description after)
     lines = result.output.split('\n')
     show_sources_line = None
@@ -540,36 +541,35 @@ def test_show_sources_disabled():
                 assert len(next_line) > 0 or '--show-sources' in line.split('#')[0], \
                     "Flag should have a description"
             break
-    
+
     assert show_sources_line is not None, "--show-sources flag should be in help output"
 
 
 def test_custom_llm_endpoint():
     """Test custom LLM endpoint configuration via environment variable."""
     import os
-    from unittest.mock import patch
-    
+
     # Save original value
     original = os.environ.get('SECONDBRAIN_LLM_ENDPOINT')
-    
+
     try:
         # Set custom endpoint
         custom_endpoint = 'http://custom-llm:8080'
         os.environ['SECONDBRAIN_LLM_ENDPOINT'] = custom_endpoint
-        
+
         # Verify the environment variable is set
         assert os.environ['SECONDBRAIN_LLM_ENDPOINT'] == custom_endpoint
-        
+
         # Verify that config module can read this environment variable
         # by checking if it's in the expected location for config loading
         from secondbrain.config import get_config
         cfg = get_config()
-        
+
         # The config should have been loaded with the environment variable
         # We verify by checking that the env var was actually read
         # (config loading would fail or use default if env var wasn't read)
         assert cfg is not None, "Config should load successfully"
-        
+
         # Verify the env var is in the standard location for SecondBrain config
         assert 'SECONDBRAIN_LLM_ENDPOINT' in os.environ
     finally:
@@ -583,25 +583,25 @@ def test_custom_llm_endpoint():
 def test_custom_conversation_db():
     """Test custom conversation database configuration via environment variable."""
     import os
-    
+
     # Save original value
     original = os.environ.get('SECONDBRAIN_CONVERSATION_DB')
-    
+
     try:
         # Set custom conversation DB
         custom_db = 'my_custom_conversations'
         os.environ['SECONDBRAIN_CONVERSATION_DB'] = custom_db
-        
+
         # Verify the environment variable is set
         assert os.environ['SECONDBRAIN_CONVERSATION_DB'] == custom_db
-        
+
         # Verify it can be loaded by config
         from secondbrain.config import get_config
         cfg = get_config()
-        
+
         # The config should load successfully with the custom DB setting
         assert cfg is not None, "Config should load successfully with custom conversation DB"
-        
+
         # Verify the env var is in the standard location for SecondBrain config
         assert 'SECONDBRAIN_CONVERSATION_DB' in os.environ
     finally:

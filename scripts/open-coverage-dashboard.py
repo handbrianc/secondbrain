@@ -9,9 +9,9 @@ Usage:
     python scripts/open-coverage-dashboard.py --module secondbrain.rag
 """
 
+import sys
 import webbrowser
 from pathlib import Path
-import sys
 
 
 def main():

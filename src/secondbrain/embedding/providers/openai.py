@@ -107,18 +107,18 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         except httpx.ConnectError as e:
             raise ServiceUnavailableError(
                 "Embedding",
-                f"OpenAI embeddings API unreachable. "
-                f"Ensure SECONDBRAIN_EMBEDDING_API_KEY is set correctly and network is available"
+                "OpenAI embeddings API unreachable. "
+                "Ensure SECONDBRAIN_EMBEDDING_API_KEY is set correctly and network is available",
             ) from e
         except httpx.TimeoutException as e:
             raise ServiceUnavailableError(
                 "Embedding",
-                f"OpenAI embeddings API request timed out after {self._timeout}s"
+                f"OpenAI embeddings API request timed out after {self._timeout}s",
             ) from e
         except APIError as e:
             raise ServiceUnavailableError(
                 "Embedding",
-                f"OpenAI embeddings API error: {e.message if hasattr(e, 'message') else e}"
+                f"OpenAI embeddings API error: {e.message if hasattr(e, 'message') else e}",
             ) from e
         except Exception as e:
             raise RuntimeError(f"Embedding generation failed: {e}") from e
@@ -160,18 +160,17 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
 
         except httpx.ConnectError as e:
             raise ServiceUnavailableError(
-                "Embedding",
-                f"OpenAI embeddings API unreachable"
+                "Embedding", "OpenAI embeddings API unreachable"
             ) from e
         except httpx.TimeoutException as e:
             raise ServiceUnavailableError(
                 "Embedding",
-                f"OpenAI embeddings API request timed out after {self._timeout}s"
+                f"OpenAI embeddings API request timed out after {self._timeout}s",
             ) from e
         except APIError as e:
             raise ServiceUnavailableError(
                 "Embedding",
-                f"OpenAI embeddings API error: {e.message if hasattr(e, 'message') else e}"
+                f"OpenAI embeddings API error: {e.message if hasattr(e, 'message') else e}",
             ) from e
         except Exception as e:
             raise RuntimeError(f"Batch embedding generation failed: {e}") from e
@@ -199,18 +198,17 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
 
         except httpx.ConnectError as e:
             raise ServiceUnavailableError(
-                "Embedding",
-                f"OpenAI embeddings API unreachable"
+                "Embedding", "OpenAI embeddings API unreachable"
             ) from e
         except httpx.TimeoutException as e:
             raise ServiceUnavailableError(
                 "Embedding",
-                f"OpenAI embeddings API request timed out after {self._timeout}s"
+                f"OpenAI embeddings API request timed out after {self._timeout}s",
             ) from e
         except APIError as e:
             raise ServiceUnavailableError(
                 "Embedding",
-                f"OpenAI embeddings API error: {e.message if hasattr(e, 'message') else e}"
+                f"OpenAI embeddings API error: {e.message if hasattr(e, 'message') else e}",
             ) from e
         except Exception as e:
             raise RuntimeError(f"Async embedding generation failed: {e}") from e
@@ -246,18 +244,17 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
 
         except httpx.ConnectError as e:
             raise ServiceUnavailableError(
-                "Embedding",
-                f"OpenAI embeddings API unreachable"
+                "Embedding", "OpenAI embeddings API unreachable"
             ) from e
         except httpx.TimeoutException as e:
             raise ServiceUnavailableError(
                 "Embedding",
-                f"OpenAI embeddings API request timed out after {self._timeout}s"
+                f"OpenAI embeddings API request timed out after {self._timeout}s",
             ) from e
         except APIError as e:
             raise ServiceUnavailableError(
                 "Embedding",
-                f"OpenAI embeddings API error: {e.message if hasattr(e, 'message') else e}"
+                f"OpenAI embeddings API error: {e.message if hasattr(e, 'message') else e}",
             ) from e
         except Exception as e:
             raise RuntimeError(f"Async batch embedding generation failed: {e}") from e
@@ -281,8 +278,17 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
 
     def close(self) -> None:
         """Close clients and release resources."""
-        # OpenAI clients don't have explicit close methods, but we can dereference them
-        # to allow garbage collection
-        self._client = None  # type: ignore[assignment]
-        self._async_client = None  # type: ignore[assignment]
+        # Close httpx client explicitly to avoid resource warnings
+        if self._client is not None:
+            try:
+                self._client.close()
+            except Exception:
+                pass  # Already closed or error during close
+            self._client = None  # type: ignore[assignment]
+        if self._async_client is not None:
+            try:
+                self._async_client.close()
+            except Exception:
+                pass  # Already closed or error during close
+            self._async_client = None  # type: ignore[assignment]
         self._api_key = None

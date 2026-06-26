@@ -6,7 +6,6 @@ import time
 from collections.abc import AsyncGenerator, Generator
 from typing import TYPE_CHECKING, Any
 
-import httpx
 import pytest
 from pymongo import MongoClient
 
@@ -33,15 +32,14 @@ SERVICE_HEALTH_TIMEOUT = 10  # seconds - reduced for faster test feedback
 def _check_mongodb_healthy() -> bool:
     """Check if MongoDB test service is healthy."""
     try:
-        client = MongoClient(TEST_MONGO_URI, serverSelectionTimeoutMS=10000, maxPoolSize=50)
+        client = MongoClient(
+            TEST_MONGO_URI, serverSelectionTimeoutMS=10000, maxPoolSize=50
+        )
         client.admin.command("ping")
         client.close()
         return True
     except Exception:
         return False
-
-
-
 
 
 @pytest.fixture(scope="session")
@@ -69,7 +67,8 @@ def wait_for_services() -> Generator[None, None, None]:
     This session-scoped fixture ensures MongoDB is healthy before tests run.
     It waits up to SERVICE_HEALTH_TIMEOUT seconds for services to become available.
 
-    Raises:
+    Raises
+    ------
         pytest.skip: If services don't become healthy within timeout.
     """
     print("\nWaiting for test services to be healthy...")
@@ -99,7 +98,8 @@ def real_storage(wait_for_services: None) -> Generator[VectorStorage, None, None
     Creates a VectorStorage instance connected to the test MongoDB database.
     Ensures the vector search index is created and waits for it to be ready.
 
-    Yields:
+    Yields
+    ------
         VectorStorage: Connected storage instance.
     """
     storage = VectorStorage(
@@ -131,7 +131,8 @@ def mock_storage() -> Generator[MockVectorStorage, None, None]:
     Provides an in-memory storage implementation for testing integration
     logic without requiring actual MongoDB connections.
 
-    Yields:
+    Yields
+    ------
         MockVectorStorage: In-memory storage instance.
     """
     storage = MockVectorStorage()
@@ -149,7 +150,8 @@ def real_embedding_generator(
     Creates an OpenAIEmbeddingProvider instance connected to the test
     embedding service URL configured in the environment.
 
-    Yields:
+    Yields
+    ------
         OpenAIEmbeddingProvider: Connected embedding generator.
     """
     from secondbrain.embedding.providers.openai import OpenAIEmbeddingProvider
@@ -180,7 +182,8 @@ def mock_embedding_generator() -> Generator[MockEmbeddingGenerator, None, None]:
     Provides deterministic, fast embeddings for testing without
     requiring an external embedding service.
 
-    Yields:
+    Yields
+    ------
         MockEmbeddingGenerator: Mock embedding generator instance.
     """
     generator = MockEmbeddingGenerator(model_name="mock-384", dimension=384)
@@ -197,7 +200,8 @@ async def clean_test_database(
     Ensures a clean slate for each test by deleting all documents
     before the test runs and after the test completes.
 
-    Yields:
+    Yields
+    ------
         None: Control point for test execution.
     """
     # Cleanup before test
@@ -218,7 +222,8 @@ async def clean_test_database(
 def sample_test_document() -> dict[str, Any]:
     """Sample document for testing ingestion and search.
 
-    Returns:
+    Returns
+    -------
         dict: Sample document with text and metadata.
     """
     return {
@@ -237,7 +242,8 @@ def sample_test_document() -> dict[str, Any]:
 def health_check_utils() -> dict[str, Any]:
     """Provide utility functions for health checking services.
 
-    Returns:
+    Returns
+    -------
         dict: Dictionary with health check functions.
     """
     return {

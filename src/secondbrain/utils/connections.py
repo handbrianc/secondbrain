@@ -53,9 +53,6 @@ def ensure_service_available(service_name: str, validator: Callable[[], bool]) -
         raise ServiceUnavailableError(service_name)
 
 
-
-
-
 class ValidatableService:
     """Base class for services requiring connection validation with caching.
 
@@ -268,6 +265,3 @@ class ValidatableService:
                 self._circuit_breaker.record_failure()
 
         return result
-
-
-

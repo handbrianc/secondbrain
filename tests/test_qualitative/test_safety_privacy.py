@@ -15,7 +15,6 @@ from typing import Any
 
 import pytest
 
-
 _MONGO_CACHE: dict[str, bool] = {"available": False, "checked": False}
 
 

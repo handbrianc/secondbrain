@@ -84,7 +84,8 @@ mongodump --db secondbrain --out ./backup/
 ### 4. Run Migration
 
 ```bash
-python -m secondbrain.management.migrate --from 1.0 --to 2.0
+# (Migration CLI is not yet implemented — see docs/developer-guide/index.md)
+# For now, use direct MongoDB schema migration scripts
 ```
 
 ### 5. Verify

@@ -121,14 +121,11 @@ class ConversationSession:
             >>> if session is not None:
             ...     history = session.get_history()
         """
-        # Check if session exists by attempting to load history
-        messages = storage.get_history(session_id)
-
-        # Session doesn't exist if we get an empty list (no messages)
-        # Note: This assumes new sessions have no messages initially
-        if messages == []:
+        # Check if session exists in storage first
+        if not storage.session_exists(session_id):
             return None
 
+        messages = storage.get_history(session_id)
         session = cls(session_id, storage, context_window)
         session._history = messages
         return session

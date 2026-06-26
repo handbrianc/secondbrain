@@ -7,7 +7,6 @@ Consolidated from:
 """
 
 import inspect
-import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 

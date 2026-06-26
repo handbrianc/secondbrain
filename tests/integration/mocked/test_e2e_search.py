@@ -8,7 +8,6 @@ import pytest
 
 from secondbrain.search import Searcher
 
-
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.xdist_group("mocked_integration"),  # Group on same worker to share mongomock client

@@ -4,13 +4,14 @@ This module provides comprehensive error handling tests for the RAGPipeline clas
 covering fallback logic, error recovery, provider failures, and edge cases.
 """
 
+from unittest.mock import MagicMock
+
 import pytest
-from unittest.mock import patch, MagicMock, PropertyMock
 from openai import APIError as OpenAI_APIError
 
-from secondbrain.rag.pipeline import RAGPipeline
-from secondbrain.rag.interfaces import LocalLLMProvider
 from secondbrain.exceptions import EmbeddingGenerationError, ServiceUnavailableError
+from secondbrain.rag.interfaces import LocalLLMProvider
+from secondbrain.rag.pipeline import RAGPipeline
 
 
 @pytest.fixture
@@ -67,7 +68,7 @@ class TestRAGPipelineErrorHandling:
     ) -> None:
         """Verify pipeline handles empty or whitespace-only queries gracefully."""
         result = pipeline_with_mocks.query("")
-        
+
         assert result["answer"] == "Query cannot be empty. Please provide a valid question."
         assert result.get("validation_error") is True
 
@@ -77,7 +78,7 @@ class TestRAGPipelineErrorHandling:
     ) -> None:
         """Verify pipeline handles whitespace-only queries gracefully."""
         result = pipeline_with_mocks.query("   \n\t  ")
-        
+
         assert result["answer"] == "Query cannot be empty. Please provide a valid question."
         assert result.get("validation_error") is True
 
@@ -91,15 +92,15 @@ class TestRAGPipelineErrorHandling:
         mock_searcher.search.side_effect = ServiceUnavailableError(
             "MongoDB", "Database connection failed"
         )
-        
+
         pipeline = RAGPipeline(
             searcher=mock_searcher,
             llm_provider=mock_llm_provider,
             top_k=5,
         )
-        
+
         result = pipeline.query("test query")
-        
+
         # Should handle error gracefully and return error response
         assert "answer" in result
         assert result.get("error") is not None or "failed" in result["answer"].lower()
@@ -114,20 +115,20 @@ class TestRAGPipelineErrorHandling:
         mock_searcher.search.return_value = [
             {"chunk_text": "test context", "source_file": "test.pdf", "page": 1}
         ]
-        
+
         mock_llm_provider = MagicMock(spec=LocalLLMProvider)
         mock_llm_provider.generate.side_effect = ServiceUnavailableError(
             "Ollama", "LLM server unavailable"
         )
-        
+
         pipeline = RAGPipeline(
             searcher=mock_searcher,
             llm_provider=mock_llm_provider,
             top_k=5,
         )
-        
+
         result = pipeline.query("test query")
-        
+
         # Should handle error gracefully and return error response
         assert "answer" in result
         assert "error" in result["answer"].lower() or "apologize" in result["answer"].lower()
@@ -142,20 +143,20 @@ class TestRAGPipelineErrorHandling:
         mock_searcher.search.return_value = [
             {"chunk_text": "test context", "source_file": "test.pdf", "page": 1}
         ]
-        
+
         mock_llm_provider = MagicMock(spec=LocalLLMProvider)
         mock_llm_provider.generate.side_effect = TimeoutError(
             "Request timed out after 120s"
         )
-        
+
         pipeline = RAGPipeline(
             searcher=mock_searcher,
             llm_provider=mock_llm_provider,
             top_k=5,
         )
-        
+
         result = pipeline.query("test query")
-        
+
         # Should handle timeout gracefully
         assert "answer" in result
         assert "error" in result["answer"].lower() or "apologize" in result["answer"].lower()
@@ -170,20 +171,20 @@ class TestRAGPipelineErrorHandling:
         mock_searcher.search.return_value = [
             {"chunk_text": "test context", "source_file": "test.pdf", "page": 1}
         ]
-        
+
         mock_llm_provider = MagicMock(spec=LocalLLMProvider)
         mock_llm_provider.generate.side_effect = ConnectionError(
             "Failed to connect to LLM server"
         )
-        
+
         pipeline = RAGPipeline(
             searcher=mock_searcher,
             llm_provider=mock_llm_provider,
             top_k=5,
         )
-        
+
         result = pipeline.query("test query")
-        
+
         # Should handle connection error gracefully
         assert "answer" in result
         assert result.get("error") is not None or "failed" in result["answer"].lower()
@@ -198,17 +199,17 @@ class TestRAGPipelineErrorHandling:
         mock_searcher.search.return_value = [
             {"chunk_text": "test context", "source_file": "test.pdf", "page": 1}
         ]
-        
+
         mock_llm_provider = MagicMock(spec=LocalLLMProvider)
         # Return None or invalid response
         mock_llm_provider.generate.return_value = None
-        
+
         pipeline = RAGPipeline(
             searcher=mock_searcher,
             llm_provider=mock_llm_provider,
             top_k=5,
         )
-        
+
         # Should handle None response gracefully
         result = pipeline.query("test query")
         assert "answer" in result
@@ -223,19 +224,19 @@ class TestRAGPipelineErrorHandling:
         mock_searcher.search.return_value = [
             {"chunk_text": "test context", "source_file": "test.pdf", "page": 1}
         ]
-        
+
         mock_llm_provider = MagicMock(spec=LocalLLMProvider)
         # Return empty string
         mock_llm_provider.generate.return_value = ""
-        
+
         pipeline = RAGPipeline(
             searcher=mock_searcher,
             llm_provider=mock_llm_provider,
             top_k=5,
         )
-        
+
         result = pipeline.query("test query")
-        
+
         # Should handle empty response (may return empty answer or error)
         assert "answer" in result
 
@@ -247,31 +248,31 @@ class TestRAGPipelineErrorHandling:
         """Verify chat retries on empty LLM responses (up to 3 times)."""
         from secondbrain.conversation import ConversationSession
         from secondbrain.conversation.storage import ConversationStorage
-        
+
         # Create a mock session
         mock_storage = MagicMock(spec=ConversationStorage)
         session = ConversationSession(
             session_id="test-session",
             storage=mock_storage,
         )
-        
+
         # Mock successful search
         mock_searcher.search.return_value = [
             {"chunk_text": "test context", "source_file": "test.pdf", "page": 1}
         ]
-        
+
         # Mock LLM provider that returns empty twice, then succeeds
         mock_llm_provider = MagicMock(spec=LocalLLMProvider)
         mock_llm_provider.generate.side_effect = ["", "", "Valid answer after retries"]
-        
+
         pipeline = RAGPipeline(
             searcher=mock_searcher,
             llm_provider=mock_llm_provider,
             top_k=5,
         )
-        
+
         result = pipeline.chat("Test query", session)
-        
+
         # Should have retried and eventually succeeded
         assert mock_llm_provider.generate.call_count == 3
         assert "answer" in result
@@ -286,31 +287,31 @@ class TestRAGPipelineErrorHandling:
         """Verify chat returns fallback response after max retries with empty responses."""
         from secondbrain.conversation import ConversationSession
         from secondbrain.conversation.storage import ConversationStorage
-        
+
         # Create a mock session
         mock_storage = MagicMock(spec=ConversationStorage)
         session = ConversationSession(
             session_id="test-session",
             storage=mock_storage,
         )
-        
+
         # Mock successful search
         mock_searcher.search.return_value = [
             {"chunk_text": "test context", "source_file": "test.pdf", "page": 1}
         ]
-        
+
         # Mock LLM provider that always returns empty
         mock_llm_provider = MagicMock(spec=LocalLLMProvider)
         mock_llm_provider.generate.return_value = ""
-        
+
         pipeline = RAGPipeline(
             searcher=mock_searcher,
             llm_provider=mock_llm_provider,
             top_k=5,
         )
-        
+
         result = pipeline.chat("Test query", session)
-        
+
         # Should have retried max times and returned fallback
         assert mock_llm_provider.generate.call_count == 3
         assert "answer" in result
@@ -325,31 +326,31 @@ class TestRAGPipelineErrorHandling:
         """Verify pipeline treats whitespace-only responses as empty and retries."""
         from secondbrain.conversation import ConversationSession
         from secondbrain.conversation.storage import ConversationStorage
-        
+
         # Create a mock session
         mock_storage = MagicMock(spec=ConversationStorage)
         session = ConversationSession(
             session_id="test-session",
             storage=mock_storage,
         )
-        
+
         # Mock successful search
         mock_searcher.search.return_value = [
             {"chunk_text": "test context", "source_file": "test.pdf", "page": 1}
         ]
-        
+
         # Mock LLM provider that returns whitespace then valid
         mock_llm_provider = MagicMock(spec=LocalLLMProvider)
         mock_llm_provider.generate.side_effect = ["   ", "\n\t", "Valid answer"]
-        
+
         pipeline = RAGPipeline(
             searcher=mock_searcher,
             llm_provider=mock_llm_provider,
             top_k=5,
         )
-        
+
         result = pipeline.chat("Test query", session)
-        
+
         # Should have retried 3 times (whitespace counts as empty)
         assert mock_llm_provider.generate.call_count == 3
         assert result["answer"] == "Valid answer"
@@ -363,7 +364,7 @@ class TestRAGPipelineErrorHandling:
         """Verify chat handles session-related failures gracefully."""
         from secondbrain.conversation import ConversationSession
         from secondbrain.conversation.storage import ConversationStorage
-        
+
         # Create a mock storage and session
         mock_storage = MagicMock(spec=ConversationStorage)
         session = ConversationSession(
@@ -372,16 +373,16 @@ class TestRAGPipelineErrorHandling:
         )
         session.add_message("user", "Hello")
         session.add_message("assistant", "Hi there!")
-        
+
         pipeline = RAGPipeline(
             searcher=mock_searcher,
             llm_provider=mock_llm_provider,
             top_k=5,
         )
-        
+
         # Should handle chat gracefully even with empty search results
         result = pipeline.chat("How are you?", session)
-        
+
         assert "answer" in result
 
     def test_chat_handles_rewriter_failure(
@@ -392,7 +393,7 @@ class TestRAGPipelineErrorHandling:
         """Verify chat handles query rewriter failures gracefully."""
         from secondbrain.conversation import ConversationSession, QueryRewriter
         from secondbrain.conversation.storage import ConversationStorage
-        
+
         # Create mock storage and session with history
         mock_storage = MagicMock(spec=ConversationStorage)
         session = ConversationSession(
@@ -401,7 +402,7 @@ class TestRAGPipelineErrorHandling:
         )
         session.add_message("user", "What is Python?")
         session.add_message("assistant", "Python is a programming language.")
-        
+
         # Mock rewriter that fails
         mock_rewriter = MagicMock(spec=QueryRewriter)
         mock_rewriter.rewrite_query.side_effect = ServiceUnavailableError(
@@ -409,25 +410,25 @@ class TestRAGPipelineErrorHandling:
         )
         mock_rewriter.should_rewrite.return_value = True
         mock_rewriter.context_window = 10
-        
+
         # Mock successful search
         mock_searcher.search.return_value = [
             {"chunk_text": "test context", "source_file": "test.pdf", "page": 1}
         ]
-        
+
         mock_llm_provider = MagicMock(spec=LocalLLMProvider)
         mock_llm_provider.generate.return_value = "Generated answer"
-        
+
         pipeline = RAGPipeline(
             searcher=mock_searcher,
             llm_provider=mock_llm_provider,
             rewriter=mock_rewriter,
             top_k=5,
         )
-        
+
         # Should fall back to original query when rewriter fails
         result = pipeline.chat("What about Java?", session)
-        
+
         assert "answer" in result
         # Should still produce an answer despite rewriter failure
 
@@ -441,18 +442,18 @@ class TestRAGPipelineErrorHandling:
         mock_searcher.search.side_effect = EmbeddingGenerationError(
             "Failed to generate embeddings for query"
         )
-        
+
         mock_llm_provider = MagicMock(spec=LocalLLMProvider)
         mock_llm_provider.generate.return_value = "Generated answer"
-        
+
         pipeline = RAGPipeline(
             searcher=mock_searcher,
             llm_provider=mock_llm_provider,
             top_k=5,
         )
-        
+
         result = pipeline.query("test query")
-        
+
         # Should handle embedding failure gracefully
         assert "answer" in result
         assert result.get("error") is not None or "failed" in result["answer"].lower()
@@ -468,16 +469,16 @@ class TestRAGPipelineErrorHandling:
         mock_searcher.search.return_value = [
             {"chunk_text": "test context", "source_file": "test.pdf", "page": 1}
         ]
-        
+
         pipeline = RAGPipeline(
             searcher=mock_searcher,
             llm_provider=mock_llm_provider,
             top_k=5,
         )
-        
+
         # Query that might trigger security filter
         result = pipeline.query("DROP TABLE users; --")
-        
+
         # Should return security-blocked response
         assert "answer" in result
         # Security filter may or may not block this, but should handle gracefully
@@ -491,15 +492,15 @@ class TestRAGPipelineErrorHandling:
         """Verify pipeline handles case when no context is found."""
         # Mock empty search results
         mock_searcher.search.return_value = []
-        
+
         pipeline = RAGPipeline(
             searcher=mock_searcher,
             llm_provider=mock_llm_provider,
             top_k=5,
         )
-        
+
         result = pipeline.query("test query")
-        
+
         # Should handle no results gracefully with fallback message
         assert "answer" in result
         assert "couldn't find" in result["answer"].lower() or "no relevant" in result["answer"].lower()
@@ -514,18 +515,18 @@ class TestRAGPipelineErrorHandling:
         """Verify pipeline handles unexpected exceptions during processing."""
         # Mock searcher to raise unexpected exception
         mock_searcher.search.side_effect = RuntimeError("Unexpected error in searcher")
-        
+
         mock_llm_provider = MagicMock(spec=LocalLLMProvider)
         mock_llm_provider.generate.return_value = "Generated answer"
-        
+
         pipeline = RAGPipeline(
             searcher=mock_searcher,
             llm_provider=mock_llm_provider,
             top_k=5,
         )
-        
+
         result = pipeline.query("test query")
-        
+
         # Should catch all exceptions and return error response
         assert "answer" in result
         assert "error" in result["answer"].lower() or "apologize" in result["answer"].lower()
@@ -536,7 +537,7 @@ class TestRAGPipelineErrorHandling:
     ) -> None:
         """Verify _format_context handles empty chunk list."""
         result = pipeline_with_mocks._format_context([])
-        
+
         assert result == ""
 
     def test_format_context_handles_long_chunks(
@@ -548,9 +549,9 @@ class TestRAGPipelineErrorHandling:
         chunks = [
             {"chunk_text": long_text, "source_file": "test.pdf", "page": 1}
         ]
-        
+
         result = pipeline_with_mocks._format_context(chunks)
-        
+
         # Should truncate to 500 chars + "..."
         assert "..." in result
         assert len(result) < 1000
@@ -561,7 +562,7 @@ class TestRAGPipelineErrorHandling:
     ) -> None:
         """Verify _build_prompt handles empty context."""
         prompt = pipeline_with_mocks._build_prompt("test query", "")
-        
+
         assert "Question: test query" in prompt
         assert "No relevant context" in prompt or "CONTEXT" not in prompt
 
@@ -573,7 +574,7 @@ class TestRAGPipelineErrorHandling:
         prompt = pipeline_with_mocks._build_prompt(
             "test query", "context text", conversation_history=None
         )
-        
+
         assert "Question: test query" in prompt
         assert "Conversation History" not in prompt
 
@@ -585,16 +586,16 @@ class TestRAGPipelineErrorHandling:
         """Verify _rewrite_query_with_history handles empty history."""
         from secondbrain.conversation import ConversationSession
         from secondbrain.conversation.storage import ConversationStorage
-        
+
         mock_storage = MagicMock(spec=ConversationStorage)
         session = ConversationSession(
             session_id="test-session",
             storage=mock_storage,
         )
         # No messages added - empty history
-        
+
         result = pipeline_with_mocks._rewrite_query_with_history("test query", session)
-        
+
         # Should return original query when no history
         assert result == "test query"
 
@@ -606,7 +607,7 @@ class TestRAGPipelineErrorHandling:
         response = pipeline_with_mocks._create_error_response(
             "Test error message", "test query"
         )
-        
+
         assert "answer" in response
         assert "Test error message" in response["answer"]
         assert response.get("query") == "test query"
@@ -625,7 +626,7 @@ class TestRAGPipelineProviderFailures:
         mock_searcher.search.return_value = [
             {"chunk_text": "test context", "source_file": "test.pdf", "page": 1}
         ]
-        
+
         mock_llm_provider = MagicMock(spec=LocalLLMProvider)
         # Simulate OpenAI API error
         mock_request = MagicMock()
@@ -634,15 +635,15 @@ class TestRAGPipelineProviderFailures:
             request=mock_request,
             body=None,
         )
-        
+
         pipeline = RAGPipeline(
             searcher=mock_searcher,
             llm_provider=mock_llm_provider,
             top_k=5,
         )
-        
+
         result = pipeline.query("test query")
-        
+
         # Should handle API error gracefully
         assert "answer" in result
 
@@ -653,27 +654,27 @@ class TestRAGPipelineProviderFailures:
     ) -> None:
         """Verify pipeline handles HTTP timeout errors."""
         import httpx
-        
+
         # Mock successful search
         mock_searcher.search.return_value = [
             {"chunk_text": "test context", "source_file": "test.pdf", "page": 1}
         ]
-        
+
         mock_llm_provider = MagicMock(spec=LocalLLMProvider)
         # Simulate HTTP timeout
         mock_llm_provider.generate.side_effect = httpx.TimeoutException(
             message="Request timed out",
             request=MagicMock(),
         )
-        
+
         pipeline = RAGPipeline(
             searcher=mock_searcher,
             llm_provider=mock_llm_provider,
             top_k=5,
         )
-        
+
         result = pipeline.query("test query")
-        
+
         # Should handle timeout gracefully
         assert "answer" in result
 
@@ -684,12 +685,12 @@ class TestRAGPipelineProviderFailures:
     ) -> None:
         """Verify pipeline handles rate limit errors."""
         import httpx
-        
+
         # Mock successful search
         mock_searcher.search.return_value = [
             {"chunk_text": "test context", "source_file": "test.pdf", "page": 1}
         ]
-        
+
         mock_llm_provider = MagicMock(spec=LocalLLMProvider)
         # Simulate rate limit
         mock_llm_provider.generate.side_effect = httpx.HTTPStatusError(
@@ -697,15 +698,15 @@ class TestRAGPipelineProviderFailures:
             request=MagicMock(),
             response=MagicMock(status_code=429),
         )
-        
+
         pipeline = RAGPipeline(
             searcher=mock_searcher,
             llm_provider=mock_llm_provider,
             top_k=5,
         )
-        
+
         result = pipeline.query("test query")
-        
+
         # Should handle rate limit gracefully
         assert "answer" in result
 

@@ -12,18 +12,12 @@ Tests cover:
 - Database connection failures (3 tests)
 """
 
-import asyncio
-import os
-import tempfile
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from secondbrain.document import (
     AsyncDocumentIngestor,
-    DocumentExtractionError,
     DocumentIngestor,
 )
 from secondbrain.exceptions import (

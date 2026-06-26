@@ -136,11 +136,14 @@ class TestGracefulDegradation:
 
     def test_fallback_to_cached_embeddings(self):
         """Test fallback mechanism when embedding service fails."""
-        from secondbrain.utils.circuit_breaker import CircuitBreaker, CircuitBreakerConfig
-        
+        from secondbrain.utils.circuit_breaker import (
+            CircuitBreaker,
+            CircuitBreakerConfig,
+        )
+
         config = CircuitBreakerConfig(failure_threshold=3, recovery_timeout=1)
         cb = CircuitBreaker(config)
-        
+
         assert hasattr(cb, 'is_allowed')
         assert hasattr(cb, 'record_failure')
         assert hasattr(cb, 'record_success')

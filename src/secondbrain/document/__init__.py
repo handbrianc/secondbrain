@@ -33,6 +33,9 @@ from secondbrain.utils.tracing import trace_operation
 # Apply MPS patch before docling imports (fixes float64 issue on Apple Silicon)
 patch_transformers_for_mps()
 
+# Re-export Segment from protocols so existing importers are unaffected
+from secondbrain.document.protocols import Segment  # noqa: E402
+
 # Lazy import docling to avoid 2+ second import overhead in tests
 # Only import when actually needed (DocumentConverter instantiation)
 if TYPE_CHECKING:
@@ -61,6 +64,7 @@ warnings.filterwarnings(
 # - 100 is a conservative limit that prevents OOM on large document batches
 # - Can be tuned based on available RAM and typical document sizes
 MAX_MEMORY_BATCH_SIZE = 100
+
 
 def _extract_and_chunk_file(
     file_path_str: str, chunk_size: int, chunk_overlap: int
@@ -156,10 +160,10 @@ def _extract_chunk_and_embed_file(
     file_path = Path(file_path_str)
     try:
         import logging
-        
+
         logging.getLogger("RapidOCR").setLevel(logging.ERROR)
         logging.getLogger("docling").setLevel(logging.WARNING)
-        
+
         from docling.datamodel.accelerator_options import (
             AcceleratorDevice,
             AcceleratorOptions,
@@ -173,14 +177,11 @@ def _extract_chunk_and_embed_file(
                 do_ocr=True,
                 do_table_structure=False,
                 accelerator_options=AcceleratorOptions(
-                    device=AcceleratorDevice.CPU,
-                    num_threads=4
+                    device=AcceleratorDevice.CPU, num_threads=4
                 ),
             )
         )
-        converter = DocumentConverter(
-            format_options={InputFormat.PDF: pdf_options}
-        )
+        converter = DocumentConverter(format_options={InputFormat.PDF: pdf_options})
 
         result = converter.convert(file_path)
         content = result.document
@@ -205,6 +206,7 @@ def _extract_chunk_and_embed_file(
         chunks = _chunk_segments(segments, chunk_size, chunk_overlap)
 
         from secondbrain.config import config
+
         cfg = config()
         from secondbrain.embedding import EmbeddingProviderFactory
 
@@ -349,28 +351,28 @@ def _chunk_segments(
     # Minimum segment size before merging - segments smaller than this
     # will be merged with adjacent segments to create meaningful chunks
     MIN_SEGMENT_SIZE = 200
-    
+
     # First pass: merge small adjacent segments and titles with content
     merged_segments: list[Segment] = []
     current_text = ""
     current_page = 0
-    
-    for i, segment in enumerate(segments):
+
+    for _i, segment in enumerate(segments):
         text = segment["text"]
         page = segment.get("page", 0)
-        
+
         if not text.strip():
             continue
-        
+
         stripped = text.strip()
-        
+
         # Check if this looks like a title/header (short, no punctuation, often ends abruptly)
         is_likely_title = (
-            len(stripped) < 100 and
-            not any(p in stripped for p in ['.', ':', '-', '—']) and
-            not stripped.endswith('.')
+            len(stripped) < 100
+            and not any(p in stripped for p in [".", ":", "-", "—"])
+            and not stripped.endswith(".")
         )
-        
+
         # If current accumulated text is small, keep accumulating
         # Also merge titles with following content
         if len(current_text) < MIN_SEGMENT_SIZE or is_likely_title:
@@ -385,11 +387,11 @@ def _chunk_segments(
             merged_segments.append({"text": current_text, "page": current_page})
             current_text = stripped
             current_page = page
-    
+
     # Don't forget the last segment
     if current_text:
         merged_segments.append({"text": current_text, "page": current_page})
-    
+
     # Second pass: chunk the merged segments
     chunks: list[Segment] = []
 
@@ -426,24 +428,6 @@ def _chunk_segments(
             start = chunk_end if new_start <= start else new_start
 
     return chunks
-
-
-class Segment(TypedDict):
-    """Text segment extracted from a document.
-
-    Represents a chunk of text with its source page information,
-    used during document ingestion pipeline.
-
-    Attributes
-    ----------
-    text : str
-        The extracted text content.
-    page : int
-        The page number where this segment was found (0-indexed).
-    """
-
-    text: str
-    page: int
 
 
 SUPPORTED_EXTENSIONS = {
@@ -569,10 +553,10 @@ class DocumentIngestor:
 
         # Lazily import docling to avoid 2+ second import overhead
         import logging
-        
+
         logging.getLogger("RapidOCR").setLevel(logging.ERROR)
         logging.getLogger("docling").setLevel(logging.WARNING)
-        
+
         from docling.datamodel.accelerator_options import (
             AcceleratorDevice,
             AcceleratorOptions,
@@ -586,8 +570,7 @@ class DocumentIngestor:
                 do_ocr=True,
                 do_table_structure=False,
                 accelerator_options=AcceleratorOptions(
-                    device=AcceleratorDevice.CPU,
-                    num_threads=4
+                    device=AcceleratorDevice.CPU, num_threads=4
                 ),
             )
         )
@@ -1697,7 +1680,9 @@ class AsyncDocumentIngestor(DocumentIngestor):
             async def process_with_semaphore(file_path: Path) -> bool:
                 """Process a single file with semaphore control."""
                 async with semaphore:
-                    return await self.process_file_async(file_path, embedding_gen, storage)
+                    return await self.process_file_async(
+                        file_path, embedding_gen, storage
+                    )
 
             # Create tasks for all files
             tasks = [process_with_semaphore(f) for f in files]
@@ -1712,14 +1697,10 @@ class AsyncDocumentIngestor(DocumentIngestor):
             return {"success": successful, "failed": failed}
         finally:
             # Clean up resources to prevent connection leaks
-            try:
+            with contextlib.suppress(Exception):
                 embedding_gen.close()
-            except Exception:
-                pass
-            try:
+            with contextlib.suppress(Exception):
                 storage.close()
-            except Exception:
-                pass
 
     async def _stream_process_chunks_async(
         self,

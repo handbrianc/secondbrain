@@ -568,7 +568,8 @@ class FailureInjector:
             failure_type=FailureType.NETWORK_PARTITION,
             duration=duration,
             delay=delay,
-            error_message=error_message or f"Network partition ({partition_type}) detected",
+            error_message=error_message
+            or f"Network partition ({partition_type}) detected",
         )
 
         with self._lock:
@@ -773,6 +774,7 @@ def inject_latency(
 
 # Pytest fixture for automatic cleanup (only available when pytest is installed)
 if _HAS_PYTEST:
+
     @pytest.fixture
     def failure_injector() -> Generator[FailureInjector, None, None]:
         """Pytest fixture providing FailureInjector with automatic cleanup.

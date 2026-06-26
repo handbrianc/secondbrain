@@ -155,19 +155,53 @@ class RAGPipeline:
             # Step 4: Build prompt with context + query
             prompt = self._build_prompt(query, context_text)
 
-            # Step 5: Generate answer via llm_provider.generate()
+            # Step 5: Generate answer via llm_provider.generate() OR stream_chat()
             generation_start = time.perf_counter()
+            answer = ""
             try:
                 with trace_operation("rag_generation") as span:
                     if span:
                         span.set_attribute("rag.prompt_length", len(prompt))
-                        span.set_attribute("rag.temperature", self._config.llm_temperature)
-                        span.set_attribute("rag.max_tokens", self._config.llm_max_tokens)
-                    answer = self._llm_provider.generate(
-                        prompt=prompt,
-                        temperature=self._config.llm_temperature,
-                        max_tokens=self._config.llm_max_tokens,
-                    )
+                        span.set_attribute(
+                            "rag.temperature", self._config.llm_temperature
+                        )
+                        span.set_attribute(
+                            "rag.max_tokens", self._config.llm_max_tokens
+                        )
+
+                    if self._config.streaming_enabled and hasattr(
+                        self._llm_provider, "stream_chat"
+                    ):
+                        try:
+                            messages = [{"role": "user", "content": prompt}]
+                            accumulated: list[str] = []
+
+                            def on_chunk(content: str, _reasoning: str | None) -> None:
+                                if content:
+                                    accumulated.append(content)
+
+                            self._llm_provider.stream_chat(
+                                messages=messages,
+                                on_chunk=on_chunk,
+                                temperature=self._config.llm_temperature,
+                                max_tokens=self._config.llm_max_tokens,
+                            )
+                            answer = "".join(accumulated)
+                        except Exception as streaming_err:
+                            logger.warning(
+                                "Streaming failed, falling back to generate(): %s: %s",
+                                type(streaming_err).__name__,
+                                streaming_err,
+                            )
+                            answer = ""
+
+                    if not answer or not answer.strip():
+                        answer = self._llm_provider.generate(
+                            prompt=prompt,
+                            temperature=self._config.llm_temperature,
+                            max_tokens=self._config.llm_max_tokens,
+                        )
+
                     if span:
                         span.set_attribute("rag.answer_length", len(answer))
             finally:
@@ -227,7 +261,9 @@ class RAGPipeline:
                         span.set_attribute("rag.query", rewritten_query)
                         span.set_attribute("rag.top_k", effective_top_k)
                         span.set_attribute("rag.is_chat", True)
-                    chunks = self._searcher.search(rewritten_query, top_k=effective_top_k)
+                    chunks = self._searcher.search(
+                        rewritten_query, top_k=effective_top_k
+                    )
                     if span and chunks:
                         span.set_attribute("rag.chunks_returned", len(chunks))
             finally:
@@ -253,48 +289,82 @@ class RAGPipeline:
             # Step 5: Build prompt with system instruction + context + query
             prompt = self._build_prompt(rewritten_query, context_text, history)
 
-            # Step 6: Generate answer via llm_provider.generate() with retry logic
+            # Step 6: Generate answer via llm_provider.generate() OR stream_chat() with retry logic
             generation_start = time.perf_counter()
             answer = ""
-            max_retries = 3
+            max_retries = self._config.rag_max_retries
             retry_count = 0
             try:
                 while retry_count < max_retries:
                     with trace_operation("rag_generation") as span:
                         if span:
                             span.set_attribute("rag.prompt_length", len(prompt))
-                            span.set_attribute("rag.temperature", self._config.llm_temperature)
-                            span.set_attribute("rag.max_tokens", self._config.llm_max_tokens)
+                            span.set_attribute(
+                                "rag.temperature", self._config.llm_temperature
+                            )
+                            span.set_attribute(
+                                "rag.max_tokens", self._config.llm_max_tokens
+                            )
                             span.set_attribute("rag.is_chat", True)
                             span.set_attribute("rag.retry_attempt", retry_count + 1)
-                        answer = self._llm_provider.generate(
-                            prompt=prompt,
-                            temperature=self._config.llm_temperature,
-                            max_tokens=self._config.llm_max_tokens,
-                        )
+
+                        if self._config.streaming_enabled and hasattr(
+                            self._llm_provider, "stream_chat"
+                        ):
+                            try:
+                                messages = [{"role": "user", "content": prompt}]
+                                accumulated: list[str] = []
+
+                                def on_chunk(
+                                    content: str, _reasoning: str | None
+                                ) -> None:
+                                    if content:
+                                        accumulated.append(content)  # noqa: B023
+
+                                self._llm_provider.stream_chat(
+                                    messages=messages,
+                                    on_chunk=on_chunk,
+                                    temperature=self._config.llm_temperature,
+                                    max_tokens=self._config.llm_max_tokens,
+                                )
+                                answer = "".join(accumulated)
+                            except Exception as streaming_err:
+                                logger.warning(
+                                    "Streaming failed on attempt %d, falling back to generate(): %s: %s",
+                                    retry_count + 1,
+                                    type(streaming_err).__name__,
+                                    streaming_err,
+                                )
+                                answer = ""
+
+                        if not answer or not answer.strip():
+                            answer = self._llm_provider.generate(
+                                prompt=prompt,
+                                temperature=self._config.llm_temperature,
+                                max_tokens=self._config.llm_max_tokens,
+                            )
+
                         if span:
                             span.set_attribute("rag.answer_length", len(answer))
 
-                    # Check if answer is valid (non-empty and not just whitespace)
                     if answer and answer.strip():
                         logger.debug(
                             "Generation successful on attempt %d, answer length: %d",
-                            retry_count + 1, len(answer),
+                            retry_count + 1,
+                            len(answer),
                         )
                         break
 
-                    # Empty response - log and retry
                     retry_count += 1
                     logger.warning(
                         "Empty LLM response received (attempt %d/%d). Retrying...",
-                        retry_count, max_retries,
+                        retry_count,
+                        max_retries,
                     )
 
                     if retry_count < max_retries:
-                        # Small delay before retry to allow LLM to recover
                         time.sleep(0.5)
 
-                # If we exhausted all retries with empty responses
                 if not answer or not answer.strip():
                     logger.error(
                         "Empty LLM response after %d attempts. Returning fallback response.",
@@ -335,8 +405,10 @@ class RAGPipeline:
     def _format_context(
         self,
         chunks: list[dict[str, Any]],
-        max_chars: int = 8000,
+        max_chars: int | None = None,
     ) -> str:
+        if max_chars is None:
+            max_chars = self._config.rag_max_context_chars
         r"""Format retrieved chunks into context text.
 
         Args:
@@ -363,8 +435,8 @@ class RAGPipeline:
             page = chunk.get("page", chunk.get("page_number", "unknown"))
 
             # Truncate chunk if too long
-            if len(chunk_text) > 500:
-                chunk_text = chunk_text[:500] + "..."
+            if len(chunk_text) > self._config.rag_chunk_preview_chars:
+                chunk_text = chunk_text[: self._config.rag_chunk_preview_chars] + "..."
 
             source_line = f"Source: {source_file} (page {page})"
             chunk_entry = f"{source_line}\n{chunk_text}\n"
@@ -596,18 +668,52 @@ class RAGPipeline:
             prompt = self._build_prompt(query, context_text)
 
             generation_start = time.perf_counter()
+            answer = ""
             try:
                 with trace_operation("rag_generation_async") as span:
                     if span:
                         span.set_attribute("rag.prompt_length", len(prompt))
-                        span.set_attribute("rag.temperature", self._config.llm_temperature)
-                        span.set_attribute("rag.max_tokens", self._config.llm_max_tokens)
+                        span.set_attribute(
+                            "rag.temperature", self._config.llm_temperature
+                        )
+                        span.set_attribute(
+                            "rag.max_tokens", self._config.llm_max_tokens
+                        )
                         span.set_attribute("rag.is_async", True)
-                    answer = await self._llm_provider.agenerate(
-                        prompt=prompt,
-                        temperature=self._config.llm_temperature,
-                        max_tokens=self._config.llm_max_tokens,
-                    )
+
+                    if self._config.streaming_enabled and hasattr(
+                        self._llm_provider, "stream_chat_async"
+                    ):
+                        try:
+                            messages = [{"role": "user", "content": prompt}]
+                            accumulated: list[str] = []
+
+                            def on_chunk(content: str, _reasoning: str | None) -> None:
+                                if content:
+                                    accumulated.append(content)
+
+                            await self._llm_provider.stream_chat_async(
+                                messages=messages,
+                                on_chunk=on_chunk,
+                                temperature=self._config.llm_temperature,
+                                max_tokens=self._config.llm_max_tokens,
+                            )
+                            answer = "".join(accumulated)
+                        except Exception as streaming_err:
+                            logger.warning(
+                                "Async streaming failed, falling back to agenerate(): %s: %s",
+                                type(streaming_err).__name__,
+                                streaming_err,
+                            )
+                            answer = ""
+
+                    if not answer or not answer.strip():
+                        answer = await self._llm_provider.agenerate(
+                            prompt=prompt,
+                            temperature=self._config.llm_temperature,
+                            max_tokens=self._config.llm_max_tokens,
+                        )
+
                     if span:
                         span.set_attribute("rag.answer_length", len(answer))
             finally:
@@ -681,19 +787,53 @@ class RAGPipeline:
             prompt = self._build_prompt(rewritten_query, context_text, history)
 
             generation_start = time.perf_counter()
+            answer = ""
             try:
                 with trace_operation("rag_generation_async") as span:
                     if span:
                         span.set_attribute("rag.prompt_length", len(prompt))
-                        span.set_attribute("rag.temperature", self._config.llm_temperature)
-                        span.set_attribute("rag.max_tokens", self._config.llm_max_tokens)
+                        span.set_attribute(
+                            "rag.temperature", self._config.llm_temperature
+                        )
+                        span.set_attribute(
+                            "rag.max_tokens", self._config.llm_max_tokens
+                        )
                         span.set_attribute("rag.is_chat", True)
                         span.set_attribute("rag.is_async", True)
-                    answer = await self._llm_provider.agenerate(
-                        prompt=prompt,
-                        temperature=self._config.llm_temperature,
-                        max_tokens=self._config.llm_max_tokens,
-                    )
+
+                    if self._config.streaming_enabled and hasattr(
+                        self._llm_provider, "stream_chat_async"
+                    ):
+                        try:
+                            messages = [{"role": "user", "content": prompt}]
+                            accumulated: list[str] = []
+
+                            def on_chunk(content: str, _reasoning: str | None) -> None:
+                                if content:
+                                    accumulated.append(content)
+
+                            await self._llm_provider.stream_chat_async(
+                                messages=messages,
+                                on_chunk=on_chunk,
+                                temperature=self._config.llm_temperature,
+                                max_tokens=self._config.llm_max_tokens,
+                            )
+                            answer = "".join(accumulated)
+                        except Exception as streaming_err:
+                            logger.warning(
+                                "Async streaming failed, falling back to agenerate(): %s: %s",
+                                type(streaming_err).__name__,
+                                streaming_err,
+                            )
+                            answer = ""
+
+                    if not answer or not answer.strip():
+                        answer = await self._llm_provider.agenerate(
+                            prompt=prompt,
+                            temperature=self._config.llm_temperature,
+                            max_tokens=self._config.llm_max_tokens,
+                        )
+
                     if span:
                         span.set_attribute("rag.answer_length", len(answer))
             finally:

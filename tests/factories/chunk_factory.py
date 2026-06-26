@@ -1,6 +1,7 @@
 """Factory for creating test Chunk objects."""
 
-from factory import Faker, Sequence, Factory, SubFactory, LazyAttribute
+from factory import Factory, Faker, LazyAttribute, Sequence, SubFactory
+
 from secondbrain.domain.entities import DocumentChunk, DocumentMetadata
 from secondbrain.domain.value_objects import ChunkId, EmbeddingVector, SourcePath
 
@@ -44,7 +45,7 @@ class ChunkFactory(Factory):
     def _create(cls, model_class, *args, **kwargs):
         """Create a chunk with document_id in metadata if provided."""
         document_id = kwargs.pop("document_id", None)
-        
+
         # Ensure metadata has document reference
         if document_id and "metadata" not in kwargs:
             kwargs["metadata"] = DocumentMetadata(
@@ -52,5 +53,5 @@ class ChunkFactory(Factory):
                 file_type="pdf",
                 ingested_at=Faker("date_time_this_year").generate({}),
             )
-        
+
         return model_class(*args, **kwargs)

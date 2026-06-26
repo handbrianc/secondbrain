@@ -10,9 +10,6 @@ from secondbrain.utils.circuit_breaker import CircuitBreakerConfig, CircuitBreak
 from secondbrain.utils.connections import ValidatableService
 
 
-
-
-
 class TestValidatableServiceWithCircuitBreaker:
     """Tests for ValidatableService with circuit breaker."""
 

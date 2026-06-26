@@ -43,9 +43,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = [
+# Core linting and formatting only
+lint = [
     "ruff>=0.15.5",  # Linting/formatting - fast Rust-based tool
     "mypy>=1.8.0",  # Type checking - static analysis
+]
+
+# Core pytest and test infrastructure
+test = [
     "pytest>=8.0.0",  # Test framework - v8 for performance
     "pytest-asyncio>=0.23.0",  # Async test support - modern async patterns
     "pytest-cov>=4.1.0",  # Coverage reporting - test quality
@@ -53,45 +58,112 @@ dev = [
     "pytest-timeout>=2.2.0",  # Test timeouts - prevent hangs
     "pytest-rerunfailures>=12.0",  # Retry flaky tests - concurrent test stability
     "hypothesis>=6.0.0",  # Property-based testing - edge case discovery
-    "mutmut>=3.5.0",  # Mutation testing - verify test quality
     "factory-boy>=3.3.0",  # Test factories - factory_boy for test data
+    "mongomock>=4.0.0",  # Test mocking - MongoDB without server
+]
+
+# Security scanning tools
+security = [
     "bandit>=1.7.0",  # Security scanning - Python security issues
     "safety>=3.0.0",  # Vulnerability check - dependency audits
     "pip-audit>=2.10.0",  # Security audit - PyPI vulnerability check
-    "pre-commit>=4.6.0",  # Git hooks - automated quality checks
-    "pyinstaller>=6.20.0",  # Binary packaging - standalone executables
-    "mongomock>=4.0.0",  # Test mocking - MongoDB without server
-    "vulture>=2.16",  # Dead code detection - cleanup unused code
     "cyclonedx-bom>=7.0.0",  # SBOM generation - supply chain security
-    "pipdeptree>=2.35.3",  # Dependency tree - visualize requirements
-    "fastapi>=0.136.3",  # API framework - future REST API support
-    "uvicorn>=0.1.0",  # ASGI server - async HTTP server
-    "flask>=3.0.0",  # Web framework - alternative API option
+]
+
+# Documentation generation
+docs = [
     "mkdocs>=1.6.0",  # Documentation - static site generator
     "mkdocstrings>=0.24.0",  # API docs - auto-generate from docstrings
     "mkdocstrings-python>=2.0.3",  # Python plugin - mkdocstrings support
     "mkdocs-material>=9.5.0",  # Theme - professional documentation
     "jinja2>=3.1.6",  # Templating - security patch required
-    "urllib3>=2.6.0",  # HTTP library - security updates
-    "cryptography>=48.0.0",  # Crypto lib - security dependencies
-    "pillow>=11.3.0",  # Image processing - document rendering
-    "paramiko>=3.5.0",  # SSH library - secure file operations
-    "PyJWT>=2.13.0",  # JWT tokens - authentication support
-    "pyasn1>=0.6.3",  # ASN.1 parser - crypto library dependency
-    "pyopenssl>=25.1.0",  # OpenSSL wrapper - secure connections
-    "twisted>=26.4.0",  # Async framework - dependency for security libs
-    "idna>=3.18",  # International domains - URL handling
-    "wheel>=0.45.0",  # Binary wheels - package distribution
-    "fpdf2>=2.7.0",  # PDF generation - document export
-    "reportlab>=4.5.1",  # PDF library - complex document rendering
-    "python-docx>=1.0.0",  # Word documents - DOCX parsing
-    "setuptools>=60.0.0",  # Build tooling
+]
+
+# Mutation testing
+mutation = [
+    "mutmut>=3.5.0",  # Mutation testing - verify test quality
+]
+
+# Pre-commit hooks
+precommit = [
+    "pre-commit>=4.6.0",  # Git hooks - automated quality checks
+]
+
+# Web frameworks and serving
+web = [
+    "fastapi>=0.136.3",  # API framework - future REST API support
+    "uvicorn>=0.1.0",  # ASGI server - async HTTP server
+    "flask>=3.0.0",  # Web framework - alternative API option
+]
+
+# Bundled extras (combines all dev tools - backward compatible with [dev])
+bundled = [
+    # All lint deps
+    "ruff>=0.15.5",
+    "mypy>=1.8.0",
+    # All test deps
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=4.1.0",
+    "pytest-xdist>=3.0.0",
+    "pytest-timeout>=2.2.0",
+    "pytest-rerunfailures>=12.0",
+    "hypothesis>=6.0.0",
+    "factory-boy>=3.3.0",
+    "mongomock>=4.0.0",
+    # All security deps
+    "bandit>=1.7.0",
+    "safety>=3.0.0",
+    "pip-audit>=2.10.0",
+    "cyclonedx-bom>=7.0.0",
+    # Misc dev tools
+    "pre-commit>=4.6.0",
+    "pyinstaller>=6.20.0",
+    "vulture>=2.16",
+    "pipdeptree>=2.35.3",
+    # All docs deps
+    "mkdocs>=1.6.0",
+    "mkdocstrings>=0.24.0",
+    "mkdocstrings-python>=2.0.3",
+    "mkdocs-material>=9.5.0",
+    "jinja2>=3.1.6",
+    # All web deps
+    "fastapi>=0.136.3",
+    "uvicorn>=0.1.0",
+    "flask>=3.0.0",
+    # Transitive/util deps
+    "urllib3>=2.6.0",
+    "cryptography>=48.0.0",
+    "pillow>=11.3.0",
+    "paramiko>=3.5.0",
+    "PyJWT>=2.13.0",
+    "pyasn1>=0.6.3",
+    "pyopenssl>=25.1.0",
+    "twisted>=26.4.0",
+    "idna>=3.18",
+    "wheel>=0.45.0",
+    "setuptools>=60.0.0",
+    "fpdf2>=2.7.0",
+    "reportlab>=4.5.1",
+    "python-docx>=1.0.0",
+    # Bundled extras (depends on mutation)
+    "mutmut>=3.5.0",
+]
+
+# Alias [dev] to [bundled] for backward compatibility
+dev = [
+    "secondbrain[bundled]",
 ]
 
 qualitative = [
     "llama-cpp-python>=0.2.0",  # Local LLM - CPU inference support
-    
+
     "accelerate>=0.25.0",  # Model optimization - GPU/CPU distribution
+]
+
+rag = [
+    "llama-cpp-python>=0.2.0",  # Local LLM inference for RAG pipeline
+    "accelerate>=0.25.0",  # Model optimization for local LLM
 ]
 
 opentelemetry = [
@@ -152,7 +224,6 @@ namespace_packages = false
 [[tool.mypy.overrides]]
 module = ["secondbrain.document"]
 warn_unused_ignores = false
-disable_error_code = ["arg-type", "attr-defined"]
 
 [[tool.mypy.overrides]]
 module = ["google.*"]
@@ -165,13 +236,15 @@ ignore_missing_imports = true
 module = ["pymongo", "pymongo.*", "motor", "motor.*"]
 follow_imports = "skip"
 ignore_missing_imports = true
-disable_error_code = ["attr-defined", "no-any-return", "valid-type", "operator", "unreachable", "has-type", "misc", "return-value"]
+# Technical debt: restored incrementally — attr-defined/operator/unreachable/has-type remain for stub gaps; misc/no-any-return/valid-type/return-value removed for stricter checking
+disable_error_code = ["attr-defined", "operator", "unreachable", "has-type"]
 
 [[tool.mypy.overrides]]
 module = ["docling", "docling.*"]
 follow_imports = "skip"
 ignore_missing_imports = true
-disable_error_code = ["attr-defined", "no-any-return", "valid-type", "operator", "unreachable", "has-type", "misc"]
+# TODO: restore disabled codes as docling typing matures
+disable_error_code = ["attr-defined", "has-type", "unreachable"]
 
 [[tool.mypy.overrides]]
 module = ["docs.examples.*"]

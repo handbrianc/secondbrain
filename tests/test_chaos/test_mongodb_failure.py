@@ -7,21 +7,22 @@ during the ingestion process, ensuring:
 - Graceful error messages to users
 """
 
-import pytest
 from pathlib import Path
 from uuid import uuid4
 
+import pytest
+
 from secondbrain.document import DocumentIngestor
-from secondbrain.utils.failure_injector import (
-    FailureInjector,
-    FailureType,
-    InjectedConnectionError,
-)
 from secondbrain.storage import VectorStorage
 from secondbrain.utils.circuit_breaker import (
     CircuitBreaker,
     CircuitBreakerConfig,
     CircuitState,
+)
+from secondbrain.utils.failure_injector import (
+    FailureInjector,
+    FailureType,
+    InjectedConnectionError,
 )
 
 

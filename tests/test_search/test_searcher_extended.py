@@ -1,6 +1,6 @@
 """Extended tests for Searcher to improve coverage."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 

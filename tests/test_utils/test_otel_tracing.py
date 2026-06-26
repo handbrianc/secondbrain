@@ -109,8 +109,8 @@ class TestContextHelpers:
     def test_extract_inject_functions_exist(self):
         from secondbrain.utils.tracing import (
             extract_trace_context,
-            inject_trace_context,
             get_current_trace_context,
+            inject_trace_context,
             set_trace_context,
         )
         assert callable(extract_trace_context)
@@ -119,14 +119,20 @@ class TestContextHelpers:
         assert callable(set_trace_context)
 
     def test_context_propagation_basic(self):
-        from secondbrain.utils.tracing import inject_trace_context, extract_trace_context
+        from secondbrain.utils.tracing import (
+            extract_trace_context,
+            inject_trace_context,
+        )
         headers = {}
         inject_trace_context(headers)
         context = extract_trace_context(headers)
         assert isinstance(context, dict) or context is None
 
     def test_http_trace_context_headers(self):
-        from secondbrain.utils.tracing import inject_trace_context, extract_trace_context
+        from secondbrain.utils.tracing import (
+            extract_trace_context,
+            inject_trace_context,
+        )
         http_headers = {}
         inject_trace_context(http_headers)
         if "traceparent" in http_headers:

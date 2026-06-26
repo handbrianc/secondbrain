@@ -3,10 +3,7 @@ import json
 import subprocess
 import tempfile
 from pathlib import Path
-from unittest.mock import patch, MagicMock
-
-import pytest
-
+from unittest.mock import MagicMock, patch
 
 # Deterministic SBOM JSON fixture returned by mocked subprocess
 SbomFixture = {

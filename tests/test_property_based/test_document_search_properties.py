@@ -4,16 +4,191 @@ This module tests invariants that should hold across a wide range of inputs,
 using hypothesis for automated test case generation.
 """
 
-import re
-from collections.abc import Sequence
 
 import pytest
-from hypothesis import HealthCheck, assume, given, settings, strategies as st
+from hypothesis import HealthCheck, assume, given, settings
+from hypothesis import strategies as st
 
-from secondbrain.config import Config
 from secondbrain.domain.entities import DocumentChunk, DocumentMetadata
 from secondbrain.domain.value_objects import FileSize, PageNumber
 from secondbrain.search import MAX_QUERY_LENGTH, sanitize_query
+
+# =============================================================================
+# Unicode strategy helpers for property-based testing
+# =============================================================================
+
+# ----- 1. Emoji clusters (variation selectors, regional indicators) -----
+EMOJI_PATTERN = (
+    "["
+    "\U0001F3E7-\U0001F3EF"  # flag emojis (subrange)
+    "\U0001F600-\U0001F64F"  # emoticons
+    "\U0001F680-\U0001F6FF"  # transport & map symbols
+    "\U0001F900-\U0001F9FF"  # supplemental symbols & pictographs
+    "\U0001FA00-\U0001FA6F"  # chess, symbols, extended pictographs
+    "\U0001FB00-\U0001FBFF"  # emoji modification (skin tone, etc.)
+    "\U00002702-\U00002702"  # dagger
+    "\U00002600-\U000026FF"  # misc symbols (sun, moon, etc.)
+    "\U0001F004-\U0001F004"  # mahjong tile
+    "\U0001F0CF-\U0001F0CF"  # playing card
+    "\u200D"                 # zero-width joiner (allows ZWJ sequences)
+    "\uFE0F"                 # variation selector-16
+    "\uFE0E"                 # variation selector-15
+    "]+"
+)
+
+
+def _random_emoji_str(min_sz: int, max_sz: int) -> str:
+    import secrets
+    lengths = list(range(min_sz, max_sz + 1))
+    length = secrets.choice(lengths) if lengths else min_sz
+    emoji_ranges = [
+        (0x1F600, 0x1F64F),
+        (0x1F680, 0x1F6FF),
+        (0x1F900, 0x1F9FF),
+        (0x2600, 0x26FF),
+        (0x1FA00, 0x1FA6F),
+        (0x1FA70, 0x1FAFF),
+        (0x1F004, 0x1F004),
+        (0x1F0CF, 0x1F0CF),
+    ]
+    selector_ranges = [(0xFE0E, 0xFE0F), (0x200D, 0x200D)]
+    all_ranges = emoji_ranges + selector_ranges
+    chars = []
+    for _ in range(length):
+        rng = secrets.choice(all_ranges)
+        codepoint = secrets.choice(range(rng[0], rng[1] + 1))
+        try:
+            chars.append(chr(codepoint))
+        except ValueError:
+            chars.append("\uFFFD")
+    return "".join(chars)
+
+
+def emoji_clusters_strategy(min_size: int = 1, max_size: int = 100) -> st.SearchStrategy[str]:
+    """Strategy producing emoji-heavy strings including ZWJ sequences."""
+    # Pre-defined emoji characters as a pool (deterministic, covers key clusters)
+    base_emoji_pool = (
+        "\U0001F600\U0001F603\U0001F604\U0001F601\U0001F602\U0001F923"  # smileys
+        "\U0001F970\U0001F60D\U0001F618\U0001F917"  # more faces
+        "\U0001F499\U0001F49A\U0001F49B\U0001F49C"  # hearts
+        "\U0001F3E7\U0001F3E8\U0001F3E9\U0001F3EA"  # flags
+        "\U0001F308\U0001F309\U0001F306\U0001F307"  # world/cultural
+        "\U0001F930\U0001F931\U0001F932\U0001F933"  # gestures
+        "\U0001F385\U0001F393\U0001F3A4\U0001F3A8"  # activity
+        "\U0001F680\U0001F6A8\U0001F6A9\U0001F6AC"  # transport
+        "\u2764\u2620\u2708\u2709\u2600\u2601\u2602\u2603"  # misc symbols
+        "\U0001F7E2\U0001F7E3\U0001F7E4\U0001F7E5"  # colored circles
+        "\U0001F3FB\U0001F3FC\U0001F3FD\U0001F3FE\U0001F3FF"  # skin tone modifiers
+    )
+    zwj = "\u200D"
+    vs16 = "\uFE0F"
+    vs15 = "\uFE0E"
+    modifier_pool = (
+        zwj + vs16 + vs15 + "\u20E0"  # enclosing combined diacritical mark
+    )
+
+    return st.lists(
+        st.sampled_from(list(base_emoji_pool)),
+        min_size=min_size,
+        max_size=max_size,
+    ).map(lambda lst: "".join(lst)).flatmap(
+        lambda s: st.builds(
+            lambda mod: s[: max_size - 5] + mod,
+            st.sampled_from(modifier_pool),
+        )
+        if len(s) > 3
+        else st.just(s)
+    )
+
+
+# ----- 2. Mixed-script text (Latin + CJK + Arabic) -----
+
+LATIN_POOL = (
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+    "0123456789 !@#$%^&*()-=_+[]{}|;:',.<>?/"
+)
+CJK_POOL = (
+    "\u4E00\u4E01\u4E02\u4E03\u4E04\u4E05\u4E06\u4E07\u4E08\u4E09"  # basic CJK
+    "\u4E8C\u4E09\u56DB\u4E94\u516D\u4E03\u516B\u4E5D\u5341\u767E"  # numbers
+    "\u65E5\u6708\u706B\u6C34\u6728\u91D1\u571F\u946B\u76D8\u51B0"  # nature
+    "\u4EBA\u5927\u5C0F\u4E2D\u4E0A\u4E0B\u5DE6\u53F3\u5185\u5916"  # directions
+    "\u53EF\u4EE5\u4E0D\u5403\u4E86\u7684\u5462\u54E1\u8BB0\u5FEB"  # common
+)
+ARABIC_POOL = (
+    "\u0627\u0628\u062A\u062B\u062C\u062D\u062E\u062F\u0630\u0631"  # Arabic letters
+    "\u0633\u0634\u0635\u0636\u0637\u0638\u0639\u063A\u0641\u0642"  # more letters
+    "\u0643\u0644\u0645\u0646\u0647\u0648\u064A\u0621\u0643\u0629"  # even more
+    "\u0660\u0661\u0662\u0663\u0664\u0665\u0666\u0667\u0668\u0669"  # Arabic-Indic digits
+    "\u0600\u0601\u0602\u0603\u0604\u0610\u0611\u0612\u0613\u0614"  # Arabic punctuation
+)
+SPACERS = "  \u0020\u3000\u200B"  # regular space, ideographic space, zero-width space
+
+
+def mixed_script_strategy(min_size: int = 5, max_size: int = 200) -> st.SearchStrategy[str]:
+    """Produce strings mixing Latin, CJK, and Arabic scripts in arbitrary order."""
+
+    def shuffle_to_string(pool_items: list[str]) -> str:
+        import secrets
+
+        result = []
+        quota = secrets.randbelow(max_size - min_size + 1) + min_size
+        pools = [
+            list(LATIN_POOL),
+            list(CJK_POOL),
+            list(ARABIC_POOL),
+            list(SPACERS),
+        ]
+        for _ in range(quota):
+            pool = secrets.choice(pools)
+            result.append(secrets.choice(pool))
+        return "".join(result)
+
+    return st.builds(shuffle_to_string, st.lists(st.just(0), min_size=1, max_size=1))
+
+
+# ----- 3. BiDi override characters (RTL/LTR manipulation) -----
+
+BIDI_LRM = "\u200E"   # LEFT-TO-RIGHT MARK
+BIDI_RLM = "\u200F"   # RIGHT-TO-LEFT MARK
+BIDI_LRE = "\u202A"   # LEFT-TO-RIGHT EMBEDDING
+BIDI_RLE = "\u202B"   # RIGHT-TO-LEFT EMBEDDING
+BIDI_LRO = "\u202D"   # LEFT-TO-RIGHT OVERRIDE
+BIDI_RLO = "\u202E"   # RIGHT-TO-LEFT OVERRIDE
+BIDI_PDF = "\u202C"   # POP DIRECTIONAL FORMATTING
+BIDI_ALM = "\u2066"   # ARABIC LETTER MARK (left-to-right isolate)
+BIDI_RLI = "\u2067"   # RIGHT-TO-LEFT ISOLATE
+BIDI_FSI = "\u2068"   # FIRST STRONG ISOLATE
+BIDI_LRI = "\u2069"   # LEFT-TO-RIGHT ISOLATE
+BIDI_PD = "\u202D"    # POP DIRECTIONAL ISOLATE
+
+BIDI_POOL = (
+    BIDI_LRM + BIDI_RLM + BIDI_LRE + BIDI_RLE
+    + BIDI_LRO + BIDI_RLO + BIDI_PDF
+    + BIDI_ALM + BIDI_RLI + BIDI_FSI + BIDI_LRI
+)
+
+
+def bidi_override_strategy(min_size: int = 1, max_size: int = 50) -> st.SearchStrategy[str]:
+    """Strings annotated with BiDi override / isolation characters."""
+    latin_base = st.text(min_size=1, max_size=50, alphabet=st.characters(min_codepoint=0x41, max_codepoint=0x7A))
+
+    return st.dictionaries(
+        keys=st.sampled_from(["ltr", "rtl", "mix"]),
+        values=st.lists(st.sampled_from(list(BIDI_POOL)), min_size=1, max_size=5),
+        min_size=1,
+        max_size=3,
+    ).flatmap(
+        lambda d: st.builds(
+            lambda s: (
+                ("".join(d.get("ltr", [])))
+                + s
+                + ("".join(d.get("rtl", [])))
+                + s
+                + ("".join(d.get("mix", [])))
+            ),
+            latin_base,
+        )
+    )
 
 
 @pytest.mark.hypothesis
@@ -589,7 +764,7 @@ class TestChunkingCharacterPreservation:
 
         Note: We filter for text with high entropy (many unique chars) to avoid
         false negatives from repetitive text where overlap detection is ambiguous.
-    """
+        """
         assume(chunk_overlap < chunk_size)
 
         segments = [{"text": text, "page": 0}]  # type: ignore

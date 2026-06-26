@@ -97,7 +97,7 @@ class TestBasicUsageExamples:
     @pytest.mark.unit
     def test_example_basic_usage_list(self) -> None:
         """Test basic document listing example."""
-        from unittest.mock import MagicMock, patch
+        from unittest.mock import patch
 
         from docs.examples.basic_usage.list_documents import main
 
@@ -165,7 +165,6 @@ class TestAdvancedExamples:
     def test_example_async_workflow(self, tmp_path: Path) -> None:
         """Test async workflow example validates async document ingestion with mocked I/O."""
         import asyncio
-        from unittest.mock import MagicMock
 
         test_dir = tmp_path / "test_async"
         test_dir.mkdir()

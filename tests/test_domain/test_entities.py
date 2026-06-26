@@ -183,7 +183,7 @@ class TestDocumentChunkEmbeddingStatus:
             chunk_id=ChunkId("test-id"),
             text="test text",
             metadata=sample_metadata,
-            embedding=EmbeddingVector([0.1, 0.2, 0.3]),
+            embedding=EmbeddingVector([0.1] * 384),
         )
         assert chunk.has_embedding() is True
 
@@ -225,7 +225,7 @@ class TestDocumentChunkToDict:
             text="test text content",
             metadata=sample_metadata,
             page_number=1,
-            embedding=EmbeddingVector([0.1, 0.2, 0.3]),
+            embedding=EmbeddingVector([0.1] * 384),
         )
         result = chunk.to_dict()
 
@@ -254,7 +254,7 @@ class TestDocumentChunkToDict:
     ) -> None:
         from secondbrain.domain.value_objects import EmbeddingVector
 
-        embedding = EmbeddingVector([0.1, 0.2, 0.3, 0.4, 0.5])
+        embedding = EmbeddingVector([0.1] * 384)
         chunk = DocumentChunk(
             chunk_id=ChunkId("test-id"),
             text="test",
