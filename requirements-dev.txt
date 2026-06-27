@@ -8,7 +8,7 @@ mypy==1.15.0
 pre-commit==4.6.0
 
 # Testing framework
-pytest==8.4.0
+pytest==9.1.1
 pytest-asyncio==1.0.0
 pytest-cov==6.1.1
 pytest-benchmark==5.1.0
@@ -35,7 +35,7 @@ vulture==2.16
 mkdocs==1.6.1
 mkdocstrings==0.29.0
 mkdocstrings-python==2.0.3
-mkdocs-material==9.6.10
+mkdocs-material==9.7.6
 
 # Build and packaging
 pyinstaller==6.20.0
@@ -55,14 +55,14 @@ flask>=3.0.0
 
 # PDF/document creation for tests
 fpdf2>=2.7.0
-reportlab>=4.5.1
+reportlab>=5.0.0
 python-docx>=1.0.0
 
 # Security patches (pinned versions)
 jinja2>=3.1.6
 urllib3>=2.6.0
 setuptools>=82.0.1
-cryptography>=48.0.0
+cryptography>=49.0.0
 pillow>=11.3.0
 paramiko>=3.5.0
 PyJWT>=2.13.0
@@ -70,4 +70,4 @@ pyasn1>=0.6.3
 pyopenssl>=25.1.0
 twisted>=26.4.0
 idna>=3.18
-wheel>=0.45.0
+wheel>=0.47.0

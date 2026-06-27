@@ -20,22 +20,22 @@ classifiers = [
 
 dependencies = [
     "click>=8.4.1",  # CLI framework - stable API, minor updates only
-    "docling>=2.96.1",  # Document parsing - requires recent features
-    "docling-core>=2.78.0",  # Core types - matches docling version
+    "docling>=2.105.0",  # Document parsing - requires recent features
+    "docling-core>=2.83.1",  # Core types - matches docling version
     "pymongo>=4.17.0",  # MongoDB driver - async support required
     "motor>=3.0.0",  # Async MongoDB - requires pymongo 4.x compatibility
     "httpx>=0.28.1",  # HTTP client - async support for LLM calls
     "pydantic>=2.13.4",  # Data validation - pydantic v2 compatible
-    "pydantic-settings>=2.14.1",  # Settings management - pydantic v2 compatible
+    "pydantic-settings>=2.14.2",  # Settings management - pydantic v2 compatible
     "rich>=15.0.0",  # CLI formatting - modern terminal output
     "python-dotenv>=1.2.2",  # Environment config - stable API
     "numpy>=2.4.6",  # Numerical computing - array API compatibility
     "opentelemetry-api>=1.42.1",  # Telemetry - stable tracing API
     "opentelemetry-sdk>=1.42.1",  # Telemetry - tracing implementation
-    "openai>=2.40.0",  # LLM provider - v1 SDK required
+    "openai>=2.43.0",  # LLM provider - v1 SDK required
     "anthropic>=0.40.0",  # LLM provider - Claude models support
     "typing_extensions>=4.15.0",  # Type hints - backport new features
-    "pyobjc-core>=12.2; sys_platform == 'darwin'",  # MacOS Objective-C bridge - required for ocrmac
+    "pyobjc-core>=12.2.1; sys_platform == 'darwin'",  # MacOS Objective-C bridge - required for ocrmac
     "pyobjc-framework-cocoa>=12.1; sys_platform == 'darwin'",  # MacOS Cocoa framework - required for ocrmac
     "pyobjc-framework-coreml>=12.1; sys_platform == 'darwin'",  # MacOS Core ML - required for ocrmac
     "pyobjc-framework-quartz>=12.1; sys_platform == 'darwin'",  # MacOS Quartz - required for ocrmac
@@ -51,7 +51,7 @@ lint = [
 
 # Core pytest and test infrastructure
 test = [
-    "pytest>=8.0.0",  # Test framework - v8 for performance
+    "pytest>=9.1.1",  # Test framework - v9 for performance
     "pytest-asyncio>=0.23.0",  # Async test support - modern async patterns
     "pytest-cov>=4.1.0",  # Coverage reporting - test quality
     "pytest-xdist>=3.0.0",  # Parallel tests - 18 workers for speed
@@ -75,13 +75,13 @@ docs = [
     "mkdocs>=1.6.0",  # Documentation - static site generator
     "mkdocstrings>=0.24.0",  # API docs - auto-generate from docstrings
     "mkdocstrings-python>=2.0.3",  # Python plugin - mkdocstrings support
-    "mkdocs-material>=9.5.0",  # Theme - professional documentation
+    "mkdocs-material>=9.7.6",  # Theme - professional documentation
     "jinja2>=3.1.6",  # Templating - security patch required
 ]
 
 # Mutation testing
 mutation = [
-    "mutmut>=3.5.0",  # Mutation testing - verify test quality
+    "mutmut>=3.6.0",  # Mutation testing - verify test quality
 ]
 
 # Pre-commit hooks
@@ -102,7 +102,7 @@ bundled = [
     "ruff>=0.15.5",
     "mypy>=1.8.0",
     # All test deps
-    "pytest>=8.0.0",
+    "pytest>=9.1.1",
     "pytest-asyncio>=0.23.0",
     "pytest-cov>=4.1.0",
     "pytest-xdist>=3.0.0",
@@ -125,7 +125,7 @@ bundled = [
     "mkdocs>=1.6.0",
     "mkdocstrings>=0.24.0",
     "mkdocstrings-python>=2.0.3",
-    "mkdocs-material>=9.5.0",
+    "mkdocs-material>=9.7.6",
     "jinja2>=3.1.6",
     # All web deps
     "fastapi>=0.136.3",
@@ -133,7 +133,7 @@ bundled = [
     "flask>=3.0.0",
     # Transitive/util deps
     "urllib3>=2.6.0",
-    "cryptography>=48.0.0",
+    "cryptography>=49.0.0",
     "pillow>=11.3.0",
     "paramiko>=3.5.0",
     "PyJWT>=2.13.0",
@@ -141,13 +141,13 @@ bundled = [
     "pyopenssl>=25.1.0",
     "twisted>=26.4.0",
     "idna>=3.18",
-    "wheel>=0.45.0",
+    "wheel>=0.47.0",
     "setuptools>=60.0.0",
     "fpdf2>=2.7.0",
-    "reportlab>=4.5.1",
+    "reportlab>=5.0.0",
     "python-docx>=1.0.0",
     # Bundled extras (depends on mutation)
-    "mutmut>=3.5.0",
+    "mutmut>=3.6.0",
 ]
 
 # Alias [dev] to [bundled] for backward compatibility
@@ -157,7 +157,7 @@ dev = [
 
 qualitative = [
     "llama-cpp-python>=0.2.0",  # Local LLM - CPU inference support
-
+    "transformers>=5.12.1",  # HuggingFace - model loading
     "accelerate>=0.25.0",  # Model optimization - GPU/CPU distribution
 ]
 
