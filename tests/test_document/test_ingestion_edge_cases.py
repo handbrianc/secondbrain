@@ -96,29 +96,6 @@ class TestDocumentIngestorIngestEdgeCases:
 class TestDocumentIngestorBuildDocumentsEdgeCases:
     """Edge case tests for _build_documents_with_embeddings."""
 
-    def test_build_documents_with_sentence_transformers_unavailable_error(
-        self, tmp_path: Path
-    ) -> None:
-        """Test SentenceTransformersUnavailableError in embedding generation."""
-        from secondbrain.exceptions import SentenceTransformersUnavailableError
-
-        ingestor = DocumentIngestor()
-        test_file = tmp_path / "test.txt"
-
-        segments: list[Segment] = [{"text": "test text", "page": 1}]
-
-        mock_embedding_gen = MagicMock()
-        mock_embedding_gen.generate.side_effect = SentenceTransformersUnavailableError(
-            "SentenceTransformers unavailable"
-        )
-
-        docs = ingestor._build_documents_with_embeddings(
-            test_file, segments, mock_embedding_gen
-        )
-
-        # Should return empty list when all embeddings fail
-        assert len(docs) == 0
-
     def test_build_documents_skips_chunks_without_embedding(
         self, tmp_path: Path
     ) -> None:

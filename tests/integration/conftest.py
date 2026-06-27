@@ -6,12 +6,10 @@ import time
 from collections.abc import AsyncGenerator, Generator
 from typing import TYPE_CHECKING, Any
 
-import httpx
 import pytest
 from pymongo import MongoClient
 
 from secondbrain.config import Config
-from secondbrain.embedding import LocalEmbeddingGenerator
 from secondbrain.embedding.mock import MockEmbeddingGenerator
 from secondbrain.storage import MockVectorStorage, VectorStorage
 
@@ -34,19 +32,12 @@ SERVICE_HEALTH_TIMEOUT = 10  # seconds - reduced for faster test feedback
 def _check_mongodb_healthy() -> bool:
     """Check if MongoDB test service is healthy."""
     try:
-        client = MongoClient(TEST_MONGO_URI, serverSelectionTimeoutMS=10000, maxPoolSize=50)
+        client = MongoClient(
+            TEST_MONGO_URI, serverSelectionTimeoutMS=10000, maxPoolSize=50
+        )
         client.admin.command("ping")
         client.close()
         return True
-    except Exception:
-        return False
-
-
-def _check_embedding_service_healthy() -> bool:
-    """Check if sentence-transformers service is healthy."""
-    try:
-        response = httpx.get(TEST_EMBEDDING_URL, timeout=5.0)
-        return response.status_code == 200
     except Exception:
         return False
 
@@ -62,7 +53,7 @@ def mongo_test_uri() -> str:
 
 @pytest.fixture(scope="session")
 def embedding_service_url() -> str:
-    """Sentence-transformers service URL fixture.
+    """OpenAI-compatible embedding API URL fixture.
 
     Returns the test embedding service URL configured for docker-compose.
     """
@@ -73,11 +64,11 @@ def embedding_service_url() -> str:
 def wait_for_services() -> Generator[None, None, None]:
     """Wait for test services to be healthy before running tests.
 
-    This session-scoped fixture ensures both MongoDB and sentence-transformers
-    services are healthy before tests run. It waits up to SERVICE_HEALTH_TIMEOUT
-    seconds for services to become available.
+    This session-scoped fixture ensures MongoDB is healthy before tests run.
+    It waits up to SERVICE_HEALTH_TIMEOUT seconds for services to become available.
 
-    Raises:
+    Raises
+    ------
         pytest.skip: If services don't become healthy within timeout.
     """
     print("\nWaiting for test services to be healthy...")
@@ -96,20 +87,7 @@ def wait_for_services() -> Generator[None, None, None]:
             f"Start services with appropriate docker-compose setup."
         )
 
-    # Wait for sentence-transformers
-    start_time = time.time()
-    while time.time() - start_time < SERVICE_HEALTH_TIMEOUT:
-        if _check_embedding_service_healthy():
-            print("Sentence-transformers is healthy")
-            break
-        print(".", end="", flush=True)
-        time.sleep(0.5)  # Reduced from 1s for faster feedback
-    else:
-        pytest.skip(
-            f"Sentence-transformers not available after {SERVICE_HEALTH_TIMEOUT}s - integration tests skipped."
-        )
-
-    print("All services are healthy\n")
+    print("Services are healthy\n")
     yield
 
 
@@ -120,7 +98,8 @@ def real_storage(wait_for_services: None) -> Generator[VectorStorage, None, None
     Creates a VectorStorage instance connected to the test MongoDB database.
     Ensures the vector search index is created and waits for it to be ready.
 
-    Yields:
+    Yields
+    ------
         VectorStorage: Connected storage instance.
     """
     storage = VectorStorage(
@@ -152,7 +131,8 @@ def mock_storage() -> Generator[MockVectorStorage, None, None]:
     Provides an in-memory storage implementation for testing integration
     logic without requiring actual MongoDB connections.
 
-    Yields:
+    Yields
+    ------
         MockVectorStorage: In-memory storage instance.
     """
     storage = MockVectorStorage()
@@ -164,16 +144,25 @@ def mock_storage() -> Generator[MockVectorStorage, None, None]:
 @pytest.fixture(scope="session")
 def real_embedding_generator(
     wait_for_services: None,
-) -> Generator[LocalEmbeddingGenerator, None, None]:
-    """Real embedding generator using sentence-transformers service.
+) -> Generator[Any, None, None]:
+    """Real embedding generator using OpenAI-compatible API (e.g. Ollama, LM Studio).
 
-    Creates a LocalEmbeddingGenerator instance connected to the test
-    sentence-transformers service.
+    Creates an OpenAIEmbeddingProvider instance connected to the test
+    embedding service URL configured in the environment.
 
-    Yields:
-        LocalEmbeddingGenerator: Connected embedding generator.
+    Yields
+    ------
+        OpenAIEmbeddingProvider: Connected embedding generator.
     """
-    generator = LocalEmbeddingGenerator(model_name="all-MiniLM-L6-v2")
+    from secondbrain.embedding.providers.openai import OpenAIEmbeddingProvider
+
+    cfg = Config()
+    generator = OpenAIEmbeddingProvider(
+        model=cfg.embedding_model,
+        api_key=cfg.embedding_api_key or "test",
+        api_base=cfg.embedding_api_base or TEST_EMBEDDING_URL,
+        dimensions=cfg.embedding_dimensions,
+    )
 
     try:
         # Validate connection
@@ -191,9 +180,10 @@ def mock_embedding_generator() -> Generator[MockEmbeddingGenerator, None, None]:
     """Mock embedding generator for integration tests.
 
     Provides deterministic, fast embeddings for testing without
-    requiring sentence-transformers service.
+    requiring an external embedding service.
 
-    Yields:
+    Yields
+    ------
         MockEmbeddingGenerator: Mock embedding generator instance.
     """
     generator = MockEmbeddingGenerator(model_name="mock-384", dimension=384)
@@ -210,7 +200,8 @@ async def clean_test_database(
     Ensures a clean slate for each test by deleting all documents
     before the test runs and after the test completes.
 
-    Yields:
+    Yields
+    ------
         None: Control point for test execution.
     """
     # Cleanup before test
@@ -231,7 +222,8 @@ async def clean_test_database(
 def sample_test_document() -> dict[str, Any]:
     """Sample document for testing ingestion and search.
 
-    Returns:
+    Returns
+    -------
         dict: Sample document with text and metadata.
     """
     return {
@@ -250,10 +242,10 @@ def sample_test_document() -> dict[str, Any]:
 def health_check_utils() -> dict[str, Any]:
     """Provide utility functions for health checking services.
 
-    Returns:
+    Returns
+    -------
         dict: Dictionary with health check functions.
     """
     return {
         "mongodb_healthy": _check_mongodb_healthy,
-        "embedding_healthy": _check_embedding_service_healthy,
     }

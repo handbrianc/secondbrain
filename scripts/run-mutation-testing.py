@@ -21,9 +21,9 @@ def run_command(cmd: list[str], description: str) -> bool:
     print(f"🧬 {description}")
     print(f"{'='*60}")
     print(f"Command: {' '.join(cmd)}\n")
-    
+
     result = subprocess.run(cmd, cwd=Path(__file__).parent.parent)
-    
+
     if result.returncode == 0:
         print(f"✅ {description} completed successfully")
         return True
@@ -46,15 +46,15 @@ def main():
             ["mutmut", "run", "--paths-to-mutate", module],
             f"Mutation testing for {module}"
         )
-        
+
     elif command == "results":
         # Show mutation testing results
         success = run_command(["mutmut", "results"], "Getting mutation results")
-        
+
     elif command == "browse":
         # Open mutation testing browser
         success = run_command(["mutmut", "browse"], "Opening mutation browser")
-        
+
     else:
         # Full mutation testing run
         print("🧬 Starting Full Mutation Testing")
@@ -62,17 +62,17 @@ def main():
         print("This may take 30-60 minutes depending on test suite size.")
         print("\nMutation testing verifies that your tests can catch real bugs.")
         print("High mutation score = tests are effective at catching errors.\n")
-        
+
         # Run mutation testing
         success = run_command(
             ["mutmut", "run"],
             "Running full mutation testing suite"
         )
-        
+
         if success:
             # Show results
             run_command(["mutmut", "results"], "Displaying mutation results")
-            
+
             print("\n" + "="*60)
             print("📊 Mutation Testing Complete!")
             print("="*60)

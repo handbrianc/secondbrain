@@ -6,6 +6,7 @@ using threading primitives for shared state.
 
 from __future__ import annotations
 
+import collections
 import threading
 import time
 
@@ -37,7 +38,7 @@ class SharedRateLimiter:
         """
         self._max_requests = max_requests
         self._window_seconds = window_seconds
-        self._timestamps: list[float] = []
+        self._timestamps: collections.deque[float] = collections.deque()
         self._lock = threading.Lock()
 
     def acquire(self) -> bool:
@@ -53,7 +54,7 @@ class SharedRateLimiter:
         with self._lock:
             # Clean old timestamps
             while self._timestamps and self._timestamps[0] < window_start:
-                self._timestamps.pop(0)
+                self._timestamps.popleft()
 
             # Check if under limit
             if len(self._timestamps) < self._max_requests:
@@ -119,46 +120,6 @@ class SharedRateLimiter:
         with self._lock:
             # Clean old timestamps
             while self._timestamps and self._timestamps[0] < window_start:
-                self._timestamps.pop(0)
+                self._timestamps.popleft()
 
             return max(0, self._max_requests - len(self._timestamps))
-
-
-# Global singleton instance
-_shared_rate_limiter: SharedRateLimiter | None = None
-
-
-def get_shared_rate_limiter(
-    max_requests: int = 100, window_seconds: float = 60.0
-) -> SharedRateLimiter:
-    """Get or create the shared rate limiter singleton.
-
-    Creates a SharedRateLimiter on first call, then
-    returns the same instance on subsequent calls.
-
-    Args:
-        max_requests: Maximum requests allowed in window.
-        window_seconds: Time window in seconds.
-
-    Returns
-    -------
-        SharedRateLimiter instance.
-    """
-    global _shared_rate_limiter
-
-    if _shared_rate_limiter is None:
-        _shared_rate_limiter = SharedRateLimiter(
-            max_requests=max_requests, window_seconds=window_seconds
-        )
-
-    return _shared_rate_limiter
-
-
-def shutdown_shared_rate_limiter() -> None:
-    """Shutdown the shared rate limiter.
-
-    Call this when the application exits to clean up resources.
-    """
-    global _shared_rate_limiter
-
-    _shared_rate_limiter = None

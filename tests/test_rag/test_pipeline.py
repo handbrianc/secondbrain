@@ -4,7 +4,6 @@ This module provides comprehensive unit tests for the RAGPipeline class,
 covering all public and private methods, edge cases, and orchestration logic.
 """
 
-import platform
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest

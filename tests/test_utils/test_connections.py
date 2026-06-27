@@ -2,17 +2,14 @@
 
 import asyncio
 import time
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 from secondbrain.utils.connections import (
-    RateLimitedRetry,
     ServiceUnavailableError,
     ValidatableService,
     ensure_service_available,
-    get_request_trace_headers,
-    inject_trace_headers,
 )
 
 
@@ -55,148 +52,6 @@ class TestEnsureServiceAvailable:
         assert "unavailable" in str(exc_info.value)
         # Explicitly reset mock to prevent leakage
         validator.reset_mock()
-
-
-class TestRateLimitedRetry:
-    """Test suite for RateLimitedRetry class."""
-
-    def test_retry_on_failure(self) -> None:
-        """Test that RateLimitedRetry exhausts retries on failure."""
-        retry = RateLimitedRetry(max_retries=2, base_delay=0.01)
-
-        call_count = 0
-
-        def always_failing() -> bool:
-            nonlocal call_count
-            call_count += 1
-            return False
-
-        result = retry.call(always_failing)
-        assert result is False
-        assert call_count == 2
-
-    def test_success_on_first_attempt(self) -> None:
-        """Test that RateLimitedRetry doesn't retry on first success."""
-        retry = RateLimitedRetry(max_retries=3, base_delay=0.01)
-
-        result = retry.call(lambda: True)
-        assert result is True
-
-    def test_retry_with_exception(self) -> None:
-        """Test that RateLimitedRetry handles exceptions."""
-        retry = RateLimitedRetry(max_retries=2, base_delay=0.01)
-
-        call_count = 0
-
-        def failing_with_exception() -> bool:
-            nonlocal call_count
-            call_count += 1
-            if call_count < 2:
-                raise ValueError("Temporary failure")
-            return True
-
-        result = retry.call(failing_with_exception)
-        assert result is True
-        assert call_count == 2
-
-    def test_retry_resets_after_success(self) -> None:
-        """Test that RateLimitedRetry resets after success."""
-        retry = RateLimitedRetry(max_retries=3, base_delay=0.01)
-
-        call_count = 0
-
-        def failing_then_succeeding() -> bool:
-            nonlocal call_count
-            call_count += 1
-            return not call_count < 3
-
-        # First sequence - succeeds on 3rd attempt
-        result1 = retry.call(failing_then_succeeding)
-        assert result1 is True
-
-        # Reset and run again
-        retry.reset()
-        call_count = 0
-        result2 = retry.call(failing_then_succeeding)
-        assert result2 is True
-        assert call_count == 3  # Should be able to retry again
-
-    def test_retry_early_return_when_cannot_retry(self) -> None:
-        """Test that func is called even when cannot retry."""
-        retry = RateLimitedRetry(max_retries=0, base_delay=0.01)
-
-        call_count = 0
-
-        def track_calls() -> bool:
-            nonlocal call_count
-            call_count += 1
-            return False
-
-        # First call - should try (max_retries=0 means 0 retries, 1 attempt)
-        result = retry.call(track_calls)
-        assert result is False
-        assert call_count == 1
-
-        # After exhausting retries, subsequent calls still invoke func
-        result = retry.call(track_calls)
-        assert result is False
-        assert call_count == 2
-
-    def test_retry_log_exhausted(self) -> None:
-        """Test that retry logs when all attempts exhausted."""
-        retry = RateLimitedRetry(max_retries=1, base_delay=0.01)
-
-        def always_failing() -> bool:
-            raise RuntimeError("Test error")
-
-        with patch("secondbrain.utils.connections.logger") as mock_logger:
-            result = retry.call(always_failing)
-
-        assert result is False
-        mock_logger.debug.assert_called()
-
-
-class TestRateLimitedRetryEdgeCases:
-    """Additional edge case tests for RateLimitedRetry."""
-
-    def test_calculate_delay_with_jitter(self) -> None:
-        """Test that RateLimitedRetry delay calculation includes jitter."""
-        retry = RateLimitedRetry(max_retries=3, base_delay=1.0, max_delay=10.0)
-
-        # Calculate delay for attempt 0
-        delay = retry._calculate_delay(0)
-        # Should be between 0.9 and 1.1 (1.0 * 0.9 to 1.0 * 1.1)
-        assert 0.9 <= delay <= 1.1
-
-        # Calculate delay for attempt 1
-        delay = retry._calculate_delay(1)
-        # Should be between 1.8 and 2.2 (2.0 * 0.9 to 2.0 * 1.1)
-        assert 1.8 <= delay <= 2.2
-
-    def test_can_retry_exhausted(self) -> None:
-        """Test that RateLimitedRetry can_retry returns False when exhausted."""
-        retry = RateLimitedRetry(max_retries=2, base_delay=0.01)
-
-        # First call should succeed
-        assert retry._can_retry() is True
-        # Second call should succeed
-        assert retry._can_retry() is True
-        # Third call should fail (max_retries=2, so 2 retries after initial)
-        assert retry._can_retry() is False
-
-    def test_wait_before_retry_elapsed(self) -> None:
-        """Test that RateLimitedRetry wait_before_retry when elapsed."""
-        retry = RateLimitedRetry(max_retries=3, base_delay=0.01)
-
-        # Set last retry time to long ago
-        import time
-
-        retry._last_retry_time = time.monotonic() - 1.0
-
-        # Should not need to wait
-        # (This tests the path where elapsed >= base_delay)
-        retry._wait_before_retry()
-        # If we get here without hanging, test passes
 
 
 class TestValidatableService:
@@ -448,57 +303,4 @@ class TestValidatableServiceAsync:
         assert result is True
 
 
-class TestInjectTraceHeaders:
-    """Tests for inject_trace_headers function."""
 
-    def test_inject_headers_when_tracing_available(self) -> None:
-        """Should inject trace headers when tracing is available."""
-        with (
-            patch("secondbrain.utils.connections.TRACE_CONTEXT_AVAILABLE", True),
-            patch("secondbrain.utils.connections.inject_trace_context") as mock_inject,
-        ):
-            mock_inject.return_value = {
-                "content-type": "application/json",
-                "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
-            }
-
-            headers = {"content-type": "application/json"}
-            result = inject_trace_headers(headers)
-
-            mock_inject.assert_called_once_with(headers)
-            assert "traceparent" in result
-
-    def test_inject_headers_when_tracing_unavailable(self) -> None:
-        """Should return copy of headers when tracing is unavailable."""
-        with patch("secondbrain.utils.connections.TRACE_CONTEXT_AVAILABLE", False):
-            headers = {"content-type": "application/json"}
-            result = inject_trace_headers(headers)
-
-            assert result == headers
-            assert result is not headers  # Should be a copy
-
-
-class TestGetRequestTraceHeaders:
-    """Tests for get_request_trace_headers function."""
-
-    def test_get_headers_when_tracing_available(self) -> None:
-        """Should return trace headers when tracing is available."""
-        with (
-            patch("secondbrain.utils.connections.TRACE_CONTEXT_AVAILABLE", True),
-            patch("secondbrain.utils.connections.inject_trace_context") as mock_inject,
-        ):
-            mock_inject.return_value = {
-                "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
-            }
-
-            result = get_request_trace_headers()
-
-            mock_inject.assert_called_once_with({})
-            assert "traceparent" in result
-
-    def test_get_headers_when_tracing_unavailable(self) -> None:
-        """Should return empty dict when tracing is unavailable."""
-        with patch("secondbrain.utils.connections.TRACE_CONTEXT_AVAILABLE", False):
-            result = get_request_trace_headers()
-
-            assert result == {}

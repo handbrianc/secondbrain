@@ -4,7 +4,6 @@ This file specifically targets the 203 missing lines in src/secondbrain/document
 to achieve 90%+ coverage.
 """
 
-import asyncio
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -144,8 +143,16 @@ class TestCoverageGapsStoreEmbeddingBatch:
 class TestCoverageGapsProcessParallel:
     """Tests for process_parallel_with_progress (lines 1427-1530)."""
 
-    def test_process_parallel_handles_failure(self, tmp_path: Path) -> None:
+    @patch("secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config")
+    def test_process_parallel_handles_failure(
+        self, mock_factory: MagicMock, tmp_path: Path
+    ) -> None:
         """Test parallel processing handles failures gracefully."""
+        mock_embedding = MagicMock()
+        mock_embedding.generate_batch.return_value = [[0.1] * 384]
+        mock_embedding.generate.return_value = [0.1] * 384
+        mock_factory.return_value = mock_embedding
+
         ingestor = DocumentIngestor(chunk_size=512, chunk_overlap=50)
         ingestor.verbose = True
 
@@ -168,8 +175,16 @@ class TestCoverageGapsProcessParallel:
 class TestCoverageGapsThreadPool:
     """Tests for thread pool processing (lines 1551-1597)."""
 
-    def test_thread_process_with_callback(self, tmp_path: Path) -> None:
+    @patch("secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config")
+    def test_thread_process_with_callback(
+        self, mock_factory: MagicMock, tmp_path: Path
+    ) -> None:
         """Test threading with progress callback."""
+        mock_embedding = MagicMock()
+        mock_embedding.generate_batch.return_value = [[0.1] * 384]
+        mock_embedding.generate.return_value = [0.1] * 384
+        mock_factory.return_value = mock_embedding
+
         ingestor = DocumentIngestor(chunk_size=512, chunk_overlap=50)
 
         # Create test file
@@ -183,10 +198,13 @@ class TestCoverageGapsThreadPool:
 
         ingestor.progress_callback = progress_callback
 
-        # Mock extraction and storage
-        with patch.object(ingestor, "_extract_text", return_value=[]):
-            with patch.object(ingestor, "_build_documents_with_embeddings", return_value=[]):
-                result = ingestor.ingest(str(test_file))
+        # Mock extraction and storage, plus parallel processing
+        with (
+            patch.object(ingestor, "_extract_text", return_value=[]),
+            patch.object(ingestor, "_build_documents_with_embeddings", return_value=[]),
+            patch.object(ingestor, "_process_parallel_with_progress", return_value=(1, 0)),
+        ):
+            result = ingestor.ingest(str(test_file))
 
         assert result["success"] >= 0
 
@@ -309,8 +327,16 @@ class TestCoverageGapsAsync:
         assert result == {}
 
     @pytest.mark.asyncio
-    async def test_async_ingest_with_streaming_disabled(self, tmp_path: Path) -> None:
+    @patch("secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config")
+    async def test_async_ingest_with_streaming_disabled(
+        self, mock_factory: MagicMock, tmp_path: Path
+    ) -> None:
         """Test async ingestion with streaming disabled."""
+        mock_embedding = MagicMock()
+        mock_embedding.generate_batch_async.return_value = [[0.1] * 384]
+        mock_embedding.generate_async.return_value = [0.1] * 384
+        mock_factory.return_value = mock_embedding
+
         ingestor = AsyncDocumentIngestor(chunk_size=512, chunk_overlap=50)
 
         # Create test file

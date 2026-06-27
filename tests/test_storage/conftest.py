@@ -1,10 +1,10 @@
 """Shared fixtures for storage tests."""
 
+import os
 from collections.abc import Generator
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-import os
 import pytest
 
 from secondbrain.storage import VectorStorage

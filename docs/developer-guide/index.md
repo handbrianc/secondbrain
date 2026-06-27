@@ -117,8 +117,9 @@ ruff check . && ruff format . && mypy .
 ### Running the Application
 
 ```bash
-# Development mode
-python -m secondbrain --help
+# Development mode - CLI is installed via `pip install -e .`
+# NOTE: `python -m secondbrain` does NOT work (no __main__.py exists)
+secondbrain --help
 
 # With debug logging
 SECONDBRAIN_LOG_LEVEL=DEBUG secondbrain ingest ./docs/

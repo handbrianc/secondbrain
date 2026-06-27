@@ -16,11 +16,7 @@ class ChunkInfo(TypedDict):
     chunk_text: str
 
 
-class SearchResult(TypedDict):
+class SearchResult(ChunkInfo, total=False):
     """Typed dictionary for search results."""
 
-    chunk_id: str
-    source_file: str
-    page_number: int | None
-    chunk_text: str
     score: float

@@ -58,7 +58,7 @@ class TestIngestCoresValidation:
         test_file.write_text("hello world")
         test_dir = str(tmp_path)
 
-        # Mock DocumentIngestor to bypass costly docling/SentenceTransformer init.
+        # Mock DocumentIngestor to bypass costly docling/embedding initialization.
         # All three invoke cases below exercise CLI arg-validation and warning-logic
         # only — none depend on actual document ingestion, so a bare mock suffices.
         mock_ingestor = MagicMock()

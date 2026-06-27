@@ -26,7 +26,7 @@ console = Console()
 
 async def ingest_file_async(ingestor: DocumentIngestor, filepath: Path) -> None:
     """Asynchronously ingest a single file."""
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     await loop.run_in_executor(None, lambda: ingestor.ingest(str(filepath)))
 
 
@@ -34,7 +34,7 @@ async def search_async(
     searcher: Searcher, query: str, top_k: int = 5
 ) -> list[dict[str, Any]]:
     """Asynchronously perform a search."""
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, lambda: searcher.search(query, top_k))
 
 

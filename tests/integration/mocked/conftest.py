@@ -9,13 +9,13 @@ from typing import TYPE_CHECKING, Any
 import pytest
 from pymongo import MongoClient
 
-from secondbrain.embedding import LocalEmbeddingGenerator
+from secondbrain.embedding.mock import MockEmbeddingGenerator
 from secondbrain.storage import VectorStorage
 
 if TYPE_CHECKING:
     pass  # type: ignore[unused-ignore]
 
-EMBEDDING_DIMENSIONS = 768
+EMBEDDING_DIMENSIONS = 384
 
 
 @pytest.fixture
@@ -54,21 +54,19 @@ def sample_embedding() -> list[float]:
 @pytest.fixture
 def mock_embedder(sample_embedding: list[float]) -> Any:
     """Create a mock embedding generator that returns predictable embeddings."""
-    original_gen = LocalEmbeddingGenerator.generate
+    mock_gen = MockEmbeddingGenerator(model_name="mock-384", dimension=EMBEDDING_DIMENSIONS)
 
-    def mock_generate(self: LocalEmbeddingGenerator, text: str) -> list[float]:
-        text_hash = hash(text.strip().lower())
-        import random
+    def mock_generate(self: Any, text: str) -> list[float]:
+        return sample_embedding
 
-        random.seed(text_hash)
-        return [random.random() for _ in range(EMBEDDING_DIMENSIONS)]
-
-    LocalEmbeddingGenerator.generate = mock_generate
+    # Patch MockEmbeddingGenerator.generate at the class level for duration of test
+    original_generate = MockEmbeddingGenerator.generate
+    MockEmbeddingGenerator.generate = mock_generate  # type: ignore[method-assign]
 
     try:
-        yield mock_generate
+        yield mock_gen
     finally:
-        LocalEmbeddingGenerator.generate = original_gen
+        MockEmbeddingGenerator.generate = original_generate  # type: ignore[method-assign]
 
 
 @pytest.fixture
@@ -106,17 +104,17 @@ def ingestor_with_mock_embedder(sample_embedding: list[float]) -> Any:
 
     ingestor = DocumentIngestor(chunk_size=100, chunk_overlap=10, verbose=False)
 
-    original_gen = LocalEmbeddingGenerator.generate
+    original_generate = MockEmbeddingGenerator.generate
 
-    def mock_generate(self: LocalEmbeddingGenerator, text: str) -> list[float]:
+    def mock_generate(self: Any, text: str) -> list[float]:
         return sample_embedding
 
-    LocalEmbeddingGenerator.generate = mock_generate
+    MockEmbeddingGenerator.generate = mock_generate  # type: ignore[method-assign]
 
     try:
         yield ingestor
     finally:
-        LocalEmbeddingGenerator.generate = original_gen
+        MockEmbeddingGenerator.generate = original_generate  # type: ignore[method-assign]
 
 
 @pytest.fixture
@@ -129,16 +127,14 @@ def storage_with_index(test_collection: Any) -> Any:
     original_mongo_db = os.environ.get("SECONDBRAIN_MONGO_DB")
     original_mongo_collection = os.environ.get("SECONDBRAIN_MONGO_COLLECTION")
     original_llm_host = os.environ.get("SECONDBRAIN_OPENAI_BASE_URL")
-    original_embedding_model = os.environ.get("SECONDBRAIN_LOCAL_EMBEDDING_MODEL")
 
     # Use Config to get test defaults
     get_config.cache_clear()
     cfg = Config()
-    
+
     os.environ["SECONDBRAIN_MONGO_URI"] = cfg.mongo_uri
     os.environ["SECONDBRAIN_MONGO_DB"] = cfg.mongo_db
     os.environ["SECONDBRAIN_MONGO_COLLECTION"] = "test_embeddings"
-    os.environ["SECONDBRAIN_LOCAL_EMBEDDING_MODEL"] = "all-MiniLM-L6-v2"
 
     get_config.cache_clear()
 
@@ -172,10 +168,10 @@ def storage_with_index(test_collection: Any) -> Any:
         elif "SECONDBRAIN_MONGO_COLLECTION" in os.environ:
             del os.environ["SECONDBRAIN_MONGO_COLLECTION"]
 
-        if original_embedding_model is not None:
-            os.environ["SECONDBRAIN_LOCAL_EMBEDDING_MODEL"] = original_embedding_model
-        elif "SECONDBRAIN_LOCAL_EMBEDDING_MODEL" in os.environ:
-            del os.environ["SECONDBRAIN_LOCAL_EMBEDDING_MODEL"]
+        if original_llm_host is not None:
+            os.environ["SECONDBRAIN_OPENAI_BASE_URL"] = original_llm_host
+        elif "SECONDBRAIN_OPENAI_BASE_URL" in os.environ:
+            del os.environ["SECONDBRAIN_OPENAI_BASE_URL"]
 
         # Clear and re-cache config to pick up restored env vars
         get_config.cache_clear()
@@ -186,16 +182,14 @@ def search_workflow(storage_with_index: Any, sample_embedding: list[float]) -> A
     """Create a Searcher-like workflow for testing search operations."""
     from secondbrain.search import Searcher
 
-    original_gen = LocalEmbeddingGenerator.generate
+    mock_gen = MockEmbeddingGenerator(model_name="mock-384", dimension=EMBEDDING_DIMENSIONS)
 
-    def mock_generate(self: LocalEmbeddingGenerator, text: str) -> list[float]:
-        hash_val = hash(text.lower())
-        import random
+    original_generate = MockEmbeddingGenerator.generate
 
-        random.seed(hash_val % (2**32))
-        return [random.random() for _ in range(EMBEDDING_DIMENSIONS)]
+    def mock_generate(self: Any, text: str) -> list[float]:
+        return sample_embedding
 
-    LocalEmbeddingGenerator.generate = mock_generate
+    MockEmbeddingGenerator.generate = mock_generate  # type: ignore[method-assign]
 
     storage_with_index.ensure_index()
 
@@ -203,7 +197,7 @@ def search_workflow(storage_with_index: Any, sample_embedding: list[float]) -> A
         yield {
             "searcher": Searcher(verbose=False),
             "storage": storage_with_index,
-            "embedding_gen": LocalEmbeddingGenerator(),
+            "embedding_gen": mock_gen,
         }
     finally:
-        LocalEmbeddingGenerator.generate = original_gen
+        MockEmbeddingGenerator.generate = original_generate  # type: ignore[method-assign]

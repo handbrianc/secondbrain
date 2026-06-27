@@ -4,6 +4,7 @@ Provides AnthropicLLMProvider class that implements the LocalLLMProvider protoco
 for using Anthropic Claude as an LLM backend.
 """
 
+import contextlib
 import os
 
 import httpx
@@ -269,8 +270,36 @@ class AnthropicLLMProvider(LocalLLMProvider):
             return full_content
 
         except httpx.ConnectError as e:
-            raise ServiceUnavailableError(f"Anthropic API unreachable: {e}") from e
+            raise ServiceUnavailableError(f"Async streaming failed: {e}") from e
         except APIError as e:
-            raise ServiceUnavailableError(f"Anthropic API error: {e}") from e
+            raise ServiceUnavailableError(f"Async streaming error: {e}") from e
         except Exception as e:
             raise RuntimeError(f"Async streaming failed: {e}") from e
+
+    def close(self) -> None:
+        """Close clients and release resources.
+
+        Note: For proper async cleanup in async context, use aclose() instead.
+        This method closes the sync httpx client but does not close the async
+        client — the async client must be closed with aclose() to avoid
+        RuntimeWarnings from unawaited coroutines.
+        """
+        if self._client is not None:
+            with contextlib.suppress(Exception):
+                self._client.close()
+            self._client = None  # type: ignore[assignment]
+
+    async def aclose(self) -> None:
+        """Asynchronously close both sync and async HTTP clients.
+
+        Releases all held resources including async connection pools to prevent
+        resource leaks and RuntimeWarnings from unawaited coroutines.
+        """
+        if self._client is not None:
+            with contextlib.suppress(Exception):
+                self._client.close()
+            self._client = None  # type: ignore[assignment]
+        if self._async_client is not None:
+            await self._async_client.close()  # type: ignore[attr-defined]
+            self._async_client = None  # type: ignore[assignment]
+        self._api_key = None

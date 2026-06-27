@@ -3,11 +3,10 @@ import json
 import logging
 import os
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from rich.logging import RichHandler
-
-from unittest.mock import patch
 
 from secondbrain.logging import (
     HealthStatus,
@@ -61,7 +60,7 @@ class TestHealthStatus:
             "status": "healthy",
             "timestamp": "2024-01-01T00:00:00+00:00",
             "uptime": 3600.0,
-            "services": {"sentence-transformers": True, "mongodb": True},
+            "services": {"mongodb": True},
             "check_duration_seconds": 0.5,
         }
 

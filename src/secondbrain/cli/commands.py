@@ -24,6 +24,7 @@ import click
 from rich.console import Console
 
 from secondbrain.config import config
+from secondbrain.constants import MAX_LIST_LIMIT
 from secondbrain.exceptions import (
     CLIValidationError,
     ServiceUnavailableError,
@@ -47,8 +48,6 @@ from .errors import handle_cli_errors
 
 console = Console(markup=True)
 logger = logging.getLogger(__name__)
-
-MAX_LIST_LIMIT = 100000
 
 
 @handle_cli_errors
@@ -488,11 +487,13 @@ def chat(
         return
 
     if delete_session:
-        confirm = console.input(f"Are you sure you want to delete session '{delete_session}'? [y/N]: ")
-        if confirm.lower() != 'y':
+        confirm = console.input(
+            f"Are you sure you want to delete session '{delete_session}'? [y/N]: "
+        )
+        if confirm.lower() != "y":
             console.print("[dim]Deletion cancelled.[/dim]")
             return
-            
+
         with ConversationStorage() as storage:
             deleted = storage.delete_session(delete_session)
         if deleted:
@@ -513,7 +514,7 @@ def chat(
                     f"[red]✗ LLM provider ({cfg.llm_provider}) health check failed[/red]"
                 )
         except Exception as e:
-            console.print(f"[red]✗ LLM provider error: {str(e)}[/red]")
+            console.print(f"[red]✗ LLM provider error: {e!s}[/red]")
         return
 
     if history:
@@ -652,7 +653,9 @@ def _interactive_chat(
             session_obj = ConversationSession.load(session, storage)
             if session_obj is None:
                 session_obj = ConversationSession.create(session, storage)
-                console.print(f"[dim]Created new session: {session_obj.session_id}[/dim]")
+                console.print(
+                    f"[dim]Created new session: {session_obj.session_id}[/dim]"
+                )
             elif not session_obj.is_empty:
                 console.print(
                     f"[dim]Resuming session with {session_obj.message_count} messages[/dim]"

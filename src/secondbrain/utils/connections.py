@@ -2,7 +2,6 @@
 
 import logging
 import threading
-import time
 from abc import abstractmethod
 from collections.abc import Callable
 from time import monotonic
@@ -33,12 +32,9 @@ __all__ = [
     "CircuitBreaker",
     "CircuitBreakerConfig",
     "CircuitBreakerError",
-    "RateLimitedRetry",
     "ServiceUnavailableError",
     "ValidatableService",
     "ensure_service_available",
-    "get_request_trace_headers",
-    "inject_trace_headers",
 ]
 
 
@@ -55,123 +51,6 @@ def ensure_service_available(service_name: str, validator: Callable[[], bool]) -
     """
     if not validator():
         raise ServiceUnavailableError(service_name)
-
-
-class RateLimitedRetry:
-    """Retry wrapper with exponential backoff and rate limiting.
-
-    This class provides controlled retry behavior with exponential backoff,
-    maximum retry limits, and rate limiting to avoid overwhelming services.
-
-    Use this to wrap validation calls that may transiently fail:
-        retry = RateLimitedRetry(max_retries=3, base_delay=0.5, max_delay=5.0)
-        is_valid = retry.call(validator_function)
-    """
-
-    def __init__(
-        self,
-        max_retries: int = 3,
-        base_delay: float = 0.5,
-        max_delay: float = 5.0,
-        exponential_base: float = 2.0,
-    ) -> None:
-        """Initialize retry configuration.
-
-        Args:
-            max_retries: Maximum number of retry attempts.
-            base_delay: Initial delay between retries in seconds.
-            max_delay: Maximum delay between retries in seconds.
-            exponential_base: Base for exponential backoff calculation.
-        """
-        self.max_retries = max_retries
-        self.base_delay = base_delay
-        self.max_delay = max_delay
-        self.exponential_base = exponential_base
-        self._lock = threading.Lock()
-        self._retry_count = 0
-        self._last_retry_time = 0.0
-
-    def _calculate_delay(self, attempt: int) -> float:
-        """Calculate delay with exponential backoff.
-
-        Args:
-            attempt: Current attempt number (0-indexed).
-
-        Returns
-        -------
-            Delay in seconds.
-        """
-        delay = min(
-            self.base_delay * (self.exponential_base**attempt),
-            self.max_delay,
-        )
-        # Add small jitter to prevent thundering herd
-        return delay * (0.9 + 0.2 * (attempt % 5))  # 19% jitter
-
-    def _can_retry(self) -> bool:
-        """Check if another retry is allowed.
-
-        Returns
-        -------
-            True if retry allowed, False otherwise.
-        """
-        with self._lock:
-            if self._retry_count >= self.max_retries:
-                return False
-            self._retry_count += 1
-            return True
-
-    def _wait_before_retry(self) -> None:
-        """Wait before next retry with rate limiting."""
-        current_time = monotonic()
-        elapsed = current_time - self._last_retry_time
-
-        if elapsed < self.base_delay:
-            time.sleep(self.base_delay - elapsed)
-
-        self._last_retry_time = monotonic()
-
-    def call(self, func: Callable[[], bool]) -> bool:
-        """Call function with retry and rate limiting.
-
-        Args:
-            func: Function to call, should return bool.
-
-        Returns
-        -------
-            Result of function call, False if all retries exhausted.
-        """
-        if not self._can_retry():
-            return func()
-
-        last_result = False
-        last_error: Exception | None = None
-
-        for attempt in range(self.max_retries + 1):
-            try:
-                last_result = func()
-                if last_result:
-                    return True
-            except Exception as e:
-                logger.debug(
-                    "Attempt %s failed: %s: %s", attempt + 1, type(e).__name__, e
-                )
-                last_error = e
-
-            if not self._can_retry():
-                break
-
-            self._wait_before_retry()
-
-        if last_error:
-            logger.debug("All retries exhausted: %s", last_error)
-
-        return last_result
-
-    def reset(self) -> None:
-        """Reset retry count."""
-        with self._lock:
-            self._retry_count = 0
 
 
 class ValidatableService:
@@ -386,55 +265,3 @@ class ValidatableService:
                 self._circuit_breaker.record_failure()
 
         return result
-
-
-def inject_trace_headers(headers: dict[str, str]) -> dict[str, str]:
-    """Inject trace context headers into HTTP request headers.
-
-    Adds W3C traceparent (and optionally tracestate) headers to propagate
-    trace context across service boundaries.
-
-    Args:
-        headers: Dictionary of HTTP headers to inject trace context into.
-
-    Returns
-    -------
-        Updated headers dictionary with trace context injected.
-
-    Example:
-        headers = {"Content-Type": "application/json"}
-        headers = inject_trace_headers(headers)
-        # headers now contains traceparent for distributed tracing
-    """
-    if not TRACE_CONTEXT_AVAILABLE or inject_trace_context is None:
-        return headers.copy()
-
-    return inject_trace_context(headers)
-
-
-def get_request_trace_headers() -> dict[str, str]:
-    """Get trace context headers for outbound HTTP requests.
-
-    Convenience function to get trace headers ready for adding to requests.
-
-    Returns
-    -------
-        Dictionary containing traceparent (and optionally tracestate) headers.
-
-    Example:
-        # Using with requests library
-        import requests
-        headers = get_request_trace_headers()
-        response = requests.get(url, headers=headers)
-
-        # Using with aiohttp
-        import aiohttp
-        headers = get_request_trace_headers()
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=headers) as resp:
-                ...
-    """
-    if not TRACE_CONTEXT_AVAILABLE or inject_trace_context is None:
-        return {}
-
-    return inject_trace_context({})

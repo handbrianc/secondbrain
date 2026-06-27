@@ -7,7 +7,6 @@ Consolidated from:
 """
 
 import inspect
-import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -18,7 +17,6 @@ from secondbrain.document import DocumentIngestor, _extract_and_chunk_file
 
 def _slow_task(x):
     """Module-level function for multiprocessing (must be picklable)."""
-    time.sleep(0.5)
     return x
 
 

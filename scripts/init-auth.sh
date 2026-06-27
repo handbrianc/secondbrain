@@ -14,7 +14,7 @@ mongosh --eval "
   try {
     db.createUser({
       user: 'admin',
-      pwd: 'supersecretpassword123',
+      pwd: '${MONGO_INITDB_ROOT_PASSWORD}',
       roles: [{ role: 'root', db: 'admin' }]
     });
     print('User admin created successfully');

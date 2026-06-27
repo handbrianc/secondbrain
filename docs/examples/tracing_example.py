@@ -11,6 +11,7 @@ Benefits of tracing:
 - Error tracking and debugging
 """
 
+import importlib.metadata
 import time
 
 from opentelemetry import trace
@@ -25,7 +26,7 @@ def setup_tracing() -> trace.Tracer:
     resource = Resource.create(
         {
             "service.name": "secondbrain",
-            "service.version": "0.3.0",
+            "service.version": importlib.metadata.version("secondbrain"),
         }
     )
 

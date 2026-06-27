@@ -7,9 +7,58 @@ They represent concepts like chunk IDs, embedding vectors, and file paths.
 from dataclasses import dataclass
 from typing import NewType
 
+from secondbrain.config import config
+
 # Type aliases for better type safety
 ChunkId = NewType("ChunkId", str)
 EmbeddingVector = NewType("EmbeddingVector", list[float])
+
+
+def _validate_embedding_vector(vec: list[float], *, _caller: str = "") -> list[float]:
+    """Validate embedding vector dimensions against config.
+
+    Args:
+        vec: The embedding vector values.
+        _caller: Optional caller context for error messages.
+
+    Returns:
+        The validated vector (unchanged if valid).
+
+    Raises:
+        ValueError: If vector is empty or dimension count doesn't match config.
+    """
+    if not vec:
+        raise ValueError("Embedding vector cannot be empty")
+    expected_dims = config().embedding_dimensions
+    actual_dims = len(vec)
+    if actual_dims != expected_dims:
+        raise ValueError(
+            f"Embedding vector dimension mismatch: got {actual_dims}, "
+            f"expected {expected_dims} (configured embedding_dimensions). "
+            f"{_caller}"
+        )
+    return vec
+
+
+def make_embedding_vector(values: list[float]) -> EmbeddingVector:
+    """Create a validated EmbeddingVector from raw float values.
+
+    Validates that the vector length matches config.embedding_dimensions.
+
+    Args:
+        values: Raw float values for the embedding vector.
+
+    Returns:
+        A validated EmbeddingVector.
+
+    Raises:
+        ValueError: If dimensions don't match config.embedding_dimensions or
+            vector is empty.
+    """
+    valid = _validate_embedding_vector(list(values), _caller="make_embedding_vector()")
+    return EmbeddingVector(valid)
+
+
 SourcePath = NewType("SourcePath", str)
 
 

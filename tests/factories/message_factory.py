@@ -2,8 +2,7 @@
 
 from datetime import datetime
 
-from factory import Faker, Sequence, Factory, LazyFunction
-from typing import Any
+from factory import Factory, Faker, LazyFunction
 
 
 class MessageFactory(Factory):

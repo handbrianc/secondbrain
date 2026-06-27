@@ -14,8 +14,7 @@ class TestAsyncValidation:
     def storage(self):
         """Create a VectorStorage instance with mocked config."""
         import secondbrain.storage.storage as storage_module
-        from secondbrain.config import Config
-        
+
         _mock_config = MagicMock()
         _mock_config.mongo_uri = "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
         _mock_config.mongo_db = "secondbrain_test"
@@ -28,7 +27,7 @@ class TestAsyncValidation:
 
         original_config = storage_module.config
         storage_module.config = lambda: _mock_config
-        
+
         try:
             storage = VectorStorage()
             yield storage

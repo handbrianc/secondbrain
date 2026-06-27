@@ -261,7 +261,7 @@ class TestDisplayHealthStatus:
             "status": "healthy",
             "timestamp": "2024-01-01T00:00:00+00:00",
             "uptime": 1000.0,
-            "services": {"mongodb": True, "sentence-transformers": True},
+            "services": {"mongodb": True},
             "check_duration_seconds": 0.123456,
         }
 
@@ -280,7 +280,7 @@ class TestDisplayHealthStatus:
             "status": "healthy",
             "timestamp": "2024-01-01T00:00:00+00:00",
             "uptime": 5000.0,
-            "services": {"mongodb": True, "sentence-transformers": True, "cache": True},
+            "services": {"mongodb": True, "cache": True},
             "check_duration_seconds": 0.05,
         }
 
@@ -301,7 +301,6 @@ class TestDisplayHealthStatus:
             "uptime": 5000.0,
             "services": {
                 "mongodb": True,
-                "sentence-transformers": False,
                 "cache": False,
             },
             "check_duration_seconds": 0.2,

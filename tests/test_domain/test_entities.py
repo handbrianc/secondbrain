@@ -6,8 +6,14 @@ from datetime import datetime
 
 import pytest
 
+from secondbrain.config import config
 from secondbrain.domain.entities import DocumentChunk, DocumentMetadata
-from secondbrain.domain.value_objects import ChunkId, SourcePath
+from secondbrain.domain.value_objects import ChunkId, EmbeddingVector, SourcePath
+
+
+def _test_embedding() -> EmbeddingVector:
+    """Return a test embedding vector sized to match the configured embedding dimensions."""
+    return EmbeddingVector([0.1] * config().embedding_dimensions)
 
 
 class TestDocumentMetadataValidation:
@@ -183,7 +189,7 @@ class TestDocumentChunkEmbeddingStatus:
             chunk_id=ChunkId("test-id"),
             text="test text",
             metadata=sample_metadata,
-            embedding=EmbeddingVector([0.1, 0.2, 0.3]),
+            embedding=_test_embedding(),
         )
         assert chunk.has_embedding() is True
 
@@ -201,7 +207,7 @@ class TestDocumentChunkEmbeddingStatus:
             chunk_id=ChunkId("test-id"),
             text="test text",
             metadata=sample_metadata,
-            embedding=EmbeddingVector([0.1] * 384),
+            embedding=_test_embedding(),
         )
         assert chunk_with_embedding.has_embedding()
 
@@ -225,7 +231,7 @@ class TestDocumentChunkToDict:
             text="test text content",
             metadata=sample_metadata,
             page_number=1,
-            embedding=EmbeddingVector([0.1, 0.2, 0.3]),
+            embedding=_test_embedding(),
         )
         result = chunk.to_dict()
 
@@ -254,7 +260,7 @@ class TestDocumentChunkToDict:
     ) -> None:
         from secondbrain.domain.value_objects import EmbeddingVector
 
-        embedding = EmbeddingVector([0.1, 0.2, 0.3, 0.4, 0.5])
+        embedding = EmbeddingVector(_test_embedding())
         chunk = DocumentChunk(
             chunk_id=ChunkId("test-id"),
             text="test",

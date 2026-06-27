@@ -115,7 +115,7 @@ MONGODB_INITDB_ROOT_PASSWORD=your_strong_password
 
 # MongoDB Connection (must match credentials above)
 SECONDBRAIN_MONGO_URI=mongodb://your_username:your_strong_password@localhost:27017
-SECONDBRAIN_LOCAL_EMBEDDING_MODEL=all-MiniLM-L6-v2
+SECONDBRAIN_EMBEDDING_MODEL=all-MiniLM-L6-v2
 SECONDBRAIN_CHUNK_SIZE=4096
 
 # Optional performance tuning

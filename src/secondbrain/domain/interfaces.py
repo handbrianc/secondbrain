@@ -53,7 +53,7 @@ class DocumentConverter(Protocol):
 class EmbeddingGenerator(Protocol):
     """Protocol for generating text embeddings.
 
-    Implementations: SentenceTransformersEmbedder, etc.
+    Implementations: OpenAIEmbeddingProvider, etc.
     """
 
     def generate(self, text: str) -> list[float]:
