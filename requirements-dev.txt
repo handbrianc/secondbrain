@@ -55,7 +55,7 @@ flask>=3.0.0
 
 # PDF/document creation for tests
 fpdf2>=2.7.0
-reportlab>=4.5.1
+reportlab>=5.0.0
 python-docx>=1.0.0
 
 # Security patches (pinned versions)
