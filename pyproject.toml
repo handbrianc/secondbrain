@@ -85,7 +85,7 @@ dev = [
     "idna>=3.18",  # International domains - URL handling
     "wheel>=0.45.0",  # Binary wheels - package distribution
     "fpdf2>=2.7.0",  # PDF generation - document export
-    "reportlab>=4.5.1",  # PDF library - complex document rendering
+    "reportlab>=5.0.0",  # PDF library - complex document rendering
     "python-docx>=1.0.0",  # Word documents - DOCX parsing
     "setuptools>=60.0.0",  # Build tooling - compatible with torch 2.12
 ]
