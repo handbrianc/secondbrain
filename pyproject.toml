@@ -92,7 +92,7 @@ dev = [
 
 qualitative = [
     "llama-cpp-python>=0.2.0",  # Local LLM - CPU inference support
-    "transformers>=5.9.0",  # HuggingFace - model loading
+    "transformers>=5.12.1",  # HuggingFace - model loading
     "accelerate>=0.25.0",  # Model optimization - GPU/CPU distribution
 ]
 
