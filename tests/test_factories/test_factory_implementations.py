@@ -3,7 +3,13 @@
 
 from datetime import datetime
 
+from secondbrain.config import config
 from secondbrain.domain.value_objects import ChunkId, EmbeddingVector
+
+
+def _expected_dims() -> int:
+    """Return the embedding dimensions from config."""
+    return config().embedding_dimensions
 
 
 class TestDocumentMetadataFactory:
@@ -48,9 +54,8 @@ class TestDocumentChunkFactory:
         assert chunk.chunk_id is not None
         assert chunk.text is not None and len(chunk.text) > 0
         assert chunk.metadata is not None
-        # DocumentChunkFactory sets default embedding to [0.1] * 384
         assert chunk.embedding is not None
-        assert len(chunk.embedding) == 384
+        assert len(chunk.embedding) == _expected_dims()
         assert all(v == 0.1 for v in chunk.embedding)
 
     def test_factory_with_custom_id(self, chunk_factory):
@@ -67,7 +72,7 @@ class TestDocumentChunkFactory:
 
     def test_factory_with_embedding(self, chunk_factory):
         """Test factory with custom embedding."""
-        custom_embedding = EmbeddingVector([0.1] * 384)
+        custom_embedding = EmbeddingVector([0.1] * _expected_dims())
         chunk = chunk_factory.create(embedding=custom_embedding)
 
         assert chunk.embedding == custom_embedding
@@ -92,10 +97,9 @@ class TestChunkFactory:
 
     def test_chunk_factory_default_embedding(self, chunk_factory):
         """Test that ChunkFactory creates chunks with default embedding."""
-        # ChunkFactory sets default embedding to [0.1] * 384 as per requirements
         chunk = chunk_factory.create()
         assert chunk.embedding is not None
-        assert len(chunk.embedding) == 384
+        assert len(chunk.embedding) == _expected_dims()
         assert all(v == 0.1 for v in chunk.embedding)
 
     def test_chunk_factory_with_document_id(self, chunk_factory):

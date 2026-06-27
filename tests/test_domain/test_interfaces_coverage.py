@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from secondbrain.config import config
 from secondbrain.domain.entities import (
     ChunkId,
     DocumentChunk,
@@ -17,6 +18,11 @@ from secondbrain.domain.interfaces import (
     EmbeddingGenerator,
     VectorStore,
 )
+
+
+def _test_embedding() -> list[float]:
+    """Return a test embedding vector sized to match the configured embedding dimensions."""
+    return [0.1] * config().embedding_dimensions
 
 
 class TestDocumentConverterProtocol:
@@ -286,12 +292,12 @@ class TestDocumentChunkCreation:
             text="Test content",
             metadata=metadata,
             page_number=1,
-            embedding=[0.1] * 384,
+            embedding=_test_embedding(),
         )
 
         assert chunk.chunk_id == "test-id"
         assert chunk.page_number == 1
-        assert chunk.embedding == [0.1] * 384
+        assert chunk.embedding == _test_embedding()
 
     def test_chunk_text_cannot_be_empty(self):
         """Test that empty text raises ValueError."""

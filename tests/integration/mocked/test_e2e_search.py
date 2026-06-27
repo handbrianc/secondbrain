@@ -128,7 +128,7 @@ class TestSearchIntegration:
         """Test that search with custom top_k parameter works correctly."""
         mock_embed = MagicMock()
         mock_embed.validate_connection.return_value = True
-        mock_embed.generate.return_value = [0.1] * 768
+        mock_embed.generate.return_value = [0.1] * 384
         mock_create_from_config.return_value = mock_embed
 
         mock_storage = MagicMock()
@@ -151,7 +151,7 @@ class TestSearchIntegration:
         """Test that search returns empty list when no results found."""
         mock_embed = MagicMock()
         mock_embed.validate_connection.return_value = True
-        mock_embed.generate.return_value = [0.5] * 768
+        mock_embed.generate.return_value = [0.5] * 384
         mock_create_from_config.return_value = mock_embed
 
         mock_storage = MagicMock()

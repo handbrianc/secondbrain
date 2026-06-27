@@ -8,6 +8,12 @@ from secondbrain.domain.value_objects import ChunkId, EmbeddingVector, SourcePat
 from .document_factory import DocumentMetadataFactory
 
 
+def _get_default_embedding() -> list[float]:
+    """Get default embedding vector sized to match config's embedding_dimensions."""
+    from secondbrain.config import config
+    return [0.1] * config().embedding_dimensions
+
+
 class ChunkFactory(Factory):
     """Factory for creating test Chunk (DocumentChunk) objects.
 
@@ -37,7 +43,7 @@ class ChunkFactory(Factory):
     text = Faker("paragraph")
     page_number = Faker("random_int", min=1, max=10)
     metadata = SubFactory(DocumentMetadataFactory)
-    embedding = LazyAttribute(lambda _: EmbeddingVector([0.1] * 384))
+    embedding = LazyAttribute(lambda _: _get_default_embedding())
 
     document_id = Faker("uuid4")
 
