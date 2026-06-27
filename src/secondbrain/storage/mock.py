@@ -10,7 +10,6 @@ import math
 from typing import Any
 
 
-
 class MockVectorStorage:
     """In-memory mock vector storage for testing.
 
@@ -48,7 +47,7 @@ class MockVectorStorage:
         vec2 = vec2[:min_len]
 
         # Calculate dot product
-        dot_product = sum(a * b for a, b in zip(vec1, vec2))
+        dot_product = sum(a * b for a, b in zip(vec1, vec2, strict=False))
 
         # Calculate magnitudes
         mag1 = math.sqrt(sum(a * a for a in vec1))
@@ -228,7 +227,8 @@ class MockVectorStorage:
             Number of chunks deleted.
         """
         to_delete = [
-            cid for cid, chunk in self._chunks.items()
+            cid
+            for cid, chunk in self._chunks.items()
             if chunk.get("source_file") == source_file
         ]
         for cid in to_delete:

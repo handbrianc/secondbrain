@@ -1,10 +1,39 @@
 """Pytest fixtures for document tests."""
 
+import sys
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _stub_docling_modules() -> None:
+    """Stub out docling submodules before any test imports DocumentIngestor.
+
+    DocumentIngestor's __init__ eagerly imports:
+        from docling.datamodel.accelerator_options import ...
+        from docling.datamodel.base_models import ...
+        from docling.datamodel.pipeline_options import ...
+        from docling.document_converter import DocumentConverter, PdfFormatOption
+
+    Without stubbing, each DocumentIngestor() instantiation pays ~1-2s of
+    docling package import overhead even when converter is never used in tests.
+    Stubbing at sys.modules level prevents the actual imports from executing.
+    """
+    stub = MagicMock()
+    for mod_name in (
+        "docling",
+        "docling.datamodel",
+        "docling.datamodel.accelerator_options",
+        "docling.datamodel.base_models",
+        "docling.datamodel.pipeline_options",
+        "docling.document_converter",
+        "docling.document_converter_PdfFormatOption",
+    ):
+        if mod_name not in sys.modules:
+            sys.modules[mod_name] = stub
 
 
 @pytest.fixture

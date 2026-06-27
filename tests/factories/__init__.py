@@ -1,14 +1,14 @@
 """Test factories package for SecondBrain."""
 
-from .document_factory import DocumentChunkFactory, DocumentMetadataFactory
 from .chunk_factory import ChunkFactory
-from .session_factory import SessionFactory
+from .document_factory import DocumentChunkFactory, DocumentMetadataFactory
 from .message_factory import MessageFactory
+from .session_factory import SessionFactory
 
 __all__ = [
+    "ChunkFactory",
     "DocumentChunkFactory",
     "DocumentMetadataFactory",
-    "ChunkFactory",
-    "SessionFactory",
     "MessageFactory",
+    "SessionFactory",
 ]

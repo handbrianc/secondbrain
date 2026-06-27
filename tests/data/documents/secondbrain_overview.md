@@ -29,7 +29,7 @@ SecondBrain supports the following document formats:
 - Multicore processing for fast ingestion
 
 ### Semantic Search
-- Uses sentence-transformers for embeddings
+- Uses OpenAI-compatible embeddings
 - MongoDB vector search with cosine similarity
 - Configurable top-k results and similarity thresholds
 - Returns relevant chunks with source metadata
@@ -48,7 +48,7 @@ SecondBrain supports the following document formats:
    - Progress tracking and error handling
 
 3. **Embedding Engine**
-   - sentence-transformers library
+   - OpenAI-compatible embedding API (configurable)
    - Local model: all-MiniLM-L6-v2 (default)
    - Caching layer for repeated queries
 

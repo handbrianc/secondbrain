@@ -89,11 +89,10 @@ nano .env
 ### Running the Application
 
 ```bash
-# Development mode with auto-reload
-python -m secondbrain --help
-
-# Or use the CLI directly
+# Run the CLI (requires: pip install -e .)
 secondbrain --help
+
+# Note: python -m secondbrain does NOT work — no __main__.py exists
 ```
 
 ### Running Tests

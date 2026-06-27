@@ -69,13 +69,21 @@ class DocumentChunk:
     metadata: DocumentMetadata
     page_number: int | None = None
     embedding: EmbeddingVector | None = field(default=None, repr=False)
+    magnitude: float | None = None
 
     def __post_init__(self) -> None:
-        """Validate chunk text and ID are non-empty."""
+        """Validate chunk text, ID, and embedding dimensions."""
         if not self.text.strip():
             raise ValueError("Chunk text cannot be empty")
         if not self.chunk_id:
             raise ValueError("Chunk ID cannot be empty")
+        if self.embedding is not None:
+            from secondbrain.domain.value_objects import _validate_embedding_vector
+
+            _validate_embedding_vector(
+                self.embedding,
+                _caller=f"DocumentChunk(id={self.chunk_id}).embedding",
+            )
 
     @property
     def char_count(self) -> int:
@@ -107,4 +115,5 @@ class DocumentChunk:
             "file_type": self.metadata.file_type,
             "ingested_at": self.metadata.ingested_at.isoformat(),
             "embedding": self.embedding,
+            "magnitude": self.magnitude,
         }

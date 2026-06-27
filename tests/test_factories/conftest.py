@@ -3,11 +3,11 @@
 import pytest
 
 from tests.factories import (
+    ChunkFactory,
     DocumentChunkFactory,
     DocumentMetadataFactory,
-    ChunkFactory,
-    SessionFactory,
     MessageFactory,
+    SessionFactory,
 )
 
 

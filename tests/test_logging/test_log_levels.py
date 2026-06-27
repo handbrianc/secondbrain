@@ -1,10 +1,7 @@
 """Tests for structured logging ERROR and WARNING levels."""
 import logging
-import json
-import io
-from unittest.mock import patch
-import pytest
-from secondbrain.logging import setup_logging, get_logger
+
+from secondbrain.logging import get_logger, setup_logging
 
 
 class TestStructuredLoggingLevels:
@@ -24,7 +21,7 @@ class TestStructuredLoggingLevels:
         """Logger can log at ERROR level."""
         setup_logging(verbose=False)
         logger = get_logger(__name__)
-        
+
         assert hasattr(logger, 'error')
         assert callable(logger.error)
 
@@ -32,7 +29,7 @@ class TestStructuredLoggingLevels:
         """Logger can log at WARNING level."""
         setup_logging(verbose=False)
         logger = get_logger(__name__)
-        
+
         assert hasattr(logger, 'warning')
         assert callable(logger.warning)
 
@@ -40,19 +37,19 @@ class TestStructuredLoggingLevels:
         """Test ERROR level includes detailed formatting."""
         setup_logging(verbose=False)
         logger = get_logger(__name__)
-        
+
         try:
             raise ValueError("Test error for logging")
         except Exception as e:
             logger.error("Error occurred", exc_info=True)
-        
+
         assert hasattr(logger, 'error')
 
     def test_json_format_includes_required_fields(self):
         """Test JSON format includes all required fields."""
         setup_logging(verbose=False, json_format=True)
         logger = get_logger(__name__)
-        
+
         assert hasattr(logger, 'error')
         assert callable(logger.error)
         assert logger.name is not None
@@ -73,24 +70,24 @@ class TestStructuredLoggingLevels:
 
     def test_file_handler_with_rotation(self):
         """Test file handler with rotation can be configured."""
-        import tempfile
         import os
-        
+        import tempfile
+
         logging.root.handlers = []
-        
+
         with tempfile.TemporaryDirectory() as tmpdir:
             log_file = os.path.join(tmpdir, "test.log")
-            
+
             setup_logging(verbose=False, log_file=log_file)
             logger = get_logger(__name__)
-            
+
             logger.info("Test message 1")
             logger.warning("Test message 2")
-            
+
             logging.shutdown()
-            
+
             assert os.path.exists(log_file), "Log file should be created"
-            
+
             with open(log_file) as f:
                 content = f.read()
             assert len(content) > 0, "Log file should have content"
@@ -99,8 +96,8 @@ class TestStructuredLoggingLevels:
         """Test --verbose flag enables DEBUG level logging."""
         setup_logging(verbose=True)
         logger = get_logger(__name__)
-        
+
         logger.debug("Debug message")
-        
+
         assert logger.getEffectiveLevel() == logging.DEBUG, \
             "Verbose mode should enable DEBUG level"

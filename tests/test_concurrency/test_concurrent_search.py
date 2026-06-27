@@ -35,11 +35,11 @@ class TestConcurrentSearch:
 
         tasks = [mock_search(f"query-{i}") for i in range(10)]
         await asyncio.gather(*tasks)
-        
+
         # Wait for completion signal instead of relying on timing
         try:
             await asyncio.wait_for(completed.wait(), timeout=1.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pass  # Timeout is OK if all tasks completed via gather
 
         assert len(results) == 10
@@ -256,10 +256,10 @@ class TestSearchConsistency:
             """Simulate document deletion with potential race conditions."""
             # Simulate some async work
             await asyncio.sleep(0.001)
-            
+
             # Perform deletion
             mock_collection.delete_one({"doc_id": doc_id})
-            
+
             # Record result
             async with lock:
                 deletion_results.append({"doc_id": doc_id, "success": True})
@@ -267,18 +267,18 @@ class TestSearchConsistency:
         # Create 10 concurrent deletion tasks for different documents
         doc_ids = [f"doc-{i}" for i in range(10)]
         tasks = [delete_document(doc_id) for doc_id in doc_ids]
-        
+
         # Execute all deletions concurrently
         await asyncio.gather(*tasks)
 
         # Verify all deletions completed successfully
         assert len(deletion_results) == 10
         assert all(result["success"] for result in deletion_results)
-        
+
         # Verify each document was deleted exactly once (no duplicates)
         deleted_doc_ids = [result["doc_id"] for result in deletion_results]
         assert len(set(deleted_doc_ids)) == 10  # All unique
-        
+
         # Verify mock was called exactly 10 times
         assert mock_collection.delete_one.call_count == 10
 
@@ -292,16 +292,16 @@ class TestSearchConsistency:
         async def delete_same_document():
             """Multiple deletions of the same document."""
             nonlocal deletion_count
-            
+
             await asyncio.sleep(0.001)
-            
+
             async with lock:
                 deletion_count += 1
                 mock_collection.delete_one({"doc_id": "shared-doc"})
 
         # Create 10 concurrent deletion tasks for the same document
         tasks = [delete_same_document() for _ in range(10)]
-        
+
         # Execute all deletions concurrently
         await asyncio.gather(*tasks)
 

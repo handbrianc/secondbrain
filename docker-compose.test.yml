@@ -1,6 +1,4 @@
 # Test environment docker-compose configuration
-# Memory Requirements: sentence-transformers service requires 4GB minimum
-# The all-MiniLM-L6-v2 model requires ~1.2GB RAM; 4GB provides headroom
 name: secondbrain-test
 
 services:

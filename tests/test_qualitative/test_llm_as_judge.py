@@ -132,6 +132,9 @@ def _evaluate_with_llm(
         (r"calibrat", {"score": 4, "reasoning": "Well calibrated"}),
         (r"quality.*evaluator", {"score": 4, "reasoning": "Good quality response"}),
         (r"sensitivity", {"score_a": 5, "score_b": 2, "difference": 3}),
+        (r"threshold|pass|fail|above|below|met", {"score": 4, "threshold": 3.5, "passed": True}),
+        (r"true|false|yes|no", {"score": 4, "result": True}),
+        (r"-?\d+\.?\d*", {"score": 4, "reasoning": "Mock evaluation response", "confidence": 0.75}),
         (r".*", {"score": 4, "reasoning": "Mock evaluation response", "confidence": 0.75}),
     ]
 

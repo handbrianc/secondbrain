@@ -1,0 +1,16 @@
+{
+  "_metadata": {
+    "description": "Sample user query used to drive prompt assembly for snapshot testing",
+    "pipeline_stage": "input",
+    "created_for": "golden-file snapshot fixtures for RAG pipeline"
+  },
+  "query": "What is Python and how does it relate to machine learning?",
+  "top_k": 5,
+  "chat_session": null,
+  "conversation_history": null,
+  "expected_retrieved_chunk_ids": [
+    "programming_languages.pdf-page-1",
+    "ml_intro.pdf-page-3",
+    "secondbrain_docs.pdf-page-1"
+  ]
+}

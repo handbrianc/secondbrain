@@ -1,6 +1,6 @@
 ## 1. Foundation & Configuration
 
-- [x] 1.1 Fix mypy configuration - Add `[[tool.mypy.overrides]]` for google.*, pymongo, sentence-transformers with follow_imports="skip" and ignore_missing_imports=true
+- [x] 1.1 Fix mypy configuration - Add `[[tool.mypy.overrides]]` for google.*, pymongo, OpenAI-compatible API with follow_imports="skip" and ignore_missing_imports=true
 - [x] 1.2 Create comprehensive configuration documentation - Implement `docs/getting-started/configuration.md` with all 30+ options, validation rules, defaults, and examples
 - [x] 1.3 Create example .env file - Add `.env.example` with all config options commented, validation rules, and usage notes
 - [x] 1.4 Document streaming algorithm - Add detailed "why" comments to `document/__init__.py:400-580` explaining streaming logic, batching, and caching decisions
@@ -67,7 +67,7 @@
 ## 8. Advanced Testing
 
 - [x] 8.1 Create chaos test directory - Set up `tests/test_chaos/` with `__init__.py` and test infrastructure
-- [x] 8.2 Implement service failure tests - Add tests for MongoDB unavailability, sentence-transformers failures, and recovery
+- [x] 8.2 Implement service failure tests - Add tests for MongoDB unavailability, OpenAI-compatible API failures, and recovery
 - [x] 8.3 Implement network partition tests - Add tests for network partition simulation and circuit breaker response
 - [x] 8.4 Create concurrency test directory - Set up `tests/test_concurrency/` with `__init__.py` and fixtures
 - [x] 8.5 Add concurrent ingestion tests - Test parallel document ingestion with race condition detection

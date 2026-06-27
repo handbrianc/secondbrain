@@ -763,7 +763,7 @@ class TestIndexReadyTimeout:
             mock_cursor.skip.return_value = mock_cursor
             mock_cursor.limit.return_value = mock_cursor
             mock_cursor.__iter__.return_value = [mock_chunk]
-            
+
             mock_collection = MagicMock()
             mock_collection.find.return_value = mock_cursor
 

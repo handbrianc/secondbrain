@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 __all__ = ["Searcher"]
 
 # Maximum query length to prevent DoS attacks
-MAX_QUERY_LENGTH = 10000
+MAX_QUERY_LENGTH = 2000
 
 # Pattern to detect potential injection attempts
 INJECTION_PATTERNS = [
@@ -91,8 +91,8 @@ class Searcher:
         """
         self.verbose = verbose
         self._config = config()
-        self.embedding_gen: EmbeddingProvider = EmbeddingProviderFactory.create_from_config(
-            self._config
+        self.embedding_gen: EmbeddingProvider = (
+            EmbeddingProviderFactory.create_from_config(self._config)
         )
         self.storage = VectorStorage()
 

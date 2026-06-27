@@ -80,7 +80,6 @@ The AsyncDocumentIngestor SHALL coexist with DocumentIngestor without conflicts.
 ### Requirement: Async embedding generator support
 The system SHALL provide async embedding generators that work with AsyncDocumentIngestor.
 
-#### Scenario: LocalEmbeddingGenerator has async methods
 - **WHEN** AsyncDocumentIngestor needs embeddings
 - **THEN** it SHALL call generate_async() or generate_batch_async()
 - **AND** these methods SHALL use aiohttp or httpx async client

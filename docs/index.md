@@ -103,7 +103,7 @@ Create a `.env` file:
 
 ```bash
 SECONDBRAIN_MONGO_URI=mongodb://localhost:27017
-SECONDBRAIN_LOCAL_EMBEDDING_MODEL=all-MiniLM-L6-v2
+SECONDBRAIN_EMBEDDING_MODEL=all-MiniLM-L6-v2
 SECONDBRAIN_CHUNK_SIZE=4096
 ```
 
@@ -168,7 +168,7 @@ All settings use `SECONDBRAIN_` prefix:
 | Category | Key Settings |
 |----------|--------------|
 | **MongoDB** | `MONGO_URI`, `MONGO_DB`, `MONGO_COLLECTION` |
-| **Embeddings** | `LOCAL_EMBEDDING_MODEL`, `EMBEDDING_DIMENSIONS`, `CHUNK_SIZE` |
+| **Embeddings** | `EMBEDDING_MODEL`, `EMBEDDING_DIMENSIONS`, `CHUNK_SIZE` |
 | **Performance** | `MAX_WORKERS`, `BATCH_SIZE`, `RATE_LIMIT_ENABLED` |
 | **Resilience** | `CIRCUIT_BREAKER_ENABLED`, `FAILURE_THRESHOLD` |
 | **Logging** | `LOG_LEVEL`, `LOG_FORMAT`, `VERBOSE` |

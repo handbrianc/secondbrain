@@ -1,6 +1,5 @@
 """Tests for SecurityFilter."""
 
-import pytest
 
 from secondbrain.rag.security_filter import SecurityFilter, SecurityViolation
 

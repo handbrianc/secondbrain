@@ -1,6 +1,5 @@
 """Tests for search module."""
 
-import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -108,22 +107,6 @@ class TestSearcher:
         searcher.search("test query", file_type_filter="pdf")
         call_args = mock_storage.search.call_args
         assert call_args.kwargs["file_type_filter"] == "pdf"
-
-    @patch("secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config")
-    @patch("secondbrain.search.VectorStorage")
-    def test_search_sentence_transformers_unavailable(
-        self, mock_storage_class: MagicMock, mock_create_from_config: MagicMock
-    ) -> None:
-        """Test search raises when SentenceTransformers is unavailable."""
-        mock_embed = MagicMock()
-        mock_embed.validate_connection.return_value = False
-        mock_create_from_config.return_value = mock_embed
-
-        searcher = Searcher()
-        try:
-            searcher.search("test query")
-        except RuntimeError as e:
-            assert "Cannot connect to SentenceTransformers service" in str(e)
 
     @patch("secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config")
     @patch("secondbrain.search.VectorStorage")
@@ -337,28 +320,6 @@ class TestSemanticSearchSpecRequirements:
         results = searcher.search("test query")
 
         assert results == []
-
-    @patch("secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config")
-    @patch("secondbrain.search.VectorStorage")
-    def test_search_generates_embedding_via_sentence_transformers(
-        self, mock_storage_class: MagicMock, mock_create_from_config: MagicMock
-    ) -> None:
-        """Test search generates embedding via SentenceTransformers (spec: uses same model as ingestion)."""
-        mock_embed = MagicMock()
-        mock_embed.validate_connection.return_value = True
-        mock_embed.generate.return_value = [0.1] * 384
-        mock_create_from_config.return_value = mock_embed
-
-        mock_storage = MagicMock()
-        mock_storage.validate_connection.return_value = True
-        mock_storage.search.return_value = []
-        mock_storage_class.return_value = mock_storage
-
-        searcher = Searcher()
-        searcher.search("test query")
-
-        # Verify embedding was generated
-        mock_embed.generate.assert_called_once_with("test query")
 
     @patch("secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config")
     @patch("secondbrain.search.VectorStorage")

@@ -8,6 +8,7 @@ Run:
 """
 
 import argparse
+import os
 
 from flask import Flask, jsonify, request
 
@@ -118,7 +119,9 @@ def main() -> None:
     parser.add_argument("--host", default="0.0.0.0")
     args = parser.parse_args()
 
-    app.run(host=args.host, port=args.port, debug=True)
+    app.run(
+        host=args.host, port=args.port, debug=os.environ.get("FLASK_DEBUG", "0") == "1"
+    )
 
 
 if __name__ == "__main__":

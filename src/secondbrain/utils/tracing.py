@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 try:
     from opentelemetry import metrics as otel_metrics
     from opentelemetry import trace as otel_trace
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
     from opentelemetry.sdk.metrics import MeterProvider
     from opentelemetry.sdk.metrics.export import (
         ConsoleMetricExporter,
@@ -24,7 +25,6 @@ try:
     )
     from opentelemetry.sdk.resources import Resource as OTelResource
     from opentelemetry.sdk.trace import TracerProvider as OTelTracerProvider
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
     from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
 
     try:
@@ -176,11 +176,11 @@ def setup_tracing(
     try:
         from opentelemetry.sdk.resources import Resource as OTelResource
         from opentelemetry.sdk.trace import TracerProvider as OTelTracerProvider
-        from opentelemetry.sdk.trace.sampling import TraceIdRatioBased
         from opentelemetry.sdk.trace.export import (
             BatchSpanProcessor,
             ConsoleSpanExporter,
         )
+        from opentelemetry.sdk.trace.sampling import TraceIdRatioBased
 
         otlp_endpoint = os.getenv(
             "SECONDBRAIN_OTEL_EXPORTER_ENDPOINT", "http://localhost:4317"

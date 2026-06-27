@@ -7,6 +7,8 @@ from functools import wraps
 from threading import Lock
 from typing import Any
 
+import numpy as np
+
 logger = logging.getLogger(__name__)
 
 
@@ -44,12 +46,16 @@ class PerfMetrics:
                 return None
 
             durations = self._metrics[name]
+            p50, p95, p99 = np.percentile(durations, [50, 95, 99])
             return {
                 "count": len(durations),
                 "total_seconds": sum(durations),
                 "avg_seconds": sum(durations) / len(durations),
                 "min_seconds": min(durations),
                 "max_seconds": max(durations),
+                "p50_seconds": p50,
+                "p95_seconds": p95,
+                "p99_seconds": p99,
             }
 
     def reset(self, name: str | None = None) -> None:

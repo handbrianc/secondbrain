@@ -1,7 +1,6 @@
 """Tests for RAG interfaces to improve coverage."""
 
 
-import pytest
 
 from secondbrain.rag.interfaces import LocalLLMProvider
 from secondbrain.rag.providers.mock import MockLLMProvider
@@ -25,14 +24,14 @@ class TestLocalLLMProviderProtocol:
     def test_protocol_implemented_by_mock_provider(self):
         """Test that MockLLMProvider implements the protocol."""
         provider = MockLLMProvider()
-        
+
         result = provider.generate("test prompt")
         assert isinstance(result, str)
-        
+
         import asyncio
         result = asyncio.run(provider.agenerate("test prompt"))
         assert isinstance(result, str)
-        
+
         result = provider.health_check()
         assert isinstance(result, bool)
 
@@ -61,7 +60,7 @@ class TestProtocolSignature:
         import inspect
         sig = inspect.signature(LocalLLMProvider.generate)
         params = list(sig.parameters.keys())
-        
+
         assert 'self' in params
         assert 'prompt' in params
         assert 'temperature' in params
@@ -72,7 +71,7 @@ class TestProtocolSignature:
         import inspect
         sig = inspect.signature(LocalLLMProvider.agenerate)
         params = list(sig.parameters.keys())
-        
+
         assert 'self' in params
         assert 'prompt' in params
         assert 'temperature' in params
@@ -83,6 +82,6 @@ class TestProtocolSignature:
         import inspect
         sig = inspect.signature(LocalLLMProvider.health_check)
         params = list(sig.parameters.keys())
-        
+
         assert 'self' in params
         assert len(params) == 1  # Only self

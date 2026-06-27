@@ -377,15 +377,15 @@ class TestFeatureInvention:
     def test_detects_invented_integration_capabilities(self) -> None:
         actual_integrations = {
             "MongoDB",
-            "sentence-transformers",
-            "ollama",
+            "OpenAI",
+            "Anthropic",
             "docling",
         }
 
         claimed_integrations = {
             "MongoDB",
-            "sentence-transformers",
-            "ollama",
+            "OpenAI",
+            "Anthropic",
             "Pinecone",
             "Weaviate",
             "docling",
@@ -451,14 +451,14 @@ class TestGroundedness:
     def test_claim_to_context_mapping_is_accurate(self) -> None:
         context = """
         SecondBrain is a local document intelligence CLI tool.
-        It uses sentence-transformers for embeddings.
+        It uses OpenAI-compatible embeddings.
         MongoDB stores the vector data.
         The system supports PDF, DOCX, and HTML formats.
         """
 
         claims_with_context = [
             ("SecondBrain is a CLI tool", True),
-            ("Uses sentence-transformers", True),
+            ("Uses OpenAI-compatible embeddings", True),
             ("MongoDB stores vectors", True),
             ("Supports PDF format", True),
             ("Supports XML format", False),

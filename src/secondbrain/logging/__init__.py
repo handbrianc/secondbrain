@@ -13,8 +13,6 @@ from typing import TypedDict
 from rich.console import Console
 from rich.logging import RichHandler
 
-from secondbrain.types import ChunkInfo, SearchResult
-
 __all__ = [
     "HealthStatus",
     "get_health_status",
@@ -89,7 +87,6 @@ def setup_logging(
     # Suppress verbose third-party library logs
     logging.getLogger("pymongo").setLevel(logging.WARNING)
     logging.getLogger("motor").setLevel(logging.WARNING)
-    logging.getLogger("sentence_transformers").setLevel(logging.WARNING)
 
     # If handlers are already configured, just update the level
     if logging.root.handlers:

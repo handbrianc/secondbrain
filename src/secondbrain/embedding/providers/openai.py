@@ -6,7 +6,7 @@ protocol for using OpenAI API or OpenAI-compatible endpoints for embedding gener
 
 from __future__ import annotations
 
-import asyncio
+import contextlib
 import os
 from typing import Any
 
@@ -108,18 +108,18 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         except httpx.ConnectError as e:
             raise ServiceUnavailableError(
                 "Embedding",
-                f"OpenAI embeddings API unreachable. "
-                f"Ensure SECONDBRAIN_EMBEDDING_API_KEY is set correctly and network is available"
+                "OpenAI embeddings API unreachable. "
+                "Ensure SECONDBRAIN_EMBEDDING_API_KEY is set correctly and network is available",
             ) from e
         except httpx.TimeoutException as e:
             raise ServiceUnavailableError(
                 "Embedding",
-                f"OpenAI embeddings API request timed out after {self._timeout}s"
+                f"OpenAI embeddings API request timed out after {self._timeout}s",
             ) from e
         except APIError as e:
             raise ServiceUnavailableError(
                 "Embedding",
-                f"OpenAI embeddings API error: {e.message if hasattr(e, 'message') else e}"
+                f"OpenAI embeddings API error: {e.message if hasattr(e, 'message') else e}",
             ) from e
         except Exception as e:
             raise RuntimeError(f"Embedding generation failed: {e}") from e
@@ -161,18 +161,17 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
 
         except httpx.ConnectError as e:
             raise ServiceUnavailableError(
-                "Embedding",
-                f"OpenAI embeddings API unreachable"
+                "Embedding", "OpenAI embeddings API unreachable"
             ) from e
         except httpx.TimeoutException as e:
             raise ServiceUnavailableError(
                 "Embedding",
-                f"OpenAI embeddings API request timed out after {self._timeout}s"
+                f"OpenAI embeddings API request timed out after {self._timeout}s",
             ) from e
         except APIError as e:
             raise ServiceUnavailableError(
                 "Embedding",
-                f"OpenAI embeddings API error: {e.message if hasattr(e, 'message') else e}"
+                f"OpenAI embeddings API error: {e.message if hasattr(e, 'message') else e}",
             ) from e
         except Exception as e:
             raise RuntimeError(f"Batch embedding generation failed: {e}") from e
@@ -200,18 +199,17 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
 
         except httpx.ConnectError as e:
             raise ServiceUnavailableError(
-                "Embedding",
-                f"OpenAI embeddings API unreachable"
+                "Embedding", "OpenAI embeddings API unreachable"
             ) from e
         except httpx.TimeoutException as e:
             raise ServiceUnavailableError(
                 "Embedding",
-                f"OpenAI embeddings API request timed out after {self._timeout}s"
+                f"OpenAI embeddings API request timed out after {self._timeout}s",
             ) from e
         except APIError as e:
             raise ServiceUnavailableError(
                 "Embedding",
-                f"OpenAI embeddings API error: {e.message if hasattr(e, 'message') else e}"
+                f"OpenAI embeddings API error: {e.message if hasattr(e, 'message') else e}",
             ) from e
         except Exception as e:
             raise RuntimeError(f"Async embedding generation failed: {e}") from e
@@ -247,18 +245,17 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
 
         except httpx.ConnectError as e:
             raise ServiceUnavailableError(
-                "Embedding",
-                f"OpenAI embeddings API unreachable"
+                "Embedding", "OpenAI embeddings API unreachable"
             ) from e
         except httpx.TimeoutException as e:
             raise ServiceUnavailableError(
                 "Embedding",
-                f"OpenAI embeddings API request timed out after {self._timeout}s"
+                f"OpenAI embeddings API request timed out after {self._timeout}s",
             ) from e
         except APIError as e:
             raise ServiceUnavailableError(
                 "Embedding",
-                f"OpenAI embeddings API error: {e.message if hasattr(e, 'message') else e}"
+                f"OpenAI embeddings API error: {e.message if hasattr(e, 'message') else e}",
             ) from e
         except Exception as e:
             raise RuntimeError(f"Async batch embedding generation failed: {e}") from e
@@ -281,9 +278,29 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
             return False
 
     def close(self) -> None:
-        """Close clients and release resources."""
-        # OpenAI clients don't have explicit close methods, but we can dereference them
-        # to allow garbage collection
-        self._client = None  # type: ignore[assignment]
-        self._async_client = None  # type: ignore[assignment]
+        """Close clients and release resources.
+
+        Note: For proper async cleanup in async context, use aclose() instead.
+        This method closes the sync httpx client but does not close the async
+        client — the async client must be closed with aclose() to avoid
+        RuntimeWarnings from unawaited coroutines.
+        """
+        if self._client is not None:
+            with contextlib.suppress(Exception):
+                self._client.close()
+            self._client = None  # type: ignore[assignment]
+
+    async def aclose(self) -> None:
+        """Asynchronously close both sync and async HTTP clients.
+
+        Releases all held resources including async connection pools to prevent
+        resource leaks and RuntimeWarnings from unawaited coroutines.
+        """
+        if self._client is not None:
+            with contextlib.suppress(Exception):
+                self._client.close()
+            self._client = None  # type: ignore[assignment]
+        if self._async_client is not None:
+            await self._async_client.close()  # type: ignore[attr-defined]
+            self._async_client = None  # type: ignore[assignment]
         self._api_key = None

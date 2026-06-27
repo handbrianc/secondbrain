@@ -75,7 +75,7 @@ class TestDocumentIngestion:
 
             def make_emb(text: str) -> list[float]:
                 random.seed(hash(text.lower()))
-                return [random.random() for _ in range(768)]
+                return [random.random() for _ in range(384)]
 
             mock_embed_instance = MagicMock()
             mock_embed_instance.generate.side_effect = make_emb
@@ -107,7 +107,7 @@ class TestDocumentIngestion:
                 assert doc["page_number"] >= 0
                 assert doc["chunk_text"] != ""
                 assert isinstance(doc["embedding"], list)
-                assert len(doc["embedding"]) == 768
+                assert len(doc["embedding"]) == 384
         finally:
             mongomock_client.close()
 
@@ -139,7 +139,7 @@ class TestDocumentIngestion:
 
             def make_emb(text: str) -> list[float]:
                 random.seed(hash(text.lower()))
-                return [random.random() for _ in range(768)]
+                return [random.random() for _ in range(384)]
 
             mock_embed = MagicMock()
             mock_embed.generate.side_effect = make_emb
@@ -177,7 +177,7 @@ class TestDocumentIngestion:
 
                 for d in docs:
                     assert isinstance(d["embedding"], list)
-                    assert len(d["embedding"]) == 768
+                    assert len(d["embedding"]) == 384
                     assert d["source_file"] == str(pdf_path)
         finally:
             mongomock_client.close()
@@ -201,7 +201,7 @@ class TestFullWorkflow:
             import random as r
 
             r.seed(hash(text.lower()))
-            return [r.random() for _ in range(768)]
+            return [r.random() for _ in range(384)]
 
         sample_pdf = db["sample_pdf"]
         sample_pdf.insert_one(
@@ -268,7 +268,7 @@ class TestFullWorkflow:
                 "source_file": "test.pdf",
                 "page_number": 1,
                 "chunk_text": "Test content",
-                "embedding": [0.1] * 768,
+                "embedding": [0.1] * 384,
                 "metadata": {"file_type": "pdf"},
             }
         )
@@ -295,7 +295,7 @@ class TestFullWorkflow:
                     "source_file": f"test{i}.pdf",
                     "page_number": 1,
                     "chunk_text": f"Content {i}",
-                    "embedding": [0.1] * 768,
+                    "embedding": [0.1] * 384,
                     "metadata": {"file_type": "pdf"},
                 }
             )
@@ -325,7 +325,7 @@ class TestIntegrationDataFlow:
 
             def make_emb(text: str) -> list[float]:
                 random.seed(hash(text.lower()))
-                return [random.random() for _ in range(768)]
+                return [random.random() for _ in range(384)]
 
             mock_embed = MagicMock()
             mock_embed.generate.side_effect = make_emb
@@ -362,7 +362,7 @@ class TestIntegrationDataFlow:
                 assert doc.get("page_number", 0) >= 0
                 assert doc.get("chunk_text", "") != ""
                 assert isinstance(doc["embedding"], list)
-                assert len(doc["embedding"]) == 768
+                assert len(doc["embedding"]) == 384
                 assert "file_type" in doc
                 assert "ingested_at" in doc
         finally:
@@ -384,7 +384,7 @@ class TestIntegrationDataFlow:
                     "source_file": f"test{i % 2}.pdf",
                     "page_number": 1,
                     "chunk_text": f"Chunk {i}",
-                    "embedding": [0.1] * 768,
+                    "embedding": [0.1] * 384,
                     "metadata": {"file_type": "pdf"},
                 }
             )
@@ -440,7 +440,7 @@ class TestIntegrationDataFlow:
                     "source_file": f"test{i % 2}.pdf",
                     "page_number": 1,
                     "chunk_text": f"Chunk {i}",
-                    "embedding": [0.1] * 768,
+                    "embedding": [0.1] * 384,
                     "metadata": {"file_type": "pdf"},
                 }
             )

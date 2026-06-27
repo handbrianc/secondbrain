@@ -3,7 +3,8 @@
 Defines the protocol that all local LLM providers must implement.
 """
 
-from typing import Callable, Protocol
+from collections.abc import Callable
+from typing import Protocol
 
 # Type alias for streaming callbacks
 # Callback receives (content_chunk, reasoning_chunk) where reasoning_chunk can be None

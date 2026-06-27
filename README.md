@@ -7,12 +7,12 @@ A powerful local document intelligence CLI tool that enables semantic search ove
 
 ## Why SecondBrain?
 
-- **🔒 Privacy-First**: All processing happens locally - no data leaves your machine
+- **🔒 Privacy-First**: Document parsing, chunking, and storage happen locally - embeddings go to your configured API endpoint
 - **📄 Multi-Format Support**: PDF, DOCX, PPTX, XLSX, HTML, Markdown, images, and audio
 - **🚀 Fast & Scalable**: Multicore ingestion, async API, and optimized vector search
 - **🎯 Semantic Search**: Natural language queries with intelligent relevance ranking
 - **🛠️ Production-Ready**: Circuit breaker, rate limiting, structured logging, and OpenTelemetry tracing
-- **🐳 Docker Support**: Easy deployment with MongoDB and sentence-transformers services
+- **🐳 Docker Support**: Easy deployment with MongoDB and OpenAI-compatible embedding services (Ollama, LM Studio, vLLM)
 
 ## Quick Start
 
@@ -24,7 +24,7 @@ git clone https://github.com/your-username/secondbrain.git
 cd secondbrain
 
 # 2. Start external services (Docker)
-docker-compose up -d  # MongoDB + sentence-transformers
+docker-compose up -d  # MongoDB + embedding service
 
 # 3. Install SecondBrain
 # For production use:
@@ -114,7 +114,7 @@ SecondBrain uses environment variables prefixed with `SECONDBRAIN_`:
 MONGODB_INITDB_ROOT_USERNAME=your_username
 MONGODB_INITDB_ROOT_PASSWORD=your_strong_password
 SECONDBRAIN_MONGO_URI=mongodb://your_username:your_strong_password@localhost:27017
-SECONDBRAIN_LOCAL_EMBEDDING_MODEL=all-MiniLM-L6-v2
+SECONDBRAIN_EMBEDDING_MODEL=text-embedding-3-small
 SECONDBRAIN_CHUNK_SIZE=4096
 
 # Performance tuning
@@ -256,7 +256,7 @@ See [Qualitative Testing Framework](tests/test_qualitative/README.md) for detail
 Key components:
 - **CLI Layer**: Click-based command interface
 - **Document Ingestor**: Multi-format parsing with Docling
-- **Embedding Engine**: sentence-transformers for vector generation
+- **Embedding Engine**: OpenAI-compatible API for vector generation
 - **Storage Layer**: MongoDB with vector search
 - **Resilience**: Circuit breaker and rate limiting
 

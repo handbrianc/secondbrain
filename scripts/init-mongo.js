@@ -4,9 +4,12 @@ db = db.getSiblingDB('admin');
 
 // Use environment variables or fallback to defaults for development only
 // DO NOT use defaults in production - always set MONGO_ADMIN_PASSWORD env var
-var adminPassword = db.adminCommand({getParameter: 1, featureCompatibilityVersion: 1}) ? 
-  (process.env.MONGO_ADMIN_PASSWORD || 'changeme_in_production') : 
-  (process.env.MONGO_ADMIN_PASSWORD || 'changeme_in_production');
+var mongoAdminPassword = process.env.MONGO_ADMIN_PASSWORD;
+if (!mongoAdminPassword) {
+  print('ERROR: MONGO_ADMIN_PASSWORD environment variable must be set');
+  process.exit(1);
+}
+var adminPassword = mongoAdminPassword;
 
 try {
   db.createUser({

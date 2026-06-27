@@ -56,7 +56,31 @@ See [Schema Reference](SCHEMA.md) for complete schema details.
 - Support for multiple embedding models
 - Easy setup and maintenance
 
-## Performance Considerations
+## Performance Characteristics
+
+### Vector Search Complexity
+
+The `build_search_pipeline()` function performs ** brute-force cosine similarity** over all document vectors. This has important implications:
+
+| Metric | Value |
+|--------|-------|
+| **Time Complexity** | O(n·d) where n = documents, d = embedding dimensions |
+| **Space Complexity** | O(1) additional space per query |
+| **Scaling Behavior** | Linear in corpus size |
+
+#### Recommendations
+
+- **Recommended for**: Corpora < 100,000 documents
+- **Acceptable for**: Medium workloads with modest hardware
+- **Not recommended for**: Large-scale production with millions of documents
+
+#### Migration Path for Scale
+
+For larger workloads, consider:
+1. **MongoDB Atlas Search** (paid tier) — native $vectorSearch operator with HNSW indexes
+2. **External vector database** — Qdrant, Weaviate, Pinecone, Milvus
+
+### General Performance Tips
 
 - **Batch Processing**: Process documents in parallel
 - **Connection Caching**: Reduce connection overhead

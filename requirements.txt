@@ -93,8 +93,6 @@ huggingface-hub==0.36.2
     #   accelerate
     #   docling
     #   docling-ibm-models
-    #   sentence-transformers
-    #   tokenizers
     #   transformers
 idna==3.11
     # via
@@ -152,8 +150,6 @@ numpy==2.4.3
     #   safetensors
     #   scikit-learn
     #   scipy
-    #   sentence-transformers
-    #   shapely
     #   torchvision
     #   transformers
 ocrmac==1.0.1
@@ -299,16 +295,10 @@ safetensors[numpy,torch]==0.7.0
     #   docling-ibm-models
     #   transformers
 scikit-learn==1.8.0
-    # via sentence-transformers
-scipy==1.17.1
     # via
     #   docling
     #   scikit-learn
-    #   sentence-transformers
-semchunk==3.2.5
     # via docling-core
-sentence-transformers==5.4.1
-    # via -r requirements.in
 shapely==2.1.2
     # via rapidocr
 shellingham==1.5.4
@@ -337,8 +327,6 @@ torch==2.10.0
     #   docling
     #   docling-ibm-models
     #   safetensors
-    #   sentence-transformers
-    #   torchvision
 torchvision==0.25.0
     # via
     #   docling
@@ -352,14 +340,10 @@ tqdm==4.67.3
     #   openai
     #   rapidocr
     #   semchunk
-    #   sentence-transformers
-    #   transformers
 transformers==4.57.6
     # via
     #   docling-core
     #   docling-ibm-models
-    #   sentence-transformers
-tree-sitter==0.25.2
     # via docling-core
 tree-sitter-c==0.24.1
     # via docling-core
@@ -388,8 +372,6 @@ typing-extensions==4.15.0
     #   pydantic-core
     #   python-docx
     #   python-pptx
-    #   sentence-transformers
-    #   torch
     #   typing-inspection
 typing-inspection==0.4.2
     # via

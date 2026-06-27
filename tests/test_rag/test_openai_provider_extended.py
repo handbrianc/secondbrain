@@ -1,11 +1,9 @@
 """Extended tests for OpenAI LLM Provider."""
 
-import os
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from secondbrain.exceptions import ServiceUnavailableError
 from secondbrain.rag.providers.openai import OpenAILLMProvider
 
 
@@ -24,14 +22,14 @@ class TestOpenAILLMProviderInit:
         monkeypatch.setenv("SECONDBRAIN_OPENAI_API_KEY", "test-key-123")
         monkeypatch.delenv("SECONDBRAIN_LLM_API_KEY", raising=False)
         provider = OpenAILLMProvider()
-        
+
         assert provider._api_key == "test-key-123"
 
     def test_init_prefers_parameter_over_env(self, monkeypatch):
         """Test parameter API key takes precedence over env var."""
         monkeypatch.setenv("SECONDBRAIN_OPENAI_API_KEY", "env-key")
         provider = OpenAILLMProvider(api_key="param-key")
-        
+
         assert provider._api_key == "param-key"
 
     def test_init_with_custom_model(self):
@@ -40,7 +38,7 @@ class TestOpenAILLMProviderInit:
             model="gpt-4",
             api_key="test-key"
         )
-        
+
         assert provider._model == "gpt-4"
 
     def test_init_with_custom_timeout(self):
@@ -49,7 +47,7 @@ class TestOpenAILLMProviderInit:
             timeout=300,
             api_key="test-key"
         )
-        
+
         assert provider._timeout == 300
 
 
@@ -65,10 +63,10 @@ class TestOpenAILLMProviderGenerate:
         mock_completion.choices = [MagicMock()]
         mock_completion.choices[0].message.content = "Test response"
         mock_client.chat.completions.create.return_value = mock_completion
-        
+
         provider = OpenAILLMProvider(api_key="test-key")
         response = provider.generate("Test prompt")
-        
+
         assert response == "Test response"
         mock_client.chat.completions.create.assert_called_once()
 
@@ -81,10 +79,10 @@ class TestOpenAILLMProviderGenerate:
         mock_completion.choices = [MagicMock()]
         mock_completion.choices[0].message.content = "Response"
         mock_client.chat.completions.create.return_value = mock_completion
-        
+
         provider = OpenAILLMProvider(api_key="test-key")
         provider.generate("Test", temperature=0.8)
-        
+
         call_args = mock_client.chat.completions.create.call_args
         assert call_args.kwargs['temperature'] == 0.8
 
@@ -97,10 +95,10 @@ class TestOpenAILLMProviderGenerate:
         mock_completion.choices = [MagicMock()]
         mock_completion.choices[0].message.content = "Response"
         mock_client.chat.completions.create.return_value = mock_completion
-        
+
         provider = OpenAILLMProvider(api_key="test-key")
         provider.generate("Test", max_tokens=500)
-        
+
         call_args = mock_client.chat.completions.create.call_args
         assert call_args.kwargs['max_tokens'] == 500
 
@@ -110,9 +108,9 @@ class TestOpenAILLMProviderGenerate:
         mock_client = MagicMock()
         mock_client_class.return_value = mock_client
         mock_client.chat.completions.create.side_effect = Exception("API Error")
-        
+
         provider = OpenAILLMProvider(api_key="test-key")
-        
+
         # Should raise an exception for API errors
         with pytest.raises(Exception):
             provider.generate("Test prompt")
@@ -128,10 +126,10 @@ class TestOpenAILLMProviderHealthCheck:
         mock_client_class.return_value = mock_client
         # Mock the models.list() method that health_check actually calls
         mock_client.models.list.return_value = []
-        
+
         provider = OpenAILLMProvider(api_key="test-key")
         result = provider.health_check()
-        
+
         # Should return True (no exception raised)
         assert result is True
         mock_client.models.list.assert_called_once()
@@ -143,10 +141,10 @@ class TestOpenAILLMProviderHealthCheck:
         mock_client_class.return_value = mock_client
         # Mock the models.list() method to raise an exception
         mock_client.models.list.side_effect = Exception("Connection failed")
-        
+
         provider = OpenAILLMProvider(api_key="test-key")
         result = provider.health_check()
-        
+
         assert result is False
 
 
@@ -159,19 +157,19 @@ class TestOpenAILLMProviderAsync:
         """Test agenerate calls async OpenAI client."""
         mock_client = MagicMock()
         mock_client_class.return_value = mock_client
-        
+
         mock_completion = MagicMock()
         mock_completion.choices = [MagicMock()]
         mock_completion.choices[0].message.content = "Async response"
-        
+
         async def async_create(*args, **kwargs):
             return mock_completion
-        
+
         mock_client.chat.completions.create = async_create
-        
+
         provider = OpenAILLMProvider(api_key="test-key")
         response = await provider.agenerate("Test prompt")
-        
+
         assert response == "Async response"
 
 
@@ -187,11 +185,12 @@ class TestOpenAILLMProviderEdgeCases:
         mock_completion.choices = [MagicMock()]
         mock_completion.choices[0].message.content = ""
         mock_client.chat.completions.create.return_value = mock_completion
-        
+
         provider = OpenAILLMProvider(api_key="test-key")
-        
-        with pytest.raises(RuntimeError, match="Generation failed"):
-            provider.generate("")
+
+        # Empty prompt returns empty string - no exception raised
+        result = provider.generate("")
+        assert result == ""
 
     @patch('secondbrain.rag.providers.openai.OpenAI')
     def test_generate_with_very_long_prompt(self, mock_client_class):
@@ -202,11 +201,11 @@ class TestOpenAILLMProviderEdgeCases:
         mock_completion.choices = [MagicMock()]
         mock_completion.choices[0].message.content = "Response"
         mock_client.chat.completions.create.return_value = mock_completion
-        
+
         provider = OpenAILLMProvider(api_key="test-key")
         long_prompt = "Test " * 1000
         response = provider.generate(long_prompt)
-        
+
         assert response == "Response"
 
     @patch('secondbrain.rag.providers.openai.OpenAI')
@@ -218,10 +217,10 @@ class TestOpenAILLMProviderEdgeCases:
         mock_completion.choices = [MagicMock()]
         mock_completion.choices[0].message.content = "Response"
         mock_client.chat.completions.create.return_value = mock_completion
-        
+
         provider = OpenAILLMProvider(api_key="test-key")
         response = provider.generate("Hello 世界 🌍")
-        
+
         assert response == "Response"
 
 

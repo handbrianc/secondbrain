@@ -28,9 +28,11 @@ def build_search_pipeline(
     3. Sorts by similarity score (descending)
     4. Returns top-k most similar documents
 
-    Note: This is O(n) complexity as it scans all documents. Suitable for
-    small to medium datasets (<100k documents). For larger datasets, consider
-    specialized vector databases.
+    Note: This is O(n·d) complexity where n = number of documents and
+    d = embedding dimensions, as it computes cosine similarity over all
+    document vectors. Suitable for small to medium datasets (<100k documents).
+    For larger datasets, consider MongoDB Atlas Search (paid tier) or an
+    external vector database (Qdrant, Weaviate, Pinecone).
 
     Args:
         embedding: Query embedding vector.
@@ -77,33 +79,40 @@ def build_search_pipeline(
                     "$let": {
                         "vars": {
                             "doc_magnitude": {
-                                "$sqrt": {
-                                    "$reduce": {
-                                        "input": {"$range": [0, embedding_dim]},
-                                        "initialValue": 0,
-                                        "in": {
-                                            "$add": [
-                                                "$$value",
-                                                {
-                                                    "$multiply": [
+                                # Pre-stored at ingest time — avoids O(d) reduce per query per doc
+                                # Falls back to computing on-the-fly if field is missing (backward compat)
+                                "$ifNull": [
+                                    "$magnitude",
+                                    {
+                                        "$sqrt": {
+                                            "$reduce": {
+                                                "input": {"$range": [0, embedding_dim]},
+                                                "initialValue": 0,
+                                                "in": {
+                                                    "$add": [
+                                                        "$$value",
                                                         {
-                                                            "$arrayElemAt": [
-                                                                "$embedding",
-                                                                "$$this",
-                                                            ]
-                                                        },
-                                                        {
-                                                            "$arrayElemAt": [
-                                                                "$embedding",
-                                                                "$$this",
+                                                            "$multiply": [
+                                                                {
+                                                                    "$arrayElemAt": [
+                                                                        "$embedding",
+                                                                        "$$this",
+                                                                    ]
+                                                                },
+                                                                {
+                                                                    "$arrayElemAt": [
+                                                                        "$embedding",
+                                                                        "$$this",
+                                                                    ]
+                                                                },
                                                             ]
                                                         },
                                                     ]
                                                 },
-                                            ]
-                                        },
-                                    }
-                                }
+                                            }
+                                        }
+                                    },
+                                ]
                             },
                             "dot_product": {
                                 "$reduce": {

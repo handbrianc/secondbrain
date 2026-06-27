@@ -7,9 +7,9 @@ Consolidated from:
 - test_multicore_progress.py (progress tracking)
 """
 
-import os
 import time
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeoutError
 from pathlib import Path
 
 import pytest
@@ -40,30 +40,20 @@ class TestRateLimiting:
         SharedRateLimiter directly to test the actual rate limiting behavior.
         """
         from secondbrain.utils.rate_limiter import SharedRateLimiter
-        
+
         # Create a fresh rate limiter for this test (thread-safe)
         limiter = SharedRateLimiter(max_requests=10, window_seconds=1.0)
-        
+
         # First 10 requests should succeed
         success_count = 0
         for _ in range(10):
             if limiter.acquire():
                 success_count += 1
-        
+
         assert success_count == 10
-        
+
         # 11th request should fail (rate limited)
         assert not limiter.acquire()
-
-    def test_rate_limiter_shared_across_processes(self):
-        """Test that rate limiter state is shared across processes."""
-        from secondbrain.utils.rate_limiter import get_shared_rate_limiter
-
-        # Verify rate limiter function exists and is callable
-        assert callable(get_shared_rate_limiter)
-
-        limiter = get_shared_rate_limiter()
-        assert limiter is not None
 
 
 class TestMemoryManagement:

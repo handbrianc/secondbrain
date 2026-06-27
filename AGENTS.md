@@ -3,9 +3,9 @@
 **Last Updated:** 2026-05-03  
 **Commit:** 80fd894
 
-SecondBrain is a local document intelligence CLI for semantic search using MongoDB vector search and sentence-transformers.
+SecondBrain is a local document intelligence CLI for semantic search using MongoDB vector search and OpenAI-compatible embedding APIs.
 
-**Stack:** Python 3.11+, Click, Pydantic 2, Motor, sentence-transformers, Docker
+**Stack:** Python 3.11+, Click, Pydantic 2, Motor, OpenAI-compatible API, Docker
 
 ---
 
@@ -146,7 +146,7 @@ pytest
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **secondbrain** (10149 symbols, 18504 relationships, 191 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **secondbrain** (9484 symbols, 17061 relationships, 201 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 

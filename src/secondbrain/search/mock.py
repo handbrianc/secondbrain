@@ -3,7 +3,6 @@
 from typing import Any
 
 
-
 class MockSearcher:
     """Mock searcher that returns predefined test chunks without MongoDB.
 
@@ -150,18 +149,18 @@ class MockSearcher:
             List of chunk dicts with similarity scores.
         """
         query_lower = query.lower()
-        
+
         scored_chunks = []
         for chunk in self._test_chunks:
             chunk_text = chunk.get("chunk_text", "").lower()
             score = chunk.get("similarity", 0.5)
-            
+
             words = [w for w in query_lower.split() if len(w) > 3]
             matches = sum(1 for w in words if w in chunk_text)
-            
+
             boost = min(matches * 0.1, 0.3)
             scored_chunks.append((score + boost, chunk))
-        
+
         scored_chunks.sort(key=lambda x: x[0], reverse=True)
         results = [chunk for _, chunk in scored_chunks[:top_k]]
 

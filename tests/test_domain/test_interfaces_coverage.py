@@ -6,12 +6,23 @@ from pathlib import Path
 
 import pytest
 
+from secondbrain.config import config
+from secondbrain.domain.entities import (
+    ChunkId,
+    DocumentChunk,
+    DocumentMetadata,
+    SourcePath,
+)
 from secondbrain.domain.interfaces import (
     DocumentConverter,
     EmbeddingGenerator,
     VectorStore,
 )
-from secondbrain.domain.entities import DocumentChunk, ChunkId, DocumentMetadata, SourcePath
+
+
+def _test_embedding() -> list[float]:
+    """Return a test embedding vector sized to match the configured embedding dimensions."""
+    return [0.1] * config().embedding_dimensions
 
 
 class TestDocumentConverterProtocol:
@@ -30,13 +41,13 @@ class TestDocumentConverterProtocol:
         class MockConverter:
             def convert(self, file_path: Path) -> dict[str, str]:
                 return {"1": "test content"}
-            
+
             def supports_format(self, file_path: Path) -> bool:
                 return True
-        
+
         converter = MockConverter()
         result = converter.convert(Path("test.pdf"))
-        
+
         assert isinstance(result, dict)
         assert "1" in result
 
@@ -45,13 +56,13 @@ class TestDocumentConverterProtocol:
         class MockConverter:
             def convert(self, file_path: Path) -> dict[str, str]:
                 return {}
-            
+
             def supports_format(self, file_path: Path) -> bool:
                 return True
-        
+
         converter = MockConverter()
         result = converter.supports_format(Path("test.pdf"))
-        
+
         assert isinstance(result, bool)
 
 
@@ -75,17 +86,17 @@ class TestEmbeddingGeneratorProtocol:
         class MockEmbedder:
             def generate(self, text: str) -> list[float]:
                 return [0.1, 0.2, 0.3]
-            
+
             def generate_batch(self, texts: list[str]) -> list[list[float]]:
                 return [[0.1, 0.2, 0.3]]
-            
+
             @property
             def dimensions(self) -> int:
                 return 3
-        
+
         embedder = MockEmbedder()
         result = embedder.generate("test")
-        
+
         assert isinstance(result, list)
         assert len(result) == 3
 
@@ -94,17 +105,17 @@ class TestEmbeddingGeneratorProtocol:
         class MockEmbedder:
             def generate(self, text: str) -> list[float]:
                 return [0.1, 0.2, 0.3]
-            
+
             def generate_batch(self, texts: list[str]) -> list[list[float]]:
                 return [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]]
-            
+
             @property
             def dimensions(self) -> int:
                 return 3
-        
+
         embedder = MockEmbedder()
         result = embedder.generate_batch(["test1", "test2"])
-        
+
         assert isinstance(result, list)
         assert len(result) == 2
         assert isinstance(result[0], list)
@@ -114,17 +125,17 @@ class TestEmbeddingGeneratorProtocol:
         class MockEmbedder:
             def generate(self, text: str) -> list[float]:
                 return [0.1, 0.2, 0.3]
-            
+
             def generate_batch(self, texts: list[str]) -> list[list[float]]:
                 return [[0.1, 0.2, 0.3]]
-            
+
             @property
             def dimensions(self) -> int:
                 return 3
-        
+
         embedder = MockEmbedder()
         result = embedder.dimensions
-        
+
         assert isinstance(result, int)
         assert result == 3
 
@@ -157,24 +168,24 @@ class TestVectorStoreProtocol:
         class MockStore:
             def store(self, chunk: DocumentChunk) -> str:
                 return "chunk-id-123"
-            
+
             def store_batch(self, chunks: list[DocumentChunk]) -> int:
                 return 1
-            
+
             def search(
                 self,
                 embedding: list[float],
                 top_k: int = 5,
-                _source_filter: str | None = None  # noqa: F841,
+                _source_filter: str | None = None
             ) -> Sequence[DocumentChunk]:
                 return []
-            
+
             def delete_by_source(self, source: str) -> int:
                 return 0
-            
+
             def delete_all(self) -> int:
                 return 0
-        
+
         store = MockStore()
         chunk = DocumentChunk(
             chunk_id=ChunkId("test-id"),
@@ -186,7 +197,7 @@ class TestVectorStoreProtocol:
             ),
             page_number=1,
         )
-        
+
         result = store.store(chunk)
         assert isinstance(result, str)
         assert result == "chunk-id-123"
@@ -194,14 +205,14 @@ class TestVectorStoreProtocol:
     def test_search_returns_sequence_of_chunks(self):
         """Test that search method returns a sequence of chunks."""
         from collections.abc import Sequence
-        
+
         class MockStore:
             def store(self, chunk: DocumentChunk) -> str:
                 return "id1"
-            
+
             def store_batch(self, chunks: list[DocumentChunk]) -> int:
                 return 1
-            
+
             def search(
                 self,
                 embedding: list[float],
@@ -229,17 +240,17 @@ class TestVectorStoreProtocol:
                     page_number=2,
                 )
                 return [chunk1, chunk2]
-            
+
             def delete_by_source(self, source: str) -> int:
                 return 0
-            
+
             def delete_all(self) -> int:
                 return 0
-        
+
         store = MockStore()
         query_embedding = [0.1, 0.2, 0.3, 0.4, 0.5]
         result = store.search(query_embedding, top_k=2, source_filter="test.pdf")
-        
+
         assert isinstance(result, Sequence)
         assert len(result) == 2
         assert result[0].chunk_id == "chunk-1"
@@ -263,7 +274,7 @@ class TestDocumentChunkCreation:
             metadata=metadata,
             page_number=1,
         )
-        
+
         # ChunkId is a NewType(str), so it's just a string
         assert chunk.chunk_id == "test-id"
         assert chunk.text == "Test content"
@@ -281,12 +292,12 @@ class TestDocumentChunkCreation:
             text="Test content",
             metadata=metadata,
             page_number=1,
-            embedding=[0.1, 0.2, 0.3],
+            embedding=_test_embedding(),
         )
-        
+
         assert chunk.chunk_id == "test-id"
         assert chunk.page_number == 1
-        assert chunk.embedding == [0.1, 0.2, 0.3]
+        assert chunk.embedding == _test_embedding()
 
     def test_chunk_text_cannot_be_empty(self):
         """Test that empty text raises ValueError."""

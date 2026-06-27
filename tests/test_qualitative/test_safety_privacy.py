@@ -15,16 +15,25 @@ from typing import Any
 
 import pytest
 
+_MONGO_CACHE: dict[str, bool] = {"available": False, "checked": False}
+
 
 def _is_mongo_available() -> bool:
+    """Check MongoDB availability with caching to avoid repeated timeouts."""
+    if _MONGO_CACHE["checked"]:
+        return _MONGO_CACHE["available"]
     try:
         from pymongo import MongoClient
 
-        client = MongoClient("localhost", 27018, serverSelectionTimeoutMS=5000)
+        client = MongoClient("localhost", 27018, serverSelectionTimeoutMS=2000)
         client.admin.command("ping")
         client.close()
+        _MONGO_CACHE["available"] = True
+        _MONGO_CACHE["checked"] = True
         return True
     except Exception:
+        _MONGO_CACHE["available"] = False
+        _MONGO_CACHE["checked"] = True
         return False
 
 

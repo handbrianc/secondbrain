@@ -2,14 +2,14 @@
 
 The secondbrain project is a CLI-only document intelligence tool that:
 - Ingests documents using Docling (PDF, DOCX, PPTX, XLSX, HTML, Markdown, etc.)
-- Generates embeddings using sentence-transformers with `embeddinggemma:latest` model
+- Generates embeddings using OpenAI-compatible API with `embeddinggemma:latest` model
 - Stores vectors in MongoDB for semantic search
 - Provides CLI commands: ingest, search, list, delete
 
 ### Current State
 - This is a new greenfield project
 - No existing codebase
-- sentence-transformers runs locally or via Docker, MongoDB via Docker
+- OpenAI-compatible API runs locally or via Docker, MongoDB via Docker
 
 ### Constraints
 - CLI-only application (not a server)
@@ -29,9 +29,9 @@ The secondbrain project is a CLI-only document intelligence tool that:
 **Goals:**
 - Create a production-ready Python CLI tool using Click
 - Support all Docling-supported document types
-- Implement semantic search using sentence-transformers embeddings
+- Implement semantic search using OpenAI-compatible API embeddings
 - Store vectors in MongoDB with proper metadata
-- Provide complete Docker setup for MongoDB and local sentence-transformers installation
+- Provide complete Docker setup for MongoDB and local OpenAI-compatible API installation
 - Achieve 80%+ test coverage with all linting/type warnings resolved
 - Generate SBOM using SPDX standard
 
@@ -70,11 +70,11 @@ The secondbrain project is a CLI-only document intelligence tool that:
 - **PyMuPDF (fitz)**: Good for PDF but limited to PDF only
 - **python-docx**: Only handles DOCX, would need multiple libraries
 
-### 3. Embeddings: sentence-transformers with embeddinggemma
-**Decision:** Use sentence-transformers as the embedding service with embeddinggemma:latest model.
+### 3. Embeddings: OpenAI-compatible API with embeddinggemma
+**Decision:** Use OpenAI-compatible API as the embedding service with embeddinggemma:latest model.
 
 **Rationale:**
-- sentence-transformers provides local embedding generation (privacy-friendly)
+- OpenAI-compatible API provides local embedding generation (privacy-friendly)
 - embeddinggemma is a high-quality embedding model
 - Easy to swap models (nomic-embed-text, mxbai-embed-large, etc.) via configuration
 - Runs locally or via Docker, consistent across environments (12-factor)
@@ -97,8 +97,8 @@ The secondbrain project is a CLI-only document intelligence tool that:
 - **Pinecone**: Cloud-only, not local
 - **Chroma**: Good but less mature than MongoDB
 
-### 5. Local Server: sentence-transformers
-**Decision:** Use sentence-transformers server to manage embedding model.
+### 5. Local Server: OpenAI-compatible API
+**Decision:** Use OpenAI-compatible API server to manage embedding model.
 
 **Rationale:**
 - Single command to start the embedding service
@@ -141,7 +141,7 @@ The secondbrain project is a CLI-only document intelligence tool that:
 
 ## Risks / Trade-offs
 
-### Risk: sentence-transformers Model Availability
+### Risk: OpenAI-compatible API Model Availability
 **Risk:** The embeddinggemma model may not be available or may require specific pulling.
 **Mitigation:** Include model pull in setup instructions, add fallback to nomic-embed-text.
 
@@ -170,7 +170,7 @@ The secondbrain project is a CLI-only document intelligence tool that:
 
 ### Phase 2: Core Implementation
 - Implement document ingestion (Docling integration)
-- Implement embedding generation (sentence-transformers client)
+- Implement embedding generation (OpenAI-compatible API client)
 - Implement vector storage (MongoDB client)
 - Implement CLI commands (Click)
 

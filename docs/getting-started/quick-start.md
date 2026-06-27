@@ -32,7 +32,7 @@ SECONDBRAIN_MONGO_URI=mongodb://your_username:your_strong_password@localhost:270
 
 # Sentence Transformers
 SECONDBRAIN_SENTENCE_TRANSFORMERS_URL=http://localhost:11434
-SECONDBRAIN_LOCAL_EMBEDDING_MODEL=all-MiniLM-L6-v2
+SECONDBRAIN_EMBEDDING_MODEL=all-MiniLM-L6-v2
 
 # Chunk size
 SECONDBRAIN_CHUNK_SIZE=4096

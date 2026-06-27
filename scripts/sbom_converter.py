@@ -3,7 +3,7 @@
 
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 
@@ -15,7 +15,7 @@ def convert_cyclonedx_to_spdx(cyclonedx_path: str, spdx_path: str) -> None:
         spdx_path: Path for output SPDX file
     """
     # Read the JSON SBOM
-    with open(cyclonedx_path, 'r') as f:
+    with open(cyclonedx_path) as f:
         sbom_data = json.load(f)
 
     # Extract packages from CycloneDX format
@@ -26,7 +26,7 @@ def convert_cyclonedx_to_spdx(cyclonedx_path: str, spdx_path: str) -> None:
             if comp.get('licenses'):
                 license_data = comp['licenses'][0].get('license', {})
                 license_info = license_data.get('id') or license_data.get('name', 'NOASSERTION')
-            
+
             packages.append({
                 'Name': comp.get('name', 'unknown'),
                 'Version': comp.get('version', 'unknown'),
@@ -52,7 +52,7 @@ def convert_cyclonedx_to_spdx(cyclonedx_path: str, spdx_path: str) -> None:
         "DocumentName: secondbrain",
         f"DocumentNamespace: {namespace}",
         "Creator: Tool: cyclonedx-py",
-        f"Created: {datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}",
+        f"Created: {datetime.now(UTC).strftime('%Y-%m-%dT%H:%M:%SZ')}",
         "",
         ""
     ]
@@ -63,7 +63,7 @@ def convert_cyclonedx_to_spdx(cyclonedx_path: str, spdx_path: str) -> None:
         name = pkg['Name']
         version = pkg['Version']
         license_info = pkg['License']
-        
+
         pkg_lines = [
             f"PackageName: {name}",
             f"SPDXID: {pkg_id}",
@@ -95,7 +95,7 @@ def main() -> int:
     print(f"Converting {cyclonedx_path} to SPDX format...")
     convert_cyclonedx_to_spdx(str(cyclonedx_path), str(spdx_path))
     print(f"✅ SPDX SBOM generated: {spdx_path}")
-    
+
     return 0
 
 

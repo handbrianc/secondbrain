@@ -47,10 +47,10 @@ jobs:
           name: codecov-umbrella
           fail_ci_if_error: false
 
-      - name: Run mutation testing (sample)
+      - name: Run mutation testing (expanded coverage)
         run: |
-          # Run mutation testing on critical module only (full run takes too long)
-          mutmut run --paths-to-mutate secondbrain.rag.factory \
+          # Run mutation testing on critical path modules
+          mutmut run --paths secondbrain.rag.pipeline secondbrain.storage secondbrain.document secondbrain.search \
             --runner="pytest {mutmut_test_file} -xvs"
           mutmut results
         timeout-minutes: 30

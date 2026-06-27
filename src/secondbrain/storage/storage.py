@@ -4,14 +4,12 @@ import asyncio
 import contextlib
 import logging
 import re
-import struct
 import time
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any
 
 import httpx
-from bson.binary import Binary
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import MongoClient
 from pymongo.collection import Collection
@@ -23,6 +21,7 @@ from pymongo.errors import (
 
 from secondbrain.config import Config, config
 from secondbrain.exceptions import StorageConnectionError
+from secondbrain.storage._base import BaseVectorStorage
 from secondbrain.storage.models import DatabaseStats
 from secondbrain.storage.pipeline import build_search_pipeline
 from secondbrain.types import ChunkInfo, SearchResult
@@ -33,7 +32,7 @@ from secondbrain.utils.tracing import trace_operation
 logger = logging.getLogger(__name__)
 
 
-class VectorStorage(ValidatableService):
+class VectorStorage(BaseVectorStorage, ValidatableService):
     """Handles vector storage in MongoDB.
 
     Uses ValidatableService base class for connection validation with caching.
@@ -108,101 +107,6 @@ class VectorStorage(ValidatableService):
 
         return result
 
-    def _add_ingestion_timestamps(
-        self, documents: list[dict[str, Any]]
-    ) -> list[dict[str, Any]]:
-        """Add ingestion timestamps to multiple documents.
-
-        Supports both old (nested metadata) and new (flattened) formats.
-        All documents in batch get the same timestamp for consistency.
-
-        Args:
-            documents: List of documents to add timestamps to.
-
-        Returns
-        -------
-            List of documents with updated timestamps.
-        """
-        now = datetime.now(UTC).isoformat()
-        docs_with_timestamps: list[dict[str, Any]] = []
-
-        for doc in documents:
-            doc_copy = doc.copy()
-
-            # Support new flattened format
-            if "ingested_at" in doc_copy:
-                doc_copy["ingested_at"] = now
-            # Support old nested format for backward compatibility
-            elif "metadata" in doc_copy:
-                doc_copy.setdefault("metadata", {})
-                doc_copy["metadata"]["ingested_at"] = now
-
-            docs_with_timestamps.append(doc_copy)
-
-        return docs_with_timestamps
-
-    def _encode_embedding(self, embedding: list[float]) -> bytes:
-        """Convert float list to binary float32 array.
-
-        Args:
-            embedding: List of floats (float64 or float32).
-
-        Returns
-        -------
-            Binary data packed as float32 array.
-        """
-        # Convert to float32 if needed and pack
-        return struct.pack(f"{len(embedding)}f", *embedding)
-
-    def _decode_embedding(
-        self, binary: bytes, dimensions: int | None = None
-    ) -> list[float]:
-        """Convert binary float32 array back to float list.
-
-        Args:
-            binary: Binary data from float32 array.
-            dimensions: Expected dimensions (auto-detected if None).
-
-        Returns
-        -------
-            List of floats decoded from binary.
-        """
-        if dimensions is None:
-            dimensions = len(binary) // 4  # 4 bytes per float32
-        return list(struct.unpack(f"{dimensions}f", binary))
-
-    def _prepare_embedding_for_storage(
-        self, embedding: list[float]
-    ) -> bytes | list[float]:
-        """Prepare embedding for storage based on config.
-
-        Args:
-            embedding: List of floats to store.
-
-        Returns
-        -------
-            Binary data if binary format enabled, otherwise original list.
-        """
-        if self._config.embedding_storage_format == "binary":
-            return Binary(self._encode_embedding(embedding))
-        return embedding
-
-    def _normalize_embedding(self, embedding: bytes | list[float]) -> list[float]:
-        """Normalize embedding to list format for use.
-
-        Args:
-            embedding: Binary data or list of floats.
-
-        Returns
-        -------
-            List of floats.
-        """
-        if isinstance(embedding, Binary):
-            return self._decode_embedding(bytes(embedding))
-        if isinstance(embedding, bytes):
-            return self._decode_embedding(embedding)
-        return embedding
-
     def _wait_for_index_ready(self) -> None:
         """No-op for local MongoDB.
 
@@ -248,9 +152,9 @@ class VectorStorage(ValidatableService):
             self._client.close()
             self._client = None
         if self._async_client is not None:
-            # AsyncIOMotorClient.close() works in sync context
+            # AsyncIOMotorClient.close() is synchronous-safe; motor stubs don't expose it on abstract base
             with contextlib.suppress(Exception):
-                self._async_client.close()
+                self._async_client.close()  # type: ignore[attr-defined]
             self._async_client = None
 
     async def aclose(self) -> None:
@@ -392,12 +296,28 @@ class VectorStorage(ValidatableService):
             return False
 
     def ensure_index(self) -> None:
-        """Skip index creation for local MongoDB.
+        """Create indexes for local MongoDB.
 
-        Local MongoDB Community Edition does not support Atlas Search indexes.
-        Vector search is performed using manual cosine similarity calculation
-        in the aggregation pipeline (O(n) complexity).
+        Creates B-tree indexes for filter fields (source_file, file_type).
+        NOTE: Vector search still uses O(n) cosine similarity in aggregation.
         """
+        try:
+            self.collection.create_index(
+                [("source_file", 1)],
+                name="ix_source_file",
+                background=True,
+            )
+            self.collection.create_index(
+                [("file_type", 1)],
+                name="ix_file_type",
+                background=True,
+            )
+        except Exception as e:
+            logger.warning(
+                "Failed to create filter indexes (non-fatal): %s: %s",
+                type(e).__name__,
+                e,
+            )
         # Always use fallback search for local MongoDB
         self._index_created = False
         logger.debug("Using local MongoDB without Atlas Search indexes")
@@ -412,24 +332,6 @@ class VectorStorage(ValidatableService):
         with trace_operation("storage_insert_one"):
             result = self.collection.insert_one(doc)
         return str(result.inserted_id)
-
-    def _prepare_document_for_storage(self, doc: dict[str, Any]) -> dict[str, Any]:
-        """Prepare document for storage with optimizations.
-
-        Args:
-            doc: Document to prepare.
-
-        Returns
-        -------
-            Document with optimized embedding format.
-        """
-        result = doc.copy()
-        # Convert embedding to optimized format
-        if "embedding" in result:
-            result["embedding"] = self._prepare_embedding_for_storage(
-                result["embedding"]
-            )
-        return result
 
     @timing("storage_store_batch")
     def store_batch(self, documents: list[dict[str, Any]]) -> int:
@@ -813,7 +715,7 @@ class VectorStorage(ValidatableService):
         }
 
 
-class AsyncVectorStorage(ValidatableService):
+class AsyncVectorStorage(BaseVectorStorage, ValidatableService):
     """Asynchronous vector storage using Motor (official async MongoDB driver).
 
     This class provides a native async/await API for MongoDB operations using Motor,
@@ -829,13 +731,19 @@ class AsyncVectorStorage(ValidatableService):
     - Same API surface as VectorStorage for easy migration
     """
 
-    def __init__(
+    def __init__(  # type: ignore[misc]
         self,
         mongo_uri: str | None = None,
         db_name: str | None = None,
         collection_name: str | None = None,
     ) -> None:
-        """Initialize async vector storage with Motor."""
+        """Initialize async vector storage with Motor.
+
+        NOTE: This method is synchronous. The caller should invoke
+        ``await storage.ensure_filter_indexes_async()`` afterward to create
+        B-tree indexes. This separation keeps test fixtures simple (no async
+        __init__) while still providing fully-initialized clients.
+        """
         cfg = config()
         self.mongo_uri: str = mongo_uri or cfg.mongo_uri
         self.db_name: str = db_name or cfg.mongo_db
@@ -861,8 +769,20 @@ class AsyncVectorStorage(ValidatableService):
             )
 
     async def _wait_for_index_ready_async(self) -> None:
-        """Wait for MongoDB vector search index to be ready asynchronously."""
+        """Wait for MongoDB vector search index to be ready asynchronously.
+
+        For local MongoDB Community Edition, this is a no-op because
+        _ensure_index_async() sets _index_created = False (no Atlas Search index).
+        For Atlas Search deployments, proceeds with index readiness polling.
+        """
         await self._ensure_index_async()
+
+        # Guard: Skip polling for local MongoDB (no Atlas Search indexes exist)
+        if not self._index_created:
+            logger.debug(
+                "Skipping index readiness check: local MongoDB without Atlas Search"
+            )
+            return
 
         base_delay = 0.1
         max_delay = 2.0
@@ -899,9 +819,46 @@ class AsyncVectorStorage(ValidatableService):
         Local MongoDB Community Edition does not support Atlas Search indexes.
         Vector search is performed using manual cosine similarity calculation
         in the aggregation pipeline (O(n) complexity).
+
+        Note: After calling this method, check self._index_created before
+        calling _wait_for_index_ready_async(). If _index_created is False,
+        the index does not exist and waiting is pointless.
         """
         # Always use fallback search for local MongoDB
         self._index_created = False
+
+    async def _ensure_filter_indexes_async(self) -> None:
+        """Create B-tree indexes for frequently filtered fields.
+
+        These are standard MongoDB indexes (not Atlas Search vector indexes) that
+        accelerate $regex prefix queries on source_file and equality filters on
+        file_type. These work in MongoDB Community Edition.
+
+        Indexes created:
+            - (source_file, 1) for prefix-filtered listing queries
+            - (file_type, 1) for file type equality filters
+
+        Idempotent: MongoDB's create_index is a no-op if the index already exists
+        with the same spec.
+        """
+        try:
+            await self.async_collection.create_index(
+                [("source_file", 1)],
+                name="ix_source_file",
+                background=True,
+            )
+            await self.async_collection.create_index(
+                [("file_type", 1)],
+                name="ix_file_type",
+                background=True,
+            )
+            logger.info("Created filter indexes: ix_source_file, ix_file_type")
+        except Exception as e:
+            logger.warning(
+                "Failed to create filter indexes (non-fatal): %s: %s",
+                type(e).__name__,
+                e,
+            )
 
     @property
     def async_client(self) -> AsyncIOMotorClient:
@@ -943,65 +900,6 @@ class AsyncVectorStorage(ValidatableService):
         else:
             result["ingested_at"] = now
 
-        return result
-
-    def _add_ingestion_timestamps(
-        self, documents: list[dict[str, Any]]
-    ) -> list[dict[str, Any]]:
-        """Add ingestion timestamps to multiple documents."""
-        now = datetime.now(UTC).isoformat()
-        docs_with_timestamps: list[dict[str, Any]] = []
-
-        for doc in documents:
-            doc_copy = doc.copy()
-
-            if "ingested_at" in doc_copy:
-                doc_copy["ingested_at"] = now
-            elif "metadata" in doc_copy:
-                doc_copy.setdefault("metadata", {})
-                doc_copy["metadata"]["ingested_at"] = now
-            else:
-                doc_copy["ingested_at"] = now
-
-            docs_with_timestamps.append(doc_copy)
-
-        return docs_with_timestamps
-
-    def _encode_embedding(self, embedding: list[float]) -> bytes:
-        """Convert float list to binary float32 array."""
-        return struct.pack(f"{len(embedding)}f", *embedding)
-
-    def _decode_embedding(
-        self, binary: bytes, dimensions: int | None = None
-    ) -> list[float]:
-        """Convert binary float32 array back to float list."""
-        if dimensions is None:
-            dimensions = len(binary) // 4
-        return list(struct.unpack(f"{dimensions}f", binary))
-
-    def _prepare_embedding_for_storage(
-        self, embedding: list[float]
-    ) -> bytes | list[float]:
-        """Prepare embedding for storage based on config."""
-        if self._config.embedding_storage_format == "binary":
-            return Binary(self._encode_embedding(embedding))
-        return embedding
-
-    def _normalize_embedding(self, embedding: bytes | list[float]) -> list[float]:
-        """Normalize embedding to list format for use."""
-        if isinstance(embedding, Binary):
-            return self._decode_embedding(bytes(embedding))
-        if isinstance(embedding, bytes):
-            return self._decode_embedding(embedding)
-        return embedding
-
-    def _prepare_document_for_storage(self, doc: dict[str, Any]) -> dict[str, Any]:
-        """Prepare document for storage with optimizations."""
-        result = doc.copy()
-        if "embedding" in result:
-            result["embedding"] = self._prepare_embedding_for_storage(
-                result["embedding"]
-            )
         return result
 
     def close(self) -> None:

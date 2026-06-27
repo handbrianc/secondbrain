@@ -4,13 +4,12 @@ This module provides comprehensive tests for the failure injection framework,
 covering all failure types, context managers, edge cases, and integration points.
 """
 
-import asyncio
 import random
 import threading
 import time
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from typing import Callable
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -32,7 +31,6 @@ from secondbrain.utils.failure_injector import (
     inject_network_partition,
     inject_timeout,
 )
-from secondbrain.exceptions import SecondBrainError
 
 
 @pytest.mark.slow
@@ -995,32 +993,32 @@ class TestScheduleCleanup:
     def test_schedule_cleanup_basic(self):
         """Test that scheduled cleanup removes failures after duration."""
         injector = FailureInjector()
-        
+
         # Inject a failure with a short duration
         injector.inject(failure_type=FailureType.TIMEOUT, duration=0.2)
-        
+
         # Failure should be active immediately
         assert injector.is_failure_active(FailureType.TIMEOUT) is True
-        
+
         # Wait for cleanup
         time.sleep(0.3)
-        
+
         # Failure should be cleaned up
         assert injector.is_failure_active(FailureType.TIMEOUT) is False
 
     def test_schedule_cleanup_with_delay_no_auto_cleanup(self):
         """Test that delayed failures don't schedule automatic cleanup."""
         injector = FailureInjector()
-        
+
         # Inject a failure with delay - cleanup is NOT scheduled when delay > 0
         injector.inject(failure_type=FailureType.CONNECTION_ERROR, delay=0.2, duration=0.5)
-        
+
         # Failure should be active (config exists)
         assert len(injector._active_failures) == 1
-        
+
         # No cleanup callback scheduled when delay > 0
         assert len(injector._cleanup_callbacks) == 0
-        
+
         # Manual reset is required
         injector.reset()
         assert len(injector._active_failures) == 0
@@ -1028,16 +1026,16 @@ class TestScheduleCleanup:
     def test_cleanup_callback_failure_handling(self):
         """Test that cleanup handles callback failures gracefully."""
         injector = FailureInjector()
-        
+
         # Add a failing cleanup callback
         def failing_callback():
             raise Exception("Cleanup failed")
-        
+
         injector._cleanup_callbacks.append(failing_callback)
-        
+
         # Reset should not raise, just log warning
         injector.reset()
-        
+
         # Callback should be cleared
         assert len(injector._cleanup_callbacks) == 0
 
@@ -1051,10 +1049,10 @@ class TestRaiseFailure:
         injector = FailureInjector()
         config = FailureConfig(failure_type=FailureType.TIMEOUT, timeout_value=45.0)
         injector._active_failures["timeout_test"] = config
-        
+
         with pytest.raises(InjectedTimeoutError) as exc_info:
             injector.raise_failure(FailureType.TIMEOUT)
-        
+
         assert "timeout" in str(exc_info.value).lower()
         assert exc_info.value.timeout_value == 45.0
 
@@ -1062,10 +1060,10 @@ class TestRaiseFailure:
         """Test raising timeout failure with custom message."""
         injector = FailureInjector()
         injector._active_failures["timeout_test"] = FailureConfig(failure_type=FailureType.TIMEOUT)
-        
+
         with pytest.raises(InjectedTimeoutError) as exc_info:
             injector.raise_failure(FailureType.TIMEOUT, error_message="Custom timeout")
-        
+
         assert "Custom timeout" in str(exc_info.value)
 
     def test_raise_connection_error_with_config_message(self):
@@ -1073,10 +1071,10 @@ class TestRaiseFailure:
         injector = FailureInjector()
         config = FailureConfig(failure_type=FailureType.CONNECTION_ERROR, error_message="Config error")
         injector._active_failures["conn_test"] = config
-        
+
         with pytest.raises(InjectedConnectionError) as exc_info:
             injector.raise_failure(FailureType.CONNECTION_ERROR)
-        
+
         assert "Config error" in str(exc_info.value)
 
     def test_raise_connection_error_with_override_message(self):
@@ -1084,19 +1082,19 @@ class TestRaiseFailure:
         injector = FailureInjector()
         config = FailureConfig(failure_type=FailureType.CONNECTION_ERROR, error_message="Config error")
         injector._active_failures["conn_test"] = config
-        
+
         with pytest.raises(InjectedConnectionError) as exc_info:
             injector.raise_failure(FailureType.CONNECTION_ERROR, error_message="Override error")
-        
+
         assert "Override error" in str(exc_info.value)
 
     def test_raise_connection_error_default_message(self):
         """Test raising connection error with no config uses default message."""
         injector = FailureInjector()
-        
+
         with pytest.raises(InjectedConnectionError) as exc_info:
             injector.raise_failure(FailureType.CONNECTION_ERROR)
-        
+
         assert "Injected connection error" in str(exc_info.value)
 
     def test_raise_general_failure_with_config_message(self):
@@ -1104,10 +1102,10 @@ class TestRaiseFailure:
         injector = FailureInjector()
         config = FailureConfig(failure_type=FailureType.GENERAL_FAILURE, error_message="Config failure")
         injector._active_failures["gen_test"] = config
-        
+
         with pytest.raises(InjectedFailureError) as exc_info:
             injector.raise_failure(FailureType.GENERAL_FAILURE)
-        
+
         assert "Config failure" in str(exc_info.value)
 
     def test_raise_general_failure_with_override_message(self):
@@ -1115,19 +1113,19 @@ class TestRaiseFailure:
         injector = FailureInjector()
         config = FailureConfig(failure_type=FailureType.GENERAL_FAILURE, error_message="Config failure")
         injector._active_failures["gen_test"] = config
-        
+
         with pytest.raises(InjectedFailureError) as exc_info:
             injector.raise_failure(FailureType.GENERAL_FAILURE, error_message="Override failure")
-        
+
         assert "Override failure" in str(exc_info.value)
 
     def test_raise_general_failure_default_message(self):
         """Test raising general failure with no config uses default message."""
         injector = FailureInjector()
-        
+
         with pytest.raises(InjectedFailureError) as exc_info:
             injector.raise_failure(FailureType.GENERAL_FAILURE)
-        
+
         assert "Injected general failure" in str(exc_info.value)
 
     def test_raise_slow_response_delays_and_raises(self):
@@ -1135,12 +1133,12 @@ class TestRaiseFailure:
         injector = FailureInjector()
         config = FailureConfig(failure_type=FailureType.SLOW_RESPONSE, timeout_value=0.1)
         injector._active_failures["slow_test"] = config
-        
+
         start = time.time()
         with pytest.raises(InjectedFailureError):
             injector.raise_failure(FailureType.SLOW_RESPONSE)
         elapsed = time.time() - start
-        
+
         # Should have slept for timeout_value
         assert elapsed >= 0.08  # Allow some tolerance
 
@@ -1149,42 +1147,42 @@ class TestRaiseFailure:
         injector = FailureInjector()
         config = FailureConfig(failure_type=FailureType.SLOW_RESPONSE, timeout_value=0.05)
         injector._active_failures["slow_test"] = config
-        
+
         with pytest.raises(InjectedFailureError) as exc_info:
             injector.raise_failure(FailureType.SLOW_RESPONSE, error_message="Custom slow")
-        
+
         assert "Custom slow" in str(exc_info.value)
 
     def test_raise_network_partition(self):
         """Test raising network partition failure."""
         injector = FailureInjector()
         injector._active_failures["net_test"] = FailureConfig(failure_type=FailureType.NETWORK_PARTITION)
-        
+
         with pytest.raises(InjectedFailureError) as exc_info:
             injector.raise_failure(FailureType.NETWORK_PARTITION)
-        
+
         assert "network_partition" in str(exc_info.value).lower()
 
     def test_raise_latency_injection(self):
         """Test raising latency injection failure."""
         injector = FailureInjector()
         injector._active_failures["lat_test"] = FailureConfig(failure_type=FailureType.LATENCY_INJECTION)
-        
+
         with pytest.raises(InjectedFailureError) as exc_info:
             injector.raise_failure(FailureType.LATENCY_INJECTION)
-        
+
         assert "latency_injection" in str(exc_info.value).lower()
 
     def test_failure_count_increment(self):
         """Test that raise_failure increments failure count."""
         injector = FailureInjector()
         injector._active_failures["test"] = FailureConfig(failure_type=FailureType.TIMEOUT)
-        
+
         assert injector._failure_count == 0
         with pytest.raises(InjectedTimeoutError):
             injector.raise_failure(FailureType.TIMEOUT)
         assert injector._failure_count == 1
-        
+
         with pytest.raises(InjectedTimeoutError):
             injector.raise_failure(FailureType.TIMEOUT)
         assert injector._failure_count == 2
@@ -1197,68 +1195,68 @@ class TestContextManagerDelays:
     def test_timeout_with_delay(self):
         """Test timeout context manager with delay."""
         injector = FailureInjector()
-        
+
         start = time.time()
         with injector.inject_timeout(duration=1.0, delay=0.2):
             elapsed = time.time() - start
             assert elapsed >= 0.15  # Delay should have passed
-        
+
         # Context should have exited after delay
         assert len(injector._active_failures) == 0
 
     def test_connection_error_with_delay(self):
         """Test connection error context manager with delay."""
         injector = FailureInjector()
-        
+
         start = time.time()
         with injector.inject_connection_error(duration=1.0, delay=0.2):
             elapsed = time.time() - start
             assert elapsed >= 0.15
-        
+
         assert len(injector._active_failures) == 0
 
     def test_general_failure_with_delay(self):
         """Test general failure context manager with delay."""
         injector = FailureInjector()
-        
+
         start = time.time()
         with injector.inject_general_failure(duration=1.0, delay=0.2):
             elapsed = time.time() - start
             assert elapsed >= 0.15
-        
+
         assert len(injector._active_failures) == 0
 
     def test_slow_response_with_delay(self):
         """Test slow response context manager with delay."""
         injector = FailureInjector()
-        
+
         start = time.time()
         with injector.inject_slow_response(duration=1.0, delay=0.2, slow_duration=0.05):
             elapsed = time.time() - start
             assert elapsed >= 0.15
-        
+
         assert len(injector._active_failures) == 0
 
     def test_network_partition_with_delay(self):
         """Test network partition context manager with delay."""
         injector = FailureInjector()
-        
+
         start = time.time()
         with injector.inject_network_partition(duration=1.0, delay=0.2):
             elapsed = time.time() - start
             assert elapsed >= 0.15
-        
+
         assert len(injector._active_failures) == 0
 
     def test_latency_with_delay(self):
         """Test latency context manager with delay."""
         injector = FailureInjector()
-        
+
         start = time.time()
         with injector.inject_latency(duration=1.0, delay=0.2, latency_ms=10):
             elapsed = time.time() - start
             assert elapsed >= 0.15
-        
+
         assert len(injector._active_failures) == 0
 
 
@@ -1269,52 +1267,52 @@ class TestNetworkPartitionScenarios:
     def test_network_partition_complete(self):
         """Test complete network partition."""
         injector = FailureInjector()
-        
+
         with injector.inject_network_partition(
             duration=0.5,
             partition_type="complete",
             affected_services=["service1", "service2"]
         ):
             assert injector.is_failure_active(FailureType.NETWORK_PARTITION) is True
-        
+
         assert len(injector._active_failures) == 0
 
     def test_network_partition_partial(self):
         """Test partial network partition."""
         injector = FailureInjector()
-        
+
         with injector.inject_network_partition(
             duration=0.5,
             partition_type="partial",
             affected_services=["service1"]
         ):
             assert injector.is_failure_active(FailureType.NETWORK_PARTITION) is True
-        
+
         assert len(injector._active_failures) == 0
 
     def test_network_partition_asymmetric(self):
         """Test asymmetric network partition."""
         injector = FailureInjector()
-        
+
         with injector.inject_network_partition(
             duration=0.5,
             partition_type="asymmetric",
             affected_services=["service1", "service2", "service3"]
         ):
             assert injector.is_failure_active(FailureType.NETWORK_PARTITION) is True
-        
+
         assert len(injector._active_failures) == 0
 
     def test_network_partition_custom_message(self):
         """Test network partition with custom error message."""
         injector = FailureInjector()
-        
+
         with injector.inject_network_partition(
             duration=0.5,
             error_message="Custom partition message"
         ):
             assert injector.is_failure_active(FailureType.NETWORK_PARTITION) is True
-        
+
         assert len(injector._active_failures) == 0
 
 
@@ -1325,18 +1323,18 @@ class TestLatencyInjectionScenarios:
     def test_latency_basic(self):
         """Test basic latency injection."""
         injector = FailureInjector()
-        
+
         start = time.time()
         with injector.inject_latency(latency_ms=100):
             elapsed = time.time() - start
             assert elapsed >= 0.08  # 100ms with tolerance
-        
+
         assert len(injector._active_failures) == 0
 
     def test_latency_with_jitter(self):
         """Test latency injection with jitter."""
         injector = FailureInjector()
-        
+
         # Run multiple times to see jitter effect
         latencies = []
         for _ in range(5):
@@ -1345,7 +1343,7 @@ class TestLatencyInjectionScenarios:
                 elapsed = time.time() - start
                 latencies.append(elapsed)
             injector.reset()
-        
+
         # Should have variance due to jitter
         assert max(latencies) > min(latencies)
         # All should be at least 50ms
@@ -1354,16 +1352,16 @@ class TestLatencyInjectionScenarios:
     def test_latency_duration(self):
         """Test latency injection with duration."""
         injector = FailureInjector()
-        
+
         with injector.inject_latency(duration=0.5, latency_ms=20):
             assert injector.is_failure_active(FailureType.LATENCY_INJECTION) is True
-        
+
         assert len(injector._active_failures) == 0
 
     def test_latency_zero_jitter(self):
         """Test latency with zero jitter is consistent."""
         injector = FailureInjector()
-        
+
         latencies = []
         for _ in range(5):
             start = time.time()
@@ -1371,7 +1369,7 @@ class TestLatencyInjectionScenarios:
                 elapsed = time.time() - start
                 latencies.append(elapsed)
             injector.reset()
-        
+
         # Should be very consistent with no jitter
         assert max(latencies) - min(latencies) < 0.01
 
@@ -1386,7 +1384,7 @@ class TestConvenienceFunctionWrappers:
             # Should use singleton instance
             injector = FailureInjector.get_instance()
             assert injector.is_failure_active(FailureType.TIMEOUT) is True
-        
+
         # After context exit, should be cleaned up
         injector = FailureInjector.get_instance()
         assert len(injector._active_failures) == 0
@@ -1396,7 +1394,7 @@ class TestConvenienceFunctionWrappers:
         with inject_connection_error(duration=0.5):
             injector = FailureInjector.get_instance()
             assert injector.is_failure_active(FailureType.CONNECTION_ERROR) is True
-        
+
         injector = FailureInjector.get_instance()
         assert len(injector._active_failures) == 0
 
@@ -1405,7 +1403,7 @@ class TestConvenienceFunctionWrappers:
         with inject_general_failure(duration=0.5, probability=0.8):
             injector = FailureInjector.get_instance()
             assert injector.is_failure_active(FailureType.GENERAL_FAILURE) is True
-        
+
         injector = FailureInjector.get_instance()
         assert len(injector._active_failures) == 0
 
@@ -1418,7 +1416,7 @@ class TestConvenienceFunctionWrappers:
         ):
             injector = FailureInjector.get_instance()
             assert injector.is_failure_active(FailureType.NETWORK_PARTITION) is True
-        
+
         injector = FailureInjector.get_instance()
         assert len(injector._active_failures) == 0
 
@@ -1430,7 +1428,7 @@ class TestConvenienceFunctionWrappers:
             assert injector.is_failure_active(FailureType.LATENCY_INJECTION) is True
             elapsed = time.time() - start
             assert elapsed >= 0.04
-        
+
         injector = FailureInjector.get_instance()
         assert len(injector._active_failures) == 0
 
@@ -1442,28 +1440,28 @@ class TestEdgeCasesAndBoundaries:
     def test_zero_duration_immediate_cleanup(self):
         """Test that zero duration causes immediate cleanup."""
         injector = FailureInjector()
-        
+
         injector.inject(failure_type=FailureType.TIMEOUT, duration=0.001)
-        
+
         # Should be active initially
         assert len(injector._active_failures) > 0
-        
+
         # Wait for cleanup
         time.sleep(0.01)
-        
+
         # Should be cleaned up
         assert len(injector._active_failures) == 0
 
     def test_very_long_duration(self):
         """Test very long duration doesn't cause issues."""
         injector = FailureInjector()
-        
+
         # Inject with long duration
         injector.inject(failure_type=FailureType.TIMEOUT, duration=3600.0)
-        
+
         # Should be active
         assert injector.is_failure_active(FailureType.TIMEOUT) is True
-        
+
         # Manual reset should work
         injector.reset()
         assert len(injector._active_failures) == 0
@@ -1471,14 +1469,14 @@ class TestEdgeCasesAndBoundaries:
     def test_multiple_simultaneous_failures(self):
         """Test multiple simultaneous failure injections."""
         injector = FailureInjector()
-        
+
         with injector.inject_timeout(duration=1.0):
             with injector.inject_connection_error(duration=1.0):
                 with injector.inject_general_failure(duration=1.0):
                     assert injector.is_failure_active(FailureType.TIMEOUT) is True
                     assert injector.is_failure_active(FailureType.CONNECTION_ERROR) is True
                     assert injector.is_failure_active(FailureType.GENERAL_FAILURE) is True
-        
+
         # All should be cleaned up
         assert len(injector._active_failures) == 0
 
@@ -1486,7 +1484,7 @@ class TestEdgeCasesAndBoundaries:
         """Test nested context managers of same type."""
         injector1 = FailureInjector()
         injector2 = FailureInjector()
-        
+
         # Use different injector instances to get different keys
         with injector1.inject_timeout(duration=1.0):
             assert len(injector1._active_failures) == 1
@@ -1502,24 +1500,24 @@ class TestEdgeCasesAndBoundaries:
     def test_reset_cleans_all_failures(self):
         """Test reset clears all active failures."""
         injector = FailureInjector()
-        
+
         injector.inject(failure_type=FailureType.TIMEOUT, duration=3600)
         injector.inject(failure_type=FailureType.CONNECTION_ERROR, duration=3600)
         injector.inject(failure_type=FailureType.GENERAL_FAILURE, duration=3600)
-        
+
         assert len(injector._active_failures) == 3
-        
+
         injector.reset()
-        
+
         assert len(injector._active_failures) == 0
         assert len(injector._cleanup_callbacks) == 0
 
     def test_is_failure_active_no_matching_type(self):
         """Test is_failure_active returns False for non-existent type."""
         injector = FailureInjector()
-        
+
         injector.inject(failure_type=FailureType.TIMEOUT, duration=1.0)
-        
+
         assert injector.is_failure_active(FailureType.TIMEOUT) is True
         assert injector.is_failure_active(FailureType.CONNECTION_ERROR) is False
         assert injector.is_failure_active(FailureType.GENERAL_FAILURE) is False
@@ -1528,7 +1526,7 @@ class TestEdgeCasesAndBoundaries:
         """Test thread safety with concurrent failure injections."""
         injector = FailureInjector()
         results = []
-        
+
         def inject_failure(failure_type, duration):
             try:
                 with injector.inject_timeout(duration=duration):
@@ -1536,29 +1534,29 @@ class TestEdgeCasesAndBoundaries:
                     results.append(True)
             except Exception as e:
                 results.append(False)
-        
+
         threads = []
         for i in range(5):
             t = threading.Thread(target=inject_failure, args=(FailureType.TIMEOUT, 0.1))
             threads.append(t)
             t.start()
-        
+
         for t in threads:
             t.join()
-        
+
         assert all(results)
 
     def test_exception_in_context_manager_preserves_cleanup(self):
         """Test that exceptions in context manager still trigger cleanup."""
         injector = FailureInjector()
-        
+
         try:
             with injector.inject_timeout(duration=1.0):
                 assert len(injector._active_failures) == 1
                 raise ValueError("Test exception")
         except ValueError:
             pass
-        
+
         # Cleanup should have happened
         assert len(injector._active_failures) == 0
 
@@ -1571,11 +1569,11 @@ class TestFailureCountAndRepeat:
         """Test that failure count resets on reset."""
         injector = FailureInjector()
         injector._active_failures["test"] = FailureConfig(failure_type=FailureType.TIMEOUT)
-        
+
         with pytest.raises(InjectedTimeoutError):
             injector.raise_failure(FailureType.TIMEOUT)
         assert injector._failure_count == 1
-        
+
         injector.reset()
         assert injector._failure_count == 0
 
@@ -1588,12 +1586,12 @@ class TestFailureCountAndRepeat:
             probability=1.0
         )
         injector._active_failures["test"] = config
-        
+
         # Should be able to fail multiple times
         for i in range(5):
             with pytest.raises(InjectedFailureError):
                 injector.raise_failure(FailureType.GENERAL_FAILURE)
-        
+
         assert injector._failure_count == 5
 
 
@@ -1605,13 +1603,13 @@ class TestShouldFail:
         """Test should_fail returns True when failure is active."""
         injector = FailureInjector()
         injector._active_failures["test"] = FailureConfig(failure_type=FailureType.TIMEOUT)
-        
+
         assert injector.should_fail(FailureType.TIMEOUT) is True
 
     def test_should_fail_returns_false_when_not_active(self):
         """Test should_fail returns False when no failure is active."""
         injector = FailureInjector()
-        
+
         assert injector.should_fail(FailureType.TIMEOUT) is False
 
     def test_should_fail_with_probability_zero(self):
@@ -1619,7 +1617,7 @@ class TestShouldFail:
         injector = FailureInjector()
         config = FailureConfig(failure_type=FailureType.TIMEOUT, probability=0.0)
         injector._active_failures["test"] = config
-        
+
         # With probability 0.0, should_fail should return False
         # (random.random() > 0.0 is always True, so it returns False)
         assert injector.should_fail(FailureType.TIMEOUT) is False
@@ -1629,14 +1627,14 @@ class TestShouldFail:
         injector = FailureInjector()
         config = FailureConfig(failure_type=FailureType.TIMEOUT, probability=1.0, repeat_count=3)
         injector._active_failures["test"] = config
-        
+
         # With probability 1.0 and repeat_count=3, should return True when count < 3
         injector._failure_count = 0
         assert injector.should_fail(FailureType.TIMEOUT) is True
-        
+
         injector._failure_count = 2
         assert injector.should_fail(FailureType.TIMEOUT) is True
-        
+
         injector._failure_count = 3
         assert injector.should_fail(FailureType.TIMEOUT) is False
 
@@ -1645,7 +1643,7 @@ class TestShouldFail:
         injector = FailureInjector()
         config = FailureConfig(failure_type=FailureType.TIMEOUT, probability=1.0, repeat_count=None)
         injector._active_failures["test"] = config
-        
+
         # Should always return True regardless of failure count
         injector._failure_count = 100
         assert injector.should_fail(FailureType.TIMEOUT) is True
@@ -1658,7 +1656,7 @@ class TestAsyncContextManagerFull:
     async def test_async_context_manager_enter(self):
         """Test async context manager __aenter__."""
         injector = FailureInjector()
-        
+
         async with injector as result:
             assert result is injector
             assert injector is not None
@@ -1666,23 +1664,23 @@ class TestAsyncContextManagerFull:
     async def test_async_context_manager_exits_cleanly(self):
         """Test async context manager __aexit__ cleans up."""
         injector = FailureInjector()
-        
+
         async with injector:
             injector.inject(failure_type=FailureType.TIMEOUT, duration=3600)
             assert len(injector._active_failures) == 1
-        
+
         # Should be reset after exit
         assert len(injector._active_failures) == 0
 
     async def test_async_context_manager_with_exception(self):
         """Test async context manager handles exceptions properly."""
         injector = FailureInjector()
-        
+
         with pytest.raises(ValueError):
             async with injector:
                 injector.inject(failure_type=FailureType.TIMEOUT, duration=3600)
                 raise ValueError("Test exception")
-        
+
         # Should still be reset after exception
         assert len(injector._active_failures) == 0
 

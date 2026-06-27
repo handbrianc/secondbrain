@@ -80,7 +80,7 @@ class TestConversationSessionLoad:
 
     def test_load_nonexistent_session(self, mock_storage):
         """Test loading a session that doesn't exist."""
-        mock_storage.get_history.return_value = []
+        mock_storage.session_exists.return_value = False
 
         session = ConversationSession.load("nonexistent", mock_storage)
 
@@ -430,8 +430,7 @@ class TestConversationSessionErrorPaths:
 
         Error Path: Loading non-existent session.
         """
-        # Mock empty history (session doesn't exist)
-        mock_storage.get_history.return_value = []
+        mock_storage.session_exists.return_value = False
 
         result = ConversationSession.load("nonexistent", mock_storage)
 

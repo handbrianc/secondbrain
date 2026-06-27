@@ -16,11 +16,9 @@ from secondbrain.document import DocumentIngestor
 from secondbrain.logging import setup_logging
 from secondbrain.search import Searcher
 
-app = FastAPI(title="SecondBrain API")
-
-setup_logging(verbose=False)
-
 app = FastAPI(title="SecondBrain API", version="1.0.0")
+
+setup_logging()
 
 
 class IngestRequest(BaseModel):
