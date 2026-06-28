@@ -8,6 +8,14 @@ from unittest.mock import MagicMock
 import pytest
 
 
+def _cleanup_temp_path(path: Path) -> None:
+    """Remove a temp file if it still exists."""
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        pass
+
+
 @pytest.fixture(autouse=True, scope="session")
 def _stub_docling_modules() -> None:
     """Stub out docling submodules before any test imports DocumentIngestor.
@@ -79,11 +87,12 @@ def mocked_pdf_extraction(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
 
 
 @pytest.fixture
-def sample_pdf_path() -> Path:
+def sample_pdf_path(request: pytest.FixtureRequest) -> Path:
     """Return path to a sample PDF file for testing.
 
     Creates a temporary PDF file with test content using fpdf.
     Skips the test if fpdf is not available.
+    The file is cleaned up after the test completes.
     """
     try:
         from fpdf import FPDF
@@ -102,15 +111,18 @@ def sample_pdf_path() -> Path:
             "machine learning and artificial intelligence topics.",
         )
         pdf.output(tmp.name)
-        return Path(tmp.name)
+        path = Path(tmp.name)
+        request.addfinalizer(lambda: _cleanup_temp_path(path))
+        return path
 
 
 @pytest.fixture
-def sample_pdf_with_multiple_pages() -> Path:
+def sample_pdf_with_multiple_pages(request: pytest.FixtureRequest) -> Path:
     """Return path to a multi-page sample PDF file for testing.
 
     Creates a temporary multi-page PDF file with test content using fpdf.
     Skips the test if fpdf is not available.
+    The file is cleaned up after the test completes.
     """
     try:
         from fpdf import FPDF
@@ -130,4 +142,6 @@ def sample_pdf_with_multiple_pages() -> Path:
                 "machine learning, deep learning, and neural networks.",
             )
         pdf.output(tmp.name)
-        return Path(tmp.name)
+        path = Path(tmp.name)
+        request.addfinalizer(lambda: _cleanup_temp_path(path))
+        return path
