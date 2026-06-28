@@ -14,49 +14,33 @@ ChunkId = NewType("ChunkId", str)
 EmbeddingVector = NewType("EmbeddingVector", list[float])
 
 
-def _validate_embedding_vector(vec: list[float], *, _caller: str = "") -> list[float]:
-    """Validate embedding vector dimensions against config.
-
-    Args:
-        vec: The embedding vector values.
-        _caller: Optional caller context for error messages.
-
-    Returns:
-        The validated vector (unchanged if valid).
-
-    Raises:
-        ValueError: If vector is empty or dimension count doesn't match config.
-    """
-    if not vec:
-        raise ValueError("Embedding vector cannot be empty")
-    expected_dims = config().embedding_dimensions
-    actual_dims = len(vec)
-    if actual_dims != expected_dims:
-        raise ValueError(
-            f"Embedding vector dimension mismatch: got {actual_dims}, "
-            f"expected {expected_dims} (configured embedding_dimensions). "
-            f"{_caller}"
-        )
-    return vec
-
-
-def make_embedding_vector(values: list[float]) -> EmbeddingVector:
+def make_embedding_vector(values: list[float], expected_dims: int | None = None) -> EmbeddingVector:
     """Create a validated EmbeddingVector from raw float values.
-
-    Validates that the vector length matches config.embedding_dimensions.
 
     Args:
         values: Raw float values for the embedding vector.
+        expected_dims: Exact dimensionality expected.  If None, falls back to
+            config.embedding_dimensions (preserved for backward compatibility
+            with existing test fixtures; prefer passing explicit dims at callsites
+            to decouple domain layer from the global config singleton).
 
     Returns:
         A validated EmbeddingVector.
 
     Raises:
-        ValueError: If dimensions don't match config.embedding_dimensions or
-            vector is empty.
+        ValueError: If dimensions don't match expected_dims or vector is empty.
     """
-    valid = _validate_embedding_vector(list(values), _caller="make_embedding_vector()")
-    return EmbeddingVector(valid)
+    if expected_dims is None:
+        expected_dims = config().embedding_dimensions
+    if not values:
+        raise ValueError("Embedding vector cannot be empty")
+    actual_dims = len(values)
+    if actual_dims != expected_dims:
+        raise ValueError(
+            f"Embedding vector dimension mismatch: got {actual_dims}, "
+            f"expected {expected_dims}."
+        )
+    return EmbeddingVector(list(values))
 
 
 SourcePath = NewType("SourcePath", str)
