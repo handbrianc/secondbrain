@@ -176,7 +176,7 @@ class TestAsyncConnection:
 
         def mock_aggregate(*args, **kwargs):
             time.sleep(0.01)  # Simulate small delay
-            return [{"score": 0.9}]
+            return [{"chunk_id": "fake-id", "source_file": "test.pdf", "chunk_text": "sample text", "page_number": 1, "score": 0.9}]
 
         mock_collection.aggregate = MagicMock(side_effect=mock_aggregate)
 
