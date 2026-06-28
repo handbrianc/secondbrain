@@ -445,7 +445,8 @@ class TestVectorStorageStatistics:
         storage = storage_with_mock
 
         mock_chunks = [
-            {"chunk_id": f"id-{i}", "source_file": "test.pdf"} for i in range(10)
+            {"chunk_id": f"id-{i}", "source_file": "test.pdf", "chunk_text": f"text-{i}", "page_number": 1}
+            for i in range(10)
         ]
         mock_cursor = MagicMock()
         mock_cursor.skip.return_value = mock_cursor
