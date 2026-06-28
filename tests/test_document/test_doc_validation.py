@@ -81,33 +81,31 @@ class TestResolveCoreCount:
     """Tests for _resolve_core_count parallel processing configuration."""
 
     def test_resolve_core_count_auto(self) -> None:
-        """Test cores=None triggers auto-detection."""
+        """Test cores=None triggers auto-detection via os.cpu_count()."""
         ingestor = DocumentIngestor()
 
-        # Mock config to return None for max_workers, so os.cpu_count() is used
-        with patch("secondbrain.document.config") as mock_config:
-            mock_config.return_value.max_workers = None
-            with patch.object(os, "cpu_count", return_value=8):
+        # When config.max_workers is None, _resolve_core_count uses os.cpu_count().
+        # We patch at the module level where it's used (ingestor.py imports os at top).
+        with patch("secondbrain.document.ingestor.os") as mock_os:
+            mock_os.cpu_count.return_value = 8
+            with patch("secondbrain.document.config") as mock_config:
+                mock_config.return_value.max_workers = None
                 assert ingestor._resolve_core_count(None) == 8
 
         # When cpu_count returns None, fallback to 1
-        with patch("secondbrain.document.config") as mock_config:
-            mock_config.return_value.max_workers = None
-            with patch.object(os, "cpu_count", return_value=None):
+        with patch("secondbrain.document.ingestor.os") as mock_os:
+            mock_os.cpu_count.return_value = None
+            with patch("secondbrain.document.config") as mock_config:
+                mock_config.return_value.max_workers = None
                 assert ingestor._resolve_core_count(None) == 1
 
-    def test_resolve_core_count_clamped(self) -> None:
-        """Test cores > available are clamped to max."""
+    def test_resolve_core_count_explicit(self) -> None:
+        """Test explicit cores values are respected (no auto-detection)."""
         ingestor = DocumentIngestor()
 
-        with patch("secondbrain.document.config") as mock_config_func:
-            mock_config_func.return_value.max_workers = 4
-
-            with patch.object(os, "cpu_count", return_value=4):
-                assert ingestor._resolve_core_count(8) == 8
-
-            with patch.object(os, "cpu_count", return_value=4):
-                assert ingestor._resolve_core_count(4) == 4
+        assert ingestor._resolve_core_count(8) == 8
+        assert ingestor._resolve_core_count(4) == 4
+        assert ingestor._resolve_core_count(1) == 1
 
     def test_resolve_core_count_invalid(self) -> None:
         """Test non-positive core counts are rejected."""
