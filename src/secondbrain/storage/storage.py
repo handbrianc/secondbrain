@@ -21,10 +21,10 @@ from pymongo.errors import (
 
 from secondbrain.config import Config, config
 from secondbrain.exceptions import StorageConnectionError
-from secondbrain.storage._base import BaseVectorStorage
+from secondbrain.storage.base import BaseVectorStorage
 from secondbrain.storage.models import DatabaseStats
 from secondbrain.storage.pipeline import build_search_pipeline
-from secondbrain.types import ChunkInfo, SearchResult
+from secondbrain.types import ChunkInfo, SearchResult, _validate_chunk_info, _validate_search_result
 from secondbrain.utils.connections import ValidatableService
 from secondbrain.utils.perf_monitor import async_timing, timing
 from secondbrain.utils.tracing import trace_operation
@@ -32,7 +32,7 @@ from secondbrain.utils.tracing import trace_operation
 logger = logging.getLogger(__name__)
 
 
-class VectorStorage(BaseVectorStorage, ValidatableService):
+class VectorStorage(ValidatableService, BaseVectorStorage):
     """Handles vector storage in MongoDB.
 
     Uses ValidatableService base class for connection validation with caching.
@@ -295,6 +295,40 @@ class VectorStorage(BaseVectorStorage, ValidatableService):
         except (ConnectionFailure, ServerSelectionTimeoutError):
             return False
 
+    # ------------------------------------------------------------------
+    # Transport-layer stubs — satisfy new base.py ABC requirements
+    # ------------------------------------------------------------------
+
+    def _execute_insert_one(self, doc: dict[str, Any]) -> Any:
+        return self.collection.insert_one(doc)
+
+    def _execute_insert_many(self, docs: list[dict[str, Any]]) -> Any:
+        return self.collection.insert_many(docs)
+
+    def _execute_aggregate(self, pipeline: list[dict[str, Any]]) -> Any:
+        return self.collection.aggregate(pipeline)
+
+    def _execute_find(
+        self,
+        query: dict[str, Any],
+        projection: dict[str, Any],
+        skip: int,
+        limit: int,
+    ) -> Any:
+        return self.collection.find(query, projection).skip(skip).limit(limit)
+
+    def _execute_delete_many(self, query: dict[str, Any]) -> Any:
+        return self.collection.delete_many(query)
+
+    def _execute_delete_one(self, query: dict[str, Any]) -> Any:
+        return self.collection.delete_one(query)
+
+    def _execute_count(self, query: dict[str, Any]) -> int:
+        return self.collection.count_documents(query)
+
+    def _execute_distinct(self, field: str) -> list[Any]:
+        return self.collection.distinct(field)
+
     def ensure_index(self) -> None:
         """Create indexes for local MongoDB.
 
@@ -373,8 +407,8 @@ class VectorStorage(BaseVectorStorage, ValidatableService):
         )
 
         with trace_operation("storage_aggregate"):
-            results: list[SearchResult] = list(self.collection.aggregate(pipeline))
-        return results
+            raw: list[dict[str, Any]] = list(self.collection.aggregate(pipeline))
+        return [_validate_search_result(r) for r in raw]
 
     def list_chunks(
         self,
@@ -427,8 +461,8 @@ class VectorStorage(BaseVectorStorage, ValidatableService):
             .limit(limit)
         )
 
-        chunks: list[ChunkInfo] = list(cursor)
-        return chunks
+        raw: list[dict[str, Any]] = list(cursor)
+        return [_validate_chunk_info(r) for r in raw]
 
     def delete_by_source(self, source: str) -> int:
         """Delete all chunks from a source file.
@@ -578,10 +612,10 @@ class VectorStorage(BaseVectorStorage, ValidatableService):
             file_type_filter=file_type_filter,
         )
 
-        results: list[SearchResult] = list(
+        raw: list[dict[str, Any]] = list(
             await asyncio.to_thread(lambda: list(self.collection.aggregate(pipeline)))
         )
-        return results
+        return [_validate_search_result(r) for r in raw]
 
     async def list_chunks_async(
         self,
@@ -625,8 +659,8 @@ class VectorStorage(BaseVectorStorage, ValidatableService):
             .limit(limit)
         )
 
-        chunks: list[ChunkInfo] = list(await asyncio.to_thread(lambda: list(cursor)))
-        return chunks
+        raw: list[dict[str, Any]] = list(await asyncio.to_thread(lambda: list(cursor)))
+        return [_validate_chunk_info(r) for r in raw]
 
     async def delete_by_source_async(self, source: str) -> int:
         """Delete all chunks from a source file asynchronously.
@@ -715,7 +749,7 @@ class VectorStorage(BaseVectorStorage, ValidatableService):
         }
 
 
-class AsyncVectorStorage(BaseVectorStorage, ValidatableService):
+class AsyncVectorStorage(ValidatableService, BaseVectorStorage):
     """Asynchronous vector storage using Motor (official async MongoDB driver).
 
     This class provides a native async/await API for MongoDB operations using Motor,
@@ -955,6 +989,51 @@ class AsyncVectorStorage(BaseVectorStorage, ValidatableService):
         except Exception:
             return False
 
+    # ------------------------------------------------------------------
+    # Validator concrete implementations — satisfy base.py ABC while
+    # delegating to ValidatableService cache/proxy logic
+    # ------------------------------------------------------------------
+
+    def validate_connection(self, force: bool = False) -> bool:
+        return super().validate_connection(force=force)  # type: ignore[misc]
+
+    async def validate_connection_async(self, force: bool = False) -> bool:
+        return await super().validate_connection_async(force=force)  # type: ignore[misc]
+
+    # ------------------------------------------------------------------
+    # Transport-layer stubs — satisfy new base.py ABC requirements
+    # ------------------------------------------------------------------
+
+    async def _execute_insert_one(self, doc: dict[str, Any]) -> Any:
+        return await self.async_collection.insert_one(doc)
+
+    async def _execute_insert_many(self, docs: list[dict[str, Any]]) -> Any:
+        return await self.async_collection.insert_many(docs)
+
+    async def _execute_aggregate(self, pipeline: list[dict[str, Any]]) -> Any:
+        return self.async_collection.aggregate(pipeline)
+
+    async def _execute_find(
+        self,
+        query: dict[str, Any],
+        projection: dict[str, Any],
+        skip: int,
+        limit: int,
+    ) -> Any:
+        return self.async_collection.find(query, projection).skip(skip).limit(limit)
+
+    async def _execute_delete_many(self, query: dict[str, Any]) -> Any:
+        return await self.async_collection.delete_many(query)
+
+    async def _execute_delete_one(self, query: dict[str, Any]) -> Any:
+        return await self.async_collection.delete_one(query)
+
+    async def _execute_count(self, query: dict[str, Any]) -> int:  # type: ignore[override]
+        return await self.async_collection.count_documents(query)
+
+    async def _execute_distinct(self, field: str) -> list[Any]:  # type: ignore[override]
+        return await self.async_collection.distinct(field)
+
     @async_timing("async_storage_store")
     async def store_async(self, document: dict[str, Any]) -> str:
         """Store a document with embedding using native Motor async."""
@@ -1002,8 +1081,8 @@ class AsyncVectorStorage(BaseVectorStorage, ValidatableService):
         )
 
         agg_cursor = self.async_collection.aggregate(pipeline)
-        results = await agg_cursor.to_list(length=None)
-        return results  # type: ignore[no-any-return]
+        raw: list[dict[str, Any]] = await agg_cursor.to_list(length=None)
+        return [_validate_search_result(r) for r in raw]
 
     async def list_chunks_async(
         self,
@@ -1036,8 +1115,8 @@ class AsyncVectorStorage(BaseVectorStorage, ValidatableService):
             .limit(limit)
         )
 
-        chunks = await cursor.to_list(length=None)
-        return chunks  # type: ignore[no-any-return]
+        raw: list[dict[str, Any]] = await cursor.to_list(length=None)
+        return [_validate_chunk_info(r) for r in raw]
 
     async def delete_by_source_async(self, source: str) -> int:
         """Delete all chunks from a source file using native Motor async."""
