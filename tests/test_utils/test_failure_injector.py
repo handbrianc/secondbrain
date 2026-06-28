@@ -1446,8 +1446,9 @@ class TestEdgeCasesAndBoundaries:
         # Should be active initially
         assert len(injector._active_failures) > 0
 
-        # Wait for cleanup
-        time.sleep(0.01)
+        # Wait for cleanup — 0.5s accommodates Timer scheduling latency
+        # under parallel pytest-xdist workers
+        time.sleep(0.5)
 
         # Should be cleaned up
         assert len(injector._active_failures) == 0
