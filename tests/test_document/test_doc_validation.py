@@ -81,17 +81,15 @@ class TestResolveCoreCount:
     """Tests for _resolve_core_count parallel processing configuration."""
 
     def test_resolve_core_count_auto(self) -> None:
-        ingestor = DocumentIngestor()
+        with patch("secondbrain.document.config") as mock_config:
+            mock_config.return_value.max_workers = None
+            ingestor = DocumentIngestor(cpu_count_fn=lambda: 8)
+            assert ingestor._resolve_core_count(None) == 8
 
-        with patch("secondbrain.document.ingestor._detect_cpu_count", return_value=8):
-            with patch("secondbrain.document.config") as mock_config:
-                mock_config.return_value.max_workers = None
-                assert ingestor._resolve_core_count(None) == 8
-
-        with patch("secondbrain.document.ingestor._detect_cpu_count", return_value=None):
-            with patch("secondbrain.document.config") as mock_config:
-                mock_config.return_value.max_workers = None
-                assert ingestor._resolve_core_count(None) == 1
+        with patch("secondbrain.document.config") as mock_config:
+            mock_config.return_value.max_workers = None
+            ingestor = DocumentIngestor(cpu_count_fn=lambda: None)
+            assert ingestor._resolve_core_count(None) == 1
 
     def test_resolve_core_count_explicit(self) -> None:
         """Test explicit cores values are respected (no auto-detection)."""
