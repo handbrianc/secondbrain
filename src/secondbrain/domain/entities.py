@@ -78,12 +78,10 @@ class DocumentChunk:
         if not self.chunk_id:
             raise ValueError("Chunk ID cannot be empty")
         if self.embedding is not None:
-            from secondbrain.domain.value_objects import _validate_embedding_vector
-
-            _validate_embedding_vector(
-                self.embedding,
-                _caller=f"DocumentChunk(id={self.chunk_id}).embedding",
-            )
+            # Validation deferred to make_embedding_vector() at creation time —
+            # DocumentChunk.__post_init__ intentionally elided to avoid
+            # config() global-state coupling in domain layer.
+            pass
 
     @property
     def char_count(self) -> int:

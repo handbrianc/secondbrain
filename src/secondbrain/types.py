@@ -1,10 +1,6 @@
-"""Shared type definitions for secondbrain.
+"""Shared type definitions for secondbrain."""
 
-This module defines TypedDicts used throughout the application for
-representing document chunks and search results.
-"""
-
-from typing import TypedDict
+from typing import Any, TypedDict
 
 
 class ChunkInfo(TypedDict):
@@ -20,3 +16,23 @@ class SearchResult(ChunkInfo, total=False):
     """Typed dictionary for search results."""
 
     score: float
+
+
+def _validate_chunk_info(d: dict[str, Any]) -> ChunkInfo:
+    """Runtime validation gate at dict→ChunkInfo cast points."""
+    for key in ("chunk_id", "source_file", "chunk_text"):
+        if key not in d:
+            raise TypeError(f"ChunkInfo missing required key: {key!r}")
+    if "page_number" not in d:
+        raise TypeError("ChunkInfo missing required key: 'page_number'")
+    return d  # type: ignore[return]
+
+
+def _validate_search_result(d: dict[str, Any]) -> SearchResult:
+    """Runtime validation gate at dict→SearchResult cast points."""
+    for key in ("chunk_id", "source_file", "chunk_text"):
+        if key not in d:
+            raise TypeError(f"SearchResult missing required key: {key!r}")
+    if "page_number" not in d:
+        raise TypeError("SearchResult missing required key: 'page_number'")
+    return d  # type: ignore[return]
