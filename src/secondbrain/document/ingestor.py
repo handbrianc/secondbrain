@@ -33,6 +33,11 @@ def _get_doc_config() -> Any:
     return secondbrain.document.config()
 
 
+def _detect_cpu_count() -> int | None:
+    """Wrapper around os.cpu_count() for testability."""
+    return os.cpu_count()
+
+
 # Suppress docling deprecation warnings (upstream library issue)
 warnings.filterwarnings(
     "ignore",
@@ -746,7 +751,7 @@ class DocumentIngestor:
         """
         cfg = config()
         if cores is None:
-            cores = cfg.max_workers or os.cpu_count() or 1
+            cores = cfg.max_workers or _detect_cpu_count() or 1
 
         if cores <= 0:
             raise ValueError("cores must be positive")
