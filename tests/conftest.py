@@ -177,6 +177,32 @@ def mock_embedding_gen():
     return MockEmbeddingGenerator(model_name="mock-384", dimension=384)
 
 
+@pytest.fixture(scope="session")
+def vector_storage_fixture(
+    request: pytest.FixtureRequest, tmp_path_factory: pytest.TempPathFactory
+) -> Generator[Any, None, None]:
+    from unittest.mock import MagicMock
+
+    from secondbrain.storage import VectorStorage
+
+    storage = VectorStorage()
+    storage.mongo_uri = "mongodb://localhost:27017"
+    storage.db_name = "secondbrain_test"
+    storage.collection_name = "embeddings_test"
+    storage._index_created = False
+    storage._collection = MagicMock()
+    storage._connection_valid = None
+    storage._connection_checked_at = 0.0
+
+    def _reset() -> None:
+        storage._collection = MagicMock()
+        storage._connection_valid = None
+        storage._connection_checked_at = 0.0
+
+    request.addfinalizer(_reset)
+    yield storage
+
+
 @pytest.fixture(scope="function")
 def mock_searcher():
     from secondbrain.search.mock import MockSearcher
