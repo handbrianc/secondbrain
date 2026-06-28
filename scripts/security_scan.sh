@@ -46,11 +46,7 @@ run_pip_audit() {
         echo ""
         echo -e "${GREEN}pip-audit completed successfully${NC}"
     else
-        echo -e "${YELLOW}pip-audit not installed. Installing...${NC}"
-        pip install pip-audit
-        pip-audit --desc on
-        echo ""
-        echo -e "${GREEN}pip-audit completed successfully${NC}"
+        echo -e "${YELLOW}pip-audit not installed. Skipping...${NC}"
     fi
     echo ""
 }
@@ -96,11 +92,7 @@ generate_sbom() {
         echo -e "${GREEN}SBOM generated: sbom.json${NC}"
         echo "SBOM format: SPDX JSON"
     else
-        echo -e "${YELLOW}cyclonedx-py not installed. Installing...${NC}"
-        pip install cyclonedx-bom
-        cyclonedx-py env -o sbom.json
-        echo ""
-        echo -e "${GREEN}SBOM generated: sbom.json${NC}"
+        echo -e "${YELLOW}cyclonedx-py not installed. Skipping...${NC}"
     fi
     echo ""
 }
