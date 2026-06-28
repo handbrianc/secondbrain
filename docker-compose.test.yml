@@ -10,8 +10,8 @@ services:
       - "27018:27017"  # Different from dev port (27017)
     environment:
       MONGO_INITDB_DATABASE: secondbrain_test
-      MONGO_INITDB_ROOT_USERNAME: testuser
-      MONGO_INITDB_ROOT_PASSWORD: testpass
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:-testuser}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:-testpass}
     volumes:
       - mongo_test_data:/data/db
     healthcheck:
