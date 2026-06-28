@@ -144,6 +144,7 @@ class DocumentIngestor:
         chunk_overlap: int = 50,
         verbose: bool = False,
         progress_callback: Callable[[Path, bool], None] | None = None,
+        cpu_count_fn: Callable[[], int | None] | None = None,
     ) -> None:
         """Initialize document ingestor.
 
@@ -152,6 +153,7 @@ class DocumentIngestor:
             chunk_overlap: Overlap between chunks in tokens.
             verbose: Enable verbose logging.
             progress_callback: Optional callback(file_path: Path, success: bool) called after each file.
+            cpu_count_fn: Override for auto-detected CPU count (useful for testing).
         """
         import secondbrain.document
 
@@ -169,6 +171,7 @@ class DocumentIngestor:
         self.verbose = verbose
         self.max_file_size_bytes: int = cfg.max_file_size_bytes
         self.progress_callback = progress_callback
+        self._cpu_count_fn = cpu_count_fn if cpu_count_fn is not None else _detect_cpu_count
 
         # Initialize embedding cache for deduplication
         self.embedding_cache = EmbeddingCache(max_size=cfg.embedding_cache_size)
@@ -751,7 +754,7 @@ class DocumentIngestor:
         """
         cfg = config()
         if cores is None:
-            cores = cfg.max_workers or _detect_cpu_count() or 1
+            cores = cfg.max_workers or self._cpu_count_fn() or 1
 
         if cores <= 0:
             raise ValueError("cores must be positive")
