@@ -18,7 +18,6 @@ from typing import Any
 
 from typing_extensions import TypedDict
 
-
 DEFAULT_MIN_SEGMENT_SIZE = 200
 
 
@@ -157,3 +156,7 @@ def deduplicate_segments(
             )
 
     return all_chunks
+
+
+# Backward-compatibility alias — original __init__.py used _chunk_segments
+_chunk_segments = chunk_segments

@@ -43,6 +43,11 @@ def parse_args() -> argparse.Namespace:
         help="Filter by source file (partial match)",
     )
     parser.add_argument(
+        "--filter-type",
+        type=str,
+        help="Filter by document type (e.g., pdf, docx)",
+    )
+    parser.add_argument(
         "--verbose",
         "-v",
         action="store_true",
