@@ -6,54 +6,14 @@ connection strings.
 """
 
 import os
-import platform
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-__all__ = ["Config", "config", "get_config", "preload_env"]
-
-
-def preload_env() -> None:
-    """Preload environment variables from .env or .env.test file.
-
-    This function should be called before creating Config instances to ensure
-    environment variables are loaded from the appropriate .env file.
-
-    When PYTEST_CURRENT_TEST is set, loads from .env.test if it exists.
-    Otherwise loads from .env.
-
-    In test mode, .env.test values override existing environment variables.
-    In production mode, .env values are only used if not already set.
-    """
-    is_test_env = os.getenv("PYTEST_CURRENT_TEST") is not None
-
-    # Determine which .env file to load
-    if is_test_env and Path(".env.test").exists():
-        env_file_path = Path(".env.test")
-    elif Path(".env").exists():
-        env_file_path = Path(".env")
-    else:
-        return  # No env file to load
-
-    # Load environment variables from file
-    if env_file_path.exists():
-        with open(env_file_path, encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith("#") and "=" in line:
-                    key, _, value = line.partition("=")
-                    key = key.strip()
-                    # Strip inline comments (text after #) and quotes
-                    value = value.split("#")[0].strip().strip('"').strip("'")
-                    # In test mode, always set (override any existing)
-                    # In production mode, only set if not already in environment
-                    if is_test_env or key not in os.environ:
-                        os.environ[key] = value
+__all__ = ["Config", "config", "get_config"]
 
 
 def _validate_mongo_uri(value: str) -> str:
