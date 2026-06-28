@@ -26,12 +26,6 @@ fi
 echo "SBOM cleanup complete."
 echo ""
 
-# Install cyclonedx-bom if not already installed
-if ! command -v cyclonedx-py &> /dev/null; then
-    echo "Installing cyclonedx-bom..."
-    pip install -q cyclonedx-bom
-fi
-
 # Generate JSON SBOM using CycloneDX
 echo "Generating CycloneDX JSON SBOM..."
 cyclonedx-py environment -o sbom.json --of JSON
