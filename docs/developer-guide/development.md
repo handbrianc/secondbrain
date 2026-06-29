@@ -1,268 +1,266 @@
 # Development Setup
 
-Complete guide to setting up and working with the SecondBrain codebase.
+Setting up a local development environment for SecondBrain.
 
 ## Prerequisites
 
-- **Python 3.11+**
-- **Git**
-- **MongoDB 8.0+** (via Docker or local)
-- **sentence-transformers** (via Docker or local)
+| Component | Version | Purpose |
+|-----------|---------|---------|
+| Python | 3.11+ | Runtime |
+| Git | Latest | Version control |
+| MongoDB | 4.4+ | Vector storage |
+| Docker | Latest | Service containers |
 
-## Initial Setup
-
-### 1. Clone Repository
+## Clone Repository
 
 ```bash
 git clone https://github.com/your-username/secondbrain.git
 cd secondbrain
 ```
 
-### 2. Create Virtual Environment
+## Virtual Environment
+
+Create an isolated Python environment:
 
 ```bash
-python -m venv venv
-source venv/bin/activate  # Linux/macOS
-venv\Scripts\activate     # Windows
+# Create environment
+python -m venv .venv
+
+# Activate (Linux/macOS)
+source .venv/bin/activate
+
+# Activate (Windows)
+.venv\Scripts\activate
+
+# Verify activation
+which python  # Should show .venv/bin/python
 ```
 
-### 3. Install Dependencies
+## Install Dependencies
 
-Choose the installation profile that matches your needs:
+### Core Dependencies
 
-**For Development (Recommended for Contributors):**
+```bash
+pip install -e .
+```
+
+### Development Dependencies
+
+Includes linting, testing, and documentation tools:
+
 ```bash
 pip install -e ".[dev]"
 ```
 
-**For Production/Runtime Only:**
+Or install subsets:
+
 ```bash
-pip install -e "."
+# Linting only
+pip install -e ".[lint]"
+
+# Testing only
+pip install -e ".[test]"
+
+# Documentation only
+pip install -e ".[docs]"
 ```
 
-> **What's the difference?** See [Dependency Installation Guide](../getting-started/DEPENDENCIES.md) for complete details on:
-> - Runtime dependencies (19 core packages)
-> - Development dependencies (30+ tools for testing, linting, security)
-> - Optional groups (qualitative testing, observability)
-> - External service requirements (MongoDB, sentence-transformers, configured LLM provider)
+### Optional Dependencies
 
-### What Development Dependencies Include
+Additional functionality groups:
 
-The `.[dev]` extra installs tools for:
+```bash
+# Mutation testing
+pip install -e ".[mutation]"
 
-- **Linting & Formatting**: ruff, mypy
-- **Testing**: pytest, hypothesis, mongomock
-- **Security Scanning**: bandit, safety, pip-audit
-- **Documentation**: mkdocs, mkdocstrings
-- **Packaging**: pyinstaller, wheel
-- **Quality Analysis**: vulture, pipdeptree
+# Web frameworks
+pip install -e ".[web]"
 
-Total: 30+ additional packages beyond runtime dependencies.
+# RAG with local models
+pip install -e ".[rag]"
 
-### Do You Need Dev Dependencies?
+# OpenTelemetry instrumentation
+pip install -e ".[opentelemetry]"
+```
 
-| Your Goal | Install Command |
-|-----------|----------------|
-| Just use SecondBrain | `pip install -e "."` |
-| Contribute to SecondBrain | `pip install -e ".[dev]"` |
-| Run qualitative tests | `pip install -e ".[dev]"` + `pip install -e ".[qualitative]"` |
-| Production deployment | `pip install -e "."` |
+## Environment Variables
 
-### 4. Install Pre-commit Hooks
+Copy the example environment file:
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` with your configuration:
+
+```bash
+# Required for embedding generation
+SECONDBRAIN_OPENAI_API_KEY=your-api-key
+
+# Point to local or Docker MongoDB
+SECONDBRAIN_MONGO_URI=mongodb://localhost:27017
+
+# Development settings
+SECONDBRAIN_LOG_LEVEL=DEBUG
+```
+
+## Start MongoDB
+
+### Option A: Docker
+
+```bash
+docker run -d \
+  --name secondbrain-mongo \
+  -p 27017:27017 \
+  mongo:latest
+```
+
+### Option B: Local MongoDB
+
+Ensure the mongod service is running:
+
+```bash
+mongod --dbpath /data/db
+```
+
+### Option C: Docker Compose
+
+```bash
+secondbrain start --wait
+```
+
+## Verify Installation
+
+Test that SecondBrain is correctly installed:
+
+```bash
+# Check version
+secondbrain --version
+
+# Run health check
+secondbrain health
+
+# Run status check
+secondbrain status
+```
+
+## Run Tests
+
+### All Tests
+
+```bash
+pytest
+```
+
+### Specific Test Categories
+
+```bash
+# Unit tests only
+pytest -m unit
+
+# Integration tests
+pytest -m integration
+
+# Fast tests (<50ms)
+pytest -m fast
+
+# Slow tests (>1s)
+pytest -m slow
+```
+
+### With Coverage
+
+```bash
+pytest --cov=secondbrain --cov-report=html
+open htmlcov/index.html
+```
+
+### Parallel Execution
+
+```bash
+pytest -n auto
+```
+
+Uses pytest-xdist to distribute tests across CPU cores.
+
+## Lint and Type Check
+
+Before submitting changes:
+
+```bash
+# Ruff linting
+ruff check src/
+
+# MyPy type checking
+mypy src/secondbrain/
+```
+
+## Pre-commit Hooks
+
+Install pre-commit hooks:
 
 ```bash
 pre-commit install
 ```
 
-### 5. Configure Environment
+Hooks run automatically before each commit:
 
-```bash
-# Copy example environment file
-cp .env.example .env
+- Ruff formatting and linting
+- MyPy type checking
+- Import sorting
+- Trailing whitespace removal
 
-# Edit with your settings
-nano .env
+## IDE Setup
+
+### VS Code
+
+Recommended settings in `.vscode/settings.json`:
+
+```json
+{
+  "python.linting.enabled": true,
+  "python.linting.ruffEnabled": true,
+  "python.typeChecking.mode": "strict",
+  "python.analysis.autoImportCompletions": true,
+  "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.codeActionsOnSave": {
+      "source.fixAll": "explicit",
+      "source.organizeImports": "explicit"
+    }
+  }
+}
 ```
 
-## Development Workflow
+### PyCharm
 
-### Running the Application
-
-```bash
-# Run the CLI (requires: pip install -e .)
-secondbrain --help
-
-# Note: python -m secondbrain does NOT work — no __main__.py exists
-```
-
-### Running Tests
-
-```bash
-# Fast profile (default)
-pytest
-
-# With coverage
-pytest --cov=secondbrain --cov-report=term-missing
-
-# Integration tests
-pytest -m integration
-
-# Specific test file
-pytest tests/test_document.py
-```
-
-### Code Quality
-
-```bash
-# Linting
-ruff check .
-
-# Formatting
-ruff format .
-
-# Type checking
-mypy .
-
-# All checks
-ruff check . && ruff format . && mypy .
-```
-
-### Pre-commit Hooks
-
-```bash
-# Run all hooks manually
-pre-commit run --all-files
-
-# Update hooks
-pre-commit autoupdate
-```
-
-## Project Structure
-
-```
-secondbrain/
-├── src/
-│   └── secondbrain/
-│       ├── __init__.py
-│       ├── cli/           # CLI commands
-│       ├── core/          # Core logic
-│       ├── storage/       # Database operations
-│       ├── embedding/     # Embedding generation
-│       ├── utils/         # Utilities
-│       └── config.py      # Configuration
-├── tests/
-│   ├── unit/             # Unit tests
-│   ├── integration/      # Integration tests
-│   └── conftest.py       # Test fixtures
-├── docs/                 # Documentation
-├── pyproject.toml        # Project configuration
-└── requirements*.txt     # Dependencies
-```
-
-## Debugging
-
-### Using pdb
-
-```python
-import pdb; pdb.set_trace()
-```
-
-### Using VS Code
-
-1. Set breakpoints in code
-2. Run "Python: Debug Current File"
-3. Use debug console for inspection
-
-### Logging
-
-```bash
-# Enable debug logging
-SECONDBRAIN_LOG_LEVEL=DEBUG secondbrain ingest ./docs/
-```
-
-## Common Tasks
-
-### Adding a New Command
-
-1. Create command in `src/secondbrain/cli/commands.py`
-2. Add Click decorator
-3. Add to CLI group
-4. Write tests
-5. Update documentation
-
-### Modifying Configuration
-
-1. Update `src/secondbrain/config.py`
-2. Add to `.env.example`
-3. Update [Configuration Guide](configuration.md)
-4. Add validation tests
-
-### Database Changes
-
-1. Update models in `src/secondbrain/storage/models.py`
-2. Write migration if needed
-3. Update [Schema Reference](../architecture/SCHEMA.md)
-4. Test with integration tests
-
-## Performance Testing
-
-```bash
-# See slowest tests (built-in pytest feature)
-pytest --durations=10
-
-# Profile code
-python -m cProfile -o profile.out -m secondbrain ingest ./docs/
-```
-
-## Contributing
-
-See [Contributing Guide](contributing.md) for detailed contribution guidelines.
+1. Set Project Interpreter to `.venv/bin/python`
+2. Enable ruff plugin
+3. Configure mypy plugin for type checking
 
 ## Troubleshooting
 
 ### Import Errors
 
 ```bash
-# Reinstall in development mode
-pip install -e ".[dev]" --force-reinstall
+# Reinstall in editable mode
+pip install -e .
 ```
 
-### Test Failures
+### MongoDB Connection Issues
 
 ```bash
-# Run with verbose output
-pytest -v
+# Check MongoDB is running
+docker ps | grep mongo
 
-# Show captured output
-pytest -s
+# Test connection
+mongosh --eval "db.adminCommand('ping')"
 ```
 
-### Dependency Issues
+### Test Discovery Failures
 
 ```bash
-# Clean and reinstall
-pip uninstall secondbrain
-pip install -e ".[dev]"
+# Clear pytest cache
+rm -rf .pytest_cache __pycache__
+pytest --collect-only
 ```
-
-### Dependency Conflicts
-
-```bash
-# Check dependency tree
-pip install pipdeptree
-pipdeptree
-
-# Create fresh virtual environment
-python -m venv venv
-source venv/bin/activate
-pip install --upgrade pip
-pip install -e ".[dev]"
-```
-
-> **More troubleshooting tips**: See [Dependency Troubleshooting Guide](../getting-started/DEPENDENCIES.md#troubleshooting)
-
-## Next Steps
-
-- [Docker Setup](docker.md) - Containerized development
-- [Testing Guide](TESTING.md) - Comprehensive testing
-- [Code Standards](code-standards.md) - Coding guidelines

@@ -1,222 +1,243 @@
-# Security Guidelines
+# Security Guide
 
-Security best practices for SecondBrain development.
+Security considerations and best practices for deploying and using SecondBrain.
 
-## Secure Coding Practices
+## Data Privacy
 
-### Input Validation
+### Local Processing
 
-Always validate user input:
+All document processing happens locally:
 
-```python
-from pydantic import BaseModel, Field, validator
+- **Parsing**: Done on-host with Docling
+- **Chunking**: Performed locally before storage
+- **Embedding**: Sent to external API if using hosted models
+- **Storage**: Vectors stored in your MongoDB instance
 
-class IngestRequest(BaseModel):
-    path: str = Field(..., min_length=1)
-    chunk_size: int = Field(default=4096, ge=512, le=8192)
-    
-    @validator("path")
-    def validate_path(cls, v):
-        # Prevent path traversal
-        path = Path(v).resolve()
-        if not path.is_absolute():
-            raise ValueError("Path must be absolute")
-        return str(path)
-```
+Understand which operations contact external services:
 
-### Error Handling
+| Operation | External Contact | Data Shared |
+|-----------|-----------------|-------------|
+| Embedding generation | Embedding API | Text chunks for vectorization |
+| LLM chat (RAG) | LLM API | Retrieved chunks + conversation |
+| Application telemetry | Optional OTLP | Logs and traces |
 
-Don't expose internal details:
+### Sensitive Data Handling
 
-```python
-try:
-    result = process()
-except Exception as e:
-    logger.error(f"Processing failed: {e}", exc_info=True)
-    raise CLIError("Failed to process document")
-```
-
-### Secrets Management
-
-Never hardcode secrets:
-
-```python
-# Good
-from secondbrain.config import Config
-config = Config()
-mongo_uri = config.mongo_uri  # From environment
-
-# Avoid
-mongo_uri = "mongodb://admin:password@localhost:27017"
-```
-
-## Dependency Security
-
-### Regular Scans
+Documents may contain sensitive information:
 
 ```bash
-# Full security scan (automatically cleans old reports)
-./scripts/security_scan.sh all
+# Exclude directories with sensitive content
+secondbrain ingest ./safe-docs --recursive
 
-# Individual security checks
-./scripts/security_scan.sh audit    # pip-audit dependency scan
-./scripts/security_scan.sh safety   # Safety vulnerability check
-./scripts/security_scan.sh bandit   # Code security scan
-./scripts/security_scan.sh sbom     # Generate SBOM
-
-# Generate SBOM separately
-./scripts/generate-sbom.sh
-
-# Clean up old reports manually
-./scripts/cleanup_reports.sh
+# Review source filter to prevent accidental ingestion
+secondbrain delete --source "./passwords.txt"
 ```
 
-### Report Management
+### Audit Trail
 
-Security and SBOM reports are automatically cleaned before each scan. The cleanup script removes:
-
-- JSON report files (`*report*.json`, `*security*.json`, `*sbom*.json`, etc.)
-- Markdown report files (`*report*.md`, `*security*.md`, `*vulnerability*.md`, etc.)
-- Old SBOM files (`sbom.json`, `sbom.spdx`)
-
-Reports are generated in:
-- `docs/security/` - Security scan reports and analysis
-- `site/security/` - Published security documentation
-
-### Update Dependencies
+Enable structured logging for compliance:
 
 ```bash
-# Check for updates
-pip list --outdated
-
-# Update safely
-pip install --upgrade <package>
+export SECONDBRAIN_LOG_FORMAT=json
+export SECONDBRAIN_LOG_LEVEL=INFO
 ```
 
-## Configuration Security
+Logs capture operation metadata without document content.
 
-### Environment Variables
+## Credential Management
+
+### API Keys
+
+Store credentials securely:
 
 ```bash
-# .env (add to .gitignore)
-SECONDBRAIN_MONGO_URI=mongodb://user:strong_password@localhost:27017
-SECONDBRAIN_SENTENCE_TRANSFORMERS_URL=http://localhost:11434
+# Environment variables (preferred for containers)
+export SECONDBRAIN_OPENAI_API_KEY=sk-...
+
+# .env file with restricted permissions (not in version control)
+chmod 600 .env
 ```
 
-### Secure Defaults
+### MongoDB Credentials
 
-```python
-class Config(BaseSettings):
-    # Secure by default
-    rate_limit_enabled: bool = True
-    circuit_breaker_enabled: bool = True
-    log_level: str = "INFO"  # Not DEBUG in production
-```
-
-## API Security
-
-### Rate Limiting
-
-```python
-from secondbrain.utils.circuit_breaker import CircuitBreaker
-
-@CircuitBreaker(
-    failure_threshold=5,
-    recovery_timeout=60
-)
-async def call_embedding_api(text: str):
-    ...
-```
-
-### Authentication (Future)
-
-```python
-# Plan for API authentication
-# JWT tokens, API keys, etc.
-```
-
-## Data Security
-
-### Encryption at Rest
-
-MongoDB supports encryption:
+Use strong authentication:
 
 ```bash
-# Enable MongoDB encryption
-# Configure in MongoDB settings
+# Connection string with credentials
+mongodb://user:strong-password@host:27017/secondbrain
+
+# TLS encryption
+mongodb+srv://user:pass@cluster.mongodb.net/?tls=true
 ```
 
-### Encryption in Transit
+### Secret Rotation
+
+Rotate API keys periodically:
+
+1. Obtain new key from provider
+2. Deploy updated credential
+3. Verify functionality
+4. Revoke old key
+
+## Deployment Security
+
+### Docker Security
+
+```yaml
+# docker-compose.prod.yml - production hardening
+services:
+  mongodb:
+    image: mongo:7.0
+    security_opt:
+      - no-new-privileges:true
+    read_only: false  # Needs writable volume for data
+    cap_drop:
+      - ALL
+```
+
+Run containers with least privilege:
 
 ```bash
-# Use TLS for MongoDB connections
-SECONDBRAIN_MONGO_URI=mongodb+srv://user:pass@cluster/?ssl=true
+docker run --cap-drop=ALL --security-opt=no-new-privileges secondbrain
 ```
 
-## Logging Security
+### Network Isolation
 
-### Don't Log Sensitive Data
+Bind MongoDB to localhost in development:
 
-```python
-# Good
-logger.info(f"Processed document: {doc_id}")
-
-# Avoid
-logger.info(f"Processed document with URI: {mongo_uri}")
+```bash
+mongod --bind_ip localhost
 ```
 
-### Sanitize Logs
+For network-accessible MongoDB, use firewall rules and TLS.
+
+### File Permissions
+
+Secure document directories:
+
+```bash
+# Restrict access to user only
+chmod 700 ./documents/
+
+# Restrict SecondBrain data directory
+chmod 700 ~/.secondbrain/
+```
+
+## Dependency Vulnerabilities
+
+### Automated Scanning
+
+Regular vulnerability checks:
+
+```bash
+# Scan dependencies
+pip install -e ".[security]"
+
+# Check for vulnerabilities
+safety check
+
+# Check PyPI package health
+pip-audit
+```
+
+### SBOM Generation
+
+Generate Software Bill of Materials:
+
+```bash
+cyclonedx-bom -o sbom.json
+```
+
+Required for supply chain security compliance.
+
+### Bandit Security Analysis
+
+Static analysis for Python security issues:
+
+```bash
+bandit -r src/secondbrain/
+```
+
+## Rate Limiting
+
+Protect against abuse and quota exhaustion:
+
+```bash
+# Configure rate limits
+export SECONDBRAIN_RATE_LIMIT_ENABLED=true
+export SECONDBRAIN_RATE_LIMIT_MAX_REQUESTS=10
+export SECONDBRAIN_RATE_LIMIT_WINDOW_SECONDS=1.0
+```
+
+Monitor rate limit violations in logs.
+
+## Input Validation
+
+### File Type Validation
+
+SecondBrain validates file extensions before processing:
 
 ```python
-def sanitize_log(message: str) -> str:
-    # Remove credentials, tokens, etc.
-    return re.sub(r"password=[^&]+", "password=***", message)
+SUPPORTED_EXTENSIONS = {
+    ".pdf", ".docx", ".pptx", ".xlsx",
+    ".html", ".md", ".txt", ...
+}
+
+# Reject unsupported types early
+if path.suffix.lower() not in SUPPORTED_EXTENSIONS:
+    raise ValueError(f"Unsupported file type: {path.suffix}")
+```
+
+### Path Traversal Prevention
+
+Sanitize file paths to prevent directory escapes:
+
+```python
+from pathlib import Path
+
+resolved_path = Path(path).resolve()
+allowed_base = Path("./data").resolve()
+
+if not resolved_path.is_relative_to(allowed_base):
+    raise ValueError("Path escape attempted")
+```
+
+### Query Injection Prevention
+
+Search queries are treated as opaque strings:
+
+```python
+# Safe: query passed as literal value
+filter = {"source": {"$eq": user_provided_source}}
+
+# MongoDB handles escaping automatically
+cursor = collection.find(filter)
 ```
 
 ## Security Checklist
 
-Before release:
+Before production deployment:
 
-- [ ] All inputs validated
-- [ ] No hardcoded secrets
-- [ ] Error messages sanitized
-- [ ] Dependencies scanned
+- [ ] MongoDB bound to internal network
+- [ ] Strong MongoDB credentials
+- [ ] API keys secured in environment or vault
+- [ ] Log format set to `json` for audit trails
 - [ ] Rate limiting enabled
-- [ ] Circuit breakers configured
-- [ ] Logs don't expose secrets
-- [ ] TLS enabled in production
-- [ ] Security tests pass
+- [ ] `pip-audit` passes with no critical issues
+- [ ] Docker runs with dropped capabilities
+- [ ] File permissions restricted to owner
 
 ## Incident Response
 
-### If Vulnerability Found
+If you suspect a security issue:
 
-1. **Assess** impact
-2. **Disclose** responsibly
-3. **Patch** quickly
-4. **Document** in changelog
-5. **Notify** users if needed
+1. **Contain**: Rotate affected API keys immediately
+2. **Assess**: Review logs for unauthorized access patterns
+3. **Report**: Contact maintainers via GitHub Security advisories
+4. **Remediate**: Follow published security bulletins
 
-### Reporting
+## Known Limitations
 
-Email: security@secondbrain.local
-
-## Security Tools
-
-| Tool | Purpose | Command |
-|------|---------|---------|
-| pip-audit | Dependency vulnerabilities | `pip-audit` |
-| bandit | Code security | `bandit -r src/` |
-| safety | Dependency check | `safety check` |
-| cyclonedx | SBOM generation | `cyclonedx-py environment` |
-
-## SBOM & Dependency Analysis
-
-- [SBOM Analysis](../architecture/SBOM_ANALYSIS.md) - Complete dependency inventory
-- [License Risk Report](../architecture/LICENSE-RISK-REPORT.md) - License compliance status
-
-## Next Steps
-
-- [Security Guide](../security/index.md) - User security
-- [Security Reports](../security/index.md#security-reports) - Latest scan results
-- [Configuration](configuration.md) - Secure configuration
+- **No access control**: Currently no per-user authentication
+- **Local LLM bypass**: Traffic stays on-premises if using Ollama/local models
+- **No encryption at rest**: MongoDB storage encryption depends on your MongoDB configuration

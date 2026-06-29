@@ -1,222 +1,245 @@
 # Document Ingestion Guide
 
-Learn how to add documents to your SecondBrain vector database.
+Comprehensive guide to ingesting documents into SecondBrain's vector database.
 
-## Supported Formats
+## Overview
 
-SecondBrain supports a wide range of document formats:
+The `ingest` command parses supported file types, splits content into chunks, generates embeddings, and stores vectors in MongoDB.
+
+## Supported File Types
+
+SecondBrain supports the following document formats:
 
 ### Documents
-- **PDF** (.pdf) - Text extraction with layout preservation
-- **Word** (.docx) - Full formatting support
-- **PowerPoint** (.pptx) - Slide-by-slide extraction
-- **Excel** (.xlsx) - Cell data with formatting
 
-### Web & Text
-- **HTML** (.html, .htm) - Content extraction, strips tags
-- **Markdown** (.md) - Preserves structure
-- **Text** (.txt) - Plain text
+| Format | Extensions | Notes |
+|--------|------------|-------|
+| PDF | `.pdf` | Text and tables extracted via Docling |
+| Word | `.docx` | Full text and paragraph extraction |
+| PowerPoint | `.pptx` | Slide text and bullet points |
+| Excel | `.xlsx` | Tabular data preservation |
+| HTML | `.html`, `.htm` | Web page content extraction |
+| Markdown | `.md` | Plain text with formatting preserved |
+| Plain Text | `.txt` | UTF-8 text files |
+| ASCII Doc | `.asciidoc`, `.adoc` | AsciiDoctor format |
+| LaTeX | `.tex` | TeX document format |
+| CSV | `.csv` | Structured tabular data |
+| XML | `.xml` | Markup document format |
+| JSON | `.json` | Structured JSON data |
 
-### Media
-- **Images** (.png, .jpg, .jpeg) - OCR extraction (requires Tesseract)
-- **Audio** (.wav, .mp3) - Transcription (requires Whisper)
+### Images (with OCR)
 
-## Basic Ingestion
+| Format | Extensions | OCR Engine |
+|--------|------------|------------|
+| PNG | `.png` | Docling/Tesseract |
+| JPEG | `.jpg`, `.jpeg` | Docling/Tesseract |
+| TIFF | `.tiff`, `.tif` | Docling/Tesseract |
+| BMP | `.bmp` | Docling/Tesseract |
+| WebP | `.webp` | Docling/Tesseract |
 
-### Ingest a Single File
+### Audio/Video
+
+| Format | Extensions | Processing |
+|--------|------------|------------|
+| WAV | `.wav` | Transcription |
+| MP3 | `.mp3` | Transcription |
+| WebVTT | `.vtt` | Subtitle extraction |
+
+## Chunking Configuration
+
+Documents are split into overlapping chunks to enable granular retrieval.
+
+### Default Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `chunk_size` | 4096 | Target chunk size in characters |
+| `chunk_overlap` | 50 | Overlap between consecutive chunks |
+
+### Tuning Guidelines
+
+#### Small Chunks (< 1024 chars)
+
+Best for: Precise fact extraction, Q&A, dense content
 
 ```bash
-secondbrain ingest document.pdf
+secondbrain ingest ./facts/ --chunk-size 512 --chunk-overlap 50
 ```
 
-### Ingest a Directory
+#### Medium Chunks (1024-2048 chars)
+
+Best for: General purpose, balanced precision/recall
+
+```bash
+secondbrain ingest ./general/ --chunk-size 1536 --chunk-overlap 100
+```
+
+#### Large Chunks (> 2048 chars)
+
+Best for: Preserving context, narrative content
+
+```bash
+secondbrain ingest ./books/ --chunk-size 4096 --chunk-overlap 200
+```
+
+### Chunk Size Constraints
+
+- `chunk_overlap` must be less than `chunk_size`
+- Chunk sizes are targets; actual chunks may vary slightly
+
+## Parallel Processing
+
+### Automatic Core Detection
+
+By default, SecondBrain auto-detects available CPU cores:
+
+```bash
+secondbrain ingest ./large_corpus/ --recursive
+```
+
+### Manual Core Specification
+
+Specify explicit core count:
+
+```bash
+secondbrain ingest ./papers/ --recursive --cores 4
+```
+
+### How Parallelism Works
+
+| Cores | Behavior |
+|-------|----------|
+| 1 | ThreadPoolExecutor with configurable batch size |
+| 2+ | Parallel file processing with progress tracking |
+
+## Batch Processing
+
+Control memory usage via batch sizing:
+
+```bash
+# Conservative batching
+secondbrain ingest ./docs/ --batch-size 5
+
+# Aggressive batching
+secondbrain ingest ./docs/ --batch-size 50
+```
+
+Lower batch sizes reduce memory pressure; higher sizes improve throughput.
+
+## Progressive File Selection
+
+### Non-Recursive Mode
+
+Ingests files directly in the specified directory:
 
 ```bash
 secondbrain ingest ./documents/
+# Processes: documents/file1.pdf, documents/file2.docx, ...
 ```
 
-All supported files in the directory will be processed recursively.
+### Recursive Mode
 
-## Advanced Options
-
-### Chunk Configuration
-
-Documents are split into chunks for embedding:
+Descends into all subdirectories:
 
 ```bash
-# Smaller chunks for better precision
-secondbrain ingest ./docs/ --chunk-size 1024 --chunk-overlap 100
-
-# Larger chunks for better context
-secondbrain ingest ./docs/ --chunk-size 8192 --chunk-overlap 500
+secondbrain ingest ./documents/ --recursive
+# Processes: documents/a/file1.pdf, documents/b/file2.pdf, ...
 ```
 
-| Parameter | Description | Recommended Range |
-|-----------|-------------|-------------------|
-| `--chunk-size` | Characters per chunk | 512 - 8192 |
-| `--chunk-overlap` | Overlap between chunks | 50 - 500 |
+Files are filtered to supported extensions automatically.
 
-### Performance Tuning
+## Ingestion Output
+
+Successful ingestion reports:
+
+```
+Successfully ingested 10 files
+```
+
+Warnings for failures:
+
+```
+Failed: 2 files
+```
+
+Check logs for details on failed files.
+
+## Performance Considerations
+
+### Optimizing Throughput
+
+1. **Parallel processing**: Use `--cores` for I/O-bound workloads
+2. **Larger batches**: Increase `--batch-size` for faster sequential processing
+3. **Disable compression**: Temporary speed boost at cost of storage
 
 ```bash
-# Use more CPU cores (default: 4)
-secondbrain ingest ./docs/ --cores 8
-
-# Process in larger batches
-secondbrain ingest ./docs/ --batch-size 20
-
-# Disable rate limiting (development only)
-SECONDBRAIN_RATE_LIMIT_ENABLED=false secondbrain ingest ./docs/
+export SECONDBRAIN_TEXT_COMPRESSION_ENABLED=false
 ```
 
-### Re-ingestion
+### Managing Memory
 
-By default, SecondBrain skips existing documents:
+1. **Reduce batch size**: Lower memory footprint
+2. **Streaming mode**: Enabled by default for memory efficiency
 
 ```bash
-# Force re-ingestion of all documents
-secondbrain ingest ./docs/ --force
+export SECONDBRAIN_STREAMING_CHUNK_BATCH_SIZE=50
 ```
 
-Useful when:
-- Changing chunk configuration
-- Updating embedding model
-- Fixing corrupted documents
+### Network-Bound Scenarios
 
-## Best Practices
-
-### Optimal Chunk Size
-
-| Use Case | Chunk Size | Overlap |
-|----------|------------|---------|
-| Q&A tasks | 512-1024 | 100-200 |
-| General search | 2048-4096 | 200-300 |
-| Full document context | 4096-8192 | 300-500 |
-
-### Directory Organization
-
-```
-documents/
-├── research/
-│   ├── papers/
-│   └── notes/
-├── projects/
-│   ├── project-a/
-│   └── project-b/
-└── personal/
-```
-
-Ingest by category:
-```bash
-secondbrain ingest ./documents/research/ --chunk-size 2048
-secondbrain ingest ./documents/projects/ --chunk-size 4096
-```
-
-### Large Datasets
-
-For large document collections:
+For remote embedding providers:
 
 ```bash
-# Process in stages
-secondbrain ingest ./docs/part1/ --cores 8
-secondbrain ingest ./docs/part2/ --cores 8
-
-# Monitor progress
-secondbrain status
+secondbrain ingest ./docs/ --batch-size 10
+# Allows rate limiting adjustments between batches
 ```
 
-## Monitoring Progress
+## Incremental Ingestion
 
-### Verbose Mode
+Re-running ingestion on previously processed files:
+
+- Creates duplicate chunks if not cleaned first
+- Use `delete` to remove stale entries first:
 
 ```bash
-secondbrain ingest ./docs/ --verbose
+# Remove previous version
+secondbrain delete --source "./updated_document.pdf"
+
+# Re-ingest
+secondbrain ingest ./updated_document.pdf
 ```
 
-Output:
-```
-Processing: document1.pdf (45KB)
-  - Extracted 12,345 characters
-  - Created 4 chunks
-  - Generated embeddings
-  ✓ Complete (2.3s)
+## Troubleshooting Ingestion
 
-Processing: document2.docx (89KB)
-  ...
-```
+### Files Skipped Without Error
 
-### Progress Tracking
+Verify the file extension is supported:
 
 ```bash
-# Check ingestion status
-secondbrain status
-
-# List recently added documents
-secondbrain ls --limit 10
+secondbrain ingest ./samples/ --recursive -v
 ```
 
-## Error Handling
+### Out of Memory During Large Batch
 
-### Failed Documents
-
-If a document fails to process:
+1. Reduce batch size:
 
 ```bash
-# Continue processing other documents
-secondbrain ingest ./docs/  # Skips failed files
-
-# See detailed errors
-secondbrain ingest ./docs/ --verbose
+secondbrain ingest ./huge/ --batch-size 2
 ```
 
-Common errors:
-- **Corrupted file**: Try repairing or re-saving
-- **Unsupported format**: Convert to supported format
-- **Permission denied**: Check file permissions
-
-### Retry Strategy
+2. Process directory in smaller chunks:
 
 ```bash
-# Re-ingest only failed documents
-secondbrain ingest ./failed-docs/ --force
+mkdir /tmp/part1 /tmp/part2
+mv half_of_files/* /tmp/part1/
+# Process each part separately
 ```
 
-## Examples
+### Embedding Rate Limits Exceeded
 
-### Ingest Research Papers
+Configure rate limiting:
 
 ```bash
-# Optimize for academic papers
-secondbrain ingest ./papers/ \
-  --chunk-size 2048 \
-  --chunk-overlap 200 \
-  --cores 4
+export SECONDBRAIN_RATE_LIMIT_MAX_REQUESTS=5
+export SECONDBRAIN_RATE_LIMIT_WINDOW_SECONDS=1.0
 ```
-
-### Ingest Project Documentation
-
-```bash
-# Larger chunks for technical docs
-secondbrain ingest ./project-docs/ \
-  --chunk-size 4096 \
-  --chunk-overlap 300 \
-  --batch-size 15
-```
-
-### Continuous Ingestion
-
-```bash
-# Watch directory for new files (requires watchman)
-watchman watch ./documents/
-# Then run ingestion periodically
-while true; do
-  secondbrain ingest ./documents/
-  sleep 3600  # Every hour
-done
-```
-
-## Next Steps
-
-- [Search Guide](search-guide.md) - Learn to query your documents
-- [Document Management](document-management.md) - Manage your database
-- [CLI Reference](cli-reference.md) - Complete command reference

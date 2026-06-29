@@ -1,106 +1,105 @@
-# Architecture Documentation
+# Architecture
 
 Technical architecture and system design for SecondBrain.
 
-## Overview
+## Components
 
-This section provides deep technical documentation for developers and architects:
+SecondBrain consists of layered components that work together to provide document intelligence:
 
-| Document | Description |
-|----------|-------------|
-| [Data Flow](DATA_FLOW.md) | System architecture and data pipelines |
-| [Schema Reference](SCHEMA.md) | Database structure and models |
-| [SBOM Analysis](SBOM_ANALYSIS.md) | Software Bill of Materials & dependency analysis |
-| [License Risk Report](LICENSE-RISK-REPORT.md) | License compliance & risk assessment |
+| Layer | Components | Responsibility |
+|-------|------------|----------------|
+| CLI Interface | `cli/commands.py` | User-facing commands (ingest, search, chat, etc.) |
+| Configuration | `config/` | Environment variable management via Pydantic |
+| Document Processing | `document/` | Parsing and chunking of supported file types |
+| Embedding | `embed/` | Vector generation via OpenAI-compatible API |
+| Storage | `storage/` | MongoDB vector storage and retrieval |
+| Search | `search/` | Similarity search and ranking |
+| RAG | `rag/` | Retrieval-augmented generation for chat |
+| Utils | `utils/` | Docker management, performance monitoring |
 
-## System Components
+## Data Flow
 
-### Core Components
+See [Data Flow](DATA_FLOW.md) for detailed processing pipeline.
 
-1. **CLI Interface** - Click-based command-line tool
-2. **Document Ingestor** - Multi-format document processing
-3. **Embedding Engine** - sentence-transformers integration for vector generation
-4. **Storage Layer** - MongoDB vector storage
-5. **Search Engine** - Semantic search with cosine similarity
+## Schema
 
-### Data Flow
+See [Schema Reference](SCHEMA.md) for MongoDB document structure.
+
+## Technology Stack
+
+| Component | Technology |
+|-----------|------------|
+| CLI Framework | Click 8.x |
+| Document Parsing | Docling 2.x |
+| Database | MongoDB with $vectorSearch |
+| Drivers | PyMongo (sync), Motor (async) |
+| HTTP Client | httpx |
+| Data Validation | Pydantic 2.x |
+| Async | asyncio native |
+| Observability | OpenTelemetry |
+
+## Key Design Decisions
+
+### 1. Separation of Concerns
+
+Each module has a focused responsibility:
+- `document/` handles parsing only
+- `embed/` handles embeddings only
+- `storage/` handles persistence only
+
+This allows independent testing and replacement of components.
+
+### 2. Async-First Design
+
+Storage layer supports both sync and async operations via abstract interfaces:
+- Sync: Blocking operations for CLI simplicity
+- Async: Concurrent operations for API performance
+
+### 3. Configuration-Driven
+
+All settings via environment variables following 12-factor app principles:
+- `SECONDBRAIN_*` prefix for all config
+- Pydantic validation at startup
+- Test-aware configuration switching
+
+### 4. Local-First Privacy
+
+Core processing always happens on-host:
+- Document parsing: Local with Docling
+- Chunking: Local algorithm
+- Only embedding generation may contact external APIs
+
+### 5. Vector Search Foundation
+
+Using MongoDB's native `$vectorSearch` for similarity retrieval:
+- No separate vector database required
+- Leverages existing MongoDB infrastructure
+- Server-side similarity computation
+
+## System Diagram
 
 ```
-Documents → Ingestor → Chunking → Embeddings → MongoDB → Search
+┌─────────────────────────────────────────────────────────────────┐
+│                        CLI Interface                            │
+│  ingest ── search ── ls ── delete ── chat ── status ── health  │
+└───────────────────────────────┬─────────────────────────────────┘
+                                │
+                    ┌───────────▼───────────┐
+                    │    Document Layer     │
+                    │   (Docling Parser)    │
+                    └───────────┬───────────┘
+                                │
+                    ┌───────────▼───────────┐
+                    │    Chunking Engine    │
+                    │  (Character Splitter) │
+                    └───────────┬───────────┘
+                                │
+         ┌──────────────────────┼──────────────────────┐
+         │                      │                      │
+    ┌────▼────┐           ┌─────▼─────┐          ┌─────▼─────┐
+    │ Embedder│           │  Storage  │          │   RAG     │
+    │ (HTTP)  │           │ (MongoDB) │          │ (LLM API) │
+    └────┬────┘           └─────┬─────┘          └─────┬─────┘
+         │                      │                      │
+         └──────────────────────▼──────────────────────┘
 ```
-
-See [Data Flow Documentation](DATA_FLOW.md) for detailed diagrams.
-
-## Database Schema
-
-SecondBrain uses MongoDB for vector storage:
-
-- **embeddings** collection - Document chunks and vectors
-- Indexes on: `document_id`, `file_type`, `chunk_index`
-
-See [Schema Reference](SCHEMA.md) for complete schema details.
-
-## Design Decisions
-
-### Why MongoDB?
-
-- Native vector search capabilities
-- Scalable and production-ready
-- Flexible schema for document metadata
-- Easy deployment via Docker
-
-### Why sentence-transformers?
-
-- Local embedding generation (privacy)
-- No API costs
-- Support for multiple embedding models
-- Easy setup and maintenance
-
-## Performance Characteristics
-
-### Vector Search Complexity
-
-The `build_search_pipeline()` function performs ** brute-force cosine similarity** over all document vectors. This has important implications:
-
-| Metric | Value |
-|--------|-------|
-| **Time Complexity** | O(n·d) where n = documents, d = embedding dimensions |
-| **Space Complexity** | O(1) additional space per query |
-| **Scaling Behavior** | Linear in corpus size |
-
-#### Recommendations
-
-- **Recommended for**: Corpora < 100,000 documents
-- **Acceptable for**: Medium workloads with modest hardware
-- **Not recommended for**: Large-scale production with millions of documents
-
-#### Migration Path for Scale
-
-For larger workloads, consider:
-1. **MongoDB Atlas Search** (paid tier) — native $vectorSearch operator with HNSW indexes
-2. **External vector database** — Qdrant, Weaviate, Pinecone, Milvus
-
-### General Performance Tips
-
-- **Batch Processing**: Process documents in parallel
-- **Connection Caching**: Reduce connection overhead
-- **Rate Limiting**: Protect sentence-transformers API
-- **Chunk Optimization**: Adjust chunk size for your use case
-
-See [Building & Performance](../developer-guide/building.md) for optimization tips.
-
-## Security
-
-- Environment-based configuration
-- Input validation and sanitization
-- Rate limiting protection
-- Connection health checks
-
-See [Security Guide](../developer-guide/security.md) for details.
-
-## Related Documentation
-
-- [Developer Guide](../developer-guide/index.md) - Development workflows
-- [API Reference](../api/index.md) - Code-level documentation
-- [Getting Started](../getting-started/index.md) - New users
-- [Async API Guide](../developer-guide/async-api.md) - Asynchronous programming
