@@ -26,10 +26,11 @@ secondbrain/
 │   ├── cli/                   # CLI commands
 │   ├── config/                # Configuration
 │   ├── document/              # Document processing
-│   ├── embed/                 # Embedding generation
+│   ├── embedding/             # Embedding generation
 │   ├── search/                # Vector search
 │   ├── storage/               # MongoDB storage
-│   └── utils/                 # Utilities
+│   ├── management/            # Docker management, metrics
+│   └── rag/                   # RAG pipeline
 ├── tests/                     # Test suite
 ├── docs/                      # Documentation
 └── docker-compose.yml         # Service definitions

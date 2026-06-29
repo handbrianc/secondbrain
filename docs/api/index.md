@@ -104,7 +104,7 @@ async with AsyncStorageClient() as client:
 
 ### Embedding Generation
 
-**File**: `src/secondbrain/embed/generator.py`
+**File**: `src/secondbrain/embedding/generator.py`
 
 ```python
 from secondbrain.embed.generator import EmbeddingGenerator
