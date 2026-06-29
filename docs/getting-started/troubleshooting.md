@@ -1,279 +1,262 @@
 # Troubleshooting Guide
 
-Common issues and solutions for SecondBrain.
+Solutions for common issues encountered when running SecondBrain.
+
+## Installation Issues
+
+### Module Not Found Errors
+
+**Symptom**: `ModuleNotFoundError: No module named 'secondbrain'`
+
+**Solution**: Reinstall the package in development mode:
+
+```bash
+pip uninstall secondbrain
+pip install -e .
+```
+
+### Dependency Conflicts
+
+**Symptom**: `ERROR: Cannot install package due to conflicting dependencies`
+
+**Solution**: Create a fresh virtual environment:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate  # Linux/macOS
+pip install -e .
+```
 
 ## MongoDB Connection Issues
 
-### Error: "MongoServerSelectionError: connect ECONNREFUSED"
+### Connection Refused
 
-**Cause**: MongoDB is not running or unreachable.
+**Symptom**: `ConnectionRefusedError: [Errno 111] Connection refused`
 
 **Solution**:
-```bash
-# Check if MongoDB is running
-docker ps | grep mongo  # Docker
-brew services list | grep mongodb  # macOS Homebrew
 
-# Start MongoDB
-docker-compose up -d  # Docker
-brew services start mongodb-community  # macOS
+1. Verify MongoDB is running:
+
+```bash
+docker ps  # For Docker MongoDB
+mongod --version  # For local MongoDB
 ```
 
-### Error: "Authentication failed"
+2. Start MongoDB if not running:
 
-**Cause**: Incorrect MongoDB credentials.
-
-**Solution**:
 ```bash
-# Verify credentials in .env
-cat .env | grep SECONDBRAIN_MONGO_URI
-
-# Test connection
-mongosh "mongodb://localhost:27017" -u your_user -p your_password
+secondbrain start --wait
 ```
 
-## sentence-transformers Issues
+3. Check the connection URI is correct:
 
-### Error: "Connection refused to sentence-transformers API"
-
-**Cause**: sentence-transformers service is not running.
-
-**Solution**:
 ```bash
-# Check if service is running
-curl http://localhost:11434/api/tags
-
-# Start sentence-transformers
-    docker-compose up -d sentence-transformers
-    
-    # Pull required model if not present (SECONDBRAIN_EMBEDDING_MODEL in .env, default: all-MiniLM-L6-v2)
+echo $SECONDBRAIN_MONGO_URI
 ```
 
-### Error: "Model not found"
+### Authentication Failed
 
-**Cause**: Required embedding model is not downloaded.
+**Symptom**: `AuthenticationFailed: Auth failed`
 
-**Solution**:
-```bash
-# List available models
-    sentence-transformers list
-    
-    # Pull the default model (SECONDBRAIN_EMBEDDING_MODEL in .env, default: all-MiniLM-L6-v2)
-    
-    # Or specify a different model in .env
-    SECONDBRAIN_EMBEDDING_MODEL=all-MiniLM-L6-v2
+**Solution**: Verify credentials in your connection string:
+
+```
+mongodb://username:password@host:27017/database
 ```
 
-## Ingestion Issues
+Ensure the user has appropriate roles on the database.
 
-### Error: "File format not supported"
+### Database Not Ready
 
-**Cause**: Attempting to ingest an unsupported file type.
+**Symptom**: `ServerSelectionTimeoutError: Unable to connect to MongoDB`
 
-**Supported formats**:
-- PDF (.pdf)
-- Word (.docx)
-- PowerPoint (.pptx)
-- Excel (.xlsx)
-- HTML (.html, .htm)
-- Markdown (.md)
-- Text (.txt)
-- Images (.png, .jpg, .jpeg) - requires OCR
-- Audio (.wav, .mp3) - requires transcription
+**Solution**: Wait for MongoDB to fully initialize:
 
-**Solution**: Convert file to supported format or install required dependencies.
-
-### Error: "Permission denied"
-
-**Cause**: Insufficient file system permissions.
-
-**Solution**:
 ```bash
-# Check file permissions
-ls -la /path/to/documents/
-
-# Fix permissions if needed
-chmod +r /path/to/documents/*
+secondbrain start --wait
+secondbrain health
 ```
 
-### Error: "No documents found in directory"
+## Document Ingestion Issues
 
-**Cause**: Directory is empty or contains no supported files.
+### Unsupported File Type
 
-**Solution**:
+**Symptom**: `ValueError: Unsupported file type: .xyz`
+
+**Solution**: SecondBrain supports the following formats:
+
+```
+pdf, docx, pptx, xlsx, html, htm, md, txt, asciidoc, adoc,
+tex, csv, png, jpg, jpeg, tiff, tif, bmp, webp, wav, mp3,
+vtt, xml, json
+```
+
+Consider converting your file to a supported format.
+
+### File Too Large
+
+**Symptom**: `ValueError: File exceeds maximum size of 100MB`
+
+**Solution**: Split large files into smaller pieces, or adjust the limit:
+
 ```bash
-# Check directory contents
-ls -la /path/to/documents/
+export SECONDBRAIN_MAX_FILE_SIZE_BYTES=200000000  # 200MB
+```
 
-# Verify file extensions
-find /path/to/documents/ -type f -name "*.pdf" -o -name "*.docx"
+### Permission Denied
+
+**Symptom**: `PermissionError: [Errno 13] Permission denied: '/path/to/file'`
+
+**Solution**: Check file permissions:
+
+```bash
+ls -la /path/to/file
+chmod 644 /path/to/file
 ```
 
 ## Search Issues
 
-### Error: "No results found"
+### No Results Returned
 
-**Cause**: 
-- No documents in database
-- Query is too specific
-- Embedding model mismatch
+**Symptom**: Search returns zero results despite matching content
 
-**Solution**:
+**Possible Causes**:
+
+1. Documents haven't been ingested yet:
+
 ```bash
-# Check if documents exist
-secondbrain ls
-
-# Try a broader search
-secondbrain search "general topic"
-
-# Verify embedding dimensions match
-cat .env | grep SECONDBRAIN_EMBEDDING_DIMENSIONS
+secondbrain ingest ./documents/ --recursive
 ```
 
-### Error: "Vector dimension mismatch"
+2. Similarity threshold too high:
 
-**Cause**: Query embedding dimensions don't match stored embeddings.
+```bash
+secondbrain search "query" --min-score 0.3
+```
+
+3. Wrong collection or database queried:
+
+```bash
+echo $SECONDBRAIN_MONGO_DB
+echo $SECONDBRAIN_MONGO_COLLECTION
+```
+
+### Poor Search Relevance
+
+**Symptom**: Results don't match query intent
+
+**Solutions**:
+
+1. Adjust chunk size for better semantic granularity:
+
+```bash
+export SECONDBRAIN_CHUNK_SIZE=2048  # Smaller chunks
+```
+
+2. Increase top-k for more candidate results:
+
+```bash
+secondbrain search "query" --top-k 50
+```
+
+3. Lower minimum score threshold:
+
+```bash
+secondbrain search "query" --min-score 0.3
+```
+
+## CLI Command Issues
+
+### Command Not Recognized
+
+**Symptom**: `Error: No such command 'command-name'`
+
+**Solution**: Verify you're using the correct command syntax:
+
+```bash
+secondbrain --help
+secondbrain ingest --help
+```
+
+### Invalid Arguments
+
+**Symptom**: `Error: Invalid value for '--option': 'value'`
+
+**Solution**: Check the command reference for valid option values:
+
+```bash
+secondbrain search --help
+```
+
+## Health Check Failures
+
+### Service Unavailable
+
+**Symptom**: `secondbrain health` reports unhealthy services
 
 **Solution**:
-```bash
-# Ensure same model is used for ingestion and search
-cat .env | grep SECONDBRAIN_EMBEDDING_MODEL
 
-# Re-ingest with correct model if needed
-SECONDBRAIN_EMBEDDING_MODEL=all-MiniLM-L6-v2 secondbrain ingest ./docs/
+1. Check MongoDB connectivity:
+
+```bash
+secondbrain health
+```
+
+2. Restart services:
+
+```bash
+secondbrain stop
+secondbrain start --wait
 ```
 
 ## Performance Issues
 
-### Slow ingestion
+### Slow Ingestion
 
-**Causes**:
-- Large documents
-- Small chunk size
-- Rate limiting enabled
+**Symptom**: Document processing takes excessively long
 
 **Solutions**:
+
+1. Enable multicore processing:
+
 ```bash
-# Increase chunk size
-SECONDBRAIN_CHUNK_SIZE=8192 secondbrain ingest ./docs/
-
-# Increase workers (if system has resources)
-SECONDBRAIN_MAX_WORKERS=8 secondbrain ingest ./docs/
-
-# Disable rate limiting (development only)
-SECONDBRAIN_RATE_LIMIT_ENABLED=false secondbrain ingest ./docs/
+secondbrain ingest ./docs --recursive --cores 4
 ```
 
-### Slow search
+2. Adjust batch size:
 
-**Causes**:
-- Large database
-- High top-k value
-- No indexes
+```bash
+secondbrain ingest ./docs --batch-size 20
+```
+
+3. Disable text compression temporarily:
+
+```bash
+export SECONDBRAIN_TEXT_COMPRESSION_ENABLED=false
+```
+
+### High Memory Usage
+
+**Symptom**: System runs out of memory during batch operations
 
 **Solutions**:
-```bash
-# Limit results
-secondbrain search "query" --top-k 10
 
-# Check database size
-secondbrain status
-```
-
-## Configuration Issues
-
-### Error: "Invalid configuration"
-
-**Cause**: Malformed .env file or invalid environment variables.
-
-**Solution**:
-```bash
-# Check .env syntax
-cat .env
-
-# Validate with SecondBrain
-secondbrain health --verbose
-
-# Reset to defaults (backup first!)
-cp .env .env.backup
-rm .env
-cp .env.example .env
-```
-
-### Environment variables not loading
-
-**Cause**: .env file not in working directory or not loaded.
-
-**Solution**:
-```bash
-# Ensure .env is in current directory
-pwd
-ls -la .env
-
-# Or specify explicitly
-export $(cat .env | xargs)
-secondbrain ingest ./docs/
-```
-
-## Docker-Specific Issues
-
-### Container won't start
-
-**Solution**:
-```bash
-# Check Docker logs
-docker-compose logs mongo
-
-# Remove and recreate containers
-docker-compose down
-docker-compose up -d
-
-# Check Docker resources
-docker system df
-```
-
-### Port conflicts
-
-**Solution**:
-```bash
-# Check what's using the port
-lsof -i :27017  # MongoDB
-lsof -i :11434  # sentence-transformers
-
-# Change port in docker-compose.yml or stop conflicting service
-```
-
-## Logging & Debugging
-
-### Enable verbose logging
+1. Reduce streaming batch size:
 
 ```bash
-# CLI flag
-secondbrain ingest ./docs/ --verbose
-
-# Environment variable
-SECONDBRAIN_VERBOSE=true secondbrain ingest ./docs/
-
-# Debug log level
-SECONDBRAIN_LOG_LEVEL=DEBUG secondbrain ingest ./docs/
+export SECONDBRAIN_STREAMING_CHUNK_BATCH_SIZE=50
 ```
 
-### Check logs
+2. Limit worker processes:
 
 ```bash
-# Docker logs
-docker-compose logs -f mongo
-docker-compose logs -f sentence-transformers
-
-# Application logs (if configured to file)
-tail -f /path/to/logs/secondbrain.log
+export SECONDBRAIN_MAX_WORKERS=2
 ```
 
-## Getting More Help
+## Getting Help
 
-If you can't find your issue here:
+If you encounter issues not covered here:
 
-1. **Check logs**: Enable verbose/debug logging
-2. **Verify setup**: Run `secondbrain health` to check services
-3. **Review documentation**: [Configuration Guide](configuration.md)
-4. **Search/Open issues**: [GitHub Issues](https://github.com/your-username/secondbrain/issues) - include error message, logs, and reproduction steps
+1. Check the [GitHub Issues](https://github.com/your-username/secondbrain/issues)
+2. Review existing discussions
+3. File a new issue with relevant logs and system information

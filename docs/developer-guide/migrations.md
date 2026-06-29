@@ -1,212 +1,178 @@
 # Migrations Guide
 
-Schema migration strategies for SecondBrain.
+Database migration procedures for SecondBrain.
 
 ## Overview
 
-SecondBrain uses MongoDB, which has a flexible schema. However, migrations may be needed for:
+SecondBrain stores all data in MongoDB. Migrations handle:
 
-- New required fields
-- Data transformations
-- Index changes
-- Collection restructuring
+- Schema changes to the `embeddings` collection
+- Index modifications
+- Data transformations for new features
 
-## Migration Strategies
+## Migration Philosophy
 
-### 1. Forward Compatibility
+- **Forward-only migrations**: Old data remains readable with current code
+- **Backward compatibility**: Previous versions may not read new schemas
+- **Atomic operations**: Each migration is idempotent where possible
 
-Design schemas to be forward-compatible:
+## Current Schema Version
 
-```python
-class Document(BaseModel):
-    id: str
-    content: str
-    # New fields optional
-    metadata: Optional[Dict] = None
-```
+As of version 0.4.0, the current schema includes:
 
-### 2. Versioned Documents
-
-Add schema version to documents:
-
-```python
+```javascript
 {
-    "_id": "...",
-    "schema_version": "1.0",
-    "content": "...",
-    "metadata": {...}
+  "_id": ObjectId,
+  "chunk_id": String,          // UUID
+  "chunk_index": Integer,
+  "text": String,              // May be compressed
+  "vector": Array[Float],      // Embedding vector
+  "metadata": {
+    "source": String,          // File path
+    "page": Integer,
+    "file_type": String,       // Extension
+    "created_at": DateTime,
+    "size": Integer
+  }
 }
 ```
 
-### 3. Migration Scripts
+Indexes:
 
-Create migration scripts for data transformations:
+- `vector` field with `2dsphere` or `knnBeta` index type
+- Compound indexes on `(metadata.source, chunk_index)`
 
-```python
-async def migrate_v1_to_v2():
-    """Migrate documents from schema v1 to v2."""
-    async for doc in collection.find({"schema_version": "1.0"}):
-        # Transform document
-        doc["new_field"] = transform(doc["old_field"])
-        doc["schema_version"] = "2.0"
-        await collection.replace_one({"_id": doc["_id"]}, doc)
-```
+## Common Migrations
 
-## Migration Workflow
+### Adding a New Index
 
-### 1. Plan Migration
-
-- Document schema changes
-- Estimate data volume
-- Plan rollback strategy
-- Test on subset of data
-
-### 2. Create Migration Script
-
-```python
-async def run_migration():
-    # Backup first
-    await backup_collection()
-    
-    # Run migration
-    await migrate_v1_to_v2()
-    
-    # Verify
-    await verify_migration()
-```
-
-### 3. Backup Data
-
-```bash
-mongodump --db secondbrain --out ./backup/
-```
-
-### 4. Run Migration
-
-```bash
-# (Migration CLI is not yet implemented — see docs/developer-guide/index.md)
-# For now, use direct MongoDB schema migration scripts
-```
-
-### 5. Verify
-
-```python
-def verify_migration():
-    # Check document count
-    # Validate new fields
-    # Test queries
-    pass
-```
-
-### 6. Rollback (if needed)
-
-```bash
-mongorestore --db secondbrain ./backup/secondbrain/
-```
-
-## Common Migration Patterns
-
-### Adding Required Field
-
-```python
-async def add_required_field():
-    default_value = "default"
-    
-    async for doc in collection.find({"new_field": {"$exists": False}}):
-        doc["new_field"] = default_value
-        await collection.update_one(
-            {"_id": doc["_id"]},
-            {"$set": {"new_field": default_value}}
-        )
-```
-
-### Renaming Field
-
-```python
-async def rename_field():
-    async for doc in collection.find({"old_field": {"$exists": True}}):
-        doc["new_field"] = doc["old_field"]
-        del doc["old_field"]
-        await collection.replace_one({"_id": doc["_id"]}, doc)
-```
-
-### Splitting Field
-
-```python
-async def split_field():
-    async for doc in collection.find({"combined": {"$exists": True}}):
-        parts = doc["combined"].split("|")
-        doc["field1"] = parts[0]
-        doc["field2"] = parts[1]
-        del doc["combined"]
-        await collection.replace_one({"_id": doc["_id"]}, doc)
-```
-
-## Index Management
-
-### Create Index
-
-```python
-await collection.create_index([("new_field", 1)])
-```
-
-### Drop Index
-
-```python
-await collection.drop_index("index_name")
-```
-
-### Background Index Creation
-
-```python
-await collection.create_index(
-    [("field", 1)],
-    background=True  # Don't block operations
+```javascript
+// Migration: add_file_type_index.js
+db.embeddings.createIndex(
+  { "metadata.file_type": 1 },
+  { name: "file_type_idx", background: true }
 )
 ```
 
-## Best Practices
+### Renaming a Field
 
-1. **Always backup** before migrations
-2. **Test on small dataset** first
-3. **Run in stages** for large datasets
-4. **Monitor performance** during migration
-5. **Have rollback plan** ready
-6. **Document changes** in migration notes
+From MongoDB shell:
 
-## Migration Commands
-
-```bash
-# List available migrations
-secondbrain migrate --list
-
-# Run specific migration
-secondbrain migrate --to 2.0
-
-# Dry run (preview changes)
-secondbrain migrate --dry-run
+```javascript
+db.embeddings.updateMany(
+  {},
+  { $rename: { "old_field": "new_field" } }
+)
 ```
 
-## Troubleshooting
+### Dropping Deprecated Fields
 
-### Migration Failed
-
-```bash
-# Check logs
-secondbrain migrate --verbose
-
-# Restore from backup
-mongorestore --db secondbrain ./backup/
+```javascript
+db.embeddings.updateMany(
+  {},
+  { $unset: { "legacy_field": "" } }
+)
 ```
 
-### Incomplete Migration
+## Performing Migrations
+
+### Manual Migration
+
+1. Export current data:
 
 ```bash
-# Resume migration
-secondbrain migrate --resume
+mongodump --uri="$SECONDBRAIN_MONGO_URI" --archive=dump.archive
 ```
 
-## Next Steps
+2. Run migration (mongosh):
 
-- [Schema Reference](../architecture/SCHEMA.md) - Current schema
-- [Changelog](changelog.md) - Version history
+```javascript
+// Apply changes
+db.embeddings.createIndex(...)
+db.embeddings.updateMany(..., {$rename: {...}})
+```
+
+3. Verify migration:
+
+```javascript
+db.embeddings.getIndexes()
+// Confirm new indexes present
+
+db.embeddings.findOne()
+// Confirm expected document structure
+```
+
+### Programmatic Migration
+
+For automated deployments:
+
+```python
+async def migrate_add_source_hash():
+    """Add computed hash for deduplication."""
+    from pymongo import MongoClient
+    
+    client = MongoClient(os.getenv("SECONDBRAIN_MONGO_URI"))
+    db = client[os.getenv("SECONDBRAIN_MONGO_DB")]
+    collection = db[os.getenv("SECONDBRAIN_MONGO_COLLECTION")]
+    
+    # Add hash field
+    cursor = collection.find({"content_hash": {"$exists": False}})
+    for doc in cursor:
+        doc["content_hash"] = compute_hash(doc["text"])
+        collection.replace_one({"_id": doc["_id"]}, doc)
+    
+    client.close()
+
+if __name__ == "__main__":
+    migrate_add_source_hash()
+```
+
+## Rollback Procedures
+
+### Index Removal
+
+```javascript
+// Non-essential index only
+db.embeddings.dropIndex("temporary_idx")
+```
+
+### Field Restoration
+
+Cannot automatically restore renamed/deleted fields from MongoDB. Ensure backups exist before irreversible operations.
+
+## Pre-Migration Checklist
+
+Before applying migrations:
+
+- [ ] Backup database: `mongodump --archive=backup.archive`
+- [ ] Review migration scripts in staging environment
+- [ ] Schedule maintenance window for large datasets
+- [ ] Notify users of potential downtime
+- [ ] Have rollback plan ready
+
+## Post-Migration Verification
+
+After migration:
+
+1. Verify application still works:
+
+```bash
+secondbrain status
+secondbrain search "test query"
+```
+
+2. Check for errors in logs
+
+3. Confirm expected performance characteristics
+
+4. Monitor error tracking for new migration-related bugs
+
+## Version Compatibility Matrix
+
+| Version | Schema Version | Compatible |
+|---------|---------------|------------|
+| 0.3.x | v1 | Read/write |
+| 0.4.0 | v2 | Read/write |
+| Future | v3 | Write only |
+
+Schemas are additive (fields added) in minor versions. Major versions may introduce breaking changes.

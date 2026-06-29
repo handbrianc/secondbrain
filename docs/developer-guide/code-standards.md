@@ -1,239 +1,257 @@
 # Code Standards
 
-Coding standards and best practices for SecondBrain.
+Development standards, style guidelines, and conventions for SecondBrain contributions.
 
-## Code Style
+## Python Version
 
-### Formatting
+Minimum Python version: **3.11**
 
-- **Line Length**: 88 characters (ruff default)
-- **Indentation**: 4 spaces
-- **No trailing whitespace**
-- **Two blank lines** between top-level definitions
-- **One blank line** between methods
+New language features may be used freely at this version or above.
+
+## Type Annotations
+
+Strict type checking is enforced via MyPy:
+
+```toml
+[tool.mypy]
+python_version = "3.11"
+strict = true
+```
+
+### Function Signatures
+
+All functions must have type annotations:
+
+```python
+# Correct
+def process_document(path: str, options: dict[str, Any]) -> list[Chunk]:
+    ...
+
+# Incorrect - missing types
+def process_document(path, options):
+    ...
+```
+
+### Generic Types
+
+Use concrete generic types rather than bare generics:
+
+```python
+# Preferred
+def fetch_items() -> list[Item]:
+    ...
+
+# Acceptable for heterogeneous lists
+def fetch_mixed() -> list[Any]:
+    ...
+
+# Discouraged
+def fetch_items() -> list:
+    ...
+```
+
+## Linting
+
+Powered by Ruff with strict rules:
+
+```toml
+[tool.ruff]
+select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM", "PTH", "RUF", "D"]
+ignore = ["E501"]  # Line length handled separately
+```
 
 ### Imports
 
+Organize with isort conventions:
+
 ```python
-# Standard library first
+# Standard library
 import os
 import sys
-from pathlib import Path
+from typing import Any
 
 # Third-party
 import click
-from typing_extensions import Protocol
+from pydantic import Field
 
-# Local imports last
-from . import utils
-from .core import BaseClass
+# Local application
+from secondbrain.config import config
+from secondbrain.storage import ChunkInfo
 ```
 
-### Type Annotations
+Never use wildcard imports:
 
 ```python
-from typing import Any, Dict, List, Optional
-
-def process_data(
-    users: List[Dict[str, str]],
-    max_count: Optional[int] = None
-) -> Dict[str, Any]:
-    ...
+# Forbidden
+from secondbrain.config import *
 ```
+
+## Docstrings
+
+Follow numpy convention with Sphinx processing for MkDocs:
+
+```python
+def calculate_similarity(vector_a: list[float], vector_b: list[float]) -> float:
+    """Calculate cosine similarity between two vectors.
+
+    Args:
+        vector_a: First vector for comparison.
+        vector_b: Second vector for comparison.
+
+    Returns:
+        Cosine similarity score ranging from -1.0 (opposite) to 1.0 (identical).
+
+    Raises:
+        ValueError: If vectors have unequal lengths.
+
+    Examples:
+        >>> calculate_similarity([1.0, 0.0], [1.0, 0.0])
+        1.0
+        >>> calculate_similarity([1.0, 0.0], [-1.0, 0.0])
+        -1.0
+    """
+```
+
+## File Organization
+
+### Imports in __init__
+
+Keep `__init__.py` exports minimal:
+
+```python
+# secondbrain/config/__init__.py
+"""Configuration module."""
+
+from secondbrain.config.settings import Settings
+
+__all__ = ["Settings", "get_settings"]
+```
+
+Avoid importing implementation details in `__init__.py`.
 
 ## Naming Conventions
 
 | Element | Convention | Example |
 |---------|------------|---------|
-| Variables | snake_case | `user_name`, `max_count` |
-| Functions | snake_case | `get_user_by_id()` |
-| Classes | PascalCase | `UserManager`, `ConfigLoader` |
-| Constants | UPPER_SNAKE | `MAX_RETRIES`, `DEFAULT_TIMEOUT` |
-| Modules | snake_case | `user_service.py` |
+| Modules | snake_case | `async_client.py` |
+| Classes | PascalCase | `AsyncStorageClient` |
+| Functions | snake_case | `get_connection()` |
+| Constants | SCREAMING_SNAKE_CASE | `MAX_RETRIES` |
+| Variables | snake_case | `connection_pool` |
+| Type aliases | PascalCase | `ChunkMap` |
+| Private methods | _prefix | `_internal_state()` |
 
-## Error Handling
+## Testing Standards
 
-### Use Specific Exceptions
+### Test Organization
 
-```python
-# Good
-raise ValueError("Invalid email format")
-raise FileNotFoundError(f"Config not found: {path}")
+Tests mirror source structure in `tests/`:
 
-# Avoid
-raise Exception("Something went wrong")
 ```
-
-### Handle Exceptions Explicitly
-
-```python
-try:
-    result = process()
-except ProcessingError as e:
-    logger.warning(f"Processing failed: {e}")
-    raise
-```
-
-### Never Use Bare Except
-
-```python
-# Good
-except (ValueError, TypeError) as e:
-    logger.error(f"Invalid input: {e}")
-
-# Avoid
-except:
-    pass
-```
-
-## Documentation
-
-### Docstrings
-
-```python
-def process_document(
-    path: Path,
-    chunk_size: int = 4096
-) -> List[Document]:
-    """Process a document into chunks.
-
-    Args:
-        path: Path to document file
-        chunk_size: Size of each chunk in characters
-
-    Returns:
-        List of document chunks
-
-    Raises:
-        FileNotFoundError: If document doesn't exist
-        ValueError: If chunk_size is invalid
-    """
-```
-
-### Type Hints
-
-Always use type hints for function signatures.
-
-## Testing
-
-### Test Structure
-
-```python
-def test_document_ingestion(tmp_path):
-    """Test that documents are ingested correctly."""
-    # Arrange
-    doc_path = tmp_path / "test.pdf"
-    doc_path.write_bytes(sample_pdf)
-    
-    # Act
-    result = ingest_document(doc_path)
-    
-    # Assert
-    assert result is not None
-    assert len(result.chunks) > 0
+tests/
+├── secondbrain/
+│   ├── config/
+│   │   └── test_settings.py
+│   ├── storage/
+│   │   └── test_async_client.py
+│   └── test_main.py
 ```
 
 ### Test Naming
 
-```python
-# Good
-def test_ingest_returns_correct_chunk_count()
-def test_search_with_invalid_query_raises_error()
-
-# Avoid
-def test_stuff()
-def test_1()
-```
-
-## Performance
-
-### Use Async for I/O
+Pattern: `test_<functionality>_<scenario>`
 
 ```python
-# Good
-async def ingest_async(path: Path):
-    await storage.ingest(path)
+def test_search_returns_empty_when_no_matches():
+    ...
 
-# Avoid (blocking I/O in async context)
-def ingest_sync(path: Path):
-    storage.ingest(path)  # Blocks event loop
+def test_search_filters_by_source_with_regex():
+    ...
 ```
 
-### Batch Operations
+### Fixtures
+
+Use pytest fixtures from `conftest.py`:
 
 ```python
-# Good
-for batch in chunked(documents, 10):
-    await storage.insert_many(batch)
-
-# Avoid
-for doc in documents:
-    await storage.insert(doc)
+@pytest.fixture
+def sample_chunks() -> list[Chunk]:
+    return [Chunk(content="Test", metadata={})]
 ```
 
-## Security
+## Error Handling
 
-### Input Validation
+### Custom Exceptions
+
+Define in `exceptions.py`:
 
 ```python
-from pydantic import BaseModel, Field
-
-class IngestRequest(BaseModel):
-    path: str = Field(..., min_length=1)
-    chunk_size: int = Field(default=4096, ge=512, le=8192)
+class ValidationError(Exception):
+    """Raised when input validation fails."""
+    pass
 ```
 
-### Never Trust User Input
+### Specific Except Clauses
+
+Catch specific exceptions, not bare `Exception`:
 
 ```python
-# Good
-safe_path = Path(user_input).resolve()
-if not safe_path.is_relative_to(base_dir):
-    raise ValueError("Invalid path")
+# Preferred
+except ValueError as e:
+    logger.warning("Invalid input: %s", e)
 
-# Avoid
-path = Path(user_input)  # Vulnerable to path traversal
+# Discouraged
+except Exception as e:
+    logger.error("Something went wrong: %s", e)
 ```
 
-## Tools
+## Logging
 
-### Linting
+Use module-level loggers:
+
+```python
+logger = logging.getLogger(__name__)
+```
+
+Don't use `logging.basicConfig()` — rely on the application's configured logging.
+
+## Commit Messages
+
+Follow conventional commits:
+
+```
+feat: add async embedding batch support
+fix: resolve race condition in chunk storage
+docs: update CLI reference for search command
+test: add integration tests for RAG pipeline
+refactor: extract vector similarity calculation
+```
+
+## Pull Request Guidelines
+
+1. **Scope**: One feature or fix per PR
+2. **Description**: Explain motivation and approach
+3. **Tests**: Include tests for new functionality
+4. **Documentation**: Update docs for user-facing changes
+5. **CI**: All checks must pass before merge
+
+## Pre-commit Checklist
+
+Before pushing:
 
 ```bash
-ruff check .
+# Format code
+ruff format src/
+
+# Lint
+ruff check src/
+
+# Type check
+mypy src/secondbrain/
+
+# Test
+pytest
+
+# Security scan
+bandit -r src/
 ```
-
-### Formatting
-
-```bash
-ruff format .
-```
-
-### Type Checking
-
-```bash
-mypy .
-```
-
-### Pre-commit
-
-```bash
-pre-commit install
-pre-commit run --all-files
-```
-
-## Code Review Checklist
-
-- [ ] Code follows style guidelines
-- [ ] Type hints are complete
-- [ ] Docstrings are present for public APIs
-- [ ] Tests are included
-- [ ] No security vulnerabilities
-- [ ] Performance is acceptable
-- [ ] Error handling is appropriate
-
-## Next Steps
-
-- [Development Setup](development.md) - Get started
-- [Testing Guide](TESTING.md) - Write tests
-- [Contributing](contributing.md) - Contribute code

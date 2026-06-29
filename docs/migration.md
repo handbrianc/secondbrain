@@ -1,154 +1,191 @@
 # Migration Guide
 
-This guide provides migration instructions for upgrading SecondBrain across major versions.
+Instructions for migrating between SecondBrain versions or updating configurations.
 
-## Version 0.2.0 → 0.3.0
+## Upgrading SecondBrain
 
-### New Features in 0.3.0
-
-This release adds extensive resilience, security, and documentation improvements:
-
-- **Circuit Breaker Pattern**: Automatic service failure handling with MongoDB and sentence-transformers
-- **Async API**: Full asynchronous document ingestion and search
-- **Chaos Testing**: Comprehensive chaos and concurrency test suites
-- **Security Scanning**: Integrated pip-audit, cyclonedx SBOM generation
-- **Enhanced Logging**: Structured JSON logging with OpenTelemetry tracing
-
-### Breaking Changes
-
-**None** - This release maintains full backward compatibility with the existing API.
-
-### Migration Steps
-
-#### 1. Update Dependencies
+### Standard Upgrade
 
 ```bash
-# Update with development dependencies
-pip install -e ".[dev]"
+# Upgrade via pip
+pip install --upgrade secondbrain
 
-# Or update runtime dependencies only
-pip install -e "."
+# Verify version
+secondbrain --version
 ```
 
-Or with pinned versions:
+### Version-Specific Notes
+
+#### Upgrading to 0.4.0
+
+Version 0.4.0 introduces:
+
+- Text compression option (`SECONDBRAIN_TEXT_COMPRESSION_ENABLED`)
+- Enhanced RAG formatting controls (`RAG_MAX_CONTEXT_CHARS`, `RAG_CHUNK_PREVIEW_CHARS`)
+- Storage format migration from Binary to Array (see below)
+
+#### Prior to 0.3.0
+
+Older versions used different storage schemes. If upgrading from pre-0.3:
+
+1. Export critical data via `secondbrain ls --all`
+2. Consider export before major upgrades
+
+### Re-ingesting Documents
+
+After upgrade, consider re-ingesting documents to benefit from:
+
+- Improved chunking algorithms
+- Updated parsing improvements
+- New metadata fields
 
 ```bash
-pip install -r requirements-dev.txt
+# Export current inventory
+secondbrain ls --all > pre_upgrade_inventory.csv
+
+# Delete old data
+secondbrain delete --all --yes
+
+# Re-ingest with new version
+secondbrain ingest ./documents/ --recursive --cores 4
 ```
 
-> **See [Dependency Installation Guide](getting-started/DEPENDENCIES.md)** for details on runtime vs development dependencies.
+## Configuration Migration
 
-#### 2. Enable Circuit Breaker (Optional)
+When adding new environment variables:
 
-Circuit breaker is enabled by default. To customize thresholds:
+| Variable | Added In | Default |
+|----------|----------|---------|
+| `SECONDBRAIN_TEXT_COMPRESSION_ENABLED` | 0.4.0 | `false` |
+| `SECONDBRAIN_RAG_MAX_CONTEXT_CHARS` | 0.4.0 | `8000` |
+| `SECONDBRAIN_RAG_CHUNK_PREVIEW_CHARS` | 0.4.0 | `500` |
+| `SECONDBRAIN_STORAGE_COMPRESSION_ENABLED` | 0.4.0 | `true` |
 
-```python
-from secondbrain.utils.circuit_breaker import CircuitBreakerConfig
+New variables have sensible defaults. Existing deployments continue working without changes.
 
-# Custom configuration
-config = CircuitBreakerConfig(
-    failure_threshold=10,      # Failures before opening circuit
-    success_threshold=5,       # Successes before closing circuit
-    recovery_timeout=60.0,     # Seconds before half-open state
-    half_open_max_calls=10     # Max calls in half-open state
-)
+## MongoDB Migration
+
+### Collection Upgrades
+
+SecondBrain creates indexes automatically on first run. MongoDB migrations may be needed for:
+
+- Index type changes (e.g., `2dsphere` → `cosineSimilarity`)
+- New fields added to schema
+
+### Vector Index Recreation
+
+If vector search stops working after upgrade:
+
+```javascript
+// Check current index
+db.embeddings.getIndexes()
+
+// If outdated, recreate
+db.embeddings.dropIndex("vector_index")
+// SecondBrain recreates on next ingest/search
 ```
 
-#### 3. Migrate to Async API (Optional)
+### Data Export/Import
 
-The sync API remains fully supported. To use async:
-
-```python
-import asyncio
-from secondbrain.storage.async_storage import AsyncDocumentStorage
-
-async def main():
-    storage = AsyncDocumentStorage()
-    
-    # Async ingestion
-    await storage.ingest_document(
-        doc_id="doc-1",
-        content="Document content",
-        metadata={"source": "test"}
-    )
-    
-    # Async search
-    results = await storage.search(
-        query_embedding=[0.1] * 768,
-        top_k=5
-    )
-
-asyncio.run(main())
-```
-
-#### 4. Configure Security Scanning
-
-Run initial security scan:
+Backup before migration:
 
 ```bash
-./scripts/security_scan.sh all
+mongodump \
+  --uri="$SECONDBRAIN_MONGO_URI" \
+  --db=secondbrain \
+  --collection=embeddings \
+  --archive=embeddings_backup.archive
 ```
 
-Generate SBOM:
+Restore if needed:
 
 ```bash
-./scripts/security_scan.sh sbom
+mongorestore \
+  --uri="$SECONDBRAIN_MONGO_URI" \
+  --db=secondbrain \
+  --collection=embeddings \
+  --archive=embeddings_backup.archive
 ```
 
-#### 5. Enable Structured Logging
+## Environment Variable Changes
 
-Set environment variable:
+### Renamed Variables
+
+Occasionally variables are renamed for clarity. Legacy names may continue working with deprecation warnings.
+
+Current naming convention: `SECONDBRAIN_<DOMAIN>_<NAME>`
+
+For example: `SECONDBRAIN_EMBEDDING_MODEL` not `SECONDBRAIN_MODEL`
+
+### Removed Variables
+
+Deprecated variables emit warnings. Check logs after upgrading.
+
+## Docker Compose Migration
+
+If using provided `docker-compose.yml`:
 
 ```bash
-export SECONDBRAIN_LOG_FORMAT=json
+# Pull new image
+docker pull secondbrain:latest
+
+# Restart services
+secondbrain stop
+secondbrain start --wait
+
+# Verify health
+secondbrain health
 ```
 
-## Version 0.1.0 → 0.2.0
+For custom compose files, compare against provided template for new service definitions.
 
-### Breaking Changes
+## Zero-Downtime Upgrades
 
-None. This was an additive release.
+For production environments:
 
-### New Features
+1. **Stage in testing**: Deploy new version to staging
+2. **Backup data**: `mongodump` current state
+3. **Switch traffic**: Route to new version
+4. **Monitor**: Watch for errors or regressions
+5. **Rollback if needed**: Restore backup, redeploy old version
 
-- Async embedding generation
-- Circuit breaker for service resilience
-- Multicore document ingestion
-- Comprehensive test coverage
+## Cross-Version Compatibility
 
-## Migration Checklist
+| Client Version | Server Compatible | Notes |
+|---------------|-------------------|-------|
+| 0.4.0 | 0.4.0, forward compat | Current stable |
+| 0.3.x | 0.4.0 | Fully compatible |
+| < 0.3 | 0.4.0 | May have issues, upgrade recommended |
 
-Before upgrading:
+## Troubleshooting Upgrades
 
-- [ ] Review changelog for breaking changes
-- [ ] Backup MongoDB database
-- [ ] Test in staging environment
-- [ ] Verify MongoDB compatibility (8.0+)
-- [ ] Ensure Python version (3.11+)
-
-After upgrading:
-
-- [ ] Run `secondbrain health` to verify services
-- [ ] Run security scan: `./scripts/security_scan.sh all`
-- [ ] Run tests: `pytest -m "not slow"`
-- [ ] Verify document ingestion works
-- [ ] Verify search functionality
-
-## Rollback Procedure
-
-If you need to rollback:
+### Import Errors After Upgrade
 
 ```bash
-# Install previous version
-pip install secondbrain==0.2.0
+# Clear import caches
+rm -rf __pycache__ .pytest_cache
 
-# Restore database from backup if needed
-mongorestore --uri="mongodb://localhost:27017" backup_directory/
+# Reinstall in dev mode
+pip install -e . --force-reinstall
 ```
 
-## Support
+### MongoDB Schema Conflicts
 
-For migration issues:
-1. Check troubleshooting guide: [troubleshooting.md](getting-started/troubleshooting.md)
-2. Review logs: `secondbrain health --verbose`
-3. Open an issue with migration details
+```bash
+# Check MongoDB server version
+mongosh --eval "db.version()"
+
+# Ensure MongoDB 4.4+ for vector search
+# If using Atlas, verify tier supports vector search
+```
+
+### Index Creation Failures
+
+Vector index creation requires MongoDB 5.0+ with specific index types.
+
+```javascript
+// Check server version for $vectorSearch support
+db.adminCommand({getCmdLineOpts: ()}).parsed.version
+```
+
+Upgrade MongoDB if below 5.0, or disable automatic index creation and manage manually.

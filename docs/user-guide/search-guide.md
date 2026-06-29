@@ -1,297 +1,278 @@
-# Semantic Search Guide
+# Search Guide
 
-Learn how to perform semantic search queries with SecondBrain.
+Guide to performing effective semantic searches with SecondBrain.
 
-## Basic Search
+## Overview
 
-### Simple Query
+The `search` command performs vector similarity search against your ingested document corpus. Queries are converted to embeddings and compared against stored document vectors.
 
-```bash
-secondbrain search "what is machine learning?"
-```
-
-SecondBrain will:
-1. Convert your query to an embedding
-2. Find similar embeddings in the database
-3. Return the most relevant document chunks
-
-### Results Format
-
-```
-[Score: 0.89] From: report.pdf (chunk 3)
-Machine learning is a subset of artificial intelligence that enables systems to learn and improve from experience without being explicitly programmed.
-
-[Score: 0.82] From: notes.md (chunk 1)
-Key concepts in ML: supervised learning, unsupervised learning, reinforcement learning...
-```
-
-## Search Options
-
-### Limit Results
+## Basic Search Syntax
 
 ```bash
-# Get top 10 results
-secondbrain search "python best practices" --top-k 10
+secondbrain search "your search query"
 ```
 
-### Confidence Threshold
+Results display as a formatted table showing:
+
+- **Score**: Relevance score (0.0 to 1.0, higher = more relevant)
+- **Source**: Origin file
+- **Page**: Page number or section marker
+- **Text Preview**: Snippet of matched content
+
+## Filtering Options
+
+### Source Filter
+
+Filter results to a specific file or directory:
 
 ```bash
-# Only high-confidence matches (0.0 - 1.0)
-secondbrain search "data pipeline" --threshold 0.75
+secondbrain search "optimization" --source "./research/"
+secondbrain search "methodology" --source "./thesis.pdf"
 ```
 
-Results below the threshold are filtered out.
+### File Type Filter
 
-### Custom Fields
+Restrict to particular formats:
 
 ```bash
-# Include metadata in results
-secondbrain search "report" --fields content,metadata,filename
+secondbrain search "benchmarks" --file-type pdf
+secondbrain search "api reference" --file-type md
+secondbrain search "pricing" --file-type xlsx
 ```
 
-### Verbose Mode
+### Combining Filters
+
+Filters can be combined:
 
 ```bash
-# Show timing and statistics
-secondbrain search "query" --verbose
+secondbrain search "authentication flow" \
+  --source "./docs/" \
+  --file-type md \
+  --min-score 0.5
 ```
 
-Output:
-```
-Query embedding: 45ms
-Vector search: 12ms
-Result ranking: 3ms
-Total: 60ms
+## Result Quantity Control
 
-Found 15 matching chunks
-Returning top 5
-```
+### Top-K Parameter
 
-## Query Optimization
-
-### Natural Language
-
-Use natural language queries:
+Control how many results to return:
 
 ```bash
-# Good: Natural language
-secondbrain search "How do I configure MongoDB?"
+# Return only top result
+secondbrain search "key finding" --top-k 1
 
-# Also good: Question format
-secondbrain search "What are the best practices for chunking?"
+# Return more context
+secondbrain search "overview" --top-k 20
 ```
 
-### Keywords vs. Semantics
+Default: 20 results
 
-SecondBrain understands semantics, not just keywords:
+### Minimum Score Threshold
+
+Exclude low-relevance results:
 
 ```bash
-# These will find similar results:
-secondbrain search "car"
-secondbrain search "automobile"
-secondbrain search "vehicle transportation"
+# High precision (fewer, more relevant results)
+secondbrain search "critical bug" --min-score 0.8
+
+# Higher recall (more potential matches)
+secondbrain search "related topic" --min-score 0.3
 ```
 
-### Context-Rich Queries
+Default minimum score: 0.46
 
-```bash
-# More context = better results
-secondbrain search "How to handle errors in async Python code?"
+## Output Formatting
 
-# Rather than:
-secondbrain search "async error"
+### Table Format (Default)
+
+Human-readable output with columns:
+
+```
+╭───────────────────────────────────────────────────────────────╮
+│ Search Results                                               │
+├───────────────────────────────────────────────────────────────╮
+│  Score │ Source              │ Page │ Text Preview            │
+├────────┼─────────────────────┼──────┼─────────────────────────┤
+│  0.89  │ paper.pdf           │ 3    │ The optimization techn… │
+│  0.76  │ notes.md            │ 1    │ Various approaches inc… │
+╰───────────────────────────────────────────────────────────────╯
 ```
 
-## Advanced Search Patterns
+### JSON Format
 
-### Multi-Concept Search
-
-Search for documents covering multiple concepts:
+Machine-readable output for scripting:
 
 ```bash
-# Find docs about both topics
-secondbrain search "machine learning AND data preprocessing"
+secondbrain search "requirements" --format json
 ```
 
-### Exclusion Queries
-
-SecondBrain doesn't support explicit negation yet, but you can:
-
-```bash
-# Be specific about what you want
-secondbrain search "python async without threading"
-```
-
-### Search by Metadata
-
-```bash
-# Search within specific file types
-secondbrain search "configuration"  # Then filter results manually
-
-# Or search and check metadata
-secondbrain search "database" --fields content,metadata
-```
-
-## Understanding Scores
-
-### Similarity Score
-
-- **Range**: 0.0 to 1.0
-- **Interpretation**:
-  - 0.8-1.0: Very high relevance
-  - 0.6-0.8: High relevance
-  - 0.4-0.6: Moderate relevance
-  - < 0.4: Low relevance
-
-### Score Adjustment
-
-```bash
-# Strict matching
-secondbrain search "exact term" --threshold 0.85
-
-# Broad matching
-secondbrain search "general concept" --threshold 0.3
+```json
+[
+  {
+    "score": 0.89,
+    "source": "paper.pdf",
+    "page": 3,
+    "text": "The optimization techniques include..."
+  }
+]
 ```
 
 ## Search Strategies
 
-### Iterative Refinement
+### Precision Search
+
+When you need exact answers:
 
 ```bash
-# Start broad
-secondbrain search "python"
-
-# Narrow down based on results
-secondbrain search "python async programming"
-
-# Even more specific
-secondbrain search "python asyncio best practices"
+# High threshold, few results
+secondbrain search "\"specific phrase\"" --min-score 0.75 --top-k 5
 ```
 
 ### Exploratory Search
 
-```bash
-# Discover related topics
-secondbrain search "database optimization" --top-k 20
-
-# Review results to find patterns
-# Then refine query based on common themes
-```
-
-### Comparative Search
+When discovering topics:
 
 ```bash
-# Compare different approaches
-secondbrain search "approach A versus approach B"
-secondbrain search "benefits of approach A"
-secondbrain search "benefits of approach B"
+# Low threshold, many results
+secondbrain search "overview of techniques" --min-score 0.3 --top-k 50
 ```
 
-## Performance Tips
+Then iterate by increasing score threshold on promising results.
 
-### Fast Search
+### Targeted Retrieval
+
+Specific document sections:
 
 ```bash
-# Limit results
-secondbrain search "query" --top-k 5
-
-# Use appropriate threshold
-secondbrain search "specific term" --threshold 0.6
+# Filter to specific source
+secondbrain search "implementation details" \
+  --source "./specific_doc.pdf" \
+  --top-k 10
 ```
 
-### Comprehensive Search
+## Understanding Scores
+
+Similarity scores represent cosine similarity between query and document vectors:
+
+| Score Range | Interpretation |
+|-------------|----------------|
+| 0.8 - 1.0 | Very high relevance, near-exact match |
+| 0.6 - 0.8 | Strong relevance |
+| 0.4 - 0.6 | Moderate relevance |
+| 0.2 - 0.4 | Weak relevance |
+| 0.0 - 0.2 | Minimal similarity |
+
+Factors affecting scores:
+
+- Query specificity
+- Document chunk boundaries
+- Embedding model used
+- Chunk size selection at ingestion
+
+## Improving Search Quality
+
+### Optimal Chunk Sizes at Ingestion
+
+| Content Type | Recommended chunk_size |
+|--------------|------------------------|
+| Q&A pairs | 512-1024 |
+| Technical docs | 1024-2048 |
+| Long articles | 2048-4096 |
+| Books/narratives | 4096-8192 |
+
+### Query Formulation Tips
+
+**Good queries:**
 
 ```bash
-# Get more results
-secondbrain search "broad topic" --top-k 50 --threshold 0.3
-
-# Include all metadata
-secondbrain search "query" --fields content,metadata,filename,source
+secondbrain search "how does the caching mechanism work"
+secondbrain search "compare SQL and NoSQL databases"
+secondbrain search "steps to configure authentication"
 ```
 
-## Common Use Cases
-
-### Code Search
+**Poor queries:**
 
 ```bash
-# Find code examples
-secondbrain search "how to implement singleton pattern"
-
-# Search for specific functionality
-secondbrain search "error handling async python"
+secondbrain search "it"              # Too vague
+secondbrain search "the thing"        # Ambiguous
+secondbrain search ""                 # Empty
 ```
 
-### Documentation Lookup
+### Semantic vs Keyword
+
+SecondBrain uses semantic search, so natural language works better than boolean:
 
 ```bash
-# Find configuration examples
-secondbrain search "MongoDB connection string example"
+# Semantic (recommended)
+secondbrain search "ways to speed up database queries"
 
-# Troubleshooting help
-secondbrain search "connection timeout error solution"
+# Less effective
+secondbrain search "database AND (speed OR fast)"
 ```
 
-### Research Assistance
+## Cross-Document Search
+
+Search across entire corpus efficiently:
 
 ```bash
-# Summarize topic coverage
-secondbrain search "neural network architectures" --top-k 20
+# Topic overview from all sources
+secondbrain search "microservices architecture patterns" --top-k 30
 
-# Find specific concepts
-secondbrain search "backpropagation algorithm explanation"
+# Synthesize common themes from results
+secondbrain search "deployment strategies" --source "./company-docs/"
 ```
 
-## Troubleshooting
+## Handling No Results
 
-### No Results Found
+If search returns nothing:
 
-**Causes**:
-- No documents in database
-- Query is too specific
-- Threshold too high
+1. Lower the score threshold:
 
-**Solutions**:
 ```bash
-# Check if documents exist
-secondbrain ls
-
-# Lower threshold
-secondbrain search "query" --threshold 0.2
-
-# Broaden query
-secondbrain search "general topic"
+secondbrain search "your query" --min-score 0.2
 ```
 
-### Irrelevant Results
+2. Broaden the query:
 
-**Causes**:
-- Query too broad
-- Chunk size inappropriate
-- Wrong embedding model
-
-**Solutions**:
 ```bash
-# Be more specific
-secondbrain search "specific aspect of topic"
+# Instead of exact phrase
+secondbrain search "performance optimization techniques"
 
-# Re-ingest with different chunk size
-secondbrain ingest ./docs/ --chunk-size 1024 --force
+# More general
+secondbrain search "optimization"
 ```
 
-### Slow Search
+3. Check if documents exist:
 
-**Solutions**:
 ```bash
-# Reduce result count
-secondbrain search "query" --top-k 5
-
-# Check database size
-secondbrain status
+secondbrain ls --source "./relevant-file.pdf"
 ```
 
-## Next Steps
+4. Re-ingest with adjusted chunking:
 
-- [Document Management](document-management.md) - Manage your database
-- [CLI Reference](cli-reference.md) - Complete command reference
-- [Async Guide](../developer-guide/async-api.md) - Programmatic search
+Documents might need different chunk sizes to match your query granularity.
+
+## Integration with Other Commands
+
+### Pipeline Example
+
+```bash
+# Find relevant documents
+secondbrain search "machine learning model evaluation" \
+  --format json > matches.json
+
+# List all from same source
+jq -r '.[].source' matches.json | sort -u | while read src; do
+  secondbrain ls --source "$src"
+done
+```
+
+### Scripting Integration
+
+```bash
+#!/bin/bash
+# Get all sources mentioning a topic
+RESULTS=$(secondbrain search "$1" --format json --top-k 50)
+
+echo "$RESULTS" | jq -r '.[].source' | sort -u
+```

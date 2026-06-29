@@ -1,270 +1,277 @@
 # Document Management Guide
 
-Learn how to manage your document database with SecondBrain.
+Managing ingested documents and chunks in SecondBrain.
 
 ## Listing Documents
 
-### Basic List
+### Basic Listing
+
+List first 100 documents:
 
 ```bash
-# Show all documents (summary)
 secondbrain ls
 ```
 
-Output:
-```
-ID                                    Filename          Size    Chunks
--------------------------------------------------------------------
-doc-a1b2c3d4e5f6                      report.pdf        45KB    12
-doc-b2c3d4e5f6g7                      notes.md          8KB     3
-doc-c3d4e5f6g7h8                      presentation.pptx 120KB   28
-```
+### Pagination
 
-### Detailed List
+Control result sets with limit and offset:
 
 ```bash
-# Show full document details
-secondbrain ls --details
+# First 50 documents
+secondbrain ls --limit 50
+
+# Next 50 documents
+secondbrain ls --limit 50 --offset 50
 ```
 
-Output:
-```
-ID: doc-a1b2c3d4e5f6
-Filename: report.pdf
-Size: 45KB
-Chunks: 12
-Type: pdf
-Ingested: 2024-01-15 14:30:22
-Metadata:
-  author: John Doe
-  department: Engineering
-```
+### List All Documents
 
-### Filter by File Type
+Retrieve entire corpus:
 
 ```bash
-# List only PDF documents
-secondbrain ls --file-type pdf
-
-# List only markdown files
-secondbrain ls --file-type md
+secondbrain ls --all
 ```
 
-### Limit Results
+Note: The `--all` flag ignores the `--limit` parameter and respects the internal `MAX_LIST_LIMIT`.
+
+### Filtering
+
+#### By Source File
+
+View all chunks from a specific document:
 
 ```bash
-# Show only recent documents
-secondbrain ls --limit 10
-
-# Combine with details
-secondbrain ls --details --limit 5
+secondbrain ls --source "./annual_report.pdf"
 ```
 
-### JSON Output
+Useful for reviewing all pieces of a single file.
+
+#### By Chunk ID
+
+Retrieve specific chunk details:
 
 ```bash
-# Export document list as JSON
-secondbrain ls --format json
+secondbrain ls --chunk-id "abc123xyz"
 ```
 
-## Database Statistics
+Useful for debugging or referencing specific content sections.
 
-### Status Command
+### Understanding the Output
 
-```bash
-# View database statistics
-secondbrain status
-```
+Listed results display:
 
-Output:
-```
-Database: secondbrain
-Collection: embeddings
-Total Documents: 150
-Total Chunks: 2,340
-Total Content Size: 45.2 MB
-Vector Index Size: 12.8 MB
-Average Chunk Size: 19,316 characters
-```
-
-### Verbose Status
-
-```bash
-# Detailed statistics
-secondbrain status --verbose
-```
-
-Includes:
-- Breakdown by file type
-- Ingestion timeline
-- Search performance metrics
-- Index health
+| Field | Description |
+|-------|-------------|
+| `chunk_id` | Unique identifier for the chunk |
+| `source` | Original file path |
+| `page` | Source page number |
+| `text_preview` | Beginning of chunk content |
+| `created_at` | Ingestion timestamp |
 
 ## Deleting Documents
 
-### Delete Single Document
+### Safety First
+
+Deletion is **permanent**. There is no recycle bin or undo functionality.
+
+Always preview before deleting:
 
 ```bash
-# Delete by ID
-secondbrain delete doc-a1b2c3d4e5f6
+# Preview what will be deleted
+secondbrain ls --source "./old_document.pdf"
 ```
 
-You'll be prompted to confirm:
-```
-Delete document doc-a1b2c3d4e5f6 (report.pdf)? [y/N]: y
-✓ Document deleted successfully
-```
+### Deletion Criteria
 
-### Force Delete (Skip Confirmation)
+Choose one criterion per operation:
+
+| Criterion | Flag | Use Case |
+|-----------|------|----------|
+| Source file | `--source` | Remove all chunks from a file |
+| Specific chunk | `--chunk-id` | Remove single chunk |
+| Everything | `--all` | Complete database reset |
+
+### By Source
+
+Remove all chunks originating from a file:
 
 ```bash
-# Delete without confirmation
-secondbrain delete doc-a1b2c3d4e5f6 --force
+secondbrain delete --source "./report_q4_2024.pdf"
 ```
 
-### Delete All Documents
+Prompts for confirmation unless `--yes` is provided.
+
+### By Chunk ID
+
+Target a specific chunk:
 
 ```bash
-# WARNING: Delete all documents
-secondbrain delete --all --force
+secondbrain delete --chunk-id "unique-chunk-identifier"
 ```
 
-**Warning**: This action cannot be undone!
+Useful for removing corrupted or obsolete entries.
 
-### Batch Delete
+### Delete Everything
+
+Clear the entire vector store:
 
 ```bash
-# Delete multiple documents (manual)
-secondbrain delete doc-1 --force
-secondbrain delete doc-2 --force
-secondbrain delete doc-3 --force
+# With confirmation prompt
+secondbrain delete --all
+
+# Skip confirmation
+secondbrain delete --all --yes
 ```
 
-## Document Metadata
-
-### Viewing Metadata
+### Confirmation Patterns
 
 ```bash
-# See metadata for all documents
-secondbrain ls --details | grep -A 5 "Metadata:"
+# Default: requires Y/n response
+secondbrain delete --source "./file.pdf"
+# Output: Delete documents matching criteria? [y/N]:
+
+# Skip with --yes flag
+secondbrain delete --source "./file.pdf" --yes
+# Executes immediately
 ```
 
-### Metadata Fields
+## Viewing Statistics
 
-Documents can have custom metadata:
-- `filename`: Original file name
-- `file_type`: Extension (pdf, md, etc.)
-- `size`: File size in bytes
-- `ingested_at`: Timestamp
-- `custom fields`: Any user-defined metadata
+### Database Status
 
-## Maintenance
-
-### Find Orphaned Chunks
+Get overall vector store statistics:
 
 ```bash
-# Check for database inconsistencies
-secondbrain status --verbose
-```
-
-### Rebuild Index
-
-```bash
-# Re-ingest all documents to rebuild
-secondbrain ingest ./documents/ --force
-```
-
-### Backup Database
-
-```bash
-# MongoDB backup
-mongodump --db secondbrain --out ./backup/
-
-# Restore from backup
-mongorestore --db secondbrain ./backup/secondbrain/
-```
-
-## Search Within Results
-
-### Filter by Content
-
-After listing documents, you can search within specific files:
-
-```bash
-# First, get document ID
-secondbrain ls --file-type pdf
-
-# Then search with context
-secondbrain search "specific topic" --top-k 10
-```
-
-### Cross-Reference Documents
-
-```bash
-# Find related documents
-secondbrain search "topic A" --top-k 5
-secondbrain search "topic B" --top-k 5
-
-# Compare results to find overlap
-```
-
-## Best Practices
-
-### Regular Maintenance
-
-```bash
-# Weekly: Check database health
 secondbrain status
-
-# Monthly: Review and clean up
-secondbrain ls --details
 ```
 
-### Document Organization
+Reports include:
+
+| Statistic | Description |
+|-----------|-------------|
+| Total chunks | Overall document count |
+| Sources | Unique source files |
+| Storage size | MongoDB collection size |
+| Index status | Vector index health |
+| Chunk distribution | Sizes across corpus |
+
+### Service Health
+
+Check MongoDB and embedding service connectivity:
 
 ```bash
-# Ingest by category
-secondbrain ingest ./documents/research/
-secondbrain ingest ./documents/projects/
-
-# Keep track with metadata
+secondbrain health
 ```
 
-### Version Control
+Health status indicates whether all required services are operational.
 
-For important documents:
-1. Keep source files in version control
-2. Track document IDs externally
-3. Document ingestion history
+### Performance Metrics
 
-## Troubleshooting
-
-### Document Not Found
+View operation latencies:
 
 ```bash
-# Verify document exists
-secondbrain ls | grep "doc-id"
-
-# Check for typos in ID
-secondbrain ls --details
+secondbrain metrics
 ```
 
-### Duplicate Documents
+Metrics tracked:
+
+- `embedding_generate` / `_async` - Synchronous and async embedding creation
+- `storage_store` / `_batch` - Individual and bulk vector storage
+- `storage_search` - Query execution latency
+
+### Reset Metrics
+
+Clear all collected metrics:
 
 ```bash
-# Re-ingest with --force to deduplicate
-secondbrain ingest ./docs/ --force
+secondbrain metrics --reset
 ```
 
-### Missing Metadata
+Useful for measuring specific operation windows.
+
+## Bulk Operations
+
+### Inventory Export
+
+Generate complete document inventory:
 
 ```bash
-# Re-ingest to add missing metadata
-secondbrain ingest ./docs/ --force
+secondbrain ls --all > inventory_$(date +%Y%m%d).txt
 ```
 
-## Next Steps
+### Selective Cleanup
 
-- [Search Guide](search-guide.md) - Learn to query documents
-- [CLI Reference](cli-reference.md) - Complete command reference
-- [Troubleshooting](../getting-started/troubleshooting.md) - Common issues
+Remove documents older than a pattern:
+
+```bash
+# List all sources
+secondbrain ls --all | grep "2023" | awk '{print $2}' | sort -u
+
+# Pipe to delete (careful!)
+secondbrain ls --all | grep "2023" | awk '{print $2}' | sort -u | \
+  while read src; do
+    secondbrain delete --source "$src" --yes
+  done
+```
+
+### Archive and Reset
+
+Archive current corpus:
+
+```bash
+# Export metadata
+secondbrain ls --all > archive_metadata.txt
+
+# Note: Actual content cannot be recovered without re-ingesting
+```
+
+## Common Tasks
+
+### Remove Duplicate File Entry
+
+When a file was ingested twice:
+
+```bash
+# Identify duplicates
+secondbrain ls --source "./document.pdf" | wc -l
+
+# Remove all instances
+secondbrain delete --source "./document.pdf"
+```
+
+### Preserve Specific Source
+
+Delete everything except one document:
+
+```bash
+# Step 1: Note current sources
+secondbrain ls --all > all_sources.txt
+
+# Step 2: Delete all
+secondbrain delete --all --yes
+
+# Step 3: Re-ingest preserved file
+secondbrain ingest ./preserved_document.pdf
+```
+
+### Migrate to New Database
+
+Transfer corpus to different MongoDB instance:
+
+1. Dump original:
+
+```bash
+mongodump --uri="$MONGO_URI" --collection=embeddings
+```
+
+2. Restore to target:
+
+```bash
+mongorestore --uri="$NEW_MONGO_URI" dump/embeddings.bson
+```
+
+3. Update configuration:
+
+```bash
+export SECONDBRAIN_MONGO_URI="$NEW_MONGO_URI"
+```

@@ -1,323 +1,432 @@
 # CLI Reference
 
-Complete reference for all SecondBrain CLI commands.
+Complete reference for all SecondBrain command-line interface commands.
 
 ## Global Options
 
-```bash
-secondbrain [GLOBAL OPTIONS] [COMMAND] [COMMAND OPTIONS]
-```
+| Option | Description |
+|--------|-------------|
+| `--help, -h` | Show help message and exit |
+| `--version, -v` | Show version number |
 
-| Option | Description | Default |
-|--------|-------------|---------|
-| `--help` | Show help message | - |
-| `--version` | Show version | - |
-| `--verbose` | Enable verbose output | false |
-| `--config` | Path to config file | `.env` |
+## Commands Overview
 
-## Commands
+| Command | Description |
+|---------|-------------|
+| [`ingest`](#ingest) | Ingest documents into the vector database |
+| [`search`](#search) | Search the vector database with semantic query |
+| [`ls`](#ls) | List ingested documents and chunks |
+| [`delete`](#delete) | Delete documents from the vector database |
+| [`status`](#status) | Show statistics about the vector database |
+| [`health`](#health) | Check health status of all services |
+| [`metrics`](#metrics) | Show performance metrics and statistics |
+| [`chat`](#chat) | Conversational Q&A with your documents |
+| [`start`](#start) | Start the production Docker Compose stack |
+| [`stop`](#stop) | Stop the production Docker Compose stack |
 
-### `ingest`
+---
+
+## ingest
 
 Ingest documents into the vector database.
 
-```bash
-secondbrain ingest PATH [OPTIONS]
+### Synopsis
+
+```
+secondbrain ingest PATH [--recursive] [--cores INT] [--batch-size INT] [--chunk-size INT] [--chunk-overlap INT]
 ```
 
-**Arguments:**
-- `PATH` - Path to file or directory to ingest
+### Arguments
 
-**Options:**
-| Option | Description | Default |
-|--------|-------------|---------|
-| `--chunk-size` | Size of text chunks | 4096 |
-| `--chunk-overlap` | Overlap between chunks | 200 |
-| `--batch-size` | Batch size for processing | 10 |
-| `--cores` | Number of CPU cores | 4 |
-| `--force` | Re-ingest existing documents | false |
-| `--verbose` | Show detailed progress | false |
+| Argument | Description |
+|----------|-------------|
+| `PATH` | Path to file or directory to ingest |
 
-**Examples:**
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `--recursive, -r` | Recursively process directories |
+| `--cores, -c INT` | Number of CPU cores for parallel processing (default: auto-detect) |
+| `--batch-size, -b INT` | Batch size for ThreadPoolExecutor when cores=1 (default: 10) |
+| `--chunk-size INT` | Override default chunk size |
+| `--chunk-overlap INT` | Override default chunk overlap |
+
+### Examples
+
 ```bash
-# Ingest a single file
-secondbrain ingest document.pdf
+# Ingest single file
+secondbrain ingest ./document.pdf
 
-# Ingest a directory
-secondbrain ingest ./documents/
+# Ingest directory recursively
+secondbrain ingest ./documents/ --recursive
 
-# Ingest with custom chunk size
-secondbrain ingest ./docs/ --chunk-size 2048
+# Ingest with 4 CPU cores
+secondbrain ingest ./papers/ --recursive --cores 4
 
-# Ingest with 8 CPU cores
-secondbrain ingest ./docs/ --cores 8
-
-# Force re-ingestion
-secondbrain ingest ./docs/ --force
+# Custom chunking parameters
+secondbrain ingest ./notes/ --chunk-size 2048 --chunk-overlap 100
 ```
 
-### `search`
+---
 
-Perform semantic search queries.
+## search
 
-```bash
-secondbrain search QUERY [OPTIONS]
+Search the vector database with semantic query.
+
+### Synopsis
+
+```
+secondbrain search QUERY [--top-k INT] [--source STR] [--file-type STR] [--format table|json] [--min-score FLOAT]
 ```
 
-**Arguments:**
-- `QUERY` - Natural language search query
+### Arguments
 
-**Options:**
-| Option | Description | Default |
-|--------|-------------|---------|
-| `--top-k` | Number of results | 5 |
-| `--threshold` | Minimum similarity score | 0.0 |
-| `--fields` | Fields to return | content |
-| `--verbose` | Show timing info | false |
+| Argument | Description |
+|----------|-------------|
+| `QUERY` | Search query text |
 
-**Examples:**
-```bash
-# Simple search
-secondbrain search "machine learning algorithms"
+### Options
 
-# Get 10 results
-secondbrain search "python best practices" --top-k 10
+| Option | Description |
+|--------|-------------|
+| `--top-k INT` | Number of results to return |
+| `--source STR` | Filter results by source file path |
+| `--file-type STR` | Filter results by file type (e.g., 'pdf', 'docx') |
+| `--format` | Output format: `table` (default) or `json` |
+| `--min-score FLOAT` | Minimum similarity score threshold (0.0-1.0, default: 0.46) |
 
-# High-confidence results only
-secondbrain search "data pipeline" --threshold 0.8
-
-# Include metadata in results
-secondbrain search "report" --fields content,metadata
-```
-
-### `ls`
-
-List ingested documents.
+### Examples
 
 ```bash
-secondbrain ls [OPTIONS]
-```
+# Basic search
+secondbrain search "machine learning optimization techniques"
 
-**Options:**
-| Option | Description | Default |
-|--------|-------------|---------|
-| `--details` | Show full details | false |
-| `--format` | Output format (table/json) | table |
-| `--file-type` | Filter by file type | - |
-| `--limit` | Maximum results | 100 |
-
-**Examples:**
-```bash
-# List all documents (summary)
-secondbrain ls
-
-# List with full details
-secondbrain ls --details
-
-# Export as JSON
-secondbrain ls --format json
+# Top 10 results in JSON format
+secondbrain search "neural network architectures" --top-k 10 --format json
 
 # Filter by file type
-secondbrain ls --file-type pdf
+secondbrain search "performance benchmarks" --file-type pdf
+
+# High-relevance only
+secondbrain search "installation steps" --min-score 0.7
+
+# Combine filters
+secondbrain search "authentication" --source "./docs/" --file-type md
 ```
 
-### `delete`
+---
 
-Delete documents from the database.
+## ls
+
+List ingested documents and chunks.
+
+### Synopsis
+
+```
+secondbrain ls [--source STR] [--chunk-id STR] [--limit INT] [--offset INT] [--all]
+```
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `--source STR` | Filter by source file |
+| `--chunk-id STR` | Filter by specific chunk ID |
+| `--limit INT` | Maximum number of results (default: 100, max: 10000) |
+| `--offset INT` | Offset for pagination |
+| `--all, -a` | List all documents (ignores limit) |
+
+### Examples
 
 ```bash
-secondbrain delete DOCUMENT_ID [OPTIONS]
+# List first 100 documents
+secondbrain ls
+
+# List all documents
+secondbrain ls --all
+
+# Paginated results
+secondbrain ls --limit 50 --offset 100
+
+# Filter by source
+secondbrain ls --source "./report.pdf"
+
+# Specific chunk
+secondbrain ls --chunk-id abc123
 ```
 
-**Arguments:**
-- `DOCUMENT_ID` - ID of document to delete
+---
 
-**Options:**
-| Option | Description | Default |
-|--------|-------------|---------|
-| `--force` | Skip confirmation | false |
-| `--all` | Delete all documents | false |
+## delete
 
-**Examples:**
-```bash
-# Delete a single document
-secondbrain delete doc-12345
+Delete documents from the vector database.
 
-# Delete without confirmation
-secondbrain delete doc-12345 --force
+### Synopsis
 
-# Delete all documents (warning!)
-secondbrain delete --all --force
+```
+secondbrain delete [--source STR] [--chunk-id STR] [--all] [--yes]
 ```
 
-### `status`
+### Options
 
-Show database statistics.
+| Option | Description |
+|--------|-------------|
+| `--source STR` | Filter by source file |
+| `--chunk-id STR` | Filter by specific chunk ID |
+| `--all, -a` | Delete all documents |
+| `--yes, -y` | Skip confirmation prompt |
 
-```bash
-secondbrain status [OPTIONS]
-```
-
-**Options:**
-| Option | Description | Default |
-|--------|-------------|---------|
-| `--verbose` | Show detailed stats | false |
-| `--format` | Output format | table |
-
-**Output:**
-```
-Database: secondbrain
-Collection: embeddings
-Total Documents: 150
-Total Chunks: 2,340
-Total Size: 45.2 MB
-Index Size: 12.8 MB
-```
-
-### `health`
-
-Check system health and connectivity.
+### Examples
 
 ```bash
-secondbrain health [OPTIONS]
+# Delete by source
+secondbrain delete --source "./report.pdf"
+
+# Delete specific chunk
+secondbrain delete --chunk-id abc123
+
+# Delete all (requires confirmation)
+secondbrain delete --all
+
+# Delete all without prompting
+secondbrain delete --all --yes
 ```
 
-**Options:**
-| Option | Description | Default |
-|--------|-------------|---------|
-| `--verbose` | Show detailed info | false |
-| `--check-sentence-transformers` | Check service | true |
-| `--check-mongo` | Check MongoDB | true |
+### Warnings
 
-**Output:**
+- Deletion is permanent and cannot be undone
+- Confirm before using `--all` without `--yes`
+
+---
+
+## status
+
+Show statistics about the vector database.
+
+### Synopsis
+
 ```
-✓ MongoDB: Connected (27017)
-✓ sentence-transformers: Available (11434)
-✓ Configuration: Valid
+secondbrain status
 ```
 
-### `chat`
+### Examples
+
+```bash
+secondbrain status
+```
+
+Displays MongoDB collection statistics including total documents, storage size, and index information.
+
+---
+
+## health
+
+Check health status of all services.
+
+### Synopsis
+
+```
+secondbrain health [--output text|json]
+```
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `--output` | Output format: `text` (default) or `json` |
+
+### Examples
+
+```bash
+# Text output
+secondbrain health
+
+# JSON for scripting
+secondbrain health --output json
+```
+
+---
+
+## metrics
+
+Show performance metrics and statistics.
+
+### Synopsis
+
+```
+secondbrain metrics [--reset]
+```
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `--reset, -r` | Reset all metrics |
+
+### Examples
+
+```bash
+# View all metrics
+secondbrain metrics
+
+# Reset metrics
+secondbrain metrics --reset
+```
+
+Available metrics:
+
+| Metric | Description |
+|--------|-------------|
+| `embedding_generate` | Sync embedding generation |
+| `embedding_generate_async` | Async embedding generation |
+| `embedding_generate_batch` | Batch sync embedding |
+| `embedding_generate_batch_async` | Batch async embedding |
+| `storage_store` | Sync storage writes |
+| `storage_store_async` | Async storage writes |
+| `storage_store_batch` | Batch sync writes |
+| `storage_store_batch_async` | Batch async writes |
+| `storage_search` | Sync search queries |
+| `storage_search_async` | Async search queries |
+
+Each metric reports: Count, Total, Average, Min, and Max times.
+
+---
+
+## chat
 
 Conversational Q&A with your documents using local LLM.
 
-```bash
-secondbrain chat [QUERY] [OPTIONS]
+### Synopsis
+
+```
+secondbrain chat [QUERY] [--session STR] [--top-k INT] [--temperature FLOAT] [--model STR]
+                 [--show-sources] [--list-sessions] [--history] [--delete-session STR]
+                 [--create] [--check-llm]
 ```
 
-**Arguments:**
-- `QUERY` - Optional query text. If omitted, enters interactive mode.
+### Arguments
 
-**Options:**
-| Option | Description | Default |
-|--------|-------------|---------|
-| `--session`, `-s` | Session ID to use or create | `default` |
-| `--top-k`, `-k` | Number of chunks to retrieve | 5 |
-| `--temperature`, `-t` | LLM temperature | 0.1 |
-| `--model`, `-m` | LLM model name | (from config) |
-| `--show-sources` | Show retrieved sources | false |
-| `--list-sessions` | List all sessions | false |
-| `--history` | Show session history | false |
-| `--delete-session`, `-d` | Delete a session | - |
-| `--check-llm` | Check if LLM provider is available | false |
+| Argument | Description |
+|----------|-------------|
+| `QUERY` | Initial query (optional - enters interactive mode if omitted) |
 
-**Interactive Mode Commands:**
-When running in interactive mode (no query provided), you can use:
-- `/quit` or `/exit` - Exit the chat
-- `/clear` - Clear conversation history
-- `/help` - Show available commands
+### Options
 
-**Examples:**
+| Option | Description |
+|--------|-------------|
+| `--session, -s STR` | Session ID to use/create |
+| `--top-k, -k INT` | Number of chunks to retrieve (default: 20) |
+| `--temperature, -t FLOAT` | LLM temperature (default: 0.1) |
+| `--model, -m STR` | LLM model name |
+| `--show-sources` | Show retrieved sources |
+| `--list-sessions` | List all conversation sessions |
+| `--history` | Show session history |
+| `--delete-session, -d STR` | Delete a session |
+| `--create, -c` | Create new session with UUID |
+| `--check-llm` | Check if LLM provider is available |
 
-Single-turn chat:
+### Interactive Mode Commands
+
+Inside the interactive REPL:
+
+| Command | Description |
+|---------|-------------|
+| `/quit, /exit` | Exit chat |
+| `/clear` | Clear conversation history |
+| `/help` | Show help |
+
+### Examples
+
 ```bash
-# Simple question
-secondbrain chat "What is secondbrain?"
+# Single query
+secondbrain chat "What is the main topic?"
 
-# With custom session
-secondbrain chat --session my-session "Explain the architecture"
-
-# Show sources
-secondbrain chat --show-sources "How does ingestion work?"
-
-# Use specific model
-secondbrain chat --model llama3 "Summarize this"
-
-# Adjust temperature for more creative responses
-secondbrain chat --temperature 0.7 "Generate ideas"
-```
-
-Interactive chat:
-```bash
-# Start interactive mode with default session
+# Interactive REPL
 secondbrain chat
 
-# Resume specific session
-secondbrain chat --session my-session
+# Named session
+secondbrain chat --session my-project
 
-# Interactive mode with custom settings
-secondbrain chat --session research --top-k 10 --temperature 0.5
-```
+# Show sources in response
+secondbrain chat "Explain the methodology" --show-sources
 
-Session management:
-```bash
 # List all sessions
 secondbrain chat --list-sessions
 
 # View session history
-secondbrain chat --session my-session --history
+secondbrain chat --history --session my-project
 
-# Delete a session
+# Delete session
 secondbrain chat --delete-session old-session
 
 # Check LLM availability
 secondbrain chat --check-llm
 ```
 
-**Output:**
+---
+
+## start
+
+Start the production Docker Compose stack.
+
+### Synopsis
+
 ```
-Answer:
-SecondBrain is a local document intelligence CLI tool that ingests documents,
-generates embeddings using sentence-transformers, and stores vectors in MongoDB
-for semantic search.
-
-Sources:
-  [1] README.md (page -): SecondBrain - Local Document Intelligence CLI Tool
-  [2] docs/index.md (page -): Project Overview and Documentation Index
-```
-
-## Exit Codes
-
-| Code | Meaning |
-|------|---------|
-| 0 | Success |
-| 1 | General error |
-| 2 | Configuration error |
-| 3 | Connection error |
-| 4 | Document not found |
-| 5 | Permission error |
-
-## Environment Variables
-
-All CLI options can be set via environment variables:
-
-| Option | Environment Variable |
-|--------|---------------------|
-| `--chunk-size` | `SECONDBRAIN_CHUNK_SIZE` |
-| `--cores` | `SECONDBRAIN_MAX_WORKERS` |
-| `--verbose` | `SECONDBRAIN_VERBOSE` |
-
-Example:
-```bash
-SECONDBRAIN_CHUNK_SIZE=2048 secondbrain ingest ./docs/
+secondbrain start [--compose-file FILE] [--project-name NAME] [--wait]
 ```
 
-## Help
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `--compose-file, -f FILE` | Path to docker-compose.yml (default: auto-detect) |
+| `--project-name, -p NAME` | Docker Compose project name (default: secondbrain) |
+| `--wait, -w` | Wait for services to be fully ready |
+
+### Examples
 
 ```bash
-# Show all commands
-secondbrain --help
+# Start with auto-detected compose file
+secondbrain start
 
-# Show command-specific help
-secondbrain ingest --help
-secondbrain search --help
+# Wait for full readiness
+secondbrain start --wait
+
+# Use specific compose file
+secondbrain start -f docker-compose.prod.yml
+```
+
+---
+
+## stop
+
+Stop the production Docker Compose stack.
+
+### Synopsis
+
+```
+secondbrain stop [--compose-file FILE] [--project-name NAME] [--remove-volumes] [--force]
+```
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `--compose-file, -f FILE` | Path to docker-compose.yml (default: auto-detect) |
+| `--project-name, -p NAME` | Docker Compose project name (default: secondbrain) |
+| `--remove-volumes, -v` | Remove named volumes |
+| `--force, -y` | Skip confirmation prompt |
+
+### Examples
+
+```bash
+# Stop containers
+secondbrain stop
+
+# Stop and remove volumes
+secondbrain stop --remove-volumes
+
+# Force stop without confirmation
+secondbrain stop --force
 ```

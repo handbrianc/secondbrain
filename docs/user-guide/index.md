@@ -1,156 +1,110 @@
 # User Guide
 
-Comprehensive usage guide for SecondBrain.
+The SecondBrain User Guide covers all aspects of operating SecondBrain in production environments.
 
-## Overview
+## Table of Contents
 
-This section covers how to use SecondBrain for common tasks:
+1. **[CLI Reference](cli-reference.md)** — Complete command documentation
+2. **[Document Ingestion](document-ingestion.md)** — Adding documents to the vector store
+3. **[Search Guide](search-guide.md)** — Performing semantic searches
+4. **[Document Management](document-management.md)** — Listing and deleting documents
 
-- [CLI Commands](cli-reference.md) - All available commands
-- [Document Ingestion](document-ingestion.md) - Adding documents
-- [Semantic Search](search-guide.md) - Finding documents
-- [Document Management](document-management.md) - Listing and deleting
-- [Conversational Q&A](conversational-qa.md) - Multi-turn conversations
+## Core Concepts
 
-## Quick Navigation
+### Vector Search Fundamentals
 
-### Common Tasks
+SecondBrain stores document chunks as embedded vectors in MongoDB. When you search, your query is converted to a vector and compared against stored vectors using similarity metrics.
 
-| Task | Command | Guide |
-|------|---------|-------|
-| Add documents | `secondbrain ingest` | [Ingestion Guide](document-ingestion.md) |
-| Search | `secondbrain search` | [Search Guide](search-guide.md) |
-| Chat with docs | `secondbrain chat` | [Conversational Q&A](conversational-qa.md) |
-| List documents | `secondbrain ls` | [Document Management](document-management.md) |
-| Delete documents | `secondbrain delete` | [Document Management](document-management.md) |
-| Check health | `secondbrain health` | [CLI Reference](cli-reference.md) |
+### Chunking Strategy
 
-### Document Formats
+Documents are split into overlapping chunks to enable granular retrieval. Key settings:
 
-SecondBrain supports:
+- **`chunk_size`**: Target size of each chunk (default: 4096 characters)
+- **`chunk_overlap`**: Characters overlapped between consecutive chunks (default: 50)
 
-**Documents:**
-- PDF (.pdf)
-- Word (.docx)
-- PowerPoint (.pptx)
-- Excel (.xlsx)
+### Session-Based Chat
 
-**Web & Text:**
-- HTML (.html, .htm)
-- Markdown (.md)
-- Text (.txt)
+The `chat` command maintains conversation history per session, enabling multi-turn dialogues with your documents using RAG (Retrieval-Augmented Generation).
 
-**Media (requires additional setup):**
-- Images (.png, .jpg, .jpeg) - OCR for text extraction
-- Audio (.wav, .mp3) - Transcription to text
+## Common Operations
 
-See [Document Ingestion](document-ingestion.md) for format-specific details.
-
-## Core Workflows
-
-### 1. Ingesting Documents
+### Daily Workflow Example
 
 ```bash
-# Ingest a single file
-secondbrain ingest document.pdf
+#!/bin/bash
+# Morning routine - check status
+secondbrain status
+secondbrain health
 
-# Ingest a directory
-secondbrain ingest ./documents/
+# Ingest new documents
+secondbrain ingest ~/Documents/research --recursive --cores 4
 
-# Ingest with custom settings
-secondbrain ingest ./docs/ --chunk-size 2048 --cores 4
+# Answer questions
+secondbrain chat "Summarize the key findings from recent papers"
+secondbrain chat "Compare approaches documented in the literature"
 ```
 
-### 2. Searching Documents
+### Weekly Maintenance
 
 ```bash
-# Simple semantic search
-secondbrain search "machine learning best practices"
+#!/bin/bash
+# Weekly cleanup
+secondbrain ls --all > inventory.txt
+# Review inventory and delete stale sources
+secondbrain delete --source "./old-document.pdf" --yes
 
-# Limit results
-secondbrain search "error handling" --top-k 10
-
-# High-confidence results only
-secondbrain search "data pipeline" --threshold 0.8
+# Reset metrics for fresh monitoring
+secondbrain metrics --reset
 ```
 
-### 3. Interactive Chat
+## Configuration Recommendations
+
+### Development Environment
 
 ```bash
-# Start interactive chat
-secondbrain chat
-
-# Single query
-secondbrain chat "What is the architecture?"
-
-# With session management
-secondbrain chat --session research-project
+SECONDBRAIN_LOG_LEVEL=DEBUG
+SECONDBRAIN_RATE_LIMIT_ENABLED=false
+SECONDBRAIN_CIRCUIT_BREAKER_ENABLED=false
 ```
 
-### 4. Managing Documents
+### Production Environment
 
 ```bash
-# List all documents
-secondbrain ls
-
-# List with full details
-secondbrain ls --details
-
-# Filter by file type
-secondbrain ls --file-type pdf
-
-# Delete a document
-secondbrain delete <document-id>
+SECONDBRAIN_LOG_LEVEL=INFO
+SECONDBRAIN_LOG_FORMAT=json
+SECONDBRAIN_RATE_LIMIT_ENABLED=true
+SECONDBRAIN_CIRCUIT_BREAKER_ENABLED=true
+SECONDBRAIN_STORAGE_COMPRESSION_ENABLED=true
 ```
 
-## Advanced Topics
+## Tips and Tricks
 
-### Async API
-
-For programmatic usage in Python:
-
-```python
-import asyncio
-from secondbrain.client import SecondBrainClient
-
-async def main():
-    client = SecondBrainClient()
-    
-    # Ingest documents
-    await client.ingest("./documents/")
-    
-    # Search
-    results = await client.search("semantic query")
-    
-    await client.close()
-
-asyncio.run(main())
-```
-
-See [Async Guide](../developer-guide/async-api.md) for details.
-
-### Configuration
-
-All CLI options can be set via environment variables:
+### Efficient Batch Ingestion
 
 ```bash
-SECONDBRAIN_CHUNK_SIZE=2048 secondbrain ingest ./docs/
+# For large document collections
+secondbrain ingest ./corpus --recursive --cores $(nproc) --batch-size 20
 ```
 
-See [Configuration Guide](../getting-started/configuration.md) for complete options.
+### Precision Searching
 
-### Examples
+```bash
+# High-precision search
+secondbrain search "specific phrase" --min-score 0.7 --top-k 5
 
-Practical examples are available in the [examples directory](../examples/README.md):
+# Broad exploratory search
+secondbrain search "concept overview" --min-score 0.3 --top-k 50
+```
 
-- **Basic Usage**: Simple CLI-style examples
-- **Advanced**: Custom chunking, batch processing, async workflows
-- **Integrations**: Flask and FastAPI REST APIs
+### Session Management
 
-## Related Documentation
+```bash
+# Named session for project-specific chats
+secondbrain chat --session "project-alpha" "What decisions were made?"
 
-- [Getting Started](../getting-started/index.md) - New users
-- [CLI Reference](cli-reference.md) - Command details
-- [Configuration](../getting-started/configuration.md) - Setup options
-- [Developer Guide](../developer-guide/index.md) - For contributors
-- [Troubleshooting](../getting-started/troubleshooting.md) - Common issues
+# View session history
+secondbrain chat --history --session "project-alpha"
+
+# Switch contexts entirely
+secondbrain chat --session "project-beta" "Different research questions"
+```

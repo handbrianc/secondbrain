@@ -1,138 +1,134 @@
 # Quick Start Guide
 
-Get up and running with SecondBrain in 5 minutes.
+Get SecondBrain running in under 5 minutes with this streamlined guide.
 
-## Step 1: Installation
-
-```bash
-# Production
-pip install -e "."
-
-# Development
-pip install -e ".[dev]"
-
-# Start services (Docker)
-docker-compose up -d
-
-# Alternative: Start sentence-transformers locally
-# sentence-transformers serve
-```
-
-> **Choose Your Installation Profile**: See [Dependency Installation Guide](DEPENDENCIES.md) for detailed options and external service requirements.
-
-## Step 2: Configure
-
-Create a `.env` file in your project root:
+## Step 1: Install SecondBrain
 
 ```bash
-# MongoDB
-MONGODB_INITDB_ROOT_USERNAME=your_username
-MONGODB_INITDB_ROOT_PASSWORD=your_strong_password
-SECONDBRAIN_MONGO_URI=mongodb://your_username:your_strong_password@localhost:27017
-
-# Sentence Transformers
-SECONDBRAIN_SENTENCE_TRANSFORMERS_URL=http://localhost:11434
-SECONDBRAIN_EMBEDDING_MODEL=all-MiniLM-L6-v2
-
-# Chunk size
-SECONDBRAIN_CHUNK_SIZE=4096
+pip install -e .
 ```
 
-**⚠️ Security Note**: Enable MongoDB authentication for production use. See [MongoDB Authentication Setup](mongodb-authentication.md) for detailed setup instructions.
+## Step 2: Configure Environment
 
-## Step 3: Ingest Documents
+Set required environment variables:
 
 ```bash
-secondbrain ingest /path/to/documents/
-
-# Custom options
-secondbrain ingest /path/to/documents/ \
-  --chunk-size 2048 \
-  --batch-size 10 \
-  --verbose
+export SECONDBRAIN_MONGO_URI="mongodb://localhost:27017"
+export SECONDBRAIN_OPENAI_API_KEY="your-api-key"
 ```
 
-Supported formats:
-- PDF (.pdf)
-- Word (.docx)
-- PowerPoint (.pptx)
-- Excel (.xlsx)
-- HTML (.html, .htm)
-- Markdown (.md)
-- Text (.txt)
-- Images (requires OCR)
-- Audio (requires transcription)
-
-## Step 4: Search
+Optionally, set a custom chunk size for your documents:
 
 ```bash
-secondbrain search "what is this about?"
-
-# Limit results
-secondbrain search "machine learning" --top-k 10
-
-# Verbose output
-secondbrain search "data pipelines" --verbose
+export SECONDBRAIN_CHUNK_SIZE=4096
+export SECONDBRAIN_CHUNK_OVERLAP=50
 ```
 
-## Step 5: Manage Documents
+## Step 3: Start MongoDB
+
+Launch the Docker Compose stack with the `--wait` flag to ensure readiness:
+
+```bash
+secondbrain start --wait
+```
+
+You should see:
+
+```
+Starting Docker Compose stack from: /path/to/docker-compose.yml
+Starting MongoDB...
+Waiting for services to be ready...
+✓ Docker Compose stack is fully ready
+```
+
+## Step 4: Ingest Your First Documents
+
+Process a file or directory:
+
+```bash
+# Single file
+secondbrain ingest ./document.pdf
+
+# Entire directory (recursive)
+secondbrain ingest ./documents/ --recursive
+```
+
+Progress indicators show ingestion status:
+
+```
+Ingesting: ./documents/
+✓ Successfully ingested 10 files
+```
+
+## Step 5: Perform Semantic Search
+
+Query your document corpus:
+
+```bash
+secondbrain search "what is the main topic discussed?"
+```
+
+Results display with relevance scores:
+
+```
+╭───────────────────────────────────────────────────────────────╮
+│ Search Results                                               │
+├───────────────────────────────────────────────────────────────╮
+│  Score │ Source              │ Page │ Text Preview            │
+├────────┼─────────────────────┼──────┼─────────────────────────┤
+│  0.89  │ document.pdf        │ 3    │ The main topic of this… │
+│  0.76  │ report.docx         │ 1    │ According to the docum… │
+╰───────────────────────────────────────────────────────────────╯
+```
+
+## Step 6: List Indexed Documents
+
+View all ingested documents:
 
 ```bash
 secondbrain ls
-secondbrain ls --details
+```
 
-# Delete a document
-secondbrain delete <document-id>
+Or list with filters:
 
-# Check database status
+```bash
+# Specific source
+secondbrain ls --source "./document.pdf"
+
+# Show all documents
+secondbrain ls --all
+```
+
+## Common Workflows
+
+### Basic Document Intelligence Pipeline
+
+```bash
+#!/bin/bash
+# Ingest documents with multicore processing
+secondbrain ingest /path/to/docs --recursive --cores 4
+
+# Search with high relevance threshold
+secondbrain search "installation instructions" --min-score 0.5
+
+# Check status
 secondbrain status
 ```
 
-## Example Workflow
+### Multi-Source Research
 
 ```bash
-secondbrain ingest ./research-papers/
-secondbrain search "neural network architectures"
-secondbrain ls --details
-secondbrain delete doc-12345
+# Ingest from multiple sources
+secondbrain ingest ~/projects/research/papers/ --recursive
+secondbrain ingest ~/Dropbox/notes/ --recursive
+
+# Search across all sources
+secondbrain search "machine learning optimization techniques"
 ```
-
-## Async API (Advanced)
-
-For programmatic usage:
-
-```python
-import asyncio
-from secondbrain.client import SecondBrainClient
-
-async def main():
-    client = SecondBrainClient()
-    
-    await client.ingest("./documents/")
-    results = await client.search("semantic query")
-    for result in results:
-        print(result)
-    
-    await client.close()
-
-asyncio.run(main())
-```
-
-See [Async Guide](../developer-guide/async-api.md) for details.
 
 ## Next Steps
 
-- [Configuration Guide](configuration.md) - Deep dive into configuration
-- [User Guide](../user-guide/index.md) - Complete usage reference
-- [CLI Reference](../user-guide/cli-reference.md) - All commands and options
-- [Developer Guide](../developer-guide/index.md) - If you want to contribute
-
-## Common Commands
-
-| Command | Description |
-|---------|-------------|
-| `secondbrain --help` | Show all commands |
-| `secondbrain ingest --help` | Ingest options |
-| `secondbrain search --help` | Search options |
-| `secondbrain health` | Check system health |
-| `secondbrain status` | Database statistics |
+- **[CLI Reference](../user-guide/cli-reference.md)** — Learn all available commands and options
+- **[Configuration](configuration.md)** — Fine-tune SecondBrain for your use case
+- **[Document Ingestion](../user-guide/document-ingestion.md)** — Understand processing options
+- **[Search Guide](../user-guide/search-guide.md)** — Master advanced search techniques
