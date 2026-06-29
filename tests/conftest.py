@@ -268,3 +268,22 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
         shutdown_tracing()
     except Exception:
         pass
+    # Clean up test-run artifacts to keep the working tree tidy.
+    import shutil
+
+    artifacts = (
+        ".coverage",
+        "htmlcov",
+    )
+    for artifact in artifacts:
+        try:
+            path = Path(artifact)
+            if path.is_dir():
+                shutil.rmtree(path)
+            elif path.exists():
+                path.unlink()
+        except FileNotFoundError:
+            pass
+        except OSError:
+            # rmtree/unlink can fail on Windows if files are still held open
+            pass
