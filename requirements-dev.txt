@@ -23,7 +23,7 @@ pytest-hypothesis==6.0.0
 factory-boy==3.3.0
 
 # Security scanning
-bandit==1.8.3
+bandit==1.9.4
 safety==3.2.10
 pip-audit==2.10.0
 cyclonedx-bom==7.6.2
