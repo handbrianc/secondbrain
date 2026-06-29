@@ -53,7 +53,7 @@ lint = [
 test = [
     "pytest>=9.1.1",  # Test framework - v9 for performance
     "pytest-asyncio>=0.23.0",  # Async test support - modern async patterns
-    "pytest-cov>=4.1.0",  # Coverage reporting - test quality
+    "pytest-cov>=7.1.0",  # Coverage reporting - test quality
     "pytest-xdist>=3.0.0",  # Parallel tests - 18 workers for speed
     "pytest-timeout>=2.2.0",  # Test timeouts - prevent hangs
     "pytest-rerunfailures>=12.0",  # Retry flaky tests - concurrent test stability
@@ -104,7 +104,7 @@ bundled = [
     # All test deps
     "pytest>=9.1.1",
     "pytest-asyncio>=0.23.0",
-    "pytest-cov>=4.1.0",
+    "pytest-cov>=7.1.0",
     "pytest-xdist>=3.0.0",
     "pytest-timeout>=2.2.0",
     "pytest-rerunfailures>=12.0",
