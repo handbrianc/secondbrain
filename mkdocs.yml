@@ -61,7 +61,7 @@ nav:
   - Security:
       - Security Guide: security/index.md
   - Migration: migration.md
-  - License: ../LICENSE.md
+  - License: license.md
 
 markdown_extensions:
   - toc:
