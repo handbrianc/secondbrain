@@ -15,7 +15,7 @@ SecondBrain consists of layered components that work together to provide documen
 | Storage | `storage/` | MongoDB vector storage and retrieval |
 | Search | `search/` | Similarity search and ranking |
 | RAG | `rag/` | Retrieval-augmented generation for chat |
-| Utils | `utils/` | Docker management, performance monitoring |
+| Utils | `utils/` | Circuit breaker, tracing, caching, Docker management, performance monitoring |
 | Management | `management/` | List/delete/status operations for stored documents |
 
 ## Data Flow

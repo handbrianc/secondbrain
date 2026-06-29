@@ -30,7 +30,7 @@ secondbrain/
 │   ├── search/                # Vector search
 │   ├── storage/               # MongoDB storage
 │   ├── management/            # Document list/delete/status
-│   ├── utils/                 # Docker helpers, performance monitoring
+│   ├── utils/                 # Circuit breaker, tracing, caching, Docker helpers, performance monitoring
 │   └── rag/                   # RAG pipeline
 ├── tests/                     # Test suite
 ├── docs/                      # Documentation
