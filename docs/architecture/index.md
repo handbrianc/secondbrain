@@ -8,14 +8,15 @@ SecondBrain consists of layered components that work together to provide documen
 
 | Layer | Components | Responsibility |
 |-------|------------|----------------|
-| CLI Interface | `cli/commands.py` | User-facing commands (ingest, search, chat, etc.) |
+| CLI Interface | `cli/` | User-facing commands (ingest, search, chat, etc.) |
 | Configuration | `config/` | Environment variable management via Pydantic |
 | Document Processing | `document/` | Parsing and chunking of supported file types |
-| Embedding | `embed/` | Vector generation via OpenAI-compatible API |
+| Embedding | `embedding/` | Vector generation via OpenAI-compatible API |
 | Storage | `storage/` | MongoDB vector storage and retrieval |
 | Search | `search/` | Similarity search and ranking |
 | RAG | `rag/` | Retrieval-augmented generation for chat |
-| Utils | `utils/` | Docker management, performance monitoring |
+| Utils | `utils/` | Circuit breaker, tracing, caching, Docker management, performance monitoring |
+| Management | `management/` | List/delete/status operations for stored documents |
 
 ## Data Flow
 
@@ -44,7 +45,7 @@ See [Schema Reference](SCHEMA.md) for MongoDB document structure.
 
 Each module has a focused responsibility:
 - `document/` handles parsing only
-- `embed/` handles embeddings only
+- `embedding/` handles embeddings only
 - `storage/` handles persistence only
 
 This allows independent testing and replacement of components.
