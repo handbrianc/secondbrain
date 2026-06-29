@@ -74,7 +74,7 @@ security = [
 docs = [
     "mkdocs>=1.6.0",  # Documentation - static site generator
     "mkdocstrings>=0.24.0",  # API docs - auto-generate from docstrings
-    "mkdocstrings-python>=2.0.3",  # Python plugin - mkdocstrings support
+    "mkdocstrings-python>=2.0.5",  # Python plugin - mkdocstrings support
     "mkdocs-material>=9.7.6",  # Theme - professional documentation
     "jinja2>=3.1.6",  # Templating - security patch required
 ]
@@ -124,7 +124,7 @@ bundled = [
     # All docs deps
     "mkdocs>=1.6.0",
     "mkdocstrings>=0.24.0",
-    "mkdocstrings-python>=2.0.3",
+    "mkdocstrings-python>=2.0.5",
     "mkdocs-material>=9.7.6",
     "jinja2>=3.1.6",
     # All web deps
