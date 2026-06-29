@@ -91,7 +91,7 @@ precommit = [
 
 # Web frameworks and serving
 web = [
-    "fastapi>=0.136.3",  # API framework - future REST API support
+    "fastapi>=0.138.2",  # API framework - future REST API support
     "uvicorn>=0.1.0",  # ASGI server - async HTTP server
     "flask>=3.0.0",  # Web framework - alternative API option
 ]
@@ -128,7 +128,7 @@ bundled = [
     "mkdocs-material>=9.7.6",
     "jinja2>=3.1.6",
     # All web deps
-    "fastapi>=0.136.3",
+    "fastapi>=0.138.2",
     "uvicorn>=0.1.0",
     "flask>=3.0.0",
     # Transitive/util deps
