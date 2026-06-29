@@ -1,8 +1,8 @@
 # Runtime dependencies (pinned for reproducibility)
 # Generated from pyproject.toml dependencies section
-click>=8.4.1
-docling>=2.105.0
-docling-core>=2.83.1
+click>=8.4.2
+docling>=2.107.0
+docling-core>=2.85.0
 pymongo>=4.17.0
 motor>=3.0.0
 httpx>=0.28.1

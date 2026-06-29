@@ -19,9 +19,9 @@ classifiers = [
 ]
 
 dependencies = [
-    "click>=8.4.1",  # CLI framework - stable API, minor updates only
-    "docling>=2.105.0",  # Document parsing - requires recent features
-    "docling-core>=2.83.1",  # Core types - matches docling version
+    "click>=8.4.2",  # CLI framework - stable API, minor updates only
+    "docling>=2.107.0",  # Document parsing - requires recent features
+    "docling-core>=2.85.0",  # Core types - matches docling version
     "pymongo>=4.17.0",  # MongoDB driver - async support required
     "motor>=3.0.0",  # Async MongoDB - requires pymongo 4.x compatibility
     "httpx>=0.28.1",  # HTTP client - async support for LLM calls
