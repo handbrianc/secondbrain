@@ -51,7 +51,7 @@ nav:
       - Contributing: developer-guide/contributing.md
       - Migrations: developer-guide/migrations.md
       - Security: developer-guide/security.md
-      - Changelog: ../../../CHANGELOG.md
+      - Changelog: changelog.md
   - Architecture:
       - Architecture: architecture/index.md
       - Data Flow: architecture/DATA_FLOW.md
