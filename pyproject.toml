@@ -46,7 +46,7 @@ dependencies = [
 # Core linting and formatting only
 lint = [
     "ruff>=0.15.5",  # Linting/formatting - fast Rust-based tool
-    "mypy>=1.8.0",  # Type checking - static analysis
+    "mypy>=2.1.0",  # Type checking - static analysis
 ]
 
 # Core pytest and test infrastructure
@@ -100,7 +100,7 @@ web = [
 bundled = [
     # All lint deps
     "ruff>=0.15.5",
-    "mypy>=1.8.0",
+    "mypy>=2.1.0",
     # All test deps
     "pytest>=9.1.1",
     "pytest-asyncio>=0.23.0",
