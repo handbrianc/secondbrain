@@ -1,193 +1,139 @@
-# Contributing Guide
+# Contributing to SecondBrain
 
-How to contribute to SecondBrain.
+Thank you for your interest in contributing to SecondBrain!
+
+## Ways to Contribute
+
+- **Bug Fixes**: Submit pull requests fixing identified issues
+- **Feature Development**: Propose and implement new features
+- **Documentation**: Improve docs, examples, and inline comments
+- **Testing**: Expand test coverage for edge cases
+- **Reviews**: Review and test pull requests from others
 
 ## Getting Started
 
-### Prerequisites
+### 1. Fork and Clone
 
-- Python 3.11+
-- Git
-- MongoDB 8.0+ (via Docker or local)
-- sentence-transformers (via Docker or local)
-
-### Setup
+Fork the repository on GitHub, then clone locally:
 
 ```bash
-# Fork the repository
 git clone https://github.com/your-username/secondbrain.git
 cd secondbrain
-
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate
-
-# Install with development dependencies
-pip install -e ".[dev]"
-
-# Install pre-commit hooks
-pre-commit install
 ```
 
-> **What's included?** See [Dependency Installation Guide](../getting-started/DEPENDENCIES.md#development-dependencies) for the complete list of development tools.
+### 2. Set Up Development Environment
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+```
+
+### 3. Create a Feature Branch
+
+Work on a dedicated branch for each change:
+
+```bash
+git checkout -b feature/add-async-batch-search
+# or
+git checkout -b fix/search-results-sorting
+```
 
 ## Development Workflow
 
-### 1. Create Branch
+### 1. Write Code
+
+Follow the [Code Standards](code-standards.md) guide.
+
+### 2. Run Tests
+
+Ensure existing tests pass and add tests for new functionality:
 
 ```bash
-git checkout -b feature/your-feature-name
-```
-
-### 2. Make Changes
-
-- Follow [Code Standards](code-standards.md)
-- Write tests for new functionality
-- Update documentation
-
-### 3. Run Tests
-
-```bash
-# Fast tests
-pytest
-
 # All tests
 pytest
 
 # With coverage
-pytest --cov=secondbrain
+pytest --cov=secondbrain --cov-fail-under=75
+
+# Watch for changes
+pytest --watch
 ```
 
-### 4. Run Linting
+### 3. Run Linters
+
+Format and check code:
 
 ```bash
-ruff check .
-ruff format .
-mypy .
+# Format
+ruff format src/
+
+# Lint
+ruff check src/
+
+# Type check
+mypy src/secondbrain/
 ```
 
-### 5. Commit Changes
+### 4. Commit Changes
+
+Use conventional commit format:
 
 ```bash
 git add .
-git commit -m "feat: add your feature"
+git commit -m "feat: add async search with batch support"
 ```
 
-### Commit Message Format
-
-Use conventional commits:
-
-```
-feat: Add new feature
-fix: Fix bug
-docs: Update documentation
-refactor: Refactor code
-test: Add tests
-chore: Maintenance
-```
-
-### 6. Push & Create PR
+### 5. Push and Create PR
 
 ```bash
 git push origin feature/your-feature-name
 ```
 
-Create a pull request on GitHub.
+Open a pull request on GitHub with:
 
-## Code Review
+- Clear description of the change
+- Link to related issues
+- Evidence tests pass
 
-### PR Checklist
+## Pull Request Checklist
 
-- [ ] Code follows style guidelines
-- [ ] Tests added/updated
-- [ ] Documentation updated
-- [ ] No linting errors
-- [ ] All tests pass
-- [ ] Descriptive PR title
+- [ ] Code follows style guidelines (ruff, mypy)
+- [ ] Tests pass: `pytest`
+- [ ] Coverage maintained or improved
+- [ ] Documentation updated if user-facing
+- [ ] Commit messages follow convention
+- [ ] PR description explains motivation and approach
 
-### Review Process
+## Issue Reporting
 
-1. Automated checks run
-2. Maintainer reviews code
-3. Address feedback
-4. Merge when approved
+When filing issues, include:
 
-## Reporting Issues
+1. **Environment**: OS, Python version, SecondBrain version
+2. **Reproduction**: Steps to reproduce the behavior
+3. **Expected vs Actual**: What you expected versus what happened
+4. **Logs**: Relevant log output (with sensitive data redacted)
 
-### Bug Reports
+Issue templates available on GitHub.
 
-Include:
-- Description of the bug
-- Steps to reproduce
-- Expected behavior
-- Actual behavior
-- Environment details
-- Logs/error messages
+## Code Review Process
 
-### Feature Requests
+Pull requests require:
 
-Include:
-- Problem statement
-- Proposed solution
-- Use cases
-- Alternatives considered
+- At least one approved review
+- Passing CI checks
+- No unresolved conversations
 
-## Code Guidelines
+Reviewers check for:
 
-### Style
+- Correctness and completeness
+- Test coverage
+- Side effects and edge cases
+- Adherence to project conventions
 
-- Follow [Code Standards](code-standards.md)
-- Use type hints
-- Write docstrings
-- Keep functions small
+## Questions
 
-### Testing
+For questions about contributing:
 
-- Write unit tests
-- Test edge cases
-- Use fixtures
-- Aim for >85% coverage
-
-### Documentation
-
-- Update README if needed
-- Add docstrings
-- Update CLI help text
-- Add examples
-
-## Areas of Contribution
-
-### Good First Issues
-
-- Documentation improvements
-- Bug fixes
-- Test additions
-- CLI enhancements
-
-### Advanced Topics
-
-- Performance optimization
-- New document parsers
-- Storage backends
-- Integration features
-
-## Questions?
-
-- [GitHub Discussions](https://github.com/your-username/secondbrain/discussions)
-- [Open an Issue](https://github.com/your-username/secondbrain/issues)
-
-## Code of Conduct
-
-- Be respectful and inclusive
-- Provide constructive feedback
-- Accept constructive criticism
-- Focus on what's best for the community
-
-## Recognition
-
-Contributors are recognized in:
-- GitHub contributor list
-- Release notes
-- Documentation credits
-
-Thank you for contributing to SecondBrain!
+- GitHub Discussions
+- GitHub Issues (labeled `question`)

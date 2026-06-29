@@ -1,199 +1,201 @@
 # Building & Distribution
 
-Create distributable binaries and packages for SecondBrain.
+Packaging and distributing SecondBrain as a release artifact.
 
-## Building Options
+## Package Metadata
 
-### Install from Source
+Defined in `pyproject.toml`:
 
-```bash
-# For development (includes testing, linting, security tools)
-pip install -e ".[dev]"
-
-# For production (runtime dependencies only)
-pip install -e "."
+```toml
+[project]
+name = "secondbrain"
+version = "0.4.0"
+description = "A local document intelligence CLI tool for semantic search"
+requires-python = ">=3.11"
+authors = [
+    {name = "Bishal Chand", email = "bishal.chand@gmail.com"}
+]
+license = {text = "MIT"}
 ```
 
-> **Choose the right installation**: See [Dependency Installation Guide](../getting-started/DEPENDENCIES.md) for details on runtime vs development dependencies.
+## Build Backends
 
-### Build Wheel
-
-```bash
-# Build wheel distribution
-python -m build --wheel
-
-# Output: dist/secondbrain-0.1.0-py3-none-any.whl
-```
-
-### Build Source Distribution
-
-```bash
-# Build source distribution
-python -m build --sdist
-
-# Output: dist/secondbrain-0.1.0.tar.gz
-```
-
-### Build Both
-
-```bash
-# Build wheel and sdist
-python -m build
-
-# Output: dist/
-#   secondbrain-0.1.0-py3-none-any.whl
-#   secondbrain-0.1.0.tar.gz
-```
-
-## Installation Methods
-
-### From PyPI
-
-```bash
-pip install secondbrain
-```
-
-### From Wheel
-
-```bash
-pip install dist/secondbrain-0.1.0-py3-none-any.whl
-```
-
-### From Source
-
-```bash
-pip install .
-```
-
-### Development Mode
-
-```bash
-# Install with all development dependencies
-pip install -e ".[dev]"
-```
-
-> **Need only runtime?** Use `pip install -e "."` for production deployments.
-
-## Distribution Channels
-
-### PyPI (Recommended)
-
-```bash
-# Upload to TestPyPI
-twine upload --repository testpypi dist/*
-
-# Upload to PyPI
-twine upload dist/*
-```
-
-### GitHub Releases
-
-```bash
-# Create GitHub release
-gh release create v0.1.0 dist/*
-```
-
-## Build Configuration
-
-### pyproject.toml
+SecondBrain uses setuptools as the build backend:
 
 ```toml
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=60.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
+```
 
-[project]
-name = "secondbrain"
-version = "0.1.0"
-description = "Local document intelligence CLI"
-requires-python = ">=3.11"
+## Installing in Development Mode
+
+For local development:
+
+```bash
+pip install -e .
+```
+
+Editable install links the package to the source directory.
+
+## Dependency Groups
+
+### Core
+
+Runtime dependencies only:
+
+```toml
 dependencies = [
-    "click>=8.0.0",
-    "pydantic>=2.0.0",
-    "pymongo>=4.0.0",
+    "click>=8.4.1",
+    "pymongo>=4.17.0",
+    "motor>=3.0.0",
+    ...
 ]
-
-[project.optional-dependencies]
-dev = [
-    "pytest>=7.0.0",
-    "ruff>=0.1.0",
-    "mypy>=1.0.0",
-]
-
-[project.scripts]
-secondbrain = "secondbrain.cli:cli"
 ```
 
-## Docker Distribution
+### Optional Dependencies
+
+Grouped extras for specific use cases:
+
+| Group | Purpose |
+|-------|---------|
+| `lint` | Ruff and MyPy |
+| `test` | Pytest and testing utilities |
+| `docs` | MkDocs and plugins |
+| `security` | Bandit and Safety |
+| `web` | FastAPI and Flask |
+| `mutation` | Mutmut testing |
+| `precommit` | Pre-commit hooks |
+| `bundled` | All development tools |
+| `dev` | Alias for bundled |
+| `rag` | Local LLM inference |
+
+## Creating a Distribution
+
+### Wheel (Binary Package)
 
 ```bash
-# Build Docker image
-docker build -t secondbrain:latest .
-
-# Push to registry
-docker push your-registry/secondbrain:latest
+pip wheel . --wheel-dir dist/
 ```
 
-## Verification
+Creates `dist/secondbrain-0.4.0-py3-none-any.whl`
 
-### Check Package
+### Source Distribution
 
 ```bash
-# Verify wheel
-python -m pip install --upgrade pip
-pip install dist/secondbrain-0.1.0-py3-none-any.whl --force-reinstall
-
-# Test installation
-secondbrain --help
+python -m build --sdist
 ```
 
-### Test Distribution
+Creates `dist/secondbrain-0.4.0.tar.gz`
+
+## Publishing to PyPI
+
+### Prerequisites
 
 ```bash
-# Create test environment
-python -m venv test-env
-source test-env/bin/activate
-
-# Install from distribution
-pip install dist/secondbrain-0.1.0-py3-none-any.whl
-
-# Run tests
-pytest
+pip install build twine
 ```
 
-## Release Checklist
-
-- [ ] Update version in pyproject.toml
-- [ ] Update CHANGELOG.md
-- [ ] Run all tests
-- [ ] Build distributions
-- [ ] Test installation from wheel
-- [ ] Upload to TestPyPI
-- [ ] Test from TestPyPI
-- [ ] Upload to PyPI
-- [ ] Create GitHub release
-- [ ] Update documentation
-
-## Troubleshooting
-
-### Build Failures
+### Build Artifacts
 
 ```bash
-# Clean build artifacts
-rm -rf dist/ build/ *.egg-info
-
-# Rebuild
 python -m build
 ```
 
-### Dependency Issues
+Artifacts appear in `dist/`.
+
+### Upload
 
 ```bash
-# Upgrade build tools
-pip install --upgrade build twine setuptools wheel
+# Test PyPI (recommended first)
+twine upload --repository testpypi dist/*
+
+# Production PyPI
+twine upload dist/*
 ```
 
-## Next Steps
+Requires PyPI credentials in `~/.pypirc` or token authentication.
 
-- [Development Setup](development.md) - Development workflow
-- [Testing Guide](TESTING.md) - Test before release
+## Standalone Executable
+
+Build a single-file executable using PyInstaller:
+
+```bash
+pip install -e ".[bundled]"
+pyinstaller secondbrain.spec
+```
+
+The resulting executable is in `dist/`.
+
+## Distribution Checklist
+
+Before releasing a new version:
+
+- [ ] Update version in `pyproject.toml`
+- [ ] Update changelog in `CHANGELOG.md`
+- [ ] Run full test suite: `pytest`
+- [ ] Run type checker: `mypy src/`
+- [ ] Run linter: `ruff check src/`
+- [ ] Verify build artifacts: `python -m build`
+- [ ] Test installation from distribution
+- [ ] Tag release in git
+
+## Versioning Scheme
+
+SecondBrain uses semantic versioning (SemVer):
+
+```
+MAJOR.MINOR.PATCH
+0.4.0
+│ │ └─ Patch: Bug fixes
+│ └─── Minor: New features, backward compatible
+└───── Major: Breaking changes
+```
+
+## CI/CD Integration
+
+### GitHub Actions Example
+
+```yaml
+# .github/workflows/release.yml
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install build twine
+          
+      - name: Build
+        run: python -m build
+        
+      - name: Publish
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+        run: twine upload dist/*
+```
+
+## Distribution Formats Comparison
+
+| Format | Pros | Cons |
+|--------|------|------|
+| Wheel (.whl) | Fast install, reproducible | Platform-specific wheels needed |
+| Source (.tar.gz) | Universal | Compilation required |
+| Executable | No Python needed | Large file, platform-specific |
+| Docker image | Consistent environment | Container runtime required |

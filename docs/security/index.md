@@ -1,189 +1,280 @@
 # Security Guide
 
-Security best practices and policies for SecondBrain.
+Security considerations for deploying and using SecondBrain.
 
-## Security Policy
+## Threat Model
 
-### Supported Versions
+### In-Scope Threats
 
-| Version | Supported |
-|---------|-----------|
-| 0.1.x   | ✅ |
+| Threat | Mitigation |
+|--------|------------|
+| API key exposure | Environment variables, no hardcoding |
+| Unauthorized MongoDB access | Authentication, network isolation |
+| Malicious file ingestion | Input validation, path traversal prevention |
+| Service denial | Rate limiting, resource bounds |
+| Supply chain attacks | Dependency auditing, SBOM |
 
-### Reporting Vulnerabilities
+### Out-of-Scope
 
-If you discover a security vulnerability:
+- Physical security of hosting infrastructure
+- Social engineering attacks
+- MongoDB本身的未加密传输 (unencrypted transit) |
 
-1. **DO NOT** create a public GitHub issue
-2. Email responsibly to: security@secondbrain.local
-3. Include:
-   - Description of the vulnerability
-   - Steps to reproduce
-   - Potential impact
-   - Known mitigations (if any)
+## Data Sensitivity
 
-## Security Features
+### Local Processing Guarantees
 
-SecondBrain includes several security features:
+All document processing happens locally:
 
-### Environment-Based Configuration
+- **Parsing**: On-host via Docling library
+- **Chunking**: Local algorithm with no network calls
+- **Embedding generation**: Text chunks sent to external API (if using hosted LLM)
+- **RAG chat**: Retrieved chunks sent to LLM API with conversation history
 
-Sensitive settings are configured via environment variables:
+### Data That Leaves Your Machine
+
+| Operation | External Destination | Data Shared |
+|-----------|---------------------|-------------|
+| Embedding (OpenAI-compatible) | Your configured API endpoint | Text chunks for vectorization |
+| Embedding (local Ollama) | localhost only | No external transmission |
+| LLM Chat (OpenAI/Anthropic) | Respective API | Retrieved chunks + conversation |
+| Telemetry (if enabled) | Your OTLP collector | Structured logs/traces |
+
+## Secure Configuration
+
+### API Keys
+
+**Strong recommendation**: Use environment variables:
+
 ```bash
-SECONDBRAIN_MONGO_URI=mongodb://user:pass@host:27017
+export SECONDBRAIN_EMBEDDING_API_KEY="sk-..."
 ```
 
-### Input Validation
+**Acceptable**: `.env` file with restrictive permissions:
 
-All user inputs are validated:
-- MongoDB URI format
-- sentence-transformers URL format
-- File paths (prevents path traversal)
-- Search queries (sanitization)
-
-### Error Handling
-
-Granular error types prevent information leakage:
-- Specific error messages
-- No stack traces in production
-- Controlled error responses
-
-### Rate Limiting
-
-Built-in rate limiting protects against:
-- API abuse
-- Denial of service
-- Resource exhaustion
-
-### Connection Validation
-
-Health checks with TTL caching:
-- Service availability monitoring
-- Connection pool management
-- Automatic reconnection
-
-## Security Best Practices
-
-### For Users
-
-1. **Never commit credentials**
-   - Use `.env` files for local configuration
-   - Add `.env` to `.gitignore`
-
-2. **Use strong credentials**
-   - MongoDB: Strong passwords
-   - Enable authentication in production
-
-3. **Enable TLS**
-   - Use TLS for MongoDB connections in production
-   - Validate certificates
-
-4. **Keep dependencies updated**
-   ```bash
-   pip install -U secondbrain
-   ```
-
-5. **Regular security scans**
-   ```bash
-   bandit -r src/
-   safety check
-   ```
-
-### For Developers
-
-1. **Validate all inputs**
-   - Use Pydantic for type validation
-   - Sanitize user-provided data
-
-2. **Handle errors securely**
-   - Don't expose internal details
-   - Log errors securely
-
-3. **Use secure defaults**
-   - Secure by default configuration
-   - Principle of least privilege
-
-4. **Review dependencies**
-   - Check for known vulnerabilities
-   - Use `safety` and `bandit`
-
-## Known Vulnerabilities
-
-### Current Dependencies
-
-Check for known vulnerabilities:
 ```bash
-pip install safety
+chmod 600 .env  # User read/write only
+```
+
+**Forbidden**: Committing credentials to version control:
+
+```bash
+# .gitignore should include
+.env
+*.log
+```
+
+### MongoDB Authentication
+
+Require authentication for production:
+
+```bash
+mongodb://user:password@host:27017/?authSource=admin
+```
+
+Use TLS for remote connections:
+
+```bash
+mongodb+srv://user:password@cluster.mongodb.net/?tls=true
+```
+
+### Least Privilege Principle
+
+Create dedicated MongoDB users:
+
+```javascript
+// Read-write user for application
+db.createUser({
+  user: "secondbrain_app",
+  pwd: "strong-random-password",
+  roles: [
+    { role: "readWrite", db: "secondbrain" },
+    { role: "dbAdmin", db: "secondbrain" }
+  ]
+})
+```
+
+Avoid using MongoDB's `root` account.
+
+## Input Validation
+
+### File Type Restrictions
+
+Only documented file types are accepted:
+
+```python
+SUPPORTED_EXTENSIONS = {
+    ".pdf", ".docx", ".pptx", ".xlsx",
+    ".html", ".htm", ".md", ".txt",
+    ".csv", ".xml", ".json", ".png",
+    ".jpg", ".jpeg", ".tiff", ".tif",
+    ".bmp", ".webp", ".wav", ".mp3", ".vtt"
+}
+```
+
+Attempting to ingest unsupported types raises `ValueError` immediately.
+
+### Path Traversal Prevention
+
+Paths are resolved canonically before processing:
+
+```python
+from pathlib import Path
+
+resolved_path = Path(user_input_path).resolve()
+
+# Verify within allowed directory tree
+if not is_safe_path(resolved_path, allowed_base):
+    raise ValueError("Path traversal attempt detected")
+```
+
+### Query Sanitization
+
+Search queries are passed as literals to MongoDB:
+
+```python
+# Filter constructed safely - query is opaque string
+filter_doc = {"metadata.source": {"$eq": user_provided_filter}}
+```
+
+No SQL-like injection risk since MongoDB wire protocol handles escaping.
+
+## Rate Limiting
+
+Protection against API quota exhaustion:
+
+```bash
+# Configure rate limiter
+SECONDBRAIN_RATE_LIMIT_ENABLED=true
+SECONDBRAIN_RATE_LIMIT_MAX_REQUESTS=10  # per window
+SECONDBRAIN_RATE_LIMIT_WINDOW_SECONDS=1.0
+```
+
+Monitor rate limit events in application logs.
+
+## File Size Limits
+
+Prevents memory exhaustion from huge documents:
+
+```bash
+SECONDBRAIN_MAX_FILE_SIZE_BYTES=104857600  # 100 MB default
+```
+
+Attempts to process oversized files are rejected immediately.
+
+## Dependency Auditing
+
+### Regular Checks
+
+```bash
+# Install audit tooling
+pip install -e ".[security]"
+
+# Check for vulnerabilities
 safety check
-```
 
-### Bandit Security Scanning
-
-Run bandit to check for common issues:
-```bash
+# Scan code for security issues
 bandit -r src/secondbrain/
+
+# Generate SBOM for supply chain review
+cyclonedx-bom -o sbom.json
 ```
 
-See [Bandit Report](./bandit_report.json) for recent scan results.
+### CI/CD Integration
 
-## Security Checklist
+Automate security scanning:
 
-Before deploying to production:
+```yaml
+# GitHub Actions example
+- name: Security audit
+  run: |
+    pip install safety bandit
+    safety check || true
+    bandit -r src/ --failxit || true
+```
 
-- [ ] Use strong MongoDB credentials
-- [ ] Enable TLS for database connections
-- [ ] Configure firewall rules
-- [ ] Set up monitoring and alerts
-- [ ] Regular dependency updates
-- [ ] Security scan with bandit
-- [ ] Review error handling
-- [ ] Test authentication/authorization
+## Docker Security
 
-## Compliance
+### Non-Root Containers
 
-### Data Privacy
+Run application containers as non-root where possible:
 
-- All data stored locally (no cloud)
-- No data transmitted externally
-- User controls all data
+```yaml
+# docker-compose.yml
+services:
+  secondbrain-app:
+    image: secondbrain:0.4.0
+    user: "1000:1000"
+```
+
+### Capability Dropping
+
+Minimal Linux capabilities:
+
+```bash
+docker run --cap-drop=ALL secondbrain
+```
+
+### Read-Only Root Filesystem
+
+Unless write access is needed:
+
+```yaml
+services:
+  app:
+    read_only: true
+    tmpfs:
+      - /tmp
+```
+
+## Monitoring and Alerting
+
+### Suspicious Activity Patterns
+
+Alert on:
+
+- High volume of authentication failures
+- Unusual query patterns (potential probe)
+- Resource exhaustion (memory, CPU spikes)
+- Rate limit violations trending upward
 
 ### Logging
 
-- Sensitive data not logged
-- Configurable log levels
-- Secure log storage
+Structured logging for forensics:
+
+```bash
+SECONDBRAIN_LOG_FORMAT=json
+SECONDBRAIN_LOG_LEVEL=INFO
+```
+
+Logs do not contain document content by default.
 
 ## Incident Response
 
-If you suspect a security incident:
+If a security incident is suspected:
 
-1. **Isolate** - Disconnect affected systems
-2. **Assess** - Determine scope of impact
-3. **Report** - Contact security team
-4. **Remediate** - Fix vulnerability
-5. **Document** - Record incident details
+1. **Immediate containment**
+   - Rotate exposed API keys
+   - Revoke compromised credentials
+   - Isolate affected services
 
-## Related Documentation
+2. **Assessment**
+   - Review access logs for unauthorized use
+   - Identify accessed documents
+   - Determine blast radius
 
-### SBOM & Dependency Analysis
-- [SBOM Analysis](../architecture/SBOM_ANALYSIS.md) - Complete dependency inventory and trade-offs
-- [License Risk Report](../architecture/LICENSE-RISK-REPORT.md) - License compliance assessment
+3. **Recovery**
+   - Redeploy with patched configuration
+   - Monitor for recurrence
 
-### Security Reports
-- [Quality Check Report](./QUALITY_CHECK_REPORT.md) - All quality and security scan results
-- [Security Findings](./SECURITY-FINDINGS.md) - Vulnerability analysis and remediation
-- [Final Security Scan Report](./FINAL_SECURITY_SCAN_REPORT.md) - Detailed security scan results
+4. **Reporting**
+   - Document timeline
+   - File security advisory if a library vulnerability
 
-### Configuration & Development
-- [Configuration](../getting-started/configuration.md) - Secure configuration
-- [Developer Guide](../developer-guide/index.md) - Development security
-- [Security Guidelines](../developer-guide/security.md) - Secure coding practices
-- [Changelog](../developer-guide/changelog.md) - Security updates
+## Disclosure Policy
 
-## Acknowledgments
+For security vulnerabilities in SecondBrain itself:
 
-We thank the security research community for responsible disclosure.
-
----
-
-For security questions or concerns, contact: security@secondbrain.local
+1. Report privately via GitHub Security Advisories
+2. Allow 30 days for fix development
+3. Coordinate disclosure on fix availability

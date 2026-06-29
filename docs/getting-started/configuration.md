@@ -1,247 +1,155 @@
-# Configuration Reference
+# Configuration Guide
 
-Complete configuration guide for SecondBrain CLI. All settings are environment variables prefixed with `SECONDBRAIN_`.
+SecondBrain uses environment variables prefixed with `SECONDBRAIN_` for all configuration. This follows 12-factor app principles for consistent, production-ready settings management.
 
-## Quick Start
+## Quick Configuration
 
 Create a `.env` file in your project root:
 
 ```bash
-# Essential settings
+# Required: MongoDB connection
 SECONDBRAIN_MONGO_URI=mongodb://localhost:27017
-SECONDBRAIN_EMBEDDING_MODEL=all-MiniLM-L6-v2
-SECONDBRAIN_CHUNK_SIZE=4096
-```
-
-## Configuration Loading
-
-SecondBrain uses Pydantic Settings to load configuration:
-
-1. **Environment variables** (highest priority)
-2. **`.env` file** in working directory
-3. **Default values** (lowest priority)
-
-Settings are case-insensitive and prefixed with `SECONDBRAIN_`.
-
----
-
-## MongoDB Settings
-
-### MongoDB Authentication (Required for Production)
-
-For production deployments, MongoDB authentication should be enabled. See [MongoDB Authentication Setup](mongodb-authentication.md) for complete setup instructions.
-
-### `SECONDBRAIN_MONGO_URI`
-- **Type**: `str`
-- **Default**: `mongodb://localhost:27017`
-- **Required**: No (but MongoDB connection required for functionality)
-- **Validation**: Must start with `mongodb://` or `mongodb+srv://`
-- **Examples**:
-  ```bash
-  # Local MongoDB (no authentication - development only)
-  SECONDBRAIN_MONGO_URI=mongodb://localhost:27017
-  
-  # Local MongoDB (with authentication - recommended)
-  SECONDBRAIN_MONGO_URI=mongodb://username:password@localhost:27017
-  
-  # MongoDB Atlas (cloud)
-  SECONDBRAIN_MONGO_URI=mongodb+srv://username:password@cluster.mongodb.net/?retryWrites=true
-  
-  # With authentication database
-  SECONDBRAIN_MONGO_URI=mongodb://user:pass@host:27017,host:27017/?authSource=admin
-  ```
-
-**⚠️ Special Characters in Passwords**: If your password contains `@`, `:`, `/`, `#`, `?`, or `&`, URL-encode them:
-- `@` → `%40`
-- `:` → `%3A`
-- `/` → `%2F`
-- `#` → `%23`
-- `?` → `%3F`
-- `&` → `%26`
-
-Or use a `.env` file to avoid shell escaping issues.
-
-### `SECONDBRAIN_MONGO_DB`
-- **Type**: `str`
-- **Default**: `secondbrain`
-- **Description**: Database name for storing embeddings
-- **Example**: `SECONDBRAIN_MONGO_DB=my_vector_db`
-
-### `SECONDBRAIN_MONGO_COLLECTION`
-- **Type**: `str`
-- **Default**: `embeddings`
-- **Description**: Collection name within the database
-- **Example**: `SECONDBRAIN_MONGO_COLLECTION=document_chunks`
-
-### Docker Environment Variables (for MongoDB Container)
-
-These variables configure the MongoDB container in `docker-compose.yml`:
-
-### `MONGODB_INITDB_ROOT_USERNAME`
-- **Type**: `str`
-- **Default**: `admin`
-- **Description**: MongoDB admin username (set in `.env` file)
-- **Required**: Yes, for new MongoDB installations with authentication
-- **Example**: `MONGODB_INITDB_ROOT_USERNAME=secondbrain_admin`
-
-### `MONGODB_INITDB_ROOT_PASSWORD`
-- **Type**: `str`
-- **Default**: `password`
-- **Description**: MongoDB admin password (set in `.env` file)
-- **Required**: Yes, for new MongoDB installations with authentication
-- **Security**: Use strong passwords (16+ characters, mixed case, numbers, symbols)
-- **Example**: `MONGODB_INITDB_ROOT_PASSWORD=SuperSecureP@ssw0rd123!`
-
-**⚠️ Never commit `.env` files with credentials to version control!** Add `.env` to `.gitignore`.
-
----
-
-## Embedding Settings
-
-### `SECONDBRAIN_EMBEDDING_MODEL`
-- **Type**: `str`
-- **Default**: `all-MiniLM-L6-v2`
-- **Description**: Sentence-transformers model for local embedding generation
-- **Common Models**:
-  | Model | Dimensions | Speed | Quality | Use Case |
-  |-------|-----------|-------|---------|----------|
-  | `all-MiniLM-L6-v2` | 384 | Fast | Good | General purpose, recommended |
-  | `all-mpnet-base-v2` | 768 | Medium | Better | Higher quality |
-  | `multi-qa-mpnet-base-dot-v1` | 768 | Medium | Better | QA tasks |
-
-### `SECONDBRAIN_EMBEDDING_DIMENSIONS`
-- **Type**: `int`
-- **Default**: `384`
-- **Description**: Vector dimensionality (must match selected model)
-- **Note**: Must match the model's output dimensions
-
-### `SECONDBRAIN_EMBEDDING_CACHE_SIZE`
-- **Type**: `int`
-- **Default**: `1000`
-- **Description**: Maximum embeddings to cache in memory
-- **Performance**: Reduces API calls for duplicate text
-
-### `SECONDBRAIN_SENTENCE_TRANSFORMERS_URL`
-- **Type**: `str`
-- **Default**: `http://localhost:11434`
-- **Description**: URL of the sentence-transformers API
-
----
-
-## Processing Settings
-
-### `SECONDBRAIN_CHUNK_SIZE`
-- **Type**: `int`
-- **Default**: `4096`
-- **Description**: Size of text chunks for embedding
-- **Range**: 512-8192 recommended
-- **Trade-off**: Larger chunks = fewer embeddings but less precision
-
-### `SECONDBRAIN_CHUNK_OVERLAP`
-- **Type**: `int`
-- **Default**: `200`
-- **Description**: Overlap between consecutive chunks
-- **Purpose**: Maintains context across chunk boundaries
-
-### `SECONDBRAIN_MAX_WORKERS`
-- **Type**: `int`
-- **Default**: `4`
-- **Description**: Number of parallel workers for ingestion
-- **Performance**: Higher values = faster ingestion but more resources
-
----
-
-## Rate Limiting & Resilience
-
-### `SECONDBRAIN_RATE_LIMIT_ENABLED`
-- **Type**: `bool`
-- **Default**: `true`
-- **Description**: Enable rate limiting for sentence-transformers API
-
-### `SECONDBRAIN_RATE_LIMIT_REQUESTS_PER_SECOND`
-- **Type**: `float`
-- **Default**: `10.0`
-- **Description**: Maximum requests per second
-
-### `SECONDBRAIN_CIRCUIT_BREAKER_ENABLED`
-- **Type**: `bool`
-- **Default**: `true`
-- **Description**: Enable circuit breaker pattern
-
-### `SECONDBRAIN_CIRCUIT_BREAKER_FAILURE_THRESHOLD`
-- **Type**: `int`
-- **Default**: `5`
-- **Description**: Failures before opening circuit
-
-### `SECONDBRAIN_CIRCUIT_BREAKER_RECOVERY_TIMEOUT`
-- **Type**: `float`
-- **Default**: `60.0`
-- **Description**: Seconds before attempting recovery (half-open state)
-
----
-
-## Logging & Debugging
-
-### `SECONDBRAIN_LOG_LEVEL`
-- **Type**: `str`
-- **Default**: `INFO`
-- **Options**: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`
-- **Description**: Logging verbosity level
-
-### `SECONDBRAIN_LOG_FORMAT`
-- **Type**: `str`
-- **Default**: `pretty`
-- **Options**: `pretty`, `json`
-- **Description**: Log output format
-
-### `SECONDBRAIN_VERBOSE`
-- **Type**: `bool`
-- **Default**: `false`
-- **Description**: Enable verbose output (CLI flag alternative)
-
----
-
-## Example .env File
-
-```bash
-# MongoDB Authentication (REQUIRED for production)
-MONGODB_INITDB_ROOT_USERNAME=secondbrain_admin
-MONGODB_INITDB_ROOT_PASSWORD=SuperSecureP@ssw0rd123!
-
-# MongoDB Connection (must match credentials above)
-SECONDBRAIN_MONGO_URI=mongodb://secondbrain_admin:SuperSecureP@ssw0rd123!@localhost:27017
 SECONDBRAIN_MONGO_DB=secondbrain
 SECONDBRAIN_MONGO_COLLECTION=embeddings
 
-# Embedding Configuration
-SECONDBRAIN_EMBEDDING_MODEL=all-MiniLM-L6-v2
-SECONDBRAIN_EMBEDDING_DIMENSIONS=384
-SECONDBRAIN_EMBEDDING_CACHE_SIZE=1000
-SECONDBRAIN_SENTENCE_TRANSFORMERS_URL=http://localhost:11434
+# Embedding provider
+SECONDBRAIN_EMBEDDING_MODEL=text-embedding-3-small
+SECONDBRAIN_EMBEDDING_API_KEY=your-api-key
 
-# Processing Configuration
+# Document processing
 SECONDBRAIN_CHUNK_SIZE=4096
-SECONDBRAIN_CHUNK_OVERLAP=200
-SECONDBRAIN_MAX_WORKERS=4
-
-# Rate Limiting
-SECONDBRAIN_RATE_LIMIT_ENABLED=true
-SECONDBRAIN_RATE_LIMIT_REQUESTS_PER_SECOND=10.0
-
-# Circuit Breaker
-SECONDBRAIN_CIRCUIT_BREAKER_ENABLED=true
-SECONDBRAIN_CIRCUIT_BREAKER_FAILURE_THRESHOLD=5
-SECONDBRAIN_CIRCUIT_BREAKER_RECOVERY_TIMEOUT=60.0
-
-# Logging
-SECONDBRAIN_LOG_LEVEL=INFO
-SECONDBRAIN_LOG_FORMAT=pretty
-SECONDBRAIN_VERBOSE=false
+SECONDBRAIN_CHUNK_OVERLAP=50
+SECONDBRAIN_DEFAULT_TOP_K=20
 ```
 
-## Next Steps
+## Configuration Loading Order
 
-- [Quick Start](quick-start.md) - Get started quickly
-- [MongoDB Authentication Setup](mongodb-authentication.md) - Configure MongoDB authentication
-- [Troubleshooting](troubleshooting.md) - Common issues and solutions
-- [Developer Guide](../developer-guide/configuration.md) - Advanced configuration
+SecondBrain loads configuration in the following priority order (highest to lowest):
+
+1. Environment variables
+2. `.env` file values
+3. Hardcoded defaults
+
+During testing (`PYTEST_CURRENT_TEST` is set), configuration additionally loads from `.env.test` with test-specific defaults.
+
+## Core Settings
+
+### MongoDB Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SECONDBRAIN_MONGO_URI` | `mongodb://localhost:27017` | MongoDB connection URI |
+| `SECONDBRAIN_MONGO_DB` | `secondbrain` | Database name |
+| `SECONDBRAIN_MONGO_COLLECTION` | `embeddings` | Collection for vector storage |
+
+### Embedding Settings
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SECONDBRAIN_EMBEDDING_PROVIDER` | `openai` | Provider type (openai or compatible) |
+| `SECONDBRAIN_EMBEDDING_MODEL` | `text-embedding-3-small` | Model name |
+| `SECONDBRAIN_EMBEDDING_DIMENSIONS` | `1536` | Vector dimensionality |
+| `SECONDBRAIN_EMBEDDING_API_KEY` | `None` | API key for provider |
+| `SECONDBRAIN_EMBEDDING_API_BASE` | `None` | Custom endpoint base URL |
+| `SECONDBRAIN_EMBEDDING_CACHE_SIZE` | `1000` | LRU cache size (0 disables) |
+| `SECONDBRAIN_EMBEDDING_BATCH_SIZE` | `20` | Batch size (1-100) |
+
+### LLM Configuration (for RAG chat)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SECONDBRAIN_LLM_PROVIDER` | `openai` | Provider type (openai, anthropic) |
+| `SECONDBRAIN_LLM_MODEL` | `gpt-4o-mini` | Model name |
+| `SECONDBRAIN_LLM_TEMPERATURE` | `0.1` | Generation temperature (0.0-2.0) |
+| `SECONDBRAIN_LLM_MAX_TOKENS` | `2048` | Maximum response tokens |
+| `SECONDBRAIN_LLM_TIMEOUT` | `120` | Request timeout in seconds |
+| `SECONDBRAIN_OPENAI_BASE_URL` | `None` | OpenAI-compatible API base URL |
+
+### Document Processing
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SECONDBRAIN_CHUNK_SIZE` | `4096` | Target chunk size in characters |
+| `SECONDBRAIN_CHUNK_OVERLAP` | `50` | Overlap between chunks |
+| `SECONDBRAIN_SUPPORTED_EXTENSIONS` | (comprehensive list) | Comma-separated file extensions |
+| `SECONDBRAIN_MAX_FILE_SIZE_BYTES` | `104857600` | Maximum file size (100MB) |
+
+### Search Settings
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SECONDBRAIN_DEFAULT_TOP_K` | `20` | Default number of search results |
+| `MIN_SCORE` | `0.46` | Minimum similarity threshold (constant) |
+
+## Advanced Settings
+
+### RAG/Pipeline Settings
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SECONDBRAIN_RAG_CONTEXT_WINDOW` | `5` | Recent messages in conversation context |
+| `SECONDBRAIN_RAG_MAX_RETRIES` | `3` | Maximum LLM retry attempts |
+| `SECONDBRAIN_RAG_MAX_CONTEXT_CHARS` | `8000` | Maximum context characters |
+| `SECONDBRAIN_RAG_CHUNK_PREVIEW_CHARS` | `500` | Per-chunk preview length |
+| `SECONDBRAIN_STREAMING_ENABLED` | `true` | Enable streaming processing |
+| `SECONDBRAIN_STREAMING_CHUNK_BATCH_SIZE` | `100` | Streaming batch size (1-200) |
+
+### Performance Settings
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SECONDBRAIN_MAX_WORKERS` | `None` | Worker processes (auto-detect if unset) |
+| `SECONDBRAIN_RATE_LIMIT_ENABLED` | `true` | Enable rate limiting |
+| `SECONDBRAIN_RATE_LIMIT_MAX_REQUESTS` | `10` | Requests per window |
+| `SECONDBRAIN_RATE_LIMIT_WINDOW_SECONDS` | `1.0` | Rate limit window duration |
+| `SECONDBRAIN_INDEX_READY_RETRY_COUNT` | `15` | Index check retries |
+
+### Storage Optimization
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SECONDBRAIN_STORAGE_COMPRESSION_ENABLED` | `true` | Enable zstd compression |
+| `SECONDBRAIN_TEXT_COMPRESSION_ENABLED` | `false` | Enable text compression |
+| `SECONDBRAIN_TEXT_COMPRESSION_ALGORITHM` | `gzip` | Algorithm: gzip, brotli, zstd |
+| `SECONDBRAIN_EMBEDDING_DTYPE` | `float32` | Storage precision |
+| `SECONDBRAIN_EMBEDDING_STORAGE_FORMAT` | `array` | Storage format (array recommended) |
+
+## Configuration Validation
+
+On startup, SecondBrain validates configuration values. Invalid configurations raise errors:
+
+```python
+# chunk_overlap must be less than chunk_size
+# embedding_dimensions must be positive
+# embedding_batch_size must be between 1 and 100
+```
+
+## Example Production Configuration
+
+```bash
+# Production .env.example
+SECONDBRAIN_MONGO_URI=mongodb://localhost:27017
+SECONDBRAIN_MONGO_DB=secondbrain_prod
+SECONDBRAIN_MONGO_COLLECTION=embeddings_v2
+
+SECONDBRAIN_EMBEDDING_MODEL=text-embedding-3-small
+SECONDBRAIN_EMBEDDING_API_KEY=$OPENAI_API_KEY
+SECONDBRAIN_EMBEDDING_DIMENSIONS=1536
+SECONDBRAIN_EMBEDDING_BATCH_SIZE=20
+
+SECONDBRAIN_LLM_MODEL=gpt-4o-mini
+SECONDBRAIN_LLM_PROVIDER=openai
+SECONDBRAIN_LLM_MAX_TOKENS=2048
+SECONDBRAIN_LLM_TIMEOUT=120
+
+SECONDBRAIN_CHUNK_SIZE=4096
+SECONDBRAIN_CHUNK_OVERLAP=50
+SECONDBRAIN_DEFAULT_TOP_K=20
+
+SECONDBRAIN_MAX_WORKERS=4
+SECONDBRAIN_RATE_LIMIT_ENABLED=true
+SECONDBRAIN_CIRCUIT_BREAKER_ENABLED=true
+
+SECONDBRAIN_LOG_LEVEL=INFO
+SECONDBRAIN_LOG_FORMAT=json
+```

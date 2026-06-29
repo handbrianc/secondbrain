@@ -1,165 +1,301 @@
-# Python CLI Best Practices Checklist
+# CLI Best Practices Checklist
 
-Checklist for building production-ready Python CLIs with Click.
+Guidelines for designing robust, user-friendly command-line interfaces.
 
-## Command Structure
+Based on Python CLI expert recommendations, adapted for SecondBrain's implementation.
 
-- [ ] Use Click for CLI framework
-- [ ] Organize commands with groups
-- [ ] Provide helpful help text
-- [ ] Use subcommands for related functionality
-- [ ] Support `--help` on all commands
+## Design Principles
 
-## Options & Arguments
+### 1. Composability Over Convenience
 
-- [ ] Use appropriate types for options
-- [ ] Provide default values
-- [ ] Validate user input
-- [ ] Use enums for fixed choices
-- [ ] Support environment variables
+Design commands that compose naturally:
 
-### Example
+```bash
+# Good: composable primitives
+secondbrain ingest ./docs --cores 4
+secondbrain search "query" --top-k 10 --format json
+secondbrain delete --source "./old.pdf"
 
-```python
-@click.command()
-@click.option("--chunk-size", type=int, default=4096, help="Chunk size in characters")
-@click.option("--verbose", is_flag=True, help="Enable verbose output")
-@click.argument("path", type=click.Path(exists=True))
-def ingest(path: str, chunk_size: int, verbose: bool):
-    """Ingest documents from PATH."""
+# Problematic: convenience that breaks composition
+secondbrain sync-and-search --ingest-path ./docs --query "..." --delete-source
 ```
 
-## Error Handling
-
-- [ ] Use specific exception types
-- [ ] Provide clear error messages
-- [ ] Exit with appropriate codes
-- [ ] Don't expose stack traces in production
-- [ ] Log errors appropriately
-
-### Example
+### 2. Sensible Defaults with Explicit Override
 
 ```python
-class CLIError(click.ClickException):
-    """Base CLI exception."""
-    exit_code = 1
-    
-    def show(self, file=None):
-        click.echo(f"Error: {self.format_message()}", err=True)
+@click.option('--cores', '-c', type=int, default=None,
+              help="CPU cores (default: auto-detect)")
+@click.option('--chunk-size', type=int, default=None,
+              help="Override configured chunk size")
 ```
 
-## Output Formatting
+Defaults should work for 80% of use cases. Users who need customization should be able to override precisely.
 
-- [ ] Use Rich for terminal output
-- [ ] Support multiple output formats (table, json)
-- [ ] Provide progress indicators for long operations
-- [ ] Use colors appropriately
-- [ ] Support quiet mode
-
-### Example
+### 3. Fail Fast with Clear Messages
 
 ```python
-from rich.console import Console
-from rich.table import Table
+if not any([source, chunk_id, all]):
+    raise CLIValidationError(
+        "Must specify --source, --chunk-id, or --all"
+    )
 
-console = Console()
-
-def display_results(results):
-    table = Table(title="Results")
-    table.add_column("ID")
-    table.add_column("Score")
-    for result in results:
-        table.add_row(result.id, f"{result.score:.3f}")
-    console.print(table)
+if sum([bool(source), bool(chunk_id), all]) > 1:
+    raise CLIValidationError(
+        "Specify only one of --source, --chunk-id, or --all"
+    )
 ```
 
-## Configuration
+## Error Handling Patterns
 
-- [ ] Support `.env` files
-- [ ] Use environment variables
-- [ ] Provide sensible defaults
-- [ ] Validate configuration
-- [ ] Document all options
+### Centralized Error Handler
 
-## Testing
+```python
+from functools import wraps
 
-- [ ] Use Click's CliRunner
-- [ ] Test all commands
-- [ ] Test error cases
-- [ ] Mock external dependencies
-- [ ] Test output formatting
+def handle_cli_errors(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except CLIValidationError as e:
+            console.print(f"[red]Validation error: {e}[/red]")
+            sys.exit(1)
+        except ServiceUnavailableError as e:
+            console.print(f"[red]Service unavailable: {e}[/red]")
+            sys.exit(1)
+        except Exception as e:
+            console.print(f"[red]Unexpected error: {e}[/red]")
+            raise
+    return wrapper
+```
 
-### Example
+### Typed Exceptions Hierarchy
+
+```python
+class CLIBaseError(Exception):
+    """Base exception for CLI errors."""
+    pass
+
+class CLIValidationError(CLIBaseError):
+    """Invalid user input."""
+    pass
+
+class ServiceUnavailableError(CLIBaseError):
+    """Required service not available."""
+    pass
+```
+
+## Output Design
+
+### Structured Output Modes
+
+Support multiple formats for scripting:
+
+```python
+@click.option('--format', type=click.Choice(['table', 'json']),
+              default='table')
+def display_results(format: str):
+    if format == 'json':
+        console.print_json(data)
+    else:
+        # Render table
+        pass
+```
+
+### Status Indicators
+
+Visual feedback for operation outcomes:
+
+```python
+console.print("[green]✓ Ingestion complete[/green]")
+console.print("[yellow]⚠ Some files skipped[/yellow]")
+console.print("[red]✗ Error occurred[/red]")
+```
+
+## Feedback Mechanisms
+
+### Progress Indication
+
+For long-running operations:
+
+```python
+with console.status("[cyan]Processing...", spinner="dots"):
+    results = long_running_operation()
+```
+
+### Progress Bars
+
+Track discrete items:
+
+```python
+from rich.progress import Progress, BarColumn, TextColumn
+
+with Progress(TextColumn("[progress.description]"), BarColumn()) as progress:
+    task = progress.add_task("Processing", total=len(files))
+    for f in files:
+        process(f)
+        progress.advance(task)
+```
+
+## Input Validation
+
+### At Declaration Time
+
+Leverage Click's built-in validation:
+
+```python
+@click.option('--limit', type=click.IntRange(min=0, max=MAX_LIMIT))
+@click.option('--format', type=click.Choice(['table', 'json']))
+```
+
+### At Runtime
+
+Explicit validation beyond Click's capabilities:
+
+```python
+if cores > os.cpu_count():
+    console.print(
+        f"[yellow]Warning: {cores} cores requested, "
+        f"but only {os.cpu_count()} available[/yellow]"
+    )
+    cores = os.cpu_count()
+```
+
+## Interaction Patterns
+
+### Affirmative Defaults
+
+Ask for destructive actions:
+
+```python
+# Bad: accidental deletion
+$ secondbrain delete --all
+
+# Good: require confirmation
+if not click.confirm("Delete all documents? This cannot be undone."):
+    return
+```
+
+### Idempotent Flags
+
+Make operations safe to re-run:
+
+```python
+# --yes flag bypasses confirmation for scripted use
+@click.option('--yes', '-y', is_flag=True)
+def delete(all: bool, yes: bool):
+    if not yes:
+        if not click.confirm("Proceed?"):
+            return
+```
+
+## Testing CLIs
+
+### Simulate Command Line
 
 ```python
 from click.testing import CliRunner
 
 def test_ingest_command():
     runner = CliRunner()
-    result = runner.invoke(ingest, ["./docs/"])
-    assert result.exit_code == 0
-    assert "Successfully ingested" in result.output
+    with runner.isolated_filesystem():
+        # Setup test file
+        Path("test.pdf").touch()
+        
+        result = runner.invoke(cli.main, ['ingest', 'test.pdf'])
+        
+        assert result.exit_code == 0
+        assert "Successfully ingested" in result.output
 ```
 
-## Documentation
-
-- [ ] Document all commands
-- [ ] Provide examples
-- [ ] Explain options clearly
-- [ ] Update docs with changes
-- [ ] Include troubleshooting
-
-## Performance
-
-- [ ] Use async for I/O operations
-- [ ] Support parallel processing
-- [ ] Provide progress feedback
-- [ ] Handle large inputs gracefully
-- [ ] Cache where appropriate
-
-## Security
-
-- [ ] Validate all inputs
-- [ ] Sanitize file paths
-- [ ] Don't expose sensitive data
-- [ ] Use secure defaults
-- [ ] Handle errors securely
-
-## Release Checklist
-
-- [ ] All tests pass
-- [ ] Documentation updated
-- [ ] Version bumped
-- [ ] Changelog updated
-- [ ] Help text reviewed
-- [ ] Examples tested
-
-## Common Patterns
-
-### Progress Indicator
+### Verify Output Format
 
 ```python
-from rich.progress import Progress
+result = runner.invoke(cli.main, ['search', 'query', '--format', 'json'])
 
-with Progress() as progress:
-    task = progress.add_task("Ingesting...", total=len(documents))
-    for doc in documents:
-        process(doc)
-        progress.update(task, advance=1)
+assert result.exit_code == 0
+data = json.loads(result.output)
+assert isinstance(data, list)
 ```
 
-### JSON Output
+## Performance Considerations
+
+### Lazy Imports
+
+Keep startup time fast:
 
 ```python
-@click.option("--format", type=click.Choice(["table", "json"]), default="table")
-def list_docs(format: str):
-    if format == "json":
-        click.echo(json.dumps(results))
-    else:
-        display_table(results)
+# Defer expensive imports until command execution
+def ingest(path: str):
+    from secondbrain.document import DocumentIngestor  # Local import
+    ...
 ```
 
-## Next Steps
+### Caching
 
-- [Click Documentation](https://click.palletsprojects.com/)
-- [Rich Documentation](https://rich.readthedocs.io/)
+Cache expensive computations:
+
+```python
+@lru_cache
+def get_config() -> Config:
+    return Config()
+```
+
+## Help Text Quality
+
+### Describe Every Option
+
+```python
+@click.option('--min-score', type=float,
+              help="Minimum similarity score (0.0-1.0, default: 0.46)")
+```
+
+### Provide Examples
+
+```python
+@click.command()
+@click.argument('query')
+def search(query):
+    """Search documents with semantic query.
+
+    Examples:
+        search "machine learning"
+        search "optimization" --top-k 10
+        search "guide" --format json
+    """
+    ...
+```
+
+## Deprecation Handling
+
+Signal deprecations clearly:
+
+```python
+if old_option_used:
+    warnings.warn(
+        "'--old-flag' is deprecated, use '--new-flag' instead",
+        DeprecationWarning,
+        stacklevel=2
+    )
+```
+
+## Logging Integration
+
+### Structured Logging
+
+```python
+logger.info("Operation completed",
+            extra={"operation": "ingest", "files": len(files), "duration": elapsed})
+```
+
+### Sensitive Data Filtering
+
+Never log sensitive configuration values:
+
+```python
+# Bad
+logger.debug(f"API key: {api_key}")
+
+# Good
+logger.debug(f"API key present: {bool(api_key)}")
+```
