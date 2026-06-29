@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import runpy
 import sys
+from functools import lru_cache
 from io import StringIO
 from pathlib import Path
 from typing import Any
@@ -13,36 +14,22 @@ import pytest
 
 from secondbrain.config import Config
 
-_ENV_CACHE: dict[str, str] = {}
-_env_loaded = False
 
-
+@lru_cache(maxsize=1)
 def _get_cached_env() -> dict[str, str]:
-    """Load and cache environment from .env file (once per test session)."""
-    global _ENV_CACHE, _env_loaded
-    if _env_loaded:
-        return _ENV_CACHE
-
-    env = os.environ.copy()
-    env_file = Path(__file__).parent.parent.parent / ".env"
-    if env_file.exists():
-        with open(env_file) as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith("#") and "=" in line:
-                    key, value = line.split("=", 1)
-                    key = key.strip()
-                    value = value.strip().strip('"').strip("'")
-                    if key and value:
-                        env[key] = value
-
+    """Test-safe env: values derived from Config (uses .env.test when PYTEST_CURRENT_TEST is set)."""
+    env: dict[str, str] = {}
     test_config = Config()
-    env["SECONDBRAIN_VERBOSE"] = "0"
-    env["SECONDBRAIN_MONGO_URI"] = test_config.mongo_uri
+    for key in dir(test_config):
+        if key.isupper() and not key.startswith("_"):
+            val = getattr(test_config, key, None)
+            if val is not None and not callable(val):
+                env[f"SECONDBRAIN_{key}"] = str(val)
 
-    _ENV_CACHE = env
-    _env_loaded = True
-    return _ENV_CACHE
+    env["SECONDBRAIN_VERBOSE"] = "0"
+    env.setdefault("SECONDBRAIN_STREAMING_ENABLED", "false")
+
+    return env
 
 
 @pytest.fixture
@@ -104,8 +91,17 @@ def example_runner(tmp_path: Path) -> Any:
         returncode = 0
         error_msg = None
 
+        from secondbrain.config import get_config
+
+        # Preserve original environ and inject test-safe environment to prevent
+        # production .env bleed-through when example scripts call VectorStorage().
+        # Also clear the config cache so a fresh Config reads our test env vars.
+        orig_environ = os.environ.copy()
+        get_config.cache_clear()
+        os.environ.update(_get_cached_env())
+
         try:
-            # Apply env overrides to current process
+            # Apply additional env overrides on top of test-safe defaults
             if env_overrides:
                 for k, v in env_overrides.items():
                     os.environ[k] = v
@@ -116,7 +112,9 @@ def example_runner(tmp_path: Path) -> Any:
             try:
                 runpy.run_path(str(script_path), run_name="__main__")
             except SystemExit as e:
-                returncode = e.code if isinstance(e.code, int) else (0 if e.code is None else 1)
+                returncode = (
+                    e.code if isinstance(e.code, int) else (0 if e.code is None else 1)
+                )
             except Exception as e:
                 returncode = 1
                 error_msg = repr(e)
@@ -126,13 +124,9 @@ def example_runner(tmp_path: Path) -> Any:
             sys.stderr = orig_stderr
             sys.argv = orig_argv
 
-            # Restore env overrides
-            if env_overrides:
-                for k in env_overrides.keys():
-                    if k in _get_cached_env() and k not in os.environ:
-                        del os.environ[k]
-                    elif k in _get_cached_env():
-                        os.environ[k] = _get_cached_env()[k]
+            # Fully restore original environ (not just env_overrides keys)
+            os.environ.clear()
+            os.environ.update(orig_environ)
 
         stdout = stdout_capture.getvalue()
         stderr = stderr_capture.getvalue()

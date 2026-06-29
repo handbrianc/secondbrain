@@ -9,11 +9,50 @@ import subprocess
 import time
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from secondbrain.config import Config
+from secondbrain.storage import VectorStorage
+
+_TEST_MONGO_URI = "mongodb://localhost:27018/"
+_TEST_DB_NAME = "secondbrain_test"
+
+
+def _patched_vectorstorage_init(
+    self: Any,
+    mongo_uri: str | None = None,
+    db_name: str | None = None,
+    collection_name: str | None = None,
+    *,
+    force_test_db: bool = True,
+) -> None:
+    from secondbrain.config import config
+
+    cfg = config()
+    if force_test_db:
+        mongo_uri = _TEST_MONGO_URI
+        db_name = _TEST_DB_NAME
+    else:
+        mongo_uri = mongo_uri or cfg.mongo_uri
+        db_name = db_name or cfg.mongo_db
+    collection_name = collection_name or cfg.mongo_collection
+
+    object.__setattr__(self, "mongo_uri", mongo_uri)
+    object.__setattr__(self, "db_name", db_name)
+    object.__setattr__(self, "collection_name", collection_name)
+    object.__setattr__(self, "_config", cfg)
+    object.__setattr__(self, "_client", None)
+    object.__setattr__(self, "_db", None)
+    object.__setattr__(self, "_collection", None)
+    object.__setattr__(self, "_index_created", False)
+    object.__setattr__(self, "_async_client", None)
+    object.__setattr__(self, "_index_ready_retry_count", cfg.index_ready_retry_count)
+    object.__setattr__(self, "_index_ready_retry_delay", cfg.index_ready_retry_delay)
+    from secondbrain.utils.connections import ValidatableService
+
+    ValidatableService.__init__(self, cache_ttl=cfg.connection_cache_ttl)
 
 # Get test config
 _test_config = Config()
@@ -191,6 +230,7 @@ class TestAdvancedExamples:
 
     @pytest.mark.integration
     @_needs_docker
+    @patch.object(VectorStorage, "__init__", _patched_vectorstorage_init)
     def test_example_batch_ingestion(
         self, example_runner: Any, tmp_path: Path
     ) -> None:
@@ -219,6 +259,7 @@ class TestAdvancedExamples:
 
     @pytest.mark.integration
     @_needs_docker
+    @patch.object(VectorStorage, "__init__", _patched_vectorstorage_init)
     def test_example_custom_chunking(
         self, example_runner: Any, create_test_pdf: Any, tmp_path: Path
     ) -> None:
