@@ -29,7 +29,8 @@ secondbrain/
 │   ├── embedding/             # Embedding generation
 │   ├── search/                # Vector search
 │   ├── storage/               # MongoDB storage
-│   ├── management/            # Docker management, metrics
+│   ├── management/            # Document list/delete/status
+│   ├── utils/                 # Docker helpers, performance monitoring
 │   └── rag/                   # RAG pipeline
 ├── tests/                     # Test suite
 ├── docs/                      # Documentation
