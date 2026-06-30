@@ -373,8 +373,7 @@ def _extract_chunk_and_embed_file(
                 start = chunk_end if new_start <= start else new_start
 
         cfg = config()
-        # create_from_config is a classmethod resolved via lazy import — type: ignore[misc]
-        embedding_model = EmbeddingProviderFactory.create_from_config(cfg)  # type: ignore[misc]
+        embedding_model = EmbeddingProviderFactory.create_from_config(cfg)
 
         seen_hashes = set()
         unique_chunks = []
