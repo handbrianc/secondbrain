@@ -48,7 +48,7 @@ cleanup_directory() {
         fi
         
         deleted_files+=("$file")
-        ((deleted_count++))
+        deleted_count=$((deleted_count + 1))
     done < <(find "$full_path" -type f \( -name "*report*.json" -o -name "*security*.json" -o -name "*sbom*.json" -o -name "*vulnerability*.json" -o -name "*bandit*.json" -o -name "*safety*.json" \) -print0 2>/dev/null)
     
     # Find and remove MD report files
@@ -61,7 +61,7 @@ cleanup_directory() {
         fi
         
         deleted_files+=("$file")
-        ((deleted_count++))
+        deleted_count=$((deleted_count + 1))
     done < <(find "$full_path" -type f \( -name "*report*.md" -o -name "*security*.md" -o -name "*vulnerability*.md" -o -name "*remediation*.md" -o -name "*scan*.md" -o -name "*findings*.md" \) -print0 2>/dev/null)
 }
 
@@ -80,7 +80,7 @@ while IFS= read -r -d '' file; do
        [[ "$basename_file" == "sbom.spdx" ]] || \
        [[ "$basename_file" == "*security_report.md" ]]; then
         deleted_files+=("$file")
-        ((deleted_count++))
+        deleted_count=$((deleted_count + 1))
     fi
 done < <(find "$PROJECT_ROOT" -maxdepth 1 -type f \( -name "sbom.json" -o -name "sbom.spdx" -o -name "*security_report.md" \) -print0 2>/dev/null)
 
