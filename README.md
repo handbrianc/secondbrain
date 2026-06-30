@@ -146,7 +146,7 @@ Search Query ← Searcher ← Embedder ← Query
 Key components:
 - **Document Ingestor** (`secondbrain ingest`) - parses and chunks supported file types
 - **Embedding Engine** - OpenAI-compatible API for vector generation
-- **Vector Storage** - MongoDB with `$vectorSearch` for similarity retrieval
+- **Vector Storage** - MongoDB vector search with `$vectorSearch` for similarity retrieval
 - **Chat** (`secondbrain chat`) - RAG pipeline for conversational Q&A
 
 ## Documentation
