@@ -47,6 +47,7 @@ cleanup_directory() {
             continue
         fi
         
+        rm "$file"
         deleted_files+=("$file")
         deleted_count=$((deleted_count + 1))
     done < <(find "$full_path" -type f \( -name "*report*.json" -o -name "*security*.json" -o -name "*sbom*.json" -o -name "*vulnerability*.json" -o -name "*bandit*.json" -o -name "*safety*.json" \) -print0 2>/dev/null)
