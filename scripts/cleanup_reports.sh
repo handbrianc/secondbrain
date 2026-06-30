@@ -61,6 +61,7 @@ cleanup_directory() {
             continue
         fi
         
+        rm "$file"
         deleted_files+=("$file")
         deleted_count=$((deleted_count + 1))
     done < <(find "$full_path" -type f \( -name "*report*.md" -o -name "*security*.md" -o -name "*vulnerability*.md" -o -name "*remediation*.md" -o -name "*scan*.md" -o -name "*findings*.md" \) -print0 2>/dev/null)
