@@ -80,7 +80,8 @@ while IFS= read -r -d '' file; do
     basename_file=$(basename "$file")
     if [[ "$basename_file" == "sbom.json" ]] || \
        [[ "$basename_file" == "sbom.spdx" ]] || \
-       [[ "$basename_file" == "*security_report.md" ]]; then
+       [[ "$basename_file" == *security_report.md ]]; then
+        rm "$file"
         deleted_files+=("$file")
         deleted_count=$((deleted_count + 1))
     fi
