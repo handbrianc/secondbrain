@@ -14,6 +14,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from abc import abstractmethod
+
 from typing_extensions import TypedDict
 
 if TYPE_CHECKING:
@@ -38,6 +40,7 @@ class Segment(TypedDict):
 class DocumentParsingProtocol:
     """Structural protocol for converting a file path to text segments."""
 
+    @abstractmethod
     def parse(self, file_path: Path) -> list[Segment]:
         """Parse a file and extract text segments."""
         ...
@@ -46,6 +49,7 @@ class DocumentParsingProtocol:
 class ChunkAssemblyProtocol:
     """Structural protocol for assembling raw segments into chunks."""
 
+    @abstractmethod
     def assemble(
         self,
         segments: list[Segment],

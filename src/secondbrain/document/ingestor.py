@@ -1295,7 +1295,7 @@ class AsyncDocumentIngestor(DocumentIngestor):
             # Collect and validate files
             files = await asyncio.to_thread(
                 self._collect_and_validate_files, path, recursive
-            )  # type: ignore[attr-defined]
+            )
 
             if not files:
                 return {"success": 0, "failed": 0}
@@ -1598,7 +1598,7 @@ class AsyncDocumentIngestor(DocumentIngestor):
             True if processing succeeded, False otherwise.
         """
         try:
-            segments = await asyncio.to_thread(self._extract_text, file_path)  # type: ignore[attr-defined]
+            segments = await asyncio.to_thread(self._extract_text, file_path)
 
             if not segments:
                 logger.warning(
