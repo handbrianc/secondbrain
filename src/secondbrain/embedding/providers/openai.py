@@ -28,7 +28,7 @@ from openai import APIError, AsyncOpenAI, OpenAI
 
 from secondbrain.exceptions import ServiceUnavailableError
 
-from .interfaces import EmbeddingProvider
+from secondbrain.embedding.interfaces import EmbeddingProvider
 
 
 class OpenAIEmbeddingProvider(EmbeddingProvider):
