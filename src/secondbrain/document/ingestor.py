@@ -733,7 +733,16 @@ class DocumentIngestor:
             docs_to_store.append(doc)
 
         if docs_to_store:
-            storage.store_batch(docs_to_store)
+            with trace_operation("storage.store") as span:
+                if span is not None:
+                    span.set_attribute(
+                        "storage.documents_stored", len(docs_to_store)
+                    )
+                start = time.time()
+                storage.store_batch(docs_to_store)
+                elapsed_ms = (time.time() - start) * 1000
+                if span is not None:
+                    span.set_attribute("storage.duration_ms", elapsed_ms)
 
         return len(docs_to_store)
 
@@ -1007,7 +1016,22 @@ class DocumentIngestor:
                                 0, len(docs_to_store), MAX_MEMORY_BATCH_SIZE
                             ):
                                 batch = docs_to_store[i : i + MAX_MEMORY_BATCH_SIZE]
-                                storage.store_batch(batch)
+                                with trace_operation("storage.store") as span:
+                                    if span is not None:
+                                        span.set_attribute(
+                                            "storage.documents_stored",
+                                            len(batch),
+                                        )
+                                    start = time.time()
+                                    storage.store_batch(batch)
+                                    elapsed_ms = (
+                                        time.time() - start
+                                    ) * 1000
+                                    if span is not None:
+                                        span.set_attribute(
+                                            "storage.duration_ms",
+                                            elapsed_ms,
+                                        )
                             successful_files += 1
                             if self.progress_callback:
                                 self.progress_callback(file_path, True)
@@ -1078,7 +1102,19 @@ class DocumentIngestor:
                         self.progress_callback(file_path, False)
                     continue
 
-                storage.store_batch(result)
+                with trace_operation("storage.store") as span:
+                    if span is not None:
+                        span.set_attribute(
+                            "storage.documents_stored",
+                            len(result),
+                        )
+                    start = time.time()
+                    storage.store_batch(result)
+                    elapsed_ms = (time.time() - start) * 1000
+                    if span is not None:
+                        span.set_attribute(
+                            "storage.duration_ms", elapsed_ms
+                        )
                 successful_files += 1
                 if self.progress_callback:
                     self.progress_callback(file_path, True)
@@ -1500,7 +1536,16 @@ class AsyncDocumentIngestor(DocumentIngestor):
             docs_to_store.append(doc)
 
         if docs_to_store:
-            await storage.store_batch_async(docs_to_store)
+            with trace_operation("storage.store") as span:
+                if span is not None:
+                    span.set_attribute(
+                        "storage.documents_stored", len(docs_to_store)
+                    )
+                start = time.time()
+                await storage.store_batch_async(docs_to_store)
+                elapsed_ms = (time.time() - start) * 1000
+                if span is not None:
+                    span.set_attribute("storage.duration_ms", elapsed_ms)
 
         return len(docs_to_store)
 
@@ -1637,7 +1682,19 @@ class AsyncDocumentIngestor(DocumentIngestor):
                     file_path, segments, embedding_gen
                 )
                 if docs_to_store:
-                    await storage.store_batch_async(docs_to_store)
+                    with trace_operation("storage.store") as span:
+                        if span is not None:
+                            span.set_attribute(
+                                "storage.documents_stored",
+                                len(docs_to_store),
+                            )
+                        start = time.time()
+                        await storage.store_batch_async(docs_to_store)
+                        elapsed_ms = (time.time() - start) * 1000
+                        if span is not None:
+                            span.set_attribute(
+                                "storage.duration_ms", elapsed_ms
+                            )
                     return True
                 return False
 
