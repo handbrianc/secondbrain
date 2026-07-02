@@ -1,6 +1,5 @@
 """Unit tests for streaming functionality in LLM providers."""
 
-
 from secondbrain.rag.providers.mock import MockLLMProvider
 
 
@@ -16,8 +15,7 @@ class TestMockProviderStreaming:
             chunks.append((content, reasoning))
 
         result = provider.stream_chat(
-            messages=[{"role": "user", "content": "test query"}],
-            on_chunk=on_chunk
+            messages=[{"role": "user", "content": "test query"}], on_chunk=on_chunk
         )
 
         assert "Test response for streaming" in result
@@ -27,15 +25,16 @@ class TestMockProviderStreaming:
 
     def test_stream_chat_with_multiple_chunks(self):
         """Test streaming produces multiple chunks."""
-        provider = MockLLMProvider(default_response="This is a longer response that should produce multiple chunks")
+        provider = MockLLMProvider(
+            default_response="This is a longer response that should produce multiple chunks"
+        )
         chunks = []
 
         def on_chunk(content: str, reasoning: str | None) -> None:
             chunks.append(content)
 
         result = provider.stream_chat(
-            messages=[{"role": "user", "content": "test"}],
-            on_chunk=on_chunk
+            messages=[{"role": "user", "content": "test"}], on_chunk=on_chunk
         )
 
         assert len(chunks) > 1
@@ -66,8 +65,7 @@ class TestMockProviderStreaming:
 
         async def run_test():
             return await provider.stream_chat_async(
-                messages=[{"role": "user", "content": "test"}],
-                on_chunk=on_chunk
+                messages=[{"role": "user", "content": "test"}], on_chunk=on_chunk
             )
 
         result = asyncio.run(run_test())
@@ -86,8 +84,7 @@ class TestMockProviderStreaming:
             call_count += 1
 
         result = provider.stream_chat(
-            messages=[{"role": "user", "content": "test"}],
-            on_chunk=on_chunk
+            messages=[{"role": "user", "content": "test"}], on_chunk=on_chunk
         )
 
         assert call_count > 0
@@ -105,7 +102,7 @@ class TestMockProviderStreaming:
 
         result = provider.stream_chat(
             messages=[{"role": "user", "content": "this is a test query"}],
-            on_chunk=on_chunk
+            on_chunk=on_chunk,
         )
 
         assert result == "Mapped response for test query"
@@ -124,8 +121,7 @@ class TestStreamingCallbackSignature:
             received.append({"content": content, "reasoning": reasoning})
 
         provider.stream_chat(
-            messages=[{"role": "user", "content": "test"}],
-            on_chunk=on_chunk
+            messages=[{"role": "user", "content": "test"}], on_chunk=on_chunk
         )
 
         assert all(r["reasoning"] is None for r in received)
@@ -140,6 +136,5 @@ class TestStreamingCallbackSignature:
             assert reasoning is None or isinstance(reasoning, str)
 
         provider.stream_chat(
-            messages=[{"role": "user", "content": "test"}],
-            on_chunk=on_chunk
+            messages=[{"role": "user", "content": "test"}], on_chunk=on_chunk
         )

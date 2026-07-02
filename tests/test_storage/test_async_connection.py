@@ -17,6 +17,7 @@ class TestAsyncConnection:
         """Create a VectorStorage instance with mocked config and fresh state."""
         with patch("secondbrain.storage.config") as mock_config_func:
             from secondbrain.config import Config
+
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
             mock_config_func.return_value.mongo_db = "secondbrain_test"
@@ -176,7 +177,15 @@ class TestAsyncConnection:
 
         def mock_aggregate(*args, **kwargs):
             time.sleep(0.01)  # Simulate small delay
-            return [{"chunk_id": "fake-id", "source_file": "test.pdf", "chunk_text": "sample text", "page_number": 1, "score": 0.9}]
+            return [
+                {
+                    "chunk_id": "fake-id",
+                    "source_file": "test.pdf",
+                    "chunk_text": "sample text",
+                    "page_number": 1,
+                    "score": 0.9,
+                }
+            ]
 
         mock_collection.aggregate = MagicMock(side_effect=mock_aggregate)
 

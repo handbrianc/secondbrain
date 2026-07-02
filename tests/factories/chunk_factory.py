@@ -3,7 +3,7 @@
 from factory import Factory, Faker, LazyAttribute, Sequence, SubFactory
 
 from secondbrain.domain.entities import DocumentChunk, DocumentMetadata
-from secondbrain.domain.value_objects import ChunkId, EmbeddingVector, SourcePath
+from secondbrain.domain.value_objects import ChunkId, SourcePath
 
 from .document_factory import DocumentMetadataFactory
 
@@ -11,6 +11,7 @@ from .document_factory import DocumentMetadataFactory
 def _get_default_embedding() -> list[float]:
     """Get default embedding vector sized to match config's embedding_dimensions."""
     from secondbrain.config import config
+
     return [0.1] * config().embedding_dimensions
 
 

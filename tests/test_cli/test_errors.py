@@ -317,9 +317,7 @@ class TestLLMErrorHandling:
         @click.command()
         @handle_cli_errors
         def test_shows_model_not_found_message():
-            raise RuntimeError(
-                "Model 'llama3.2' not found on LLM server"
-            )
+            raise RuntimeError("Model 'llama3.2' not found on LLM server")
 
         result = runner.invoke(test_shows_model_not_found_message, [])
         assert result.exit_code == 1

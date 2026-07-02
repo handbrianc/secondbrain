@@ -34,7 +34,9 @@ class TestOpenAILLMProviderInit:
 
     def test_init_with_custom_parameters(self):
         """Test initialization with custom parameters."""
-        with patch.dict(os.environ, {"SECONDBRAIN_OPENAI_API_KEY": "test-key"}, clear=True):
+        with patch.dict(
+            os.environ, {"SECONDBRAIN_OPENAI_API_KEY": "test-key"}, clear=True
+        ):
             provider = OpenAILLMProvider(
                 model="gpt-4",
                 temperature=0.7,
@@ -64,7 +66,9 @@ class TestOpenAILLMProviderInit:
         """Test that clients are created during initialization."""
         with patch.dict(os.environ, {"SECONDBRAIN_OPENAI_API_KEY": "test-key"}):
             with patch("secondbrain.rag.providers.openai.OpenAI") as mock_sync:
-                with patch("secondbrain.rag.providers.openai.AsyncOpenAI") as mock_async:
+                with patch(
+                    "secondbrain.rag.providers.openai.AsyncOpenAI"
+                ) as mock_async:
                     mock_sync.return_value = MagicMock()
                     mock_async.return_value = MagicMock()
 
@@ -84,7 +88,9 @@ class TestOpenAILLMProviderGenerate:
         with patch.dict(os.environ, {"SECONDBRAIN_OPENAI_API_KEY": "test-key"}):
             with patch("secondbrain.rag.providers.openai.OpenAI") as mock_client_class:
                 mock_response = MagicMock()
-                mock_response.choices = [MagicMock(message=MagicMock(content="Test response"))]
+                mock_response.choices = [
+                    MagicMock(message=MagicMock(content="Test response"))
+                ]
                 mock_client = MagicMock()
                 mock_client.chat.completions.create.return_value = mock_response
                 mock_client_class.return_value = mock_client
@@ -100,7 +106,9 @@ class TestOpenAILLMProviderGenerate:
         with patch.dict(os.environ, {"SECONDBRAIN_OPENAI_API_KEY": "test-key"}):
             with patch("secondbrain.rag.providers.openai.OpenAI") as mock_client_class:
                 mock_response = MagicMock()
-                mock_response.choices = [MagicMock(message=MagicMock(content="Response"))]
+                mock_response.choices = [
+                    MagicMock(message=MagicMock(content="Response"))
+                ]
                 mock_client = MagicMock()
                 mock_client.chat.completions.create.return_value = mock_response
                 mock_client_class.return_value = mock_client
@@ -116,7 +124,9 @@ class TestOpenAILLMProviderGenerate:
         with patch.dict(os.environ, {"SECONDBRAIN_OPENAI_API_KEY": "test-key"}):
             with patch("secondbrain.rag.providers.openai.OpenAI") as mock_client_class:
                 mock_response = MagicMock()
-                mock_response.choices = [MagicMock(message=MagicMock(content="Response"))]
+                mock_response.choices = [
+                    MagicMock(message=MagicMock(content="Response"))
+                ]
                 mock_client = MagicMock()
                 mock_client.chat.completions.create.return_value = mock_response
                 mock_client_class.return_value = mock_client
@@ -132,7 +142,9 @@ class TestOpenAILLMProviderGenerate:
         with patch.dict(os.environ, {"SECONDBRAIN_OPENAI_API_KEY": "test-key"}):
             with patch("secondbrain.rag.providers.openai.OpenAI") as mock_client_class:
                 mock_response = MagicMock()
-                mock_response.choices = [MagicMock(message=MagicMock(content="Response"))]
+                mock_response.choices = [
+                    MagicMock(message=MagicMock(content="Response"))
+                ]
                 mock_client = MagicMock()
                 mock_client.chat.completions.create.return_value = mock_response
                 mock_client_class.return_value = mock_client
@@ -150,9 +162,7 @@ class TestOpenAILLMProviderGenerate:
                 mock_client = MagicMock()
                 mock_request = MagicMock()
                 mock_client.chat.completions.create.side_effect = APIError(
-                    message="API Error",
-                    request=mock_request,
-                    body={}
+                    message="API Error", request=mock_request, body={}
                 )
                 mock_client_class.return_value = mock_client
 
@@ -169,11 +179,17 @@ class TestOpenAILLMProviderAGenerate:
     async def test_agenerate_async_success(self):
         """Test successful async generation."""
         with patch.dict(os.environ, {"SECONDBRAIN_OPENAI_API_KEY": "test-key"}):
-            with patch("secondbrain.rag.providers.openai.AsyncOpenAI") as mock_client_class:
+            with patch(
+                "secondbrain.rag.providers.openai.AsyncOpenAI"
+            ) as mock_client_class:
                 mock_response = MagicMock()
-                mock_response.choices = [MagicMock(message=MagicMock(content="Test response"))]
+                mock_response.choices = [
+                    MagicMock(message=MagicMock(content="Test response"))
+                ]
                 mock_client = MagicMock()
-                mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+                mock_client.chat.completions.create = AsyncMock(
+                    return_value=mock_response
+                )
                 mock_client_class.return_value = mock_client
 
                 provider = OpenAILLMProvider()
@@ -185,15 +201,23 @@ class TestOpenAILLMProviderAGenerate:
     async def test_agenerate_async_with_custom_params(self):
         """Test async generation with custom parameters."""
         with patch.dict(os.environ, {"SECONDBRAIN_OPENAI_API_KEY": "test-key"}):
-            with patch("secondbrain.rag.providers.openai.AsyncOpenAI") as mock_client_class:
+            with patch(
+                "secondbrain.rag.providers.openai.AsyncOpenAI"
+            ) as mock_client_class:
                 mock_response = MagicMock()
-                mock_response.choices = [MagicMock(message=MagicMock(content="Response"))]
+                mock_response.choices = [
+                    MagicMock(message=MagicMock(content="Response"))
+                ]
                 mock_client = MagicMock()
-                mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+                mock_client.chat.completions.create = AsyncMock(
+                    return_value=mock_response
+                )
                 mock_client_class.return_value = mock_client
 
                 provider = OpenAILLMProvider()
-                response = await provider.generate_async("Test", temperature=0.8, max_tokens=512)
+                response = await provider.generate_async(
+                    "Test", temperature=0.8, max_tokens=512
+                )
 
                 call_kwargs = mock_client.chat.completions.create.call_args[1]
                 assert call_kwargs["temperature"] == 0.8
@@ -205,7 +229,9 @@ class TestOpenAILLMProviderAGenerate:
         import httpx
 
         with patch.dict(os.environ, {"SECONDBRAIN_OPENAI_API_KEY": "test-key"}):
-            with patch("secondbrain.rag.providers.openai.AsyncOpenAI") as mock_client_class:
+            with patch(
+                "secondbrain.rag.providers.openai.AsyncOpenAI"
+            ) as mock_client_class:
                 mock_client = MagicMock()
                 mock_client.chat.completions.create = AsyncMock(
                     side_effect=httpx.ConnectError("Connection failed")
@@ -214,21 +240,23 @@ class TestOpenAILLMProviderAGenerate:
 
                 provider = OpenAILLMProvider()
 
-                with pytest.raises(ServiceUnavailableError, match="OpenAI API unreachable"):
+                with pytest.raises(
+                    ServiceUnavailableError, match="OpenAI API unreachable"
+                ):
                     await provider.generate_async("Test prompt")
 
     @pytest.mark.asyncio
     async def test_agenerate_async_raises_service_unavailable_on_api_error(self):
         """Test that APIError raises ServiceUnavailableError."""
         with patch.dict(os.environ, {"SECONDBRAIN_OPENAI_API_KEY": "test-key"}):
-            with patch("secondbrain.rag.providers.openai.AsyncOpenAI") as mock_client_class:
+            with patch(
+                "secondbrain.rag.providers.openai.AsyncOpenAI"
+            ) as mock_client_class:
                 mock_client = MagicMock()
                 mock_request = MagicMock()
                 mock_client.chat.completions.create = AsyncMock(
                     side_effect=APIError(
-                        message="API Error",
-                        request=mock_request,
-                        body={}
+                        message="API Error", request=mock_request, body={}
                     )
                 )
                 mock_client_class.return_value = mock_client

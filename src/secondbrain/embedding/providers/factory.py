@@ -6,7 +6,7 @@ based on configuration, supporting OpenAI API-based embedding providers.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from secondbrain.config import Config
 from secondbrain.embedding.interfaces import EmbeddingProvider
@@ -53,11 +53,14 @@ class EmbeddingProviderFactory:
         if provider_type == "openai":
             from secondbrain.embedding.providers.openai import OpenAIEmbeddingProvider
 
-            return OpenAIEmbeddingProvider(
-                model=config.embedding_model,
-                api_key=config.embedding_api_key,
-                api_base=config.embedding_api_base,
-                dimensions=config.embedding_dimensions,
+            return cast(
+                EmbeddingProvider,
+                OpenAIEmbeddingProvider(
+                    model=config.embedding_model,
+                    api_key=config.embedding_api_key,
+                    api_base=config.embedding_api_base,
+                    dimensions=config.embedding_dimensions,
+                ),
             )
 
         raise ValueError(

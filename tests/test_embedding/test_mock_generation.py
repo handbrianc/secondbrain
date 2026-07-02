@@ -189,13 +189,7 @@ class TestMockEmbeddingGenerateBatch:
         """Test batch generation with mixed content types."""
         gen = MockEmbeddingGenerator(dimension=384)
 
-        texts = [
-            "simple text",
-            "",
-            "   ",
-            "unicode 世界",
-            "very long text " * 100
-        ]
+        texts = ["simple text", "", "   ", "unicode 世界", "very long text " * 100]
 
         result = gen.generate_batch(texts)
 
@@ -248,4 +242,3 @@ class TestMockEmbeddingRepr:
         assert "MockEmbeddingGenerator" in result
         assert "model=custom" in result
         assert "dimension=768" in result
-

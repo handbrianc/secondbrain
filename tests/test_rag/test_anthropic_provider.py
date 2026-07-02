@@ -59,7 +59,9 @@ class TestAnthropicLLMProviderInit:
         """Test that clients are created during initialization."""
         with patch.dict(os.environ, {"SECONDBRAIN_ANTHROPIC_API_KEY": "test-key"}):
             with patch("secondbrain.rag.providers.anthropic.Anthropic") as mock_sync:
-                with patch("secondbrain.rag.providers.anthropic.AsyncAnthropic") as mock_async:
+                with patch(
+                    "secondbrain.rag.providers.anthropic.AsyncAnthropic"
+                ) as mock_async:
                     mock_sync.return_value = MagicMock()
                     mock_async.return_value = MagicMock()
 
@@ -73,7 +75,9 @@ class TestAnthropicLLMProviderAsyncGenerate:
     async def test_agenerate_with_defaults(self):
         """Test async generation with default parameters."""
         with patch.dict(os.environ, {"SECONDBRAIN_ANTHROPIC_API_KEY": "test-key"}):
-            with patch("secondbrain.rag.providers.anthropic.AsyncAnthropic") as mock_client_class:
+            with patch(
+                "secondbrain.rag.providers.anthropic.AsyncAnthropic"
+            ) as mock_client_class:
                 mock_response = MagicMock()
                 mock_response.content = [MagicMock(text="Async Response")]
                 mock_client = MagicMock()
@@ -90,7 +94,9 @@ class TestAnthropicLLMProviderAsyncGenerate:
     async def test_agenerate_with_custom_params(self):
         """Test async generation with custom parameters."""
         with patch.dict(os.environ, {"SECONDBRAIN_ANTHROPIC_API_KEY": "test-key"}):
-            with patch("secondbrain.rag.providers.anthropic.AsyncAnthropic") as mock_client_class:
+            with patch(
+                "secondbrain.rag.providers.anthropic.AsyncAnthropic"
+            ) as mock_client_class:
                 mock_response = MagicMock()
                 mock_response.content = [MagicMock(text="Response")]
                 mock_client = MagicMock()
@@ -112,7 +118,9 @@ class TestAnthropicLLMProviderAsyncGenerate:
         import httpx
 
         with patch.dict(os.environ, {"SECONDBRAIN_ANTHROPIC_API_KEY": "test-key"}):
-            with patch("secondbrain.rag.providers.anthropic.AsyncAnthropic") as mock_client_class:
+            with patch(
+                "secondbrain.rag.providers.anthropic.AsyncAnthropic"
+            ) as mock_client_class:
                 mock_client = MagicMock()
                 mock_client.messages.create = AsyncMock(
                     side_effect=httpx.ConnectError("Connection failed")
@@ -121,21 +129,23 @@ class TestAnthropicLLMProviderAsyncGenerate:
 
                 provider = AnthropicLLMProvider()
 
-                with pytest.raises(ServiceUnavailableError, match="Anthropic API unreachable"):
+                with pytest.raises(
+                    ServiceUnavailableError, match="Anthropic API unreachable"
+                ):
                     await provider.agenerate("Test")
 
     @pytest.mark.asyncio
     async def test_agenerate_raises_runtime_on_api_error(self):
         """Test that APIError raises RuntimeError."""
         with patch.dict(os.environ, {"SECONDBRAIN_ANTHROPIC_API_KEY": "test-key"}):
-            with patch("secondbrain.rag.providers.anthropic.AsyncAnthropic") as mock_client_class:
+            with patch(
+                "secondbrain.rag.providers.anthropic.AsyncAnthropic"
+            ) as mock_client_class:
                 mock_client = MagicMock()
                 mock_request = MagicMock()
                 mock_client.messages.create = AsyncMock(
                     side_effect=APIError(
-                        message="API Error",
-                        request=mock_request,
-                        body={}
+                        message="API Error", request=mock_request, body={}
                     )
                 )
                 mock_client_class.return_value = mock_client
@@ -152,7 +162,9 @@ class TestAnthropicLLMProviderHealthCheck:
     def test_health_check_success(self):
         """Test health check returns True on success."""
         with patch.dict(os.environ, {"SECONDBRAIN_ANTHROPIC_API_KEY": "test-key"}):
-            with patch("secondbrain.rag.providers.anthropic.Anthropic") as mock_client_class:
+            with patch(
+                "secondbrain.rag.providers.anthropic.Anthropic"
+            ) as mock_client_class:
                 mock_client = MagicMock()
                 mock_client.models.list.return_value = MagicMock()
                 mock_client_class.return_value = mock_client
@@ -168,9 +180,13 @@ class TestAnthropicLLMProviderHealthCheck:
         import httpx
 
         with patch.dict(os.environ, {"SECONDBRAIN_ANTHROPIC_API_KEY": "test-key"}):
-            with patch("secondbrain.rag.providers.anthropic.Anthropic") as mock_client_class:
+            with patch(
+                "secondbrain.rag.providers.anthropic.Anthropic"
+            ) as mock_client_class:
                 mock_client = MagicMock()
-                mock_client.models.list.side_effect = httpx.ConnectError("Connection failed")
+                mock_client.models.list.side_effect = httpx.ConnectError(
+                    "Connection failed"
+                )
                 mock_client_class.return_value = mock_client
 
                 provider = AnthropicLLMProvider()
@@ -181,7 +197,9 @@ class TestAnthropicLLMProviderHealthCheck:
     def test_health_check_catches_all_errors(self):
         """Test health check returns False for all errors."""
         with patch.dict(os.environ, {"SECONDBRAIN_ANTHROPIC_API_KEY": "test-key"}):
-            with patch("secondbrain.rag.providers.anthropic.Anthropic") as mock_client_class:
+            with patch(
+                "secondbrain.rag.providers.anthropic.Anthropic"
+            ) as mock_client_class:
                 mock_client = MagicMock()
                 mock_client.models.list.side_effect = RuntimeError("Unexpected error")
                 mock_client_class.return_value = mock_client
@@ -198,7 +216,9 @@ class TestAnthropicLLMProviderGenerate:
     def test_generate_with_default_params(self):
         """Test generation with default temperature and max_tokens."""
         with patch.dict(os.environ, {"SECONDBRAIN_ANTHROPIC_API_KEY": "test-key"}):
-            with patch("secondbrain.rag.providers.anthropic.Anthropic") as mock_client_class:
+            with patch(
+                "secondbrain.rag.providers.anthropic.Anthropic"
+            ) as mock_client_class:
                 mock_response = MagicMock()
                 mock_response.content = [MagicMock(text="Test response")]
                 mock_client = MagicMock()
@@ -214,7 +234,9 @@ class TestAnthropicLLMProviderGenerate:
     def test_generate_with_custom_temperature(self):
         """Test generation with custom temperature."""
         with patch.dict(os.environ, {"SECONDBRAIN_ANTHROPIC_API_KEY": "test-key"}):
-            with patch("secondbrain.rag.providers.anthropic.Anthropic") as mock_client_class:
+            with patch(
+                "secondbrain.rag.providers.anthropic.Anthropic"
+            ) as mock_client_class:
                 mock_response = MagicMock()
                 mock_response.content = [MagicMock(text="Response")]
                 mock_client = MagicMock()
@@ -230,7 +252,9 @@ class TestAnthropicLLMProviderGenerate:
     def test_generate_with_custom_max_tokens(self):
         """Test generation with custom max_tokens."""
         with patch.dict(os.environ, {"SECONDBRAIN_ANTHROPIC_API_KEY": "test-key"}):
-            with patch("secondbrain.rag.providers.anthropic.Anthropic") as mock_client_class:
+            with patch(
+                "secondbrain.rag.providers.anthropic.Anthropic"
+            ) as mock_client_class:
                 mock_response = MagicMock()
                 mock_response.content = [MagicMock(text="Response")]
                 mock_client = MagicMock()
@@ -246,7 +270,9 @@ class TestAnthropicLLMProviderGenerate:
     def test_generate_uses_default_temperature_when_not_specified(self):
         """Test that default temperature is used when not specified."""
         with patch.dict(os.environ, {"SECONDBRAIN_ANTHROPIC_API_KEY": "test-key"}):
-            with patch("secondbrain.rag.providers.anthropic.Anthropic") as mock_client_class:
+            with patch(
+                "secondbrain.rag.providers.anthropic.Anthropic"
+            ) as mock_client_class:
                 mock_response = MagicMock()
                 mock_response.content = [MagicMock(text="Response")]
                 mock_client = MagicMock()
@@ -262,15 +288,14 @@ class TestAnthropicLLMProviderGenerate:
     def test_generate_raises_service_unavailable_on_api_error(self):
         """Test that APIError is converted to RuntimeError."""
         with patch.dict(os.environ, {"SECONDBRAIN_ANTHROPIC_API_KEY": "test-key"}):
-            with patch("secondbrain.rag.providers.anthropic.Anthropic") as mock_client_class:
+            with patch(
+                "secondbrain.rag.providers.anthropic.Anthropic"
+            ) as mock_client_class:
                 mock_client = MagicMock()
                 mock_request = MagicMock()
                 mock_client.messages.create.side_effect = APIError(
-                    message="API Error",
-                    request=mock_request,
-                    body={}
+                    message="API Error", request=mock_request, body={}
                 )
                 mock_client_class.return_value = mock_client
 
                 provider = AnthropicLLMProvider()
-

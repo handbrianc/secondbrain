@@ -332,7 +332,9 @@ class TestConversationSessionErrorPaths:
         """
         import threading
 
-        session = ConversationSession.create("test-session", mock_storage, context_window=100)
+        session = ConversationSession.create(
+            "test-session", mock_storage, context_window=100
+        )
 
         def add_messages(count):
             for i in range(count):
@@ -449,7 +451,9 @@ class TestConversationSessionErrorPaths:
 
         Error Path: trim_context with valid message count.
         """
-        session = ConversationSession.create("test-session", mock_storage, context_window=5)
+        session = ConversationSession.create(
+            "test-session", mock_storage, context_window=5
+        )
 
         # Add 3 messages (under limit)
         for i in range(3):
@@ -467,7 +471,9 @@ class TestConversationSessionErrorPaths:
 
         Error Path: trim_context with excessive messages.
         """
-        session = ConversationSession.create("test-session", mock_storage, context_window=3)
+        session = ConversationSession.create(
+            "test-session", mock_storage, context_window=3
+        )
 
         # Add 5 messages (over limit)
         for i in range(5):
@@ -562,7 +568,9 @@ class TestConversationSessionErrorPaths:
 
         Error Path: Context window limiting.
         """
-        session = ConversationSession.create("test-session", mock_storage, context_window=3)
+        session = ConversationSession.create(
+            "test-session", mock_storage, context_window=3
+        )
 
         # Add 5 messages
         for i in range(5):

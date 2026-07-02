@@ -1,16 +1,21 @@
 """Abstract base class for vector storage implementations."""
 
-from abc import ABC, abstractmethod
-from collections.abc import Sequence
 import logging
 import math
 import re
+from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from typing import Any
 
 from bson.binary import Binary
 
 from secondbrain.storage.pipeline import build_search_pipeline
-from secondbrain.types import ChunkInfo, SearchResult, _validate_chunk_info, _validate_search_result
+from secondbrain.types import (
+    ChunkInfo,
+    SearchResult,
+    _validate_chunk_info,
+    _validate_search_result,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +111,9 @@ class BaseVectorStorage(ABC):
     # Document preparation helpers (called by concrete store methods)
     # ------------------------------------------------------------------
 
-    def _prepare_embedding_for_storage(self, embedding: list[float]) -> bytes | list[float]:
+    def _prepare_embedding_for_storage(
+        self, embedding: list[float]
+    ) -> bytes | list[float]:
         """Prepare embedding for storage based on config.
 
         Args:
@@ -212,10 +219,14 @@ class BaseVectorStorage(ABC):
     # ------------------------------------------------------------------
 
     @abstractmethod
-    def validate_connection(self, force: bool = False) -> bool: ...  # Provided by ValidatableService
+    def validate_connection(
+        self, force: bool = False
+    ) -> bool: ...  # Provided by ValidatableService
 
     @abstractmethod
-    async def validate_connection_async(self, force: bool = False) -> bool: ...  # Provided by ValidatableService
+    async def validate_connection_async(
+        self, force: bool = False
+    ) -> bool: ...  # Provided by ValidatableService
 
     # ------------------------------------------------------------------
     # Connection guards (call into ValidatableService via subclass)

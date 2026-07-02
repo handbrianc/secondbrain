@@ -4,7 +4,6 @@ This module tests invariants that should hold across a wide range of inputs,
 using hypothesis for automated test case generation.
 """
 
-
 import pytest
 from hypothesis import HealthCheck, assume, given, settings
 from hypothesis import strategies as st
@@ -20,25 +19,26 @@ from secondbrain.search import MAX_QUERY_LENGTH, sanitize_query
 # ----- 1. Emoji clusters (variation selectors, regional indicators) -----
 EMOJI_PATTERN = (
     "["
-    "\U0001F3E7-\U0001F3EF"  # flag emojis (subrange)
-    "\U0001F600-\U0001F64F"  # emoticons
-    "\U0001F680-\U0001F6FF"  # transport & map symbols
-    "\U0001F900-\U0001F9FF"  # supplemental symbols & pictographs
-    "\U0001FA00-\U0001FA6F"  # chess, symbols, extended pictographs
-    "\U0001FB00-\U0001FBFF"  # emoji modification (skin tone, etc.)
+    "\U0001f3e7-\U0001f3ef"  # flag emojis (subrange)
+    "\U0001f600-\U0001f64f"  # emoticons
+    "\U0001f680-\U0001f6ff"  # transport & map symbols
+    "\U0001f900-\U0001f9ff"  # supplemental symbols & pictographs
+    "\U0001fa00-\U0001fa6f"  # chess, symbols, extended pictographs
+    "\U0001fb00-\U0001fbff"  # emoji modification (skin tone, etc.)
     "\U00002702-\U00002702"  # dagger
-    "\U00002600-\U000026FF"  # misc symbols (sun, moon, etc.)
-    "\U0001F004-\U0001F004"  # mahjong tile
-    "\U0001F0CF-\U0001F0CF"  # playing card
-    "\u200D"                 # zero-width joiner (allows ZWJ sequences)
-    "\uFE0F"                 # variation selector-16
-    "\uFE0E"                 # variation selector-15
+    "\U00002600-\U000026ff"  # misc symbols (sun, moon, etc.)
+    "\U0001f004-\U0001f004"  # mahjong tile
+    "\U0001f0cf-\U0001f0cf"  # playing card
+    "\u200d"  # zero-width joiner (allows ZWJ sequences)
+    "\ufe0f"  # variation selector-16
+    "\ufe0e"  # variation selector-15
     "]+"
 )
 
 
 def _random_emoji_str(min_sz: int, max_sz: int) -> str:
     import secrets
+
     lengths = list(range(min_sz, max_sz + 1))
     length = secrets.choice(lengths) if lengths else min_sz
     emoji_ranges = [
@@ -60,44 +60,52 @@ def _random_emoji_str(min_sz: int, max_sz: int) -> str:
         try:
             chars.append(chr(codepoint))
         except ValueError:
-            chars.append("\uFFFD")
+            chars.append("\ufffd")
     return "".join(chars)
 
 
-def emoji_clusters_strategy(min_size: int = 1, max_size: int = 100) -> st.SearchStrategy[str]:
+def emoji_clusters_strategy(
+    min_size: int = 1, max_size: int = 100
+) -> st.SearchStrategy[str]:
     """Strategy producing emoji-heavy strings including ZWJ sequences."""
     # Pre-defined emoji characters as a pool (deterministic, covers key clusters)
     base_emoji_pool = (
-        "\U0001F600\U0001F603\U0001F604\U0001F601\U0001F602\U0001F923"  # smileys
-        "\U0001F970\U0001F60D\U0001F618\U0001F917"  # more faces
-        "\U0001F499\U0001F49A\U0001F49B\U0001F49C"  # hearts
-        "\U0001F3E7\U0001F3E8\U0001F3E9\U0001F3EA"  # flags
-        "\U0001F308\U0001F309\U0001F306\U0001F307"  # world/cultural
-        "\U0001F930\U0001F931\U0001F932\U0001F933"  # gestures
-        "\U0001F385\U0001F393\U0001F3A4\U0001F3A8"  # activity
-        "\U0001F680\U0001F6A8\U0001F6A9\U0001F6AC"  # transport
+        "\U0001f600\U0001f603\U0001f604\U0001f601\U0001f602\U0001f923"  # smileys
+        "\U0001f970\U0001f60d\U0001f618\U0001f917"  # more faces
+        "\U0001f499\U0001f49a\U0001f49b\U0001f49c"  # hearts
+        "\U0001f3e7\U0001f3e8\U0001f3e9\U0001f3ea"  # flags
+        "\U0001f308\U0001f309\U0001f306\U0001f307"  # world/cultural
+        "\U0001f930\U0001f931\U0001f932\U0001f933"  # gestures
+        "\U0001f385\U0001f393\U0001f3a4\U0001f3a8"  # activity
+        "\U0001f680\U0001f6a8\U0001f6a9\U0001f6ac"  # transport
         "\u2764\u2620\u2708\u2709\u2600\u2601\u2602\u2603"  # misc symbols
-        "\U0001F7E2\U0001F7E3\U0001F7E4\U0001F7E5"  # colored circles
-        "\U0001F3FB\U0001F3FC\U0001F3FD\U0001F3FE\U0001F3FF"  # skin tone modifiers
+        "\U0001f7e2\U0001f7e3\U0001f7e4\U0001f7e5"  # colored circles
+        "\U0001f3fb\U0001f3fc\U0001f3fd\U0001f3fe\U0001f3ff"  # skin tone modifiers
     )
-    zwj = "\u200D"
-    vs16 = "\uFE0F"
-    vs15 = "\uFE0E"
+    zwj = "\u200d"
+    vs16 = "\ufe0f"
+    vs15 = "\ufe0e"
     modifier_pool = (
-        zwj + vs16 + vs15 + "\u20E0"  # enclosing combined diacritical mark
+        zwj + vs16 + vs15 + "\u20e0"  # enclosing combined diacritical mark
     )
 
-    return st.lists(
-        st.sampled_from(list(base_emoji_pool)),
-        min_size=min_size,
-        max_size=max_size,
-    ).map(lambda lst: "".join(lst)).flatmap(
-        lambda s: st.builds(
-            lambda mod: s[: max_size - 5] + mod,
-            st.sampled_from(modifier_pool),
+    return (
+        st.lists(
+            st.sampled_from(list(base_emoji_pool)),
+            min_size=min_size,
+            max_size=max_size,
         )
-        if len(s) > 3
-        else st.just(s)
+        .map(lambda lst: "".join(lst))
+        .flatmap(
+            lambda s: (
+                st.builds(
+                    lambda mod: s[: max_size - 5] + mod,
+                    st.sampled_from(modifier_pool),
+                )
+                if len(s) > 3
+                else st.just(s)
+            )
+        )
     )
 
 
@@ -108,23 +116,25 @@ LATIN_POOL = (
     "0123456789 !@#$%^&*()-=_+[]{}|;:',.<>?/"
 )
 CJK_POOL = (
-    "\u4E00\u4E01\u4E02\u4E03\u4E04\u4E05\u4E06\u4E07\u4E08\u4E09"  # basic CJK
-    "\u4E8C\u4E09\u56DB\u4E94\u516D\u4E03\u516B\u4E5D\u5341\u767E"  # numbers
-    "\u65E5\u6708\u706B\u6C34\u6728\u91D1\u571F\u946B\u76D8\u51B0"  # nature
-    "\u4EBA\u5927\u5C0F\u4E2D\u4E0A\u4E0B\u5DE6\u53F3\u5185\u5916"  # directions
-    "\u53EF\u4EE5\u4E0D\u5403\u4E86\u7684\u5462\u54E1\u8BB0\u5FEB"  # common
+    "\u4e00\u4e01\u4e02\u4e03\u4e04\u4e05\u4e06\u4e07\u4e08\u4e09"  # basic CJK
+    "\u4e8c\u4e09\u56db\u4e94\u516d\u4e03\u516b\u4e5d\u5341\u767e"  # numbers
+    "\u65e5\u6708\u706b\u6c34\u6728\u91d1\u571f\u946b\u76d8\u51b0"  # nature
+    "\u4eba\u5927\u5c0f\u4e2d\u4e0a\u4e0b\u5de6\u53f3\u5185\u5916"  # directions
+    "\u53ef\u4ee5\u4e0d\u5403\u4e86\u7684\u5462\u54e1\u8bb0\u5feb"  # common
 )
 ARABIC_POOL = (
-    "\u0627\u0628\u062A\u062B\u062C\u062D\u062E\u062F\u0630\u0631"  # Arabic letters
-    "\u0633\u0634\u0635\u0636\u0637\u0638\u0639\u063A\u0641\u0642"  # more letters
-    "\u0643\u0644\u0645\u0646\u0647\u0648\u064A\u0621\u0643\u0629"  # even more
+    "\u0627\u0628\u062a\u062b\u062c\u062d\u062e\u062f\u0630\u0631"  # Arabic letters
+    "\u0633\u0634\u0635\u0636\u0637\u0638\u0639\u063a\u0641\u0642"  # more letters
+    "\u0643\u0644\u0645\u0646\u0647\u0648\u064a\u0621\u0643\u0629"  # even more
     "\u0660\u0661\u0662\u0663\u0664\u0665\u0666\u0667\u0668\u0669"  # Arabic-Indic digits
     "\u0600\u0601\u0602\u0603\u0604\u0610\u0611\u0612\u0613\u0614"  # Arabic punctuation
 )
-SPACERS = "  \u0020\u3000\u200B"  # regular space, ideographic space, zero-width space
+SPACERS = "  \u0020\u3000\u200b"  # regular space, ideographic space, zero-width space
 
 
-def mixed_script_strategy(min_size: int = 5, max_size: int = 200) -> st.SearchStrategy[str]:
+def mixed_script_strategy(
+    min_size: int = 5, max_size: int = 200
+) -> st.SearchStrategy[str]:
     """Produce strings mixing Latin, CJK, and Arabic scripts in arbitrary order."""
 
     def shuffle_to_string(pool_items: list[str]) -> str:
@@ -148,29 +158,43 @@ def mixed_script_strategy(min_size: int = 5, max_size: int = 200) -> st.SearchSt
 
 # ----- 3. BiDi override characters (RTL/LTR manipulation) -----
 
-BIDI_LRM = "\u200E"   # LEFT-TO-RIGHT MARK
-BIDI_RLM = "\u200F"   # RIGHT-TO-LEFT MARK
-BIDI_LRE = "\u202A"   # LEFT-TO-RIGHT EMBEDDING
-BIDI_RLE = "\u202B"   # RIGHT-TO-LEFT EMBEDDING
-BIDI_LRO = "\u202D"   # LEFT-TO-RIGHT OVERRIDE
-BIDI_RLO = "\u202E"   # RIGHT-TO-LEFT OVERRIDE
-BIDI_PDF = "\u202C"   # POP DIRECTIONAL FORMATTING
-BIDI_ALM = "\u2066"   # ARABIC LETTER MARK (left-to-right isolate)
-BIDI_RLI = "\u2067"   # RIGHT-TO-LEFT ISOLATE
-BIDI_FSI = "\u2068"   # FIRST STRONG ISOLATE
-BIDI_LRI = "\u2069"   # LEFT-TO-RIGHT ISOLATE
-BIDI_PD = "\u202D"    # POP DIRECTIONAL ISOLATE
+BIDI_LRM = "\u200e"  # LEFT-TO-RIGHT MARK
+BIDI_RLM = "\u200f"  # RIGHT-TO-LEFT MARK
+BIDI_LRE = "\u202a"  # LEFT-TO-RIGHT EMBEDDING
+BIDI_RLE = "\u202b"  # RIGHT-TO-LEFT EMBEDDING
+BIDI_LRO = "\u202d"  # LEFT-TO-RIGHT OVERRIDE
+BIDI_RLO = "\u202e"  # RIGHT-TO-LEFT OVERRIDE
+BIDI_PDF = "\u202c"  # POP DIRECTIONAL FORMATTING
+BIDI_ALM = "\u2066"  # ARABIC LETTER MARK (left-to-right isolate)
+BIDI_RLI = "\u2067"  # RIGHT-TO-LEFT ISOLATE
+BIDI_FSI = "\u2068"  # FIRST STRONG ISOLATE
+BIDI_LRI = "\u2069"  # LEFT-TO-RIGHT ISOLATE
+BIDI_PD = "\u202d"  # POP DIRECTIONAL ISOLATE
 
 BIDI_POOL = (
-    BIDI_LRM + BIDI_RLM + BIDI_LRE + BIDI_RLE
-    + BIDI_LRO + BIDI_RLO + BIDI_PDF
-    + BIDI_ALM + BIDI_RLI + BIDI_FSI + BIDI_LRI
+    BIDI_LRM
+    + BIDI_RLM
+    + BIDI_LRE
+    + BIDI_RLE
+    + BIDI_LRO
+    + BIDI_RLO
+    + BIDI_PDF
+    + BIDI_ALM
+    + BIDI_RLI
+    + BIDI_FSI
+    + BIDI_LRI
 )
 
 
-def bidi_override_strategy(min_size: int = 1, max_size: int = 50) -> st.SearchStrategy[str]:
+def bidi_override_strategy(
+    min_size: int = 1, max_size: int = 50
+) -> st.SearchStrategy[str]:
     """Strings annotated with BiDi override / isolation characters."""
-    latin_base = st.text(min_size=1, max_size=50, alphabet=st.characters(min_codepoint=0x41, max_codepoint=0x7A))
+    latin_base = st.text(
+        min_size=1,
+        max_size=50,
+        alphabet=st.characters(min_codepoint=0x41, max_codepoint=0x7A),
+    )
 
     return st.dictionaries(
         keys=st.sampled_from(["ltr", "rtl", "mix"]),
@@ -207,7 +231,7 @@ class TestQuerySanitization:
             )
         )
     )
-    @settings(max_examples=100)
+    @settings(max_examples=150)
     def test_sanitize_preserves_valid_input(self, query: str):
         """Sanitization should preserve valid queries."""
         sanitized = sanitize_query(query)
@@ -228,7 +252,7 @@ class TestQuerySanitization:
             )
         )
     )
-    @settings(max_examples=100)
+    @settings(max_examples=150)
     def test_sanitize_removes_control_characters(self, query: str):
         """Sanitization should remove control characters."""
         try:
@@ -255,7 +279,7 @@ class TestQuerySanitization:
             )
         )
     )
-    @settings(max_examples=100)
+    @settings(max_examples=150)
     def test_sanitize_strips_whitespace(self, query: str):
         """Sanitization should strip leading/trailing whitespace."""
         sanitized = sanitize_query(query)
@@ -280,11 +304,14 @@ class TestSearchQueryValidation:
                 and "onload=" not in s.lower()
                 and "onerror=" not in s.lower()
                 and s.strip()  # Must have non-whitespace content
-                and all(ord(c) not in range(0, 32) and ord(c) not in range(127, 160) for c in s)  # No control chars
+                and all(
+                    ord(c) not in range(0, 32) and ord(c) not in range(127, 160)
+                    for c in s
+                )  # No control chars
             )
         ),
     )
-    @settings(max_examples=100)
+    @settings(max_examples=150)
     def test_sanitize_preserves_valid_input(self, query: str):
         """Valid queries should be preserved (possibly with whitespace stripped)."""
         sanitized = sanitize_query(query)
@@ -303,7 +330,7 @@ class TestSearchQueryValidation:
     @given(
         query=st.text(min_size=1, max_size=MAX_QUERY_LENGTH),
     )
-    @settings(max_examples=100, suppress_health_check=[HealthCheck.filter_too_much])
+    @settings(max_examples=150, suppress_health_check=[HealthCheck.filter_too_much])
     def test_sanitize_removes_control_characters(self, query: str):
         """Sanitized queries should not contain control characters."""
         # Skip queries that are too dangerous to even attempt sanitization
@@ -330,7 +357,7 @@ class TestSearchQueryValidation:
             lambda s: "\x00" not in s and len(s.strip()) > 0
         ),
     )
-    @settings(max_examples=100)
+    @settings(max_examples=150)
     def test_sanitize_strips_whitespace(self, base_query: str):
         """Sanitization should strip leading/trailing whitespace."""
         # Add various whitespace patterns
@@ -376,16 +403,14 @@ class TestSearchConsistency:
             lambda s: "\x00" not in s and len(s.strip()) > 0
         ),
     )
-    @settings(max_examples=100)
+    @settings(max_examples=150)
     def test_query_deterministic_sanitization(self, query: str):
         """Same query should always produce same sanitized result."""
         try:
             sanitized1 = sanitize_query(query)
             sanitized2 = sanitize_query(query)
 
-            assert sanitized1 == sanitized2, (
-                "Sanitization should be deterministic"
-            )
+            assert sanitized1 == sanitized2, "Sanitization should be deterministic"
         except ValueError:
             # Some queries will be rejected - that's fine
             pass
@@ -395,7 +420,7 @@ class TestSearchConsistency:
             lambda s: "\x00" not in s and len(s.strip()) > 0
         ),
     )
-    @settings(max_examples=100)
+    @settings(max_examples=150)
     def test_sanitized_query_meets_length_constraint(self, query: str):
         """Sanitized query should never exceed MAX_QUERY_LENGTH."""
         try:
@@ -416,7 +441,7 @@ class TestSearchConsistency:
             )
         ),
     )
-    @settings(max_examples=100)
+    @settings(max_examples=150)
     def test_sanitized_query_preserves_meaningful_content(self, query: str):
         """Sanitization should preserve alphanumeric content."""
         assume(len(query.strip()) > 0)
@@ -524,7 +549,11 @@ class TestChunkingProperties:
         chunk_size=st.integers(min_value=50, max_value=500),
         chunk_overlap=st.integers(min_value=0, max_value=50).filter(lambda o: o < 50),
     )
-    @settings(max_examples=30, deadline=200, suppress_health_check=[HealthCheck.filter_too_much])
+    @settings(
+        max_examples=30,
+        deadline=200,
+        suppress_health_check=[HealthCheck.filter_too_much],
+    )
     def test_chunking_preserves_text(
         self, text: str, chunk_size: int, chunk_overlap: int
     ):
@@ -563,7 +592,11 @@ class TestChunkingProperties:
         chunk_size=st.integers(min_value=50, max_value=500),
         chunk_overlap=st.integers(min_value=0, max_value=50).filter(lambda o: o < 50),
     )
-    @settings(max_examples=10, deadline=100, suppress_health_check=[HealthCheck.filter_too_much])
+    @settings(
+        max_examples=10,
+        deadline=100,
+        suppress_health_check=[HealthCheck.filter_too_much],
+    )
     def test_chunking_respects_size_limit(
         self, text: str, chunk_size: int, chunk_overlap: int
     ):
@@ -590,11 +623,14 @@ class TestChunkingProperties:
                 f"{chunk['text'][:50]!r}..."
             )
 
-    @pytest.mark.parametrize("chunk_size,text,chunk_overlap", [
-        (50, "a " * 100, 0),
-        (500, "a " * 5, 0),
-        (100, "word " * 20, 10),
-    ])
+    @pytest.mark.parametrize(
+        "chunk_size,text,chunk_overlap",
+        [
+            (50, "a " * 100, 0),
+            (500, "a " * 5, 0),
+            (100, "word " * 20, 10),
+        ],
+    )
     def test_chunking_respects_size_limit_manual(
         self, chunk_size: int, text: str, chunk_overlap: int
     ):
@@ -666,11 +702,17 @@ class TestChunkingCharacterPreservation:
     """
 
     @given(
-        text=st.text(min_size=50, max_size=1000).filter(lambda t: t.strip() and " " in t),
+        text=st.text(min_size=50, max_size=1000).filter(
+            lambda t: t.strip() and " " in t
+        ),
         chunk_size=st.integers(min_value=30, max_value=200),
         chunk_overlap=st.integers(min_value=0, max_value=30),
     )
-    @settings(max_examples=30, deadline=200, suppress_health_check=[HealthCheck.filter_too_much])
+    @settings(
+        max_examples=30,
+        deadline=200,
+        suppress_health_check=[HealthCheck.filter_too_much],
+    )
     def test_chunking_preserves_non_whitespace_chars(
         self, text: str, chunk_size: int, chunk_overlap: int
     ):
@@ -707,11 +749,17 @@ class TestChunkingCharacterPreservation:
         )
 
     @given(
-        text=st.text(min_size=50, max_size=1000).filter(lambda t: t.strip() and " " in t),
+        text=st.text(min_size=50, max_size=1000).filter(
+            lambda t: t.strip() and " " in t
+        ),
         chunk_size=st.integers(min_value=30, max_value=200),
         chunk_overlap=st.integers(min_value=0, max_value=30),
     )
-    @settings(max_examples=30, deadline=200, suppress_health_check=[HealthCheck.filter_too_much])
+    @settings(
+        max_examples=30,
+        deadline=200,
+        suppress_health_check=[HealthCheck.filter_too_much],
+    )
     def test_chunking_word_boundaries_preserved(
         self, text: str, chunk_size: int, chunk_overlap: int
     ):
@@ -753,7 +801,11 @@ class TestChunkingCharacterPreservation:
         chunk_size=st.integers(min_value=50, max_value=400),
         chunk_overlap=st.integers(min_value=5, max_value=50),
     )
-    @settings(max_examples=30, deadline=200, suppress_health_check=[HealthCheck.filter_too_much])
+    @settings(
+        max_examples=30,
+        deadline=200,
+        suppress_health_check=[HealthCheck.filter_too_much],
+    )
     def test_chunking_overlap_actually_exists(
         self, text: str, chunk_size: int, chunk_overlap: int
     ):
@@ -781,7 +833,9 @@ class TestChunkingCharacterPreservation:
             curr_text = chunks[i]["text"]
 
             # Check for any overlap
-            for overlap_len in range(min(chunk_overlap + 10, len(prev_text), len(curr_text)), 0, -1):
+            for overlap_len in range(
+                min(chunk_overlap + 10, len(prev_text), len(curr_text)), 0, -1
+            ):
                 if prev_text[-overlap_len:] == curr_text[:overlap_len]:
                     chunks_with_overlap += 1
                     break
@@ -789,7 +843,7 @@ class TestChunkingCharacterPreservation:
         # Require at least 30% of chunk pairs to have detectable overlap
         # (lower threshold to account for page boundaries, tiny chunks, etc.)
         assert chunks_with_overlap >= max(1, int(len(chunks) * 0.3)), (
-            f"Only {chunks_with_overlap}/{len(chunks)-1} chunk pairs have overlap. "
+            f"Only {chunks_with_overlap}/{len(chunks) - 1} chunk pairs have overlap. "
             f"Expected overlap={chunk_overlap}"
         )
 
@@ -807,7 +861,11 @@ class TestChunkingSizeConstraints:
         chunk_size=st.integers(min_value=30, max_value=300),
         chunk_overlap=st.integers(min_value=0, max_value=30),
     )
-    @settings(max_examples=30, deadline=200, suppress_health_check=[HealthCheck.filter_too_much])
+    @settings(
+        max_examples=30,
+        deadline=200,
+        suppress_health_check=[HealthCheck.filter_too_much],
+    )
     def test_all_chunks_within_size_limit(
         self, text: str, chunk_size: int, chunk_overlap: int
     ):
@@ -840,7 +898,11 @@ class TestChunkingSizeConstraints:
         chunk_size=st.integers(min_value=50, max_value=200),
         chunk_overlap=st.integers(min_value=0, max_value=20),
     )
-    @settings(max_examples=30, deadline=200, suppress_health_check=[HealthCheck.filter_too_much])
+    @settings(
+        max_examples=30,
+        deadline=200,
+        suppress_health_check=[HealthCheck.filter_too_much],
+    )
     def test_chunk_count_scales_with_text_length(
         self, text: str, chunk_size: int, chunk_overlap: int
     ):
@@ -865,7 +927,9 @@ class TestChunkingSizeConstraints:
 
         # Calculate expected chunk count
         effective_chunk_size = chunk_size - chunk_overlap
-        expected_chunks = len(text) / effective_chunk_size if effective_chunk_size > 0 else len(text)
+        expected_chunks = (
+            len(text) / effective_chunk_size if effective_chunk_size > 0 else len(text)
+        )
 
         # Allow 100% variance due to word boundaries, page breaks, etc.
         # This is intentionally loose to avoid false negatives
@@ -890,7 +954,7 @@ class TestDataValidationProperties:
     @given(
         size_bytes=st.integers(min_value=0, max_value=10_000_000_000),
     )
-    @settings(max_examples=100)
+    @settings(max_examples=200)
     def test_filesize_non_negative(self, size_bytes: int):
         """FileSize should accept any non-negative integer."""
         # Valid case
@@ -901,7 +965,7 @@ class TestDataValidationProperties:
     @given(
         size_bytes=st.integers(min_value=-1000, max_value=-1),
     )
-    @settings(max_examples=100)
+    @settings(max_examples=200)
     def test_filesize_rejects_negative(self, size_bytes: int):
         """FileSize should reject negative values."""
         with pytest.raises(ValueError):
@@ -910,7 +974,7 @@ class TestDataValidationProperties:
     @given(
         page_num=st.integers(min_value=1, max_value=10000),
     )
-    @settings(max_examples=100)
+    @settings(max_examples=200)
     def test_pagenumber_positive(self, page_num: int):
         """PageNumber should accept positive integers (1-indexed)."""
         page = PageNumber(number=page_num)
@@ -920,7 +984,7 @@ class TestDataValidationProperties:
     @given(
         page_num=st.integers(min_value=-100, max_value=0),
     )
-    @settings(max_examples=100)
+    @settings(max_examples=200)
     def test_pagenumber_rejects_non_positive(self, page_num: int):
         """PageNumber should reject zero and negative values."""
         with pytest.raises(ValueError):
@@ -930,10 +994,8 @@ class TestDataValidationProperties:
         chunk_text=st.text(min_size=1, max_size=1000).filter(lambda t: t.strip()),
         chunk_id=st.text(min_size=1, max_size=50).filter(lambda t: t.strip()),
     )
-    @settings(max_examples=100)
-    def test_document_chunk_valid_inputs(
-        self, chunk_text: str, chunk_id: str
-    ):
+    @settings(max_examples=200)
+    def test_document_chunk_valid_inputs(self, chunk_text: str, chunk_id: str):
         """DocumentChunk should accept valid non-empty text and ID."""
         assume(len(chunk_text.strip()) > 0)
         assume(len(chunk_id.strip()) > 0)
@@ -963,7 +1025,7 @@ class TestDataValidationProperties:
     @given(
         chunk_text=st.just("") | st.just("   ") | st.just("\n\t"),
     )
-    @settings(max_examples=100)
+    @settings(max_examples=200)
     def test_document_chunk_rejects_empty_text(self, chunk_text: str):
         """DocumentChunk should reject empty or whitespace-only text."""
         from datetime import UTC, datetime

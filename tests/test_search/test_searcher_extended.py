@@ -11,6 +11,7 @@ from secondbrain.search import Searcher, sanitize_query
 def mock_searcher():
     """Create a mock Searcher class with context manager methods."""
     from unittest.mock import AsyncMock
+
     mock = MagicMock(spec=Searcher)
     mock.__enter__ = MagicMock(return_value=mock)
     mock.__exit__ = MagicMock(return_value=None)
@@ -88,14 +89,14 @@ class TestSearcherContextManager:
         """Test sync context manager."""
         with mock_searcher as searcher:
             assert searcher is not None
-            assert hasattr(searcher, 'search')
+            assert hasattr(searcher, "search")
 
     @pytest.mark.asyncio
     async def test_context_manager_async(self, mock_searcher):
         """Test async context manager."""
         async with mock_searcher as searcher:
             assert searcher is not None
-            assert hasattr(searcher, 'search')
+            assert hasattr(searcher, "search")
 
     def test_close_releases_resources(self, mock_searcher):
         """Test close releases resources."""

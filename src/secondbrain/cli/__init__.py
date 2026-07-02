@@ -34,7 +34,7 @@ def cli(ctx: click.Context, verbose: bool) -> None:
 
 # Import and register commands after cli group is defined
 # This ensures commands are properly decorated and registered
-from . import commands  # noqa: E402
+from . import commands
 
 
 def main() -> None:

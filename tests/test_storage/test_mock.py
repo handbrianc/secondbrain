@@ -86,7 +86,7 @@ class TestMockVectorStorageStore:
             "chunk_id": "test-1",
             "text": "Content",
             "metadata": {"source": "test.pdf", "page": 1},
-            "embedding": [0.1, 0.2, 0.3]
+            "embedding": [0.1, 0.2, 0.3],
         }
 
         storage.store(chunk)

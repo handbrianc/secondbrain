@@ -30,7 +30,9 @@ from secondbrain.exceptions import (
 class TestEmbeddingFailureScenarios:
     """Tests for embedding generation failure handling."""
 
-    @patch("secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config")
+    @patch(
+        "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
+    )
     def test_ingest_handles_embedding_failure_gracefully(
         self, mock_factory: MagicMock, tmp_path: Path, mocked_pdf_extraction: MagicMock
     ) -> None:
@@ -54,10 +56,16 @@ class TestEmbeddingFailureScenarios:
         assert "failed" in result
         assert result["failed"] >= 1
 
-    @patch("secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config")
+    @patch(
+        "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
+    )
     @patch("secondbrain.storage.VectorStorage")
     def test_ingest_continues_on_single_embedding_error(
-        self, mock_vs: MagicMock, mock_factory: MagicMock, tmp_path: Path, mocked_pdf_extraction: MagicMock
+        self,
+        mock_vs: MagicMock,
+        mock_factory: MagicMock,
+        tmp_path: Path,
+        mocked_pdf_extraction: MagicMock,
     ) -> None:
         mock_embedding = MagicMock()
         call_count = 0
@@ -87,7 +95,9 @@ class TestEmbeddingFailureScenarios:
         assert "success" in result
         assert "failed" in result
 
-    @patch("secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config")
+    @patch(
+        "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
+    )
     def test_embedding_timeout_handling(
         self, mock_factory: MagicMock, tmp_path: Path, mocked_pdf_extraction: MagicMock
     ) -> None:
@@ -96,9 +106,7 @@ class TestEmbeddingFailureScenarios:
         mock_embedding.generate_batch.side_effect = TimeoutError(
             "Embedding generation timed out"
         )
-        mock_embedding.generate.side_effect = TimeoutError(
-            "Single embedding timed out"
-        )
+        mock_embedding.generate.side_effect = TimeoutError("Single embedding timed out")
         mock_factory.return_value = mock_embedding
 
         ingestor = DocumentIngestor(verbose=True)
@@ -111,7 +119,9 @@ class TestEmbeddingFailureScenarios:
         assert "failed" in result
         assert result["failed"] >= 1
 
-    @patch("secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config")
+    @patch(
+        "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
+    )
     def test_embedding_rate_limit_backoff(
         self, mock_factory: MagicMock, tmp_path: Path, mocked_pdf_extraction: MagicMock
     ) -> None:
@@ -120,9 +130,7 @@ class TestEmbeddingFailureScenarios:
         mock_embedding.generate_batch.side_effect = EmbeddingError(
             "Rate limit exceeded"
         )
-        mock_embedding.generate.side_effect = EmbeddingError(
-            "Rate limit exceeded"
-        )
+        mock_embedding.generate.side_effect = EmbeddingError("Rate limit exceeded")
         mock_factory.return_value = mock_embedding
 
         ingestor = DocumentIngestor(verbose=True)
@@ -134,7 +142,9 @@ class TestEmbeddingFailureScenarios:
 
         assert "failed" in result
 
-    @patch("secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config")
+    @patch(
+        "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
+    )
     def test_fallback_embedding_provider_on_failure(
         self, mock_factory: MagicMock, tmp_path: Path, mocked_pdf_extraction: MagicMock
     ) -> None:
@@ -169,7 +179,9 @@ class TestEmbeddingFailureScenarios:
 class TestFileProcessingErrors:
     """Tests for file processing error scenarios."""
 
-    @patch("secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config")
+    @patch(
+        "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
+    )
     def test_ingest_handles_permission_denied(
         self, mock_factory: MagicMock, tmp_path: Path
     ) -> None:
@@ -198,7 +210,9 @@ class TestFileProcessingErrors:
         finally:
             test_file.chmod(0o644)
 
-    @patch("secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config")
+    @patch(
+        "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
+    )
     def test_ingest_handles_file_not_found_during_processing(
         self, mock_factory: MagicMock, tmp_path: Path
     ) -> None:
@@ -220,7 +234,9 @@ class TestFileProcessingErrors:
 
         assert "failed" in result
 
-    @patch("secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config")
+    @patch(
+        "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
+    )
     def test_ingest_handles_corrupted_file_gracefully(
         self, mock_factory: MagicMock, tmp_path: Path
     ) -> None:
@@ -242,7 +258,9 @@ class TestFileProcessingErrors:
         assert isinstance(result, dict)
         assert "success" in result or "failed" in result
 
-    @patch("secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config")
+    @patch(
+        "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
+    )
     def test_ingest_handles_encoding_errors(
         self, mock_factory: MagicMock, tmp_path: Path
     ) -> None:
@@ -268,7 +286,9 @@ class TestFileProcessingErrors:
 class TestMemoryExhaustion:
     """Tests for memory exhaustion scenarios."""
 
-    @patch("secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config")
+    @patch(
+        "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
+    )
     def test_ingest_handles_memory_exhaustion_during_batch(
         self, mock_factory: MagicMock, tmp_path: Path, mocked_pdf_extraction: MagicMock
     ) -> None:
@@ -293,7 +313,9 @@ class TestMemoryExhaustion:
 
         assert "failed" in result
 
-    @patch("secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config")
+    @patch(
+        "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
+    )
     def test_chunking_falls_back_to_smaller_batches_on_oom(
         self, mock_factory: MagicMock, tmp_path: Path, mocked_pdf_extraction: MagicMock
     ) -> None:
@@ -346,15 +368,18 @@ class TestMemoryExhaustion:
         test_file.write_text("sample content")
 
         mock_embedding = MagicMock()
-        mock_embedding.generate_batch = MagicMock(
-            return_value=[[0.1] * 384]
-        )
+        mock_embedding.generate_batch = MagicMock(return_value=[[0.1] * 384])
         mock_embedding.generate = MagicMock(return_value=[0.1] * 384)
 
-        with patch("time.sleep", return_value=None), \
-             patch("gc.collect", return_value=None), \
-             patch("secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config", return_value=mock_embedding), \
-             patch("secondbrain.storage.VectorStorage.store_batch", return_value=None):
+        with (
+            patch("time.sleep", return_value=None),
+            patch("gc.collect", return_value=None),
+            patch(
+                "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config",
+                return_value=mock_embedding,
+            ),
+            patch("secondbrain.storage.VectorStorage.store_batch", return_value=None),
+        ):
             result = ingestor.ingest(str(tmp_path), recursive=False, cores=1)
 
         assert isinstance(result, dict)
@@ -363,7 +388,9 @@ class TestMemoryExhaustion:
 class TestDatabaseConnectionFailures:
     """Tests for MongoDB connection failure scenarios."""
 
-    @patch("secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config")
+    @patch(
+        "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
+    )
     def test_ingest_handles_mongo_connection_failure(
         self, mock_factory: MagicMock, tmp_path: Path, mocked_pdf_extraction: MagicMock
     ) -> None:
@@ -388,7 +415,9 @@ class TestDatabaseConnectionFailures:
 
         assert "failed" in result
 
-    @patch("secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config")
+    @patch(
+        "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
+    )
     def test_ingest_retries_on_mongo_timeout(
         self, mock_factory: MagicMock, tmp_path: Path
     ) -> None:
@@ -414,7 +443,9 @@ class TestDatabaseConnectionFailures:
         assert "failed" in result
         assert result["failed"] == 1
 
-    @patch("secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config")
+    @patch(
+        "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
+    )
     def test_ingest_graceful_degradation_on_db_failure(
         self, mock_factory: MagicMock, tmp_path: Path, mocked_pdf_extraction: MagicMock
     ) -> None:
@@ -443,7 +474,9 @@ class TestDatabaseConnectionFailures:
 class TestMultithreadedErrorHandling:
     """Tests for error handling in multithreaded ingestion."""
 
-    @patch("secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config")
+    @patch(
+        "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
+    )
     def test_threaded_ingest_handles_partial_failures(
         self, mock_factory: MagicMock, tmp_path: Path, mocked_pdf_extraction: MagicMock
     ) -> None:
@@ -468,7 +501,9 @@ class TestMultithreadedErrorHandling:
         assert isinstance(result["success"], int)
         assert isinstance(result["failed"], int)
 
-    @patch("secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config")
+    @patch(
+        "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
+    )
     def test_multiprocess_ingest_handles_worker_crashes(
         self, mock_factory: MagicMock, tmp_path: Path, mocked_pdf_extraction: MagicMock
     ) -> None:

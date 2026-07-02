@@ -143,7 +143,9 @@ class TestCoverageGapsStoreEmbeddingBatch:
 class TestCoverageGapsProcessParallel:
     """Tests for process_parallel_with_progress (lines 1427-1530)."""
 
-    @patch("secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config")
+    @patch(
+        "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
+    )
     def test_process_parallel_handles_failure(
         self, mock_factory: MagicMock, tmp_path: Path
     ) -> None:
@@ -175,7 +177,9 @@ class TestCoverageGapsProcessParallel:
 class TestCoverageGapsThreadPool:
     """Tests for thread pool processing (lines 1551-1597)."""
 
-    @patch("secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config")
+    @patch(
+        "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
+    )
     def test_thread_process_with_callback(
         self, mock_factory: MagicMock, tmp_path: Path
     ) -> None:
@@ -202,7 +206,9 @@ class TestCoverageGapsThreadPool:
         with (
             patch.object(ingestor, "_extract_text", return_value=[]),
             patch.object(ingestor, "_build_documents_with_embeddings", return_value=[]),
-            patch.object(ingestor, "_process_parallel_with_progress", return_value=(1, 0)),
+            patch.object(
+                ingestor, "_process_parallel_with_progress", return_value=(1, 0)
+            ),
         ):
             result = ingestor.ingest(str(test_file))
 
@@ -327,7 +333,9 @@ class TestCoverageGapsAsync:
         assert result == {}
 
     @pytest.mark.asyncio
-    @patch("secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config")
+    @patch(
+        "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
+    )
     async def test_async_ingest_with_streaming_disabled(
         self, mock_factory: MagicMock, tmp_path: Path
     ) -> None:
@@ -345,7 +353,9 @@ class TestCoverageGapsAsync:
 
         # Mock methods
         with patch.object(ingestor, "_extract_text", return_value=[]):
-            with patch.object(ingestor, "_build_documents_with_embeddings", return_value=[]):
+            with patch.object(
+                ingestor, "_build_documents_with_embeddings", return_value=[]
+            ):
                 result = await ingestor.ingest_async(str(test_file))
 
         assert result["success"] >= 0

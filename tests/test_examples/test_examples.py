@@ -32,4 +32,6 @@ class TestAsyncWorkflow:
 
         result = asyncio.run(run_async_workflow(test_dir))
 
-        assert result.get("success", 0) >= 1, f"Expected at least 1 ingestion, got {result}"
+        assert result.get("success", 0) >= 1, (
+            f"Expected at least 1 ingestion, got {result}"
+        )

@@ -4,6 +4,9 @@ Provides AnthropicLLMProvider class that implements the LocalLLMProvider protoco
 for using Anthropic Claude as an LLM backend.
 """
 
+# mypy: disable-error-code=union-attr
+# mypy: disable-error-code=attr-defined
+
 import contextlib
 import os
 
@@ -219,11 +222,11 @@ class AnthropicLLMProvider(LocalLLMProvider):
 
             for event in response:
                 if event.type == "content_block_delta":
-                    if hasattr(event.delta, "text") and event.delta.text:  # type: ignore
+                    if hasattr(event.delta, "text") and event.delta.text:
                         full_content += event.delta.text
                         on_chunk(event.delta.text, None)
 
-                    if hasattr(event.delta, "thinking") and event.delta.thinking:  # type: ignore
+                    if hasattr(event.delta, "thinking") and event.delta.thinking:
                         full_reasoning += event.delta.thinking
                         on_chunk("", event.delta.thinking)
 
@@ -260,11 +263,11 @@ class AnthropicLLMProvider(LocalLLMProvider):
 
             async for event in response:
                 if event.type == "content_block_delta":
-                    if hasattr(event.delta, "text") and event.delta.text:  # type: ignore
+                    if hasattr(event.delta, "text") and event.delta.text:
                         full_content += event.delta.text
                         on_chunk(event.delta.text, None)
 
-                    if hasattr(event.delta, "thinking") and event.delta.thinking:  # type: ignore
+                    if hasattr(event.delta, "thinking") and event.delta.thinking:
                         on_chunk("", event.delta.thinking)
 
             return full_content
@@ -300,6 +303,6 @@ class AnthropicLLMProvider(LocalLLMProvider):
                 self._client.close()
             self._client = None  # type: ignore[assignment]
         if self._async_client is not None:
-            await self._async_client.close()  # type: ignore[attr-defined]
+            await self._async_client.close()
             self._async_client = None  # type: ignore[assignment]
         self._api_key = None

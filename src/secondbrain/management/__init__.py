@@ -4,7 +4,7 @@ This module provides classes for listing, deleting, and checking status
 of documents stored in the vector database.
 """
 
-from typing import Any, Self
+from typing import Any, Self, cast
 
 from secondbrain.storage import ChunkInfo, DatabaseStats, VectorStorage
 from secondbrain.utils.connections import ensure_service_available
@@ -156,4 +156,4 @@ class StatusChecker(BaseManager):
         -------
             Dictionary of database statistics.
         """
-        return self.storage.get_stats()
+        return cast(DatabaseStats, self.storage.get_stats())

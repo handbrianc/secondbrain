@@ -17,7 +17,7 @@ class TestMockSearcherInit:
         searcher = MockSearcher()
 
         assert searcher.verbose is False
-        assert hasattr(searcher, '_test_chunks')
+        assert hasattr(searcher, "_test_chunks")
         assert len(searcher._test_chunks) > 0
 
     def test_init_with_verbose_true(self):
@@ -36,8 +36,15 @@ class TestMockSearcherInit:
         """Test that test chunks have required fields."""
         searcher = MockSearcher()
 
-        required_fields = ['chunk_id', 'source_file', 'page_number',
-                          'chunk_text', 'file_type', 'metadata', 'similarity']
+        required_fields = [
+            "chunk_id",
+            "source_file",
+            "page_number",
+            "chunk_text",
+            "file_type",
+            "metadata",
+            "similarity",
+        ]
 
         for chunk in searcher._test_chunks:
             for field in required_fields:
@@ -75,8 +82,8 @@ class TestMockSearcherSearch:
 
         # Verify results are returned (sorting is internal implementation)
         assert len(results) > 0
-        assert all('similarity' in chunk for chunk in results)
-        assert all('chunk_text' in chunk for chunk in results)
+        assert all("similarity" in chunk for chunk in results)
+        assert all("chunk_text" in chunk for chunk in results)
 
     def test_search_chunk_has_all_fields(self):
         """Test that each returned chunk has all required fields."""
@@ -84,8 +91,15 @@ class TestMockSearcherSearch:
 
         results = searcher.search("test query")
 
-        required_fields = ['chunk_id', 'source_file', 'page_number',
-                          'chunk_text', 'file_type', 'metadata', 'similarity']
+        required_fields = [
+            "chunk_id",
+            "source_file",
+            "page_number",
+            "chunk_text",
+            "file_type",
+            "metadata",
+            "similarity",
+        ]
 
         for chunk in results:
             for field in required_fields:
@@ -117,7 +131,7 @@ class TestMockSearcherSearch:
 
         # Verify we get the predefined chunk about chunk size
         assert len(results) > 0
-        assert any('chunk size' in chunk['chunk_text'].lower() for chunk in results)
+        assert any("chunk size" in chunk["chunk_text"].lower() for chunk in results)
 
     def test_search_adds_fallback_similarity_when_missing(self):
         """Test that search adds similarity=0.8 when chunk lacks similarity key.
@@ -233,7 +247,7 @@ class TestMockSearcherContent:
         results = searcher.search("configuration")
 
         assert len(results) > 0
-        assert any('config' in chunk['chunk_text'].lower() for chunk in results)
+        assert any("config" in chunk["chunk_text"].lower() for chunk in results)
 
     def test_has_architecture_chunk(self):
         """Test that mock data includes architecture-related chunks."""
@@ -242,7 +256,7 @@ class TestMockSearcherContent:
         results = searcher.search("architecture")
 
         assert len(results) > 0
-        assert any('architecture' in chunk['chunk_text'].lower() for chunk in results)
+        assert any("architecture" in chunk["chunk_text"].lower() for chunk in results)
 
     def test_has_mongodb_chunk(self):
         """Test that mock data includes MongoDB-related chunks."""
@@ -251,29 +265,29 @@ class TestMockSearcherContent:
         results = searcher.search("MongoDB")
 
         assert len(results) > 0
-        assert any('mongodb' in chunk['chunk_text'].lower() for chunk in results)
+        assert any("mongodb" in chunk["chunk_text"].lower() for chunk in results)
 
     def test_chunks_have_correct_source_files(self):
         """Test that chunks reference correct source files."""
         searcher = MockSearcher()
 
-        source_files = set(chunk['source_file'] for chunk in searcher._test_chunks)
+        source_files = set(chunk["source_file"] for chunk in searcher._test_chunks)
 
-        assert 'tests/config.md' in source_files
-        assert 'tests/architecture.md' in source_files
+        assert "tests/config.md" in source_files
+        assert "tests/architecture.md" in source_files
 
     def test_chunks_have_valid_page_numbers(self):
         """Test that all chunks have valid page numbers."""
         searcher = MockSearcher()
 
         for chunk in searcher._test_chunks:
-            assert isinstance(chunk['page_number'], int)
-            assert chunk['page_number'] >= 1
+            assert isinstance(chunk["page_number"], int)
+            assert chunk["page_number"] >= 1
 
     def test_chunks_have_valid_similarity_scores(self):
         """Test that all chunks have valid similarity scores."""
         searcher = MockSearcher()
 
         for chunk in searcher._test_chunks:
-            assert isinstance(chunk['similarity'], (int, float))
-            assert 0 <= chunk['similarity'] <= 1
+            assert isinstance(chunk["similarity"], (int, float))
+            assert 0 <= chunk["similarity"] <= 1

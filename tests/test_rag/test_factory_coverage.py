@@ -62,9 +62,7 @@ class TestCreateLLMProvider:
         # Setup
         mock_cfg = MagicMock()
         mock_config.return_value = mock_cfg
-        mock_factory.create_from_config.side_effect = Exception(
-            "Initialization failed"
-        )
+        mock_factory.create_from_config.side_effect = Exception("Initialization failed")
 
         # Execute & Assert
         with pytest.raises(RuntimeError) as exc_info:
@@ -113,9 +111,11 @@ class TestFactoryModuleExports:
     def test_create_llm_provider_in_all(self):
         """Test create_llm_provider is exported."""
         from secondbrain.rag import factory
+
         assert "create_llm_provider" in factory.__all__
 
     def test_create_query_rewriter_in_all(self):
         """Test create_query_rewriter is exported."""
         from secondbrain.rag import factory
+
         assert "create_query_rewriter" in factory.__all__

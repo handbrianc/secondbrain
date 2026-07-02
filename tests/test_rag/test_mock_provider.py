@@ -12,7 +12,10 @@ class TestMockLLMProviderInit:
         """Test initialization with default parameters."""
         provider = MockLLMProvider()
 
-        assert provider._default_response == "This is a mock response generated for testing purposes."
+        assert (
+            provider._default_response
+            == "This is a mock response generated for testing purposes."
+        )
         assert provider._response_map == {}
 
     def test_init_with_custom_default_response(self):
@@ -34,8 +37,7 @@ class TestMockLLMProviderInit:
     def test_init_with_both_parameters(self):
         """Test initialization with both default and response map."""
         provider = MockLLMProvider(
-            default_response="Default",
-            response_map={"test": "mapped"}
+            default_response="Default", response_map={"test": "mapped"}
         )
 
         assert provider._default_response == "Default"
@@ -89,8 +91,7 @@ class TestMockLLMProviderGenerate:
     def test_generate_uses_response_map_first(self):
         """Test that response map takes precedence over default."""
         provider = MockLLMProvider(
-            default_response="Default",
-            response_map={"hello": "Hello response"}
+            default_response="Default", response_map={"hello": "Hello response"}
         )
 
         response = provider.generate("Say hello to me")
@@ -101,10 +102,7 @@ class TestMockLLMProviderGenerate:
     def test_generate_first_match_wins(self):
         """Test that first matching pattern wins in response map."""
         provider = MockLLMProvider(
-            response_map={
-                "hello": "First match",
-                "hello world": "Second match"
-            }
+            response_map={"hello": "First match", "hello world": "Second match"}
         )
 
         response = provider.generate("Say hello world")
@@ -151,9 +149,7 @@ class TestMockLLMProviderAGenerate:
     @pytest.mark.asyncio
     async def test_agenerate_uses_response_map(self):
         """Test that agenerate uses response map."""
-        provider = MockLLMProvider(
-            response_map={"test": "Mapped async response"}
-        )
+        provider = MockLLMProvider(response_map={"test": "Mapped async response"})
 
         response = await provider.agenerate("This is a test")
 
@@ -164,11 +160,7 @@ class TestMockLLMProviderAGenerate:
         """Test agenerate with temperature and max_tokens."""
         provider = MockLLMProvider()
 
-        response = await provider.agenerate(
-            "Test",
-            temperature=0.7,
-            max_tokens=50
-        )
+        response = await provider.agenerate("Test", temperature=0.7, max_tokens=50)
 
         assert "temperature: 0.7" in response
         assert "max_tokens: 50" in response
@@ -214,8 +206,7 @@ class TestMockLLMProviderEdgeCases:
     def test_response_map_with_empty_string_key(self):
         """Test response map with empty string as key."""
         provider = MockLLMProvider(
-            default_response="Default",
-            response_map={"": "Empty key response"}
+            default_response="Default", response_map={"": "Empty key response"}
         )
 
         # Empty string is in all strings, so should match
@@ -266,8 +257,7 @@ class TestMockLLMProviderHealthCheck:
     def test_health_check_with_custom_response(self):
         """Test that health_check returns True even with custom configuration."""
         provider = MockLLMProvider(
-            default_response="Custom",
-            response_map={"test": "mapped"}
+            default_response="Custom", response_map={"test": "mapped"}
         )
 
         result = provider.health_check()
@@ -325,8 +315,7 @@ class TestMockLLMProviderChat:
     def test_chat_uses_response_map(self):
         """Test that chat uses response map when pattern matches."""
         provider = MockLLMProvider(
-            default_response="Default",
-            response_map={"hello": "Hello response"}
+            default_response="Default", response_map={"hello": "Hello response"}
         )
 
         messages = [{"role": "user", "content": "Say hello"}]
@@ -341,7 +330,7 @@ class TestMockLLMProviderChat:
         messages = [
             {"role": "user", "content": "First message"},
             {"role": "assistant", "content": "Response"},
-            {"role": "user", "content": "Second message"}
+            {"role": "user", "content": "Second message"},
         ]
 
         response = provider.chat(messages)
@@ -368,7 +357,7 @@ class TestMockLLMProviderChat:
 
         messages = [
             {"role": "assistant", "content": "Previous response"},
-            {"role": "system", "content": "System instruction"}
+            {"role": "system", "content": "System instruction"},
         ]
 
         response = provider.chat(messages)
@@ -383,7 +372,7 @@ class TestMockLLMProviderChat:
         messages = [
             {"role": "user", "content": "First"},
             {"role": "user", "content": "Second"},
-            {"role": "user", "content": "Third"}
+            {"role": "user", "content": "Third"},
         ]
 
         response = provider.chat(messages)

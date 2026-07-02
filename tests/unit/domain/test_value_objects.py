@@ -25,13 +25,17 @@ def expected_dim(default_config: Config) -> int:
 class TestMakeEmbeddingVectorValid:
     """Tests for make_embedding_vector with valid inputs."""
 
-    def test_make_embedding_vector_valid(self, default_config: Config, expected_dim: int) -> None:
+    def test_make_embedding_vector_valid(
+        self, default_config: Config, expected_dim: int
+    ) -> None:
         """Test that valid dimension matching config is accepted without error."""
         vector = make_embedding_vector([0.1] * expected_dim)
         assert len(vector) == expected_dim
         assert isinstance(vector, list)
 
-    def test_make_embedding_vector_correct_every_element(self, default_config: Config, expected_dim: int) -> None:
+    def test_make_embedding_vector_correct_every_element(
+        self, default_config: Config, expected_dim: int
+    ) -> None:
         """Test that all elements are preserved unchanged."""
         vals = [float(i) / expected_dim for i in range(expected_dim)]
         vector = make_embedding_vector(vals)
@@ -55,15 +59,21 @@ class TestMakeEmbeddingVectorInvalid:
 
     def test_make_embedding_vector_boundary_minus_one(self, expected_dim: int) -> None:
         """Test that (dim-1) raises ValueError."""
-        with pytest.raises(ValueError, match=f"got {expected_dim - 1}.*expected {expected_dim}"):
+        with pytest.raises(
+            ValueError, match=f"got {expected_dim - 1}.*expected {expected_dim}"
+        ):
             make_embedding_vector([0.1] * (expected_dim - 1))
 
     def test_make_embedding_vector_boundary_plus_one(self, expected_dim: int) -> None:
         """Test that (dim+1) raises ValueError."""
-        with pytest.raises(ValueError, match=f"got {expected_dim + 1}.*expected {expected_dim}"):
+        with pytest.raises(
+            ValueError, match=f"got {expected_dim + 1}.*expected {expected_dim}"
+        ):
             make_embedding_vector([0.1] * (expected_dim + 1))
 
-    def test_make_embedding_vector_integer_raises_type_error(self, expected_dim: int) -> None:
+    def test_make_embedding_vector_integer_raises_type_error(
+        self, expected_dim: int
+    ) -> None:
         """Test that integer input raises TypeError because int is not iterable.
 
         Passing an integer directly (not wrapped in a list) triggers TypeError
@@ -72,7 +82,9 @@ class TestMakeEmbeddingVectorInvalid:
         with pytest.raises(TypeError):
             make_embedding_vector(42)  # type: ignore
 
-    def test_make_embedding_vector_none_raises_type_error(self, expected_dim: int) -> None:
+    def test_make_embedding_vector_none_raises_type_error(
+        self, expected_dim: int
+    ) -> None:
         """Test that None input raises ValueError."""
         with pytest.raises((TypeError, ValueError)):
             make_embedding_vector(None)

@@ -79,9 +79,9 @@ class TestDocumentIngestion:
 
             mock_embed_instance = MagicMock()
             mock_embed_instance.generate.side_effect = make_emb
-            mock_embed_instance.generate_batch.side_effect = (
-                lambda texts: [make_emb(t) for t in texts]
-            )
+            mock_embed_instance.generate_batch.side_effect = lambda texts: [
+                make_emb(t) for t in texts
+            ]
             mock_embed_instance.validate_connection.return_value = True
 
             ingestor = DocumentIngestor(chunk_size=500, chunk_overlap=50, verbose=False)
@@ -143,9 +143,9 @@ class TestDocumentIngestion:
 
             mock_embed = MagicMock()
             mock_embed.generate.side_effect = make_emb
-            mock_embed.generate_batch.side_effect = (
-                lambda texts: [make_emb(t) for t in texts]
-            )
+            mock_embed.generate_batch.side_effect = lambda texts: [
+                make_emb(t) for t in texts
+            ]
             mock_embed.validate_connection.return_value = True
 
             mock_storage = MagicMock()
@@ -216,13 +216,17 @@ class TestFullWorkflow:
         pdf_path.write_text("Test content for full workflow")
 
         try:
-            with patch("secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config") as mock_factory:
+            with patch(
+                "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
+            ) as mock_factory:
                 mock_embed = MagicMock()
                 mock_embed.generate.side_effect = mock_generate
                 mock_embed.validate_connection.return_value = True
                 mock_factory.return_value = mock_embed
 
-                ingestor = DocumentIngestor(chunk_size=500, chunk_overlap=50, verbose=False)
+                ingestor = DocumentIngestor(
+                    chunk_size=500, chunk_overlap=50, verbose=False
+                )
                 result = ingestor.ingest(str(pdf_path))
                 assert result["success"] >= 0
 
@@ -329,9 +333,9 @@ class TestIntegrationDataFlow:
 
             mock_embed = MagicMock()
             mock_embed.generate.side_effect = make_emb
-            mock_embed.generate_batch.side_effect = (
-                lambda texts: [make_emb(t) for t in texts]
-            )
+            mock_embed.generate_batch.side_effect = lambda texts: [
+                make_emb(t) for t in texts
+            ]
             mock_embed.validate_connection.return_value = True
 
             mock_storage = MagicMock()

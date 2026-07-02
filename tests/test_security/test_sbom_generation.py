@@ -1,4 +1,5 @@
 """Tests for SBOM generation using CycloneDX."""
+
 import json
 import subprocess
 import tempfile
@@ -49,10 +50,12 @@ class TestSBOMGeneration:
                 ["cyclonedx-py", "venv", "-o", str(output_path)],
                 capture_output=True,
                 text=True,
-                timeout=120
+                timeout=120,
             )
             # cyclonedx may exit with 0 (success) or 1 (vulnerabilities found)
-            assert result.returncode in [0, 1], f"SBOM generation failed: {result.stderr}"
+            assert result.returncode in [0, 1], (
+                f"SBOM generation failed: {result.stderr}"
+            )
             assert output_path.exists(), "SBOM file was not created"
 
             # Verify valid JSON
@@ -69,10 +72,12 @@ class TestSBOMGeneration:
             result = subprocess.run(
                 ["cyclonedx-py", "venv", "-o", str(output_path)],
                 capture_output=True,
-                timeout=60
+                timeout=60,
             )
 
-            assert result.returncode in [0, 1], f"SBOM generation failed: {result.stderr}"
+            assert result.returncode in [0, 1], (
+                f"SBOM generation failed: {result.stderr}"
+            )
             assert output_path.exists(), "SBOM file should be created"
 
             with open(output_path) as f:
@@ -82,8 +87,12 @@ class TestSBOMGeneration:
             component_names = [c.get("name", "").lower() for c in components]
 
             # Check for key dependencies
-            assert any("pymongo" in name for name in component_names), "pymongo should be in SBOM"
-            assert any("click" in name for name in component_names), "click should be in SBOM"
+            assert any("pymongo" in name for name in component_names), (
+                "pymongo should be in SBOM"
+            )
+            assert any("click" in name for name in component_names), (
+                "click should be in SBOM"
+            )
 
     @patch("subprocess.run", side_effect=_mock_subprocess_run_for_cyclonedx)
     def test_sbom_format_version(self, _mock_run):
@@ -93,7 +102,7 @@ class TestSBOMGeneration:
             subprocess.run(
                 ["cyclonedx-py", "venv", "-o", str(output_path)],
                 capture_output=True,
-                timeout=60
+                timeout=60,
             )
 
             with open(output_path) as f:

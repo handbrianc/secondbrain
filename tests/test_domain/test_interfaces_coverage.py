@@ -30,14 +30,15 @@ class TestDocumentConverterProtocol:
 
     def test_protocol_has_convert_method(self):
         """Test protocol defines convert method."""
-        assert hasattr(DocumentConverter, 'convert')
+        assert hasattr(DocumentConverter, "convert")
 
     def test_protocol_has_supports_format_method(self):
         """Test protocol defines supports_format method."""
-        assert hasattr(DocumentConverter, 'supports_format')
+        assert hasattr(DocumentConverter, "supports_format")
 
     def test_convert_returns_dict(self):
         """Test that a mock converter returns dict."""
+
         class MockConverter:
             def convert(self, file_path: Path) -> dict[str, str]:
                 return {"1": "test content"}
@@ -53,6 +54,7 @@ class TestDocumentConverterProtocol:
 
     def test_supports_format_returns_bool(self):
         """Test that supports_format returns bool."""
+
         class MockConverter:
             def convert(self, file_path: Path) -> dict[str, str]:
                 return {}
@@ -71,18 +73,19 @@ class TestEmbeddingGeneratorProtocol:
 
     def test_protocol_has_generate_method(self):
         """Test protocol defines generate method."""
-        assert hasattr(EmbeddingGenerator, 'generate')
+        assert hasattr(EmbeddingGenerator, "generate")
 
     def test_protocol_has_generate_batch_method(self):
         """Test protocol defines generate_batch method."""
-        assert hasattr(EmbeddingGenerator, 'generate_batch')
+        assert hasattr(EmbeddingGenerator, "generate_batch")
 
     def test_protocol_has_dimensions_property(self):
         """Test protocol defines dimensions property."""
-        assert hasattr(EmbeddingGenerator, 'dimensions')
+        assert hasattr(EmbeddingGenerator, "dimensions")
 
     def test_generate_returns_list(self):
         """Test generate returns list of floats."""
+
         class MockEmbedder:
             def generate(self, text: str) -> list[float]:
                 return [0.1, 0.2, 0.3]
@@ -102,6 +105,7 @@ class TestEmbeddingGeneratorProtocol:
 
     def test_generate_batch_returns_list_of_lists(self):
         """Test generate_batch returns list of lists."""
+
         class MockEmbedder:
             def generate(self, text: str) -> list[float]:
                 return [0.1, 0.2, 0.3]
@@ -122,6 +126,7 @@ class TestEmbeddingGeneratorProtocol:
 
     def test_dimensions_property_returns_int(self):
         """Test dimensions property returns int."""
+
         class MockEmbedder:
             def generate(self, text: str) -> list[float]:
                 return [0.1, 0.2, 0.3]
@@ -145,26 +150,27 @@ class TestVectorStoreProtocol:
 
     def test_protocol_has_store_method(self):
         """Test protocol defines store method."""
-        assert hasattr(VectorStore, 'store')
+        assert hasattr(VectorStore, "store")
 
     def test_protocol_has_store_batch_method(self):
         """Test protocol defines store_batch method."""
-        assert hasattr(VectorStore, 'store_batch')
+        assert hasattr(VectorStore, "store_batch")
 
     def test_protocol_has_search_method(self):
         """Test protocol defines search method."""
-        assert hasattr(VectorStore, 'search')
+        assert hasattr(VectorStore, "search")
 
     def test_protocol_has_delete_by_source_method(self):
         """Test protocol defines delete_by_source method."""
-        assert hasattr(VectorStore, 'delete_by_source')
+        assert hasattr(VectorStore, "delete_by_source")
 
     def test_protocol_has_delete_all_method(self):
         """Test protocol defines delete_all method."""
-        assert hasattr(VectorStore, 'delete_all')
+        assert hasattr(VectorStore, "delete_all")
 
     def test_store_returns_string_id(self):
         """Test that store method returns a string ID."""
+
         class MockStore:
             def store(self, chunk: DocumentChunk) -> str:
                 return "chunk-id-123"
@@ -176,7 +182,7 @@ class TestVectorStoreProtocol:
                 self,
                 embedding: list[float],
                 top_k: int = 5,
-                _source_filter: str | None = None
+                _source_filter: str | None = None,
             ) -> Sequence[DocumentChunk]:
                 return []
 

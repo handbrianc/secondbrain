@@ -74,12 +74,12 @@ class TestVectorStorage:
 
         # Patch validate_connection directly (not _client) so the method
         # skips its connection-cache hot-path and always reaches the mock.
-        with patch.object(storage, "validate_connection", side_effect=lambda *args, **kwargs: False):
+        with patch.object(
+            storage, "validate_connection", side_effect=lambda *args, **kwargs: False
+        ):
             assert storage.validate_connection() is False
 
-    def test_ensure_index_success(
-        self, vector_storage_fixture: VectorStorage
-    ) -> None:
+    def test_ensure_index_success(self, vector_storage_fixture: VectorStorage) -> None:
         """Test ensure_index sets up for local MongoDB (no Atlas Search)."""
         storage = vector_storage_fixture
 
@@ -159,9 +159,7 @@ class TestVectorStorage:
                 }
             )
 
-    def test_store_batch_success(
-        self, vector_storage_fixture: VectorStorage
-    ) -> None:
+    def test_store_batch_success(self, vector_storage_fixture: VectorStorage) -> None:
         """Test storing multiple documents."""
         storage = vector_storage_fixture
 
@@ -183,9 +181,7 @@ class TestVectorStorage:
             assert result == 2
             mock_collection.insert_many.assert_called_once()
 
-    def test_get_stats_success(
-        self, vector_storage_fixture: VectorStorage
-    ) -> None:
+    def test_get_stats_success(self, vector_storage_fixture: VectorStorage) -> None:
         """Test getting database statistics."""
         storage = vector_storage_fixture
 
@@ -247,9 +243,7 @@ class TestVectorStorage:
                 {"chunk_id": "chunk-123"}
             )
 
-    def test_delete_all_success(
-        self, vector_storage_fixture: VectorStorage
-    ) -> None:
+    def test_delete_all_success(self, vector_storage_fixture: VectorStorage) -> None:
         """Test deleting all documents."""
         storage = vector_storage_fixture
 
@@ -267,9 +261,7 @@ class TestVectorStorage:
             assert result == 100
             mock_collection.delete_many.assert_called_once_with({})
 
-    def test_list_chunks_success(
-        self, vector_storage_fixture: VectorStorage
-    ) -> None:
+    def test_list_chunks_success(self, vector_storage_fixture: VectorStorage) -> None:
         """Test listing chunks with filters."""
         storage = vector_storage_fixture
 
@@ -397,9 +389,7 @@ class TestStatisticsAndMetadata:
             assert "ingested_at" in stored_doc["metadata"]
             assert "T" in stored_doc["metadata"]["ingested_at"]
 
-    def test_metadata_preservation(
-        self, vector_storage_fixture: VectorStorage
-    ) -> None:
+    def test_metadata_preservation(self, vector_storage_fixture: VectorStorage) -> None:
         """Test that metadata survives round-trip through storage."""
         storage = vector_storage_fixture
 

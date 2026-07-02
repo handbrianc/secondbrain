@@ -110,32 +110,70 @@ def _evaluate_with_llm(
     import re
 
     _MOCK_RESPONSES = [
-        (r"Compare.*response A.*response B", {"score_a": 4, "score_b": 2, "winner": "A", "reasoning": "A is more detailed"}),
-        (r"winner.*A.*B", {"winner": "A", "reasoning": "Response A is clearer", "confidence": 0.85}),
-        (r"Compare.*without bias", {"score_a": 4, "score_b": 4, "bias_detected": False}),
+        (
+            r"Compare.*response A.*response B",
+            {
+                "score_a": 4,
+                "score_b": 2,
+                "winner": "A",
+                "reasoning": "A is more detailed",
+            },
+        ),
+        (
+            r"winner.*A.*B",
+            {"winner": "A", "reasoning": "Response A is clearer", "confidence": 0.85},
+        ),
+        (
+            r"Compare.*without bias",
+            {"score_a": 4, "score_b": 4, "bias_detected": False},
+        ),
         (r"Compare.*quality", {"score_a": 5, "score_b": 2}),
         (r"winner.*tie", {"winner": "tie", "reasoning": "Responses are equivalent"}),
         (r"better response", {"score_a": 4, "score_b": 2, "winner": "A"}),
-        (r"A is better|B is better", {"winner": "A", "reasoning": "A is more comprehensive"}),
+        (
+            r"A is better|B is better",
+            {"winner": "A", "reasoning": "A is more comprehensive"},
+        ),
         (r"relevance", {"score": 4, "reasoning": "Response addresses the query"}),
         (r"coherent|coherence", {"coherent": True, "score": 4}),
         (r"complete|completeness", {"complete": True, "score": 4}),
-        (r"grounded", {"grounded_a": True, "grounded_b": False, "score_a": 5, "score_b": 2}),
+        (
+            r"grounded",
+            {"grounded_a": True, "grounded_b": False, "score_a": 5, "score_b": 2},
+        ),
         (r"fluent|fluency", {"fluent": True, "score": 4}),
-        (r"accurate|accuracy", {"accurate_a": True, "accurate_b": False, "score_a": 5, "score_b": 1}),
+        (
+            r"accurate|accuracy",
+            {"accurate_a": True, "accurate_b": False, "score_a": 5, "score_b": 1},
+        ),
         (r"concise|conciseness", {"concise": True, "score": 4}),
         (r"helpful|helpfulness", {"helpful": True, "score": 4, "actionable": True}),
-        (r"weighted.*score", {"weighted_score": 4.4, "breakdown": {"relevance": 1.5, "accuracy": 1.6}}),
+        (
+            r"weighted.*score",
+            {"weighted_score": 4.4, "breakdown": {"relevance": 1.5, "accuracy": 1.6}},
+        ),
         (r"pass.*threshold", {"score": 4.2, "threshold": 3.5, "passed": True}),
-        (r"threshold.*met", {"score": 4.8, "level": "excellent", "threshold_met": True}),
+        (
+            r"threshold.*met",
+            {"score": 4.8, "level": "excellent", "threshold_met": True},
+        ),
         (r"consistency|consistent", {"score": 4, "confidence": 0.8}),
         (r"calibrat", {"score": 4, "reasoning": "Well calibrated"}),
         (r"quality.*evaluator", {"score": 4, "reasoning": "Good quality response"}),
         (r"sensitivity", {"score_a": 5, "score_b": 2, "difference": 3}),
-        (r"threshold|pass|fail|above|below|met", {"score": 4, "threshold": 3.5, "passed": True}),
+        (
+            r"threshold|pass|fail|above|below|met",
+            {"score": 4, "threshold": 3.5, "passed": True},
+        ),
         (r"true|false|yes|no", {"score": 4, "result": True}),
-        (r"-?\d+\.?\d*", {"score": 4, "reasoning": "Mock evaluation response", "confidence": 0.75}),
-        (r".*", {"score": 4, "reasoning": "Mock evaluation response", "confidence": 0.75}),
+        (
+            r"-?\d+\.?\d*",
+            {"score": 4, "reasoning": "Mock evaluation response", "confidence": 0.75},
+        ),
+        (
+            r".*",
+            {"score": 4, "reasoning": "Mock evaluation response", "confidence": 0.75},
+        ),
     ]
 
     for pattern, response in _MOCK_RESPONSES:

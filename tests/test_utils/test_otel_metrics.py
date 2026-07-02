@@ -3,6 +3,7 @@
 Covers basic metrics tests and integration tests verifying metrics are actually
 exported when operations run.
 """
+
 import time
 
 import pytest

@@ -1,6 +1,5 @@
 """Factory for creating test Session objects."""
 
-
 from factory import Factory, Faker, List, SubFactory
 
 from .message_factory import MessageFactory

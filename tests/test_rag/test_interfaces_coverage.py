@@ -1,7 +1,5 @@
 """Tests for RAG interfaces to improve coverage."""
 
-
-
 from secondbrain.rag.interfaces import LocalLLMProvider
 from secondbrain.rag.providers.mock import MockLLMProvider
 
@@ -11,15 +9,15 @@ class TestLocalLLMProviderProtocol:
 
     def test_protocol_has_generate_method(self):
         """Test protocol defines generate method."""
-        assert hasattr(LocalLLMProvider, 'generate')
+        assert hasattr(LocalLLMProvider, "generate")
 
     def test_protocol_has_agenerate_method(self):
         """Test protocol defines agenerate method."""
-        assert hasattr(LocalLLMProvider, 'agenerate')
+        assert hasattr(LocalLLMProvider, "agenerate")
 
     def test_protocol_has_health_check_method(self):
         """Test protocol defines health_check method."""
-        assert hasattr(LocalLLMProvider, 'health_check')
+        assert hasattr(LocalLLMProvider, "health_check")
 
     def test_protocol_implemented_by_mock_provider(self):
         """Test that MockLLMProvider implements the protocol."""
@@ -29,6 +27,7 @@ class TestLocalLLMProviderProtocol:
         assert isinstance(result, str)
 
         import asyncio
+
         result = asyncio.run(provider.agenerate("test prompt"))
         assert isinstance(result, str)
 
@@ -58,30 +57,33 @@ class TestProtocolSignature:
     def test_generate_signature(self):
         """Test generate method signature."""
         import inspect
+
         sig = inspect.signature(LocalLLMProvider.generate)
         params = list(sig.parameters.keys())
 
-        assert 'self' in params
-        assert 'prompt' in params
-        assert 'temperature' in params
-        assert 'max_tokens' in params
+        assert "self" in params
+        assert "prompt" in params
+        assert "temperature" in params
+        assert "max_tokens" in params
 
     def test_agenerate_signature(self):
         """Test agenerate method signature."""
         import inspect
+
         sig = inspect.signature(LocalLLMProvider.agenerate)
         params = list(sig.parameters.keys())
 
-        assert 'self' in params
-        assert 'prompt' in params
-        assert 'temperature' in params
-        assert 'max_tokens' in params
+        assert "self" in params
+        assert "prompt" in params
+        assert "temperature" in params
+        assert "max_tokens" in params
 
     def test_health_check_signature(self):
         """Test health_check method signature."""
         import inspect
+
         sig = inspect.signature(LocalLLMProvider.health_check)
         params = list(sig.parameters.keys())
 
-        assert 'self' in params
+        assert "self" in params
         assert len(params) == 1  # Only self

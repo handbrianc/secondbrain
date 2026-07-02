@@ -1,6 +1,5 @@
 """Tests for factory pattern implementations."""
 
-
 from datetime import datetime
 
 from secondbrain.config import config
