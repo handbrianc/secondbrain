@@ -74,6 +74,7 @@ __all__ = [
     "DocumentIngestor",
     "Segment",
     "UnsupportedFileError",
+    "config",
     "get_file_type",
     "is_supported",
 ]
