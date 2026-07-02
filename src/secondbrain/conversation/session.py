@@ -43,7 +43,6 @@ class ConversationSession:
             session_id: Unique session identifier.
             storage: ConversationStorage instance for persistence.
             context_window: Number of recent messages to keep (default: 5 per spec).
-            context_window: Number of recent messages to keep (default: 10).
 
         Example:
         --------

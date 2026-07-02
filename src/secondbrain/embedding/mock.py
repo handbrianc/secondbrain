@@ -7,7 +7,7 @@ need to test actual embedding quality.
 from __future__ import annotations
 
 import hashlib
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 
@@ -56,7 +56,7 @@ class MockEmbeddingProvider(EmbeddingProvider):
             vector = vector[: self.dimension]
         # Normalize to unit vector
         vector = vector / np.linalg.norm(vector)
-        return vector.tolist()
+        return cast("list[float]", vector.tolist())
 
     def generate_batch(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings for multiple texts.

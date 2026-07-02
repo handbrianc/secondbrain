@@ -4,6 +4,11 @@ Provides OpenAILLMProvider class that implements the LocalLLMProvider protocol
 for using OpenAI API as an LLM backend.
 """
 
+# mypy: disable-error-code=attr-defined
+# mypy: disable-error-code=arg-type
+# (openai package stubs don't explicitly export APIError/AsyncOpenAI/OpenAI;
+#  arg-type suppressed for list[dict[str,str]] vs ChatCompletionMessageParam unions)
+
 import os
 
 import httpx
@@ -11,7 +16,7 @@ from openai import APIError, AsyncOpenAI, OpenAI
 
 from secondbrain.exceptions import ServiceUnavailableError
 
-from ..interfaces import LocalLLMProvider
+from ..interfaces import LocalLLMProvider, StreamingCallback
 
 
 class OpenAILLMProvider(LocalLLMProvider):
@@ -106,7 +111,7 @@ class OpenAILLMProvider(LocalLLMProvider):
             # Call OpenAI chat API
             response = self._client.chat.completions.create(
                 model=self._model,
-                messages=messages,  # type: ignore
+                messages=messages,
                 temperature=temp,
                 max_tokens=tokens,
             )
@@ -151,7 +156,7 @@ class OpenAILLMProvider(LocalLLMProvider):
             # Call OpenAI chat API asynchronously
             response = await self._async_client.chat.completions.create(
                 model=self._model,
-                messages=messages,  # type: ignore
+                messages=messages,
                 temperature=temp,
                 max_tokens=tokens,
             )
@@ -219,3 +224,35 @@ class OpenAILLMProvider(LocalLLMProvider):
             RuntimeError: If generation fails.
         """
         return await self.generate_async(prompt, temperature, max_tokens)
+
+    def stream_chat(
+        self,
+        messages: list[dict[str, str]],
+        on_chunk: StreamingCallback,
+        temperature: float = 0.7,
+        max_tokens: int = 4096,
+    ) -> str:
+        """Synchronous streaming is not implemented; use generate()."""
+        result = self.generate(
+            messages[-1]["content"] if messages else "",
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        on_chunk(result, None)
+        return result
+
+    async def stream_chat_async(
+        self,
+        messages: list[dict[str, str]],
+        on_chunk: StreamingCallback,
+        temperature: float = 0.7,
+        max_tokens: int = 4096,
+    ) -> str:
+        """Async streaming via on_chunk callback."""
+        result = await self.generate_async(
+            messages[-1]["content"] if messages else "",
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        on_chunk(result, None)
+        return result

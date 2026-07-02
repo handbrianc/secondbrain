@@ -64,10 +64,10 @@ class TestSharedRateLimiterInit:
         limiter = SharedRateLimiter(max_requests=100, window_seconds=60.0)
 
         # Verify timestamps is a list
-        assert hasattr(limiter._timestamps, 'append')
-        assert hasattr(limiter._timestamps, 'pop')
-        assert hasattr(limiter._lock, 'acquire')
-        assert hasattr(limiter._lock, 'release')
+        assert hasattr(limiter._timestamps, "append")
+        assert hasattr(limiter._timestamps, "pop")
+        assert hasattr(limiter._lock, "acquire")
+        assert hasattr(limiter._lock, "release")
 
 
 class TestSharedRateLimiterAcquire:

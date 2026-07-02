@@ -1,6 +1,5 @@
 """Tests for SecurityFilter."""
 
-
 from secondbrain.rag.security_filter import SecurityFilter, SecurityViolation
 
 
@@ -206,7 +205,7 @@ class TestSecurityViolation:
         violation = SecurityViolation(
             violation_type="sql_injection",
             pattern_matched="SELECT * FROM",
-            severity="critical"
+            severity="critical",
         )
 
         assert violation.violation_type == "sql_injection"
@@ -216,8 +215,7 @@ class TestSecurityViolation:
     def test_violation_default_severity(self):
         """Test that violation has default severity."""
         violation = SecurityViolation(
-            violation_type="xss_injection",
-            pattern_matched="<script>"
+            violation_type="xss_injection", pattern_matched="<script>"
         )
 
         assert violation.severity == "high"

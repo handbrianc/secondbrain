@@ -69,7 +69,9 @@ class TestEmbeddingProviderFactoryCreateFromConfig:
         mock_cfg = MagicMock()
         mock_cfg.embedding_provider = "local"
 
-        with pytest.raises(ValueError, match="'local' embedding provider has been removed"):
+        with pytest.raises(
+            ValueError, match="'local' embedding provider has been removed"
+        ):
             EmbeddingProviderFactory.create_from_config(mock_cfg)
 
     def test_case_insensitive_openai(self) -> None:
@@ -175,7 +177,8 @@ class TestEmbeddingProviderFactoryCreateOpenAI:
 
 class TestOpenAIEmbeddingProviderVariants:
     """Tests demonstrating that OpenAIEmbeddingProvider handles OpenAI-compatible
-    endpoints (Ollama, LM Studio, vLLM, Azure OpenAI) via api_base override."""
+    endpoints (Ollama, LM Studio, vLLM, Azure OpenAI) via api_base override.
+    """
 
     def test_azure_openai_style_endpoint(self) -> None:
         """Azure OpenAI and OpenAI-compatible services use api_base to point at custom endpoints."""

@@ -581,6 +581,7 @@ class TestCircuitBreakerExponentialBackoff:
 
         # Transition to HALF_OPEN after timeout
         import time
+
         time.sleep(0.15)
         state_info = cb.get_state_info()
         assert state_info["state"] == CircuitState.HALF_OPEN.value
@@ -621,7 +622,7 @@ class TestCircuitBreakerExponentialBackoff:
 
 def test_state_changes_logged_with_timestamp():
     """Test that state changes are logged with timestamp and reason.
-    
+
     QA: Verify observability of circuit breaker state transitions.
     """
     import logging
@@ -639,7 +640,7 @@ def test_state_changes_logged_with_timestamp():
     handler = logging.StreamHandler(log_stream)
     handler.setLevel(logging.INFO)
 
-    logger = logging.getLogger('secondbrain.utils.circuit_breaker')
+    logger = logging.getLogger("secondbrain.utils.circuit_breaker")
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)
 
@@ -663,7 +664,11 @@ def test_state_changes_logged_with_timestamp():
     log_contents = log_stream.getvalue()
 
     # Verify logs contain state changes
-    assert "CLOSED" in log_contents or "OPEN" in log_contents or "HALF_OPEN" in log_contents
+    assert (
+        "CLOSED" in log_contents
+        or "OPEN" in log_contents
+        or "HALF_OPEN" in log_contents
+    )
 
     # Cleanup
     logger.removeHandler(handler)

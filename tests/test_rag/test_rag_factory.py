@@ -22,8 +22,8 @@ class TestCreateLLMProvider:
         mock_config = MagicMock()
         mock_provider = MagicMock(spec=LocalLLMProvider)
 
-        with patch('secondbrain.rag.factory.config', return_value=mock_config):
-            with patch('secondbrain.rag.factory.LLMProviderFactory') as mock_factory:
+        with patch("secondbrain.rag.factory.config", return_value=mock_config):
+            with patch("secondbrain.rag.factory.LLMProviderFactory") as mock_factory:
                 mock_factory.create_from_config.return_value = mock_provider
 
                 # Call the function
@@ -37,9 +37,11 @@ class TestCreateLLMProvider:
         """Test that ValueError is raised when provider type is invalid."""
         mock_config = MagicMock()
 
-        with patch('secondbrain.rag.factory.config', return_value=mock_config):
-            with patch('secondbrain.rag.factory.LLMProviderFactory') as mock_factory:
-                mock_factory.create_from_config.side_effect = ValueError("Invalid provider type")
+        with patch("secondbrain.rag.factory.config", return_value=mock_config):
+            with patch("secondbrain.rag.factory.LLMProviderFactory") as mock_factory:
+                mock_factory.create_from_config.side_effect = ValueError(
+                    "Invalid provider type"
+                )
 
                 # Verify ValueError is raised with helpful message
                 with pytest.raises(ValueError, match="Failed to create LLM provider"):
@@ -49,12 +51,16 @@ class TestCreateLLMProvider:
         """Test that RuntimeError is raised when provider initialization fails."""
         mock_config = MagicMock()
 
-        with patch('secondbrain.rag.factory.config', return_value=mock_config):
-            with patch('secondbrain.rag.factory.LLMProviderFactory') as mock_factory:
-                mock_factory.create_from_config.side_effect = Exception("Initialization failed")
+        with patch("secondbrain.rag.factory.config", return_value=mock_config):
+            with patch("secondbrain.rag.factory.LLMProviderFactory") as mock_factory:
+                mock_factory.create_from_config.side_effect = Exception(
+                    "Initialization failed"
+                )
 
                 # Verify RuntimeError is raised with helpful message
-                with pytest.raises(RuntimeError, match="Failed to initialize LLM provider"):
+                with pytest.raises(
+                    RuntimeError, match="Failed to initialize LLM provider"
+                ):
                     create_llm_provider()
 
     def test_create_llm_provider_wraps_exceptions_properly(self):
@@ -62,8 +68,8 @@ class TestCreateLLMProvider:
         mock_config = MagicMock()
         original_error = ValueError("Original error")
 
-        with patch('secondbrain.rag.factory.config', return_value=mock_config):
-            with patch('secondbrain.rag.factory.LLMProviderFactory') as mock_factory:
+        with patch("secondbrain.rag.factory.config", return_value=mock_config):
+            with patch("secondbrain.rag.factory.LLMProviderFactory") as mock_factory:
                 mock_factory.create_from_config.side_effect = original_error
 
                 with pytest.raises(ValueError) as exc_info:
@@ -80,7 +86,7 @@ class TestCreateQueryRewriter:
         """Test successful QueryRewriter creation."""
         mock_provider = MagicMock(spec=LocalLLMProvider)
 
-        with patch('secondbrain.rag.factory.QueryRewriter') as mock_rewriter_class:
+        with patch("secondbrain.rag.factory.QueryRewriter") as mock_rewriter_class:
             mock_rewriter = MagicMock(spec=QueryRewriter)
             mock_rewriter_class.return_value = mock_rewriter
 
@@ -95,7 +101,7 @@ class TestCreateQueryRewriter:
         """Test that RuntimeError is raised when rewriter creation fails."""
         mock_provider = MagicMock(spec=LocalLLMProvider)
 
-        with patch('secondbrain.rag.factory.QueryRewriter') as mock_rewriter_class:
+        with patch("secondbrain.rag.factory.QueryRewriter") as mock_rewriter_class:
             mock_rewriter_class.side_effect = Exception("Rewriter creation failed")
 
             # Verify RuntimeError is raised with helpful message
@@ -107,7 +113,7 @@ class TestCreateQueryRewriter:
         mock_provider = MagicMock(spec=LocalLLMProvider)
         original_error = ValueError("Original error")
 
-        with patch('secondbrain.rag.factory.QueryRewriter') as mock_rewriter_class:
+        with patch("secondbrain.rag.factory.QueryRewriter") as mock_rewriter_class:
             mock_rewriter_class.side_effect = original_error
 
             with pytest.raises(RuntimeError) as exc_info:
@@ -126,9 +132,11 @@ class TestFactoryIntegration:
         mock_provider = MagicMock(spec=LocalLLMProvider)
         mock_rewriter = MagicMock(spec=QueryRewriter)
 
-        with patch('secondbrain.rag.factory.config', return_value=mock_config):
-            with patch('secondbrain.rag.factory.LLMProviderFactory') as mock_factory:
-                with patch('secondbrain.rag.factory.QueryRewriter') as mock_rewriter_class:
+        with patch("secondbrain.rag.factory.config", return_value=mock_config):
+            with patch("secondbrain.rag.factory.LLMProviderFactory") as mock_factory:
+                with patch(
+                    "secondbrain.rag.factory.QueryRewriter"
+                ) as mock_rewriter_class:
                     mock_factory.create_from_config.return_value = mock_provider
                     mock_rewriter_class.return_value = mock_rewriter
 

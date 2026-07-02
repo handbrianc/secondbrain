@@ -25,7 +25,7 @@ def _validate_chunk_info(d: dict[str, Any]) -> ChunkInfo:
             raise TypeError(f"ChunkInfo missing required key: {key!r}")
     if "page_number" not in d:
         raise TypeError("ChunkInfo missing required key: 'page_number'")
-    return d  # type: ignore[return]
+    return d  # type: ignore[return-value]
 
 
 def _validate_search_result(d: dict[str, Any]) -> SearchResult:
@@ -35,4 +35,4 @@ def _validate_search_result(d: dict[str, Any]) -> SearchResult:
             raise TypeError(f"SearchResult missing required key: {key!r}")
     if "page_number" not in d:
         raise TypeError("SearchResult missing required key: 'page_number'")
-    return d  # type: ignore[return]
+    return d  # type: ignore[return-value]

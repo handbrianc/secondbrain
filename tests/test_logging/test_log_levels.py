@@ -1,4 +1,5 @@
 """Tests for structured logging ERROR and WARNING levels."""
+
 import logging
 
 from secondbrain.logging import get_logger, setup_logging
@@ -10,19 +11,19 @@ class TestStructuredLoggingLevels:
     def test_error_level_exists(self):
         """ERROR level constant exists in logging module."""
         assert logging.ERROR == 40
-        assert hasattr(logging, 'ERROR')
+        assert hasattr(logging, "ERROR")
 
     def test_warning_level_exists(self):
         """WARNING level constant exists in logging module."""
         assert logging.WARNING == 30
-        assert hasattr(logging, 'WARNING')
+        assert hasattr(logging, "WARNING")
 
     def test_logger_can_log_error(self):
         """Logger can log at ERROR level."""
         setup_logging(verbose=False)
         logger = get_logger(__name__)
 
-        assert hasattr(logger, 'error')
+        assert hasattr(logger, "error")
         assert callable(logger.error)
 
     def test_logger_can_log_warning(self):
@@ -30,7 +31,7 @@ class TestStructuredLoggingLevels:
         setup_logging(verbose=False)
         logger = get_logger(__name__)
 
-        assert hasattr(logger, 'warning')
+        assert hasattr(logger, "warning")
         assert callable(logger.warning)
 
     def test_error_level_detailed_formatting(self):
@@ -43,20 +44,21 @@ class TestStructuredLoggingLevels:
         except Exception as e:
             logger.error("Error occurred", exc_info=True)
 
-        assert hasattr(logger, 'error')
+        assert hasattr(logger, "error")
 
     def test_json_format_includes_required_fields(self):
         """Test JSON format includes all required fields."""
         setup_logging(verbose=False, json_format=True)
         logger = get_logger(__name__)
 
-        assert hasattr(logger, 'error')
+        assert hasattr(logger, "error")
         assert callable(logger.error)
         assert logger.name is not None
 
     def test_request_id_in_logs(self):
         """Test that request ID can be included in logs."""
         from secondbrain.logging import set_request_id
+
         setup_logging(verbose=False)
         logger = get_logger(__name__)
 
@@ -99,5 +101,6 @@ class TestStructuredLoggingLevels:
 
         logger.debug("Debug message")
 
-        assert logger.getEffectiveLevel() == logging.DEBUG, \
+        assert logger.getEffectiveLevel() == logging.DEBUG, (
             "Verbose mode should enable DEBUG level"
+        )

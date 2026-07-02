@@ -69,7 +69,10 @@ class TestRAGPipelineErrorHandling:
         """Verify pipeline handles empty or whitespace-only queries gracefully."""
         result = pipeline_with_mocks.query("")
 
-        assert result["answer"] == "Query cannot be empty. Please provide a valid question."
+        assert (
+            result["answer"]
+            == "Query cannot be empty. Please provide a valid question."
+        )
         assert result.get("validation_error") is True
 
     def test_query_handles_whitespace_only_query(
@@ -79,7 +82,10 @@ class TestRAGPipelineErrorHandling:
         """Verify pipeline handles whitespace-only queries gracefully."""
         result = pipeline_with_mocks.query("   \n\t  ")
 
-        assert result["answer"] == "Query cannot be empty. Please provide a valid question."
+        assert (
+            result["answer"]
+            == "Query cannot be empty. Please provide a valid question."
+        )
         assert result.get("validation_error") is True
 
     def test_query_handles_searcher_failure(
@@ -131,7 +137,10 @@ class TestRAGPipelineErrorHandling:
 
         # Should handle error gracefully and return error response
         assert "answer" in result
-        assert "error" in result["answer"].lower() or "apologize" in result["answer"].lower()
+        assert (
+            "error" in result["answer"].lower()
+            or "apologize" in result["answer"].lower()
+        )
 
     def test_query_handles_timeout_error(
         self,
@@ -159,7 +168,10 @@ class TestRAGPipelineErrorHandling:
 
         # Should handle timeout gracefully
         assert "answer" in result
-        assert "error" in result["answer"].lower() or "apologize" in result["answer"].lower()
+        assert (
+            "error" in result["answer"].lower()
+            or "apologize" in result["answer"].lower()
+        )
 
     def test_query_handles_connection_error(
         self,
@@ -277,7 +289,9 @@ class TestRAGPipelineErrorHandling:
         assert mock_llm_provider.generate.call_count == 3
         assert "answer" in result
         assert result["answer"] == "Valid answer after retries"
-        assert result.get("empty_response_retries") is None  # No retries needed in final result
+        assert (
+            result.get("empty_response_retries") is None
+        )  # No retries needed in final result
 
     def test_chat_returns_fallback_after_max_empty_retries(
         self,
@@ -503,7 +517,10 @@ class TestRAGPipelineErrorHandling:
 
         # Should handle no results gracefully with fallback message
         assert "answer" in result
-        assert "couldn't find" in result["answer"].lower() or "no relevant" in result["answer"].lower()
+        assert (
+            "couldn't find" in result["answer"].lower()
+            or "no relevant" in result["answer"].lower()
+        )
         # LLM should not be called when no context found
         mock_llm_provider.generate.assert_not_called()
 
@@ -529,7 +546,10 @@ class TestRAGPipelineErrorHandling:
 
         # Should catch all exceptions and return error response
         assert "answer" in result
-        assert "error" in result["answer"].lower() or "apologize" in result["answer"].lower()
+        assert (
+            "error" in result["answer"].lower()
+            or "apologize" in result["answer"].lower()
+        )
 
     def test_format_context_handles_empty_list(
         self,
@@ -546,9 +566,7 @@ class TestRAGPipelineErrorHandling:
     ) -> None:
         """Verify _format_context truncates long chunks."""
         long_text = "x" * 1000
-        chunks = [
-            {"chunk_text": long_text, "source_file": "test.pdf", "page": 1}
-        ]
+        chunks = [{"chunk_text": long_text, "source_file": "test.pdf", "page": 1}]
 
         result = pipeline_with_mocks._format_context(chunks)
 
@@ -717,7 +735,7 @@ def pipeline_with_mocks(
     mock_searcher: MagicMock,
     mock_llm_provider: MagicMock,
     mock_config: dict[str, str],
-    ) -> RAGPipeline:
+) -> RAGPipeline:
     """Create RAGPipeline with mocked dependencies."""
     return RAGPipeline(
         searcher=mock_searcher,
@@ -756,7 +774,10 @@ class TestRAGPipelineFallbackLogic:
 
         # Should handle error gracefully and return error response
         assert "answer" in result
-        assert "error" in result["answer"].lower() or "apologize" in result["answer"].lower()
+        assert (
+            "error" in result["answer"].lower()
+            or "apologize" in result["answer"].lower()
+        )
 
     def test_pipeline_handles_empty_response(
         self,
@@ -833,7 +854,10 @@ class TestRAGPipelineFallbackLogic:
 
         # Should handle timeout gracefully
         assert "answer" in result
-        assert "error" in result["answer"].lower() or "apologize" in result["answer"].lower()
+        assert (
+            "error" in result["answer"].lower()
+            or "apologize" in result["answer"].lower()
+        )
 
     def test_pipeline_invalid_input_validation(
         self,
@@ -888,7 +912,10 @@ class TestRAGPipelineFallbackLogic:
 
         # Should handle provider failure gracefully
         assert "answer" in result
-        assert "error" in result["answer"].lower() or "apologize" in result["answer"].lower()
+        assert (
+            "error" in result["answer"].lower()
+            or "apologize" in result["answer"].lower()
+        )
 
     def test_pipeline_handles_searcher_exception(
         self,
@@ -910,7 +937,10 @@ class TestRAGPipelineFallbackLogic:
 
         # Should catch exception and return error response
         assert "answer" in result
-        assert "error" in result["answer"].lower() or "apologize" in result["answer"].lower()
+        assert (
+            "error" in result["answer"].lower()
+            or "apologize" in result["answer"].lower()
+        )
 
     def test_pipeline_handles_none_from_provider(
         self,

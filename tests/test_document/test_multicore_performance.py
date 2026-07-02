@@ -33,7 +33,7 @@ class TestRateLimiting:
 
     def test_rate_limit_requests_per_second(self):
         """Test that rate limiter enforces requests per second limit.
-        
+
         Note: This test must run in isolation (-n0) because get_shared_rate_limiter()
         returns a singleton that persists across tests. The singleton is created with
         default parameters (100 req/s) on first call, so this test creates a fresh
@@ -126,7 +126,9 @@ class TestParallelPerformance:
         start = time.time()
         try:
             with ThreadPoolExecutor(max_workers=4) as executor:
-                results_parallel = list(executor.map(io_task, range(num_items), timeout=30))
+                results_parallel = list(
+                    executor.map(io_task, range(num_items), timeout=30)
+                )
         except FuturesTimeoutError:
             pytest.fail("Parallel execution timed out after 30s")
         finally:
@@ -222,4 +224,6 @@ class TestWorkerPoolManagement:
         # Thread pool should be faster than sequential for I/O-bound tasks
         # Sequential would take ~0.5s (10 * 0.05s), parallel should be faster
         # Use loose tolerance: allow up to 0.4s (20% below sequential)
-        assert elapsed < 0.4, f"Thread pool should be faster for I/O tasks, took {elapsed:.2f}s"
+        assert elapsed < 0.4, (
+            f"Thread pool should be faster for I/O tasks, took {elapsed:.2f}s"
+        )

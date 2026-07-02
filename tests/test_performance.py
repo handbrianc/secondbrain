@@ -1,4 +1,5 @@
 """Tests for performance monitoring utilities."""
+
 import logging
 import time
 
@@ -81,8 +82,12 @@ class TestPerfMetrics:
         assert search_stats is not None
         assert ingest_stats["count"] == 2
         assert search_stats["count"] == 1
-        assert 0.50 <= ingest_stats["avg_seconds"] <= 0.60  # 20% tolerance for system variance
-        assert 0.040 <= search_stats["avg_seconds"] <= 0.060  # 20% tolerance for system variance
+        assert (
+            0.50 <= ingest_stats["avg_seconds"] <= 0.60
+        )  # 20% tolerance for system variance
+        assert (
+            0.040 <= search_stats["avg_seconds"] <= 0.060
+        )  # 20% tolerance for system variance
         # Verify percentile tracking is present alongside existing stats
         for stat_name, stats in [("ingest", ingest_stats), ("search", search_stats)]:
             assert "p50_seconds" in stats, f"{stat_name}: missing p50_seconds"
@@ -133,7 +138,9 @@ class TestTimingDecorator:
         stats = metrics.get_stats("test_operation")
         assert stats is not None
         assert stats["count"] == 1
-        assert 0.090 <= stats["avg_seconds"] <= 0.150  # 20% tolerance below, 50% above for sleep variance
+        assert (
+            0.090 <= stats["avg_seconds"] <= 0.150
+        )  # 20% tolerance below, 50% above for sleep variance
 
     def test_timing_decorator_handles_exceptions(self, caplog):
         metrics.reset("failing_operation")
@@ -150,7 +157,9 @@ class TestTimingDecorator:
         stats = metrics.get_stats("failing_operation")
         assert stats is not None
         assert stats["count"] == 1
-        assert 0.040 <= stats["avg_seconds"] <= 0.100  # 20% tolerance below, 100% above for exception overhead
+        assert (
+            0.040 <= stats["avg_seconds"] <= 0.100
+        )  # 20% tolerance below, 100% above for exception overhead
 
 
 class TestPerformanceLogging:
@@ -189,5 +198,9 @@ class TestPerformanceLogging:
         assert search_stats is not None
         assert ingest_stats["count"] == 1
         assert search_stats["count"] == 1
-        assert 0.040 <= ingest_stats["avg_seconds"] <= 0.070  # 20% tolerance below, 40% above for system variance
-        assert 0.025 <= search_stats["avg_seconds"] <= 0.045  # 20% tolerance below, 50% above for system variance
+        assert (
+            0.040 <= ingest_stats["avg_seconds"] <= 0.070
+        )  # 20% tolerance below, 40% above for system variance
+        assert (
+            0.025 <= search_stats["avg_seconds"] <= 0.045
+        )  # 20% tolerance below, 50% above for system variance

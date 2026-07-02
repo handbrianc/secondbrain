@@ -19,6 +19,7 @@ class TestDeleteBySource:
         """Test that delete by source successfully removes documents."""
         with patch("secondbrain.storage.config") as mock_config_func:
             from secondbrain.config import Config
+
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
             mock_config_func.return_value.mongo_db = "secondbrain_test"
@@ -47,6 +48,7 @@ class TestDeleteBySource:
         """Test that delete by source returns 0 when no matches found."""
         with patch("secondbrain.storage.config") as mock_config_func:
             from secondbrain.config import Config
+
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
             mock_config_func.return_value.mongo_db = "secondbrain_test"
@@ -75,6 +77,7 @@ class TestDeleteBySource:
         """Test that delete by source raises StorageConnectionError on failure."""
         with patch("secondbrain.storage.config") as mock_config_func:
             from secondbrain.config import Config
+
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
             mock_config_func.return_value.mongo_db = "secondbrain_test"
@@ -97,6 +100,7 @@ class TestDeleteBySource:
         """Test that delete by source handles large batches correctly."""
         with patch("secondbrain.storage.config") as mock_config_func:
             from secondbrain.config import Config
+
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
             mock_config_func.return_value.mongo_db = "secondbrain_test"
@@ -126,6 +130,7 @@ class TestDeleteByChunkId:
         """Test that delete by chunk ID successfully removes a document."""
         with patch("secondbrain.storage.config") as mock_config_func:
             from secondbrain.config import Config
+
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
             mock_config_func.return_value.mongo_db = "secondbrain_test"
@@ -154,6 +159,7 @@ class TestDeleteByChunkId:
         """Test that delete by chunk ID returns 0 when not found."""
         with patch("secondbrain.storage.config") as mock_config_func:
             from secondbrain.config import Config
+
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
             mock_config_func.return_value.mongo_db = "secondbrain_test"
@@ -182,6 +188,7 @@ class TestDeleteByChunkId:
         """Test that delete by chunk ID raises StorageConnectionError on failure."""
         with patch("secondbrain.storage.config") as mock_config_func:
             from secondbrain.config import Config
+
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
             mock_config_func.return_value.mongo_db = "secondbrain_test"
@@ -204,6 +211,7 @@ class TestDeleteByChunkId:
         """Test that delete by chunk ID handles UUID format correctly."""
         with patch("secondbrain.storage.config") as mock_config_func:
             from secondbrain.config import Config
+
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
             mock_config_func.return_value.mongo_db = "secondbrain_test"
@@ -238,6 +246,7 @@ class TestDeleteAll:
         """Test that delete all successfully removes all documents."""
         with patch("secondbrain.storage.config") as mock_config_func:
             from secondbrain.config import Config
+
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
             mock_config_func.return_value.mongo_db = "secondbrain_test"
@@ -264,6 +273,7 @@ class TestDeleteAll:
         """Test that delete all returns 0 on empty database."""
         with patch("secondbrain.storage.config") as mock_config_func:
             from secondbrain.config import Config
+
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
             mock_config_func.return_value.mongo_db = "secondbrain_test"
@@ -290,6 +300,7 @@ class TestDeleteAll:
         """Test that delete all raises StorageConnectionError on failure."""
         with patch("secondbrain.storage.config") as mock_config_func:
             from secondbrain.config import Config
+
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
             mock_config_func.return_value.mongo_db = "secondbrain_test"
@@ -312,6 +323,7 @@ class TestDeleteAll:
         """Test that delete all handles large datasets correctly."""
         with patch("secondbrain.storage.config") as mock_config_func:
             from secondbrain.config import Config
+
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
             mock_config_func.return_value.mongo_db = "secondbrain_test"
@@ -341,6 +353,7 @@ class TestDeleteEdgeCases:
         """Test that delete by source handles special characters correctly."""
         with patch("secondbrain.storage.config") as mock_config_func:
             from secondbrain.config import Config
+
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
             mock_config_func.return_value.mongo_db = "secondbrain_test"
@@ -369,6 +382,7 @@ class TestDeleteEdgeCases:
         """Test that delete by chunk ID handles empty string correctly."""
         with patch("secondbrain.storage.config") as mock_config_func:
             from secondbrain.config import Config
+
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
             mock_config_func.return_value.mongo_db = "secondbrain_test"
@@ -395,6 +409,7 @@ class TestDeleteEdgeCases:
         """Test that delete operations return int type."""
         with patch("secondbrain.storage.config") as mock_config_func:
             from secondbrain.config import Config
+
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
             mock_config_func.return_value.mongo_db = "secondbrain_test"
@@ -431,6 +446,7 @@ class TestAsyncDeleteOperations:
         """Test that async delete by source succeeds."""
         with patch("secondbrain.storage.config") as mock_config_func:
             from secondbrain.config import Config
+
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
             mock_config_func.return_value.mongo_db = "secondbrain_test"
@@ -457,6 +473,7 @@ class TestAsyncDeleteOperations:
         """Test that async delete by chunk ID succeeds."""
         with patch("secondbrain.storage.config") as mock_config_func:
             from secondbrain.config import Config
+
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
             mock_config_func.return_value.mongo_db = "secondbrain_test"
@@ -483,6 +500,7 @@ class TestAsyncDeleteOperations:
         """Test that async delete all succeeds."""
         with patch("secondbrain.storage.config") as mock_config_func:
             from secondbrain.config import Config
+
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
             mock_config_func.return_value.mongo_db = "secondbrain_test"
@@ -509,6 +527,7 @@ class TestAsyncDeleteOperations:
         """Test that async delete by source raises on connection failure."""
         with patch("secondbrain.storage.config") as mock_config_func:
             from secondbrain.config import Config
+
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
             mock_config_func.return_value.mongo_db = "secondbrain_test"
@@ -528,6 +547,7 @@ class TestAsyncDeleteOperations:
         """Test that async delete by chunk ID raises on connection failure."""
         with patch("secondbrain.storage.config") as mock_config_func:
             from secondbrain.config import Config
+
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
             mock_config_func.return_value.mongo_db = "secondbrain_test"
@@ -547,6 +567,7 @@ class TestAsyncDeleteOperations:
         """Test that async delete all raises on connection failure."""
         with patch("secondbrain.storage.config") as mock_config_func:
             from secondbrain.config import Config
+
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
             mock_config_func.return_value.mongo_db = "secondbrain_test"
@@ -569,6 +590,7 @@ class TestDeleteIntegrationScenarios:
         """Test that delete by source followed by count verification works."""
         with patch("secondbrain.storage.config") as mock_config_func:
             from secondbrain.config import Config
+
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
             mock_config_func.return_value.mongo_db = "secondbrain_test"
@@ -600,6 +622,7 @@ class TestDeleteIntegrationScenarios:
         """Test that sequential delete operations work correctly."""
         with patch("secondbrain.storage.config") as mock_config_func:
             from secondbrain.config import Config
+
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
             mock_config_func.return_value.mongo_db = "secondbrain_test"

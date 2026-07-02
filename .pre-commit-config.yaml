@@ -50,7 +50,7 @@ repos:
         entry: pip-audit
         language: system
         files: pyproject\.toml$
-        args: [--format, json]
+        args: [--format, json, --fail-on, vulns]
         pass_filenames: false
 
   

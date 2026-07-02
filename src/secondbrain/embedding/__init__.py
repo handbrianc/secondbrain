@@ -7,6 +7,10 @@ This module provides embedding providers for generating text embeddings:
 The EmbeddingProviderFactory creates provider instances based on configuration.
 """
 
+from __future__ import annotations
+
+from typing import Any
+
 from .interfaces import EmbeddingProvider
 from .mock import MockEmbeddingGenerator, MockEmbeddingProvider
 
@@ -19,7 +23,7 @@ __all__ = [
 ]
 
 
-def __getattr__(name: str):
+def __getattr__(name: str) -> Any:
     """Lazy import for EmbeddingProviderFactory and OpenAIEmbeddingProvider to avoid circular imports."""
     if name == "EmbeddingProviderFactory":
         from .providers.factory import EmbeddingProviderFactory

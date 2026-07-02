@@ -23,6 +23,7 @@ def pytest_configure(config: Any) -> None:
     # DocumentIngestor.__init__ eagerly imports docling.datamodel submodules.
     import sys
     from unittest.mock import MagicMock
+
     for mod_name in (
         "docling",
         "docling.datamodel",
@@ -36,6 +37,7 @@ def pytest_configure(config: Any) -> None:
 
     try:
         import secondbrain.utils.tracing as tracing_mod
+
         tracing_mod._tracer = None
         tracing_mod._tracing_enabled = False
     except Exception:
@@ -73,10 +75,12 @@ def sample_pdf_path(request: pytest.FixtureRequest) -> Path:
             c = canvas.Canvas(pdf_path, pagesize=A4)
             _, height = A4
             c.setFont("Helvetica", 12)
-            c.drawString(50 * mm, height - 50 * mm,
+            c.drawString(
+                50 * mm,
+                height - 50 * mm,
                 "SecondBrain test document\n\n"
                 "This is sample content for testing PDF ingestion with "
-                "machine learning and artificial intelligence topics."
+                "machine learning and artificial intelligence topics.",
             )
             c.save()
             path = Path(pdf_path)
@@ -130,10 +134,12 @@ def sample_pdf_with_multiple_pages(request: pytest.FixtureRequest) -> Path:
             _, height = A4
             for page_num in range(1, 4):
                 c.setFont("Helvetica", 12)
-                c.drawString(50 * mm, height - 50 * mm,
+                c.drawString(
+                    50 * mm,
+                    height - 50 * mm,
                     f"Page {page_num} of SecondBrain test document\n\n"
                     f"This is unique content for page {page_num} covering "
-                    "machine learning, deep learning, and neural networks."
+                    "machine learning, deep learning, and neural networks.",
                 )
                 c.showPage()
             c.save()
@@ -239,7 +245,9 @@ def cleanup_mongo_connections() -> Generator[None, None, None]:
     ):
         os.environ.pop(_key, None)
     # Restore test-only dummy key so chat tests remain functional
-    os.environ.setdefault("SECONDBRAIN_OPENAI_API_KEY", "test-secret-key-for-chat-tests")
+    os.environ.setdefault(
+        "SECONDBRAIN_OPENAI_API_KEY", "test-secret-key-for-chat-tests"
+    )
     # Reset global tracing cache to prevent stale flag from earlier tests
     import secondbrain.utils.tracing as _tm
 
@@ -258,7 +266,6 @@ def cleanup_mongo_connections() -> Generator[None, None, None]:
     import importlib
 
     importlib.reload(importlib.import_module("secondbrain.cli.commands"))
-
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:

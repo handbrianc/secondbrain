@@ -19,6 +19,7 @@ class TestVectorStorageBatchOperations:
         """Test store_batch with empty document list."""
         with patch("secondbrain.storage.config") as mock_config_func:
             from secondbrain.config import Config
+
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
             mock_config_func.return_value.mongo_db = "secondbrain_test"
@@ -45,6 +46,7 @@ class TestVectorStorageBatchOperations:
         """Test store_batch with single document."""
         with patch("secondbrain.storage.config") as mock_config_func:
             from secondbrain.config import Config
+
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
             mock_config_func.return_value.mongo_db = "secondbrain_test"
@@ -79,6 +81,7 @@ class TestVectorStorageBatchOperations:
         """Test store_batch with 100+ documents."""
         with patch("secondbrain.storage.config") as mock_config_func:
             from secondbrain.config import Config
+
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
             mock_config_func.return_value.mongo_db = "secondbrain_test"
@@ -116,6 +119,7 @@ class TestVectorStorageBatchOperations:
         """Test that all documents in batch get the same timestamp."""
         with patch("secondbrain.storage.config") as mock_config_func:
             from secondbrain.config import Config
+
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
             mock_config_func.return_value.mongo_db = "secondbrain_test"
@@ -167,6 +171,7 @@ class TestVectorStorageBatchOperations:
         """Test that metadata is preserved during batch insert."""
         with patch("secondbrain.storage.config") as mock_config_func:
             from secondbrain.config import Config
+
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
             mock_config_func.return_value.mongo_db = "secondbrain_test"
@@ -227,6 +232,7 @@ class TestVectorStorageBatchOperations:
         """Test store_batch raises error when connection is invalid."""
         with patch("secondbrain.storage.config") as mock_config_func:
             from secondbrain.config import Config
+
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
             mock_config_func.return_value.mongo_db = "secondbrain_test"
@@ -255,6 +261,7 @@ class TestVectorStorageBatchOperations:
         """Test that store_batch returns the correct count of inserted documents."""
         with patch("secondbrain.storage.config") as mock_config_func:
             from secondbrain.config import Config
+
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
             mock_config_func.return_value.mongo_db = "secondbrain_test"
@@ -290,6 +297,7 @@ class TestVectorStorageBatchOperations:
         """Test store_batch handles documents without metadata field."""
         with patch("secondbrain.storage.config") as mock_config_func:
             from secondbrain.config import Config
+
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
             mock_config_func.return_value.mongo_db = "secondbrain_test"
@@ -339,6 +347,7 @@ class TestVectorStorageBatchOperations:
         """Test that original documents are not modified during batch insert."""
         with patch("secondbrain.storage.config") as mock_config_func:
             from secondbrain.config import Config
+
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
             mock_config_func.return_value.mongo_db = "secondbrain_test"

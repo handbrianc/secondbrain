@@ -35,12 +35,14 @@ class TestThreadingConfiguration:
     def test_cpu_count_detection(self):
         """CPU count should be detectable."""
         import os
+
         count = os.cpu_count()
         assert count > 0
 
     def test_threading_available(self):
         """Threading should be available."""
         import threading
+
         assert threading.Thread is not None
 
 
@@ -72,7 +74,9 @@ class TestErrorHandling:
         test_file.write_text("Valid content")
 
         # Process should succeed with valid input
-        results = _extract_and_chunk_file(str(test_file), chunk_size=100, chunk_overlap=10)
+        results = _extract_and_chunk_file(
+            str(test_file), chunk_size=100, chunk_overlap=10
+        )
         assert len(results) > 0
 
     def test_invalid_chunk_size_handling(self, tmp_path: Path):
@@ -81,9 +85,11 @@ class TestErrorHandling:
         test_file.write_text("Test content")
 
         # Zero chunk size is currently allowed (no validation)
-        results = _extract_and_chunk_file(str(test_file), chunk_size=0, chunk_overlap=10)
+        results = _extract_and_chunk_file(
+            str(test_file), chunk_size=0, chunk_overlap=10
+        )
         assert isinstance(results, dict)
-        assert 'segments' in results
+        assert "segments" in results
 
     def test_negative_chunk_overlap_handling(self, tmp_path: Path):
         """Test handling of negative chunk overlap (currently allows it)."""
@@ -91,9 +97,11 @@ class TestErrorHandling:
         test_file.write_text("Test content")
 
         # Negative overlap is currently allowed (no validation)
-        results = _extract_and_chunk_file(str(test_file), chunk_size=100, chunk_overlap=-10)
+        results = _extract_and_chunk_file(
+            str(test_file), chunk_size=100, chunk_overlap=-10
+        )
         assert isinstance(results, dict)
-        assert 'segments' in results
+        assert "segments" in results
 
 
 class TestGracefulShutdown:
@@ -119,6 +127,7 @@ class TestCrossPlatformCompatibility:
     def test_cross_platform_compatibility(self):
         """Test that threading works across platforms."""
         import os
+
         cpu_count = os.cpu_count()
         assert cpu_count > 0
 
@@ -137,9 +146,11 @@ class TestDocumentEdgeCases:
         empty_file.write_text("")
 
         # Should handle empty files gracefully
-        results = _extract_and_chunk_file(str(empty_file), chunk_size=100, chunk_overlap=10)
+        results = _extract_and_chunk_file(
+            str(empty_file), chunk_size=100, chunk_overlap=10
+        )
         assert isinstance(results, dict)
-        assert 'segments' in results
+        assert "segments" in results
 
     def test_large_document_chunking(self, tmp_path: Path):
         """Test processing of large documents."""
@@ -151,26 +162,30 @@ class TestDocumentEdgeCases:
         )
 
         assert isinstance(results, dict)
-        assert 'segments' in results
-        assert len(results['segments']) >= 1
+        assert "segments" in results
+        assert len(results["segments"]) >= 1
 
     def test_single_character_document(self, tmp_path: Path):
         """Test handling of single character documents."""
         tiny_file = tmp_path / "tiny.txt"
         tiny_file.write_text("X")
 
-        results = _extract_and_chunk_file(str(tiny_file), chunk_size=100, chunk_overlap=10)
+        results = _extract_and_chunk_file(
+            str(tiny_file), chunk_size=100, chunk_overlap=10
+        )
         assert isinstance(results, dict)
-        assert 'segments' in results
+        assert "segments" in results
 
     def test_whitespace_only_document(self, tmp_path: Path):
         """Test handling of whitespace-only documents."""
         ws_file = tmp_path / "whitespace.txt"
         ws_file.write_text("   \n\n   \t   ")
 
-        results = _extract_and_chunk_file(str(ws_file), chunk_size=100, chunk_overlap=10)
+        results = _extract_and_chunk_file(
+            str(ws_file), chunk_size=100, chunk_overlap=10
+        )
         assert isinstance(results, dict)
-        assert 'segments' in results
+        assert "segments" in results
 
 
 class TestProgressCallbackEdgeCases:
@@ -184,6 +199,7 @@ class TestProgressCallbackEdgeCases:
 
     def test_progress_callback_exception_handling(self):
         """Test that exceptions in progress callback don't crash ingestion."""
+
         def failing_callback(path, success):
             raise ValueError("Callback error")
 
@@ -204,10 +220,10 @@ class TestProgressCallbackEdgeCases:
         """Test that ingest method accepts cores parameter."""
         ingestor = DocumentIngestor(verbose=False)
         sig = inspect.signature(ingestor.ingest)
-        assert 'cores' in sig.parameters
+        assert "cores" in sig.parameters
 
     def test_ingest_with_cores_parameter(self):
         """Test ingest with cores parameter."""
         ingestor = DocumentIngestor(verbose=False)
         sig = inspect.signature(ingestor.ingest)
-        assert 'cores' in sig.parameters
+        assert "cores" in sig.parameters

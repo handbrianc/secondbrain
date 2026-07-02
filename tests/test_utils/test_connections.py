@@ -301,6 +301,3 @@ class TestValidatableServiceAsync:
         # Default async implementation should work
         result = await service._do_validate_async()
         assert result is True
-
-
-

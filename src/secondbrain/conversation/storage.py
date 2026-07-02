@@ -376,7 +376,9 @@ class ConversationStorage(ValidatableService):
         """
         self._require_connection("session exists check")
 
-        return self.collection.count_documents({"session_id": session_id}, limit=1) > 0
+        return bool(
+            self.collection.count_documents({"session_id": session_id}, limit=1)
+        )
 
     def delete_session(self, session_id: str) -> bool:
         """Delete a conversation session.

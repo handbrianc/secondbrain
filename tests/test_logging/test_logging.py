@@ -136,6 +136,7 @@ class TestRequestContext:
         prev = get_request_id()
         yield
         set_request_id(prev)
+
     def test_get_request_id_default_empty(self) -> None:
         assert get_request_id() == ""
 
@@ -177,16 +178,18 @@ class TestSetupJsonLogging:
 
         class TestJSONFormatter(logging.Formatter):
             def format(self, record: logging.LogRecord) -> str:
-                return json.dumps({
-                    "timestamp": self.formatTime(record, self.datefmt),
-                    "level": record.levelname,
-                    "logger": record.name,
-                    "message": record.getMessage(),
-                    "module": record.module,
-                    "function": record.funcName,
-                    "line": record.lineno,
-                    "request_id": get_request_id() or "",
-                })
+                return json.dumps(
+                    {
+                        "timestamp": self.formatTime(record, self.datefmt),
+                        "level": record.levelname,
+                        "logger": record.name,
+                        "message": record.getMessage(),
+                        "module": record.module,
+                        "function": record.funcName,
+                        "line": record.lineno,
+                        "request_id": get_request_id() or "",
+                    }
+                )
 
         formatter = TestJSONFormatter()
         handler.setFormatter(formatter)
@@ -216,7 +219,11 @@ class TestSetupJsonLogging:
 
 class TestGetHealthStatus:
     def test_get_health_status_structure(self) -> None:
-        with patch("secondbrain.storage.VectorStorage", return_value=MockVectorStorage(), create=True):
+        with patch(
+            "secondbrain.storage.VectorStorage",
+            return_value=MockVectorStorage(),
+            create=True,
+        ):
             status = get_health_status()
             assert "status" in status
             assert "timestamp" in status
@@ -224,21 +231,37 @@ class TestGetHealthStatus:
             assert "check_duration_seconds" in status
 
     def test_get_health_status_services_keys(self) -> None:
-        with patch("secondbrain.storage.VectorStorage", return_value=MockVectorStorage(), create=True):
+        with patch(
+            "secondbrain.storage.VectorStorage",
+            return_value=MockVectorStorage(),
+            create=True,
+        ):
             assert "mongodb" in get_health_status()["services"]
 
 
 class TestCheckServices:
     def test_check_services_returns_dict(self) -> None:
-        with patch("secondbrain.storage.VectorStorage", return_value=MockVectorStorage(), create=True):
+        with patch(
+            "secondbrain.storage.VectorStorage",
+            return_value=MockVectorStorage(),
+            create=True,
+        ):
             assert isinstance(check_services(), dict)
 
     def test_check_services_has_required_keys(self) -> None:
-        with patch("secondbrain.storage.VectorStorage", return_value=MockVectorStorage(), create=True):
+        with patch(
+            "secondbrain.storage.VectorStorage",
+            return_value=MockVectorStorage(),
+            create=True,
+        ):
             assert "mongodb" in check_services()
 
     def test_check_services_values_are_booleans(self) -> None:
-        with patch("secondbrain.storage.VectorStorage", return_value=MockVectorStorage(), create=True):
+        with patch(
+            "secondbrain.storage.VectorStorage",
+            return_value=MockVectorStorage(),
+            create=True,
+        ):
             assert isinstance(check_services()["mongodb"], bool)
 
 
@@ -253,7 +276,10 @@ class TestFileLogging:
         setup_logging(verbose=True, log_file=str(log_file))
 
         assert len(root_logger.handlers) == 2
-        assert any(isinstance(h, logging.handlers.RotatingFileHandler) for h in root_logger.handlers)
+        assert any(
+            isinstance(h, logging.handlers.RotatingFileHandler)
+            for h in root_logger.handlers
+        )
         assert log_file.exists()
 
     def test_setup_logging_with_env_var_creates_file_handler(
@@ -295,7 +321,11 @@ class TestFileLogging:
 
         setup_logging(verbose=True, log_file=str(log_file), max_bytes=1024)
 
-        file_handler = next(h for h in root_logger.handlers if isinstance(h, logging.handlers.RotatingFileHandler))
+        file_handler = next(
+            h
+            for h in root_logger.handlers
+            if isinstance(h, logging.handlers.RotatingFileHandler)
+        )
         assert file_handler.maxBytes == 1024
 
     def test_log_rotation_occurs(self, tmp_path: Path) -> None:
@@ -303,12 +333,16 @@ class TestFileLogging:
         root_logger = logging.getLogger()
         root_logger.handlers.clear()
 
-        setup_logging(verbose=True, log_file=str(log_file), max_bytes=500, backup_count=3)
+        setup_logging(
+            verbose=True, log_file=str(log_file), max_bytes=500, backup_count=3
+        )
 
         logger = get_logger("rotation_test")
 
         for i in range(10):
-            logger.info(f"Test log message number {i} with some additional content to increase size")
+            logger.info(
+                f"Test log message number {i} with some additional content to increase size"
+            )
 
         assert log_file.exists()
 
@@ -344,7 +378,11 @@ class TestFileLogging:
 
         setup_logging(verbose=True, log_file=str(log_file), max_bytes=1024)
 
-        file_handlers = [h for h in root_logger.handlers if isinstance(h, logging.handlers.RotatingFileHandler)]
+        file_handlers = [
+            h
+            for h in root_logger.handlers
+            if isinstance(h, logging.handlers.RotatingFileHandler)
+        ]
         assert len(file_handlers) == 1
 
         handler = file_handlers[0]
@@ -358,7 +396,11 @@ class TestFileLogging:
         max_bytes = 500
         setup_logging(verbose=True, log_file=str(log_file), max_bytes=max_bytes)
 
-        file_handlers = [h for h in root_logger.handlers if isinstance(h, logging.handlers.RotatingFileHandler)]
+        file_handlers = [
+            h
+            for h in root_logger.handlers
+            if isinstance(h, logging.handlers.RotatingFileHandler)
+        ]
         assert len(file_handlers) == 1
 
         handler = file_handlers[0]
