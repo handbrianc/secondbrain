@@ -206,6 +206,7 @@ class TestAllContract:
             "DocumentIngestor",
             "Segment",
             "UnsupportedFileError",
+            "config",
             "get_file_type",
             "is_supported",
         ):
@@ -214,4 +215,4 @@ class TestAllContract:
     def test_all_member_count(self) -> None:
         import secondbrain.document as doc_mod
 
-        assert len(doc_mod.__all__) == 8
+        assert len(doc_mod.__all__) == 9
