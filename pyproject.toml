@@ -239,16 +239,7 @@ ignore_missing_imports = true
 # Technical debt: restored incrementally — attr-defined/operator/unreachable/has-type remain for stub gaps; misc/no-any-return/valid-type/return-value removed for stricter checking
 disable_error_code = ["attr-defined", "operator", "unreachable", "has-type"]
 
-[[tool.mypy.overrides]]
-module = ["docling", "docling.*"]
-follow_imports = "skip"
-ignore_missing_imports = true
-# TODO: restore disabled codes as docling typing matures
-disable_error_code = ["attr-defined", "has-type", "unreachable"]
 
-[[tool.mypy.overrides]]
-module = ["docs.examples.*"]
-disable_error_code = ["misc"]
 
 [tool.coverage.run]
 source = ["src"]
