@@ -653,9 +653,8 @@ def _interactive_chat(
             console.print(f"[dim]Created new session: {session_obj.session_id}[/dim]")
         else:
             session_obj = ConversationSession.load(session, storage)  # type: ignore[assignment]
-            assert session_obj is not None, "load() returned None unexpectedly"
             if session_obj is None:
-                session_obj = ConversationSession.create(session, storage)  # type: ignore[unreachable]
+                session_obj = ConversationSession.create(session, storage)
                 console.print(
                     f"[dim]Created new session: {session_obj.session_id}[/dim]"
                 )
