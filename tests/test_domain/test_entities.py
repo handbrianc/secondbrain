@@ -200,7 +200,6 @@ class TestDocumentChunkEmbeddingStatus:
         )
         assert not chunk_no_embedding.has_embedding()
 
-
         chunk_with_embedding = DocumentChunk(
             chunk_id=ChunkId("test-id"),
             text="test text",

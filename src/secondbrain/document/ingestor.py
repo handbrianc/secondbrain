@@ -10,6 +10,7 @@ import contextlib
 import hashlib
 import logging
 import os
+import time
 import warnings
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -863,9 +864,19 @@ class DocumentIngestor:
                             continue
 
                         for i in range(0, len(documents), MAX_MEMORY_BATCH_SIZE):
-                            storage.store_batch(
-                                documents[i : i + MAX_MEMORY_BATCH_SIZE]
-                            )
+                            batch = documents[i : i + MAX_MEMORY_BATCH_SIZE]
+                            with trace_operation("storage.store") as span:
+                                if span is not None:
+                                    span.set_attribute(
+                                        "storage.documents_stored", len(batch)
+                                    )
+                                start = time.time()
+                                storage.store_batch(batch)
+                                elapsed_ms = (time.time() - start) * 1000
+                                if span is not None:
+                                    span.set_attribute(
+                                        "storage.duration_ms", elapsed_ms
+                                    )
 
                         successful_files += 1
                         completed += 1
@@ -891,8 +902,6 @@ class DocumentIngestor:
                     del pending_futures[future]
 
                 if pending_futures:
-                    import time
-
                     time.sleep(0.01)
 
         return successful_files, failed_files

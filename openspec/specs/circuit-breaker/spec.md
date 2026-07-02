@@ -17,7 +17,7 @@ The circuit breaker SHALL implement a state machine with three states: CLOSED (n
 - **THEN** state SHALL transition to HALF_OPEN
 
 #### Scenario: Transition back to CLOSED on success
-- **WHEN** HALF_OPEN state and call succeeds
+- **WHEN** HALF_OPEN state and N consecutive calls succeed (where N = success_threshold, default: 2)
 - **THEN** state SHALL transition to CLOSED
 - **AND** failure count SHALL reset to zero
 
