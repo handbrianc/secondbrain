@@ -1008,6 +1008,7 @@ class AsyncVectorStorage(ValidatableService, BaseVectorStorage):
             # called on AsyncVectorStorage (rare, but required by ABC).
             asyncio.run(self.async_client.admin.command("ping"))
             return True
+        except Exception:
             return False
 
     # ------------------------------------------------------------------
