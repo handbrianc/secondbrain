@@ -59,7 +59,7 @@ class BaseVectorStorage(ABC):  # noqa: B024
             Binary data if binary format enabled, otherwise original list.
         """
         # NOTE: Binary format is deprecated. Kept for backward compat only.
-        if self._config.embedding_storage_format == "binary":  # type: ignore[assignment]
+        if self._config.embedding_storage_format == "binary":  # type: ignore[attr-defined]
             return Binary(self._encode_embedding(embedding))
         return embedding
 

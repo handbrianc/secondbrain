@@ -7,7 +7,7 @@ import re
 import time
 from collections.abc import Sequence
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 import httpx
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -24,7 +24,12 @@ from secondbrain.exceptions import StorageConnectionError
 from secondbrain.storage.base import BaseVectorStorage
 from secondbrain.storage.models import DatabaseStats
 from secondbrain.storage.pipeline import build_search_pipeline
-from secondbrain.types import ChunkInfo, SearchResult, _validate_chunk_info, _validate_search_result
+from secondbrain.types import (
+    ChunkInfo,
+    SearchResult,
+    _validate_chunk_info,
+    _validate_search_result,
+)
 from secondbrain.utils.connections import ValidatableService
 from secondbrain.utils.perf_monitor import async_timing, timing
 from secondbrain.utils.tracing import trace_operation
@@ -324,10 +329,10 @@ class VectorStorage(ValidatableService, BaseVectorStorage):
         return self.collection.delete_one(query)
 
     def _execute_count(self, query: dict[str, Any]) -> int:
-        return self.collection.count_documents(query)
+        return cast(int, self.collection.count_documents(query))
 
     def _execute_distinct(self, field: str) -> list[Any]:
-        return self.collection.distinct(field)
+        return cast("list[Any]", self.collection.distinct(field))
 
     def ensure_index(self) -> None:
         """Create indexes for local MongoDB.
@@ -708,7 +713,7 @@ class VectorStorage(ValidatableService, BaseVectorStorage):
         result = await asyncio.to_thread(lambda: self.collection.delete_many({}))
         return int(result.deleted_count)
 
-    def get_stats(self) -> DatabaseStats:
+    def get_stats(self) -> dict[str, Any]:
         """Get database statistics.
 
         Returns
@@ -741,12 +746,15 @@ class VectorStorage(ValidatableService, BaseVectorStorage):
             lambda: len(self.collection.distinct("source_file"))
         )
 
-        return {
-            "total_chunks": total,
-            "unique_sources": unique_sources,
-            "database": self.db_name,
-            "collection": self.collection_name,
-        }
+        return cast(
+            DatabaseStats,
+            {
+                "total_chunks": total,
+                "unique_sources": unique_sources,
+                "database": self.db_name,
+                "collection": self.collection_name,
+            },
+        )
 
 
 class AsyncVectorStorage(ValidatableService, BaseVectorStorage):
@@ -765,7 +773,7 @@ class AsyncVectorStorage(ValidatableService, BaseVectorStorage):
     - Same API surface as VectorStorage for easy migration
     """
 
-    def __init__(  # type: ignore[misc]
+    def __init__(
         self,
         mongo_uri: str | None = None,
         db_name: str | None = None,
@@ -995,10 +1003,10 @@ class AsyncVectorStorage(ValidatableService, BaseVectorStorage):
     # ------------------------------------------------------------------
 
     def validate_connection(self, force: bool = False) -> bool:
-        return super().validate_connection(force=force)  # type: ignore[misc]
+        return super().validate_connection(force=force)
 
     async def validate_connection_async(self, force: bool = False) -> bool:
-        return await super().validate_connection_async(force=force)  # type: ignore[misc]
+        return await super().validate_connection_async(force=force)
 
     # ------------------------------------------------------------------
     # Transport-layer stubs — satisfy new base.py ABC requirements
@@ -1029,10 +1037,10 @@ class AsyncVectorStorage(ValidatableService, BaseVectorStorage):
         return await self.async_collection.delete_one(query)
 
     async def _execute_count(self, query: dict[str, Any]) -> int:  # type: ignore[override]
-        return await self.async_collection.count_documents(query)
+        return cast(int, await self.async_collection.count_documents(query))
 
     async def _execute_distinct(self, field: str) -> list[Any]:  # type: ignore[override]
-        return await self.async_collection.distinct(field)
+        return cast("list[Any]", await self.async_collection.distinct(field))
 
     @async_timing("async_storage_store")
     async def store_async(self, document: dict[str, Any]) -> str:
