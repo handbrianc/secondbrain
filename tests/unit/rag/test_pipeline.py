@@ -34,7 +34,9 @@ class StreamTracker:
         self._stream_raises = stream_raises
         self._stream_produces_empty = stream_produces_empty
 
-    def generate(self, prompt: str, temperature: float = 0.7, max_tokens: int = 4096) -> str:
+    def generate(
+        self, prompt: str, temperature: float = 0.7, max_tokens: int = 4096
+    ) -> str:
         self.generate_called = True
         return "Generated answer"
 
@@ -54,7 +56,9 @@ class StreamTracker:
         on_chunk("answer", None)
         return ""
 
-    async def agenerate(self, prompt: str, temperature: float = 0.7, max_tokens: int = 4096) -> str:
+    async def agenerate(
+        self, prompt: str, temperature: float = 0.7, max_tokens: int = 4096
+    ) -> str:
         self.agenerate_called = True
         return "Async generated answer"
 
@@ -81,7 +85,9 @@ class GenerateOnlyTracker:
     def __init__(self) -> None:
         self.generate_called = False
 
-    def generate(self, prompt: str, temperature: float = 0.7, max_tokens: int = 4096) -> str:
+    def generate(
+        self, prompt: str, temperature: float = 0.7, max_tokens: int = 4096
+    ) -> str:
         self.generate_called = True
         return "Generated (no streaming available)"
 
@@ -100,7 +106,9 @@ def _make_mock_searcher() -> MagicMock:
     return mock
 
 
-def _make_pipeline_for_tracker(tracker: StreamTracker | GenerateOnlyTracker) -> RAGPipeline:
+def _make_pipeline_for_tracker(
+    tracker: StreamTracker | GenerateOnlyTracker,
+) -> RAGPipeline:
     """Create RAGPipeline with given tracker as the LLM provider."""
     return RAGPipeline(
         searcher=_make_mock_searcher(),
@@ -220,7 +228,9 @@ class TestStreamingDisabled:
         result = pipeline.query("Test query")
 
         assert tracker.generate_called, "generate should have been called"
-        assert not tracker.stream_chat_called, "stream_chat should NOT be called when streaming disabled"
+        assert not tracker.stream_chat_called, (
+            "stream_chat should NOT be called when streaming disabled"
+        )
         assert "answer" in result
 
     def test_streaming_disabled_chat(self) -> None:
@@ -238,7 +248,9 @@ class TestStreamingDisabled:
         result = pipeline.chat("Test query", session)
 
         assert tracker.generate_called, "generate should have been called"
-        assert not tracker.stream_chat_called, "stream_chat should NOT be called when disabled"
+        assert not tracker.stream_chat_called, (
+            "stream_chat should NOT be called when disabled"
+        )
         assert "answer" in result
 
 
@@ -260,7 +272,9 @@ class TestStreamChatReturnsEmpty:
 
         # stream_chat was called but produced no content, so fallback to generate
         assert tracker.stream_chat_called, "stream_chat should have been called"
-        assert tracker.generate_called, "generate should have been called as fallback for empty stream"
+        assert tracker.generate_called, (
+            "generate should have been called as fallback for empty stream"
+        )
         assert "answer" in result
 
 
@@ -268,7 +282,9 @@ class TestAsyncQueryAsyncStreaming:
     """Tests for async query_async streaming wiring."""
 
     @pytest.mark.asyncio
-    async def test_async_query_async_streaming_enabled_calls_stream_chat_async(self) -> None:
+    async def test_async_query_async_streaming_enabled_calls_stream_chat_async(
+        self,
+    ) -> None:
         """Test that async query_async with streaming enabled uses stream_chat_async.
 
         When config.streaming_enabled=True and provider has stream_chat_async,
@@ -280,7 +296,9 @@ class TestAsyncQueryAsyncStreaming:
 
         result = await pipeline.query_async("Test query")
 
-        assert tracker.stream_chat_async_called, "stream_chat_async should have been called"
+        assert tracker.stream_chat_async_called, (
+            "stream_chat_async should have been called"
+        )
         assert not tracker.agenerate_called, "agenerate should NOT have been called"
         assert "answer" in result
         # The streamed content should be accumulated
@@ -302,7 +320,9 @@ class TestAsyncQueryAsyncStreaming:
         result = await pipeline.query_async("Test query")
 
         assert tracker.agenerate_called, "agenerate should have been called"
-        assert not tracker.stream_chat_async_called, "stream_chat_async should NOT be called"
+        assert not tracker.stream_chat_async_called, (
+            "stream_chat_async should NOT be called"
+        )
         assert result["answer"] == "Async generated answer"
 
     @pytest.mark.asyncio
@@ -318,6 +338,8 @@ class TestAsyncQueryAsyncStreaming:
 
         result = await pipeline.query_async("Test query")
 
-        assert tracker.stream_chat_async_called, "stream_chat_async should have been attempted"
+        assert tracker.stream_chat_async_called, (
+            "stream_chat_async should have been attempted"
+        )
         assert tracker.agenerate_called, "agenerate should have been called as fallback"
         assert result["answer"] == "Async generated answer"

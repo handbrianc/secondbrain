@@ -183,7 +183,6 @@ class TestDocumentChunkEmbeddingStatus:
     def test_has_embedding_with_valid_vector(
         self, sample_metadata: DocumentMetadata
     ) -> None:
-        from secondbrain.domain.value_objects import EmbeddingVector
 
         chunk = DocumentChunk(
             chunk_id=ChunkId("test-id"),
@@ -201,7 +200,6 @@ class TestDocumentChunkEmbeddingStatus:
         )
         assert not chunk_no_embedding.has_embedding()
 
-        from secondbrain.domain.value_objects import EmbeddingVector
 
         chunk_with_embedding = DocumentChunk(
             chunk_id=ChunkId("test-id"),
@@ -224,7 +222,6 @@ class TestDocumentChunkToDict:
     def test_serialization_to_storage_format(
         self, sample_metadata: DocumentMetadata
     ) -> None:
-        from secondbrain.domain.value_objects import EmbeddingVector
 
         chunk = DocumentChunk(
             chunk_id=ChunkId("test-chunk-id"),

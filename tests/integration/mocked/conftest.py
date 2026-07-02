@@ -54,7 +54,9 @@ def sample_embedding() -> list[float]:
 @pytest.fixture
 def mock_embedder(sample_embedding: list[float]) -> Any:
     """Create a mock embedding generator that returns predictable embeddings."""
-    mock_gen = MockEmbeddingGenerator(model_name="mock-384", dimension=EMBEDDING_DIMENSIONS)
+    mock_gen = MockEmbeddingGenerator(
+        model_name="mock-384", dimension=EMBEDDING_DIMENSIONS
+    )
 
     def mock_generate(self: Any, text: str) -> list[float]:
         return sample_embedding
@@ -182,7 +184,9 @@ def search_workflow(storage_with_index: Any, sample_embedding: list[float]) -> A
     """Create a Searcher-like workflow for testing search operations."""
     from secondbrain.search import Searcher
 
-    mock_gen = MockEmbeddingGenerator(model_name="mock-384", dimension=EMBEDDING_DIMENSIONS)
+    mock_gen = MockEmbeddingGenerator(
+        model_name="mock-384", dimension=EMBEDDING_DIMENSIONS
+    )
 
     original_generate = MockEmbeddingGenerator.generate
 

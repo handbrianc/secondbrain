@@ -12,10 +12,11 @@ from secondbrain.exceptions import StorageConnectionError
 from secondbrain.storage.mock import MockVectorStorage
 from secondbrain.storage.models import DatabaseStats
 from secondbrain.storage.pipeline import build_search_pipeline
-from secondbrain.storage.storage import VectorStorage
+from secondbrain.storage.storage import AsyncVectorStorage, VectorStorage
 from secondbrain.types import ChunkInfo, SearchResult
 
 __all__ = [
+    "AsyncVectorStorage",
     "ChunkInfo",
     "DatabaseStats",
     "MockVectorStorage",

@@ -1,10 +1,10 @@
 """Abstract base class for vector storage implementations."""
 
-from abc import ABC, abstractmethod
-from collections.abc import Sequence
 import logging
 import math
 import re
+from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from typing import Any
 
 from bson.binary import Binary

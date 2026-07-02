@@ -589,9 +589,9 @@ class TestSetupTracingWithMetrics:
         ):
             setup_tracing(service_name="test", service_version="1.0")
 
-            assert any(
-                "invalid" in msg.lower() for msg in caplog.messages
-            ), "Should log warning about invalid sampling rate"
+            assert any("invalid" in msg.lower() for msg in caplog.messages), (
+                "Should log warning about invalid sampling rate"
+            )
 
     def test_handles_otlp_exporter_failure(self, caplog):
         """Should fallback to console exporter when OTLP fails."""
@@ -799,9 +799,7 @@ class TestTraceOperationErrorHandling:
                 "secondbrain.utils.tracing._NoOpSpan.set_status"
             ).start()
 
-            mock_trace.get_tracer.return_value.start_as_current_span.return_value.__enter__.return_value = (
-                mock_span
-            )
+            mock_trace.get_tracer.return_value.start_as_current_span.return_value.__enter__.return_value = mock_span
 
             with pytest.raises(ValueError, match="Test error"):
                 with trace_operation("test_operation"):

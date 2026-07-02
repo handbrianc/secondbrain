@@ -103,6 +103,3 @@ def llm_judge_prompts():
     file_path = QUALITATIVE_DATA_PATH / "llm_judge_prompts.json"
     with open(file_path, encoding="utf-8") as f:
         return json.load(f)
-
-
-

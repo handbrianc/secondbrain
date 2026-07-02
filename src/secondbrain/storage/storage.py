@@ -997,6 +997,21 @@ class AsyncVectorStorage(ValidatableService, BaseVectorStorage):
         except Exception:
             return False
 
+    def _do_validate(self) -> bool:
+        """Synchronous validation using Motor.
+
+        Provided to satisfy the ValidatableService abstract requirement.
+        Async code paths should use _do_validate_async directly.
+        """
+        try:
+            # Blocking ping — only used when sync validate_connection() is
+            # called on AsyncVectorStorage (rare, but required by ABC).
+            import asyncio
+
+            return asyncio.run(self.async_client.admin.command("ping")) is None or True
+        except Exception:
+            return False
+
     # ------------------------------------------------------------------
     # Validator concrete implementations — satisfy base.py ABC while
     # delegating to ValidatableService cache/proxy logic

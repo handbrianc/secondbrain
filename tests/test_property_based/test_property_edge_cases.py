@@ -149,7 +149,9 @@ class TestConfigValidationEdgeCases:
     )
     @settings(max_examples=100)
     def test_embedding_config_valid(self, batch_size: int, dimensions: int):
-        config = Config(embedding_batch_size=batch_size, embedding_dimensions=dimensions)
+        config = Config(
+            embedding_batch_size=batch_size, embedding_dimensions=dimensions
+        )
         assert config.embedding_batch_size == batch_size
         assert config.embedding_dimensions == dimensions
 

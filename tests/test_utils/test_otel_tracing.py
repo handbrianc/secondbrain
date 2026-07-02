@@ -46,7 +46,9 @@ class TestOTELConfig:
 
     def test_exporter_endpoint_configurable(self, monkeypatch, caplog):
         monkeypatch.setenv("SECONDBRAIN_TRACING_ENABLED", "true")
-        monkeypatch.setenv("SECONDBRAIN_OTEL_EXPORTER_ENDPOINT", "http://custom-otel:4317")
+        monkeypatch.setenv(
+            "SECONDBRAIN_OTEL_EXPORTER_ENDPOINT", "http://custom-otel:4317"
+        )
         tracing_module.setup_tracing(service_name="test-service")
         assert "custom-otel:4317" in str(caplog.text) or True
 
@@ -68,10 +70,12 @@ class TestOTELSpans:
 
     def test_trace_operation_function_exists(self):
         from secondbrain.utils.tracing import trace_operation
+
         assert callable(trace_operation)
 
     def test_trace_operation_creates_span_context(self):
         from secondbrain.utils.tracing import trace_operation
+
         with trace_operation("document.ingest") as span:
             if span:
                 span.set_attribute("test.key", "test_value")
@@ -82,6 +86,7 @@ class TestOTELSpans:
 
     def test_trace_operation_for_search(self):
         from secondbrain.utils.tracing import trace_operation
+
         with trace_operation("search.query") as span:
             if span:
                 span.set_attribute("top_k", 10)
@@ -92,12 +97,14 @@ class TestOTELSpans:
 
     def test_trace_operation_for_mongodb(self):
         from secondbrain.utils.tracing import trace_operation
+
         with trace_operation("db.mongodb.find") as span:
             if span:
                 span.set_attribute("database", "secondbrain")
 
     def test_mongodb_span_operation_name_format(self):
         from secondbrain.utils.tracing import trace_operation
+
         with trace_operation("db.mongodb.find") as span:
             if span:
                 assert span.name == "db.mongodb.find"
@@ -113,6 +120,7 @@ class TestContextHelpers:
             inject_trace_context,
             set_trace_context,
         )
+
         assert callable(extract_trace_context)
         assert callable(inject_trace_context)
         assert callable(get_current_trace_context)
@@ -123,6 +131,7 @@ class TestContextHelpers:
             extract_trace_context,
             inject_trace_context,
         )
+
         headers = {}
         inject_trace_context(headers)
         context = extract_trace_context(headers)
@@ -133,6 +142,7 @@ class TestContextHelpers:
             extract_trace_context,
             inject_trace_context,
         )
+
         http_headers = {}
         inject_trace_context(http_headers)
         if "traceparent" in http_headers:

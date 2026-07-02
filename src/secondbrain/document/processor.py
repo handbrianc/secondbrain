@@ -84,7 +84,7 @@ class _Segment(TypedDict):
 # ---------------------------------------------------------------------------
 
 
-def create_converter() -> DocumentConverter:  # noqa: UP037
+def create_converter() -> DocumentConverter:
     """Create a configured DocumentConverter with CPU acceleration.
 
     Lazily imports docling internals. Calling this function incurs the
@@ -258,7 +258,6 @@ def _extract_chunk_and_embed_file(
     """
     import contextlib
     from datetime import UTC, datetime
-
     from uuid import uuid4
 
     from secondbrain.config import config

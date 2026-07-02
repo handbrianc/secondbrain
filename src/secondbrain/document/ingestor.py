@@ -784,7 +784,7 @@ class DocumentIngestor:
         """
         import queue
         from concurrent.futures import (
-            ThreadPoolExecutor,
+            ProcessPoolExecutor,
             as_completed,
         )
 
@@ -802,7 +802,7 @@ class DocumentIngestor:
 
         with (
             trace_operation("ingest_thread_progress") as span,
-            ThreadPoolExecutor(max_workers=max_workers) as executor,
+            ProcessPoolExecutor(max_workers=max_workers) as executor,
         ):
             if span:
                 span.set_attribute("ingestion.files_total", len(files))
@@ -917,7 +917,7 @@ class DocumentIngestor:
             Tuple of (successful_files, failed_files) counts.
         """
         from concurrent.futures import (
-            ThreadPoolExecutor,
+            ProcessPoolExecutor,
             as_completed,
         )
 
@@ -931,7 +931,7 @@ class DocumentIngestor:
 
         with (
             trace_operation("ingest_thread") as span,
-            ThreadPoolExecutor(max_workers=cores) as executor,
+            ProcessPoolExecutor(max_workers=cores) as executor,
         ):
             if span:
                 span.set_attribute("ingestion.files_total", len(files))
@@ -1284,12 +1284,12 @@ class AsyncDocumentIngestor(DocumentIngestor):
         """
         from secondbrain.config import config
         from secondbrain.embedding import EmbeddingProviderFactory
-        from secondbrain.storage import VectorStorage
+        from secondbrain.storage import AsyncVectorStorage
 
         # Initialize services
         cfg = config()
         embedding_gen = EmbeddingProviderFactory.create_from_config(cfg)
-        storage = VectorStorage()
+        storage = AsyncVectorStorage()
 
         try:
             # Collect and validate files
@@ -1419,8 +1419,10 @@ class AsyncDocumentIngestor(DocumentIngestor):
                         texts_to_embed
                     )
                 else:
-                    embeddings = await asyncio.to_thread(
-                        embedding_gen.generate_batch, texts_to_embed
+                    raise TypeError(
+                        "EmbeddingGenerator does not implement generate_batch_async; "
+                        "async-ingestor spec AI-003 requires native async embedding "
+                        "generation. Configure a generator with native async support."
                     )
 
                 for text, embedding in zip(texts_to_embed, embeddings, strict=True):
@@ -1443,8 +1445,11 @@ class AsyncDocumentIngestor(DocumentIngestor):
                         if hasattr(embedding_gen, "generate_async"):
                             embedding = await embedding_gen.generate_async(text)
                         else:
-                            embedding = await asyncio.to_thread(
-                                embedding_gen.generate, text
+                            raise TypeError(
+                                "EmbeddingGenerator does not implement generate_async; "
+                                "async-ingestor spec AI-003 requires native async single-"
+                                "embedding generation. Configure a generator with native "
+                                "async support."
                             )
                         self.embedding_cache.set(text, embedding)
                         chunk_to_embedding[chunk["text_hash"]] = embedding
@@ -1486,7 +1491,7 @@ class AsyncDocumentIngestor(DocumentIngestor):
             docs_to_store.append(doc)
 
         if docs_to_store:
-            await asyncio.to_thread(storage.store_batch, docs_to_store)
+            await storage.store_batch_async(docs_to_store)
 
         return len(docs_to_store)
 
@@ -1536,8 +1541,10 @@ class AsyncDocumentIngestor(DocumentIngestor):
                             texts_to_embed
                         )
                     else:
-                        embeddings = await asyncio.to_thread(
-                            embedding_gen.generate_batch, texts_to_embed
+                        raise TypeError(
+                            "EmbeddingGenerator does not implement generate_batch_async; "
+                            "async-ingestor spec AI-003 requires native async embedding "
+                            "generation. Configure a generator with native async support."
                         )
 
                     for idx, embedding in zip(cached_indices, embeddings, strict=True):
@@ -1563,8 +1570,10 @@ class AsyncDocumentIngestor(DocumentIngestor):
                                 chunk["text"]
                             )
                         else:
-                            embedding = await asyncio.to_thread(
-                                embedding_gen.generate, chunk["text"]
+                            raise TypeError(
+                                "EmbeddingGenerator does not implement generate_async; "
+                                "async-ingestor spec AI-003 requires native async single-embedding "
+                                "generation. Configure a generator with native async support."
                             )
                         self.embedding_cache.set(chunk["text"], embedding)
                         chunk_to_embedding[chunk["text_hash"]] = embedding
@@ -1619,7 +1628,7 @@ class AsyncDocumentIngestor(DocumentIngestor):
                     file_path, segments, embedding_gen
                 )
                 if docs_to_store:
-                    await asyncio.to_thread(storage.store_batch, docs_to_store)
+                    await storage.store_batch_async(docs_to_store)
                     return True
                 return False
 

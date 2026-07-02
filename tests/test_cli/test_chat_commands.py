@@ -35,9 +35,13 @@ class TestChatCommands:
         with (
             patch("secondbrain.rag.RAGPipeline") as mock_pipeline_class,
             patch("secondbrain.conversation.ConversationSession") as mock_session_class,
-            patch("secondbrain.rag.providers.factory.LLMProviderFactory") as mock_factory,
+            patch(
+                "secondbrain.rag.providers.factory.LLMProviderFactory"
+            ) as mock_factory,
             patch("secondbrain.search.Searcher") as mock_searcher_class,
-            patch("secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config") as mock_emb_factory,
+            patch(
+                "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
+            ) as mock_emb_factory,
         ):
             # Mock searcher
             mock_searcher = MagicMock()
@@ -98,9 +102,13 @@ class TestChatCommands:
         with (
             patch("secondbrain.rag.RAGPipeline"),
             patch("secondbrain.conversation.ConversationSession") as mock_session_class,
-            patch("secondbrain.rag.providers.factory.LLMProviderFactory") as mock_factory,
+            patch(
+                "secondbrain.rag.providers.factory.LLMProviderFactory"
+            ) as mock_factory,
             patch("secondbrain.search.Searcher") as mock_searcher_class,
-            patch("secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config") as mock_emb_factory,
+            patch(
+                "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
+            ) as mock_emb_factory,
         ):
             mock_searcher = MagicMock()
             mock_searcher_class.return_value = mock_searcher
@@ -158,9 +166,13 @@ class TestChatCommands:
         with (
             patch("secondbrain.rag.RAGPipeline") as mock_pipeline_class,
             patch("secondbrain.conversation.ConversationSession") as mock_session_class,
-            patch("secondbrain.rag.providers.factory.LLMProviderFactory") as mock_factory,
+            patch(
+                "secondbrain.rag.providers.factory.LLMProviderFactory"
+            ) as mock_factory,
             patch("secondbrain.search.Searcher") as mock_searcher_class,
-            patch("secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config") as mock_emb_factory,
+            patch(
+                "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
+            ) as mock_emb_factory,
         ):
             mock_searcher = MagicMock()
             mock_searcher_class.return_value = mock_searcher
@@ -206,7 +218,7 @@ class TestChatCommands:
 
     def test_interactive_chat_empty_response_handling(self) -> None:
         """Test empty LLM response handling in interactive chat.
-        
+
         Verifies that:
         - Empty responses trigger user-friendly message
         - Warning is logged for empty responses
@@ -216,9 +228,13 @@ class TestChatCommands:
         with (
             patch("secondbrain.rag.RAGPipeline") as mock_pipeline_class,
             patch("secondbrain.conversation.ConversationSession") as mock_session_class,
-            patch("secondbrain.rag.providers.factory.LLMProviderFactory") as mock_factory,
+            patch(
+                "secondbrain.rag.providers.factory.LLMProviderFactory"
+            ) as mock_factory,
             patch("secondbrain.search.Searcher") as mock_searcher_class,
-            patch("secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config") as mock_emb_factory,
+            patch(
+                "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
+            ) as mock_emb_factory,
         ):
             mock_searcher = MagicMock()
             mock_searcher_class.return_value = mock_searcher
@@ -239,7 +255,10 @@ class TestChatCommands:
             mock_pipeline = MagicMock()
             mock_pipeline.chat.side_effect = [
                 {"answer": "", "rewritten_query": "test query"},
-                {"answer": "Valid response after empty", "rewritten_query": "test query 2"},
+                {
+                    "answer": "Valid response after empty",
+                    "rewritten_query": "test query 2",
+                },
             ]
             mock_pipeline_class.return_value = mock_pipeline
 
@@ -262,7 +281,7 @@ class TestChatCommands:
 
     def test_single_chat_empty_response_handling(self) -> None:
         """Test empty LLM response handling in single-turn chat mode.
-        
+
         Verifies that:
         - Empty responses show user-friendly message
         - Exit code is 0 (graceful handling)
@@ -271,9 +290,13 @@ class TestChatCommands:
         with (
             patch("secondbrain.rag.RAGPipeline") as mock_pipeline_class,
             patch("secondbrain.conversation.ConversationSession") as mock_session_class,
-            patch("secondbrain.rag.providers.factory.LLMProviderFactory") as mock_factory,
+            patch(
+                "secondbrain.rag.providers.factory.LLMProviderFactory"
+            ) as mock_factory,
             patch("secondbrain.search.Searcher") as mock_searcher_class,
-            patch("secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config") as mock_emb_factory,
+            patch(
+                "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
+            ) as mock_emb_factory,
         ):
             mock_searcher = MagicMock()
             mock_searcher_class.return_value = mock_searcher
@@ -294,14 +317,13 @@ class TestChatCommands:
             mock_pipeline = MagicMock()
             mock_pipeline.chat.return_value = {
                 "answer": "",
-                "rewritten_query": "test query"
+                "rewritten_query": "test query",
             }
             mock_pipeline_class.return_value = mock_pipeline
 
             runner = CliRunner()
             result = runner.invoke(
-                cli,
-                ["chat", "What is the answer?", "--session", "test-single-empty"]
+                cli, ["chat", "What is the answer?", "--session", "test-single-empty"]
             )
 
             assert result.exit_code == 0
@@ -391,7 +413,9 @@ class TestChatCommands:
 
             # Test deletion of non-existent session (with confirmation input 'y')
             mock_storage.delete_session.return_value = False
-            result = runner.invoke(cli, ["chat", "--delete-session", "nonexistent"], input="y\n")
+            result = runner.invoke(
+                cli, ["chat", "--delete-session", "nonexistent"], input="y\n"
+            )
             assert result.exit_code == 0
             assert "Session not found: nonexistent" in result.output
 
@@ -415,7 +439,10 @@ class TestChatCommands:
             result = runner.invoke(cli, ["chat", "--check-llm"])
 
             assert result.exit_code == 0
-            assert "healthy" in result.output.lower() or "available" in result.output.lower()
+            assert (
+                "healthy" in result.output.lower()
+                or "available" in result.output.lower()
+            )
             mock_provider.health_check.assert_called_once()
 
             # Test 2: LLM unavailable
@@ -423,7 +450,10 @@ class TestChatCommands:
             result = runner.invoke(cli, ["chat", "--check-llm"])
 
             assert result.exit_code == 0
-            assert "failed" in result.output.lower() or "unavailable" in result.output.lower()
+            assert (
+                "failed" in result.output.lower()
+                or "unavailable" in result.output.lower()
+            )
 
     def test_view_session_history(self) -> None:
         """Test --history flag displays full conversation transcript."""
@@ -433,9 +463,15 @@ class TestChatCommands:
             mock_storage = MagicMock()
             mock_history = [
                 {"role": "user", "content": "What is secondbrain?"},
-                {"role": "assistant", "content": "SecondBrain is a local document intelligence CLI."},
+                {
+                    "role": "assistant",
+                    "content": "SecondBrain is a local document intelligence CLI.",
+                },
                 {"role": "user", "content": "How do I search documents?"},
-                {"role": "assistant", "content": "Use the 'secondbrain search' command."},
+                {
+                    "role": "assistant",
+                    "content": "Use the 'secondbrain search' command.",
+                },
             ]
             mock_storage.get_history.return_value = mock_history
             mock_storage_class.return_value.__enter__ = MagicMock(
@@ -467,9 +503,13 @@ class TestChatCommands:
         with (
             patch("secondbrain.rag.RAGPipeline") as mock_pipeline_class,
             patch("secondbrain.conversation.ConversationSession") as mock_session_class,
-            patch("secondbrain.rag.providers.factory.LLMProviderFactory") as mock_factory,
+            patch(
+                "secondbrain.rag.providers.factory.LLMProviderFactory"
+            ) as mock_factory,
             patch("secondbrain.search.Searcher") as mock_searcher_class,
-            patch("secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config") as mock_emb_factory,
+            patch(
+                "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
+            ) as mock_emb_factory,
         ):
             mock_searcher = MagicMock()
             mock_searcher_class.return_value = mock_searcher
@@ -522,24 +562,25 @@ def test_show_sources_disabled():
     runner = CliRunner()
 
     # Invoke chat command help to verify flag exists
-    result = runner.invoke(cli, ['chat', '--help'])
+    result = runner.invoke(cli, ["chat", "--help"])
     assert result.exit_code == 0, f"Chat help should work. Output: {result.output}"
 
     # Verify --show-sources flag is documented with a description
-    assert '--show-sources' in result.output, "CLI should have --show-sources flag"
+    assert "--show-sources" in result.output, "CLI should have --show-sources flag"
 
     # Verify the flag has proper click option format (with description after)
-    lines = result.output.split('\n')
+    lines = result.output.split("\n")
     show_sources_line = None
     for i, line in enumerate(lines):
-        if '--show-sources' in line:
+        if "--show-sources" in line:
             show_sources_line = line
             # Check if description exists on same line or next line
             if i + 1 < len(lines):
                 next_line = lines[i + 1].strip()
                 # Should have some description text (not empty)
-                assert len(next_line) > 0 or '--show-sources' in line.split('#')[0], \
+                assert len(next_line) > 0 or "--show-sources" in line.split("#")[0], (
                     "Flag should have a description"
+                )
             break
 
     assert show_sources_line is not None, "--show-sources flag should be in help output"
@@ -550,19 +591,20 @@ def test_custom_llm_endpoint():
     import os
 
     # Save original value
-    original = os.environ.get('SECONDBRAIN_LLM_ENDPOINT')
+    original = os.environ.get("SECONDBRAIN_LLM_ENDPOINT")
 
     try:
         # Set custom endpoint
-        custom_endpoint = 'http://custom-llm:8080'
-        os.environ['SECONDBRAIN_LLM_ENDPOINT'] = custom_endpoint
+        custom_endpoint = "http://custom-llm:8080"
+        os.environ["SECONDBRAIN_LLM_ENDPOINT"] = custom_endpoint
 
         # Verify the environment variable is set
-        assert os.environ['SECONDBRAIN_LLM_ENDPOINT'] == custom_endpoint
+        assert os.environ["SECONDBRAIN_LLM_ENDPOINT"] == custom_endpoint
 
         # Verify that config module can read this environment variable
         # by checking if it's in the expected location for config loading
         from secondbrain.config import get_config
+
         cfg = get_config()
 
         # The config should have been loaded with the environment variable
@@ -571,13 +613,13 @@ def test_custom_llm_endpoint():
         assert cfg is not None, "Config should load successfully"
 
         # Verify the env var is in the standard location for SecondBrain config
-        assert 'SECONDBRAIN_LLM_ENDPOINT' in os.environ
+        assert "SECONDBRAIN_LLM_ENDPOINT" in os.environ
     finally:
         # Restore original
         if original is None:
-            os.environ.pop('SECONDBRAIN_LLM_ENDPOINT', None)
+            os.environ.pop("SECONDBRAIN_LLM_ENDPOINT", None)
         else:
-            os.environ['SECONDBRAIN_LLM_ENDPOINT'] = original
+            os.environ["SECONDBRAIN_LLM_ENDPOINT"] = original
 
 
 def test_custom_conversation_db():
@@ -585,31 +627,34 @@ def test_custom_conversation_db():
     import os
 
     # Save original value
-    original = os.environ.get('SECONDBRAIN_CONVERSATION_DB')
+    original = os.environ.get("SECONDBRAIN_CONVERSATION_DB")
 
     try:
         # Set custom conversation DB
-        custom_db = 'my_custom_conversations'
-        os.environ['SECONDBRAIN_CONVERSATION_DB'] = custom_db
+        custom_db = "my_custom_conversations"
+        os.environ["SECONDBRAIN_CONVERSATION_DB"] = custom_db
 
         # Verify the environment variable is set
-        assert os.environ['SECONDBRAIN_CONVERSATION_DB'] == custom_db
+        assert os.environ["SECONDBRAIN_CONVERSATION_DB"] == custom_db
 
         # Verify it can be loaded by config
         from secondbrain.config import get_config
+
         cfg = get_config()
 
         # The config should load successfully with the custom DB setting
-        assert cfg is not None, "Config should load successfully with custom conversation DB"
+        assert cfg is not None, (
+            "Config should load successfully with custom conversation DB"
+        )
 
         # Verify the env var is in the standard location for SecondBrain config
-        assert 'SECONDBRAIN_CONVERSATION_DB' in os.environ
+        assert "SECONDBRAIN_CONVERSATION_DB" in os.environ
     finally:
         # Restore original
         if original is None:
-            os.environ.pop('SECONDBRAIN_CONVERSATION_DB', None)
+            os.environ.pop("SECONDBRAIN_CONVERSATION_DB", None)
         else:
-            os.environ['SECONDBRAIN_CONVERSATION_DB'] = original
+            os.environ["SECONDBRAIN_CONVERSATION_DB"] = original
 
     def test_empty_response_retry_logic(self) -> None:
         """Test that empty LLM responses trigger retry logic.
@@ -635,7 +680,10 @@ def test_custom_conversation_db():
             mock_pipeline.chat.side_effect = [
                 {"answer": "", "rewritten_query": "test query"},  # Empty response 1
                 {"answer": "", "rewritten_query": "test query"},  # Empty response 2
-                {"answer": "Final answer after retries.", "rewritten_query": "test query"},  # Success
+                {
+                    "answer": "Final answer after retries.",
+                    "rewritten_query": "test query",
+                },  # Success
             ]
             mock_pipeline_class.return_value = mock_pipeline
 
@@ -646,7 +694,10 @@ def test_custom_conversation_db():
             assert mock_pipeline.chat.call_count == 3
 
             # Verify output contains retry messages
-            assert "retrying" in result.output.lower() or "attempt" in result.output.lower()
+            assert (
+                "retrying" in result.output.lower()
+                or "attempt" in result.output.lower()
+            )
 
             # Verify final answer is displayed
             assert "Final answer after retries." in result.output
@@ -673,7 +724,7 @@ def test_custom_conversation_db():
             mock_pipeline = MagicMock()
             mock_pipeline.chat.return_value = {
                 "answer": "",
-                "rewritten_query": "test query"
+                "rewritten_query": "test query",
             }
             mock_pipeline_class.return_value = mock_pipeline
 
@@ -685,7 +736,13 @@ def test_custom_conversation_db():
 
             # Verify error message is shown
             assert "error" in result.output.lower()
-            assert "multiple attempts" in result.output.lower() or "try again" in result.output.lower()
+            assert (
+                "multiple attempts" in result.output.lower()
+                or "try again" in result.output.lower()
+            )
 
             # Verify no empty answer is displayed
-            assert "Assistant:" not in result.output or result.output.count("Assistant:") == 0
+            assert (
+                "Assistant:" not in result.output
+                or result.output.count("Assistant:") == 0
+            )

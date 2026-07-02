@@ -144,9 +144,9 @@ class TestGracefulDegradation:
         config = CircuitBreakerConfig(failure_threshold=3, recovery_timeout=1)
         cb = CircuitBreaker(config)
 
-        assert hasattr(cb, 'is_allowed')
-        assert hasattr(cb, 'record_failure')
-        assert hasattr(cb, 'record_success')
+        assert hasattr(cb, "is_allowed")
+        assert hasattr(cb, "record_failure")
+        assert hasattr(cb, "record_success")
 
     def test_retry_with_backoff(self):
         """Test retry logic with exponential backoff."""

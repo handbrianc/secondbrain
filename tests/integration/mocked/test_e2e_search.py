@@ -10,7 +10,9 @@ from secondbrain.search import Searcher
 
 pytestmark = [
     pytest.mark.integration,
-    pytest.mark.xdist_group("mocked_integration"),  # Group on same worker to share mongomock client
+    pytest.mark.xdist_group(
+        "mocked_integration"
+    ),  # Group on same worker to share mongomock client
 ]
 
 
@@ -18,7 +20,9 @@ class TestSearchE2E:
     """Test suite for end-to-end search integration."""
 
     @pytest.mark.integration
-    @patch("secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config")
+    @patch(
+        "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
+    )
     @patch("secondbrain.search.VectorStorage")
     def test_search_e2e(
         self, mock_storage_class: MagicMock, mock_create_from_config: MagicMock
@@ -73,7 +77,9 @@ class TestSearchE2E:
         )
 
     @pytest.mark.integration
-    @patch("secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config")
+    @patch(
+        "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
+    )
     @patch("secondbrain.search.VectorStorage")
     def test_search_with_filters(
         self, mock_storage_class: MagicMock, mock_create_from_config: MagicMock
@@ -120,7 +126,9 @@ class TestSearchIntegration:
     """Test suite for search integration scenarios."""
 
     @pytest.mark.integration
-    @patch("secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config")
+    @patch(
+        "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
+    )
     @patch("secondbrain.search.VectorStorage")
     def test_search_with_custom_top_k(
         self, mock_storage_class: MagicMock, mock_create_from_config: MagicMock
@@ -143,7 +151,9 @@ class TestSearchIntegration:
         assert call_args.kwargs["top_k"] == 20
 
     @pytest.mark.integration
-    @patch("secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config")
+    @patch(
+        "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
+    )
     @patch("secondbrain.search.VectorStorage")
     def test_search_no_results(
         self, mock_storage_class: MagicMock, mock_create_from_config: MagicMock
@@ -165,7 +175,9 @@ class TestSearchIntegration:
         assert results == []
 
     @pytest.mark.integration
-    @patch("secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config")
+    @patch(
+        "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
+    )
     @patch("secondbrain.search.VectorStorage")
     def test_search_empty_embed_result(
         self, mock_storage_class: MagicMock, mock_create_from_config: MagicMock

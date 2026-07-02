@@ -21,6 +21,19 @@ The circuit breaker SHALL implement a state machine with three states: CLOSED (n
 - **THEN** state SHALL transition to CLOSED
 - **AND** failure count SHALL reset to zero
 
+    !!! note "Spec Clarity Note — CB-007"
+        The scenario text states "Transition back to CLOSED on success" implying a
+        single success triggers the transition. However, the requirement specifies
+        "success_threshold consecutive successes" (default: 2).
+
+        The implementation (`CircuitBreaker.record_success()` in `src/secondbrain/utils/circuit_breaker.py`)
+        correctly requires `self._success_count >= self.config.success_threshold`
+        consecutive successes before transitioning HALF_OPEN → CLOSED, matching
+        the requirement's explicit consecutive-count criterion.
+
+        Proposed spec correction: Update Scenario to read "after N consecutive
+        successful calls in HALF_OPEN state" instead of "on success".
+
 #### Scenario: Return to OPEN on failure in HALF_OPEN
 - **WHEN** HALF_OPEN state and call fails
 - **THEN** state SHALL transition back to OPEN

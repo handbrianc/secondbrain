@@ -11,10 +11,9 @@ Exports:
 
 from __future__ import annotations
 
+from abc import abstractmethod
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
-
-from abc import abstractmethod
 
 from typing_extensions import TypedDict
 

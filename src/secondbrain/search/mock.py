@@ -1,8 +1,9 @@
 """Mock Searcher for testing without MongoDB."""
 
 import types
-from typing import Any, cast
-from typing_extensions import NotRequired, TypedDict
+from typing import Any, NotRequired, cast
+
+from typing_extensions import TypedDict
 
 
 class _TestChunk(TypedDict):

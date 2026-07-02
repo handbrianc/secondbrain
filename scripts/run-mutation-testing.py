@@ -17,9 +17,9 @@ from pathlib import Path
 
 def run_command(cmd: list[str], description: str) -> bool:
     """Run a command and return success status."""
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"🧬 {description}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"Command: {' '.join(cmd)}\n")
 
     result = subprocess.run(cmd, cwd=Path(__file__).parent.parent)
@@ -44,7 +44,7 @@ def main():
         module = sys.argv[2] if len(sys.argv) > 2 else "secondbrain.rag.factory"
         success = run_command(
             ["mutmut", "run", "--paths-to-mutate", module],
-            f"Mutation testing for {module}"
+            f"Mutation testing for {module}",
         )
 
     elif command == "results":
@@ -64,18 +64,15 @@ def main():
         print("High mutation score = tests are effective at catching errors.\n")
 
         # Run mutation testing
-        success = run_command(
-            ["mutmut", "run"],
-            "Running full mutation testing suite"
-        )
+        success = run_command(["mutmut", "run"], "Running full mutation testing suite")
 
         if success:
             # Show results
             run_command(["mutmut", "results"], "Displaying mutation results")
 
-            print("\n" + "="*60)
+            print("\n" + "=" * 60)
             print("📊 Mutation Testing Complete!")
-            print("="*60)
+            print("=" * 60)
             print("\nNext steps:")
             print("1. Review mutations that survived (tests didn't catch them)")
             print("2. Add tests for uncovered edge cases")
@@ -83,7 +80,9 @@ def main():
             print("\nCommands:")
             print("  - View detailed results: mutmut show")
             print("  - Browse mutations: python scripts/run-mutation-testing.py browse")
-            print("  - Run on specific module: mutmut run --paths-to-mutate secondbrain.module")
+            print(
+                "  - Run on specific module: mutmut run --paths-to-mutate secondbrain.module"
+            )
         else:
             print("\n❌ Mutation testing failed. Check the output above for errors.")
             print("\nCommon issues:")
