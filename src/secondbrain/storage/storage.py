@@ -1006,10 +1006,8 @@ class AsyncVectorStorage(ValidatableService, BaseVectorStorage):
         try:
             # Blocking ping — only used when sync validate_connection() is
             # called on AsyncVectorStorage (rare, but required by ABC).
-            import asyncio
-
-            return asyncio.run(self.async_client.admin.command("ping")) is None or True
-        except Exception:
+            asyncio.run(self.async_client.admin.command("ping"))
+            return True
             return False
 
     # ------------------------------------------------------------------
