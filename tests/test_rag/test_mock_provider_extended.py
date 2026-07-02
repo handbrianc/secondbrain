@@ -1,6 +1,5 @@
 """Extended tests for MockLLMProvider to improve coverage."""
 
-
 import pytest
 
 from secondbrain.rag.providers.mock import (
@@ -117,8 +116,7 @@ class TestMockLLMProviderHealthCheck:
     def test_health_check_with_custom_response(self):
         """Test health_check returns True even with custom config."""
         provider = MockLLMProvider(
-            default_response="Custom",
-            response_map={"test": "mapped"}
+            default_response="Custom", response_map={"test": "mapped"}
         )
         result = provider.health_check()
 

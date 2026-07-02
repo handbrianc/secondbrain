@@ -221,7 +221,9 @@ def migrate_vector_index(
 
         if current_dims == target_dimensions:
             if force:
-                logger.info("Dimensions match but --force specified. Recreating index...")
+                logger.info(
+                    "Dimensions match but --force specified. Recreating index..."
+                )
                 drop_index(collection, index_name)
                 create_index(collection, target_dimensions, index_name)
                 wait_for_index_ready(collection, index_name)

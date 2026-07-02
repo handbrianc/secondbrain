@@ -1,6 +1,21 @@
 """Mock Searcher for testing without MongoDB."""
 
-from typing import Any
+import types
+from typing import Any, NotRequired, cast
+
+from typing_extensions import TypedDict
+
+
+class _TestChunk(TypedDict):
+    """Typed dict for test chunk values — fixes mypy 'object' attribute errors."""
+
+    chunk_id: str
+    source_file: str
+    page_number: int
+    chunk_text: str
+    file_type: str
+    metadata: dict[str, Any]
+    similarity: NotRequired[float]
 
 
 class MockSearcher:
@@ -18,7 +33,7 @@ class MockSearcher:
         """
         self.verbose = verbose
         # Predefined test chunks that match common test queries
-        self._test_chunks = [
+        self._test_chunks: list[_TestChunk] = [
             {
                 "chunk_id": "chunk-001",
                 "source_file": "tests/config.md",
@@ -152,8 +167,8 @@ class MockSearcher:
 
         scored_chunks = []
         for chunk in self._test_chunks:
-            chunk_text = chunk.get("chunk_text", "").lower()
-            score = chunk.get("similarity", 0.5)
+            chunk_text: str = chunk["chunk_text"]
+            score: float = chunk.get("similarity", 0.5)
 
             words = [w for w in query_lower.split() if len(w) > 3]
             matches = sum(1 for w in words if w in chunk_text)
@@ -168,7 +183,7 @@ class MockSearcher:
             if "similarity" not in result:
                 result["similarity"] = 0.8
 
-        return results
+        return cast("list[dict[str, Any]]", results)
 
     def close(self) -> None:
         """Close resources (no-op for mock)."""
@@ -178,6 +193,11 @@ class MockSearcher:
         """Context manager entry."""
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: types.TracebackType | None,
+    ) -> None:
         """Context manager exit."""
         self.close()

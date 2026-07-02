@@ -19,7 +19,9 @@ def mock_storage_config() -> MagicMock:
         "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin",
     )
     config.mongo_db = os.environ.get("SECONDBRAIN_MONGO_DB", "secondbrain_test")
-    config.mongo_collection = os.environ.get("SECONDBRAIN_MONGO_COLLECTION", "embeddings_test")
+    config.mongo_collection = os.environ.get(
+        "SECONDBRAIN_MONGO_COLLECTION", "embeddings_test"
+    )
     config.embedding_dimensions = 384
     return config
 

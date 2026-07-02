@@ -25,7 +25,9 @@ class TestDockerManagerBasic:
     def test_init_custom_compose_file(self, tmp_path):
         """Test DockerManager with custom compose file."""
         compose_file = tmp_path / "docker-compose.yml"
-        compose_file.write_text("services:\n  mongo:\n    image: mongodb/mongodb-community-server:7.0\n")
+        compose_file.write_text(
+            "services:\n  mongo:\n    image: mongodb/mongodb-community-server:7.0\n"
+        )
         manager = DockerManager(compose_file=str(compose_file))
         assert manager.compose_file == compose_file
 
@@ -54,12 +56,7 @@ class TestDockerManagerBasic:
 
     def test_is_local_mongodb_static_method(self):
         """Test static method is_local_mongodb_uri."""
-        assert (
-            DockerManager.is_local_mongodb_uri(
-                _test_config.mongo_uri
-            )
-            is True
-        )
+        assert DockerManager.is_local_mongodb_uri(_test_config.mongo_uri) is True
         assert (
             DockerManager.is_local_mongodb_uri("mongodb+srv://cluster.mongodb.net")
             is False
@@ -128,7 +125,9 @@ class TestStartMongo:
         """Test start_mongo raises DockerNotInstalledError when Docker unavailable."""
         # Create a valid compose file to avoid file not found errors
         compose_file = tmp_path / "docker-compose.yml"
-        compose_file.write_text("services:\n  mongo:\n    image: mongodb/mongodb-community-server:7.0\n")
+        compose_file.write_text(
+            "services:\n  mongo:\n    image: mongodb/mongodb-community-server:7.0\n"
+        )
         manager = DockerManager(compose_file=str(compose_file))
         with (
             patch.object(manager, "check_docker_installed", return_value=False),
@@ -140,7 +139,9 @@ class TestStartMongo:
         """Test start_mongo raises DockerComposeError when compose unavailable."""
         # Create a valid compose file to avoid file not found errors
         compose_file = tmp_path / "docker-compose.yml"
-        compose_file.write_text("services:\n  mongo:\n    image: mongodb/mongodb-community-server:7.0\n")
+        compose_file.write_text(
+            "services:\n  mongo:\n    image: mongodb/mongodb-community-server:7.0\n"
+        )
         manager = DockerManager(compose_file=str(compose_file))
         with (
             patch.object(manager, "check_docker_installed", return_value=True),
@@ -162,7 +163,9 @@ class TestStartMongo:
     def test_start_mongo_success(self, mock_run, tmp_path):
         mock_run.return_value = MagicMock(returncode=0, stdout="Started")
         compose_file = tmp_path / "docker-compose.yml"
-        compose_file.write_text("services:\n  mongo:\n    image: mongodb/mongodb-community-server:7.0\n")
+        compose_file.write_text(
+            "services:\n  mongo:\n    image: mongodb/mongodb-community-server:7.0\n"
+        )
         manager = DockerManager(compose_file=str(compose_file))
         with patch.object(manager, "check_docker_installed", return_value=True):
             with patch.object(
@@ -185,6 +188,7 @@ class TestWaitForMongoReady:
         with patch("secondbrain.utils.docker_manager.config") as mock_config_func:
             with patch("secondbrain.storage.VectorStorage") as mock_storage_class:
                 from secondbrain.config import Config
+
                 _test_config = Config()
                 mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
                 mock_storage = MagicMock()
@@ -201,6 +205,7 @@ class TestWaitForMongoReady:
         with patch("secondbrain.utils.docker_manager.config") as mock_config_func:
             with patch("secondbrain.storage.VectorStorage") as mock_storage_class:
                 from secondbrain.config import Config
+
                 _test_config = Config()
                 mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
                 mock_storage = MagicMock()
@@ -227,7 +232,9 @@ class TestEnsureMongoRunning:
 
     def test_ensure_mongo_running_docker_not_installed(self, tmp_path):
         compose_file = tmp_path / "docker-compose.yml"
-        compose_file.write_text("services:\n  mongo:\n    image: mongodb/mongodb-community-server:7.0\n")
+        compose_file.write_text(
+            "services:\n  mongo:\n    image: mongodb/mongodb-community-server:7.0\n"
+        )
         manager = DockerManager(compose_file=str(compose_file))
         with (
             patch.object(manager, "_is_local_mongodb", return_value=True),
@@ -252,7 +259,6 @@ class TestEnsureMongoRunning:
 
 
 class TestDockerManagerCoverage:
-
     @patch("secondbrain.utils.docker_manager.subprocess.run")
     def test_check_docker_compose_installed_returns_false_when_docker_not_installed(
         self, mock_run
@@ -280,13 +286,17 @@ class TestDockerManagerCoverage:
     def test_start_mongo_handles_compose_failure(self, mock_run, tmp_path):
         """Test start_mongo handles docker compose failure (lines 263-264)."""
         compose_file = tmp_path / "docker-compose.yml"
-        compose_file.write_text("services:\n  mongo:\n    image: mongodb/mongodb-community-server:7.0\n")
+        compose_file.write_text(
+            "services:\n  mongo:\n    image: mongodb/mongodb-community-server:7.0\n"
+        )
 
         manager = DockerManager(compose_file=str(compose_file))
         mock_run.return_value = MagicMock(returncode=0)
 
         with patch.object(manager, "check_docker_installed", return_value=True):
-            with patch.object(manager, "check_docker_compose_installed", return_value=True):
+            with patch.object(
+                manager, "check_docker_compose_installed", return_value=True
+            ):
                 mock_run.side_effect = [
                     MagicMock(returncode=1, stderr="Compose failed", stdout=""),
                 ]
@@ -295,16 +305,22 @@ class TestDockerManagerCoverage:
                 assert "Compose failed" in str(exc_info.value)
 
     @patch("secondbrain.utils.docker_manager.subprocess.run")
-    def test_start_mongo_handles_container_not_running_after_start(self, mock_run, tmp_path):
+    def test_start_mongo_handles_container_not_running_after_start(
+        self, mock_run, tmp_path
+    ):
         """Test start_mongo raises MongoDBStartupError when container not running (lines 270-276)."""
         compose_file = tmp_path / "docker-compose.yml"
-        compose_file.write_text("services:\n  mongo:\n    image: mongodb/mongodb-community-server:7.0\n")
+        compose_file.write_text(
+            "services:\n  mongo:\n    image: mongodb/mongodb-community-server:7.0\n"
+        )
 
         manager = DockerManager(compose_file=str(compose_file))
         mock_run.return_value = MagicMock(returncode=0)
 
         with patch.object(manager, "check_docker_installed", return_value=True):
-            with patch.object(manager, "check_docker_compose_installed", return_value=True):
+            with patch.object(
+                manager, "check_docker_compose_installed", return_value=True
+            ):
                 with patch.object(manager, "check_mongo_running", return_value=False):
                     with pytest.raises(MongoDBStartupError) as exc_info:
                         manager.start_mongo()
@@ -314,12 +330,18 @@ class TestDockerManagerCoverage:
     def test_start_mongo_handles_timeout_expired(self, mock_run, tmp_path):
         """Test start_mongo handles subprocess.TimeoutExpired (lines 275-279)."""
         compose_file = tmp_path / "docker-compose.yml"
-        compose_file.write_text("services:\n  mongo:\n    image: mongodb/mongodb-community-server:7.0\n")
+        compose_file.write_text(
+            "services:\n  mongo:\n    image: mongodb/mongodb-community-server:7.0\n"
+        )
 
         manager = DockerManager(compose_file=str(compose_file))
         with patch.object(manager, "check_docker_installed", return_value=True):
-            with patch.object(manager, "check_docker_compose_installed", return_value=True):
-                mock_run.side_effect = subprocess.TimeoutExpired(cmd="docker compose", timeout=120)
+            with patch.object(
+                manager, "check_docker_compose_installed", return_value=True
+            ):
+                mock_run.side_effect = subprocess.TimeoutExpired(
+                    cmd="docker compose", timeout=120
+                )
                 with pytest.raises(MongoDBStartupError) as exc_info:
                     manager.start_mongo()
                 assert "Timeout" in str(exc_info.value)
@@ -328,13 +350,16 @@ class TestDockerManagerCoverage:
     def test_wait_for_mongo_ready_handles_index_not_ready(self, mock_config):
         """Test wait_for_mongo_ready handles index not ready exception (lines 326-329)."""
         from secondbrain.config import Config
+
         _test_config = Config()
         mock_config.return_value.mongo_uri = _test_config.mongo_uri
 
         with patch("secondbrain.storage.VectorStorage") as mock_storage_class:
             mock_storage = MagicMock()
             mock_storage.validate_connection.return_value = True
-            mock_storage._wait_for_index_ready.side_effect = Exception("Index not ready")
+            mock_storage._wait_for_index_ready.side_effect = Exception(
+                "Index not ready"
+            )
             mock_storage_class.return_value = mock_storage
 
             manager = DockerManager()
@@ -345,6 +370,7 @@ class TestDockerManagerCoverage:
     def test_wait_for_mongo_ready_handles_generic_exception(self, mock_config):
         """Test wait_for_mongo_ready handles generic exception (lines 333-335)."""
         from secondbrain.config import Config
+
         _test_config = Config()
         mock_config.return_value.mongo_uri = _test_config.mongo_uri
 
@@ -370,20 +396,26 @@ class TestDockerManagerCoverage:
     def test_ensure_mongo_running_verbose_already_running(self, mock_config):
         """Test ensure_mongo_running verbose output when already running (line 380)."""
         from secondbrain.config import Config
+
         _test_config = Config()
         mock_config.return_value.mongo_uri = _test_config.mongo_uri
 
-        with patch.object(manager := DockerManager(), "check_mongo_running", return_value=True):
+        with patch.object(
+            manager := DockerManager(), "check_mongo_running", return_value=True
+        ):
             manager.ensure_mongo_running(verbose=True)
 
     @patch("secondbrain.utils.docker_manager.config")
     def test_ensure_mongo_running_verbose_starting(self, mock_config):
         """Test ensure_mongo_running verbose output when starting (line 397)."""
         from secondbrain.config import Config
+
         _test_config = Config()
         mock_config.return_value.mongo_uri = _test_config.mongo_uri
 
-        with patch.object(manager := DockerManager(), "check_mongo_running", return_value=False):
+        with patch.object(
+            manager := DockerManager(), "check_mongo_running", return_value=False
+        ):
             with patch.object(manager, "check_docker_installed", return_value=False):
                 with pytest.raises(DockerNotInstalledError):
                     manager.ensure_mongo_running(verbose=True)
@@ -392,53 +424,76 @@ class TestDockerManagerCoverage:
     def test_ensure_mongo_running_verbose_waiting(self, mock_config, tmp_path):
         """Test ensure_mongo_running verbose output when waiting (line 414)."""
         from secondbrain.config import Config
+
         _test_config = Config()
         mock_config.return_value.mongo_uri = _test_config.mongo_uri
 
         compose_file = tmp_path / "docker-compose.yml"
-        compose_file.write_text("services:\n  mongo:\n    image: mongodb/mongodb-community-server:7.0\n")
+        compose_file.write_text(
+            "services:\n  mongo:\n    image: mongodb/mongodb-community-server:7.0\n"
+        )
 
         manager = DockerManager(compose_file=str(compose_file))
         with patch.object(manager, "check_mongo_running", return_value=False):
             with patch.object(manager, "check_docker_installed", return_value=True):
-                with patch.object(manager, "check_docker_compose_installed", return_value=True):
+                with patch.object(
+                    manager, "check_docker_compose_installed", return_value=True
+                ):
                     with patch.object(manager, "start_mongo", return_value=None):
-                        with patch.object(manager, "wait_for_mongo_ready", return_value=None):
+                        with patch.object(
+                            manager, "wait_for_mongo_ready", return_value=None
+                        ):
                             manager.ensure_mongo_running(verbose=True)
 
     @patch("secondbrain.utils.docker_manager.config")
     def test_ensure_mongo_running_verbose_ready(self, mock_config, tmp_path):
         """Test ensure_mongo_running verbose output when ready (line 419)."""
         from secondbrain.config import Config
+
         _test_config = Config()
         mock_config.return_value.mongo_uri = _test_config.mongo_uri
 
         compose_file = tmp_path / "docker-compose.yml"
-        compose_file.write_text("services:\n  mongo:\n    image: mongodb/mongodb-community-server:7.0\n")
+        compose_file.write_text(
+            "services:\n  mongo:\n    image: mongodb/mongodb-community-server:7.0\n"
+        )
 
         manager = DockerManager(compose_file=str(compose_file))
         with patch.object(manager, "check_mongo_running", return_value=False):
             with patch.object(manager, "check_docker_installed", return_value=True):
-                with patch.object(manager, "check_docker_compose_installed", return_value=True):
+                with patch.object(
+                    manager, "check_docker_compose_installed", return_value=True
+                ):
                     with patch.object(manager, "start_mongo", return_value=None):
-                        with patch.object(manager, "wait_for_mongo_ready", return_value=None):
+                        with patch.object(
+                            manager, "wait_for_mongo_ready", return_value=None
+                        ):
                             manager.ensure_mongo_running(verbose=True)
 
     @patch("secondbrain.utils.docker_manager.config")
     def test_ensure_mongo_running_handles_compose_error(self, mock_config, tmp_path):
         """Test ensure_mongo_running handles DockerComposeError (lines 401-402)."""
         from secondbrain.config import Config
+
         _test_config = Config()
         mock_config.return_value.mongo_uri = _test_config.mongo_uri
 
         compose_file = tmp_path / "docker-compose.yml"
-        compose_file.write_text("services:\n  mongo:\n    image: mongodb/mongodb-community-server:7.0\n")
+        compose_file.write_text(
+            "services:\n  mongo:\n    image: mongodb/mongodb-community-server:7.0\n"
+        )
 
         manager = DockerManager(compose_file=str(compose_file))
         with patch.object(manager, "check_mongo_running", return_value=False):
             with patch.object(manager, "check_docker_installed", return_value=True):
-                with patch.object(manager, "check_docker_compose_installed", return_value=True):
-                    with patch.object(manager, "start_mongo", side_effect=DockerComposeError("Compose failed")):
+                with patch.object(
+                    manager, "check_docker_compose_installed", return_value=True
+                ):
+                    with patch.object(
+                        manager,
+                        "start_mongo",
+                        side_effect=DockerComposeError("Compose failed"),
+                    ):
                         with pytest.raises(DockerComposeError) as exc_info:
                             manager.ensure_mongo_running(verbose=False)
                         assert "Failed to start MongoDB" in str(exc_info.value)
@@ -447,18 +502,27 @@ class TestDockerManagerCoverage:
     def test_ensure_mongo_running_handles_startup_error(self, mock_config, tmp_path):
         """Test ensure_mongo_running handles MongoDBStartupError (lines 420-421)."""
         from secondbrain.config import Config
+
         _test_config = Config()
         mock_config.return_value.mongo_uri = _test_config.mongo_uri
 
         compose_file = tmp_path / "docker-compose.yml"
-        compose_file.write_text("services:\n  mongo:\n    image: mongodb/mongodb-community-server:7.0\n")
+        compose_file.write_text(
+            "services:\n  mongo:\n    image: mongodb/mongodb-community-server:7.0\n"
+        )
 
         manager = DockerManager(compose_file=str(compose_file))
         with patch.object(manager, "check_mongo_running", return_value=False):
             with patch.object(manager, "check_docker_installed", return_value=True):
-                with patch.object(manager, "check_docker_compose_installed", return_value=True):
+                with patch.object(
+                    manager, "check_docker_compose_installed", return_value=True
+                ):
                     with patch.object(manager, "start_mongo", return_value=None):
-                        with patch.object(manager, "wait_for_mongo_ready", side_effect=MongoDBStartupError("Startup failed")):
+                        with patch.object(
+                            manager,
+                            "wait_for_mongo_ready",
+                            side_effect=MongoDBStartupError("Startup failed"),
+                        ):
                             with pytest.raises(MongoDBStartupError) as exc_info:
                                 manager.ensure_mongo_running(verbose=False)
                             assert "failed to become ready" in str(exc_info.value)

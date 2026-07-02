@@ -961,7 +961,10 @@ class TestRAGPipelineExtended:
         # Verify result contains answer (even if it's a fallback)
         assert "answer" in result
         # LLM should indicate it cannot answer
-        assert "couldn't" in result["answer"].lower() or "not found" in result["answer"].lower()
+        assert (
+            "couldn't" in result["answer"].lower()
+            or "not found" in result["answer"].lower()
+        )
 
     def test_handle_ambiguous_queries(self) -> None:
         from unittest.mock import AsyncMock, MagicMock
@@ -1002,7 +1005,10 @@ class TestRAGPipelineCoverageGaps:
         """
         result = pipeline_with_mocks.query("")
 
-        assert result["answer"] == "Query cannot be empty. Please provide a valid question."
+        assert (
+            result["answer"]
+            == "Query cannot be empty. Please provide a valid question."
+        )
         assert result["query"] == ""
         assert result["validation_error"] is True
 
@@ -1016,7 +1022,10 @@ class TestRAGPipelineCoverageGaps:
         """
         result = pipeline_with_mocks.query("   \t\n  ")
 
-        assert result["answer"] == "Query cannot be empty. Please provide a valid question."
+        assert (
+            result["answer"]
+            == "Query cannot be empty. Please provide a valid question."
+        )
         assert result["validation_error"] is True
 
     def test_query_with_security_violation_returns_safe_response(
@@ -1067,7 +1076,10 @@ class TestRAGPipelineCoverageGaps:
         """
         result = await pipeline_with_mocks.query_async("")
 
-        assert result["answer"] == "Query cannot be empty. Please provide a valid question."
+        assert (
+            result["answer"]
+            == "Query cannot be empty. Please provide a valid question."
+        )
         assert result["validation_error"] is True
 
 
@@ -1127,13 +1139,23 @@ class TestRAGPipelineTracing:
         # Check retrieval attributes (lines 134-138)
         assert any("rag.query" in str(call) for call in retrieval_set_attribute_calls)
         assert any("rag.top_k" in str(call) for call in retrieval_set_attribute_calls)
-        assert any("rag.chunks_returned" in str(call) for call in retrieval_set_attribute_calls)
+        assert any(
+            "rag.chunks_returned" in str(call) for call in retrieval_set_attribute_calls
+        )
 
         # Check generation attributes (lines 163-165, 172)
-        assert any("rag.prompt_length" in str(call) for call in retrieval_set_attribute_calls)
-        assert any("rag.temperature" in str(call) for call in retrieval_set_attribute_calls)
-        assert any("rag.max_tokens" in str(call) for call in retrieval_set_attribute_calls)
-        assert any("rag.answer_length" in str(call) for call in retrieval_set_attribute_calls)
+        assert any(
+            "rag.prompt_length" in str(call) for call in retrieval_set_attribute_calls
+        )
+        assert any(
+            "rag.temperature" in str(call) for call in retrieval_set_attribute_calls
+        )
+        assert any(
+            "rag.max_tokens" in str(call) for call in retrieval_set_attribute_calls
+        )
+        assert any(
+            "rag.answer_length" in str(call) for call in retrieval_set_attribute_calls
+        )
 
         assert result["answer"] == "Test answer"
 
@@ -1190,7 +1212,9 @@ class TestRAGPipelineTracing:
 
         # Verify span attributes were set
         span_calls = [
-            call for call in mock_span.set_attribute.call_args_list if call[0][0].startswith("rag.")
+            call
+            for call in mock_span.set_attribute.call_args_list
+            if call[0][0].startswith("rag.")
         ]
 
         # Check retrieval attributes including is_chat (lines 227-232)
@@ -1255,7 +1279,9 @@ class TestRAGPipelineTracing:
 
         # Verify span attributes
         span_calls = [
-            call for call in mock_span.set_attribute.call_args_list if call[0][0].startswith("rag.")
+            call
+            for call in mock_span.set_attribute.call_args_list
+            if call[0][0].startswith("rag.")
         ]
 
         # Check async retrieval attributes (lines 531-534, 539)
@@ -1319,7 +1345,9 @@ class TestRAGPipelineTracing:
         mock_rewriter.rewrite_query.return_value = "rewritten async query"
 
         # Create session
-        session = ConversationSession("async-test-session", MagicMock(), context_window=10)
+        session = ConversationSession(
+            "async-test-session", MagicMock(), context_window=10
+        )
         session.add_message("user", "Previous")
         session.add_message("assistant", "Previous answer")
 
@@ -1330,7 +1358,9 @@ class TestRAGPipelineTracing:
 
         # Verify span attributes
         span_calls = [
-            call for call in mock_span.set_attribute.call_args_list if call[0][0].startswith("rag.")
+            call
+            for call in mock_span.set_attribute.call_args_list
+            if call[0][0].startswith("rag.")
         ]
 
         # Check async chat retrieval attributes (lines 612-615, 620)

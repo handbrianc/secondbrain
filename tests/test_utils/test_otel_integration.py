@@ -2,9 +2,10 @@
 
 Consolidated tests for:
 - Context propagation
-- Span creation and attributes  
+- Span creation and attributes
 - End-to-end workflows
 """
+
 import asyncio
 
 import pytest
@@ -120,7 +121,6 @@ class TestOTELContextPropagation:
         assert extracted is None or isinstance(extracted, dict)
 
 
-
 def test_trace_operation_creates_span():
     """trace_operation context manager creates spans."""
     tracer = trace.get_tracer(__name__)
@@ -130,7 +130,6 @@ def test_trace_operation_creates_span():
     spans = get_spans()
     assert len(spans) >= 1
     assert any(span.name == "test.operation" for span in spans)
-
 
 
 def test_ingestion_creates_span():
@@ -148,7 +147,6 @@ def test_ingestion_creates_span():
     assert ingest_span.attributes.get("file.size") == 1024
 
 
-
 def test_file_processing_creates_span():
     """File processing creates 'document.process' span."""
     tracer = trace.get_tracer(__name__)
@@ -158,7 +156,6 @@ def test_file_processing_creates_span():
 
     spans = get_spans()
     assert any(span.name == "document.process" for span in spans)
-
 
 
 def test_embedding_generation_creates_span():
@@ -172,7 +169,6 @@ def test_embedding_generation_creates_span():
     assert any(span.name == "embedding.generate" for span in spans)
 
 
-
 def test_storage_operation_creates_span():
     """Storage operation creates 'storage.insert' span."""
     tracer = trace.get_tracer(__name__)
@@ -184,7 +180,6 @@ def test_storage_operation_creates_span():
     assert any(span.name == "storage.insert" for span in spans)
 
 
-
 def test_search_operation_creates_span():
     """Search operation creates 'search.semantic' span."""
     tracer = trace.get_tracer(__name__)
@@ -194,7 +189,6 @@ def test_search_operation_creates_span():
 
     spans = get_spans()
     assert any(span.name == "search.semantic" for span in spans)
-
 
 
 def test_rag_pipeline_creates_multiple_spans():
@@ -217,7 +211,6 @@ def test_rag_pipeline_creates_multiple_spans():
     assert "llm.generate" in span_names
 
 
-
 def test_span_attributes_are_serializable():
     """Span attributes are JSON-serializable."""
     tracer = trace.get_tracer(__name__)
@@ -237,7 +230,6 @@ def test_span_attributes_are_serializable():
     assert attr_span.attributes.get("bool.attr") is True
 
 
-
 def test_span_error_handling():
     """Span captures exceptions correctly."""
     tracer = trace.get_tracer(__name__)
@@ -252,9 +244,10 @@ def test_span_error_handling():
 
     error_span = spans[0]
     assert error_span.status.description is not None
-    assert "error" in error_span.status.description.lower() or \
-           error_span.status.is_ok is False
-
+    assert (
+        "error" in error_span.status.description.lower()
+        or error_span.status.is_ok is False
+    )
 
 
 def test_span_context_propagation():
@@ -270,8 +263,10 @@ def test_span_context_propagation():
     parent_span = next(s for s in spans if s.name == "parent")
     child_span = next(s for s in spans if s.name == "child")
 
-    assert child_span.get_span_context().trace_id == parent_span.get_span_context().trace_id
-
+    assert (
+        child_span.get_span_context().trace_id
+        == parent_span.get_span_context().trace_id
+    )
 
 
 class TestOTELEndToEnd:
@@ -279,7 +274,7 @@ class TestOTELEndToEnd:
 
     def test_ingestion_creates_all_spans(self):
         """End-to-end: Document ingestion creates all expected spans.
-        
+
         Verifies the complete ingestion pipeline creates:
         - document.ingest (root span)
         - document.process (child span)
@@ -329,7 +324,7 @@ class TestOTELEndToEnd:
 
     def test_search_creates_spans(self):
         """End-to-end: Search operation creates query and vector spans.
-        
+
         Verifies search workflow creates:
         - search.query (root span)
         - search.vector (child span)
@@ -363,7 +358,7 @@ class TestOTELEndToEnd:
 
     def test_async_context_propagation(self):
         """Trace context propagates across async task boundaries.
-        
+
         Verifies that when async tasks are spawned, they inherit
         the parent trace context and create child spans with the same trace ID.
         """
@@ -404,11 +399,14 @@ class TestOTELEndToEnd:
         parent_span = next(s for s in spans if s.name == "parent.operation")
         child_span = next(s for s in spans if s.name == "child.operation")
 
-        assert parent_span.get_span_context().trace_id == child_span.get_span_context().trace_id
+        assert (
+            parent_span.get_span_context().trace_id
+            == child_span.get_span_context().trace_id
+        )
 
     def test_metrics_actually_exported(self):
         """Metrics are collected and can be retrieved.
-        
+
         Verifies that:
         - secondbrain.operations.count metric is incremented
         - secondbrain.operations.duration histogram records values
@@ -451,7 +449,7 @@ class TestOTELEndToEnd:
 
     def test_mongodb_span_attributes(self):
         """MongoDB operation spans include collection name and operation type.
-        
+
         Verifies that when MongoDB operations are performed, the spans include:
         - db.mongodb.collection (collection name)
         - db.operation (operation type: find, insert, update, delete)
@@ -474,7 +472,7 @@ class TestOTELEndToEnd:
 
     def test_exception_events_in_spans(self):
         """Exception events are recorded in spans with type and message.
-        
+
         Verifies that when exceptions occur:
         - "exception" event is added to span
         - Exception type is recorded
@@ -516,7 +514,9 @@ class TestOTELEndToEnd:
         assert "exception.type" in exception_event.attributes
         assert "exception.message" in exception_event.attributes
         assert "ValueError" in exception_event.attributes["exception.type"]
-        assert "Test error for tracing" in exception_event.attributes["exception.message"]
+        assert (
+            "Test error for tracing" in exception_event.attributes["exception.message"]
+        )
 
         # Verify span status
         assert error_span.status.status_code == trace.StatusCode.ERROR

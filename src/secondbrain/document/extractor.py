@@ -214,6 +214,13 @@ def _extract_chunk_and_embed_file(
 
         if unique_chunks:
             texts = [c["text"] for c in unique_chunks]
+            # NOTE(MC-011): Each worker instantiates its own EmbeddingProvider (line 195 above)
+            # and fires embedding requests without cross-process coordination. The
+            # SharedRateLimiter (rate_limiter.py) uses threading.Lock which cannot be shared
+            # across ProcessPoolExecutor processes. Global rate limiting across workers requires
+            # a shared coordinator (e.g., multiprocessing.Manager based counter, or external
+            # proxy/gateway).  Config fields rate_limit_max_requests/window_seconds are
+            # currently unenforced in the multicore path.
             embeddings = embedding_model.generate_batch(texts)
         else:
             embeddings = []

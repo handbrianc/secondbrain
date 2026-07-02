@@ -19,8 +19,20 @@ class TestVectorStorage:
 
         mock_collection = MagicMock()
         mock_collection.aggregate.return_value = [
-            {"chunk_id": "1", "source_file": "test.pdf", "page_number": 1, "chunk_text": "sample text", "score": 0.9},
-            {"chunk_id": "2", "source_file": "test.pdf", "page_number": 1, "chunk_text": "more text", "score": 0.8},
+            {
+                "chunk_id": "1",
+                "source_file": "test.pdf",
+                "page_number": 1,
+                "chunk_text": "sample text",
+                "score": 0.9,
+            },
+            {
+                "chunk_id": "2",
+                "source_file": "test.pdf",
+                "page_number": 1,
+                "chunk_text": "more text",
+                "score": 0.8,
+            },
         ]
 
         mock_db = MagicMock()

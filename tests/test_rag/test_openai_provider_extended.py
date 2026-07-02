@@ -34,19 +34,13 @@ class TestOpenAILLMProviderInit:
 
     def test_init_with_custom_model(self):
         """Test initialization with custom model."""
-        provider = OpenAILLMProvider(
-            model="gpt-4",
-            api_key="test-key"
-        )
+        provider = OpenAILLMProvider(model="gpt-4", api_key="test-key")
 
         assert provider._model == "gpt-4"
 
     def test_init_with_custom_timeout(self):
         """Test initialization with custom timeout."""
-        provider = OpenAILLMProvider(
-            timeout=300,
-            api_key="test-key"
-        )
+        provider = OpenAILLMProvider(timeout=300, api_key="test-key")
 
         assert provider._timeout == 300
 
@@ -54,7 +48,7 @@ class TestOpenAILLMProviderInit:
 class TestOpenAILLMProviderGenerate:
     """Test OpenAILLMProvider.generate() method."""
 
-    @patch('secondbrain.rag.providers.openai.OpenAI')
+    @patch("secondbrain.rag.providers.openai.OpenAI")
     def test_generate_calls_client(self, mock_client_class):
         """Test generate calls OpenAI client."""
         mock_client = MagicMock()
@@ -70,7 +64,7 @@ class TestOpenAILLMProviderGenerate:
         assert response == "Test response"
         mock_client.chat.completions.create.assert_called_once()
 
-    @patch('secondbrain.rag.providers.openai.OpenAI')
+    @patch("secondbrain.rag.providers.openai.OpenAI")
     def test_generate_uses_custom_temperature(self, mock_client_class):
         """Test generate uses custom temperature."""
         mock_client = MagicMock()
@@ -84,9 +78,9 @@ class TestOpenAILLMProviderGenerate:
         provider.generate("Test", temperature=0.8)
 
         call_args = mock_client.chat.completions.create.call_args
-        assert call_args.kwargs['temperature'] == 0.8
+        assert call_args.kwargs["temperature"] == 0.8
 
-    @patch('secondbrain.rag.providers.openai.OpenAI')
+    @patch("secondbrain.rag.providers.openai.OpenAI")
     def test_generate_uses_custom_max_tokens(self, mock_client_class):
         """Test generate uses custom max_tokens."""
         mock_client = MagicMock()
@@ -100,9 +94,9 @@ class TestOpenAILLMProviderGenerate:
         provider.generate("Test", max_tokens=500)
 
         call_args = mock_client.chat.completions.create.call_args
-        assert call_args.kwargs['max_tokens'] == 500
+        assert call_args.kwargs["max_tokens"] == 500
 
-    @patch('secondbrain.rag.providers.openai.OpenAI')
+    @patch("secondbrain.rag.providers.openai.OpenAI")
     def test_generate_handles_api_error(self, mock_client_class):
         """Test generate handles API errors."""
         mock_client = MagicMock()
@@ -119,7 +113,7 @@ class TestOpenAILLMProviderGenerate:
 class TestOpenAILLMProviderHealthCheck:
     """Test OpenAILLMProvider.health_check() method."""
 
-    @patch('secondbrain.rag.providers.openai.OpenAI')
+    @patch("secondbrain.rag.providers.openai.OpenAI")
     def test_health_check_returns_true_on_success(self, mock_client_class):
         """Test health_check returns True when client works."""
         mock_client = MagicMock()
@@ -134,7 +128,7 @@ class TestOpenAILLMProviderHealthCheck:
         assert result is True
         mock_client.models.list.assert_called_once()
 
-    @patch('secondbrain.rag.providers.openai.OpenAI')
+    @patch("secondbrain.rag.providers.openai.OpenAI")
     def test_health_check_returns_false_on_failure(self, mock_client_class):
         """Test health_check returns False on error."""
         mock_client = MagicMock()
@@ -151,7 +145,7 @@ class TestOpenAILLMProviderHealthCheck:
 class TestOpenAILLMProviderAsync:
     """Test async methods of OpenAILLMProvider."""
 
-    @patch('secondbrain.rag.providers.openai.AsyncOpenAI')
+    @patch("secondbrain.rag.providers.openai.AsyncOpenAI")
     @pytest.mark.asyncio
     async def test_agenerate_calls_async_client(self, mock_client_class):
         """Test agenerate calls async OpenAI client."""
@@ -176,7 +170,7 @@ class TestOpenAILLMProviderAsync:
 class TestOpenAILLMProviderEdgeCases:
     """Test edge cases for OpenAILLMProvider."""
 
-    @patch('secondbrain.rag.providers.openai.OpenAI')
+    @patch("secondbrain.rag.providers.openai.OpenAI")
     def test_generate_with_empty_prompt(self, mock_client_class):
         """Test generate handles empty prompt."""
         mock_client = MagicMock()
@@ -192,7 +186,7 @@ class TestOpenAILLMProviderEdgeCases:
         result = provider.generate("")
         assert result == ""
 
-    @patch('secondbrain.rag.providers.openai.OpenAI')
+    @patch("secondbrain.rag.providers.openai.OpenAI")
     def test_generate_with_very_long_prompt(self, mock_client_class):
         """Test generate handles long prompts."""
         mock_client = MagicMock()
@@ -208,7 +202,7 @@ class TestOpenAILLMProviderEdgeCases:
 
         assert response == "Response"
 
-    @patch('secondbrain.rag.providers.openai.OpenAI')
+    @patch("secondbrain.rag.providers.openai.OpenAI")
     def test_generate_with_unicode_prompt(self, mock_client_class):
         """Test generate handles unicode prompts."""
         mock_client = MagicMock()

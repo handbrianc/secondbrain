@@ -15,13 +15,11 @@ modification — any failure indicates a behavioural deviation from the baseline
 
 from pathlib import Path
 
-import pytest
-
 from secondbrain.document import (
     SUPPORTED_EXTENSIONS,
     AsyncDocumentIngestor,
-    DocumentIngestor,
     DocumentExtractionError,
+    DocumentIngestor,
     Segment,
     UnsupportedFileError,
     get_file_type,
@@ -137,7 +135,10 @@ class TestChunkSegmentsCompatibility:
         # Simulate docling outputting a tiny header-like fragment
         segments: list[Segment] = [
             {"text": "Title", "page": 1},
-            {"text": "This is a longer paragraph that should definitely form its own chunk.", "page": 1},
+            {
+                "text": "This is a longer paragraph that should definitely form its own chunk.",
+                "page": 1,
+            },
         ]
         chunks = chunk_segments(segments, chunk_size=512, chunk_overlap=50)
 
@@ -157,7 +158,9 @@ class TestChunkSegmentsCompatibility:
 
         # Both share same normalised content → only one chunk survives
         assert len(deduped) == 1
-        assert deduped[0]["text"] == "Hello   World"  # strips leading/trailing, keeps inner
+        assert (
+            deduped[0]["text"] == "Hello   World"
+        )  # strips leading/trailing, keeps inner
 
     def test_deduplicate_includes_metadata(self) -> None:
         """deduplicate_segments must attach file_path, original_index, text_hash."""

@@ -456,10 +456,12 @@ def chat(
     """Conversational Q&A with your documents using local LLM.
 
     Examples:
+    --------
         secondbrain chat "What is secondbrain?"
         secondbrain chat --session my-chat
         secondbrain chat --list-sessions
         secondbrain chat --check-llm
+    --------
     """
     from secondbrain.config import config
     from secondbrain.conversation import ConversationStorage
@@ -589,9 +591,10 @@ def _single_turn_chat(
             session_obj = ConversationSession.create(storage=storage)
             console.print(f"[dim]Created new session: {session_obj.session_id}[/dim]")
         else:
-            session_obj = ConversationSession.load(session, storage)
+            session_obj = ConversationSession.load(session, storage)  # type: ignore[assignment]
+            assert session_obj is not None, "load() returned None unexpectedly"
             if session_obj is None:
-                session_obj = ConversationSession.create(session, storage)
+                session_obj = ConversationSession.create(session, storage)  # type: ignore[unreachable]
 
     searcher = Searcher(verbose=False)
     llm_provider = LLMProviderFactory.create_from_config(cfg)
@@ -650,9 +653,10 @@ def _interactive_chat(
             session_obj = ConversationSession.create(storage=storage)
             console.print(f"[dim]Created new session: {session_obj.session_id}[/dim]")
         else:
-            session_obj = ConversationSession.load(session, storage)
+            session_obj = ConversationSession.load(session, storage)  # type: ignore[assignment]
+            assert session_obj is not None, "load() returned None unexpectedly"
             if session_obj is None:
-                session_obj = ConversationSession.create(session, storage)
+                session_obj = ConversationSession.create(session, storage)  # type: ignore[unreachable]
                 console.print(
                     f"[dim]Created new session: {session_obj.session_id}[/dim]"
                 )
@@ -780,9 +784,11 @@ def start(
     By default, starts only MongoDB service.
 
     Examples:
+    --------
         secondbrain start                    # Start with auto-detected compose file
         secondbrain start -f docker-compose.prod.yml  # Use specific compose file
         secondbrain start --wait             # Wait for services to be fully ready
+    --------
     """
     from secondbrain.utils.docker_manager import DockerManager
 
@@ -892,10 +898,12 @@ def stop(
     Stops and removes containers created by docker compose up.
 
     Examples:
+    --------
         secondbrain stop                       # Stop with auto-detected compose file
         secondbrain stop -f docker-compose.prod.yml  # Use specific compose file
         secondbrain stop --remove-volumes      # Also remove volumes
         secondbrain stop --force               # Skip confirmation
+    --------
     """
     import subprocess
 

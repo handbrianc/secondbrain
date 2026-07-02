@@ -3,6 +3,7 @@
 These tests verify that the FailureInjector properly injects failures
 and that the system recovers correctly after injection stops.
 """
+
 import time
 from concurrent.futures import ThreadPoolExecutor
 
@@ -262,7 +263,6 @@ class TestChaosResilienceMetrics:
         assert transitions[1][1] == CircuitState.OPEN
         assert transitions[2][1] == CircuitState.HALF_OPEN
 
-
     def test_recovery_time_measurement(self):
         """Test that recovery time is accurately measured in chaos tests."""
         import time
@@ -291,9 +291,12 @@ class TestChaosResilienceMetrics:
         actual_recovery_time = time.time() - start_time
 
         # Verify recovery time is approximately the configured timeout
-        assert actual_recovery_time >= 0.3, f"Recovery time {actual_recovery_time} should be >= 0.3s"
-        assert actual_recovery_time < 0.5, f"Recovery time {actual_recovery_time} should be < 0.5s"
-
+        assert actual_recovery_time >= 0.3, (
+            f"Recovery time {actual_recovery_time} should be >= 0.3s"
+        )
+        assert actual_recovery_time < 0.5, (
+            f"Recovery time {actual_recovery_time} should be < 0.5s"
+        )
 
     def test_error_rate_calculation(self):
         """Test that error rates are correctly calculated in chaos scenarios."""
@@ -320,8 +323,9 @@ class TestChaosResilienceMetrics:
 
         # Verify failure count is tracked while circuit is still closed
         assert state_info["state"] == CircuitState.CLOSED.value
-        assert state_info["failure_count"] == failures, \
+        assert state_info["failure_count"] == failures, (
             f"Expected {failures} consecutive failures, got {state_info['failure_count']}"
+        )
 
         # Error rate for consecutive failures before threshold is 100%
         # (all calls failed, circuit hasn't opened yet)

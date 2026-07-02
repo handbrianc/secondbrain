@@ -64,6 +64,7 @@ def create_docling_converter() -> "DocumentConverter":  # noqa: UP037
     )
     return DocumentConverter(format_options={InputFormat.PDF: pdf_options})
 
+
 if TYPE_CHECKING:
     from docling.document_converter import DocumentConverter
 
@@ -83,7 +84,7 @@ class _Segment(TypedDict):
 # ---------------------------------------------------------------------------
 
 
-def create_converter() -> DocumentConverter:  # noqa: UP037
+def create_converter() -> DocumentConverter:
     """Create a configured DocumentConverter with CPU acceleration.
 
     Lazily imports docling internals. Calling this function incurs the
@@ -257,7 +258,6 @@ def _extract_chunk_and_embed_file(
     """
     import contextlib
     from datetime import UTC, datetime
-
     from uuid import uuid4
 
     from secondbrain.config import config
@@ -396,7 +396,7 @@ def _extract_chunk_and_embed_file(
         if unique_chunks:
             texts = [c["text"] for c in unique_chunks]
             # Suppress mypy error: EmbeddingProviderFactory.create_from_config resolved dynamically
-            embeddings = embedding_model.generate_batch(texts)  # type: ignore[union-attr]
+            embeddings = embedding_model.generate_batch(texts)
         else:
             embeddings = []
 
@@ -405,12 +405,29 @@ def _extract_chunk_and_embed_file(
         # Determine file_type from extension (mirrors document/__init__.py:get_file_type)
         ext = file_path.suffix.lower()
         _type_map: dict[str, str] = {
-            ".pdf": "pdf", ".docx": "docx", ".pptx": "pptx", ".xlsx": "xlsx",
-            ".html": "html", ".htm": "html", ".md": "markdown", ".txt": "text",
-            ".asciidoc": "asciidoc", ".adoc": "asciidoc", ".tex": "latex",
-            ".csv": "csv", ".png": "image", ".jpg": "image", ".jpeg": "image",
-            ".tiff": "image", ".tif": "image", ".bmp": "image", ".webp": "image",
-            ".wav": "audio", ".mp3": "audio", ".vtt": "webvtt", ".xml": "xml",
+            ".pdf": "pdf",
+            ".docx": "docx",
+            ".pptx": "pptx",
+            ".xlsx": "xlsx",
+            ".html": "html",
+            ".htm": "html",
+            ".md": "markdown",
+            ".txt": "text",
+            ".asciidoc": "asciidoc",
+            ".adoc": "asciidoc",
+            ".tex": "latex",
+            ".csv": "csv",
+            ".png": "image",
+            ".jpg": "image",
+            ".jpeg": "image",
+            ".tiff": "image",
+            ".tif": "image",
+            ".bmp": "image",
+            ".webp": "image",
+            ".wav": "audio",
+            ".mp3": "audio",
+            ".vtt": "webvtt",
+            ".xml": "xml",
             ".json": "docling-json",
         }
         file_type = _type_map.get(ext, "unknown")

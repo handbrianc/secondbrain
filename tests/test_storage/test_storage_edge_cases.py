@@ -17,6 +17,7 @@ class TestStorageEdgeCases:
         """Create a VectorStorage instance with mocked config."""
         with patch("secondbrain.storage.config") as mock_config_func:
             from secondbrain.config import Config
+
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
             mock_config_func.return_value.mongo_db = "secondbrain_test"
@@ -129,6 +130,7 @@ class TestStorageEdgeCases:
         """Test _require_connection_async raises StorageConnectionError on failure."""
         with patch("secondbrain.storage.config") as mock_config_func:
             from secondbrain.config import Config
+
             _test_config = Config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
             mock_config_func.return_value.mongo_db = "secondbrain_test"

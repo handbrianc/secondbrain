@@ -14,7 +14,9 @@ ChunkId = NewType("ChunkId", str)
 EmbeddingVector = NewType("EmbeddingVector", list[float])
 
 
-def make_embedding_vector(values: list[float], expected_dims: int | None = None) -> EmbeddingVector:
+def make_embedding_vector(
+    values: list[float], expected_dims: int | None = None
+) -> EmbeddingVector:
     """Create a validated EmbeddingVector from raw float values.
 
     Args:

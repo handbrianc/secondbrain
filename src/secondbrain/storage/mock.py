@@ -7,6 +7,7 @@ the behavior of the real MongoDB-based storage for testing purposes.
 from __future__ import annotations
 
 import math
+import types
 from typing import Any
 
 
@@ -360,7 +361,12 @@ class MockVectorStorage:
         """Context manager entry."""
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: types.TracebackType | None,
+    ) -> None:
         """Context manager exit."""
         self.close()
 

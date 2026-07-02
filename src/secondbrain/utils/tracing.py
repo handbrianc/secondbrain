@@ -1,4 +1,5 @@
 """OpenTelemetry tracing utilities."""
+# mypy: disable-error-code=attr-defined
 
 from __future__ import annotations
 
@@ -18,14 +19,6 @@ try:
     from opentelemetry import metrics as otel_metrics
     from opentelemetry import trace as otel_trace
     from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-    from opentelemetry.sdk.metrics import MeterProvider
-    from opentelemetry.sdk.metrics.export import (
-        ConsoleMetricExporter,
-        PeriodicExportingMetricReader,
-    )
-    from opentelemetry.sdk.resources import Resource as OTelResource
-    from opentelemetry.sdk.trace import TracerProvider as OTelTracerProvider
-    from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
 
     try:
         from opentelemetry.instrumentation.pymongo import PymongoInstrumentor

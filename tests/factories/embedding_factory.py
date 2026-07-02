@@ -47,8 +47,6 @@ def embedding_vector(dim: int = 1536, seed: int = 42) -> list[float]:
     >>> vec == vec2
     True
     """
-    import struct
-
     import numpy as np
 
     # Deterministic bytes from seed – same seed → same bytes → same vector.
@@ -92,7 +90,9 @@ def zero_vector(dim: int = 1536) -> list[float]:
     return [0.0] * dim
 
 
-def varied_embedding_vectors(count: int, dim: int = 1536, base_seed: int = 1) -> list[list[float]]:
+def varied_embedding_vectors(
+    count: int, dim: int = 1536, base_seed: int = 1
+) -> list[list[float]]:
     """Generate ``count`` distinct deterministic embedding vectors.
 
     Each vector differs from the others because the underlying seed is
@@ -120,6 +120,6 @@ def varied_embedding_vectors(count: int, dim: int = 1536, base_seed: int = 1) ->
 
 __all__ = [
     "embedding_vector",
-    "zero_vector",
     "varied_embedding_vectors",
+    "zero_vector",
 ]

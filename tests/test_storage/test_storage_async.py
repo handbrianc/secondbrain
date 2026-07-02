@@ -14,6 +14,7 @@ class TestVectorStorageAsync:
     def storage(self):
         """Create a VectorStorage instance with mocked config and fresh state."""
         from secondbrain.config import get_config
+
         with patch("secondbrain.storage.config") as mock_config_func:
             _test_config = get_config()
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri

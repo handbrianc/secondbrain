@@ -140,7 +140,7 @@ class TestConfigValidationEdgeCases:
     @settings(max_examples=100)
     def test_invalid_max_workers_rejected(self, workers: int):
         assume(workers <= 0)
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="max_workers must be positive"):
             Config(max_workers=workers)
 
     @given(
@@ -149,7 +149,9 @@ class TestConfigValidationEdgeCases:
     )
     @settings(max_examples=100)
     def test_embedding_config_valid(self, batch_size: int, dimensions: int):
-        config = Config(embedding_batch_size=batch_size, embedding_dimensions=dimensions)
+        config = Config(
+            embedding_batch_size=batch_size, embedding_dimensions=dimensions
+        )
         assert config.embedding_batch_size == batch_size
         assert config.embedding_dimensions == dimensions
 
@@ -171,5 +173,19 @@ class TestConfigValidationEdgeCases:
     @settings(max_examples=100)
     def test_invalid_temperature_rejected(self, temp: float):
         assume(temp < 0)
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="llm_temperature must be between"):
             Config(llm_temperature=temp)
+
+    @given(
+        st.integers(min_value=1, max_value=8192),
+        st.integers(min_value=1, max_value=8192),
+    )
+    @settings(max_examples=100, deadline=500)
+    def test_chunk_overlap_ge_chunksize_rejected(
+        self, chunk_size: int, chunk_overlap: int
+    ):
+        assume(chunk_overlap >= chunk_size)
+        with pytest.raises(
+            ValueError, match="chunk_overlap must be less than chunk_size"
+        ):
+            Config(chunk_size=chunk_size, chunk_overlap=chunk_overlap)

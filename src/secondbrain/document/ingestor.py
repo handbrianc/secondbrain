@@ -10,6 +10,7 @@ import contextlib
 import hashlib
 import logging
 import os
+import time
 import warnings
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -732,7 +733,16 @@ class DocumentIngestor:
             docs_to_store.append(doc)
 
         if docs_to_store:
-            storage.store_batch(docs_to_store)
+            with trace_operation("storage.store") as span:
+                if span is not None:
+                    span.set_attribute(
+                        "storage.documents_stored", len(docs_to_store)
+                    )
+                start = time.time()
+                storage.store_batch(docs_to_store)
+                elapsed_ms = (time.time() - start) * 1000
+                if span is not None:
+                    span.set_attribute("storage.duration_ms", elapsed_ms)
 
         return len(docs_to_store)
 
@@ -784,7 +794,7 @@ class DocumentIngestor:
         """
         import queue
         from concurrent.futures import (
-            ThreadPoolExecutor,
+            ProcessPoolExecutor,
             as_completed,
         )
 
@@ -802,7 +812,7 @@ class DocumentIngestor:
 
         with (
             trace_operation("ingest_thread_progress") as span,
-            ThreadPoolExecutor(max_workers=max_workers) as executor,
+            ProcessPoolExecutor(max_workers=max_workers) as executor,
         ):
             if span:
                 span.set_attribute("ingestion.files_total", len(files))
@@ -863,9 +873,19 @@ class DocumentIngestor:
                             continue
 
                         for i in range(0, len(documents), MAX_MEMORY_BATCH_SIZE):
-                            storage.store_batch(
-                                documents[i : i + MAX_MEMORY_BATCH_SIZE]
-                            )
+                            batch = documents[i : i + MAX_MEMORY_BATCH_SIZE]
+                            with trace_operation("storage.store") as span:
+                                if span is not None:
+                                    span.set_attribute(
+                                        "storage.documents_stored", len(batch)
+                                    )
+                                start = time.time()
+                                storage.store_batch(batch)
+                                elapsed_ms = (time.time() - start) * 1000
+                                if span is not None:
+                                    span.set_attribute(
+                                        "storage.duration_ms", elapsed_ms
+                                    )
 
                         successful_files += 1
                         completed += 1
@@ -891,8 +911,6 @@ class DocumentIngestor:
                     del pending_futures[future]
 
                 if pending_futures:
-                    import time
-
                     time.sleep(0.01)
 
         return successful_files, failed_files
@@ -917,7 +935,7 @@ class DocumentIngestor:
             Tuple of (successful_files, failed_files) counts.
         """
         from concurrent.futures import (
-            ThreadPoolExecutor,
+            ProcessPoolExecutor,
             as_completed,
         )
 
@@ -931,7 +949,7 @@ class DocumentIngestor:
 
         with (
             trace_operation("ingest_thread") as span,
-            ThreadPoolExecutor(max_workers=cores) as executor,
+            ProcessPoolExecutor(max_workers=cores) as executor,
         ):
             if span:
                 span.set_attribute("ingestion.files_total", len(files))
@@ -998,7 +1016,22 @@ class DocumentIngestor:
                                 0, len(docs_to_store), MAX_MEMORY_BATCH_SIZE
                             ):
                                 batch = docs_to_store[i : i + MAX_MEMORY_BATCH_SIZE]
-                                storage.store_batch(batch)
+                                with trace_operation("storage.store") as span:
+                                    if span is not None:
+                                        span.set_attribute(
+                                            "storage.documents_stored",
+                                            len(batch),
+                                        )
+                                    start = time.time()
+                                    storage.store_batch(batch)
+                                    elapsed_ms = (
+                                        time.time() - start
+                                    ) * 1000
+                                    if span is not None:
+                                        span.set_attribute(
+                                            "storage.duration_ms",
+                                            elapsed_ms,
+                                        )
                             successful_files += 1
                             if self.progress_callback:
                                 self.progress_callback(file_path, True)
@@ -1069,7 +1102,19 @@ class DocumentIngestor:
                         self.progress_callback(file_path, False)
                     continue
 
-                storage.store_batch(result)
+                with trace_operation("storage.store") as span:
+                    if span is not None:
+                        span.set_attribute(
+                            "storage.documents_stored",
+                            len(result),
+                        )
+                    start = time.time()
+                    storage.store_batch(result)
+                    elapsed_ms = (time.time() - start) * 1000
+                    if span is not None:
+                        span.set_attribute(
+                            "storage.duration_ms", elapsed_ms
+                        )
                 successful_files += 1
                 if self.progress_callback:
                     self.progress_callback(file_path, True)
@@ -1284,18 +1329,18 @@ class AsyncDocumentIngestor(DocumentIngestor):
         """
         from secondbrain.config import config
         from secondbrain.embedding import EmbeddingProviderFactory
-        from secondbrain.storage import VectorStorage
+        from secondbrain.storage import AsyncVectorStorage
 
         # Initialize services
         cfg = config()
         embedding_gen = EmbeddingProviderFactory.create_from_config(cfg)
-        storage = VectorStorage()
+        storage = AsyncVectorStorage()
 
         try:
             # Collect and validate files
             files = await asyncio.to_thread(
                 self._collect_and_validate_files, path, recursive
-            )  # type: ignore[attr-defined]
+            )
 
             if not files:
                 return {"success": 0, "failed": 0}
@@ -1419,8 +1464,10 @@ class AsyncDocumentIngestor(DocumentIngestor):
                         texts_to_embed
                     )
                 else:
-                    embeddings = await asyncio.to_thread(
-                        embedding_gen.generate_batch, texts_to_embed
+                    raise TypeError(
+                        "EmbeddingGenerator does not implement generate_batch_async; "
+                        "async-ingestor spec AI-003 requires native async embedding "
+                        "generation. Configure a generator with native async support."
                     )
 
                 for text, embedding in zip(texts_to_embed, embeddings, strict=True):
@@ -1443,8 +1490,11 @@ class AsyncDocumentIngestor(DocumentIngestor):
                         if hasattr(embedding_gen, "generate_async"):
                             embedding = await embedding_gen.generate_async(text)
                         else:
-                            embedding = await asyncio.to_thread(
-                                embedding_gen.generate, text
+                            raise TypeError(
+                                "EmbeddingGenerator does not implement generate_async; "
+                                "async-ingestor spec AI-003 requires native async single-"
+                                "embedding generation. Configure a generator with native "
+                                "async support."
                             )
                         self.embedding_cache.set(text, embedding)
                         chunk_to_embedding[chunk["text_hash"]] = embedding
@@ -1486,7 +1536,16 @@ class AsyncDocumentIngestor(DocumentIngestor):
             docs_to_store.append(doc)
 
         if docs_to_store:
-            await asyncio.to_thread(storage.store_batch, docs_to_store)
+            with trace_operation("storage.store") as span:
+                if span is not None:
+                    span.set_attribute(
+                        "storage.documents_stored", len(docs_to_store)
+                    )
+                start = time.time()
+                await storage.store_batch_async(docs_to_store)
+                elapsed_ms = (time.time() - start) * 1000
+                if span is not None:
+                    span.set_attribute("storage.duration_ms", elapsed_ms)
 
         return len(docs_to_store)
 
@@ -1536,8 +1595,10 @@ class AsyncDocumentIngestor(DocumentIngestor):
                             texts_to_embed
                         )
                     else:
-                        embeddings = await asyncio.to_thread(
-                            embedding_gen.generate_batch, texts_to_embed
+                        raise TypeError(
+                            "EmbeddingGenerator does not implement generate_batch_async; "
+                            "async-ingestor spec AI-003 requires native async embedding "
+                            "generation. Configure a generator with native async support."
                         )
 
                     for idx, embedding in zip(cached_indices, embeddings, strict=True):
@@ -1563,8 +1624,10 @@ class AsyncDocumentIngestor(DocumentIngestor):
                                 chunk["text"]
                             )
                         else:
-                            embedding = await asyncio.to_thread(
-                                embedding_gen.generate, chunk["text"]
+                            raise TypeError(
+                                "EmbeddingGenerator does not implement generate_async; "
+                                "async-ingestor spec AI-003 requires native async single-embedding "
+                                "generation. Configure a generator with native async support."
                             )
                         self.embedding_cache.set(chunk["text"], embedding)
                         chunk_to_embedding[chunk["text_hash"]] = embedding
@@ -1598,7 +1661,7 @@ class AsyncDocumentIngestor(DocumentIngestor):
             True if processing succeeded, False otherwise.
         """
         try:
-            segments = await asyncio.to_thread(self._extract_text, file_path)  # type: ignore[attr-defined]
+            segments = await asyncio.to_thread(self._extract_text, file_path)
 
             if not segments:
                 logger.warning(
@@ -1619,7 +1682,19 @@ class AsyncDocumentIngestor(DocumentIngestor):
                     file_path, segments, embedding_gen
                 )
                 if docs_to_store:
-                    await asyncio.to_thread(storage.store_batch, docs_to_store)
+                    with trace_operation("storage.store") as span:
+                        if span is not None:
+                            span.set_attribute(
+                                "storage.documents_stored",
+                                len(docs_to_store),
+                            )
+                        start = time.time()
+                        await storage.store_batch_async(docs_to_store)
+                        elapsed_ms = (time.time() - start) * 1000
+                        if span is not None:
+                            span.set_attribute(
+                                "storage.duration_ms", elapsed_ms
+                            )
                     return True
                 return False
 
