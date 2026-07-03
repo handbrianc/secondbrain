@@ -788,11 +788,11 @@ class DocumentIngestor:
 
         Returns
         -------
-            Tuple of (successful_files, failed_files) counts.
+            Tuple of (successful_files, failed_files, failure_reasons) counts and reasons.
         """
         import queue
         from concurrent.futures import (
-            ProcessPoolExecutor,
+            ThreadPoolExecutor,
             as_completed,
         )
 
@@ -811,7 +811,7 @@ class DocumentIngestor:
 
         with (
             trace_operation("ingest_thread_progress") as span,
-            ProcessPoolExecutor(max_workers=max_workers) as executor,
+            ThreadPoolExecutor(max_workers=max_workers) as executor,
         ):
             if span:
                 span.set_attribute("ingestion.files_total", len(files))
