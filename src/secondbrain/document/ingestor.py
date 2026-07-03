@@ -735,9 +735,7 @@ class DocumentIngestor:
         if docs_to_store:
             with trace_operation("storage.store") as span:
                 if span is not None:
-                    span.set_attribute(
-                        "storage.documents_stored", len(docs_to_store)
-                    )
+                    span.set_attribute("storage.documents_stored", len(docs_to_store))
                 start = time.time()
                 storage.store_batch(docs_to_store)
                 elapsed_ms = (time.time() - start) * 1000
@@ -775,7 +773,7 @@ class DocumentIngestor:
         embedding_gen: Any,
         storage: Any,
         max_workers: int,
-    ) -> tuple[int, int]:
+    ) -> tuple[int, int, list[tuple[str, str]]]:
         """Process files using threading with progress callback support.
 
         Uses ThreadPoolExecutor with a Queue for progress updates. Worker threads
@@ -800,6 +798,7 @@ class DocumentIngestor:
 
         successful_files = 0
         failed_files = 0
+        failure_reasons: list[tuple[str, str]] = []
 
         progress_queue: queue.Queue[tuple[str, bool]] = queue.Queue()
         from secondbrain.config import config
@@ -846,13 +845,14 @@ class DocumentIngestor:
                         result = future.result(timeout=300)
 
                         if not result["success"]:
-                            if self.verbose:
-                                logger.error(
-                                    "Failed to process %s: %s",
-                                    file_path,
-                                    result.get("error", "Unknown error"),
-                                )
+                            error_msg = result.get("error", "Unknown error")
+                            logger.error(
+                                "Failed to process %s: %s",
+                                file_path,
+                                error_msg,
+                            )
                             failed_files += 1
+                            failure_reasons.append((str(file_path), error_msg))
                             completed += 1
                             if self.progress_callback:
                                 self.progress_callback(file_path, False)
@@ -861,11 +861,10 @@ class DocumentIngestor:
 
                         documents = result.get("documents", [])
                         if not documents:
-                            if self.verbose:
-                                logger.warning(
-                                    "No documents produced from %s", file_path
-                                )
+                            reason = "No documents produced (file may be empty, image-only, or extraction failed)"
+                            logger.warning("No documents produced from %s", file_path)
                             failed_files += 1
+                            failure_reasons.append((str(file_path), reason))
                             completed += 1
                             if self.progress_callback:
                                 self.progress_callback(file_path, False)
@@ -894,14 +893,14 @@ class DocumentIngestor:
                         done_futures.append(future)
 
                     except Exception as e:
-                        if self.verbose:
-                            logger.error(
-                                "Unexpected error processing file %s: %s: %s",
-                                file_path,
-                                type(e).__name__,
-                                e,
-                            )
+                        error_msg = f"{type(e).__name__}: {e}"
+                        logger.error(
+                            "Unexpected error processing file %s: %s",
+                            file_path,
+                            error_msg,
+                        )
                         failed_files += 1
+                        failure_reasons.append((str(file_path), error_msg))
                         completed += 1
                         if self.progress_callback:
                             self.progress_callback(file_path, False)
@@ -913,225 +912,7 @@ class DocumentIngestor:
                 if pending_futures:
                     time.sleep(0.01)
 
-        return successful_files, failed_files
-
-    def _process_multiprocessing_batch(
-        self,
-        files: list[Path],
-        embedding_gen: Any,
-        storage: Any,
-        cores: int,
-    ) -> tuple[int, int]:
-        """Process files using threading with ThreadPoolExecutor.
-
-        Args:
-            files: List of file paths to process.
-            embedding_gen: EmbeddingGenerator instance.
-            storage: VectorStorage instance.
-            cores: Number of CPU cores to use.
-
-        Returns
-        -------
-            Tuple of (successful_files, failed_files) counts.
-        """
-        from concurrent.futures import (
-            ProcessPoolExecutor,
-            as_completed,
-        )
-
-        from secondbrain.config import config
-
-        successful_files = 0
-        failed_files = 0
-
-        # Import extractor worker at call time to avoid circular import
-        from secondbrain.document.extractor import _extract_and_chunk_file
-
-        with (
-            trace_operation("ingest_thread") as span,
-            ProcessPoolExecutor(max_workers=cores) as executor,
-        ):
-            if span:
-                span.set_attribute("ingestion.files_total", len(files))
-                span.set_attribute("ingestion.cores", cores)
-            futures = {
-                executor.submit(
-                    _extract_and_chunk_file,
-                    str(f),
-                    self.chunk_size,
-                    self.chunk_overlap,
-                ): f
-                for f in files
-            }
-
-            for future in as_completed(futures, timeout=3600):
-                file_path = futures[future]
-                try:
-                    result = future.result(timeout=300)
-
-                    if not result["success"]:
-                        if self.verbose:
-                            logger.error(
-                                "Failed to process %s: %s", file_path, result["error"]
-                            )
-                        failed_files += 1
-                        if self.progress_callback:
-                            self.progress_callback(file_path, False)
-                        continue
-
-                    segments = result["segments"]
-                    if not segments:
-                        if self.verbose:
-                            logger.warning(
-                                "File %s produced no segments (may be empty, image-only, or extraction failed)",
-                                file_path,
-                            )
-                        failed_files += 1
-                        if self.progress_callback:
-                            self.progress_callback(file_path, False)
-                        continue
-
-                    cfg = config()
-
-                    if cfg.streaming_enabled:
-                        with trace_operation("ingest_stream_process"):
-                            docs_count = self._stream_process_chunks(
-                                file_path, segments, embedding_gen, storage
-                            )
-                        if docs_count > 0:
-                            successful_files += 1
-                            if self.progress_callback:
-                                self.progress_callback(file_path, True)
-                        else:
-                            failed_files += 1
-                            if self.progress_callback:
-                                self.progress_callback(file_path, False)
-                    else:
-                        with trace_operation("ingest_batch_process"):
-                            docs_to_store = self._build_documents_with_embeddings(
-                                file_path, segments, embedding_gen
-                            )
-                        if docs_to_store:
-                            for i in range(
-                                0, len(docs_to_store), MAX_MEMORY_BATCH_SIZE
-                            ):
-                                batch = docs_to_store[i : i + MAX_MEMORY_BATCH_SIZE]
-                                with trace_operation("storage.store") as span:
-                                    if span is not None:
-                                        span.set_attribute(
-                                            "storage.documents_stored",
-                                            len(batch),
-                                        )
-                                    start = time.time()
-                                    storage.store_batch(batch)
-                                    elapsed_ms = (
-                                        time.time() - start
-                                    ) * 1000
-                                    if span is not None:
-                                        span.set_attribute(
-                                            "storage.duration_ms",
-                                            elapsed_ms,
-                                        )
-                            successful_files += 1
-                            if self.progress_callback:
-                                self.progress_callback(file_path, True)
-                        else:
-                            failed_files += 1
-                            if self.progress_callback:
-                                self.progress_callback(file_path, False)
-
-                except Exception as e:
-                    if self.verbose:
-                        logger.error(
-                            "Unexpected error processing file %s: %s: %s",
-                            file_path,
-                            type(e).__name__,
-                            e,
-                        )
-                    failed_files += 1
-                    if self.progress_callback:
-                        self.progress_callback(file_path, False)
-
-        return successful_files, failed_files
-
-    def _process_threadpool_batch(
-        self,
-        files: list[Path],
-        embedding_gen: Any,
-        storage: Any,
-        batch_size: int,
-    ) -> tuple[int, int]:
-        """Process files using ThreadPoolExecutor for sequential/batch processing.
-
-        Args:
-            files: List of file paths to process.
-            embedding_gen: EmbeddingGenerator instance.
-            storage: VectorStorage instance.
-            batch_size: Number of concurrent threads.
-
-        Returns
-        -------
-            Tuple of (successful_files, failed_files) counts.
-        """
-        from concurrent.futures import (
-            ThreadPoolExecutor,
-            as_completed,
-        )
-
-        successful_files = 0
-        failed_files = 0
-
-        with (
-            trace_operation("ingest_thread_process"),
-            ThreadPoolExecutor(max_workers=batch_size) as executor,
-        ):
-            futures_dict: dict[Any, Path] = {}
-            for f in files:
-                future = executor.submit(
-                    self._process_file_for_storage, f, embedding_gen
-                )
-                futures_dict[future] = f
-
-        for future in as_completed(futures_dict, timeout=3600):
-            file_path = futures_dict[future]
-            try:
-                result = future.result(timeout=300)
-                if result is None or not result:
-                    failed_files += 1
-                    if self.progress_callback:
-                        self.progress_callback(file_path, False)
-                    continue
-
-                with trace_operation("storage.store") as span:
-                    if span is not None:
-                        span.set_attribute(
-                            "storage.documents_stored",
-                            len(result),
-                        )
-                    start = time.time()
-                    storage.store_batch(result)
-                    elapsed_ms = (time.time() - start) * 1000
-                    if span is not None:
-                        span.set_attribute(
-                            "storage.duration_ms", elapsed_ms
-                        )
-                successful_files += 1
-                if self.progress_callback:
-                    self.progress_callback(file_path, True)
-
-            except Exception as e:
-                if self.verbose:
-                    logger.error(
-                        "Unexpected error processing file %s: %s: %s",
-                        file_path,
-                        type(e).__name__,
-                        e,
-                    )
-                failed_files += 1
-                if self.progress_callback:
-                    self.progress_callback(file_path, False)
-
-        return successful_files, failed_files
+        return successful_files, failed_files, failure_reasons
 
     def ingest(
         self,
@@ -1139,7 +920,7 @@ class DocumentIngestor:
         recursive: bool = False,
         batch_size: int = 10,
         cores: int | None = None,
-    ) -> dict[str, int]:
+    ) -> dict[str, int | list[tuple[str, str]]]:
         """Ingest documents from a file or directory.
 
         Args:
@@ -1151,7 +932,7 @@ class DocumentIngestor:
 
         Returns
         -------
-            dict with 'success' and 'failed' counts.
+            dict with 'success', 'failed' counts, and 'failures' list of (path, reason) tuples.
         """
         from concurrent.futures import (  # noqa: F401
             ThreadPoolExecutor,
@@ -1172,16 +953,16 @@ class DocumentIngestor:
             files = self._collect_and_validate_files(path, recursive)
 
         if not files:
-            return {"success": 0, "failed": 0}
+            return {"success": 0, "failed": 0, "failures": []}
 
         cores = self._resolve_core_count(cores)
 
         # Multiprocessing with in-worker embedding for maximum CPU/GPU utilization
-        successful, failed = self._process_parallel_with_progress(
+        successful, failed, failure_reasons = self._process_parallel_with_progress(
             files, embedding_gen, storage, cores
         )
 
-        return {"success": successful, "failed": failed}
+        return {"success": successful, "failed": failed, "failures": failure_reasons}
 
     def _extract_text(self, file_path: Path) -> list[dict[str, Any]]:
         """Extract text content from a file."""
@@ -1538,9 +1319,7 @@ class AsyncDocumentIngestor(DocumentIngestor):
         if docs_to_store:
             with trace_operation("storage.store") as span:
                 if span is not None:
-                    span.set_attribute(
-                        "storage.documents_stored", len(docs_to_store)
-                    )
+                    span.set_attribute("storage.documents_stored", len(docs_to_store))
                 start = time.time()
                 await storage.store_batch_async(docs_to_store)
                 elapsed_ms = (time.time() - start) * 1000
@@ -1692,9 +1471,7 @@ class AsyncDocumentIngestor(DocumentIngestor):
                         await storage.store_batch_async(docs_to_store)
                         elapsed_ms = (time.time() - start) * 1000
                         if span is not None:
-                            span.set_attribute(
-                                "storage.duration_ms", elapsed_ms
-                            )
+                            span.set_attribute("storage.duration_ms", elapsed_ms)
                     return True
                 return False
 

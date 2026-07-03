@@ -69,6 +69,12 @@ logger = logging.getLogger(__name__)
     type=int,
     help="Number of CPU cores to use for parallel processing (default: auto-detect)",
 )
+@click.option(
+    "--verbose",
+    "-v",
+    is_flag=True,
+    help="Enable verbose output (show extraction errors and warnings)",
+)
 @click.pass_context
 def ingest(
     ctx: click.Context,
@@ -78,6 +84,7 @@ def ingest(
     chunk_size: int | None,
     chunk_overlap: int | None,
     cores: int | None,
+    verbose: bool,
 ) -> None:
     """Ingest documents into the vector database.
 
@@ -100,8 +107,9 @@ def ingest(
             )
             cores = available_cores
 
-    # Use verbose flag from global CLI context
-    verbose = ctx.obj.get("verbose", False)
+    # Global verbose flag can also be passed via ctx.obj (e.g. from parent command)
+    if not verbose:
+        verbose = ctx.obj.get("verbose", False)
 
     console.print(f"[bold]Ingesting: {path}[/bold]")
 
@@ -162,9 +170,14 @@ def ingest(
             path, recursive=recursive, batch_size=batch_size, cores=cores
         )
 
-    console.print(f"[green]Successfully ingested {results['success']} files[/green]")
-    if results["failed"] > 0:
-        console.print(f"[yellow]Failed: {results['failed']} files[/yellow]")
+    num_success = results["success"]
+    num_failed = results["failed"]
+    console.print(f"[green]Successfully ingested {num_success} files[/green]")
+    if isinstance(num_failed, int) and num_failed > 0:
+        console.print(f"[yellow]Failed: {num_failed} files[/yellow]")
+        failures = results.get("failures", [])
+        for f in failures if isinstance(failures, list) else []:
+            console.print(f"  [red]✗[/red] {f[0]}: {f[1]}")
 
 
 @handle_cli_errors
