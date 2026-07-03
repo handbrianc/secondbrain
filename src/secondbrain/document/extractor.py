@@ -65,7 +65,7 @@ def _extract_and_chunk_file(
                 do_ocr=True,
                 do_table_structure=False,
                 accelerator_options=AcceleratorOptions(
-                    device=AcceleratorDevice.CPU, num_threads=4
+                    device=AcceleratorDevice.AUTO, num_threads=4
                 ),
             )
         )
@@ -159,7 +159,7 @@ def _extract_chunk_and_embed_file(
                 do_ocr=True,
                 do_table_structure=False,
                 accelerator_options=AcceleratorOptions(
-                    device=AcceleratorDevice.CPU, num_threads=4
+                    device=AcceleratorDevice.AUTO, num_threads=4
                 ),
             )
         )

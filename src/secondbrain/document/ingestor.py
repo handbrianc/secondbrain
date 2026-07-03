@@ -194,7 +194,7 @@ class DocumentIngestor:
                 do_ocr=True,
                 do_table_structure=False,
                 accelerator_options=AcceleratorOptions(
-                    device=AcceleratorDevice.CPU, num_threads=4
+                    device=AcceleratorDevice.AUTO, num_threads=4
                 ),
             )
         )

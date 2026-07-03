@@ -34,7 +34,7 @@ def create_docling_converter() -> "DocumentConverter":  # noqa: UP037
     """Create a configured DocumentConverter supporting all docling formats.
 
     Returns a converter pre-configured with:
-    - PDF: OCR enabled, CPU-accelerated, table structure disabled
+    - PDF: OCR enabled, auto device detection, table structure disabled
     - All other formats use docling defaults
 
     Factory exists to centralize format configuration and avoid bare
@@ -58,7 +58,7 @@ def create_docling_converter() -> "DocumentConverter":  # noqa: UP037
             do_ocr=True,
             do_table_structure=False,
             accelerator_options=AcceleratorOptions(
-                device=AcceleratorDevice.CPU, num_threads=4
+                device=AcceleratorDevice.AUTO, num_threads=4
             ),
         )
     )
@@ -85,7 +85,7 @@ class _Segment(TypedDict):
 
 
 def create_converter() -> DocumentConverter:
-    """Create a configured DocumentConverter with CPU acceleration.
+    """Create a configured DocumentConverter with automatic device detection.
 
     Lazily imports docling internals. Calling this function incurs the
     docling cold-start cost once; subsequent calls reuse the same process.
@@ -112,7 +112,7 @@ def create_converter() -> DocumentConverter:
             do_ocr=True,
             do_table_structure=False,
             accelerator_options=AcceleratorOptions(
-                device=AcceleratorDevice.CPU, num_threads=4
+                device=AcceleratorDevice.AUTO, num_threads=4
             ),
         )
     )
@@ -283,7 +283,7 @@ def _extract_chunk_and_embed_file(
                 do_ocr=True,
                 do_table_structure=False,
                 accelerator_options=AcceleratorOptions(
-                    device=AcceleratorDevice.CPU, num_threads=4
+                    device=AcceleratorDevice.AUTO, num_threads=4
                 ),
             )
         )
