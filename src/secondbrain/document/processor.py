@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -28,6 +29,13 @@ from typing_extensions import TypedDict
 from secondbrain.utils.mps_patch import patch_transformers_for_mps
 
 patch_transformers_for_mps()
+
+# Suppress PyTorch user warnings about padding+dilation on MPS - harmless
+warnings.filterwarnings(
+    "ignore",
+    r"Using padding='same' with even kernel lengths and odd dilation",
+    module="torch",
+)
 
 
 def create_docling_converter() -> "DocumentConverter":  # noqa: UP037
