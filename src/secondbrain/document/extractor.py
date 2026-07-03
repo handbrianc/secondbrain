@@ -57,13 +57,17 @@ def _extract_and_chunk_file(
             AcceleratorOptions,
         )
         from docling.datamodel.base_models import InputFormat
-        from docling.datamodel.pipeline_options import PdfPipelineOptions
+        from docling.datamodel.pipeline_options import PdfPipelineOptions, RapidOcrOptions
         from docling.document_converter import DocumentConverter, PdfFormatOption
 
         pdf_options = PdfFormatOption(
             pipeline_options=PdfPipelineOptions(
                 do_ocr=True,
                 do_table_structure=False,
+                ocr_options=RapidOcrOptions(
+                    backend='torch',
+                    rapidocr_params={'EngineConfig.torch.use_mps': True},
+                ),
                 accelerator_options=AcceleratorOptions(
                     device=AcceleratorDevice.AUTO, num_threads=4
                 ),
@@ -151,13 +155,17 @@ def _extract_chunk_and_embed_file(
             AcceleratorOptions,
         )
         from docling.datamodel.base_models import InputFormat
-        from docling.datamodel.pipeline_options import PdfPipelineOptions
+        from docling.datamodel.pipeline_options import PdfPipelineOptions, RapidOcrOptions
         from docling.document_converter import DocumentConverter, PdfFormatOption
 
         pdf_options = PdfFormatOption(
             pipeline_options=PdfPipelineOptions(
                 do_ocr=True,
                 do_table_structure=False,
+                ocr_options=RapidOcrOptions(
+                    backend='torch',
+                    rapidocr_params={'EngineConfig.torch.use_mps': True},
+                ),
                 accelerator_options=AcceleratorOptions(
                     device=AcceleratorDevice.AUTO, num_threads=4
                 ),
