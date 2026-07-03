@@ -289,6 +289,13 @@ class Config(BaseSettings):
             "Max 100 to prevent timeout on slow networks"
         ),
     )
+    embedding_timeout: int = Field(
+        default=300,
+        description=(
+            "Request timeout for embedding API calls in seconds (default: 300). "
+            "Increase for large documents or slow network connections."
+        ),
+    )
 
     # Document ingestion settings
     max_file_size_bytes: int = Field(
