@@ -50,6 +50,7 @@ class ConversationSession:
             >>> session = ConversationSession("session-123", storage, context_window=5)
         """
         self._session_id: str = session_id
+        self._seen_pages: dict[str, set[int]] = {}
         self._storage: ConversationStorage = storage
         self._context_window: int = context_window
         self._history: list[dict[str, Any]] = []
@@ -292,3 +293,31 @@ class ConversationSession:
             False
         """
         return len(self._history) == 0
+
+    @property
+    def seen_pages(self) -> dict[str, set[int]]:
+        """Return a copy of the seen pages mapping.
+
+        Returns:
+            Mapping from source_file to set of page numbers already
+            covered in assistant responses during this session.
+        """
+        return {k: set(v) for k, v in self._seen_pages.items()}
+
+    def mark_pages_seen(self, chunks: list[dict[str, Any]]) -> None:
+        """Mark pages from retrieved chunks as having been covered.
+
+        Called by RAGPipeline after each chat() retrieval to track
+        which document pages have been presented to the user.
+
+        Args:
+            chunks: List of chunk dicts from search results, each
+                containing 'source_file' and 'page_number' keys.
+        """
+        for chunk in chunks:
+            source = chunk.get("source_file", "")
+            page = chunk.get("page_number")
+            if source and page is not None:
+                if source not in self._seen_pages:
+                    self._seen_pages[source] = set()
+                self._seen_pages[source].add(page)
