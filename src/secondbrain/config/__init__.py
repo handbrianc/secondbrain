@@ -170,7 +170,7 @@ class Config(BaseSettings):
 
     # RAG formatting settings
     rag_max_context_chars: int = Field(
-        default=8000,
+        default=16000,
         ge=1000,
         le=500000,
         description=(
@@ -181,7 +181,7 @@ class Config(BaseSettings):
         ),
     )
     rag_chunk_preview_chars: int = Field(
-        default=500,
+        default=1200,
         ge=100,
         le=10000,
         description=(
@@ -240,7 +240,7 @@ class Config(BaseSettings):
 
     # Search settings
     default_top_k: int = Field(
-        default=20,
+        default=50,
         description="Default number of search results (higher = more context for better answers)",
     )
 
