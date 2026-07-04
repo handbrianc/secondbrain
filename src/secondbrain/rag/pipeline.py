@@ -6,6 +6,7 @@ Retrieval-Augmented Generation workflow for conversational Q&A.
 
 import logging
 import time
+from contextlib import suppress
 from typing import Any
 
 from secondbrain.config import config
@@ -17,6 +18,23 @@ from secondbrain.utils.perf_monitor import metrics
 from secondbrain.utils.tracing import trace_operation
 
 logger = logging.getLogger(__name__)
+
+BROAD_COVERAGE_TRIGGERS: frozenset[str] = frozenset(
+    [
+        "all",
+        "every",
+        "each",
+        "summarize each",
+        "summary of each",
+        "list every",
+        "list all sections",
+        "list all chapters",
+        "brief on each",
+        "overview of all",
+        "give me an overview",
+        "comprehensive summary",
+    ]
+)
 
 __all__ = ["RAGPipeline"]
 
@@ -53,7 +71,7 @@ class RAGPipeline:
         searcher: Searcher,
         llm_provider: LocalLLMProvider,
         rewriter: QueryRewriter | None = None,
-        top_k: int = 5,
+        top_k: int | None = None,
         context_window: int = 5,
     ) -> None:
         """Initialize RAG pipeline with components.
@@ -73,7 +91,7 @@ class RAGPipeline:
         self._searcher = searcher
         self._llm_provider = llm_provider
         self._rewriter = rewriter
-        self._top_k = top_k
+        self._top_k = top_k if top_k is not None else config().default_top_k
         self._context_window = context_window
         self._config = config()
         self._security_filter = SecurityFilter()
@@ -125,6 +143,14 @@ class RAGPipeline:
                 }
 
             effective_top_k = top_k if top_k is not None else self._top_k
+
+            # --- B4: Iterative RAG for broad-coverage queries ---
+            if self._is_broad_coverage_query(query):
+                return self._iterative_query(
+                    query,
+                    top_k=effective_top_k,
+                    show_sources=show_sources,
+                )
 
             # Step 1: Retrieve chunks via searcher.search()
             retrieval_start = time.perf_counter()
@@ -264,6 +290,30 @@ class RAGPipeline:
                     chunks = self._searcher.search(
                         rewritten_query, top_k=effective_top_k
                     )
+
+                    # --- C2: Track seen pages in session ---
+                    if session is not None and chunks:
+                        with suppress(Exception):
+                            session.mark_pages_seen(chunks)
+
+                    # --- C3: Bias toward unseen pages (reshuffle so unseen float to top) ---
+                    if session is not None and session.seen_pages and chunks:
+                        unseen_first: list[dict[str, Any]] = []
+                        seen_last: list[dict[str, Any]] = []
+                        for c in chunks:
+                            sp = c.get("page_number")
+                            sf = c.get("source_file", "")
+                            if (
+                                sp is not None
+                                and sf in session.seen_pages
+                                and sp in session.seen_pages[sf]
+                            ):
+                                seen_last.append(c)
+                            else:
+                                unseen_first.append(c)
+                        # Bias: unseen pages preferred, seen pages kept at end of results
+                        chunks = unseen_first + seen_last
+
                     if span and chunks:
                         span.set_attribute("rag.chunks_returned", len(chunks))
             finally:
@@ -510,6 +560,227 @@ class RAGPipeline:
         prompt_parts.append(f"\n\nQuestion: {query}\n\nAnswer:")
 
         return "".join(prompt_parts)
+
+    def _dedupe_by_text_hash(
+        self, chunks: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Remove duplicate chunks by 512-byte text prefix hash.
+
+        Used by iterative RAG to collapse repeated chunks across
+        multiple per-section search iterations.
+
+        Args:
+            chunks: List of chunk dicts with 'chunk_text' key.
+
+        Returns:
+            Deduplicated list preserving first occurrence order.
+        """
+        seen: set[int] = set()
+        result: list[dict[str, Any]] = []
+        for chunk in chunks:
+            text = chunk.get("chunk_text", "")[:512]
+            h = hash(text)
+            if h not in seen:
+                seen.add(h)
+                result.append(chunk)
+        return result
+
+    def _is_broad_coverage_query(self, query: str) -> bool:
+        """Detect queries seeking broad document coverage.
+
+        These queries benefit from iterative retrieval across document
+        structure rather than one-shot top-k similarity search.
+
+        Args:
+            query: User query string.
+
+        Returns:
+            True if query seeks broad/coverage of multiple sections.
+        """
+        q = query.lower().strip()
+        return any(t in q for t in BROAD_COVERAGE_TRIGGERS)
+
+    def _probe_document_structure(self, top_k: int = 20) -> list[dict[str, Any]]:
+        """Probe for document structural elements (TOC/section headers).
+
+        Searches for short chunks likely to be table-of-contents entries
+        or section headers. These are used by iterative RAG to determine
+        which page ranges to query per-section.
+
+        Args:
+            top_k: How many structural candidates to retrieve (default 20).
+
+        Returns:
+            List of chunk dicts with 'page_number', 'chunk_text', 'source_file'.
+            Filtered to chunks under 150 bytes (likely headers/TOC entries).
+        """
+        # Construct a probe query from structural keywords
+        probe_terms = [
+            "chapter",
+            "section",
+            "introduction",
+            "overview",
+            "appendix",
+            "contents",
+            "table of contents",
+            "index",
+            "glossary",
+        ]
+        probe_query = " OR ".join(probe_terms[:5])
+
+        # Lightweight search - grab more than needed, filter down
+        candidates = self._searcher.search(probe_query, top_k=top_k)
+
+        # Filter to short chunks likely being structural (TOC entries, headers)
+        structural: list[dict[str, Any]] = []
+        for chunk in candidates:
+            text = chunk.get("chunk_text", "")
+            if len(text) < 150:
+                structural.append(chunk)
+
+        return structural
+
+    def _generic_one_shot(
+        self,
+        query: str,
+        top_k: int,
+        show_sources: bool,
+    ) -> dict[str, Any]:
+        """Fallback one-shot retrieval when document structure probing fails."""
+        chunks = self._searcher.search(query, top_k=top_k)
+        if not chunks:
+            return {"answer": f"No relevant documents found for: {query}", "query": query}
+        context = self._format_context(chunks)
+        prompt = self._build_prompt(query, context)
+        answer = self._llm_provider.generate(
+            prompt=prompt,
+            temperature=self._config.llm_temperature,
+            max_tokens=self._config.llm_max_tokens,
+        )
+        result: dict[str, Any] = {"answer": answer, "query": query}
+        if show_sources:
+            result["sources"] = chunks
+        return result
+
+    def _iterative_query(
+        self,
+        query: str,
+        top_k: int,
+        show_sources: bool,
+    ) -> dict[str, Any]:
+        """Handle broad-coverage queries via iterative structural traversal.
+
+        Instead of one-shot top-k similarity, walks document structure
+        by probing TOC/section elements and querying per-section ranges,
+        then deduplicates across iterations.
+
+        Args:
+            query: Original user query.
+            top_k: Number of chunks to aim for overall.
+            show_sources: Whether to include sources in response.
+
+        Returns:
+            dict with 'answer', 'query', 'sources' (if show_sources).
+        """
+        # 1. Probe document structure for TOC/header chunks
+        structure_chunks = self._probe_document_structure(top_k=20)
+        if not structure_chunks:
+            # Fall back to generic one-shot if no structure found
+            return self._generic_one_shot(query, top_k, show_sources)
+
+        # 2. Collect chunks iterating across structure elements
+        unique_by_hash: dict[int, dict[str, Any]] = {}
+        hashes_seen: set[int] = set()
+
+        for struct_chunk in structure_chunks:
+            # Build a scoped query referencing this section
+            page = struct_chunk.get("page_number", 0)
+            source = struct_chunk.get("source_file", "")
+
+            section_scope = f"{query} focusing on page {page} section content"
+            section_chunks = self._searcher.search(section_scope, top_k=5)
+
+            for c in section_chunks:
+                h = hash(c.get("chunk_text", "")[:512])
+                if h not in hashes_seen:
+                    hashes_seen.add(h)
+                    unique_by_hash[h] = c
+
+        # 3. Fill remaining slots with generic top-k if undersubscribed
+        accumulated = list(unique_by_hash.values())
+        if len(accumulated) < top_k:
+            generic_chunks = self._searcher.search(query, top_k=top_k)
+            for c in generic_chunks:
+                h = hash(c.get("chunk_text", "")[:512])
+                if h not in hashes_seen:
+                    hashes_seen.add(h)
+                    unique_by_hash[h] = c
+            accumulated = list(unique_by_hash.values())
+
+        # 4. Sort by score descending and trim to top_k
+        accumulated.sort(key=lambda c: c.get("score", 0.0), reverse=True)
+        final_chunks = self._dedupe_by_text_hash(accumulated)[:top_k]
+
+        # 5. Format context and build prompt (reuse existing logic)
+        if not final_chunks:
+            return {
+                "answer": f"I couldn't find relevant documents for your query: {query}",
+                "query": query,
+            }
+
+        context_text = self._format_context(final_chunks)
+        prompt = self._build_prompt(query, context_text)
+
+        # 6. Generate answer (same LLM call as query() uses)
+        generation_start = time.perf_counter()
+        answer = ""
+        try:
+            with trace_operation("rag_generation_iterative") as span:
+                if span:
+                    span.set_attribute("rag.iterative_mode", True)
+                    span.set_attribute("rag.top_k", top_k)
+
+                if self._config.streaming_enabled and hasattr(
+                    self._llm_provider, "stream_chat"
+                ):
+                    try:
+                        messages = [{"role": "user", "content": prompt}]
+                        accumulated_resp: list[str] = []
+
+                        def on_chunk(content: str, _reasoning: str | None) -> None:
+                            if content:
+                                accumulated_resp.append(content)
+
+                        self._llm_provider.stream_chat(
+                            messages=messages,
+                            on_chunk=on_chunk,
+                            temperature=self._config.llm_temperature,
+                            max_tokens=self._config.llm_max_tokens,
+                        )
+                        answer = "".join(accumulated_resp)
+                    except Exception:
+                        answer = ""
+
+                if not answer or not answer.strip():
+                    answer = self._llm_provider.generate(
+                        prompt=prompt,
+                        temperature=self._config.llm_temperature,
+                        max_tokens=self._config.llm_max_tokens,
+                    )
+        except Exception as e:
+            logger.error(
+                "Iterative query generation failed: %s: %s", type(e).__name__, e
+            )
+            answer = f"An error occurred during generation: {e}"
+        finally:
+            metrics.record("generation_latency", time.perf_counter() - generation_start)
+
+        # 7. Build result
+        result: dict[str, Any] = {"answer": answer, "query": query}
+        if show_sources:
+            result["sources"] = final_chunks
+
+        return result
 
     def _handle_no_results(
         self,
