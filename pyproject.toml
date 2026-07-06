@@ -142,7 +142,7 @@ bundled = [
     "twisted>=26.4.0",
     "idna>=3.18",
     "wheel>=0.47.0",
-    "setuptools>=60.0.0",
+    "setuptools>=83.0.0",
     "fpdf2>=2.7.0",
     "reportlab>=5.0.0",
     "python-docx>=1.0.0",
@@ -175,7 +175,7 @@ opentelemetry = [
 secondbrain = "secondbrain.cli:main"
 
 [build-system]
-requires = ["setuptools>=60.0.0", "wheel"]  # setuptools v60+ required for pyproject.toml build backend support
+requires = ["setuptools>=83.0.0", "wheel"]  # setuptools v60+ required for pyproject.toml build backend support
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
