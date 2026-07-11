@@ -5,14 +5,17 @@ Retrieval-Augmented Generation workflow for conversational Q&A.
 """
 
 import logging
+import re
 import time
 from contextlib import suppress
 from typing import Any
 
 from secondbrain.config import config
 from secondbrain.conversation import ConversationSession, QueryRewriter
+from secondbrain.rag.intent_parser import IntentDecision, QueryIntent, StructuralIntentParser
 from secondbrain.rag.interfaces import LocalLLMProvider
 from secondbrain.rag.security_filter import SecurityFilter
+from secondbrain.document.scoped_retriever import ScopedRetriever
 from secondbrain.search import Searcher
 from secondbrain.utils.perf_monitor import metrics
 from secondbrain.utils.tracing import trace_operation
@@ -33,6 +36,29 @@ BROAD_COVERAGE_TRIGGERS: frozenset[str] = frozenset(
         "overview of all",
         "give me an overview",
         "comprehensive summary",
+    ]
+)
+
+CHAPTER_ENUMERATION_PATTERNS: list[re.Pattern[str]] = [
+    re.compile(r"chapter", re.I),
+    re.compile(r"\bch\.?\s*\d+\b", re.I),
+    re.compile(
+        r"(?<!\w)(\d{1,2})\s*\.{1,3}(?:intro|overview|summary|introduction)",
+        re.I,
+    ),
+]
+
+ENUMERATE_CHAPTER_SIGNALS: frozenset[str] = frozenset(
+    [
+        "all",
+        "every",
+        "each",
+        "list",
+        "summarize",
+        "overview",
+        "summary",
+        "give me",
+        "enumerate",
     ]
 )
 
@@ -89,11 +115,13 @@ class RAGPipeline:
             >>> pipeline = RAGPipeline(searcher, llm_provider, top_k=10)
         """
         self._searcher = searcher
+        self._scoper = ScopedRetriever(inner=self._searcher)  # type: ignore[arg-type]
         self._llm_provider = llm_provider
         self._rewriter = rewriter
         self._top_k = top_k if top_k is not None else config().default_top_k
         self._context_window = context_window
         self._config = config()
+        self._intent_parser = StructuralIntentParser(self._config)
         self._security_filter = SecurityFilter()
 
     def query(
@@ -144,8 +172,12 @@ class RAGPipeline:
 
             effective_top_k = top_k if top_k is not None else self._top_k
 
-            # --- B4: Iterative RAG for broad-coverage queries ---
-            if self._is_broad_coverage_query(query):
+            # --- B4: Iterative RAG for broad-coverage and chapter-enumeration queries ---
+            intent_result = self._intent_parser.parse(query)
+            if intent_result.intent in (
+                QueryIntent.BROAD_COVERAGE,
+                QueryIntent.CHAPTER_ENUMERATE,
+            ):
                 return self._iterative_query(
                     query,
                     top_k=effective_top_k,
@@ -275,6 +307,18 @@ class RAGPipeline:
         """
         try:
             effective_top_k = top_k if top_k is not None else self._top_k
+
+            # --- B4: Iterative RAG for broad-coverage and chapter-enumeration queries ---
+            intent_result = self._intent_parser.parse(query)
+            if intent_result.intent in (
+                QueryIntent.BROAD_COVERAGE,
+                QueryIntent.CHAPTER_ENUMERATE,
+            ):
+                return self._iterative_query(
+                    query,
+                    top_k=effective_top_k,
+                    show_sources=show_sources,
+                )
 
             # Step 1: Rewrite query using conversation history (if rewriter available)
             rewritten_query = self._rewrite_query_with_history(query, session)
@@ -452,6 +496,86 @@ class RAGPipeline:
             logger.error("Chat failed: %s: %s", type(e).__name__, e)
             return self._create_error_response(str(e), query)
 
+    def _derive_chapter_roster(self, structure_chunks: list[dict[str, Any]]) -> str:
+        import re
+
+        entries: list[tuple[int, str, str]] = []
+
+        def _parse_chunk(chunk_text: str) -> tuple[str, str]:
+            if not chunk_text:
+                return "", "Unknown"
+            cleaned = re.sub(r'^[. ]+', '', chunk_text)
+            if not cleaned:
+                return "", "Unknown"
+            i = 0
+            while i < len(cleaned):
+                if not cleaned[i].isdigit():
+                    i += 1
+                    continue
+                j = i
+                while j < len(cleaned) and cleaned[j].isdigit():
+                    j += 1
+                if j >= len(cleaned) or cleaned[j] != '.':
+                    i = j if j < len(cleaned) else i + 1
+                    continue
+                k = j + 1
+                has_subseg = False
+                while k < len(cleaned) and cleaned[k].isdigit():
+                    has_subseg = True
+                    k += 1
+                    while k < len(cleaned) and cleaned[k] == '.':
+                        k += 1
+                        while k < len(cleaned) and cleaned[k].isdigit():
+                            k += 1
+                section_num = cleaned[i:k]
+                after = cleaned[k:]
+                if not has_subseg:
+                    if k < len(cleaned) and not cleaned[k].isspace():
+                        i = k + 1
+                        continue
+                if section_num.count('.') >= 2:
+                    i = k + 1
+                    continue
+                title_candidate = after.lstrip()
+                title_candidate = re.sub(r'\s+\.{2,}', ' ', title_candidate)
+                title_candidate = re.sub(r'\s+\d{1,3}\s*$', '', title_candidate)
+                title_candidate = title_candidate.rstrip('.').rstrip()[:200]
+                if len(title_candidate) < 4 or not title_candidate[0].isalpha():
+                    i = k + 1
+                    continue
+                break
+            else:
+                return "", "Unknown"
+            return section_num, title_candidate
+
+        for chunk in structure_chunks:
+            raw = chunk.get("chunk_text", "")
+            sn, title = _parse_chunk(raw)
+            if sn:
+                try:
+                    major = int(sn.split(".")[0])
+                except ValueError:
+                    major = 999
+                if major > 30:
+                    continue
+                entries.append((major, sn, title))
+        entries.sort(key=lambda x: (x[0], *[int(p) for p in x[1].split(".")]))
+        lines: list[str] = []
+        prev_major: int | None = None
+        for _, sn, title in entries:
+            major = int(sn.split(".")[0]) if sn else 0
+            if prev_major != major:
+                lines.append(f"[Chapter {major}] {sn} — {title}")
+                prev_major = major
+            else:
+                lines.append(f"  {sn} — {title}")
+        header = (
+            "CHAPTER/SECTION INDEX (enumerate ALL of the following in your answer):\n"
+            + "\n".join(lines[:50])
+            + "\n\n"
+        )
+        return header
+
     def _format_context(
         self,
         chunks: list[dict[str, Any]],
@@ -585,60 +709,106 @@ class RAGPipeline:
                 result.append(chunk)
         return result
 
-    def _is_broad_coverage_query(self, query: str) -> bool:
-        """Detect queries seeking broad document coverage.
+    def _is_enumerate_chapters_query(self, query: str) -> bool:
+        """Detect queries explicitly requesting chapter-by-chapter enumeration.
 
-        These queries benefit from iterative retrieval across document
-        structure rather than one-shot top-k similarity search.
+        Matches phrases like "summarize all 21 chapters", "chapter 1", "give me an overview of each chapter".
+        Returns True when query mentions chapter numbers AND implies enumeration (not just a single chapter lookup).
 
         Args:
             query: User query string.
 
         Returns:
-            True if query seeks broad/coverage of multiple sections.
+            True if query explicitly enumerates chapters.
         """
+        q = query.lower()
+        has_chapter_ref = any(p.search(q) for p in CHAPTER_ENUMERATION_PATTERNS)
+        has_enum_signal = any(t in q for t in ENUMERATE_CHAPTER_SIGNALS)
+        return has_chapter_ref and has_enum_signal
+
+    def _derive_chapter_numbers(
+            self, structure_chunks: list[dict[str, Any]]
+        ) -> list[tuple[int, str, str]]:
+            import re
+            entries: list[tuple[int, str, str]] = []
+            seen: set[tuple[int, str]] = set()
+            DOT_LEADER = re.compile(r"\.{2,}[.\-]+")
+            SEC_RE = re.compile(r"(\d+)(?:\.(\d+))+(?:\s+(.+))?")
+            CHAPTER_N_RE = re.compile(r"Chapter\s+(\d+)\s+(.{2,60})", re.IGNORECASE)
+            seen_sec: set[int] = set()
+            for chunk in structure_chunks:
+                raw = chunk.get("chunk_text", "")
+                source = chunk.get("source_file", "")
+                cleaned = DOT_LEADER.sub("", raw, count=1).strip()
+
+                for nm in CHAPTER_N_RE.finditer(raw):
+                    major = int(nm.group(1))
+                    if major < 1 or major > 30 or (major, source) in seen:
+                        continue
+                    title = nm.group(2).strip().rstrip(".")
+                    if len(title) < 2:
+                        continue
+                    seen.add((major, source))
+                    entries.append((major, source, title))
+
+                for m in SEC_RE.finditer(cleaned):
+                    major = int(m.group(1))
+                    if major < 1 or major > 30 or major in seen_sec:
+                        continue
+                    raw_title = (m.group(3) or "").strip()
+                    clean_title = raw_title.rstrip(".")
+                    if len(clean_title) < 2:
+                        break
+                    seen_sec.add(major)
+                    entries.append((major, source, clean_title))
+
+            entries.sort(key=lambda x: x[0])
+            return entries
+
+    def _is_broad_coverage_query(self, query: str) -> bool:
         q = query.lower().strip()
         return any(t in q for t in BROAD_COVERAGE_TRIGGERS)
 
-    def _probe_document_structure(self, top_k: int = 20) -> list[dict[str, Any]]:
-        """Probe for document structural elements (TOC/section headers).
+    def _probe_document_structure(self, top_k: int = 400) -> list[dict[str, Any]]:
+        """Probe for document structural elements (TOC/section headers) via chunk_role.
 
-        Searches for short chunks likely to be table-of-contents entries
-        or section headers. These are used by iterative RAG to determine
-        which page ranges to query per-section.
+        Attempts targeted structural-role filters first; falls back to raw
+        top-K retrieval when few candidates are found (handles documents whose
+        chunks lack explicit element_type/chunk_role markers).
 
         Args:
-            top_k: How many structural candidates to retrieve (default 20).
+            top_k: How many structural candidates to retrieve (default 400).
 
         Returns:
-            List of chunk dicts with 'page_number', 'chunk_text', 'source_file'.
-            Filtered to chunks under 150 bytes (likely headers/TOC entries).
+            List of chunk dicts with '_id', 'chunk_text', 'page_number',
+            'source_file', 'chunk_id'.
         """
-        # Construct a probe query from structural keywords
-        probe_terms = [
-            "chapter",
-            "section",
-            "introduction",
-            "overview",
-            "appendix",
-            "contents",
-            "table of contents",
-            "index",
-            "glossary",
-        ]
-        probe_query = " OR ".join(probe_terms[:5])
-
-        # Lightweight search - grab more than needed, filter down
-        candidates = self._searcher.search(probe_query, top_k=top_k)
-
-        # Filter to short chunks likely being structural (TOC entries, headers)
-        structural: list[dict[str, Any]] = []
-        for chunk in candidates:
-            text = chunk.get("chunk_text", "")
-            if len(text) < 150:
-                structural.append(chunk)
-
-        return structural
+        from pymongo import MongoClient
+        from secondbrain.config import config
+        cfg = config()
+        client = MongoClient(cfg.mongo_uri, directConnection=True)
+        coll = client[cfg.mongo_db][cfg.mongo_collection]
+        cursor = (
+            coll.find(
+                {
+                    "$or": [
+                        {"element_type": {"$in": ["heading", "toc_entry", "body", "paragraph"]}},
+                        {"chunk_role": {"$in": ["body", "caption", "navigation", "heading", "toc_entry"]}},
+                    ]
+                },
+                {"_id": 0, "chunk_text": 1, "page_number": 1, "source_file": 1, "chunk_id": 1},
+            )
+            .limit(400)
+        )
+        result = list(cursor)
+        if len(result) < 5:
+            result = list(
+                coll.find(
+                    {},
+                    {"_id": 0, "chunk_text": 1, "page_number": 1, "source_file": 1, "chunk_id": 1},
+                ).limit(top_k)
+            )
+        return result
 
     def _generic_one_shot(
         self,
@@ -682,11 +852,158 @@ class RAGPipeline:
         Returns:
             dict with 'answer', 'query', 'sources' (if show_sources).
         """
-        # 1. Probe document structure for TOC/header chunks
-        structure_chunks = self._probe_document_structure(top_k=20)
+        # 1. Probe document structure for TOC/chapter chunks via chunk_role
+        structure_chunks = self._probe_document_structure(top_k=400)
         if not structure_chunks:
             # Fall back to generic one-shot if no structure found
             return self._generic_one_shot(query, top_k, show_sources)
+
+        intent_decision = self._intent_parser.parse(query)
+
+        # 2a. Branch: chapter-enumeration query — per-chapter keyword search
+        if intent_decision.intent == QueryIntent.CHAPTER_ENUMERATE:
+            chapters_to_cover = self._derive_chapter_numbers(structure_chunks)
+
+            if chapters_to_cover:
+                from pymongo import MongoClient
+                from secondbrain.config import config
+                cfg_ = config()
+                client_ = MongoClient(cfg_.mongo_uri, directConnection=True)
+                coll_ = client_[cfg_.mongo_db][cfg_.mongo_collection]
+
+                # Pick the source with the most body chunks (most substantive document)
+                sources_set = {entry[1] for entry in chapters_to_cover}
+                src = max(
+                    (s for s in sources_set),
+                    key=lambda s: coll_.count_documents(
+                        {"source_file": s, "chunk_role": "body"}
+                    ),
+                )
+
+                import re
+                SEC_HEADER_RE = re.compile(r"^\s*(\d+)\.\d+\s")
+                chapter_first_pg: dict[int, int] = {}
+                for c in (
+                    coll_.find(
+                        {"source_file": src, "chunk_role": "body"},
+                        {"_id": 0, "chunk_text": 1, "page_number": 1},
+                    )
+                    .sort("page_number", 1)
+                    .limit(3500)
+                ):
+                    txt = c.get("chunk_text", "")[:150]
+                    m = SEC_HEADER_RE.match(txt)
+                    if m:
+                        ch = int(m.group(1))
+                        if 1 <= ch <= 30 and ch not in chapter_first_pg:
+                            chapter_first_pg[ch] = c.get("page_number", 0)
+                        if len(chapter_first_pg) >= 20:
+                            break
+                sorted_pgs = sorted(chapter_first_pg.items(), key=lambda x: x[1])
+                chapter_ranges_: dict[int, tuple[int, int]] = {}
+                for idx_, (ch_, start_pg_) in enumerate(sorted_pgs):
+                    end_pg_ = sorted_pgs[idx_ + 1][1] - 1 if idx_ + 1 < len(sorted_pgs) else 700
+                    chapter_ranges_[ch_] = (start_pg_, end_pg_)
+
+                chapter_keys = sorted(chapter_ranges_.keys())
+                # Fair round-robin: grab one chunk per chapter in cycles until budget exhausted
+                chapter_buckets: dict[int, list] = {ch: [] for ch in chapter_keys}
+                for c in (
+                    coll_.find(
+                        {"source_file": src, "chunk_role": "body"},
+                        {"_id": 0, "chunk_text": 1, "page_number": 1, "source_file": 1, "chunk_id": 1},
+                    )
+                    .sort("page_number", 1)
+                    .limit(6000)
+                ):
+                    pg = c.get("page_number", 0)
+                    for ch_num in chapter_keys:
+                        rng = chapter_ranges_[ch_num]
+                        if rng[0] <= pg <= rng[1]:
+                            if len(chapter_buckets[ch_num]) < 4:
+                                c["score"] = 0.5
+                                chapter_buckets[ch_num].append(c)
+                            break
+
+                # Merge buckets in round-robin order
+                unique_by_hash: dict[int, dict[str, Any]] = {}
+                hashes_seen: set[int] = set()
+                max_bucket = max(len(b) for b in chapter_buckets.values())
+                for slot in range(max_bucket):
+                    for ch_num in chapter_keys:
+                        bucket = chapter_buckets[ch_num]
+                        if slot < len(bucket):
+                            c = bucket[slot]
+                            h = hash(c.get("chunk_text", "")[:512])
+                            if h not in hashes_seen:
+                                hashes_seen.add(h)
+                                unique_by_hash[h] = c
+
+                accumulated = list(unique_by_hash.values())
+                accumulated.sort(key=lambda c: c.get("score", 0.0), reverse=True)
+                final_chunks = accumulated[:top_k]
+
+                # Build chapter roster dynamically from chapter page ranges
+                chapter_roster_lines = []
+                for ch_num in sorted(chapter_ranges_.keys()):
+                    pg_start = chapter_ranges_[ch_num][0]
+                    chapter_roster_lines.append(f"Chapter {ch_num} (approx pages {pg_start}+)")
+                chapter_roster = "\n".join(chapter_roster_lines) + "\n"
+                context_text = chapter_roster + self._format_context(final_chunks)
+                prompt = self._build_prompt(query, context_text)
+
+                generation_start = time.perf_counter()
+                answer = ""
+                try:
+                    with trace_operation("rag_generation_iterative") as span:
+                        if span:
+                            span.set_attribute("rag.iterative_mode", True)
+                            span.set_attribute("rag.enumeration_mode", True)
+                            span.set_attribute("rag.top_k", top_k)
+
+                        if self._config.streaming_enabled and hasattr(
+                            self._llm_provider, "stream_chat"
+                        ):
+                            try:
+                                messages = [{"role": "user", "content": prompt}]
+                                accumulated_resp: list[str] = []
+
+                                def on_chunk(content: str, _reasoning: str | None) -> None:
+                                    if content:
+                                        accumulated_resp.append(content)
+
+                                self._llm_provider.stream_chat(
+                                    messages=messages,
+                                    on_chunk=on_chunk,
+                                    temperature=self._config.llm_temperature,
+                                    max_tokens=self._config.llm_max_tokens,
+                                )
+                                answer = "".join(accumulated_resp)
+                            except Exception:
+                                answer = ""
+
+                        if not answer or not answer.strip():
+                            answer = self._llm_provider.generate(
+                                prompt=prompt,
+                                temperature=self._config.llm_temperature,
+                                max_tokens=self._config.llm_max_tokens,
+                            )
+                except Exception as e:
+                    logger.error(
+                        "Iterative query generation failed: %s: %s", type(e).__name__, e
+                    )
+                    answer = f"An error occurred during generation: {e}"
+                finally:
+                    metrics.record(
+                        "generation_latency", time.perf_counter() - generation_start
+                    )
+
+                result = {"answer": answer, "query": query}
+                if show_sources:
+                    result["sources"] = final_chunks
+                return result
+            else:
+                pass  # Fall through to existing structural iteration
 
         # 2. Collect chunks iterating across structure elements
         unique_by_hash: dict[int, dict[str, Any]] = {}
@@ -721,14 +1038,14 @@ class RAGPipeline:
         accumulated.sort(key=lambda c: c.get("score", 0.0), reverse=True)
         final_chunks = self._dedupe_by_text_hash(accumulated)[:top_k]
 
-        # 5. Format context and build prompt (reuse existing logic)
         if not final_chunks:
             return {
                 "answer": f"I couldn't find relevant documents for your query: {query}",
                 "query": query,
             }
 
-        context_text = self._format_context(final_chunks)
+        chapter_roster = self._derive_chapter_roster(structure_chunks)
+        context_text = chapter_roster + self._format_context(final_chunks)
         prompt = self._build_prompt(query, context_text)
 
         # 6. Generate answer (same LLM call as query() uses)

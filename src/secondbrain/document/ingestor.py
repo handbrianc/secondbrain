@@ -21,10 +21,22 @@ from uuid import uuid4
 from secondbrain.config import config
 from secondbrain.exceptions import DocumentExtractionError
 from secondbrain.storage import VectorStorage
+from secondbrain.document.chunker import classify_chunk_role
 from secondbrain.utils.embedding_cache import EmbeddingCache
 from secondbrain.utils.tracing import trace_operation
 
 logger = logging.getLogger(__name__)
+
+
+def _element_text(el: Any) -> str:
+    if hasattr(el, "export_to_data_frame"):
+        try:
+            return el.export_to_data_frame().to_csv(index=False)
+        except Exception:
+            return str(el)  # type: ignore[return-value]
+    if hasattr(el, "text") and el.text:
+        return el.text  # type: ignore[return-value]
+    return ""
 
 
 # Access config through module namespace so test patches apply correctly
@@ -192,7 +204,7 @@ class DocumentIngestor:
         pdf_options = PdfFormatOption(
             pipeline_options=PdfPipelineOptions(
                 do_ocr=True,
-                do_table_structure=False,
+                do_table_structure=True,
                 ocr_options=RapidOcrOptions(
                     backend='torch',
                     rapidocr_params={'EngineConfig.torch.use_mps': True},
@@ -509,6 +521,7 @@ class DocumentIngestor:
                 "chunk_id": str(uuid4()),
                 "source_file": str(chunk_item["file_path"]),
                 "page_number": chunk_item["page"],
+                "chunk_role": chunk_item.get("chunk_role", "body"),
                 "chunk_text": chunk_item["text"],
                 "embedding": embedding,
                 "file_type": file_type,
@@ -602,6 +615,9 @@ class DocumentIngestor:
         batch_chunks: list[dict[str, Any]] = []
         docs_stored = 0
 
+        stream_seg_counter = 0
+        stream_total_segs = len(segments)
+
         for i, segment in enumerate(segments):
             cleaned = segment["text"].strip()
             if not cleaned:
@@ -614,6 +630,12 @@ class DocumentIngestor:
                 continue
             seen_hashes.add(text_hash)
 
+            is_likely_title_raw = (
+                len(cleaned) < 100
+                and not any(p in cleaned for p in [".", ":", "-", "—"])
+                and not cleaned.strip().endswith(".")
+            )
+
             batch_chunks.append(
                 {
                     "file_path": file_path,
@@ -621,8 +643,13 @@ class DocumentIngestor:
                     "text": cleaned,
                     "page": segment["page"],
                     "text_hash": text_hash,
+                    "chunk_role": classify_chunk_role(
+                        cleaned, stream_seg_counter, stream_total_segs, is_likely_title_raw
+                    ),
                 }
             )
+
+            stream_seg_counter += 1
 
             # Process batch when full
             if len(batch_chunks) >= batch_size:
@@ -729,6 +756,7 @@ class DocumentIngestor:
                 "chunk_id": str(uuid4()),
                 "source_file": str(chunk_item["file_path"]),
                 "page_number": chunk_item["page"],
+                "chunk_role": chunk_item.get("chunk_role", "body"),
                 "chunk_text": chunk_item["text"],
                 "embedding": embedding,
                 "file_type": file_type,
@@ -979,16 +1007,18 @@ class DocumentIngestor:
 
                 if hasattr(content, "texts") and content.texts:
                     for text_item in content.texts:
-                        if not hasattr(text_item, "text") or not text_item.text:
+                        txt = _element_text(text_item)
+                        if not txt:
                             continue
 
                         page_num = 1
-                        if hasattr(text_item, "prov") and text_item.prov:
-                            prov = text_item.prov[0]
-                            if hasattr(prov, "page_no"):
-                                page_num = prov.page_no
+                        prov = getattr(text_item, "prov", None) or []
+                        if prov:
+                            p = prov[0]
+                            if hasattr(p, "page_no"):
+                                page_num = p.page_no
 
-                        segments.append({"text": text_item.text, "page": page_num})
+                        segments.append({"text": txt, "page": page_num})
 
                 if not segments:
                     with file_path.open(encoding="utf-8", errors="ignore") as f:
@@ -1178,6 +1208,9 @@ class AsyncDocumentIngestor(DocumentIngestor):
         batch_chunks: list[dict[str, Any]] = []
         docs_stored = 0
 
+        stream_seg_counter = 0
+        stream_total_segs = len(segments)
+
         for i, segment in enumerate(segments):
             cleaned = segment["text"].strip()
             if not cleaned:
@@ -1190,6 +1223,12 @@ class AsyncDocumentIngestor(DocumentIngestor):
                 continue
             seen_hashes.add(text_hash)
 
+            is_likely_title_raw = (
+                len(cleaned) < 100
+                and not any(p in cleaned for p in [".", ":", "-", "—"])
+                and not cleaned.strip().endswith(".")
+            )
+
             batch_chunks.append(
                 {
                     "file_path": file_path,
@@ -1197,8 +1236,13 @@ class AsyncDocumentIngestor(DocumentIngestor):
                     "text": cleaned,
                     "page": segment["page"],
                     "text_hash": text_hash,
+                    "chunk_role": classify_chunk_role(
+                        cleaned, stream_seg_counter, stream_total_segs, is_likely_title_raw
+                    ),
                 }
             )
+
+            stream_seg_counter += 1
 
             # Process batch when full
             if len(batch_chunks) >= batch_size:
@@ -1313,6 +1357,7 @@ class AsyncDocumentIngestor(DocumentIngestor):
                 "chunk_id": str(uuid4()),
                 "source_file": str(chunk_item["file_path"]),
                 "page_number": chunk_item["page"],
+                "chunk_role": chunk_item.get("chunk_role", "body"),
                 "chunk_text": chunk_item["text"],
                 "embedding": embedding,
                 "file_type": file_type,

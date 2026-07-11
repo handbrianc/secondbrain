@@ -68,6 +68,7 @@ class DocumentChunk:
     text: str
     metadata: DocumentMetadata
     page_number: int | None = None
+    element_type: str | None = None
     embedding: EmbeddingVector | None = field(default=None, repr=False)
     magnitude: float | None = None
 
@@ -110,6 +111,7 @@ class DocumentChunk:
             "chunk_text": self.text,
             "page_number": self.page_number,
             "source_file": self.metadata.source_file,
+            "element_type": self.element_type,
             "file_type": self.metadata.file_type,
             "ingested_at": self.metadata.ingested_at.isoformat(),
             "embedding": self.embedding,

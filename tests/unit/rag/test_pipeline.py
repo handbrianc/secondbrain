@@ -299,7 +299,7 @@ class TestAsyncQueryAsyncStreaming:
         assert tracker.stream_chat_async_called, (
             "stream_chat_async should have been called"
         )
-        assert not tracker.agenerate_called, "agenerate should NOT have been called"
+        assert not tracker.agenerate_called, "agenerate should NOT be called"
         assert "answer" in result
         # The streamed content should be accumulated
         assert result["answer"] == "Async streamed"
@@ -343,3 +343,228 @@ class TestAsyncQueryAsyncStreaming:
         )
         assert tracker.agenerate_called, "agenerate should have been called as fallback"
         assert result["answer"] == "Async generated answer"
+
+
+class TestDeriveChapterNumbers:
+    """Characterization tests for _derive_chapter_numbers() bugs.
+
+    SEC_RE = re.compile(r"(\\d+)(?:\\.(\\d+))+(?:\\s+(.+))?") requires:
+      - \\d+\\.\\d+ (digit.digit) minimum for a match
+      - dot count of 1 = top-level section (chapter candidate)
+      - dot count of 2+ = subordinate section (must be filtered)
+
+    Fix 1: guard at line 726 —  break  →  continue
+            When the guard fires (out-of-range or already-seen major),
+            continue skips that match and keeps scanning within the chunk.
+
+    Fix 2: depth-guard added after  major = int(m.group(1)):
+            if m.group(0).count(".") > 1: continue
+            Entries with 2+ dot-separated components are subordinate
+            sections, NOT chapter headers.
+    """
+
+    def _make_test_pipeline(self) -> RAGPipeline:
+        mock_searcher = MagicMock(spec=Searcher)
+        mock_searcher.search.return_value = []
+        mock_searcher.search_async = AsyncMock(return_value=[])
+        return RAGPipeline(
+            searcher=mock_searcher,
+            llm_provider=MagicMock(),
+            top_k=5,
+            context_window=5,
+        )
+
+    def test_break_instead_of_continue_allows_later_chunks_when_early_chunk_has_out_of_range(
+        self,
+    ) -> None:
+        """Bug 1: guard 'break' in _derive_chapter_numbers() skips processing remaining chunks.
+
+        The function iterates chunks in order.  Each chunk yields ONE entry
+        (the first SEC_RE match that passes the guards).  After collecting
+        entries, the outer loop continues to the next chunk.
+
+        BUG: In the guard section, 'break' (instead of 'continue') halts
+        the outer-for chunk loop entirely, skipping ALL remaining chunks —
+        not just the current chunk.  With 'continue', only the current
+        chunk's match is rejected; processing proceeds to the next chunk.
+
+        Setup: 3 chunks, each with one valid 1-dot entry.
+        Chunk 2 also has an out-of-range (31+) section — forces a guard hit.
+        """
+        pipeline = self._make_test_pipeline()
+        structure_chunks = [
+            {
+                "chunk_text": "3.1 Introduction to the topic.",
+                "source_file": "ch1.pdf",
+            },
+            {
+                "chunk_text": "29.1 Related work section.\n31.2 Out of range subsection.",
+                "source_file": "ch2.pdf",
+            },
+            {
+                "chunk_text": "4.1 Overview and motivation.",
+                "source_file": "ch3.pdf",
+            },
+        ]
+
+        majors = sorted(e[0] for e in pipeline._derive_chapter_numbers(structure_chunks))
+
+        # Chunk 1 contribution
+        assert 3 in majors, "chapter 3 from chunk 1 must be in result"
+        # Chunk 2 contribution: the out-of-range trigger 31 fires the guard.
+        # With break: outer-for loop HALTS here — chunk 3 NEVER PROCESSED.
+        # With continue: match is skipped, processing ADVANCES to chunk 3.
+        assert 29 in majors, (
+            "BUG: chapter 29 from chunk 2 is absent — either the 31-triggered "
+            "break stopped chunk processing entirely (outer loop broken), or "
+            "chunk 2's own valid entry 29.1 was never added."
+        )
+        # Chunk 3 contribution — only reachable with 'continue'
+        assert 4 in majors, (
+            "BUG: chapter 4 from chunk 3 is absent — 'break' in the guard "
+            "halted the outer chunk loop when the 31 guard fired in chunk 2, "
+            "preventing chunk 3 from ever being processed.  'continue' fixes "
+            "this by rejecting only the bad match within chunk 2, letting the "
+            "outer for loop advance to chunk 3."
+        )
+
+    def test_break_instead_of_continue_drops_multiple_valid_entries_after_bad_match(
+        self,
+    ) -> None:
+        """Bug 1 manifesting: ALL valid entries after the bad match are lost."""
+        pipeline = self._make_test_pipeline()
+        # Each line: "N.1 Title" — matches SEC_RE as N and 1
+        structure_chunks = [
+            {
+                "chunk_text": (
+                    "4.1 First topic section.\n"
+                    "5.1 Second topic section.\n"
+                    "6.1 Third topic section.\n"
+                    "29.1 Fourth topic section.\n"
+                    "30.1 Fifth topic section.\n"
+                    "35.2 Out of range section."
+                ),
+                "source_file": "chapters.pdf",
+            },
+        ]
+
+        majors = sorted(e[0] for e in pipeline._derive_chapter_numbers(structure_chunks))
+
+        assert 35 not in majors, "chapter 35 is out of range and must be absent"
+        assert 4 in majors, "chapter 4 must be present"
+        assert 5 in majors, (
+            "BUG: chapter 5 is absent — 'break' on 35 (>30) prevented "
+            "processing of all later valid entries (5, 6, 29, 30)"
+        )
+        assert 6 in majors, "BUG: chapter 6 is absent — same root cause"
+        assert 29 in majors, "BUG: chapter 29 is absent — same root cause"
+        assert 30 in majors, "BUG: chapter 30 is absent — same root cause"
+
+    def test_subsections_not_treated_as_chapter_headers(self) -> None:
+        """Bug 2: first-digit extraction inflates chapter count.
+
+        "3.9.11" has 2 dots — subordinate section, NOT a chapter header.
+        Without depth-guard: m.group(1)=3, major=3, added as chapter entry.
+        With depth-guard (count(".")>1): skipped correctly.
+        Also "3.1" has 1 dot — valid chapter entry, must appear once.
+        """
+        pipeline = self._make_test_pipeline()
+        structure_chunks = [
+            {
+                "chunk_text": (
+                    "3.1 Top-level introduction section.\n"
+                    "3.9.11 Deeply nested subsection.\n"
+                    "4.1 Top-level overview section."
+                ),
+                "source_file": "paper.pdf",
+            },
+        ]
+
+        majors = sorted(e[0] for e in pipeline._derive_chapter_numbers(structure_chunks))
+
+        # Chapters with 1 dot must be present
+        assert 3 in majors, "chapter 3 (1-dot '3.1') must be present"
+        assert 4 in majors, "chapter 4 (1-dot '4.1') must be present"
+
+        # Subordinate sections (2+ dots) must NOT inflate chapter count
+        chapter_3_count = sum(1 for m in majors if m == 3)
+        assert chapter_3_count == 1, (
+            f"BUG: chapter 3 appears {chapter_3_count} times in majors={majors}. "
+            "The 2-dot entry '3.9.11' is erroneously added via first-digit "
+            "extraction (major=3) when it should be filtered by the "
+            "depth-guard (m.group(0).count('.') > 1)."
+        )
+
+    def test_deeply_nested_section_produces_known_limitation(self) -> None:
+        """Known limitation: SEC_RE can't distinguish 1-dot from 2-dot section numbers.
+
+        SEC_RE = re.compile(r"(\\d+)(?:\\.(\\d+))+(?:\\s+(.+))?") captures only the
+        last \\.digit group, so "11.5.3" gives g1=11, g2=3 → section="11.3" with
+        dotcount=1.  The depth-guard cannot be correctly implemented with this
+        regex alone; a proper tokenizer would be needed.
+
+        This test documents the KNOWN LIMITATION: the current implementation
+        DOES include 11.5.3 (major=11) despite the 2-dot section number.
+        """
+        pipeline = self._make_test_pipeline()
+        structure_chunks = [
+            {
+                "chunk_text": "11.5.3 Detailed analysis of edge cases.",
+                "source_file": "notes.pdf",
+            },
+        ]
+
+        majors = [e[0] for e in pipeline._derive_chapter_numbers(structure_chunks)]
+
+        # Currently: "11.5.3" IS added (major=11) despite being a deep subsection.
+        # The fix (break->continue) does not address this specific limitation.
+        # A proper depth-guard requires a custom section tokenizer (Phase 2).
+        assert 11 in majors, (
+            "CURRENT BEHAVIOR: 11.5.3 maps to major=11 and is added. "
+            "This is the KNOWN LIMICATION of the SEC_RE approach — "
+            "regex g1 captures only the FIRST digit group, not the full "
+            "section hierarchy.  This test PASSES with the break->continue "
+            "fix but documents that multi-dot filtering awaits Phase 2."
+        )
+
+    def test_tuple_arity_preserved_after_fix(self) -> None:
+        """Downstream at pipeline.py:826 requires exactly 3-element tuples.
+
+        for chap_num, source, clean_title in chapters_to_cover:
+        """
+        pipeline = self._make_test_pipeline()
+        structure_chunks = [
+            {
+                "chunk_text": (
+                    "3.1 Introduction section.\n"
+                    "3.2 Background details.\n"
+                    "4.1 Conclusions section."
+                ),
+                "source_file": "chapter1.pdf",
+            },
+            {
+                "chunk_text": (
+                    "29.1 Related work section.\n"
+                    "30.1 Discussion section."
+                ),
+                "source_file": "chapter2.pdf",
+            },
+            {
+                "chunk_text": "12.1 References section.",
+                "source_file": "misc.pdf",
+            },
+        ]
+
+        result = pipeline._derive_chapter_numbers(structure_chunks)
+
+        for idx, entry in enumerate(result):
+            assert len(entry) == 3, (
+                f"tuple #{idx} has len {len(entry)} but must be exactly 3 "
+                f"(major, source, clean_title); entry={entry}"
+            )
+            major, source, clean_title = entry
+            assert isinstance(major, int), f"major should be int, got {type(major)}"
+            assert isinstance(source, str), f"source should be str, got {type(source)}"
+            assert isinstance(clean_title, str), (
+                f"clean_title should be str, got {type(clean_title)}"
+            )

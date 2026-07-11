@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING, Any
 from typing_extensions import TypedDict
 
 # Apply MPS patch before any docling import
+from secondbrain.document.chunker import classify_chunk_role
 from secondbrain.utils.mps_patch import patch_transformers_for_mps
 
 patch_transformers_for_mps()
@@ -64,7 +65,7 @@ def create_docling_converter() -> "DocumentConverter":  # noqa: UP037
     pdf_options = PdfFormatOption(
         pipeline_options=PdfPipelineOptions(
             do_ocr=True,
-            do_table_structure=False,
+            do_table_structure=True,
             ocr_options=RapidOcrOptions(
                 backend='torch',
                 rapidocr_params={'EngineConfig.torch.use_mps': True},
@@ -74,7 +75,19 @@ def create_docling_converter() -> "DocumentConverter":  # noqa: UP037
             ),
         )
     )
+
     return DocumentConverter(format_options={InputFormat.PDF: pdf_options})
+
+
+def _segment_as_text(item: Any) -> str:
+    if hasattr(item, "export_to_data_frame"):
+        try:
+            return item.export_to_data_frame().to_csv(index=False)
+        except Exception:
+            return str(item)  # type: ignore[return-value]
+    if hasattr(item, "text") and item.text:
+        return item.text  # type: ignore[return-value]
+    return ""
 
 
 if TYPE_CHECKING:
@@ -122,7 +135,7 @@ def create_converter() -> DocumentConverter:
     pdf_options = PdfFormatOption(
         pipeline_options=PdfPipelineOptions(
             do_ocr=True,
-            do_table_structure=False,
+            do_table_structure=True,
             ocr_options=RapidOcrOptions(
                 backend='torch',
                 rapidocr_params={'EngineConfig.torch.use_mps': True},
@@ -297,7 +310,7 @@ def _extract_chunk_and_embed_file(
         pdf_options = PdfFormatOption(
             pipeline_options=PdfPipelineOptions(
                 do_ocr=True,
-                do_table_structure=False,
+                do_table_structure=True,
                 ocr_options=RapidOcrOptions(
                     backend='torch',
                     rapidocr_params={'EngineConfig.torch.use_mps': True},
@@ -368,18 +381,32 @@ def _extract_chunk_and_embed_file(
         if current_text:
             merged_segments.append({"text": current_text, "page": current_page})
 
-        chunks: list[_Segment] = []
+        chunks: list[dict[str, Any]] = []
+        total_segs = len(merged_segments)
+        seg_counter = 0
         for segment in merged_segments:
             text = segment["text"]
             page = segment.get("page", 0)
             if not text.strip():
                 continue
+            is_likely_title_for_seg = (
+                len(text.strip()) < 100
+                and not any(p in text.strip() for p in [".", ":", "-", "—"])
+                and not text.strip().endswith(".")
+            )
             start = 0
             while start < len(text):
                 if start + chunk_size >= len(text):
                     chunk_text = text[start:].rstrip()
                     if chunk_text:
-                        chunks.append({"text": chunk_text, "page": page})
+                        chunks.append({
+                            "text": chunk_text,
+                            "page": page,
+                            "chunk_role": classify_chunk_role(
+                                chunk_text, seg_counter, total_segs, is_likely_title_for_seg
+                            ),
+                        })
+                    seg_counter += 1
                     break
                 next_start = start + chunk_size
                 chunk_end = next_start
@@ -388,7 +415,14 @@ def _extract_chunk_and_embed_file(
                     chunk_end = last_space
                 chunk_text = text[start:chunk_end]
                 if chunk_text.strip():
-                    chunks.append({"text": chunk_text, "page": page})
+                    chunks.append({
+                        "text": chunk_text,
+                        "page": page,
+                        "chunk_role": classify_chunk_role(
+                            chunk_text, seg_counter, total_segs, is_likely_title_for_seg
+                        ),
+                    })
+                    seg_counter += 1
                 new_start = chunk_end - chunk_overlap
                 start = chunk_end if new_start <= start else new_start
 
@@ -410,6 +444,7 @@ def _extract_chunk_and_embed_file(
                         "text": cleaned,
                         "page": chunk["page"],
                         "text_hash": text_hash,
+                        "chunk_role": chunk.get("chunk_role", "body"),
                     }
                 )
 
@@ -463,6 +498,7 @@ def _extract_chunk_and_embed_file(
                 "embedding": embedding,
                 "file_type": file_type,
                 "ingested_at": ingested_at,
+                "chunk_role": chunk_item.get("chunk_role", "body"),
             }
             documents.append(doc)
 

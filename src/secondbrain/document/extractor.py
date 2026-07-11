@@ -19,6 +19,17 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from secondbrain.document.protocols import Segment
 
+
+def _element_text(el: Any) -> str:
+    if hasattr(el, "export_to_data_frame"):
+        try:
+            return el.export_to_data_frame().to_csv(index=False)
+        except Exception:
+            return str(el)  # type: ignore[return-value]
+    if hasattr(el, "text") and el.text:
+        return el.text  # type: ignore[return-value]
+    return ""
+
 # Configure logging suppressions for docling subprocesses
 _log = logging.getLogger("RapidOCR")
 _log.setLevel(logging.ERROR)
@@ -63,7 +74,7 @@ def _extract_and_chunk_file(
         pdf_options = PdfFormatOption(
             pipeline_options=PdfPipelineOptions(
                 do_ocr=True,
-                do_table_structure=False,
+                do_table_structure=True,
                 ocr_options=RapidOcrOptions(
                     backend='torch',
                     rapidocr_params={'EngineConfig.torch.use_mps': True},
@@ -83,16 +94,18 @@ def _extract_and_chunk_file(
 
         if hasattr(content, "texts") and content.texts:
             for text_item in content.texts:
-                if not hasattr(text_item, "text") or not text_item.text:
+                txt = _element_text(text_item)
+                if not txt:
                     continue
 
                 page_num = 1
-                if hasattr(text_item, "prov") and text_item.prov:
-                    prov = text_item.prov[0]
-                    if hasattr(prov, "page_no"):
-                        page_num = prov.page_no
+                prov = getattr(text_item, "prov", None) or []
+                if prov:
+                    p = prov[0]
+                    if hasattr(p, "page_no"):
+                        page_num = p.page_no
 
-                segments.append({"text": text_item.text, "page": page_num})
+                segments.append({"text": txt, "page": page_num})
 
         # Fallback: read file directly for plain text formats
         if not segments:
@@ -161,7 +174,7 @@ def _extract_chunk_and_embed_file(
         pdf_options = PdfFormatOption(
             pipeline_options=PdfPipelineOptions(
                 do_ocr=True,
-                do_table_structure=False,
+                do_table_structure=True,
                 ocr_options=RapidOcrOptions(
                     backend='torch',
                     rapidocr_params={'EngineConfig.torch.use_mps': True},
@@ -179,14 +192,16 @@ def _extract_chunk_and_embed_file(
         segments: list[Segment] = []
         if hasattr(content, "texts") and content.texts:
             for text_item in content.texts:
-                if not hasattr(text_item, "text") or not text_item.text:
+                txt = _element_text(text_item)
+                if not txt:
                     continue
                 page_num = 1
-                if hasattr(text_item, "prov") and text_item.prov:
-                    prov = text_item.prov[0]
-                    if hasattr(prov, "page_no"):
-                        page_num = prov.page_no
-                segments.append({"text": text_item.text, "page": page_num})
+                prov = getattr(text_item, "prov", None) or []
+                if prov:
+                    p = prov[0]
+                    if hasattr(p, "page_no"):
+                        page_num = p.page_no
+                segments.append({"text": txt, "page": page_num})
 
         if not segments:
             with file_path.open(encoding="utf-8", errors="ignore") as f:
@@ -217,6 +232,7 @@ def _extract_chunk_and_embed_file(
                         "text": cleaned,
                         "page": chunk["page"],
                         "text_hash": text_hash,
+                        "chunk_role": chunk.get("chunk_role", "body"),
                     }
                 )
 
@@ -248,6 +264,7 @@ def _extract_chunk_and_embed_file(
                 "source_file": str(file_path),
                 "page_number": chunk_item["page"],
                 "chunk_text": chunk_item["text"],
+                "chunk_role": chunk_item.get("chunk_role", "body"),
                 "embedding": embedding,
                 "file_type": file_type,
                 "ingested_at": ingested_at,

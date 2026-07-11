@@ -8,7 +8,7 @@ connection strings.
 import os
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -208,6 +208,14 @@ class Config(BaseSettings):
             "9. When the question asks for a SPECIFIC VALUE (like a model name, version number, configuration value, etc.), you MUST include the exact value from the context in your answer.\n"
             "10. NEVER generalize or omit specific values - if the context says 'all-MiniLM-L6-v2', your answer must include 'all-MiniLM-L6-v2'.\n"
             "11. Format your answer concisely and directly, matching the style of the question.\n"
+            "12. When the question asks to summarize or list chapters, sections, or parts\n"
+            "    (e.g. 'summarize by chapter', 'list all sections'), you MUST enumerate\n"
+            "    EVERY distinct chapter/section number and title present in the context —\n"
+            "    do not stop early, combine related items, or omit chapters because the\n"
+            "    answer feels 'long enough'. If the context contains 21 chapters, your\n"
+            "    answer must name all 21.\n"
+            "    IMPORTANT: Your answer will be judged a FAILURE if it omits any chapter\n"
+            "    numbers or substitutes summaries for chapter names. Enumerate all 21.\n"
             "\n"
             "When the answer is in the context:\n"
             "- State the answer directly in 1-2 sentences\n"
@@ -229,6 +237,24 @@ class Config(BaseSettings):
     chunk_overlap: int = Field(
         default=50,
         description="Chunk overlap for splitting",
+    )
+
+    # Summarization settings
+    summarizer_mode: Literal["concise", "detailed", "chapter_only"] = Field(
+        default="concise",
+        description="Summarization approach: 'concise' (brief), 'detailed' (comprehensive), or 'chapter_only' (structure only)",
+    )
+    summary_depth: int = Field(
+        default=1,
+        ge=1,
+        le=5,
+        description="Max heading depth to traverse for chapter summaries (1=top-level only, 2+=nested subsections)",
+    )
+
+    # Adaptive chunking settings
+    adaptive_chunking: bool = Field(
+        default=False,
+        description="Enable adaptive chunk sizing based on content density",
     )
 
     # File extension settings

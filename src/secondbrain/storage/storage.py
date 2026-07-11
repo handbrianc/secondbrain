@@ -459,6 +459,7 @@ class VectorStorage(ValidatableService, BaseVectorStorage):
                     "chunk_id": 1,
                     "source_file": 1,
                     "page_number": 1,
+                    "element_type": 1,
                     "chunk_text": 1,
                 },
             )
@@ -657,6 +658,7 @@ class VectorStorage(ValidatableService, BaseVectorStorage):
                     "chunk_id": 1,
                     "source_file": 1,
                     "page_number": 1,
+                    "element_type": 1,
                     "chunk_text": 1,
                 },
             )
@@ -1130,6 +1132,7 @@ class AsyncVectorStorage(ValidatableService, BaseVectorStorage):
                     "chunk_id": 1,
                     "source_file": 1,
                     "page_number": 1,
+                    "element_type": 1,
                     "chunk_text": 1,
                 },
             )
