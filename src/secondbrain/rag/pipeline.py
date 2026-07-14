@@ -942,9 +942,10 @@ class RAGPipeline:
                         if not missing:
                             break
 
-                # Phase 3: interpolate page numbers for chapters 1-21 still missing
-                # (e.g., chapter heading exists in TOC but no body chunk starts with its number)
-                for n in range(1, 22):
+                # Phase 3: interpolate page numbers for chapters still missing
+                # Only interpolates chapters known to exist (from _derive_chapter_numbers)
+                # Using hardcoded 1-21 would create phantom chapters for shorter docs
+                for n in sorted({ct[0] for ct in chapters_to_cover}):
                     if n in chapter_first_pg:
                         continue
                     before = max([k for k in chapter_first_pg if k < n], default=None)
@@ -957,6 +958,17 @@ class RAGPipeline:
                         chapter_first_pg[n] = bp + 1
                     elif ap is not None:
                         chapter_first_pg[n] = max(1, ap - 1)
+
+                # Filter out outlier chapters (false positives from Phase 1/2 body chunk matches)
+                # Only keep chapters within the known range from _derive_chapter_numbers
+                known_nums = {ct[0] for ct in chapters_to_cover}
+                if known_nums:
+                    min_k = min(known_nums)
+                    max_k = max(known_nums)
+                    chapter_first_pg = {
+                        k: v for k, v in chapter_first_pg.items()
+                        if min_k <= k <= max_k
+                    }
 
                 # Build sorted page ranges
                 sorted_pgs = sorted(chapter_first_pg.items(), key=lambda x: x[1])
