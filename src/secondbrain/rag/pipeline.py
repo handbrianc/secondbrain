@@ -959,22 +959,22 @@ class RAGPipeline:
                     elif ap is not None:
                         chapter_first_pg[n] = max(1, ap - 1)
 
-                # Find the main consecutive sequence from chapter_first_pg itself
-                # Accepts gaps up to 2 (1 missing chapter like ch20 between 19, 21)
-                # Rejects large gaps (e.g. ch24 after 18 in an 18-chapter doc)
+                # Find the longest consecutive run in chapter_first_pg
+                # This correctly handles both cases:
+                # - Proxmox (single run of 1-21): all preserved
+                # - VirtualBox (run of 1-18 + stragglers 19, 24): only 1-18 kept
                 sorted_chs = sorted(chapter_first_pg)
                 if sorted_chs:
-                    main_min = sorted_chs[0]
-                    main_max = sorted_chs[0]
+                    runs: list[list[int]] = [[sorted_chs[0]]]
                     for i in range(1, len(sorted_chs)):
-                        gap = sorted_chs[i] - sorted_chs[i - 1]
-                        if gap <= 2:
-                            main_max = sorted_chs[i]
+                        if sorted_chs[i] - sorted_chs[i - 1] == 1:
+                            runs[-1].append(sorted_chs[i])
                         else:
-                            break
+                            runs.append([sorted_chs[i]])
+                    longest = max(runs, key=len)
                     chapter_first_pg = {
                         k: v for k, v in chapter_first_pg.items()
-                        if main_min <= k <= main_max
+                        if longest[0] <= k <= longest[-1]
                     }
 
                 # Build sorted page ranges
