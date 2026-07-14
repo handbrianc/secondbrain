@@ -959,15 +959,21 @@ class RAGPipeline:
                     elif ap is not None:
                         chapter_first_pg[n] = max(1, ap - 1)
 
-                # Filter out outlier chapters (false positives from Phase 1/2 body chunk matches)
-                # Only keep chapters within the known range from _derive_chapter_numbers
-                known_nums = {ct[0] for ct in chapters_to_cover}
+                # Filter outlier chapters: find the main consecutive sequence
+                # Accept gaps up to 2 (e.g. chapter 20 missing between 19 and 21)
+                # Reject large gaps (e.g. chapter 24 after 18 in an 18-chapter doc)
+                known_nums = sorted({ct[0] for ct in chapters_to_cover})
                 if known_nums:
-                    min_k = min(known_nums)
-                    max_k = max(known_nums)
+                    main_max = known_nums[0]
+                    for i in range(1, len(known_nums)):
+                        gap = known_nums[i] - known_nums[i - 1]
+                        if gap <= 2:
+                            main_max = known_nums[i]
+                        else:
+                            break
                     chapter_first_pg = {
                         k: v for k, v in chapter_first_pg.items()
-                        if min_k <= k <= max_k
+                        if known_nums[0] <= k <= main_max
                     }
 
                 # Build sorted page ranges
