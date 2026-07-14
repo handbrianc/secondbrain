@@ -735,6 +735,11 @@ class RAGPipeline:
             DOT_LEADER = re.compile(r"\.{2,}[.\-]+")
             SEC_RE = re.compile(r"(\d+)(?:\.(\d+))+(?:\s+(.+))?")
             CHAPTER_N_RE = re.compile(r"Chapter\s+(\d+)\s+(.{2,60})", re.IGNORECASE)
+            # Match bare chapter number at start of line, e.g. "1 Introduction" or "20. High Availability"
+            BARE_CHAPTER_RE = re.compile(
+                r"(?:^|\n)\s*(\d{1,2})[\.\s]+\s*([A-Z][A-Za-z0-9\s\-\(\),'/]{4,80})",
+                re.MULTILINE,
+            )
             seen_sec: set[int] = set()
             for chunk in structure_chunks:
                 raw = chunk.get("chunk_text", "")
@@ -751,6 +756,17 @@ class RAGPipeline:
                     seen.add((major, source))
                     entries.append((major, source, title))
 
+                # Match bare chapter entries: "1 Introduction", "20. High Availability"
+                for bm in BARE_CHAPTER_RE.finditer(raw):
+                    major = int(bm.group(1))
+                    if major < 1 or major > 30 or (major, source) in seen:
+                        continue
+                    title = bm.group(2).strip().rstrip(".")
+                    if len(title) < 4:
+                        continue
+                    seen.add((major, source))
+                    entries.append((major, source, title))
+
                 for m in SEC_RE.finditer(cleaned):
                     major = int(m.group(1))
                     if major < 1 or major > 30 or major in seen_sec:
@@ -758,7 +774,7 @@ class RAGPipeline:
                     raw_title = (m.group(3) or "").strip()
                     clean_title = raw_title.rstrip(".")
                     if len(clean_title) < 2:
-                        break
+                        continue
                     seen_sec.add(major)
                     entries.append((major, source, clean_title))
 
@@ -881,8 +897,10 @@ class RAGPipeline:
                 )
 
                 import re
+                # Phase 1: find chapter start pages from body chunk subsection headers like "1.1 "
                 SEC_HEADER_RE = re.compile(r"^\s*(\d+)\.\d+\s")
                 chapter_first_pg: dict[int, int] = {}
+
                 for c in (
                     coll_.find(
                         {"source_file": src, "chunk_role": "body"},
@@ -892,17 +910,63 @@ class RAGPipeline:
                     .limit(3500)
                 ):
                     txt = c.get("chunk_text", "")[:150]
+                    page = c.get("page_number", 0)
+
                     m = SEC_HEADER_RE.match(txt)
                     if m:
                         ch = int(m.group(1))
                         if 1 <= ch <= 30 and ch not in chapter_first_pg:
-                            chapter_first_pg[ch] = c.get("page_number", 0)
-                        if len(chapter_first_pg) >= 20:
+                            chapter_first_pg[ch] = page
+                            if len(chapter_first_pg) >= 25:
+                                break
+
+                # Phase 2: post-loop targeted scan for chapters 1-30 not yet found
+                # Runs as a separate scan so it isn't cut off by the phase 1 break
+                # Uses \D (non-digit) separator to avoid matching "200 " for chapter "20"
+                missing = [n for n in range(1, 31) if n not in chapter_first_pg]
+                if missing:
+                    for c in (
+                        coll_.find(
+                            {"source_file": src, "chunk_role": "body"},
+                            {"_id": 0, "chunk_text": 1, "page_number": 1},
+                        )
+                        .sort("page_number", 1)
+                        .limit(3500)
+                    ):
+                        txt = c.get("chunk_text", "")[:150]
+                        for ch_num in list(missing):
+                            pat = re.compile(rf"^\s*{ch_num}\D")
+                            if pat.match(txt):
+                                chapter_first_pg[ch_num] = c.get("page_number", 0)
+                                missing.remove(ch_num)
+                        if not missing:
                             break
+
+                # Phase 3: interpolate page numbers for chapters 1-21 still missing
+                # (e.g., chapter heading exists in TOC but no body chunk starts with its number)
+                for n in range(1, 22):
+                    if n in chapter_first_pg:
+                        continue
+                    before = max([k for k in chapter_first_pg if k < n], default=None)
+                    after = min([k for k in chapter_first_pg if k > n], default=None)
+                    bp = chapter_first_pg[before] if before is not None else None
+                    ap = chapter_first_pg[after] if after is not None else None
+                    if bp is not None and ap is not None:
+                        chapter_first_pg[n] = (bp + ap) // 2
+                    elif bp is not None:
+                        chapter_first_pg[n] = bp + 1
+                    elif ap is not None:
+                        chapter_first_pg[n] = max(1, ap - 1)
+
+                # Build sorted page ranges
                 sorted_pgs = sorted(chapter_first_pg.items(), key=lambda x: x[1])
                 chapter_ranges_: dict[int, tuple[int, int]] = {}
                 for idx_, (ch_, start_pg_) in enumerate(sorted_pgs):
-                    end_pg_ = sorted_pgs[idx_ + 1][1] - 1 if idx_ + 1 < len(sorted_pgs) else 700
+                    end_pg_ = (
+                        sorted_pgs[idx_ + 1][1] - 1
+                        if idx_ + 1 < len(sorted_pgs)
+                        else 700
+                    )
                     chapter_ranges_[ch_] = (start_pg_, end_pg_)
 
                 chapter_keys = sorted(chapter_ranges_.keys())
@@ -943,11 +1007,22 @@ class RAGPipeline:
                 accumulated.sort(key=lambda c: c.get("score", 0.0), reverse=True)
                 final_chunks = accumulated[:top_k]
 
-                # Build chapter roster dynamically from chapter page ranges
+                # Build chapter roster with titles from _derive_chapter_numbers results
+                ch_titles: dict[int, str] = {}
+                for ct in chapters_to_cover:
+                    ch_titles[ct[0]] = ct[2]
                 chapter_roster_lines = []
                 for ch_num in sorted(chapter_ranges_.keys()):
                     pg_start = chapter_ranges_[ch_num][0]
-                    chapter_roster_lines.append(f"Chapter {ch_num} (approx pages {pg_start}+)")
+                    title = ch_titles.get(ch_num, "")
+                    if title:
+                        chapter_roster_lines.append(
+                            f"Chapter {ch_num} — {title} (approx pages {pg_start}+)"
+                        )
+                    else:
+                        chapter_roster_lines.append(
+                            f"Chapter {ch_num} (approx pages {pg_start}+)"
+                        )
                 chapter_roster = "\n".join(chapter_roster_lines) + "\n"
                 context_text = chapter_roster + self._format_context(final_chunks)
                 prompt = self._build_prompt(query, context_text)
