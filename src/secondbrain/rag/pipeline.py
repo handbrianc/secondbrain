@@ -959,21 +959,22 @@ class RAGPipeline:
                     elif ap is not None:
                         chapter_first_pg[n] = max(1, ap - 1)
 
-                # Filter outlier chapters: find the main consecutive sequence
-                # Accept gaps up to 2 (e.g. chapter 20 missing between 19 and 21)
-                # Reject large gaps (e.g. chapter 24 after 18 in an 18-chapter doc)
-                known_nums = sorted({ct[0] for ct in chapters_to_cover})
-                if known_nums:
-                    main_max = known_nums[0]
-                    for i in range(1, len(known_nums)):
-                        gap = known_nums[i] - known_nums[i - 1]
+                # Find the main consecutive sequence from chapter_first_pg itself
+                # Accepts gaps up to 2 (1 missing chapter like ch20 between 19, 21)
+                # Rejects large gaps (e.g. ch24 after 18 in an 18-chapter doc)
+                sorted_chs = sorted(chapter_first_pg)
+                if sorted_chs:
+                    main_min = sorted_chs[0]
+                    main_max = sorted_chs[0]
+                    for i in range(1, len(sorted_chs)):
+                        gap = sorted_chs[i] - sorted_chs[i - 1]
                         if gap <= 2:
-                            main_max = known_nums[i]
+                            main_max = sorted_chs[i]
                         else:
                             break
                     chapter_first_pg = {
                         k: v for k, v in chapter_first_pg.items()
-                        if known_nums[0] <= k <= main_max
+                        if main_min <= k <= main_max
                     }
 
                 # Build sorted page ranges
