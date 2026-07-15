@@ -959,10 +959,7 @@ class RAGPipeline:
                     elif ap is not None:
                         chapter_first_pg[n] = max(1, ap - 1)
 
-                # Find the longest consecutive run in chapter_first_pg
-                # This correctly handles both cases:
-                # - Proxmox (single run of 1-21): all preserved
-                # - VirtualBox (run of 1-18 + stragglers 19, 24): only 1-18 kept
+                # Find the main consecutive run: drop stragglers (e.g. ch24 after ch18)
                 sorted_chs = sorted(chapter_first_pg)
                 if sorted_chs:
                     runs: list[list[int]] = [[sorted_chs[0]]]
@@ -971,10 +968,22 @@ class RAGPipeline:
                             runs[-1].append(sorted_chs[i])
                         else:
                             runs.append([sorted_chs[i]])
-                    longest = max(runs, key=len)
+                    main_run = max(runs, key=len)
+                    # Cross-reference with _derive_chapter_numbers to drop tail chapters
+                    # (e.g. ch19 after known 1-18) while preserving gap-fillers
+                    # (e.g. ch20 between known 19 and 21 for Proxmox)
+                    known_nums = {ct[0] for ct in chapters_to_cover}
+                    keep = set()
+                    for k in range(main_run[0], main_run[-1] + 1):
+                        if k in known_nums:
+                            keep.add(k)
+                        else:
+                            before = max([c for c in known_nums if c < k], default=None)
+                            after = min([c for c in known_nums if c > k], default=None)
+                            if before is not None and after is not None:
+                                keep.add(k)
                     chapter_first_pg = {
-                        k: v for k, v in chapter_first_pg.items()
-                        if longest[0] <= k <= longest[-1]
+                        k: v for k, v in chapter_first_pg.items() if k in keep
                     }
 
                 # Build sorted page ranges
