@@ -768,11 +768,12 @@ class RAGPipeline:
                     seen.add((major, source))
                     entries.append((major, source, title))
 
-                # SEC_RE limited to within 3 of max chapter-level number.
-                # Only applies when chapter-level entries exist (seen_max > 0).
-                # Catches ch16-18 for VirtualBox but rejects ch19 phantom.
+                # SEC_RE fills gaps within the chapter-level range.
+                # Does NOT extend beyond max found by CHAPTER_N_RE/BARE_CHAPTER_RE.
+                # VirtualBox: ch1-18 found → sec_limit=18 → ch19 rejected.
+                # Proxmox: ch19,21 found → sec_limit=21 → ch20 gap-filler OK.
                 seen_max = max([s[0] for s in seen], default=0)
-                sec_limit = seen_max + 3 if seen_max > 0 else 999
+                sec_limit = seen_max if seen_max > 0 else 999
                 for m in SEC_RE.finditer(cleaned):
                     major = int(m.group(1))
                     if (major < 1 or major > 30 or major in seen_sec
