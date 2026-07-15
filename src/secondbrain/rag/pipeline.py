@@ -973,19 +973,21 @@ class RAGPipeline:
                         k: v for k, v in chapter_first_pg.items()
                         if main_run[0] <= k <= main_run[-1]
                     }
-                # Drop chapters beyond the last chapter with a real title
-                # (handles phantom ch19 that SEC_RE adds without a valid title)
-                titled_nums = {
-                    ct[0] for ct in chapters_to_cover
-                    if ct[1] == src and len(ct[2]) > 2
-                }
-                if titled_nums:
-                    max_titled = max(titled_nums)
+                # Drop chapters with duplicate titles (SEC_RE picks up same-title
+                # subsections, e.g. ch19 also gets title "VBoxManage" like ch15)
+                # and drop any chapter beyond the last unique-titled chapter.
+                seen_titles: set[str] = set()
+                unique_nums: set[int] = set()
+                for ct in chapters_to_cover:
+                    if ct[1] == src and len(ct[2]) > 2 and ct[2] not in seen_titles:
+                        seen_titles.add(ct[2])
+                        unique_nums.add(ct[0])
+                if unique_nums:
+                    max_unique = max(unique_nums)
                     for k in list(chapter_first_pg):
-                        if k > max_titled:
-                            # Check gap-filler: between two titled chapters
-                            before = max([c for c in titled_nums if c < k], default=None)
-                            after = min([c for c in titled_nums if c > k], default=None)
+                        if k > max_unique:
+                            before = max([c for c in unique_nums if c < k], default=None)
+                            after = min([c for c in unique_nums if c > k], default=None)
                             if not (before is not None and after is not None):
                                 del chapter_first_pg[k]
                 # Build sorted page ranges
