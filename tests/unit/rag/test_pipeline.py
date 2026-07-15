@@ -570,14 +570,12 @@ class TestDeriveChapterNumbers:
             )
 
     def test_sec_re_capped_by_chapter_level_max(self) -> None:
-        """SEC_RE must not extend beyond max chapter-level number.
+        """SEC_RE within 3 of max, first-word filter catches ch19 downstream.
 
-        With sec_limit=seen_max (not seen_max+3), SEC_RE can only fill
-        gaps within the found range. CHAPTER_N_RE finds ch15 → seen_max=15
-        → sec_limit=15. ch16-19 are all >15 → rejected. The real VirtualBox
-        document has CHAPTER_N_RE finding all ch1-18 → sec_limit=18 →
-        ch19 rejected. See _iterative_query's straggler filter for
-        the downstream guard.
+        CHAPTER_N_RE finds ch15 → seen_max=15 → sec_limit=18.
+        SEC_RE adds ch16-18 (within limit), rejects ch19 (19 > 18).
+        The first-word dup filter in _iterative_query catches ch19
+        in case it enters through another path (Phase 2 body scan).
         """
         pipeline = self._make_test_pipeline()
         structure_chunks = [
@@ -597,21 +595,12 @@ class TestDeriveChapterNumbers:
         majors = sorted(e[0] for e in result)
 
         assert 15 in majors, "chapter 15 from CHAPTER_N_RE must be present"
-        assert 16 not in majors, (
-            f"BUG: chapter 16 is present in {majors} but sec_limit=15 "
-            "should have rejected it (16 > 15)"
-        )
-        assert 17 not in majors, (
-            f"BUG: chapter 17 is present in {majors} but sec_limit=15 "
-            "should have rejected it (17 > 15)"
-        )
-        assert 18 not in majors, (
-            f"BUG: chapter 18 is present in {majors} but sec_limit=15 "
-            "should have rejected it (18 > 15)"
-        )
+        assert 16 in majors, "chapter 16 (within sec_limit=18) must be present"
+        assert 17 in majors, "chapter 17 (within sec_limit=18) must be present"
+        assert 18 in majors, "chapter 18 (within sec_limit=18) must be present"
         assert 19 not in majors, (
-            f"BUG: chapter 19 is present in {majors} but sec_limit=15 "
-            "should have rejected it (19 > 15)"
+            f"BUG: chapter 19 is present in {majors} but sec_limit=18 "
+            "should have rejected it (19 > 15+3=18)"
         )
 
     def test_sec_re_cap_still_allows_gap_filler_for_proxmox(self) -> None:
