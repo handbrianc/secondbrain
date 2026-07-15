@@ -740,6 +740,9 @@ class RAGPipeline:
                 re.MULTILINE,
             )
             seen_sec: set[int] = set()
+            # SEC_RE can only extend up to 3 beyond the max found by chapter-level patterns.
+            # This prevents phantom chapters (e.g. ch19 from '19.1' in an appendix).
+            sec_limit = 0
             for chunk in structure_chunks:
                 raw = chunk.get("chunk_text", "")
                 source = chunk.get("source_file", "")
@@ -765,11 +768,16 @@ class RAGPipeline:
                     seen.add((major, source))
                     entries.append((major, source, title))
 
+                # SEC_RE only adds chapters within 3 of the max chapter-level number.
+                # This catches ch16-18 for VirtualBox but rejects ch19 (phantom).
+                seen_max = max([s[0] for s in seen], default=0)
+                if seen_max > sec_limit:
+                    sec_limit = seen_max + 3
                 for m in SEC_RE.finditer(cleaned):
                     major = int(m.group(1))
-                    # Skip if chapter already found by CHAPTER_N_RE/BARE_CHAPTER_RE
-                    # (those have better titles than subsection-level SEC_RE)
-                    if major < 1 or major > 30 or major in seen_sec or (major, source) in seen:
+                    if (major < 1 or major > 30 or major in seen_sec
+                            or (major, source) in seen
+                            or major > sec_limit):
                         continue
                     raw_title = (m.group(3) or "").strip()
                     clean_title = raw_title.rstrip(".")
