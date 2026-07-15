@@ -732,19 +732,15 @@ class RAGPipeline:
             import re
             entries: list[tuple[int, str, str]] = []
             seen: set[tuple[int, str]] = set()
-            DOT_LEADER = re.compile(r"\.{2,}[.\-]+")
-            SEC_RE = re.compile(r"(\d+)(?:\.(\d+))+(?:\s+(.+))?")
             CHAPTER_N_RE = re.compile(r"Chapter\s+(\d+)\s+(.{2,60})", re.IGNORECASE)
             # Match bare chapter number at start of line, e.g. "1 Introduction" or "20. High Availability"
             BARE_CHAPTER_RE = re.compile(
                 r"(?:^|\n)\s*(\d{1,2})[\.\s]+\s*([A-Z][A-Za-z0-9\s\-\(\),'/]{4,80})",
                 re.MULTILINE,
             )
-            seen_sec: set[int] = set()
             for chunk in structure_chunks:
                 raw = chunk.get("chunk_text", "")
                 source = chunk.get("source_file", "")
-                cleaned = DOT_LEADER.sub("", raw, count=1).strip()
 
                 for nm in CHAPTER_N_RE.finditer(raw):
                     major = int(nm.group(1))
@@ -766,17 +762,6 @@ class RAGPipeline:
                         continue
                     seen.add((major, source))
                     entries.append((major, source, title))
-
-                for m in SEC_RE.finditer(cleaned):
-                    major = int(m.group(1))
-                    if major < 1 or major > 30 or major in seen_sec:
-                        continue
-                    raw_title = (m.group(3) or "").strip()
-                    clean_title = raw_title.rstrip(".")
-                    if len(clean_title) < 2:
-                        continue
-                    seen_sec.add(major)
-                    entries.append((major, source, clean_title))
 
             entries.sort(key=lambda x: x[0])
             return entries
