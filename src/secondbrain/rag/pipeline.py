@@ -976,7 +976,9 @@ class RAGPipeline:
                 # Drop any chapter beyond the max known from _derive_chapter_numbers
                 # This kills tail false-positives like ch19 after known 1-18
                 # while Phase 3 already handles gap-filling (e.g. Proxmox ch20)
-                known_nums = {ct[0] for ct in chapters_to_cover}
+                # Filter by src to avoid cross-doc pollution (e.g. Proxmox ch19
+                # in known_nums when querying the 18-chapter VirtualBox doc)
+                known_nums = {ct[0] for ct in chapters_to_cover if ct[1] == src}
                 if known_nums:
                     max_known = max(known_nums)
                     chapter_first_pg = {
