@@ -973,17 +973,21 @@ class RAGPipeline:
                         k: v for k, v in chapter_first_pg.items()
                         if main_run[0] <= k <= main_run[-1]
                     }
-                # Drop chapters not in _derive_chapter_numbers results
-                # unless they fill a gap between two known chapters (Proxmox ch20)
-                known_nums = {ct[0] for ct in chapters_to_cover if ct[1] == src}
-                if known_nums:
+                # Drop chapters beyond the last chapter with a real title
+                # (handles phantom ch19 that SEC_RE adds without a valid title)
+                titled_nums = {
+                    ct[0] for ct in chapters_to_cover
+                    if ct[1] == src and len(ct[2]) > 2
+                }
+                if titled_nums:
+                    max_titled = max(titled_nums)
                     for k in list(chapter_first_pg):
-                        if k in known_nums:
-                            continue
-                        before = max([c for c in known_nums if c < k], default=None)
-                        after = min([c for c in known_nums if c > k], default=None)
-                        if not (before is not None and after is not None):
-                            del chapter_first_pg[k]
+                        if k > max_titled:
+                            # Check gap-filler: between two titled chapters
+                            before = max([c for c in titled_nums if c < k], default=None)
+                            after = min([c for c in titled_nums if c > k], default=None)
+                            if not (before is not None and after is not None):
+                                del chapter_first_pg[k]
                 # Build sorted page ranges
                 sorted_pgs = sorted(chapter_first_pg.items(), key=lambda x: x[1])
                 chapter_ranges_: dict[int, tuple[int, int]] = {}
