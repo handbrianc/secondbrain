@@ -568,3 +568,64 @@ class TestDeriveChapterNumbers:
             assert isinstance(clean_title, str), (
                 f"clean_title should be str, got {type(clean_title)}"
             )
+
+    def test_sec_re_capped_by_chapter_level_max(self) -> None:
+        """SEC_RE must not add chapters more than 3 beyond chapter-level max.
+
+        VirtualBox scenario: CHAPTER_N_RE finds up to ch15, so sec_limit=18.
+        SEC_RE should add 16-18 but SKIP 19 (phantom from appendix '19.1').
+        """
+        pipeline = self._make_test_pipeline()
+        structure_chunks = [
+            {
+                "chunk_text": (
+                    "Chapter 15 VBoxManage\n"
+                    "16.1 Reference\n"
+                    "17.1 Change Log\n"
+                    "18.1 Licensing Information\n"
+                    "19.1 VBoxManage Command Reference"
+                ),
+                "source_file": "vbox.pdf",
+            },
+        ]
+
+        result = pipeline._derive_chapter_numbers(structure_chunks)
+        majors = sorted(e[0] for e in result)
+
+        assert 15 in majors, "chapter 15 from CHAPTER_N_RE must be present"
+        assert 16 in majors, "chapter 16 (within sec_limit=18) must be present"
+        assert 17 in majors, "chapter 17 (within sec_limit=18) must be present"
+        assert 18 in majors, "chapter 18 (within sec_limit=18) must be present"
+        assert 19 not in majors, (
+            f"BUG: chapter 19 is present in {majors} but sec_limit=18 "
+            "should have rejected it (19 > 15+3=18)"
+        )
+
+    def test_sec_re_cap_still_allows_gap_filler_for_proxmox(self) -> None:
+        """SEC_RE cap must NOT block gap-fillers like Proxmox ch20.
+
+        CHAPTER_N_RE finds up to ch21, so sec_limit=24. SEC_RE should
+        still add ch20 (within limit).
+        """
+        pipeline = self._make_test_pipeline()
+        structure_chunks = [
+            {
+                "chunk_text": (
+                    "Chapter 19 Performance\n"
+                    "Chapter 21 Bibliography\n"
+                    "20.1 High Availability Requirements\n"
+                    "20.2 HA Network Configuration"
+                ),
+                "source_file": "proxmox.pdf",
+            },
+        ]
+
+        result = pipeline._derive_chapter_numbers(structure_chunks)
+        majors = sorted(e[0] for e in result)
+
+        assert 19 in majors, "chapter 19 from CHAPTER_N_RE must be present"
+        assert 20 in majors, (
+            f"BUG: chapter 20 absent from {majors} — sec_limit should be "
+            "21+3=24, allowing 20 as a gap-filler"
+        )
+        assert 21 in majors, "chapter 21 from CHAPTER_N_RE must be present"

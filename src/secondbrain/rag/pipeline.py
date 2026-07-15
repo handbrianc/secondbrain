@@ -768,16 +768,16 @@ class RAGPipeline:
                     seen.add((major, source))
                     entries.append((major, source, title))
 
-                # SEC_RE only adds chapters within 3 of the max chapter-level number.
-                # This catches ch16-18 for VirtualBox but rejects ch19 (phantom).
+                # SEC_RE limited to within 3 of max chapter-level number.
+                # Only applies when chapter-level entries exist (seen_max > 0).
+                # Catches ch16-18 for VirtualBox but rejects ch19 phantom.
                 seen_max = max([s[0] for s in seen], default=0)
-                if seen_max > sec_limit:
-                    sec_limit = seen_max + 3
+                sec_limit = seen_max + 3 if seen_max > 0 else 999
                 for m in SEC_RE.finditer(cleaned):
                     major = int(m.group(1))
                     if (major < 1 or major > 30 or major in seen_sec
                             or (major, source) in seen
-                            or major > sec_limit):
+                            or (seen_max > 0 and major > sec_limit)):
                         continue
                     raw_title = (m.group(3) or "").strip()
                     clean_title = raw_title.rstrip(".")
