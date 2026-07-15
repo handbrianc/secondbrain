@@ -767,7 +767,9 @@ class RAGPipeline:
 
                 for m in SEC_RE.finditer(cleaned):
                     major = int(m.group(1))
-                    if major < 1 or major > 30 or major in seen_sec:
+                    # Skip if chapter already found by CHAPTER_N_RE/BARE_CHAPTER_RE
+                    # (those have better titles than subsection-level SEC_RE)
+                    if major < 1 or major > 30 or major in seen_sec or (major, source) in seen:
                         continue
                     raw_title = (m.group(3) or "").strip()
                     clean_title = raw_title.rstrip(".")
