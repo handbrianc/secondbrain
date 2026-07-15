@@ -981,19 +981,19 @@ class RAGPipeline:
                         k: v for k, v in chapter_first_pg.items()
                         if main_run[0] <= k <= main_run[-1]
                     }
-                # Drop chapters with duplicate titles using containment check.
-                # SEC_RE gives ch19 title "VBoxManage Command Reference" while
-                # real ch15 is "VBoxManage" — exact match misses this.
-                seen_titles: set[str] = set()
+                # Drop chapters with duplicate first-word (≥ 6 chars).
+                # "VBoxManage CLI Reference" and "VBoxManage Command Reference"
+                # both start with "VBoxManage" → ch19 excluded from unique_nums.
+                seen_first: set[str] = set()
                 unique_nums: set[int] = set()
                 for ct in chapters_to_cover:
                     if ct[1] != src or len(ct[2]) < 3:
                         continue
-                    tl = ct[2].lower()
-                    is_dup = any(tl in s.lower() or s.lower() in tl for s in seen_titles)
-                    if not is_dup:
-                        seen_titles.add(ct[2])
-                        unique_nums.add(ct[0])
+                    fw = ct[2].lower().split()[0]
+                    if len(fw) >= 6 and fw in seen_first:
+                        continue
+                    seen_first.add(fw)
+                    unique_nums.add(ct[0])
                 if unique_nums:
                     max_unique = max(unique_nums)
                     for k in list(chapter_first_pg):
