@@ -973,6 +973,17 @@ class RAGPipeline:
                         k: v for k, v in chapter_first_pg.items()
                         if main_run[0] <= k <= main_run[-1]
                     }
+                # Drop tail chapters beyond max known from _derive_chapter_numbers,
+                # unless they fill a gap between two known chapters (Proxmox ch20)
+                known_nums = {ct[0] for ct in chapters_to_cover if ct[1] == src}
+                if known_nums:
+                    max_known = max(known_nums)
+                    for k in list(chapter_first_pg):
+                        if k > max_known:
+                            before = max([c for c in known_nums if c < k], default=None)
+                            after = min([c for c in known_nums if c > k], default=None)
+                            if not (before is not None and after is not None):
+                                del chapter_first_pg[k]
                 # Build sorted page ranges
                 sorted_pgs = sorted(chapter_first_pg.items(), key=lambda x: x[1])
                 chapter_ranges_: dict[int, tuple[int, int]] = {}
