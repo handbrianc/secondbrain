@@ -959,7 +959,7 @@ class RAGPipeline:
                     elif ap is not None:
                         chapter_first_pg[n] = max(1, ap - 1)
 
-                # Find the main consecutive run: drop stragglers (e.g. ch24 after ch18)
+                # Drop stragglers (e.g. ch24 after ch18) via long-consecutive-run
                 sorted_chs = sorted(chapter_first_pg)
                 if sorted_chs:
                     runs: list[list[int]] = [[sorted_chs[0]]]
@@ -969,21 +969,18 @@ class RAGPipeline:
                         else:
                             runs.append([sorted_chs[i]])
                     main_run = max(runs, key=len)
-                    # Cross-reference with _derive_chapter_numbers to drop tail chapters
-                    # (e.g. ch19 after known 1-18) while preserving gap-fillers
-                    # (e.g. ch20 between known 19 and 21 for Proxmox)
-                    known_nums = {ct[0] for ct in chapters_to_cover}
-                    keep = set()
-                    for k in range(main_run[0], main_run[-1] + 1):
-                        if k in known_nums:
-                            keep.add(k)
-                        else:
-                            before = max([c for c in known_nums if c < k], default=None)
-                            after = min([c for c in known_nums if c > k], default=None)
-                            if before is not None and after is not None:
-                                keep.add(k)
                     chapter_first_pg = {
-                        k: v for k, v in chapter_first_pg.items() if k in keep
+                        k: v for k, v in chapter_first_pg.items()
+                        if main_run[0] <= k <= main_run[-1]
+                    }
+                # Drop any chapter beyond the max known from _derive_chapter_numbers
+                # This kills tail false-positives like ch19 after known 1-18
+                # while Phase 3 already handles gap-filling (e.g. Proxmox ch20)
+                known_nums = {ct[0] for ct in chapters_to_cover}
+                if known_nums:
+                    max_known = max(known_nums)
+                    chapter_first_pg = {
+                        k: v for k, v in chapter_first_pg.items() if k <= max_known
                     }
 
                 # Build sorted page ranges
