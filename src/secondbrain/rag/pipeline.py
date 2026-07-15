@@ -732,15 +732,18 @@ class RAGPipeline:
             import re
             entries: list[tuple[int, str, str]] = []
             seen: set[tuple[int, str]] = set()
+            DOT_LEADER = re.compile(r"\.{2,}[.\-]+")
+            SEC_RE = re.compile(r"(\d+)(?:\.(\d+))+(?:\s+(.+))?")
             CHAPTER_N_RE = re.compile(r"Chapter\s+(\d+)\s+(.{2,60})", re.IGNORECASE)
-            # Match bare chapter number at start of line, e.g. "1 Introduction" or "20. High Availability"
             BARE_CHAPTER_RE = re.compile(
                 r"(?:^|\n)\s*(\d{1,2})[\.\s]+\s*([A-Z][A-Za-z0-9\s\-\(\),'/]{4,80})",
                 re.MULTILINE,
             )
+            seen_sec: set[int] = set()
             for chunk in structure_chunks:
                 raw = chunk.get("chunk_text", "")
                 source = chunk.get("source_file", "")
+                cleaned = DOT_LEADER.sub("", raw, count=1).strip()
 
                 for nm in CHAPTER_N_RE.finditer(raw):
                     major = int(nm.group(1))
@@ -752,7 +755,6 @@ class RAGPipeline:
                     seen.add((major, source))
                     entries.append((major, source, title))
 
-                # Match bare chapter entries: "1 Introduction", "20. High Availability"
                 for bm in BARE_CHAPTER_RE.finditer(raw):
                     major = int(bm.group(1))
                     if major < 1 or major > 30 or (major, source) in seen:
@@ -762,6 +764,17 @@ class RAGPipeline:
                         continue
                     seen.add((major, source))
                     entries.append((major, source, title))
+
+                for m in SEC_RE.finditer(cleaned):
+                    major = int(m.group(1))
+                    if major < 1 or major > 30 or major in seen_sec:
+                        continue
+                    raw_title = (m.group(3) or "").strip()
+                    clean_title = raw_title.rstrip(".")
+                    if len(clean_title) < 2:
+                        continue
+                    seen_sec.add(major)
+                    entries.append((major, source, clean_title))
 
             entries.sort(key=lambda x: x[0])
             return entries
@@ -958,18 +971,6 @@ class RAGPipeline:
                         k: v for k, v in chapter_first_pg.items()
                         if main_run[0] <= k <= main_run[-1]
                     }
-                # Drop any chapter beyond the max known from _derive_chapter_numbers
-                # This kills tail false-positives like ch19 after known 1-18
-                # while Phase 3 already handles gap-filling (e.g. Proxmox ch20)
-                # Filter by src to avoid cross-doc pollution (e.g. Proxmox ch19
-                # in known_nums when querying the 18-chapter VirtualBox doc)
-                known_nums = {ct[0] for ct in chapters_to_cover if ct[1] == src}
-                if known_nums:
-                    max_known = max(known_nums)
-                    chapter_first_pg = {
-                        k: v for k, v in chapter_first_pg.items() if k <= max_known
-                    }
-
                 # Build sorted page ranges
                 sorted_pgs = sorted(chapter_first_pg.items(), key=lambda x: x[1])
                 chapter_ranges_: dict[int, tuple[int, int]] = {}
