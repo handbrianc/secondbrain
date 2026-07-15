@@ -1000,7 +1000,13 @@ class RAGPipeline:
                     max_unique = max(unique_nums)
                     sec_buffer = max_unique + 3  # Match SEC_RE's extension range
                     for k in list(chapter_first_pg):
+                        if k in unique_nums:
+                            continue  # Known chapter, keep
                         if k > sec_buffer:
+                            del chapter_first_pg[k]  # Beyond SEC_RE range, phantom
+                        else:
+                            # Within SEC_RE range but not uniquely titled
+                            # Check gap-filler: between two uniquely-titled chapters
                             before = max([c for c in unique_nums if c < k], default=None)
                             after = min([c for c in unique_nums if c > k], default=None)
                             if not (before is not None and after is not None):
