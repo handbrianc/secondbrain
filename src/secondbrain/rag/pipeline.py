@@ -794,7 +794,7 @@ class RAGPipeline:
         q = query.lower().strip()
         return any(t in q for t in BROAD_COVERAGE_TRIGGERS)
 
-    def _probe_document_structure(self, top_k: int = 400) -> list[dict[str, Any]]:
+    def _probe_document_structure(self, top_k: int = 2000) -> list[dict[str, Any]]:
         """Probe for document structural elements (TOC/section headers) via chunk_role.
 
         Attempts targeted structural-role filters first; falls back to raw
@@ -802,7 +802,7 @@ class RAGPipeline:
         chunks lack explicit element_type/chunk_role markers).
 
         Args:
-            top_k: How many structural candidates to retrieve (default 400).
+            top_k: How many structural candidates to retrieve (default 2000).
 
         Returns:
             List of chunk dicts with '_id', 'chunk_text', 'page_number',
@@ -823,7 +823,8 @@ class RAGPipeline:
                 },
                 {"_id": 0, "chunk_text": 1, "page_number": 1, "source_file": 1, "chunk_id": 1},
             )
-            .limit(400)
+            .sort("page_number", 1)
+            .limit(2000)
         )
         result = list(cursor)
         if len(result) < 5:
