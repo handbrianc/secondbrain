@@ -559,7 +559,7 @@ class RAGPipeline:
                 if major > 30:
                     continue
                 entries.append((major, sn, title))
-        entries.sort(key=lambda x: (x[0], *[int(p) for p in x[1].split(".")]))
+        entries.sort(key=lambda x: (x[0], *[int(p) for p in x[1].split(".") if p]))
         lines: list[str] = []
         prev_major: int | None = None
         for _, sn, title in entries:
