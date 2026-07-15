@@ -981,13 +981,17 @@ class RAGPipeline:
                         k: v for k, v in chapter_first_pg.items()
                         if main_run[0] <= k <= main_run[-1]
                     }
-                # Drop chapters with duplicate titles (SEC_RE picks up same-title
-                # subsections, e.g. ch19 also gets title "VBoxManage" like ch15)
-                # and drop any chapter beyond the last unique-titled chapter.
+                # Drop chapters with duplicate titles using containment check.
+                # SEC_RE gives ch19 title "VBoxManage Command Reference" while
+                # real ch15 is "VBoxManage" — exact match misses this.
                 seen_titles: set[str] = set()
                 unique_nums: set[int] = set()
                 for ct in chapters_to_cover:
-                    if ct[1] == src and len(ct[2]) > 2 and ct[2] not in seen_titles:
+                    if ct[1] != src or len(ct[2]) < 3:
+                        continue
+                    tl = ct[2].lower()
+                    is_dup = any(tl in s.lower() or s.lower() in tl for s in seen_titles)
+                    if not is_dup:
                         seen_titles.add(ct[2])
                         unique_nums.add(ct[0])
                 if unique_nums:
