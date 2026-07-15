@@ -997,8 +997,9 @@ class RAGPipeline:
                     unique_nums.add(ct[0])
                 if unique_nums:
                     max_unique = max(unique_nums)
+                    sec_buffer = max_unique + 3  # Match SEC_RE's extension range
                     for k in list(chapter_first_pg):
-                        if k > max_unique:
+                        if k > sec_buffer:
                             before = max([c for c in unique_nums if c < k], default=None)
                             after = min([c for c in unique_nums if c > k], default=None)
                             if not (before is not None and after is not None):
