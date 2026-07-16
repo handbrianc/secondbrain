@@ -995,17 +995,21 @@ class RAGPipeline:
                 if unique_nums:
                     max_unique = max(unique_nums)
                     sec_buffer = max_unique + 3  # Match SEC_RE's extension range
+                    # Pass 1: auto-keep known + within SEC_RE range, drop beyond
                     for k in list(chapter_first_pg):
                         if k in unique_nums:
-                            continue  # Known chapter, keep
+                            continue
                         if k > sec_buffer:
-                            del chapter_first_pg[k]  # Beyond SEC_RE range, phantom
-                        else:
-                            # Within SEC_RE range but not uniquely titled
-                            # Check gap-filler: between two uniquely-titled chapters
-                            before = max([c for c in unique_nums if c < k], default=None)
-                            after = min([c for c in unique_nums if c > k], default=None)
-                            if not (before is not None and after is not None):
+                            del chapter_first_pg[k]
+                    # Pass 2: drop SEC_RE-only chapters with first-word collisions
+                    # (catches ch19 "VBoxManage" dup with ch15 while keeping ch17-18)
+                    for k in list(chapter_first_pg):
+                        if k in unique_nums or k <= max_unique:
+                            continue
+                        kt = next((ct[2] for ct in chapters_to_cover if ct[0] == k and ct[1] == src), "")
+                        if kt:
+                            kw = kt.lower().split()[0]
+                            if len(kw) >= 6 and kw in seen_first:
                                 del chapter_first_pg[k]
                 # Build sorted page ranges
                 sorted_pgs = sorted(chapter_first_pg.items(), key=lambda x: x[1])
