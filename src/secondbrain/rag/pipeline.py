@@ -728,7 +728,9 @@ class RAGPipeline:
 
     def _derive_chapter_numbers(
             self, structure_chunks: list[dict[str, Any]]
-        ) -> list[tuple[int, str, str]]:
+        ) -> tuple[list[tuple[int, str, str]], set[int]]:
+            """Returns (entries, chapter_level_nums) where chapter_level_nums are
+            chapter numbers from CHAPTER_N_RE or BARE_CHAPTER_RE (reliable titles)."""
             import re
             entries: list[tuple[int, str, str]] = []
             seen: set[tuple[int, str]] = set()
@@ -740,8 +742,6 @@ class RAGPipeline:
                 re.MULTILINE,
             )
             seen_sec: set[int] = set()
-            # SEC_RE can only extend up to 3 beyond the max found by chapter-level patterns.
-            # This prevents phantom chapters (e.g. ch19 from '19.1' in an appendix).
             sec_limit = 0
             for chunk in structure_chunks:
                 raw = chunk.get("chunk_text", "")
@@ -768,10 +768,6 @@ class RAGPipeline:
                     seen.add((major, source))
                     entries.append((major, source, title))
 
-                # SEC_RE fills gaps within 3 of the max chapter-level number.
-                # VirtualBox: ch1-15 found → sec_limit=18 → SEC_RE adds ch16-18.
-                # First-word dup filter (in _iterative_query) catches ch19.
-                # Proxmox: ch19,21 found → sec_limit=24 → ch20 gap-filler OK.
                 seen_max = max([s[0] for s in seen], default=0)
                 sec_limit = seen_max + 3 if seen_max > 0 else 999
                 for m in SEC_RE.finditer(cleaned):
@@ -788,13 +784,13 @@ class RAGPipeline:
                     entries.append((major, source, clean_title))
 
             entries.sort(key=lambda x: x[0])
-            return entries
+            return entries, {s[0] for s in seen}
 
     def _is_broad_coverage_query(self, query: str) -> bool:
         q = query.lower().strip()
         return any(t in q for t in BROAD_COVERAGE_TRIGGERS)
 
-    def _probe_document_structure(self, top_k: int = 2000) -> list[dict[str, Any]]:
+    def _probe_document_structure(self, top_k: int = 10000) -> list[dict[str, Any]]:
         """Probe for document structural elements (TOC/section headers) via chunk_role.
 
         Attempts targeted structural-role filters first; falls back to raw
@@ -802,7 +798,7 @@ class RAGPipeline:
         chunks lack explicit element_type/chunk_role markers).
 
         Args:
-            top_k: How many structural candidates to retrieve (default 2000).
+            top_k: How many structural candidates to retrieve (default 10000).
 
         Returns:
             List of chunk dicts with '_id', 'chunk_text', 'page_number',
@@ -824,7 +820,7 @@ class RAGPipeline:
                 {"_id": 0, "chunk_text": 1, "page_number": 1, "source_file": 1, "chunk_id": 1},
             )
             .sort("page_number", 1)
-            .limit(2000)
+            .limit(10000)
         )
         result = list(cursor)
         if len(result) < 5:
@@ -888,7 +884,7 @@ class RAGPipeline:
 
         # 2a. Branch: chapter-enumeration query — per-chapter keyword search
         if intent_decision.intent == QueryIntent.CHAPTER_ENUMERATE:
-            chapters_to_cover = self._derive_chapter_numbers(structure_chunks)
+            chapters_to_cover, good_title_nums = self._derive_chapter_numbers(structure_chunks)
 
             if chapters_to_cover:
                 from pymongo import MongoClient
@@ -1060,10 +1056,11 @@ class RAGPipeline:
                 accumulated.sort(key=lambda c: c.get("score", 0.0), reverse=True)
                 final_chunks = accumulated[:top_k]
 
-                # Build chapter roster with titles from _derive_chapter_numbers results
+                # Build chapter roster: only show titles from reliable chapter-level patterns
                 ch_titles: dict[int, str] = {}
                 for ct in chapters_to_cover:
-                    ch_titles[ct[0]] = ct[2]
+                    if ct[0] in good_title_nums:
+                        ch_titles[ct[0]] = ct[2]
                 chapter_roster_lines = []
                 for ch_num in sorted(chapter_ranges_.keys()):
                     pg_start = chapter_ranges_[ch_num][0]

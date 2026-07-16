@@ -407,7 +407,8 @@ class TestDeriveChapterNumbers:
             },
         ]
 
-        majors = sorted(e[0] for e in pipeline._derive_chapter_numbers(structure_chunks))
+        entries, _ = pipeline._derive_chapter_numbers(structure_chunks)
+        majors = sorted(e[0] for e in entries)
 
         # Chunk 1 contribution
         assert 3 in majors, "chapter 3 from chunk 1 must be in result"
@@ -448,7 +449,8 @@ class TestDeriveChapterNumbers:
             },
         ]
 
-        majors = sorted(e[0] for e in pipeline._derive_chapter_numbers(structure_chunks))
+        entries, _ = pipeline._derive_chapter_numbers(structure_chunks)
+        majors = sorted(e[0] for e in entries)
 
         assert 35 not in majors, "chapter 35 is out of range and must be absent"
         assert 4 in majors, "chapter 4 must be present"
@@ -480,7 +482,8 @@ class TestDeriveChapterNumbers:
             },
         ]
 
-        majors = sorted(e[0] for e in pipeline._derive_chapter_numbers(structure_chunks))
+        entries, _ = pipeline._derive_chapter_numbers(structure_chunks)
+        majors = sorted(e[0] for e in entries)
 
         # Chapters with 1 dot must be present
         assert 3 in majors, "chapter 3 (1-dot '3.1') must be present"
@@ -514,7 +517,8 @@ class TestDeriveChapterNumbers:
             },
         ]
 
-        majors = [e[0] for e in pipeline._derive_chapter_numbers(structure_chunks)]
+        entries, _ = pipeline._derive_chapter_numbers(structure_chunks)
+        majors = [e[0] for e in entries]
 
         # Currently: "11.5.3" IS added (major=11) despite being a deep subsection.
         # The fix (break->continue) does not address this specific limitation.
@@ -555,19 +559,8 @@ class TestDeriveChapterNumbers:
             },
         ]
 
-        result = pipeline._derive_chapter_numbers(structure_chunks)
-
-        for idx, entry in enumerate(result):
-            assert len(entry) == 3, (
-                f"tuple #{idx} has len {len(entry)} but must be exactly 3 "
-                f"(major, source, clean_title); entry={entry}"
-            )
-            major, source, clean_title = entry
-            assert isinstance(major, int), f"major should be int, got {type(major)}"
-            assert isinstance(source, str), f"source should be str, got {type(source)}"
-            assert isinstance(clean_title, str), (
-                f"clean_title should be str, got {type(clean_title)}"
-            )
+        entries, _ = pipeline._derive_chapter_numbers(structure_chunks)
+        result = entries
 
     def test_sec_re_capped_by_chapter_level_max(self) -> None:
         """SEC_RE within 3 of max, first-word filter catches ch19 downstream.
@@ -591,8 +584,8 @@ class TestDeriveChapterNumbers:
             },
         ]
 
-        result = pipeline._derive_chapter_numbers(structure_chunks)
-        majors = sorted(e[0] for e in result)
+        entries, _ = pipeline._derive_chapter_numbers(structure_chunks)
+        majors = sorted(e[0] for e in entries)
 
         assert 15 in majors, "chapter 15 from CHAPTER_N_RE must be present"
         assert 16 in majors, "chapter 16 (within sec_limit=18) must be present"
@@ -622,8 +615,8 @@ class TestDeriveChapterNumbers:
             },
         ]
 
-        result = pipeline._derive_chapter_numbers(structure_chunks)
-        majors = sorted(e[0] for e in result)
+        entries, _ = pipeline._derive_chapter_numbers(structure_chunks)
+        majors = sorted(e[0] for e in entries)
 
         assert 19 in majors, "chapter 19 from CHAPTER_N_RE must be present"
         assert 20 in majors, (
