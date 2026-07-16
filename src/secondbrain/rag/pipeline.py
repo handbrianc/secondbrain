@@ -738,7 +738,7 @@ class RAGPipeline:
             SEC_RE = re.compile(r"(\d+)(?:\.(\d+))+(?:\s+(.+))?")
             CHAPTER_N_RE = re.compile(r"Chapter\s+(\d+)\s+(.{2,60})", re.IGNORECASE)
             BARE_CHAPTER_RE = re.compile(
-                r"(?:^|\n)\s*(\d{1,2})\s+([A-Z][A-Za-z0-9\s\-\(\),'/]{4,80})",
+                r"(?:^|\n)\s*(\d{1,2})\.?\s+([A-Z][A-Za-z0-9\s\-\(\),'/]{4,80})",
                 re.MULTILINE,
             )
             seen_sec: set[int] = set()
@@ -763,6 +763,13 @@ class RAGPipeline:
                     if major < 1 or major > 30 or (major, source) in seen:
                         continue
                     title = bm.group(2).strip().rstrip(".")
+                    if len(title) < 4:
+                        continue
+                    fw = title.lower().split()[0] if title.split() else ""
+                    if fw in ("copyright", "licensed", "license", "trolltech", "red", "bootstrap"):
+                        continue
+                    # Strip "on page \d+" TOC page references from the tail
+                    title = re.sub(r"\s+on\s+page\s+\d+,?\s*.*", "", title, count=1).strip().rstrip(",")
                     if len(title) < 4:
                         continue
                     seen.add((major, source))
@@ -1011,6 +1018,12 @@ class RAGPipeline:
                             kw = kt.lower().split()[0]
                             if len(kw) >= 6 and kw in seen_first:
                                 del chapter_first_pg[k]
+                # Pass 3: drop chapters not in chapters_to_cover (phantom chapters
+                # from body-chunk section headers like appendix "19.1 VBoxManage...")
+                known_chs = {ct[0] for ct in chapters_to_cover}
+                for k in list(chapter_first_pg):
+                    if k not in known_chs:
+                        del chapter_first_pg[k]
                 # Build sorted page ranges
                 sorted_pgs = sorted(chapter_first_pg.items(), key=lambda x: x[1])
                 chapter_ranges_: dict[int, tuple[int, int]] = {}
@@ -1060,10 +1073,18 @@ class RAGPipeline:
                 accumulated.sort(key=lambda c: c.get("score", 0.0), reverse=True)
                 final_chunks = accumulated[:top_k]
 
-                # Build chapter roster: only show titles from reliable chapter-level patterns
+                # Sanitize chunk text: strip leading section-number headers (e.g. "5.1 ")
+                # so the LLM doesn't mistake them for chapter titles.
+                sec_hdr_strip = re.compile(r"^\s*\d+(?:\.\d+)+\s+")
+                for fc in final_chunks:
+                    txt = fc.get("chunk_text", "")
+                    txt = sec_hdr_strip.sub("", txt, count=1)
+                    fc["chunk_text"] = txt
+
+                # Build chapter roster: only use the FIRST reliable title per chapter
                 ch_titles: dict[int, str] = {}
                 for ct in chapters_to_cover:
-                    if ct[0] in good_title_nums:
+                    if ct[0] in good_title_nums and ct[0] not in ch_titles:
                         ch_titles[ct[0]] = ct[2]
                 chapter_roster_lines = []
                 for ch_num in sorted(chapter_ranges_.keys()):
@@ -1075,11 +1096,25 @@ class RAGPipeline:
                         )
                     else:
                         chapter_roster_lines.append(
-                            f"Chapter {ch_num} (approx pages {pg_start}+)"
+                            f"Chapter {ch_num} (approx pages {pg_start}+) "
+                            f"[- NO OFFICIAL TITLE IN TOC -]"
                         )
                 chapter_roster = "\n".join(chapter_roster_lines) + "\n"
-                context_text = chapter_roster + self._format_context(final_chunks)
+                body_content = self._format_context(final_chunks)
+                context_text = chapter_roster + body_content
                 prompt = self._build_prompt(query, context_text)
+                # Override Rule 12 with a strict instruction placed right before
+                # the LLM starts generating — making it much harder to ignore.
+                override = (
+                    "\n\nCRITICAL RULE — OVERRIDES ALL PRIOR CONTRADICTIONS:\n"
+                    "The chapter index at the top of the context is your ONLY source\n"
+                    "of chapter numbers and their official titles. For chapters marked\n"
+                    "'NO OFFICIAL TITLE IN TOC' you MUST output\n"
+                    "'No official title' — do NOT invent or extract any title from\n"
+                    "the body content below. Section headers in body content are\n"
+                    "subsections, NOT chapters. Breaking this rule is an ERROR."
+                )
+                prompt = prompt.replace("\n\nAnswer:", override + "\n\nAnswer:")
 
                 generation_start = time.perf_counter()
                 answer = ""
