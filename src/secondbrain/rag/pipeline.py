@@ -738,7 +738,7 @@ class RAGPipeline:
             SEC_RE = re.compile(r"(\d+)(?:\.(\d+))+(?:\s+(.+))?")
             CHAPTER_N_RE = re.compile(r"Chapter\s+(\d+)\s+(.{2,60})", re.IGNORECASE)
             BARE_CHAPTER_RE = re.compile(
-                r"(?:^|\n)\s*(\d{1,2})[\.\s]+\s*([A-Z][A-Za-z0-9\s\-\(\),'/]{4,80})",
+                r"(?:^|\n)\s*(\d{1,2})\s+([A-Z][A-Za-z0-9\s\-\(\),'/]{4,80})",
                 re.MULTILINE,
             )
             seen_sec: set[int] = set()
