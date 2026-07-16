@@ -738,7 +738,7 @@ class RAGPipeline:
             SEC_RE = re.compile(r"(\d+)(?:\.(\d+))+(?:\s+(.+))?")
             CHAPTER_N_RE = re.compile(r"Chapter\s+(\d+)\s+(.{2,60})", re.IGNORECASE)
             BARE_CHAPTER_RE = re.compile(
-                r"(?:^|\n)\s*(\d{1,2})\.?\s+([A-Z][A-Za-z0-9\s\-\(\),'/]{4,80})",
+                r"(?:^|\n)\s*(\d{1,2})\.?\s+([A-Za-z][A-Za-z0-9\s\-\(\),'/:.\u2013\u2014]{4,80})",
                 re.MULTILINE,
             )
             seen_sec: set[int] = set()
@@ -755,6 +755,9 @@ class RAGPipeline:
                     title = nm.group(2).strip().rstrip(".")
                     if len(title) < 2:
                         continue
+                    fw = title.lower().split()[0] if title.split() else ""
+                    if fw in ("contents", "copyright", "licensed", "license", "trolltech", "red", "bootstrap"):
+                        continue
                     seen.add((major, source))
                     entries.append((major, source, title))
 
@@ -766,7 +769,7 @@ class RAGPipeline:
                     if len(title) < 4:
                         continue
                     fw = title.lower().split()[0] if title.split() else ""
-                    if fw in ("copyright", "licensed", "license", "trolltech", "red", "bootstrap"):
+                    if fw in ("contents", "copyright", "licensed", "license", "trolltech", "red", "bootstrap"):
                         continue
                     # Strip "on page \d+" TOC page references from the tail
                     title = re.sub(r"\s+on\s+page\s+\d+,?\s*.*", "", title, count=1).strip().rstrip(",")
@@ -933,10 +936,9 @@ class RAGPipeline:
                             if len(chapter_first_pg) >= 25:
                                 break
 
-                # Phase 2: post-loop targeted scan for chapters 1-30 not yet found
-                # Runs as a separate scan so it isn't cut off by the phase 1 break
-                # Uses \D (non-digit) separator to avoid matching "200 " for chapter "20"
-                missing = [n for n in range(1, 31) if n not in chapter_first_pg]
+                # Phase 2: post-loop targeted scan for chapters known to exist but not yet found
+                # Only scans up to max(chapters_to_cover) + 1 to avoid phantom chapters
+                missing = [n for n in range(1, max({ct[0] for ct in chapters_to_cover}, default=0) + 1) if n not in chapter_first_pg]
                 if missing:
                     for c in (
                         coll_.find(
@@ -1096,25 +1098,12 @@ class RAGPipeline:
                         )
                     else:
                         chapter_roster_lines.append(
-                            f"Chapter {ch_num} (approx pages {pg_start}+) "
-                            f"[- NO OFFICIAL TITLE IN TOC -]"
+                            f"Chapter {ch_num} — No official title (approx pages {pg_start}+)"
                         )
                 chapter_roster = "\n".join(chapter_roster_lines) + "\n"
                 body_content = self._format_context(final_chunks)
                 context_text = chapter_roster + body_content
                 prompt = self._build_prompt(query, context_text)
-                # Override Rule 12 with a strict instruction placed right before
-                # the LLM starts generating — making it much harder to ignore.
-                override = (
-                    "\n\nCRITICAL RULE — OVERRIDES ALL PRIOR CONTRADICTIONS:\n"
-                    "The chapter index at the top of the context is your ONLY source\n"
-                    "of chapter numbers and their official titles. For chapters marked\n"
-                    "'NO OFFICIAL TITLE IN TOC' you MUST output\n"
-                    "'No official title' — do NOT invent or extract any title from\n"
-                    "the body content below. Section headers in body content are\n"
-                    "subsections, NOT chapters. Breaking this rule is an ERROR."
-                )
-                prompt = prompt.replace("\n\nAnswer:", override + "\n\nAnswer:")
 
                 generation_start = time.perf_counter()
                 answer = ""
