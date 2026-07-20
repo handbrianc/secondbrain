@@ -394,15 +394,15 @@ class TestDeriveChapterNumbers:
         pipeline = self._make_test_pipeline()
         structure_chunks = [
             {
-                "chunk_text": "3.1 Introduction to the topic.",
+                "chunk_text": "Chapter 3 Introduction\n3.1 Subsection",
                 "source_file": "ch1.pdf",
             },
             {
-                "chunk_text": "29.1 Related work section.\n31.2 Out of range subsection.",
+                "chunk_text": "Chapter 29 Related Work\n29.1 Section.\n31.2 Out of range.",
                 "source_file": "ch2.pdf",
             },
             {
-                "chunk_text": "4.1 Overview and motivation.",
+                "chunk_text": "Chapter 4 Overview\n4.1 Motivation.",
                 "source_file": "ch3.pdf",
             },
         ]
@@ -418,7 +418,7 @@ class TestDeriveChapterNumbers:
         assert 29 in majors, (
             "BUG: chapter 29 from chunk 2 is absent — either the 31-triggered "
             "break stopped chunk processing entirely (outer loop broken), or "
-            "chunk 2's own valid entry 29.1 was never added."
+            "chunk 2's own valid entry 29 was never added."
         )
         # Chunk 3 contribution — only reachable with 'continue'
         assert 4 in majors, (
@@ -434,14 +434,17 @@ class TestDeriveChapterNumbers:
     ) -> None:
         """Bug 1 manifesting: ALL valid entries after the bad match are lost."""
         pipeline = self._make_test_pipeline()
-        # Each line: "N.1 Title" — matches SEC_RE as N and 1
+        # Mix CHAPTER_N_RE (reliable) and SEC_RE (section headers, now skipped)
         structure_chunks = [
             {
                 "chunk_text": (
+                    "Chapter 4 Results\n"
                     "4.1 First topic section.\n"
                     "5.1 Second topic section.\n"
+                    "Chapter 6 Discussion\n"
                     "6.1 Third topic section.\n"
                     "29.1 Fourth topic section.\n"
+                    "Chapter 30 Conclusions\n"
                     "30.1 Fifth topic section.\n"
                     "35.2 Out of range section."
                 ),
@@ -453,14 +456,13 @@ class TestDeriveChapterNumbers:
         majors = sorted(e[0] for e in entries)
 
         assert 35 not in majors, "chapter 35 is out of range and must be absent"
-        assert 4 in majors, "chapter 4 must be present"
-        assert 5 in majors, (
-            "BUG: chapter 5 is absent — 'break' on 35 (>30) prevented "
-            "processing of all later valid entries (5, 6, 29, 30)"
+        assert 4 in majors, "chapter 4 (CHAPTER_N_RE) must be present"
+        assert 5 not in majors, (
+            "SEC_RE entry 5.1 is a section header, not a chapter title — "
+            "must NOT appear in chapter entries"
         )
-        assert 6 in majors, "BUG: chapter 6 is absent — same root cause"
-        assert 29 in majors, "BUG: chapter 29 is absent — same root cause"
-        assert 30 in majors, "BUG: chapter 30 is absent — same root cause"
+        assert 6 in majors, "chapter 6 (CHAPTER_N_RE) must be present"
+        assert 30 in majors, "chapter 30 (CHAPTER_N_RE) must be present"
 
     def test_subsections_not_treated_as_chapter_headers(self) -> None:
         """Bug 2: first-digit extraction inflates chapter count.
@@ -474,8 +476,10 @@ class TestDeriveChapterNumbers:
         structure_chunks = [
             {
                 "chunk_text": (
+                    "Chapter 3 Introduction\n"
                     "3.1 Top-level introduction section.\n"
-                    "3.9.11 Deeply nested subsection.\n"
+                    "3.9.11 Deeply nested subsection (SEC_RE, skipped).\n"
+                    "Chapter 4 Overview\n"
                     "4.1 Top-level overview section."
                 ),
                 "source_file": "paper.pdf",
@@ -485,29 +489,22 @@ class TestDeriveChapterNumbers:
         entries, _ = pipeline._derive_chapter_numbers(structure_chunks)
         majors = sorted(e[0] for e in entries)
 
-        # Chapters with 1 dot must be present
-        assert 3 in majors, "chapter 3 (1-dot '3.1') must be present"
-        assert 4 in majors, "chapter 4 (1-dot '4.1') must be present"
+        # Chapters from CHAPTER_N_RE must be present
+        assert 3 in majors, "chapter 3 (CHAPTER_N_RE) must be present"
+        assert 4 in majors, "chapter 4 (CHAPTER_N_RE) must be present"
 
-        # Subordinate sections (2+ dots) must NOT inflate chapter count
-        chapter_3_count = sum(1 for m in majors if m == 3)
-        assert chapter_3_count == 1, (
-            f"BUG: chapter 3 appears {chapter_3_count} times in majors={majors}. "
-            "The 2-dot entry '3.9.11' is erroneously added via first-digit "
-            "extraction (major=3) when it should be filtered by the "
-            "depth-guard (m.group(0).count('.') > 1)."
+        # SEC_RE adds 3 to seen_sec only — no duplicates in return value
+        assert majors == [3, 4], (
+            f"Only CHAPTER_N_RE entries (3, 4) expected, got {majors}"
         )
 
-    def test_deeply_nested_section_produces_known_limitation(self) -> None:
-        """Known limitation: SEC_RE can't distinguish 1-dot from 2-dot section numbers.
+    def test_deeply_nested_section_skipped_as_non_chapter(self) -> None:
+        """SEC_RE section headers (even deeply nested) are NOT chapter titles.
 
         SEC_RE = re.compile(r"(\\d+)(?:\\.(\\d+))+(?:\\s+(.+))?") captures only the
         last \\.digit group, so "11.5.3" gives g1=11, g2=3 → section="11.3" with
-        dotcount=1.  The depth-guard cannot be correctly implemented with this
-        regex alone; a proper tokenizer would be needed.
-
-        This test documents the KNOWN LIMITATION: the current implementation
-        DOES include 11.5.3 (major=11) despite the 2-dot section number.
+        dotcount=1.  Even so, the entry is NOT added to the return value because
+        SEC_RE entries are section headers, not chapter titles.
         """
         pipeline = self._make_test_pipeline()
         structure_chunks = [
@@ -520,15 +517,9 @@ class TestDeriveChapterNumbers:
         entries, _ = pipeline._derive_chapter_numbers(structure_chunks)
         majors = [e[0] for e in entries]
 
-        # Currently: "11.5.3" IS added (major=11) despite being a deep subsection.
-        # The fix (break->continue) does not address this specific limitation.
-        # A proper depth-guard requires a custom section tokenizer (Phase 2).
-        assert 11 in majors, (
-            "CURRENT BEHAVIOR: 11.5.3 maps to major=11 and is added. "
-            "This is the KNOWN LIMICATION of the SEC_RE approach — "
-            "regex g1 captures only the FIRST digit group, not the full "
-            "section hierarchy.  This test PASSES with the break->continue "
-            "fix but documents that multi-dot filtering awaits Phase 2."
+        assert 11 not in majors, (
+            "SEC_RE entry '11.5.3' is a section header — must NOT appear "
+            "as a chapter title in the return value"
         )
 
     def test_tuple_arity_preserved_after_fix(self) -> None:
@@ -566,8 +557,9 @@ class TestDeriveChapterNumbers:
         """SEC_RE within 3 of max, first-word filter catches ch19 downstream.
 
         CHAPTER_N_RE finds ch15 → seen_max=15 → sec_limit=18.
-        SEC_RE adds ch16-18 (within limit), rejects ch19 (19 > 18).
-        The first-word dup filter in _iterative_query catches ch19
+        SEC_RE adds ch16-18 to seen_sec (prevents phantom chapters), but does
+        NOT add them to the return value (they're section headers, not chapter
+        titles).  The first-word dup filter in _iterative_query catches ch19
         in case it enters through another path (Phase 2 body scan).
         """
         pipeline = self._make_test_pipeline()
@@ -588,19 +580,23 @@ class TestDeriveChapterNumbers:
         majors = sorted(e[0] for e in entries)
 
         assert 15 in majors, "chapter 15 from CHAPTER_N_RE must be present"
-        assert 16 in majors, "chapter 16 (within sec_limit=18) must be present"
-        assert 17 in majors, "chapter 17 (within sec_limit=18) must be present"
-        assert 18 in majors, "chapter 18 (within sec_limit=18) must be present"
+        assert 16 not in majors, "chapter 16 is SEC_RE (section header, not chapter title)"
+        assert 17 not in majors, "chapter 17 is SEC_RE (section header, not chapter title)"
+        assert 18 not in majors, "chapter 18 is SEC_RE (section header, not chapter title)"
         assert 19 not in majors, (
-            f"BUG: chapter 19 is present in {majors} but sec_limit=18 "
-            "should have rejected it (19 > 15+3=18)"
+            "chapter 19 is out of range (19 > 15+3=18)"
+        )
+        assert majors == [15], (
+            f"expected only ch15 (CHAPTER_N_RE), got {majors}"
         )
 
     def test_sec_re_cap_still_allows_gap_filler_for_proxmox(self) -> None:
-        """SEC_RE cap must NOT block gap-fillers like Proxmox ch20.
+        """SEC_RE cap allows gap-filler without polluting chapter title pool.
 
         CHAPTER_N_RE finds ch19 and ch21 → seen_max=21 → sec_limit=21.
-        SEC_RE should still add ch20 (20 <= 21, fills gap between 19 and 21).
+        SEC_RE adds ch20 to seen_sec but NOT to the return value (it's a
+        section header, not a chapter title).  The gap-filler concept is
+        handled by the seen_sec tracking for sec_limit, not by entries.
         """
         pipeline = self._make_test_pipeline()
         structure_chunks = [
@@ -619,8 +615,75 @@ class TestDeriveChapterNumbers:
         majors = sorted(e[0] for e in entries)
 
         assert 19 in majors, "chapter 19 from CHAPTER_N_RE must be present"
-        assert 20 in majors, (
-            f"BUG: chapter 20 absent from {majors} — sec_limit should be "
-            "21+3=24, allowing 20 as a gap-filler"
+        assert 20 not in majors, (
+            "chapter 20 is SEC_RE (section header, not chapter title) — "
+            "must NOT appear in return value"
         )
         assert 21 in majors, "chapter 21 from CHAPTER_N_RE must be present"
+        assert majors == [19, 21], (
+            f"expected only ch19, ch21 (CHAPTER_N_RE), got {majors}"
+        )
+
+
+class TestFilterChaptersByTarget:
+    """Tests for filter_chapters_by_target() — a pure function, no mocking needed.
+
+    Tests the production code from rag/pipeline.py directly instead of a mirror
+    implementation.  If the production signature or semantics change, these tests
+    catch the breakage.
+    """
+
+    def test_target_11_keeps_only_chapter_11(self) -> None:
+        chapters = [
+            (10, "book.pdf", "Networking"),
+            (11, "book.pdf", "Advanced Topics"),
+            (12, "book.pdf", "Performance Tuning"),
+        ]
+        good_titles = {10, 11, 12}
+
+        from secondbrain.rag.pipeline import filter_chapters_by_target
+        filtered, filtered_titles = filter_chapters_by_target(chapters, good_titles, "11")
+
+        assert len(filtered) == 1, f"Expected 1, got {len(filtered)}: {filtered}"
+        assert filtered[0][0] == 11, f"Expected ch11, got ch{filtered[0][0]}"
+        assert filtered_titles == {11}, f"Expected {{11}}, got {filtered_titles}"
+
+    def test_target_none_keeps_all_chapters(self) -> None:
+        chapters = [
+            (1, "book.pdf", "Introduction"),
+            (2, "book.pdf", "Setup"),
+            (11, "book.pdf", "Advanced Topics"),
+        ]
+        good_titles = {1, 2, 11}
+
+        from secondbrain.rag.pipeline import filter_chapters_by_target
+        filtered, filtered_titles = filter_chapters_by_target(chapters, good_titles, None)
+
+        assert filtered == chapters, "target=None must not change chapters"
+        assert filtered_titles == good_titles, "target=None must not change titles"
+
+    def test_target_not_found_produces_empty(self) -> None:
+        chapters = [(10, "book.pdf", "Networking"), (11, "book.pdf", "Advanced Topics")]
+        good_titles = {10, 11}
+
+        from secondbrain.rag.pipeline import filter_chapters_by_target
+        filtered, filtered_titles = filter_chapters_by_target(chapters, good_titles, "99")
+
+        assert len(filtered) == 0, f"Expected empty, got {filtered}"
+        assert len(filtered_titles) == 0, f"Expected empty, got {filtered_titles}"
+
+    def test_invalid_target_falls_back(self) -> None:
+        chapters = [(1, "book.pdf", "Introduction"), (2, "book.pdf", "Setup")]
+        good_titles = {1, 2}
+
+        from secondbrain.rag.pipeline import filter_chapters_by_target
+        filtered, filtered_titles = filter_chapters_by_target(chapters, good_titles, "abc")
+
+        assert filtered == chapters, "Invalid target with matching chapter must fall back"
+        assert filtered_titles == good_titles, "Invalid target must fall back"
+
+    def test_empty_chapters_list_with_target(self) -> None:
+        from secondbrain.rag.pipeline import filter_chapters_by_target
+        filtered, filtered_titles = filter_chapters_by_target([], set(), "11")
+        assert filtered == []
+        assert filtered_titles == set()

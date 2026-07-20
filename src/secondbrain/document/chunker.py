@@ -13,10 +13,11 @@ Exports:
 from __future__ import annotations
 
 import hashlib
+import re
 from pathlib import Path
 from typing import Any, Literal
 
-from typing_extensions import TypedDict
+from typing_extensions import NotRequired, TypedDict
 
 ElementTypeLiteral = Literal[
     "navigation",
@@ -39,6 +40,12 @@ def classify_chunk_role(text: str, seg_count: int, total_segs: int, is_likely_ti
         pos = seg_count / max(total_segs, 1)
         if pos < 0.025:
             return "navigation"
+        # Section-number-prefixed headers (e.g. "11.18 Configuring the Autostart
+        # Service") are inline section markers within chapters, not document-level
+        # headings.  Classify as body so the retrieval pipeline can match them
+        # via SEC_HEADER_RE during bucket collection.
+        if re.match(r"\d+\.\d+(\.\d+)?\s", text):
+            return "body"
         return "heading"
 
     pos = seg_count / max(total_segs, 1)
@@ -69,6 +76,7 @@ DEFAULT_MIN_SEGMENT_SIZE = 200
 class _Segment(TypedDict):
     text: str
     page: int
+    chunk_role: NotRequired[str]
 
 
 def chunk_segments(
@@ -113,6 +121,22 @@ def chunk_segments(
             and not any(p in stripped for p in [".", ":", "-", "—"])
             and not stripped.endswith(".")
         )
+        # Section-number-prefixed headings like "11.18 Configuring the Autostart
+        # Service" contain a dot in the section number and would be rejected by
+        # the "." check above, causing them to merge with body content.
+        if not is_likely_title and re.match(r"\d+\.\d+(\.\d+)?\s", stripped):
+            is_likely_title = True
+
+        # Section-number-prefixed titles must START a new chunk rather than
+        # merge into the previous accumulation (the default title behaviour
+        # appends via the "if is_likely_title" branch below).
+        if is_likely_title and re.match(r"\d+\.\d+(\.\d+)?\s", stripped) and current_text:
+            merged_segments.append({"text": current_text, "page": current_page})
+            seg_counter += 1
+            current_text = stripped
+            current_page = page
+            last_is_likely_title = True
+            continue
 
         if len(current_text) < DEFAULT_MIN_SEGMENT_SIZE or is_likely_title:
             if current_text:
