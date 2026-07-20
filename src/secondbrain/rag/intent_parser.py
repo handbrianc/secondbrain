@@ -108,6 +108,8 @@ class StructuralIntentParser:
         "summarize",
         "summarize each",
         "tell me everything",
+        "tell me more",
+        "tell me about",
         "everything about",
         "overview of",
         "give me an overview",
@@ -115,6 +117,14 @@ class StructuralIntentParser:
         "complete guide to",
         "all about",
         "summary of",
+        "explain",
+        "describe",
+        "what is",
+        "what are",
+        "how does",
+        "how do",
+        "why is",
+        "why does",
     ]
 
     def __init__(

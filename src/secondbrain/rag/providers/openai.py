@@ -68,16 +68,23 @@ class OpenAILLMProvider(LocalLLMProvider):
                 "environment variable or provide api_key parameter"
             )
 
-        # Initialize clients
+        # Initialize clients with TTFT-based timeout.
+        # connect=timeout: connection must establish within `timeout` seconds.
+        # read=None:       no read timeout — streaming can take arbitrarily long.
+        # write=timeout:   request body must be sent within `timeout` seconds.
+        # pool=timeout:    connection pool acquisition timeout.
+        ttft_timeout = httpx.Timeout(
+            connect=timeout, read=None, write=timeout, pool=timeout
+        )
         self._client = OpenAI(
             api_key=self._api_key,
             base_url=base_url,  # Optional - None means use OpenAI default
-            timeout=httpx.Timeout(timeout),
+            timeout=ttft_timeout,
         )
         self._async_client = AsyncOpenAI(
             api_key=self._api_key,
             base_url=base_url,  # Optional - None means use OpenAI default
-            timeout=httpx.Timeout(timeout),
+            timeout=ttft_timeout,
         )
 
     def generate(
@@ -232,14 +239,42 @@ class OpenAILLMProvider(LocalLLMProvider):
         temperature: float = 0.7,
         max_tokens: int = 4096,
     ) -> str:
-        """Synchronous streaming is not implemented; use generate()."""
-        result = self.generate(
-            messages[-1]["content"] if messages else "",
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
-        on_chunk(result, None)
-        return result
+        """Stream response tokens in real time via the on_chunk callback.
+
+        Uses ``stream=True`` so the HTTP response is consumed as a
+        token-by-token iterator.  Each content delta is forwarded to
+        ``on_chunk`` immediately, allowing the caller to update a
+        spinner/progress indicator on the first token and display
+        incremental output.
+        """
+        try:
+            temp = temperature if temperature is not None else self._temperature
+            tokens = max_tokens if max_tokens is not None else self._max_tokens
+
+            response = self._client.chat.completions.create(
+                model=self._model,
+                messages=messages,
+                temperature=temp,
+                max_tokens=tokens,
+                stream=True,
+            )
+
+            accumulated: list[str] = []
+            for chunk in response:
+                if chunk.choices and len(chunk.choices) > 0:
+                    delta = chunk.choices[0].delta
+                    if delta and delta.content:
+                        on_chunk(delta.content, None)
+                        accumulated.append(delta.content)
+
+            return "".join(accumulated)
+
+        except httpx.ConnectError as e:
+            raise ServiceUnavailableError(f"OpenAI API unreachable: {e}") from e
+        except APIError as e:
+            raise ServiceUnavailableError(f"OpenAI API error: {e}") from e
+        except Exception as e:
+            raise RuntimeError(f"Streaming failed: {e}") from e
 
     async def stream_chat_async(
         self,

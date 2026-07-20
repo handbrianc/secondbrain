@@ -590,7 +590,12 @@ def _single_turn_chat(
     model: str | None,
     show_sources: bool,
 ) -> None:
-    """Handle single-turn chat with a query."""
+    """Handle single-turn chat with a query.
+
+    Shows a thinking spinner until the first response token arrives,
+    then streams subsequent tokens directly to the terminal.
+    """
+    
     from secondbrain.config import config
     from secondbrain.conversation import ConversationSession, ConversationStorage
     from secondbrain.rag import RAGPipeline
@@ -604,7 +609,7 @@ def _single_turn_chat(
     intent_parser = StructuralIntentParser(cfg)
     intent_result = intent_parser.parse(query)
     click.echo(
-        f"\u25b6 Detected intent: {intent_result.intent.name.lower().replace('_', ' ')}"
+        f"\u25b6 Detected intent: {'general query' if intent_result.intent.name == 'UNKNOWN' else intent_result.intent.name.lower().replace('_', ' ')}"
     )
 
     with ConversationStorage() as storage:
@@ -619,20 +624,41 @@ def _single_turn_chat(
     searcher = Searcher(verbose=False)
     llm_provider = LLMProviderFactory.create_from_config(cfg)
 
+    import sys
+
+    first_token_arrived = [False]
+
+    def on_chunk(content: str, _reasoning: str | None) -> None:
+        """Handle each streaming token — clear 'Thinking...' on first token."""
+        if content:
+            if not first_token_arrived[0]:
+                first_token_arrived[0] = True
+                # Clear the "Thinking..." line using ANSI escape
+                sys.stdout.write("\033[2K\r")
+                sys.stdout.flush()
+            sys.stdout.write(content)
+            sys.stdout.flush()
+
     pipeline = RAGPipeline(
         searcher=searcher,
         llm_provider=llm_provider,
         top_k=top_k,
         context_window=cfg.rag_context_window,
+        on_chunk=on_chunk,
     )
 
-    with console.status("[cyan]Thinking...", spinner="dots"):
-        result = pipeline.chat(
-            query, session_obj, top_k=top_k, show_sources=show_sources
-        )
+    # Show "Thinking..." indicator (plain text, no Rich spinner)
+    sys.stdout.write("[cyan]Thinking...")
+    sys.stdout.flush()
 
-    console.print("\n[bold green]Answer:[/bold green]")
-    console.print(result["answer"])
+    result = pipeline.chat(
+        query, session_obj, top_k=top_k, show_sources=show_sources
+    )
+
+    # Ensure trailing newline after streamed output
+    if first_token_arrived[0]:
+        sys.stdout.write("\n")
+        sys.stdout.flush()
 
     # Show sources if requested
     if show_sources and result.get("sources"):
@@ -689,7 +715,6 @@ def _interactive_chat(
     searcher = Searcher(verbose=False)
     llm_provider = LLMProviderFactory.create_from_config(cfg)
 
-    # Initialize RAG pipeline
     pipeline = RAGPipeline(
         searcher=searcher,
         llm_provider=llm_provider,
@@ -738,16 +763,40 @@ def _interactive_chat(
 
             intent_result = intent_parser.parse(user_input)
             click.echo(
-                f"\u25b6 Detected intent: {intent_result.intent.name.lower().replace('_', ' ')}"
+                f"\u25b6 Detected intent: {'general query' if intent_result.intent.name == 'UNKNOWN' else intent_result.intent.name.lower().replace('_', ' ')}"
             )
 
-            with console.status("[cyan]Thinking...", spinner="dots"):
-                result = pipeline.chat(
-                    user_input, session_obj, top_k=top_k, show_sources=show_sources
-                )
+            import sys
 
-            console.print("\n[bold green]Assistant:[/bold green]")
-            console.print(result["answer"])
+            first_token_arrived = [False]
+
+            def on_chunk(content: str, _reasoning: str | None) -> None:
+                if content:
+                    if not first_token_arrived[0]:
+                        first_token_arrived[0] = True
+                        sys.stdout.write("\033[2K\r")
+                        sys.stdout.flush()
+                    sys.stdout.write(content)
+                    sys.stdout.flush()
+
+            streaming_pipeline = RAGPipeline(
+                searcher=searcher,
+                llm_provider=llm_provider,
+                top_k=top_k,
+                context_window=cfg.rag_context_window,
+                on_chunk=on_chunk,
+            )
+
+            sys.stdout.write("[cyan]Thinking...")
+            sys.stdout.flush()
+
+            result = streaming_pipeline.chat(
+                user_input, session_obj, top_k=top_k, show_sources=show_sources
+            )
+
+            if first_token_arrived[0]:
+                sys.stdout.write("\n")
+                sys.stdout.flush()
 
             # Show sources if requested
             if show_sources and result.get("sources"):
