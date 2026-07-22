@@ -618,6 +618,8 @@ def _run_chat_with_spinner(
             result_container["result"] = pipeline.chat(
                 query, session_obj, top_k=top_k, show_sources=show_sources
             )
+        except BaseException as exc:
+            result_container["error"] = exc
         finally:
             done_event.set()
 
@@ -654,6 +656,11 @@ def _run_chat_with_spinner(
         _sys.stdout.flush()
 
     t.join()
+
+    # Propagate any exception that occurred in the background thread.
+    if "error" in result_container:
+        raise result_container["error"]  # type: ignore[misc]
+
     result = result_container.get("result", {})
 
     # Non-streaming path: no chunks came through the streaming

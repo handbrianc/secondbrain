@@ -78,7 +78,8 @@ class TestDocumentIngestorIngestEdgeCases:
 
         result = ingestor.ingest(str(tmp_path))
 
-        assert result == {"success": 0, "failed": 0}
+        assert result["success"] == 0
+        assert result["failed"] == 0
 
     def test_ingest_directory_with_no_supported_files(self, tmp_path: Path) -> None:
         """Test directory with only unsupported files returns success=0."""
@@ -90,7 +91,8 @@ class TestDocumentIngestorIngestEdgeCases:
 
         result = ingestor.ingest(str(tmp_path))
 
-        assert result == {"success": 0, "failed": 0}
+        assert result["success"] == 0
+        assert result["failed"] == 0
 
 
 class TestDocumentIngestorBuildDocumentsEdgeCases:

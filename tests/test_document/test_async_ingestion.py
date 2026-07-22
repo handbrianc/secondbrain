@@ -97,6 +97,7 @@ class TestAsyncIngestionNativeAwait:
         ]
 
         mock_storage = MagicMock()
+        mock_storage.store_batch_async = AsyncMock(return_value=["id1", "id2", "id3"])
         mock_storage.store_chunks = AsyncMock(return_value={})
 
         ingestor = AsyncDocumentIngestor()
