@@ -411,12 +411,12 @@ class DockerManager:
 
         # Wait for MongoDB to be ready
         if verbose:
-            print("[cyan]Waiting for MongoDB to be ready...[/cyan]")
+            console.print("[cyan]Waiting for MongoDB to be ready...[/cyan]")
 
         try:
             self.wait_for_mongo_ready()
             if verbose:
-                print("[green]✓ MongoDB is ready[/green]")
+                console.print("[green]✓ MongoDB is ready[/green]")
         except MongoDBStartupError as e:
             raise MongoDBStartupError(
                 f"[red]✗ MongoDB failed to become ready[/red]\n\n"

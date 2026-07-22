@@ -16,6 +16,7 @@ from secondbrain.rag.intent_parser import IntentDecision, QueryIntent, Structura
 from secondbrain.rag.interfaces import LocalLLMProvider, StreamingCallback
 from secondbrain.rag.security_filter import SecurityFilter
 from secondbrain.document.scoped_retriever import ScopedRetriever
+from secondbrain.rag.document_router import DocumentRouter
 from secondbrain.search import Searcher
 from secondbrain.utils.perf_monitor import metrics
 from secondbrain.utils.tracing import trace_operation
@@ -153,6 +154,10 @@ class RAGPipeline:
         self._intent_parser = StructuralIntentParser(self._config)
         self._security_filter = SecurityFilter()
         self._on_chunk = on_chunk
+        # Lazily-initialized DocumentRouter for document-scoped retrieval.
+        # Created on first use so that the pipeline can be constructed without
+        # a running MongoDB connection (e.g. during CLI help / --version).
+        self._document_router: DocumentRouter | None = None
 
     def query(
         self,
@@ -202,6 +207,9 @@ class RAGPipeline:
 
             effective_top_k = top_k if top_k is not None else self._top_k
 
+            # --- Resolve document-scoped source_filter from query ---
+            source_filter = self._resolve_source_filter(query)
+
             # --- B4: Iterative RAG for broad-coverage and chapter/section-enumeration queries ---
             intent_result = self._intent_parser.parse(query)
             if intent_result.intent in (
@@ -213,6 +221,7 @@ class RAGPipeline:
                     query,
                     top_k=effective_top_k,
                     show_sources=show_sources,
+                    source_filter=source_filter,
                 )
 
             # Step 1: Retrieve chunks via searcher.search()
@@ -222,7 +231,12 @@ class RAGPipeline:
                     if span:
                         span.set_attribute("rag.query", query)
                         span.set_attribute("rag.top_k", effective_top_k)
-                    chunks = self._searcher.search(query, top_k=effective_top_k)
+                        span.set_attribute("rag.source_filter", source_filter or "")
+                    chunks = self._searcher.search(
+                        query,
+                        top_k=effective_top_k,
+                        source_filter=source_filter,
+                    )
                     if span and chunks:
                         span.set_attribute("rag.chunks_returned", len(chunks))
             finally:
@@ -341,6 +355,9 @@ class RAGPipeline:
         try:
             effective_top_k = top_k if top_k is not None else self._top_k
 
+            # --- Resolve document-scoped source_filter from query ---
+            source_filter = self._resolve_source_filter(query)
+
             # --- B4: Iterative RAG for broad-coverage and chapter/section-enumeration queries ---
             intent_result = self._intent_parser.parse(query)
             if intent_result.intent in (
@@ -352,6 +369,7 @@ class RAGPipeline:
                     query,
                     top_k=effective_top_k,
                     show_sources=show_sources,
+                    source_filter=source_filter,
                 )
 
             # Step 1: Rewrite query using conversation history (if rewriter available)
@@ -365,8 +383,11 @@ class RAGPipeline:
                         span.set_attribute("rag.query", rewritten_query)
                         span.set_attribute("rag.top_k", effective_top_k)
                         span.set_attribute("rag.is_chat", True)
+                        span.set_attribute("rag.source_filter", source_filter or "")
                     chunks = self._searcher.search(
-                        rewritten_query, top_k=effective_top_k
+                        rewritten_query,
+                        top_k=effective_top_k,
+                        source_filter=source_filter,
                     )
 
                     # --- C2: Track seen pages in session ---
@@ -885,6 +906,43 @@ class RAGPipeline:
                     # above; `seen` (used by chapters_to_cover/good_title_nums)
                     # is handled by CHAPTER_N_RE / BARE_CHAPTER_RE / FT_CATCH.
 
+            # Phase 3: chunk-boundary recovery.
+            # Handles "Chapter N" at end of one chunk with the title on the
+            # next line of a different chunk (e.g. "... Chapter 19\\nUseful
+            # Command-line Tools" split across consecutive chunks).
+            if entries:
+                found_nums = {e[0] for e in entries}
+                all_seen = {s[0] for s in seen}
+                lo = min(found_nums)
+                hi = max(found_nums)
+                for gap_n in range(lo + 1, hi):
+                    if gap_n in all_seen:
+                        continue
+                    # Search for "Chapter N" at/near end of a chunk followed
+                    # by a plausible title in the next sequential chunk.
+                    for i in range(len(structure_chunks) - 1):
+                        cur = structure_chunks[i]
+                        nxt = structure_chunks[i + 1]
+                        cur_text = cur.get("chunk_text", "")
+                        src_cur = cur.get("source_file", "")
+                        if f"Chapter {gap_n}" not in cur_text and f"chapter {gap_n}" not in cur_text:
+                            continue
+                        # "Chapter N" appears near the end (last ~80 chars)
+                        idx = cur_text.lower().find(f"chapter {gap_n}")
+                        remaining = len(cur_text) - idx
+                        if remaining > 80 or (gap_n, src_cur) in seen:
+                            continue
+                        # Next chunk starts with a title-like line
+                        nxt_text = nxt.get("chunk_text", "").strip()
+                        first_line = nxt_text.split("\n")[0].strip()
+                        if (len(first_line) >= 4
+                                and first_line[0].isupper()
+                                and not first_line[0].islower()
+                                and not re.search(r"^\d+\.\d+", first_line)):
+                            title = re.sub(r"\s*\d+\s*$", "", first_line).rstrip(".")
+                            seen.add((gap_n, src_cur))
+                            entries.append((gap_n, src_cur, title))
+
             entries.sort(key=lambda x: x[0])
             return entries, {s[0] for s in seen}
 
@@ -892,7 +950,11 @@ class RAGPipeline:
         q = query.lower().strip()
         return any(t in q for t in BROAD_COVERAGE_TRIGGERS)
 
-    def _probe_document_structure(self, top_k: int = 10000) -> list[dict[str, Any]]:
+    def _probe_document_structure(
+        self,
+        top_k: int = 10000,
+        source_filter: str | None = None,
+    ) -> list[dict[str, Any]]:
         """Probe for document structural elements (TOC/section headers) via chunk_role.
 
         Attempts targeted structural-role filters first; falls back to raw
@@ -901,6 +963,7 @@ class RAGPipeline:
 
         Args:
             top_k: How many structural candidates to retrieve (default 10000).
+            source_filter: Optional source_file filter to scope to one document.
 
         Returns:
             List of chunk dicts with '_id', 'chunk_text', 'page_number',
@@ -911,14 +974,19 @@ class RAGPipeline:
         cfg = config()
         client = MongoClient(cfg.mongo_uri, directConnection=True)
         coll = client[cfg.mongo_db][cfg.mongo_collection]
+
+        query_filter: dict[str, object] = {
+            "$or": [
+                {"element_type": {"$in": ["heading", "toc_entry", "body", "paragraph"]}},
+                {"chunk_role": {"$in": ["body", "caption", "navigation", "heading", "toc_entry"]}},
+            ]
+        }
+        if source_filter:
+            query_filter["source_file"] = {"$regex": f"^{re.escape(source_filter)}"}
+
         cursor = (
             coll.find(
-                {
-                    "$or": [
-                        {"element_type": {"$in": ["heading", "toc_entry", "body", "paragraph"]}},
-                        {"chunk_role": {"$in": ["body", "caption", "navigation", "heading", "toc_entry"]}},
-                    ]
-                },
+                query_filter,
                 {"_id": 0, "chunk_text": 1, "page_number": 1, "source_file": 1, "chunk_id": 1},
             )
             .sort("page_number", 1)
@@ -926,9 +994,12 @@ class RAGPipeline:
         )
         result = list(cursor)
         if len(result) < 5:
+            fallback_filter: dict[str, object] = {}
+            if source_filter:
+                fallback_filter["source_file"] = {"$regex": f"^{re.escape(source_filter)}"}
             result = list(
                 coll.find(
-                    {},
+                    fallback_filter,
                     {"_id": 0, "chunk_text": 1, "page_number": 1, "source_file": 1, "chunk_id": 1},
                 ).limit(top_k)
             )
@@ -939,9 +1010,14 @@ class RAGPipeline:
         query: str,
         top_k: int,
         show_sources: bool,
+        source_filter: str | None = None,
     ) -> dict[str, Any]:
         """Fallback one-shot retrieval when document structure probing fails."""
-        chunks = self._searcher.search(query, top_k=top_k)
+        chunks = self._searcher.search(
+            query,
+            top_k=top_k,
+            source_filter=source_filter,
+        )
         if not chunks:
             return {"answer": f"No relevant documents found for: {query}", "query": query}
         context = self._format_context(chunks)
@@ -961,6 +1037,7 @@ class RAGPipeline:
         query: str,
         top_k: int,
         show_sources: bool,
+        source_filter: str | None = None,
     ) -> dict[str, Any]:
         """Handle broad-coverage queries via iterative structural traversal.
 
@@ -977,10 +1054,15 @@ class RAGPipeline:
             dict with 'answer', 'query', 'sources' (if show_sources).
         """
         # 1. Probe document structure for TOC/chapter chunks via chunk_role
-        structure_chunks = self._probe_document_structure(top_k=400)
+        structure_chunks = self._probe_document_structure(
+            top_k=400,
+            source_filter=source_filter,
+        )
         if not structure_chunks:
             # Fall back to generic one-shot if no structure found
-            return self._generic_one_shot(query, top_k, show_sources)
+            return self._generic_one_shot(
+                query, top_k, show_sources, source_filter=source_filter,
+            )
 
         intent_decision = self._intent_parser.parse(query)
 
@@ -1041,14 +1123,18 @@ class RAGPipeline:
                 client_ = MongoClient(cfg_.mongo_uri, directConnection=True)
                 coll_ = client_[cfg_.mongo_db][cfg_.mongo_collection]
 
-                # Pick the source with the most body chunks (most substantive document)
-                sources_set = {entry[1] for entry in chapters_to_cover}
-                src = max(
-                    (s for s in sources_set),
-                    key=lambda s: coll_.count_documents(
-                        {"source_file": s, "chunk_role": "body"}
-                    ),
-                )
+                # Use explicit source_filter if provided (from DocumentRouter),
+                # otherwise pick the source with the most body chunks.
+                if source_filter:
+                    src = source_filter
+                else:
+                    sources_set = {entry[1] for entry in chapters_to_cover}
+                    src = max(
+                        (s for s in sources_set),
+                        key=lambda s: coll_.count_documents(
+                            {"source_file": s, "chunk_role": "body"}
+                        ),
+                    )
 
                 import re
                 # Pre-populate chapter_first_pg from reliable CHAPTER_N_RE titles
@@ -1348,7 +1434,7 @@ class RAGPipeline:
                         p = fc.get("page_number", fc.get("page", 0))
                         pg_groups.setdefault(p, []).append(fc)
                     interleaved: list[dict] = []
-                    max_per_pg = max(len(g) for g in pg_groups.values())
+                    max_per_pg = max((len(g) for g in pg_groups.values()), default=0)
                     for slot in range(max_per_pg):
                         for pg in sorted(pg_groups):
                             if slot < len(pg_groups[pg]):
@@ -1539,7 +1625,11 @@ class RAGPipeline:
 
         # 2. Generic top-k search: one embedding call, no per-page
         # iteration (which would make 8000+ embedding requests).
-        accumulated = self._searcher.search(query, top_k=top_k)
+        accumulated = self._searcher.search(
+            query,
+            top_k=top_k,
+            source_filter=source_filter,
+        )
 
         # 4. Sort by score descending and trim to top_k
         accumulated.sort(key=lambda c: c.get("score", 0.0), reverse=True)
@@ -1609,6 +1699,28 @@ class RAGPipeline:
             result["sources"] = final_chunks
 
         return result
+
+    def _get_document_router(self) -> DocumentRouter:
+        """Return the DocumentRouter, creating it lazily if needed."""
+        if self._document_router is None:
+            try:
+                self._document_router = DocumentRouter(
+                    storage=self._searcher.storage,
+                )
+            except Exception:
+                self._document_router = DocumentRouter()
+        return self._document_router
+
+    def _resolve_source_filter(self, query: str) -> str | None:
+        """Resolve a user query to a source_file filter if a doc is named.
+
+        Returns a source_file path string or None if no document is referenced.
+        """
+        router = self._get_document_router()
+        doc_name = router.extract_document_name(query)
+        if doc_name is not None:
+            return router.resolve_source_file(doc_name)
+        return None
 
     def _handle_no_results(
         self,
@@ -1738,6 +1850,9 @@ class RAGPipeline:
         try:
             effective_top_k = top_k if top_k is not None else self._top_k
 
+            # --- Resolve document-scoped source_filter from query ---
+            source_filter = self._resolve_source_filter(query)
+
             retrieval_start = time.perf_counter()
             try:
                 with trace_operation("rag_retrieval_async") as span:
@@ -1746,8 +1861,9 @@ class RAGPipeline:
                         span.set_attribute("rag.top_k", effective_top_k)
                         span.set_attribute("rag.is_chat", False)
                         span.set_attribute("rag.is_async", True)
+                        span.set_attribute("rag.source_filter", source_filter or "")
                     chunks = await self._searcher.search_async(
-                        query, top_k=effective_top_k
+                        query, top_k=effective_top_k, source_filter=source_filter
                     )
                     if span and chunks:
                         span.set_attribute("rag.chunks_returned", len(chunks))
@@ -1855,6 +1971,9 @@ class RAGPipeline:
         try:
             effective_top_k = top_k if top_k is not None else self._top_k
 
+            # --- Resolve document-scoped source_filter from query ---
+            source_filter = self._resolve_source_filter(query)
+
             rewritten_query = self._rewrite_query_with_history(query, session)
 
             retrieval_start = time.perf_counter()
@@ -1865,8 +1984,9 @@ class RAGPipeline:
                         span.set_attribute("rag.top_k", effective_top_k)
                         span.set_attribute("rag.is_chat", True)
                         span.set_attribute("rag.is_async", True)
+                        span.set_attribute("rag.source_filter", source_filter or "")
                     chunks = await self._searcher.search_async(
-                        rewritten_query, top_k=effective_top_k
+                        rewritten_query, top_k=effective_top_k, source_filter=source_filter
                     )
                     if span and chunks:
                         span.set_attribute("rag.chunks_returned", len(chunks))

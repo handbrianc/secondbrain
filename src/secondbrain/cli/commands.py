@@ -582,6 +582,89 @@ def chat(
     )
 
 
+def _run_chat_with_spinner(
+    pipeline: Any,
+    query: str,
+    session_obj: Any,
+    top_k: int,
+    show_sources: bool,
+) -> dict[str, Any]:
+    """Run chat with a Rich spinner that animates until streaming starts.
+
+    Uses a background thread so the spinner can animate while the LLM
+    generates its first response token.  All output is routed through a
+    ``queue.Queue`` to avoid interleaving with Rich's Live display.
+    The spinner is written to stderr so it never pollutes stdout.
+    """
+    import queue
+    import threading
+    import sys
+
+    chunk_queue: queue.Queue[str] = queue.Queue()
+    done_event = threading.Event()
+    has_streamed: list[bool] = [False]
+
+    def on_chunk(content: str, _reasoning: str | None) -> None:
+        if content:
+            has_streamed[0] = True
+            chunk_queue.put(content)
+
+    pipeline._on_chunk = on_chunk  # type: ignore[attr-defined]
+
+    result_container: dict[str, Any] = {}
+
+    def _run() -> None:
+        try:
+            result_container["result"] = pipeline.chat(
+                query, session_obj, top_k=top_k, show_sources=show_sources
+            )
+        finally:
+            done_event.set()
+
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+
+    import sys as _sys
+
+    first_chunk: str | None = None
+    with console.status("[bold cyan]Thinking...", spinner="dots"):
+        while True:
+            try:
+                first_chunk = chunk_queue.get(timeout=0.1)
+                break
+            except queue.Empty:
+                if done_event.is_set():
+                    break
+
+    # Continuously drain the queue until the thread has finished
+    # *and* the queue is empty.  This handles streaming responses
+    # where chunks arrive after the first one broke the spinner.
+    wrote_first = False
+    if first_chunk is not None:
+        _sys.stdout.write(first_chunk)
+        wrote_first = True
+    while not done_event.is_set() or not chunk_queue.empty():
+        try:
+            chunk = chunk_queue.get(timeout=0.1)
+            _sys.stdout.write(chunk)
+            wrote_first = True
+        except queue.Empty:
+            pass
+    if wrote_first:
+        _sys.stdout.flush()
+
+    t.join()
+    result = result_container.get("result", {})
+
+    # Non-streaming path: no chunks came through the streaming
+    # callback, but the answer is in result["answer"].
+    if not has_streamed[0] and result.get("answer"):
+        _sys.stdout.write(result["answer"])
+        _sys.stdout.flush()
+
+    return result
+
+
 def _single_turn_chat(
     query: str,
     session: str | None,
@@ -595,7 +678,7 @@ def _single_turn_chat(
     Shows a thinking spinner until the first response token arrives,
     then streams subsequent tokens directly to the terminal.
     """
-    
+
     from secondbrain.config import config
     from secondbrain.conversation import ConversationSession, ConversationStorage
     from secondbrain.rag import RAGPipeline
@@ -624,41 +707,20 @@ def _single_turn_chat(
     searcher = Searcher(verbose=False)
     llm_provider = LLMProviderFactory.create_from_config(cfg)
 
-    import sys
-
-    first_token_arrived = [False]
-
-    def on_chunk(content: str, _reasoning: str | None) -> None:
-        """Handle each streaming token — clear 'Thinking...' on first token."""
-        if content:
-            if not first_token_arrived[0]:
-                first_token_arrived[0] = True
-                # Clear the "Thinking..." line using ANSI escape
-                sys.stdout.write("\033[2K\r")
-                sys.stdout.flush()
-            sys.stdout.write(content)
-            sys.stdout.flush()
-
     pipeline = RAGPipeline(
         searcher=searcher,
         llm_provider=llm_provider,
         top_k=top_k,
         context_window=cfg.rag_context_window,
-        on_chunk=on_chunk,
     )
 
-    # Show "Thinking..." indicator (plain text, no Rich spinner)
-    sys.stdout.write("[cyan]Thinking...")
-    sys.stdout.flush()
-
-    result = pipeline.chat(
-        query, session_obj, top_k=top_k, show_sources=show_sources
+    result = _run_chat_with_spinner(
+        pipeline, query, session_obj, top_k=top_k, show_sources=show_sources,
     )
 
     # Ensure trailing newline after streamed output
-    if first_token_arrived[0]:
-        sys.stdout.write("\n")
-        sys.stdout.flush()
+    sys.stdout.write("\n")
+    sys.stdout.flush()
 
     # Show sources if requested
     if show_sources and result.get("sources"):
@@ -768,35 +830,23 @@ def _interactive_chat(
 
             import sys
 
-            first_token_arrived = [False]
-
-            def on_chunk(content: str, _reasoning: str | None) -> None:
-                if content:
-                    if not first_token_arrived[0]:
-                        first_token_arrived[0] = True
-                        sys.stdout.write("\033[2K\r")
-                        sys.stdout.flush()
-                    sys.stdout.write(content)
-                    sys.stdout.flush()
-
             streaming_pipeline = RAGPipeline(
                 searcher=searcher,
                 llm_provider=llm_provider,
                 top_k=top_k,
                 context_window=cfg.rag_context_window,
-                on_chunk=on_chunk,
             )
 
-            sys.stdout.write("[cyan]Thinking...")
+            result = _run_chat_with_spinner(
+                streaming_pipeline,
+                user_input,
+                session_obj,
+                top_k=top_k,
+                show_sources=show_sources,
+            )
+
+            sys.stdout.write("\n")
             sys.stdout.flush()
-
-            result = streaming_pipeline.chat(
-                user_input, session_obj, top_k=top_k, show_sources=show_sources
-            )
-
-            if first_token_arrived[0]:
-                sys.stdout.write("\n")
-                sys.stdout.flush()
 
             # Show sources if requested
             if show_sources and result.get("sources"):

@@ -170,7 +170,9 @@ class TestRAGPipelineQuery:
 
         assert result["answer"] == "Python is a high-level language"
         assert result["query"] == "What is Python?"
-        mock_searcher.search.assert_called_once_with("What is Python?", top_k=5)
+        mock_searcher.search.assert_called_once_with(
+            "What is Python?", top_k=5, source_filter=None,
+        )
         mock_llm_provider.generate.assert_called_once()
 
     def test_query_with_show_sources(
@@ -203,7 +205,9 @@ class TestRAGPipelineQuery:
 
         pipeline_with_mocks.query("Test query", top_k=10)
 
-        mock_searcher.search.assert_called_once_with("Test query", top_k=10)
+        mock_searcher.search.assert_called_once_with(
+            "Test query", top_k=10, source_filter=None,
+        )
 
     def test_query_with_no_results_and_show_sources(
         self,

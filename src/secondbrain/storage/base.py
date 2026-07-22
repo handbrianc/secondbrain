@@ -5,7 +5,7 @@ import math
 import re
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, cast
 
 from bson.binary import Binary
 
@@ -414,3 +414,8 @@ class BaseVectorStorage(ABC):
             "database": self.db_name,
             "collection": self.collection_name,
         }
+
+    def list_source_files(self) -> list[str]:
+        """Return distinct source file paths from the collection."""
+        self._require_connection("list source files")
+        return cast("list[str]", self._execute_distinct("source_file"))
