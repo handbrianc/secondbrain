@@ -67,8 +67,8 @@ def create_docling_converter() -> "DocumentConverter":  # noqa: UP037
             do_ocr=True,
             do_table_structure=True,
             ocr_options=RapidOcrOptions(
-                backend='torch',
-                rapidocr_params={'EngineConfig.torch.use_mps': True},
+                backend="torch",
+                rapidocr_params={"EngineConfig.torch.use_mps": True},
             ),
             accelerator_options=AcceleratorOptions(
                 device=AcceleratorDevice.AUTO, num_threads=4
@@ -82,11 +82,11 @@ def create_docling_converter() -> "DocumentConverter":  # noqa: UP037
 def _segment_as_text(item: Any) -> str:
     if hasattr(item, "export_to_data_frame"):
         try:
-            return item.export_to_data_frame().to_csv(index=False)
+            return str(item.export_to_data_frame().to_csv(index=False))
         except Exception:
-            return str(item)  # type: ignore[return-value]
+            return str(item)
     if hasattr(item, "text") and item.text:
-        return item.text  # type: ignore[return-value]
+        return str(item.text)
     return ""
 
 
@@ -137,8 +137,8 @@ def create_converter() -> DocumentConverter:
             do_ocr=True,
             do_table_structure=True,
             ocr_options=RapidOcrOptions(
-                backend='torch',
-                rapidocr_params={'EngineConfig.torch.use_mps': True},
+                backend="torch",
+                rapidocr_params={"EngineConfig.torch.use_mps": True},
             ),
             accelerator_options=AcceleratorOptions(
                 device=AcceleratorDevice.AUTO, num_threads=4
@@ -304,7 +304,10 @@ def _extract_chunk_and_embed_file(
             AcceleratorOptions,
         )
         from docling.datamodel.base_models import InputFormat
-        from docling.datamodel.pipeline_options import PdfPipelineOptions, RapidOcrOptions
+        from docling.datamodel.pipeline_options import (
+            PdfPipelineOptions,
+            RapidOcrOptions,
+        )
         from docling.document_converter import DocumentConverter, PdfFormatOption
 
         pdf_options = PdfFormatOption(
@@ -312,8 +315,8 @@ def _extract_chunk_and_embed_file(
                 do_ocr=True,
                 do_table_structure=True,
                 ocr_options=RapidOcrOptions(
-                    backend='torch',
-                    rapidocr_params={'EngineConfig.torch.use_mps': True},
+                    backend="torch",
+                    rapidocr_params={"EngineConfig.torch.use_mps": True},
                 ),
                 accelerator_options=AcceleratorOptions(
                     device=AcceleratorDevice.AUTO, num_threads=4
@@ -351,7 +354,7 @@ def _extract_chunk_and_embed_file(
         #   chunks = chunk_segments(segments, chunk_size, chunk_overlap)
         #
         # Inline minimal chunker for this worker only — not exported from this module.
-        MIN_SEGMENT_SIZE = 200
+        min_segment_size = 200
         merged_segments: list[_Segment] = []
         current_text = ""
         current_page = 0
@@ -367,7 +370,7 @@ def _extract_chunk_and_embed_file(
                 and not any(p in stripped for p in [".", ":", "-", "—"])
                 and not stripped.endswith(".")
             )
-            if len(current_text) < MIN_SEGMENT_SIZE or is_likely_title:
+            if len(current_text) < min_segment_size or is_likely_title:
                 if current_text:
                     current_text += " " + stripped
                 else:
@@ -399,13 +402,18 @@ def _extract_chunk_and_embed_file(
                 if start + chunk_size >= len(text):
                     chunk_text = text[start:].rstrip()
                     if chunk_text:
-                        chunks.append({
-                            "text": chunk_text,
-                            "page": page,
-                            "chunk_role": classify_chunk_role(
-                                chunk_text, seg_counter, total_segs, is_likely_title_for_seg
-                            ),
-                        })
+                        chunks.append(
+                            {
+                                "text": chunk_text,
+                                "page": page,
+                                "chunk_role": classify_chunk_role(
+                                    chunk_text,
+                                    seg_counter,
+                                    total_segs,
+                                    is_likely_title_for_seg,
+                                ),
+                            }
+                        )
                     seg_counter += 1
                     break
                 next_start = start + chunk_size
@@ -415,13 +423,18 @@ def _extract_chunk_and_embed_file(
                     chunk_end = last_space
                 chunk_text = text[start:chunk_end]
                 if chunk_text.strip():
-                    chunks.append({
-                        "text": chunk_text,
-                        "page": page,
-                        "chunk_role": classify_chunk_role(
-                            chunk_text, seg_counter, total_segs, is_likely_title_for_seg
-                        ),
-                    })
+                    chunks.append(
+                        {
+                            "text": chunk_text,
+                            "page": page,
+                            "chunk_role": classify_chunk_role(
+                                chunk_text,
+                                seg_counter,
+                                total_segs,
+                                is_likely_title_for_seg,
+                            ),
+                        }
+                    )
                     seg_counter += 1
                 new_start = chunk_end - chunk_overlap
                 start = chunk_end if new_start <= start else new_start

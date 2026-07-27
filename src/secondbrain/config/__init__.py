@@ -17,19 +17,6 @@ __all__ = ["Config", "config", "get_config"]
 
 
 def _validate_mongo_uri(value: str) -> str:
-    """Validate MongoDB URI format.
-
-    Args:
-        value: MongoDB URI to validate.
-
-    Returns
-    -------
-        Validated URI string.
-
-    Raises
-    ------
-        ValueError: If URI doesn't start with mongodb:// or mongodb+srv://
-    """
     if not value.startswith("mongodb://") and not value.startswith("mongodb+srv://"):
         raise ValueError(
             f"mongo_uri must start with 'mongodb://' or 'mongodb+srv://', got: {value}"
@@ -74,7 +61,7 @@ class Config(BaseSettings):
 
         # Load environment variables from file if it exists
         if env_file_path and env_file_path.exists():
-            with open(env_file_path, encoding="utf-8") as f:
+            with env_file_path.open(encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
                     if line and not line.startswith("#") and "=" in line:
@@ -606,6 +593,7 @@ class Config(BaseSettings):
     @field_validator("rag_max_context_chars")
     @classmethod
     def validate_rag_max_context_chars(cls, v: int) -> int:
+        """Validate rag_max_context_chars is between 1000 and 500000."""
         if v < 1000 or v > 500000:
             raise ValueError("rag_max_context_chars must be between 1000 and 500000")
         return v
@@ -613,6 +601,7 @@ class Config(BaseSettings):
     @field_validator("rag_chunk_preview_chars")
     @classmethod
     def validate_rag_chunk_preview_chars(cls, v: int) -> int:
+        """Validate rag_chunk_preview_chars is between 100 and 10000."""
         if v < 100 or v > 10000:
             raise ValueError("rag_chunk_preview_chars must be between 100 and 10000")
         return v

@@ -190,8 +190,7 @@ class TOCParser:
 
             num_lines = len(chunk["text_lines"])
             num_entries = sum(
-                1 for line in chunk["text_lines"]
-                if self._is_toc_entry_line(line)
+                1 for line in chunk["text_lines"] if self._is_toc_entry_line(line)
             )
             density = num_entries / num_lines if num_lines else 0
 
@@ -243,11 +242,7 @@ class TOCParser:
             page = default_page
 
         # Clean trailing artifacts from title
-        title = (
-            self._ARABIC_PAGE_RE.sub("", title)
-            .replace("\t", " ")
-            .strip()
-        )
+        title = self._ARABIC_PAGE_RE.sub("", title).replace("\t", " ").strip()
 
         return TOCEntry(level=level, number=number, title=title, page=page)
 

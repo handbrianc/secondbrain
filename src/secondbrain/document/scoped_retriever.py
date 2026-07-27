@@ -11,10 +11,7 @@ preserving the existing hash-set dedup rather than replacing it.
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, Any, Protocol
-
-if TYPE_CHECKING:
-    pass
+from typing import Any, Protocol
 
 __all__ = ["ScopedRetriever"]
 
@@ -82,9 +79,7 @@ def _build_section_filter(scope: str) -> dict[str, Any] | None:
         if rest:
             # Non-top-level chapter - compute exclusive upper bound.
             suffix_char = chr(ord(rest[-1][0]) + 1) if rest[-1] else ""
-            next_minor = (
-                f"{rest[-2]}.{suffix_char}" if len(rest) > 1 else suffix_char
-            )
+            next_minor = f"{rest[-2]}.{suffix_char}" if len(rest) > 1 else suffix_char
             upper_bound = f"{'.'.join(major for _ in range(len(rest)))}.{next_minor}"
             return {
                 "$and": [
@@ -234,9 +229,7 @@ class ScopedRetriever:
         -------
         List of result dicts, optionally post-filtered to the requested scope.
         """
-        raw: list[dict[str, Any]] = self._inner.search(
-            query, top_k=top_k, **kwargs
-        )
+        raw: list[dict[str, Any]] = self._inner.search(query, top_k=top_k, **kwargs)
 
         if not scope:
             return raw

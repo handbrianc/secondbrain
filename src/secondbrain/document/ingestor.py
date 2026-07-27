@@ -19,9 +19,9 @@ from typing import Any
 from uuid import uuid4
 
 from secondbrain.config import config
+from secondbrain.document.chunker import classify_chunk_role
 from secondbrain.exceptions import DocumentExtractionError
 from secondbrain.storage import VectorStorage
-from secondbrain.document.chunker import classify_chunk_role
 from secondbrain.utils.embedding_cache import EmbeddingCache
 from secondbrain.utils.tracing import trace_operation
 
@@ -31,11 +31,11 @@ logger = logging.getLogger(__name__)
 def _element_text(el: Any) -> str:
     if hasattr(el, "export_to_data_frame"):
         try:
-            return el.export_to_data_frame().to_csv(index=False)
+            return str(el.export_to_data_frame().to_csv(index=False))
         except Exception:
-            return str(el)  # type: ignore[return-value]
+            return str(el)
     if hasattr(el, "text") and el.text:
-        return el.text  # type: ignore[return-value]
+        return str(el.text)
     return ""
 
 
@@ -47,7 +47,7 @@ def _get_doc_config() -> Any:
 
 
 def _detect_cpu_count() -> int | None:
-    """Wrapper around os.cpu_count() for testability."""
+    """Wrap os.cpu_count() for testability."""
     return os.cpu_count()
 
 
@@ -59,7 +59,6 @@ warnings.filterwarnings(
     module="docling",
 )
 
-# Memory management constant for batch sizes
 MAX_MEMORY_BATCH_SIZE = 100
 
 # Supported file extensions
@@ -184,7 +183,6 @@ class DocumentIngestor:
         self.progress_callback = progress_callback
         self._cpu_count_fn = _detect_cpu_count
 
-        # Initialize embedding cache for deduplication
         self.embedding_cache = EmbeddingCache(max_size=cfg.embedding_cache_size)
 
         # Lazily import docling to avoid 2+ second import overhead
@@ -198,7 +196,10 @@ class DocumentIngestor:
             AcceleratorOptions,
         )
         from docling.datamodel.base_models import InputFormat
-        from docling.datamodel.pipeline_options import PdfPipelineOptions, RapidOcrOptions
+        from docling.datamodel.pipeline_options import (
+            PdfPipelineOptions,
+            RapidOcrOptions,
+        )
         from docling.document_converter import DocumentConverter, PdfFormatOption
 
         pdf_options = PdfFormatOption(
@@ -206,8 +207,8 @@ class DocumentIngestor:
                 do_ocr=True,
                 do_table_structure=True,
                 ocr_options=RapidOcrOptions(
-                    backend='torch',
-                    rapidocr_params={'EngineConfig.torch.use_mps': True},
+                    backend="torch",
+                    rapidocr_params={"EngineConfig.torch.use_mps": True},
                 ),
                 accelerator_options=AcceleratorOptions(
                     device=AcceleratorDevice.AUTO, num_threads=4
@@ -346,16 +347,13 @@ class DocumentIngestor:
             )
             return None
 
-        # Use streaming if enabled (memory-efficient batch processing)
         if cfg.streaming_enabled:
             storage = VectorStorage()
             docs_count = self._stream_process_chunks(
                 file_path, segments, embedding_gen, storage
             )
-            # Return empty list to signal success (documents stored via streaming)
             return [] if docs_count > 0 else None
         else:
-            # Fall back to original batch processing
             return self._build_documents_with_embeddings(
                 file_path=file_path,
                 segments=segments,
@@ -423,13 +421,11 @@ class DocumentIngestor:
         batch_size = cfg.embedding_batch_size
         chunk_to_embedding: dict[int, list[float]] = {}
 
-        # Process chunks in batches
         for i in range(0, len(chunks), batch_size):
             batch = chunks[i : i + batch_size]
             texts = [chunk["text"] for chunk in batch]
 
             try:
-                # Check cache first, generate only for uncached texts
                 texts_to_embed = []
                 cached_indices = []
 
@@ -441,11 +437,9 @@ class DocumentIngestor:
                         texts_to_embed.append(text)
                         cached_indices.append(idx)
 
-                # Generate embeddings only for uncached texts
                 if texts_to_embed:
                     embeddings = embedding_gen.generate_batch(texts_to_embed)
 
-                    # Cache and map embeddings
                     for idx, embedding in zip(cached_indices, embeddings, strict=True):
                         text = texts[idx]
                         self.embedding_cache.set(text, embedding)
@@ -457,17 +451,14 @@ class DocumentIngestor:
                     type(e).__name__,
                     e,
                 )
-                # Fall back to sequential for this batch
                 for chunk in batch:
                     try:
-                        # Check cache first
                         cached = self.embedding_cache.get(chunk["text"])
                         if cached is not None:
                             chunk_to_embedding[chunk["text_hash"]] = cached
                             continue
 
                         embedding = embedding_gen.generate(chunk["text"])
-                        # Cache the embedding
                         self.embedding_cache.set(chunk["text"], embedding)
                         chunk_to_embedding[chunk["text_hash"]] = embedding
                     except Exception as e2:
@@ -548,15 +539,10 @@ class DocumentIngestor:
         -------
             List of documents ready for storage.
         """
-        # Deduplicate and chunk segments
         all_chunks = self._deduplicate_and_chunk_segments(file_path, segments)
-
-        # Generate embeddings with caching
         chunk_to_embedding = self._generate_embeddings_with_cache(
             all_chunks, embedding_gen
         )
-
-        # Build final documents
         return self._build_documents_from_chunks(all_chunks, chunk_to_embedding)
 
     def _stream_process_chunks(
@@ -610,7 +596,6 @@ class DocumentIngestor:
         cfg = config()
         batch_size = cfg.streaming_chunk_batch_size  # Default: 50 chunks/batch
 
-        # Deduplicate chunks across all segments
         seen_hashes = set()
         batch_chunks: list[dict[str, Any]] = []
         docs_stored = 0
@@ -644,21 +629,22 @@ class DocumentIngestor:
                     "page": segment["page"],
                     "text_hash": text_hash,
                     "chunk_role": classify_chunk_role(
-                        cleaned, stream_seg_counter, stream_total_segs, is_likely_title_raw
+                        cleaned,
+                        stream_seg_counter,
+                        stream_total_segs,
+                        is_likely_title_raw,
                     ),
                 }
             )
 
             stream_seg_counter += 1
 
-            # Process batch when full
             if len(batch_chunks) >= batch_size:
                 docs_stored += self._store_embedding_batch(
                     file_path, batch_chunks, embedding_gen, storage
                 )
                 batch_chunks = []
 
-        # Process remaining chunks
         if batch_chunks:
             docs_stored += self._store_embedding_batch(
                 file_path, batch_chunks, embedding_gen, storage
@@ -687,12 +673,10 @@ class DocumentIngestor:
         -------
             Number of documents stored.
         """
-        # Generate embeddings with cache - use batch processing for efficiency
         chunk_to_embedding: dict[int, list[float]] = {}
         texts_to_embed: list[str] = []
         text_to_chunk: dict[str, dict[str, Any]] = {}
 
-        # First pass: check cache and collect uncached texts
         for chunk in chunks:
             cached = self.embedding_cache.get(chunk["text"])
             if cached is not None:
@@ -701,7 +685,6 @@ class DocumentIngestor:
             texts_to_embed.append(chunk["text"])
             text_to_chunk[chunk["text"]] = chunk
 
-        # Second pass: generate embeddings in batch for uncached texts
         if texts_to_embed:
             try:
                 embeddings = embedding_gen.generate_batch(texts_to_embed)
@@ -715,7 +698,6 @@ class DocumentIngestor:
                     type(e).__name__,
                     e,
                 )
-                # Fall back to sequential for failed batch
                 for text in texts_to_embed:
                     chunk = text_to_chunk[text]
                     try:
@@ -734,7 +716,6 @@ class DocumentIngestor:
                         )
                         continue
 
-        # Build and store documents
         docs_to_store: list[dict[str, Any]] = []
         seen_doc_keys = set()
 
@@ -966,21 +947,14 @@ class DocumentIngestor:
         -------
             dict with 'success', 'failed' counts, and 'failures' list of (path, reason) tuples.
         """
-        from concurrent.futures import (  # noqa: F401
-            ThreadPoolExecutor,
-            as_completed,
-        )
-
         from secondbrain.config import config
         from secondbrain.embedding import EmbeddingProviderFactory
         from secondbrain.storage import VectorStorage
 
-        # Initialize services
         cfg = config()
         embedding_gen = EmbeddingProviderFactory.create_from_config(cfg)
         storage = VectorStorage()
 
-        # Collect and validate files
         with trace_operation("ingest_collect_files"):
             files = self._collect_and_validate_files(path, recursive)
 
@@ -989,7 +963,6 @@ class DocumentIngestor:
 
         cores = self._resolve_core_count(cores)
 
-        # Multiprocessing with in-worker embedding for maximum CPU/GPU utilization
         successful, failed, failure_reasons = self._process_parallel_with_progress(
             files, embedding_gen, storage, cores
         )
@@ -1119,8 +1092,7 @@ class AsyncDocumentIngestor(DocumentIngestor):
         exc_val: BaseException | None,
         exc_tb: Any,
     ) -> None:
-        """Exit async context manager - cleanup if needed."""
-        # No async cleanup needed currently, but reserved for future use
+        """Exit async context manager."""
         pass
 
     async def ingest_async(
@@ -1146,13 +1118,11 @@ class AsyncDocumentIngestor(DocumentIngestor):
         from secondbrain.embedding import EmbeddingProviderFactory
         from secondbrain.storage import AsyncVectorStorage
 
-        # Initialize services
         cfg = config()
         embedding_gen = EmbeddingProviderFactory.create_from_config(cfg)
         storage = AsyncVectorStorage()
 
         try:
-            # Collect and validate files
             files = await asyncio.to_thread(
                 self._collect_and_validate_files, path, recursive
             )
@@ -1170,13 +1140,9 @@ class AsyncDocumentIngestor(DocumentIngestor):
                         file_path, embedding_gen, storage
                     )
 
-            # Create tasks for all files
             tasks = [process_with_semaphore(f) for f in files]
-
-            # Run all tasks concurrently (limited by semaphore)
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
-            # Count successes and failures
             successful = sum(1 for r in results if r is True)
             failed = len(results) - successful
 
@@ -1203,7 +1169,6 @@ class AsyncDocumentIngestor(DocumentIngestor):
 
         batch_size = config().streaming_chunk_batch_size
 
-        # Deduplicate chunks across all segments
         seen_hashes = set()
         batch_chunks: list[dict[str, Any]] = []
         docs_stored = 0
@@ -1237,21 +1202,22 @@ class AsyncDocumentIngestor(DocumentIngestor):
                     "page": segment["page"],
                     "text_hash": text_hash,
                     "chunk_role": classify_chunk_role(
-                        cleaned, stream_seg_counter, stream_total_segs, is_likely_title_raw
+                        cleaned,
+                        stream_seg_counter,
+                        stream_total_segs,
+                        is_likely_title_raw,
                     ),
                 }
             )
 
             stream_seg_counter += 1
 
-            # Process batch when full
             if len(batch_chunks) >= batch_size:
                 docs_stored += await self._store_embedding_batch_async(
                     file_path, batch_chunks, embedding_gen, storage
                 )
                 batch_chunks = []
 
-        # Process remaining chunks
         if batch_chunks:
             docs_stored += await self._store_embedding_batch_async(
                 file_path, batch_chunks, embedding_gen, storage
@@ -1275,7 +1241,6 @@ class AsyncDocumentIngestor(DocumentIngestor):
         texts_to_embed: list[str] = []
         text_to_chunk: dict[str, dict[str, Any]] = {}
 
-        # First pass: check cache and collect uncached texts
         for chunk in chunks:
             cached = self.embedding_cache.get(chunk["text"])
             if cached is not None:
@@ -1284,7 +1249,6 @@ class AsyncDocumentIngestor(DocumentIngestor):
             texts_to_embed.append(chunk["text"])
             text_to_chunk[chunk["text"]] = chunk
 
-        # Second pass: generate embeddings in async batch for uncached texts
         if texts_to_embed:
             try:
                 # Use native async batch embedding if available
@@ -1335,7 +1299,6 @@ class AsyncDocumentIngestor(DocumentIngestor):
                         )
                         continue
 
-        # Build and store documents
         docs_to_store: list[dict[str, Any]] = []
         seen_doc_keys = set()
 

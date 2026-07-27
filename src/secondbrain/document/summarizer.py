@@ -249,7 +249,9 @@ class Summarizer:
                 cursor = self._storage.collection.find(query)
                 raw = list(cursor)
             except Exception as exc:
-                self._logger.error("Failed to fetch chapter %s chunks: %s", chapter_id, exc)
+                self._logger.error(
+                    "Failed to fetch chapter %s chunks: %s", chapter_id, exc
+                )
                 return []
 
         if not include_subsections:
@@ -257,7 +259,9 @@ class Summarizer:
 
         # Gather subsections (e.g. chapter_id==3 → section_prefix=="3.")
         section_prefix = f"{chapter_id}."
-        subsection_query: dict[str, Any] = {"metadata.section_id": {"$regex": rf"^{section_prefix}"}}
+        subsection_query: dict[str, Any] = {
+            "metadata.section_id": {"$regex": rf"^{section_prefix}"}
+        }
         try:
             cursor = self._storage.collection.find(subsection_query)
             subsections = list(cursor)

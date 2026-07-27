@@ -15,9 +15,9 @@ from __future__ import annotations
 import hashlib
 import re
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, NotRequired
 
-from typing_extensions import NotRequired, TypedDict
+from typing_extensions import TypedDict
 
 ElementTypeLiteral = Literal[
     "navigation",
@@ -31,9 +31,12 @@ ElementTypeLiteral = Literal[
 
 
 # TODO(element_type-migration): once migrated, return ElementTypeLiteral
-def classify_chunk_role(text: str, seg_count: int, total_segs: int, is_likely_title: bool) -> str:
+def classify_chunk_role(
+    text: str, seg_count: int, total_segs: int, is_likely_title: bool
+) -> str:
     """
     Classify chunk by structural role using only statistical signals.
+
     Thresholds are document-universal (char density, whitespace ratio, dot-chain density).
     """
     if is_likely_title:
@@ -105,7 +108,6 @@ def chunk_segments(
     current_text = ""
     current_page = 0
     seg_counter = 0
-    last_is_likely_title = False
 
     for _i, segment in enumerate(segments):
         text = segment["text"]
@@ -130,12 +132,15 @@ def chunk_segments(
         # Section-number-prefixed titles must START a new chunk rather than
         # merge into the previous accumulation (the default title behaviour
         # appends via the "if is_likely_title" branch below).
-        if is_likely_title and re.match(r"\d+\.\d+(\.\d+)?\s", stripped) and current_text:
+        if (
+            is_likely_title
+            and re.match(r"\d+\.\d+(\.\d+)?\s", stripped)
+            and current_text
+        ):
             merged_segments.append({"text": current_text, "page": current_page})
             seg_counter += 1
             current_text = stripped
             current_page = page
-            last_is_likely_title = True
             continue
 
         if len(current_text) < DEFAULT_MIN_SEGMENT_SIZE or is_likely_title:
@@ -144,13 +149,11 @@ def chunk_segments(
             else:
                 current_text = stripped
             current_page = page
-            last_is_likely_title = is_likely_title
         else:
             merged_segments.append({"text": current_text, "page": current_page})
             seg_counter += 1
             current_text = stripped
             current_page = page
-            last_is_likely_title = is_likely_title
 
     if current_text:
         merged_segments.append({"text": current_text, "page": current_page})
@@ -179,13 +182,18 @@ def chunk_segments(
             if start + chunk_size >= len(text):
                 chunk_text = text[start:].rstrip()
                 if chunk_text:
-                    chunks.append({
-                        "text": chunk_text,
-                        "page": page,
-                        "chunk_role": classify_chunk_role(
-                            chunk_text, seg_counter, total_segs, is_likely_title_for_seg
-                        ),
-                    })
+                    chunks.append(
+                        {
+                            "text": chunk_text,
+                            "page": page,
+                            "chunk_role": classify_chunk_role(
+                                chunk_text,
+                                seg_counter,
+                                total_segs,
+                                is_likely_title_for_seg,
+                            ),
+                        }
+                    )
                 seg_counter += 1
                 break
 
@@ -197,13 +205,15 @@ def chunk_segments(
 
             chunk_text = text[start:chunk_end]
             if chunk_text.strip():
-                chunks.append({
-                    "text": chunk_text,
-                    "page": page,
-                    "chunk_role": classify_chunk_role(
-                        chunk_text, seg_counter, total_segs, is_likely_title_for_seg
-                    ),
-                })
+                chunks.append(
+                    {
+                        "text": chunk_text,
+                        "page": page,
+                        "chunk_role": classify_chunk_role(
+                            chunk_text, seg_counter, total_segs, is_likely_title_for_seg
+                        ),
+                    }
+                )
                 seg_counter += 1
 
             new_start = chunk_end - chunk_overlap
@@ -256,5 +266,4 @@ def deduplicate_segments(
     return all_chunks
 
 
-# Backward-compatibility alias — original __init__.py used _chunk_segments
 _chunk_segments = chunk_segments

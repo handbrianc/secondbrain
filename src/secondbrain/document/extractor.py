@@ -14,7 +14,7 @@ from __future__ import annotations
 import hashlib
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from secondbrain.document.protocols import Segment
@@ -23,14 +23,14 @@ if TYPE_CHECKING:
 def _element_text(el: Any) -> str:
     if hasattr(el, "export_to_data_frame"):
         try:
-            return el.export_to_data_frame().to_csv(index=False)
+            return str(el.export_to_data_frame().to_csv(index=False))
         except Exception:
-            return str(el)  # type: ignore[return-value]
+            return str(el)
     if hasattr(el, "text") and el.text:
-        return el.text  # type: ignore[return-value]
+        return str(el.text)
     return ""
 
-# Configure logging suppressions for docling subprocesses
+
 _log = logging.getLogger("RapidOCR")
 _log.setLevel(logging.ERROR)
 _log = logging.getLogger("docling")
@@ -68,7 +68,10 @@ def _extract_and_chunk_file(
             AcceleratorOptions,
         )
         from docling.datamodel.base_models import InputFormat
-        from docling.datamodel.pipeline_options import PdfPipelineOptions, RapidOcrOptions
+        from docling.datamodel.pipeline_options import (
+            PdfPipelineOptions,
+            RapidOcrOptions,
+        )
         from docling.document_converter import DocumentConverter, PdfFormatOption
 
         pdf_options = PdfFormatOption(
@@ -76,8 +79,8 @@ def _extract_and_chunk_file(
                 do_ocr=True,
                 do_table_structure=True,
                 ocr_options=RapidOcrOptions(
-                    backend='torch',
-                    rapidocr_params={'EngineConfig.torch.use_mps': True},
+                    backend="torch",
+                    rapidocr_params={"EngineConfig.torch.use_mps": True},
                 ),
                 accelerator_options=AcceleratorOptions(
                     device=AcceleratorDevice.AUTO, num_threads=4
@@ -154,7 +157,7 @@ def _extract_chunk_and_embed_file(
         'documents' (list[dict]), 'error' (str | None).
     """
     # Import chunker here to avoid circular imports at module load time
-    from secondbrain.document.chunker import _chunk_segments
+    from secondbrain.document.chunker import _chunk_segments, _Segment
 
     file_path = Path(file_path_str)
     try:
@@ -168,7 +171,10 @@ def _extract_chunk_and_embed_file(
             AcceleratorOptions,
         )
         from docling.datamodel.base_models import InputFormat
-        from docling.datamodel.pipeline_options import PdfPipelineOptions, RapidOcrOptions
+        from docling.datamodel.pipeline_options import (
+            PdfPipelineOptions,
+            RapidOcrOptions,
+        )
         from docling.document_converter import DocumentConverter, PdfFormatOption
 
         pdf_options = PdfFormatOption(
@@ -176,8 +182,8 @@ def _extract_chunk_and_embed_file(
                 do_ocr=True,
                 do_table_structure=True,
                 ocr_options=RapidOcrOptions(
-                    backend='torch',
-                    rapidocr_params={'EngineConfig.torch.use_mps': True},
+                    backend="torch",
+                    rapidocr_params={"EngineConfig.torch.use_mps": True},
                 ),
                 accelerator_options=AcceleratorOptions(
                     device=AcceleratorDevice.AUTO, num_threads=4
@@ -208,7 +214,7 @@ def _extract_chunk_and_embed_file(
                 text = f.read()
             segments = [{"text": text, "page": 1}]
 
-        chunks = _chunk_segments(segments, chunk_size, chunk_overlap)
+        chunks = _chunk_segments(cast(list[_Segment], segments), chunk_size, chunk_overlap)
 
         from secondbrain.config import config
 
