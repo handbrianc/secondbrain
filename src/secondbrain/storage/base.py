@@ -271,13 +271,12 @@ class BaseVectorStorage(ABC):
         )
 
     def _wait_for_index_ready(self) -> None:
-        """No-op - local MongoDB has no Atlas Search index to wait for."""
+        """Synchronous index-readiness hook; subclasses must override."""
         raise NotImplementedError
 
     async def _wait_for_index_ready_async(self) -> None:
-        """No-op - local MongoDB has no Atlas Search index to wait for."""
+        """Asynchronous index-readiness hook; subclasses must override."""
         raise NotImplementedError
-        # Atlas-search subclasses override this with polling logic
 
     # ------------------------------------------------------------------
     # Transport-layer abstracts - MUST be implemented by concrete classes

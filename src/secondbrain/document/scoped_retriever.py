@@ -72,24 +72,10 @@ def _build_section_filter(scope: str) -> dict[str, Any] | None:
         prefix = wc_match.group("prefix")
         return {"section_id": {"$regex": rf"^{re.escape(prefix)}\."}}
 
-    # Numeric section - allow subsections via exclusive upper bound.
-    # "3.9" matches "3.9", "3.9.1", "3.9.2 ..."
+    # Numeric section - prefix match (handles subsections).
+    # "3.9" matches "3.9", "3.9.1", "3.9.2", ...
     if _SECTION_NUM_PATTERN.match(scope):
-        major, *rest = scope.split(".")
-        if rest:
-            # Non-top-level chapter - compute exclusive upper bound.
-            suffix_char = chr(ord(rest[-1][0]) + 1) if rest[-1] else ""
-            next_minor = f"{rest[-2]}.{suffix_char}" if len(rest) > 1 else suffix_char
-            upper_bound = f"{'.'.join(major for _ in range(len(rest)))}.{next_minor}"
-            return {
-                "$and": [
-                    {"section_id": {"$gte": scope}},
-                    {"section_id": {"$lt": upper_bound}},
-                ],
-            }
-        else:
-            # Top-level chapter "3" - tolerate bare "3" and "3.x" variants.
-            return {"section_id": {"$regex": rf"^{re.escape(scope)}\."}}
+        return {"section_id": {"$regex": rf"^{re.escape(scope)}(?:\.|$)"}}
 
     return None
 

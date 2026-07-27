@@ -548,7 +548,9 @@ class TestDeriveChapterNumbers:
         ]
 
         entries, _ = pipeline._derive_chapter_numbers(structure_chunks)
-        result = entries
+        assert all(len(e) == 3 for e in entries), (
+            f"Expected 3-element chapter tuples, got: {entries}"
+        )
 
     def test_sec_re_capped_by_chapter_level_max(self) -> None:
         """SEC_RE within 3 of max, first-word filter catches ch19 downstream.

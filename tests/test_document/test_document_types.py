@@ -97,8 +97,6 @@ class TestOfficeFormats:
             mock_text = MagicMock()
             if hasattr(mock_text, "export_to_data_frame"):
                 del mock_text.export_to_data_frame  # type: ignore[attr-defined]
-            if hasattr(mock_text, "export_to_data_frame"):
-                del mock_text.export_to_data_frame  # type: ignore[attr-defined]
             mock_text.text = "Slide 1: Introduction\nSlide 2: Content"
             mock_text.prov = [MagicMock(page_no=1)]
             mock_result.document.texts = [mock_text]

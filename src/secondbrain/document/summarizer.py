@@ -100,6 +100,7 @@ class Summarizer:
         chapter_id: int,
         *,
         include_subsections: bool = True,
+        source_file: str | None = None,
     ) -> ChapterSummary:
         """Produce a single summary paragraph covering all section content in this chapter.
 
@@ -110,6 +111,10 @@ class Summarizer:
         include_subsections
             When True (the default), gather all chunks belonging to any
             subsection of the given chapter (``3.1``, ``3.9.11``, …).
+        source_file
+            Optional path of the ingested document to restrict results to.
+            When provided, only chunks from that specific source are used,
+            preventing cross-document aggregation.
 
         Returns
         -------
@@ -120,6 +125,7 @@ class Summarizer:
         chunks = self._collect_chapter_chunks(
             chapter_id,
             include_subsections=include_subsections,
+            source_file=source_file,
         )
 
         if not chunks:
@@ -150,13 +156,19 @@ class Summarizer:
             token_budget_used=self._max_tokens,
         )
 
-    async def summarize_by_section(self, section_id: str) -> SectionSummary:
+    async def summarize_by_section(
+        self, section_id: str, *, source_file: str | None = None
+    ) -> SectionSummary:
         """Produce a focused summary of one section's content.
 
         Parameters
         ----------
         section_id
             Dot-separated section path, e.g. ``"3.9.11"``.
+        source_file
+            Optional path of the ingested document to restrict results to.
+            When provided, only chunks from that specific source are used,
+            preventing cross-document aggregation.
 
         Returns
         -------
@@ -170,7 +182,7 @@ class Summarizer:
             chapter_id = 0
 
         section_title = f"Section {section_id}"
-        chunks = self._collect_section_chunks(section_id)
+        chunks = self._collect_section_chunks(section_id, source_file=source_file)
 
         if not chunks:
             self._logger.warning("No chunks found for section %s", section_id)
@@ -228,14 +240,19 @@ class Summarizer:
         chapter_id: int,
         *,
         include_subsections: bool = True,
+        source_file: str | None = None,
     ) -> list[dict[str, Any]]:
         """Fetch all chunk dicts for the given chapter from storage.
 
         Storage is queried by ``chapter_id`` metadata.
         When *include_subsections* is True, all subsections whose number
         starts with ``{chapter_id}.`` are also included.
+        When *source_file* is provided, results are restricted to chunks
+        from that specific source document.
         """
         query: dict[str, Any] = {"metadata.chapter_id": chapter_id}
+        if source_file is not None:
+            query["metadata.source_file"] = source_file
         raw: list[dict[str, Any]] = []
 
         try:
@@ -262,6 +279,8 @@ class Summarizer:
         subsection_query: dict[str, Any] = {
             "metadata.section_id": {"$regex": rf"^{section_prefix}"}
         }
+        if source_file is not None:
+            subsection_query["metadata.source_file"] = source_file
         try:
             cursor = self._storage.collection.find(subsection_query)
             subsections = list(cursor)
@@ -282,9 +301,17 @@ class Summarizer:
 
         return combined
 
-    def _collect_section_chunks(self, section_id: str) -> list[dict[str, Any]]:
-        """Fetch all chunk dicts for the given section_id from storage."""
+    def _collect_section_chunks(
+        self, section_id: str, *, source_file: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Fetch all chunk dicts for the given section_id from storage.
+
+        When *source_file* is provided, results are restricted to chunks
+        from that specific source document.
+        """
         query: dict[str, Any] = {"metadata.section_id": section_id}
+        if source_file is not None:
+            query["metadata.source_file"] = source_file
         raw: Any = []
         try:
             raw = self._storage.find_chunks_by_metadata(query)

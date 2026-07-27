@@ -689,7 +689,8 @@ def _single_turn_chat(
     intent_parser = StructuralIntentParser(cfg)
     intent_result = intent_parser.parse(query)
     click.echo(
-        f"\u25b6 Detected intent: {'general query' if intent_result.intent.name == 'UNKNOWN' else intent_result.intent.name.lower().replace('_', ' ')}"
+        f"\u25b6 Detected intent: {'general query' if intent_result.intent.name == 'UNKNOWN' else intent_result.intent.name.lower().replace('_', ' ')}",
+        err=True,
     )
 
     with ConversationStorage() as storage:
@@ -820,7 +821,8 @@ def _interactive_chat(
 
             intent_result = intent_parser.parse(user_input)
             click.echo(
-                f"\u25b6 Detected intent: {'general query' if intent_result.intent.name == 'UNKNOWN' else intent_result.intent.name.lower().replace('_', ' ')}"
+                f"\u25b6 Detected intent: {'general query' if intent_result.intent.name == 'UNKNOWN' else intent_result.intent.name.lower().replace('_', ' ')}",
+                err=True,
             )
 
             streaming_pipeline = RAGPipeline(
@@ -1005,7 +1007,7 @@ def summarize(
     --------
         secondbrain summarize --chapter 3          # Summarize chapter 3
         secondbrain summarize -c 2 --by-section    # Summarize a section within chapter 2
-        secondbrain summarize -c 2 -s 3.9          # Summarize section 3.9 of chapter 2
+        secondbrain summarize -c 2 --by-section -s 2.9   # Summarize section 2.9 of chapter 2
     --------
     """
     import asyncio
