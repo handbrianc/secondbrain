@@ -171,7 +171,9 @@ class TestRAGPipelineQuery:
         assert result["answer"] == "Python is a high-level language"
         assert result["query"] == "What is Python?"
         mock_searcher.search.assert_called_once_with(
-            "What is Python?", top_k=5, source_filter=None,
+            "What is Python?",
+            top_k=5,
+            source_filter=None,
         )
         mock_llm_provider.generate.assert_called_once()
 
@@ -206,7 +208,9 @@ class TestRAGPipelineQuery:
         pipeline_with_mocks.query("Test query", top_k=10)
 
         mock_searcher.search.assert_called_once_with(
-            "Test query", top_k=10, source_filter=None,
+            "Test query",
+            top_k=10,
+            source_filter=None,
         )
 
     def test_query_with_no_results_and_show_sources(
@@ -734,7 +738,9 @@ class TestRAGPipelineAsync:
         assert result["answer"] == "Python is a high-level language"
         assert result["query"] == "What is Python?"
         mock_searcher.search_async.assert_called_once_with(
-            "What is Python?", top_k=5, source_filter=None,
+            "What is Python?",
+            top_k=5,
+            source_filter=None,
         )
         mock_llm_provider.agenerate.assert_called_once()
 
@@ -771,7 +777,9 @@ class TestRAGPipelineAsync:
         await pipeline_with_mocks.query_async("Test query", top_k=10)
 
         mock_searcher.search_async.assert_called_once_with(
-            "Test query", top_k=10, source_filter=None,
+            "Test query",
+            top_k=10,
+            source_filter=None,
         )
 
     @pytest.mark.asyncio

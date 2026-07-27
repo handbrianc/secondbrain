@@ -179,9 +179,7 @@ class TestEmbeddingProviderFactoryCreateOpenAI:
 
 
 class TestOpenAIEmbeddingProviderVariants:
-    """Tests demonstrating that OpenAIEmbeddingProvider handles OpenAI-compatible
-    endpoints (Ollama, LM Studio, vLLM, Azure OpenAI) via api_base override.
-    """
+    """Tests demonstrating OpenAIEmbeddingProvider endpoint variants."""
 
     def test_azure_openai_style_endpoint(self) -> None:
         """Azure OpenAI and OpenAI-compatible services use api_base to point at custom endpoints."""

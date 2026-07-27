@@ -10,8 +10,6 @@ Tests cover:
 
 from unittest.mock import MagicMock
 
-import pytest
-
 from secondbrain.rag.document_router import (
     DocumentRouter,
     _build_known_names,

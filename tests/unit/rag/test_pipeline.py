@@ -346,7 +346,7 @@ class TestAsyncQueryAsyncStreaming:
 
 
 class TestDeriveChapterNumbers:
-    """Characterization tests for _derive_chapter_numbers() bugs.
+    r"""Characterization tests for _derive_chapter_numbers() bugs.
 
     SEC_RE = re.compile(r"(\\d+)(?:\\.(\\d+))+(?:\\s+(.+))?") requires:
       - \\d+\\.\\d+ (digit.digit) minimum for a match
@@ -499,7 +499,7 @@ class TestDeriveChapterNumbers:
         )
 
     def test_deeply_nested_section_skipped_as_non_chapter(self) -> None:
-        """SEC_RE section headers (even deeply nested) are NOT chapter titles.
+        r"""SEC_RE section headers (even deeply nested) are NOT chapter titles.
 
         SEC_RE = re.compile(r"(\\d+)(?:\\.(\\d+))+(?:\\s+(.+))?") captures only the
         last \\.digit group, so "11.5.3" gives g1=11, g2=3 → section="11.3" with
@@ -538,10 +538,7 @@ class TestDeriveChapterNumbers:
                 "source_file": "chapter1.pdf",
             },
             {
-                "chunk_text": (
-                    "29.1 Related work section.\n"
-                    "30.1 Discussion section."
-                ),
+                "chunk_text": ("29.1 Related work section.\n30.1 Discussion section."),
                 "source_file": "chapter2.pdf",
             },
             {
@@ -580,15 +577,17 @@ class TestDeriveChapterNumbers:
         majors = sorted(e[0] for e in entries)
 
         assert 15 in majors, "chapter 15 from CHAPTER_N_RE must be present"
-        assert 16 not in majors, "chapter 16 is SEC_RE (section header, not chapter title)"
-        assert 17 not in majors, "chapter 17 is SEC_RE (section header, not chapter title)"
-        assert 18 not in majors, "chapter 18 is SEC_RE (section header, not chapter title)"
-        assert 19 not in majors, (
-            "chapter 19 is out of range (19 > 15+3=18)"
+        assert 16 not in majors, (
+            "chapter 16 is SEC_RE (section header, not chapter title)"
         )
-        assert majors == [15], (
-            f"expected only ch15 (CHAPTER_N_RE), got {majors}"
+        assert 17 not in majors, (
+            "chapter 17 is SEC_RE (section header, not chapter title)"
         )
+        assert 18 not in majors, (
+            "chapter 18 is SEC_RE (section header, not chapter title)"
+        )
+        assert 19 not in majors, "chapter 19 is out of range (19 > 15+3=18)"
+        assert majors == [15], f"expected only ch15 (CHAPTER_N_RE), got {majors}"
 
     def test_sec_re_cap_still_allows_gap_filler_for_proxmox(self) -> None:
         """SEC_RE cap allows gap-filler without polluting chapter title pool.
@@ -642,7 +641,10 @@ class TestFilterChaptersByTarget:
         good_titles = {10, 11, 12}
 
         from secondbrain.rag.pipeline import filter_chapters_by_target
-        filtered, filtered_titles = filter_chapters_by_target(chapters, good_titles, "11")
+
+        filtered, filtered_titles = filter_chapters_by_target(
+            chapters, good_titles, "11"
+        )
 
         assert len(filtered) == 1, f"Expected 1, got {len(filtered)}: {filtered}"
         assert filtered[0][0] == 11, f"Expected ch11, got ch{filtered[0][0]}"
@@ -657,7 +659,10 @@ class TestFilterChaptersByTarget:
         good_titles = {1, 2, 11}
 
         from secondbrain.rag.pipeline import filter_chapters_by_target
-        filtered, filtered_titles = filter_chapters_by_target(chapters, good_titles, None)
+
+        filtered, filtered_titles = filter_chapters_by_target(
+            chapters, good_titles, None
+        )
 
         assert filtered == chapters, "target=None must not change chapters"
         assert filtered_titles == good_titles, "target=None must not change titles"
@@ -667,7 +672,10 @@ class TestFilterChaptersByTarget:
         good_titles = {10, 11}
 
         from secondbrain.rag.pipeline import filter_chapters_by_target
-        filtered, filtered_titles = filter_chapters_by_target(chapters, good_titles, "99")
+
+        filtered, filtered_titles = filter_chapters_by_target(
+            chapters, good_titles, "99"
+        )
 
         assert len(filtered) == 0, f"Expected empty, got {filtered}"
         assert len(filtered_titles) == 0, f"Expected empty, got {filtered_titles}"
@@ -677,13 +685,19 @@ class TestFilterChaptersByTarget:
         good_titles = {1, 2}
 
         from secondbrain.rag.pipeline import filter_chapters_by_target
-        filtered, filtered_titles = filter_chapters_by_target(chapters, good_titles, "abc")
 
-        assert filtered == chapters, "Invalid target with matching chapter must fall back"
+        filtered, filtered_titles = filter_chapters_by_target(
+            chapters, good_titles, "abc"
+        )
+
+        assert filtered == chapters, (
+            "Invalid target with matching chapter must fall back"
+        )
         assert filtered_titles == good_titles, "Invalid target must fall back"
 
     def test_empty_chapters_list_with_target(self) -> None:
         from secondbrain.rag.pipeline import filter_chapters_by_target
+
         filtered, filtered_titles = filter_chapters_by_target([], set(), "11")
         assert filtered == []
         assert filtered_titles == set()

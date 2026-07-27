@@ -4,15 +4,12 @@ Verifies that the DocumentRouter correctly scopes retrieval to a specific
 document when the user's query names a document.
 """
 
-from typing import Any
 from unittest.mock import MagicMock
 
-import mongomock
 import pytest
 
 from secondbrain.rag.document_router import DocumentRouter
 from secondbrain.rag.pipeline import RAGPipeline
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -22,10 +19,13 @@ from secondbrain.rag.pipeline import RAGPipeline
 @pytest.fixture
 def known_names() -> dict[str, str]:
     from secondbrain.rag.document_router import _build_known_names
-    return _build_known_names([
-        "/docs/VirtualBox_UserManual.pdf",
-        "/docs/Proxmox_VE_Guide.pdf",
-    ])
+
+    return _build_known_names(
+        [
+            "/docs/VirtualBox_UserManual.pdf",
+            "/docs/Proxmox_VE_Guide.pdf",
+        ]
+    )
 
 
 @pytest.fixture
@@ -99,7 +99,9 @@ class TestDocumentRouterIntegration:
             doc_name = router.extract_document_name(query)
             assert doc_name is not None, f"Failed to match: {query}"
             source = router.resolve_source_file(doc_name)
-            assert source == "/docs/VirtualBox_UserManual.pdf", f"Wrong source for {query}: {source}"
+            assert source == "/docs/VirtualBox_UserManual.pdf", (
+                f"Wrong source for {query}: {source}"
+            )
 
     def test_router_extracts_proxmox_doc_name(
         self,
@@ -115,7 +117,9 @@ class TestDocumentRouterIntegration:
             doc_name = router.extract_document_name(query)
             assert doc_name is not None, f"Failed to match: {query}"
             source = router.resolve_source_file(doc_name)
-            assert source == "/docs/Proxmox_VE_Guide.pdf", f"Wrong source for {query}: {source}"
+            assert source == "/docs/Proxmox_VE_Guide.pdf", (
+                f"Wrong source for {query}: {source}"
+            )
 
     def test_no_doc_name_returns_none(
         self,
@@ -157,8 +161,9 @@ class TestDocumentRouterIntegration:
         _, kwargs = call_kwargs
         assert "source_filter" in kwargs
         # source_filter will be None because DocumentRouter won't match "Python"
-        assert kwargs["source_filter"] is None, f"Expected None but got: {kwargs['source_filter']}"
-
+        assert kwargs["source_filter"] is None, (
+            f"Expected None but got: {kwargs['source_filter']}"
+        )
 
     def test_unknown_doc_name_falls_back_gracefully(
         self,

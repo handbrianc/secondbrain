@@ -37,7 +37,7 @@ for mod_name in (
     if mod_name not in sys.modules:
         sys.modules[mod_name] = _stub
 
-from secondbrain.document.ingestor import AsyncDocumentIngestor
+from secondbrain.document.ingestor import AsyncDocumentIngestor  # noqa: E402
 
 
 class TestAsyncIngestionNativeAwait:

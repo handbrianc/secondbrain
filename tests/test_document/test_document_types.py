@@ -59,7 +59,8 @@ class TestOfficeFormats:
         with patch.object(ingestor.converter, "convert") as mock_convert:
             mock_result = MagicMock()
             mock_text = MagicMock()
-            if hasattr(mock_text, "export_to_data_frame"): del mock_text.export_to_data_frame  # type: ignore[attr-defined]
+            if hasattr(mock_text, "export_to_data_frame"):
+                del mock_text.export_to_data_frame  # type: ignore[attr-defined]
             mock_text.text = "Word document content with paragraphs"
             mock_text.prov = [MagicMock(page_no=1)]
             mock_result.document.texts = [mock_text]
@@ -94,8 +95,10 @@ class TestOfficeFormats:
         with patch.object(ingestor.converter, "convert") as mock_convert:
             mock_result = MagicMock()
             mock_text = MagicMock()
-            if hasattr(mock_text, "export_to_data_frame"): del mock_text.export_to_data_frame  # type: ignore[attr-defined]
-            if hasattr(mock_text, "export_to_data_frame"): del mock_text.export_to_data_frame  # type: ignore[attr-defined]
+            if hasattr(mock_text, "export_to_data_frame"):
+                del mock_text.export_to_data_frame  # type: ignore[attr-defined]
+            if hasattr(mock_text, "export_to_data_frame"):
+                del mock_text.export_to_data_frame  # type: ignore[attr-defined]
             mock_text.text = "Slide 1: Introduction\nSlide 2: Content"
             mock_text.prov = [MagicMock(page_no=1)]
             mock_result.document.texts = [mock_text]
@@ -129,7 +132,8 @@ class TestOfficeFormats:
         with patch.object(ingestor.converter, "convert") as mock_convert:
             mock_result = MagicMock()
             mock_text = MagicMock()
-            if hasattr(mock_text, "export_to_data_frame"): del mock_text.export_to_data_frame  # type: ignore[attr-defined]
+            if hasattr(mock_text, "export_to_data_frame"):
+                del mock_text.export_to_data_frame  # type: ignore[attr-defined]
             mock_text.text = "Column A, Column B, Column C\n1, 2, 3"
             mock_text.prov = [MagicMock(page_no=1)]
             mock_result.document.texts = [mock_text]
@@ -168,7 +172,8 @@ class TestWebFormats:
         with patch.object(ingestor.converter, "convert") as mock_convert:
             mock_result = MagicMock()
             mock_text = MagicMock()
-            if hasattr(mock_text, "export_to_data_frame"): del mock_text.export_to_data_frame  # type: ignore[attr-defined]
+            if hasattr(mock_text, "export_to_data_frame"):
+                del mock_text.export_to_data_frame  # type: ignore[attr-defined]
             mock_text.text = "Title\nContent paragraph"
             mock_text.prov = [MagicMock(page_no=1)]
             mock_result.document.texts = [mock_text]
@@ -200,7 +205,8 @@ class TestWebFormats:
         with patch.object(ingestor.converter, "convert") as mock_convert:
             mock_result = MagicMock()
             mock_text = MagicMock()
-            if hasattr(mock_text, "export_to_data_frame"): del mock_text.export_to_data_frame  # type: ignore[attr-defined]
+            if hasattr(mock_text, "export_to_data_frame"):
+                del mock_text.export_to_data_frame  # type: ignore[attr-defined]
             mock_text.text = "Heading\nThis is **bold** and *italic* text."
             mock_text.prov = [MagicMock(page_no=1)]
             mock_result.document.texts = [mock_text]
@@ -222,7 +228,8 @@ class TestWebFormats:
         with patch.object(ingestor.converter, "convert") as mock_convert:
             mock_result = MagicMock()
             mock_text = MagicMock()
-            if hasattr(mock_text, "export_to_data_frame"): del mock_text.export_to_data_frame  # type: ignore[attr-defined]
+            if hasattr(mock_text, "export_to_data_frame"):
+                del mock_text.export_to_data_frame  # type: ignore[attr-defined]
             mock_text.text = "Title\nContent"
             mock_text.prov = [MagicMock(page_no=1)]
             mock_result.document.texts = [mock_text]
@@ -254,7 +261,8 @@ class TestWebFormats:
         with patch.object(ingestor.converter, "convert") as mock_convert:
             mock_result = MagicMock()
             mock_text = MagicMock()
-            if hasattr(mock_text, "export_to_data_frame"): del mock_text.export_to_data_frame  # type: ignore[attr-defined]
+            if hasattr(mock_text, "export_to_data_frame"):
+                del mock_text.export_to_data_frame  # type: ignore[attr-defined]
             mock_text.text = "Value 1\nValue 2"
             mock_text.prov = [MagicMock(page_no=1)]
             mock_result.document.texts = [mock_text]
@@ -312,7 +320,8 @@ class TestStructuredDataFormats:
         with patch.object(ingestor.converter, "convert") as mock_convert:
             mock_result = MagicMock()
             mock_text = MagicMock()
-            if hasattr(mock_text, "export_to_data_frame"): del mock_text.export_to_data_frame  # type: ignore[attr-defined]
+            if hasattr(mock_text, "export_to_data_frame"):
+                del mock_text.export_to_data_frame  # type: ignore[attr-defined]
             mock_text.text = '{"name": "test", "value": 123}'
             mock_text.prov = [MagicMock(page_no=1)]
             mock_result.document.texts = [mock_text]
@@ -370,7 +379,8 @@ class TestImageFormats:
         with patch.object(ingestor.converter, "convert") as mock_convert:
             mock_result = MagicMock()
             mock_text = MagicMock()
-            if hasattr(mock_text, "export_to_data_frame"): del mock_text.export_to_data_frame  # type: ignore[attr-defined]
+            if hasattr(mock_text, "export_to_data_frame"):
+                del mock_text.export_to_data_frame  # type: ignore[attr-defined]
             mock_text.text = "OCR extracted text from image"
             mock_text.prov = [MagicMock(page_no=1)]
             mock_result.document.texts = [mock_text]
@@ -391,7 +401,8 @@ class TestImageFormats:
         with patch.object(ingestor.converter, "convert") as mock_convert:
             mock_result = MagicMock()
             mock_text = MagicMock()
-            if hasattr(mock_text, "export_to_data_frame"): del mock_text.export_to_data_frame  # type: ignore[attr-defined]
+            if hasattr(mock_text, "export_to_data_frame"):
+                del mock_text.export_to_data_frame  # type: ignore[attr-defined]
             mock_text.text = "Text content from JPEG image"
             mock_text.prov = [MagicMock(page_no=1)]
             mock_result.document.texts = [mock_text]
@@ -432,7 +443,8 @@ class TestAudioFormats:
         with patch.object(ingestor.converter, "convert") as mock_convert:
             mock_result = MagicMock()
             mock_text = MagicMock()
-            if hasattr(mock_text, "export_to_data_frame"): del mock_text.export_to_data_frame  # type: ignore[attr-defined]
+            if hasattr(mock_text, "export_to_data_frame"):
+                del mock_text.export_to_data_frame  # type: ignore[attr-defined]
             mock_text.text = "Transcribed speech from audio file"
             mock_text.prov = [MagicMock(page_no=1)]
             mock_result.document.texts = [mock_text]
@@ -453,7 +465,8 @@ class TestAudioFormats:
         with patch.object(ingestor.converter, "convert") as mock_convert:
             mock_result = MagicMock()
             mock_text = MagicMock()
-            if hasattr(mock_text, "export_to_data_frame"): del mock_text.export_to_data_frame  # type: ignore[attr-defined]
+            if hasattr(mock_text, "export_to_data_frame"):
+                del mock_text.export_to_data_frame  # type: ignore[attr-defined]
             mock_text.text = "Speech transcription from MP3"
             mock_text.prov = [MagicMock(page_no=1)]
             mock_result.document.texts = [mock_text]
@@ -489,7 +502,8 @@ class TestSpecialtyFormats:
         with patch.object(ingestor.converter, "convert") as mock_convert:
             mock_result = MagicMock()
             mock_text = MagicMock()
-            if hasattr(mock_text, "export_to_data_frame"): del mock_text.export_to_data_frame  # type: ignore[attr-defined]
+            if hasattr(mock_text, "export_to_data_frame"):
+                del mock_text.export_to_data_frame  # type: ignore[attr-defined]
             mock_text.text = "Intro\nContent"
             mock_text.prov = [MagicMock(page_no=1)]
             mock_result.document.texts = [mock_text]
@@ -521,7 +535,8 @@ class TestSpecialtyFormats:
         with patch.object(ingestor.converter, "convert") as mock_convert:
             mock_result = MagicMock()
             mock_text = MagicMock()
-            if hasattr(mock_text, "export_to_data_frame"): del mock_text.export_to_data_frame  # type: ignore[attr-defined]
+            if hasattr(mock_text, "export_to_data_frame"):
+                del mock_text.export_to_data_frame  # type: ignore[attr-defined]
             mock_text.text = "Title\nThis is AsciiDoc content."
             mock_text.prov = [MagicMock(page_no=1)]
             mock_result.document.texts = [mock_text]
@@ -553,7 +568,8 @@ class TestSpecialtyFormats:
         with patch.object(ingestor.converter, "convert") as mock_convert:
             mock_result = MagicMock()
             mock_text = MagicMock()
-            if hasattr(mock_text, "export_to_data_frame"): del mock_text.export_to_data_frame  # type: ignore[attr-defined]
+            if hasattr(mock_text, "export_to_data_frame"):
+                del mock_text.export_to_data_frame  # type: ignore[attr-defined]
             mock_text.text = "Hello, this is a subtitle."
             mock_text.prov = [MagicMock(page_no=1)]
             mock_result.document.texts = [mock_text]
@@ -584,7 +600,8 @@ class TestSpecialtyFormats:
         with patch.object(ingestor.converter, "convert") as mock_convert:
             mock_result = MagicMock()
             mock_text = MagicMock()
-            if hasattr(mock_text, "export_to_data_frame"): del mock_text.export_to_data_frame  # type: ignore[attr-defined]
+            if hasattr(mock_text, "export_to_data_frame"):
+                del mock_text.export_to_data_frame  # type: ignore[attr-defined]
             mock_text.text = "This is plain text content for testing."
             mock_text.prov = [MagicMock(page_no=1)]
             mock_result.document.texts = [mock_text]

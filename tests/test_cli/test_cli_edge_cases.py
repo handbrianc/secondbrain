@@ -1,5 +1,7 @@
 """Tests for CLI edge cases and validation."""
 
+import tempfile
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -21,9 +23,12 @@ class TestCLIChunkValidation:
         mock_ingestor_class.return_value = mock_ingestor
 
         runner = CliRunner()
-        result = runner.invoke(
-            cli, ["ingest", "/tmp/test_docs", "--chunk-size", "2048"]
-        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            test_file = Path(tmpdir) / "test.md"
+            test_file.write_text("test content")
+            result = runner.invoke(
+                cli, ["ingest", str(test_file), "--chunk-size", "2048"]
+            )
         assert result.exit_code == 0
 
     @patch("secondbrain.document.DocumentIngestor")
@@ -36,9 +41,12 @@ class TestCLIChunkValidation:
         mock_ingestor_class.return_value = mock_ingestor
 
         runner = CliRunner()
-        result = runner.invoke(
-            cli, ["ingest", "/tmp/test_docs", "--chunk-overlap", "100"]
-        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            test_file = Path(tmpdir) / "test.md"
+            test_file.write_text("test content")
+            result = runner.invoke(
+                cli, ["ingest", str(test_file), "--chunk-overlap", "100"]
+            )
         assert result.exit_code == 0
 
     @patch("secondbrain.document.DocumentIngestor")
@@ -51,17 +59,20 @@ class TestCLIChunkValidation:
         mock_ingestor_class.return_value = mock_ingestor
 
         runner = CliRunner()
-        result = runner.invoke(
-            cli,
-            [
-                "ingest",
-                "/tmp/test_docs",
-                "--chunk-size",
-                "2048",
-                "--chunk-overlap",
-                "100",
-            ],
-        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            test_file = Path(tmpdir) / "test.md"
+            test_file.write_text("test content")
+            result = runner.invoke(
+                cli,
+                [
+                    "ingest",
+                    str(test_file),
+                    "--chunk-size",
+                    "2048",
+                    "--chunk-overlap",
+                    "100",
+                ],
+            )
         assert result.exit_code == 0
 
 
@@ -76,7 +87,12 @@ class TestCLIBatchValidation:
         mock_ingestor_class.return_value = mock_ingestor
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["ingest", "/tmp/test_docs", "--batch-size", "20"])
+        with tempfile.TemporaryDirectory() as tmpdir:
+            test_file = Path(tmpdir) / "test.md"
+            test_file.write_text("test content")
+            result = runner.invoke(
+                cli, ["ingest", str(test_file), "--batch-size", "20"]
+            )
         assert result.exit_code == 0
 
     @patch("secondbrain.document.DocumentIngestor")
@@ -89,7 +105,10 @@ class TestCLIBatchValidation:
         mock_ingestor_class.return_value = mock_ingestor
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["ingest", "/tmp/test_docs", "-b", "15"])
+        with tempfile.TemporaryDirectory() as tmpdir:
+            test_file = Path(tmpdir) / "test.md"
+            test_file.write_text("test content")
+            result = runner.invoke(cli, ["ingest", str(test_file), "-b", "15"])
         assert result.exit_code == 0
 
     @patch("secondbrain.document.DocumentIngestor")
@@ -100,8 +119,8 @@ class TestCLIBatchValidation:
         mock_ingestor_class.return_value = mock_ingestor
 
         runner = CliRunner()
-        # Should fail validation due to click.IntRange(min=1)
-        result = runner.invoke(cli, ["ingest", "/tmp/test_docs", "--batch-size", "0"])
+        # Use a non-existent path - Click will reject it via Path(exists=True)
+        result = runner.invoke(cli, ["ingest", "/nonexistent/path", "--batch-size", "0"])
         # Click's IntRange validation returns exit code 2
         assert result.exit_code == 2
         assert (

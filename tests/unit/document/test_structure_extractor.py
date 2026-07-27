@@ -6,12 +6,10 @@ import pytest
 
 from secondbrain.document.structure_extractor import (
     HeadingDetector,
-    SectionAssignment,
     SectionClassifier,
     TOCEntry,
     TOCParser,
 )
-
 
 # ---------------------------------------------------------------------------
 # HeadingDetector
@@ -121,7 +119,10 @@ class TestTOCParserParseLine:
     def test_parses_multilevel_sections(self) -> None:
         parser = TOCParser()
         entries = parser.parse(
-            {"text_lines": ["3.9 Financial Statements", "3.9.11 Notes"], "page_number": 5}
+            {
+                "text_lines": ["3.9 Financial Statements", "3.9.11 Notes"],
+                "page_number": 5,
+            }
         )
         # "3.9" → number.count('.')+1 = 2; "3.9.11" → count('.')+1 = 3
         assert entries[0].level == 2
@@ -133,7 +134,9 @@ class TestTOCParserParseLine:
 
     def test_parses_leader_dot_format(self) -> None:
         parser = TOCParser()
-        entries = parser.parse({"text_lines": [".... 2.3 Analysis  15"], "page_number": 1})
+        entries = parser.parse(
+            {"text_lines": [".... 2.3 Analysis  15"], "page_number": 1}
+        )
         assert entries[0].number == "2.3"
         assert "...." not in entries[0].title
 
@@ -169,8 +172,13 @@ class TestTOCParserFindTocChunks:
         parser = TOCParser()
         chunk = {
             "text_lines": [
-                "1. First", "body", "2. Second", "more body",
-                "3. Third", "more body", "4. Fourth",
+                "1. First",
+                "body",
+                "2. Second",
+                "more body",
+                "3. Third",
+                "more body",
+                "4. Fourth",
             ]
         }
         candidates = parser.find_toc_chunks([chunk])

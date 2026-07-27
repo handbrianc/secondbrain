@@ -72,13 +72,13 @@ class TestStructuredLoggingLevels:
 
     def test_file_handler_with_rotation(self):
         """Test file handler with rotation can be configured."""
-        import os
         import tempfile
+        from pathlib import Path
 
         logging.root.handlers = []
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            log_file = os.path.join(tmpdir, "test.log")
+            log_file = str(Path(tmpdir) / "test.log")
 
             setup_logging(verbose=False, log_file=log_file)
             logger = get_logger(__name__)
@@ -88,7 +88,7 @@ class TestStructuredLoggingLevels:
 
             logging.shutdown()
 
-            assert os.path.exists(log_file), "Log file should be created"
+            assert Path(log_file).exists(), "Log file should be created"
 
             with open(log_file) as f:
                 content = f.read()

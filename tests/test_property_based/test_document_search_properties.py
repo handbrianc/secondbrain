@@ -468,7 +468,7 @@ class TestSearchConsistency:
 # Chunking property tests
 # =============================================================================
 
-from secondbrain.document import _chunk_segments
+from secondbrain.document import _chunk_segments  # noqa: E402
 
 
 def recombine_chunks_preserving_overlap(chunks: list[dict], max_overlap: int) -> str:
@@ -781,10 +781,9 @@ class TestChunkingCharacterPreservation:
         # (allowing for very short chunks where this is impossible)
         for chunk in chunks:
             chunk_text = chunk["text"]
-            if len(chunk_text) > chunk_size // 2:  # Only check substantial chunks
+            if len(chunk_text) > chunk_size // 2 and len(chunk_text) > 5:  # Only check substantial chunks
                 # Chunk shouldn't start/end with what looks like a partial word
                 # (single letter followed by space or punctuation)
-                if len(chunk_text) > 5:
                     # Check start
                     if chunk_text[0].isalpha() and not chunk_text[1].isalpha():
                         # First char is isolated letter - might be intentional (e.g., "A.")

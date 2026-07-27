@@ -23,6 +23,8 @@ class SessionFactory(Factory):
     """
 
     class Meta:
+        """SessionFactory for testing."""
+
         model = dict
 
     session_id = Faker("uuid4")
