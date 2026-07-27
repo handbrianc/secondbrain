@@ -13,7 +13,6 @@ from secondbrain.utils.circuit_breaker import (
     CircuitBreakerError,
 )
 
-# Optional trace context import
 try:
     from secondbrain.utils.tracing import (
         get_current_trace_context,

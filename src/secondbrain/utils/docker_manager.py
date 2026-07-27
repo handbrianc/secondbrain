@@ -241,7 +241,6 @@ class DockerManager:
         logger.info("Starting MongoDB via docker compose...")
 
         try:
-            # Run docker compose up -d
             result = subprocess.run(
                 [
                     "docker",
@@ -265,7 +264,6 @@ class DockerManager:
 
             logger.info("MongoDB container started successfully")
 
-            # Verify container is actually running
             if not self.check_mongo_running():
                 raise MongoDBStartupError(
                     "MongoDB container started but is not running. "
@@ -365,7 +363,6 @@ class DockerManager:
             >>> manager.ensure_mongo_running()
             # MongoDB is now running and ready
         """
-        # Skip auto-start for non-local MongoDB
         if not self._is_local_mongodb():
             if verbose:
                 print(
@@ -374,13 +371,11 @@ class DockerManager:
                 )
             return
 
-        # Check if already running
         if self.check_mongo_running():
             if verbose:
                 console.print("[green]✓ MongoDB is already running[/green]")
             return
 
-        # Docker not installed check
         if not self.check_docker_installed():
             raise DockerNotInstalledError(
                 "[red]✗ Docker is not installed or not in PATH[/red]\n\n"
@@ -392,7 +387,6 @@ class DockerManager:
                 "a remote MongoDB instance."
             )
 
-        # Try to start MongoDB
         if verbose:
             console.print("[cyan]Starting MongoDB via Docker...[/cyan]")
 
@@ -409,7 +403,6 @@ class DockerManager:
                 "  4. You have permission to run Docker commands"
             ) from e
 
-        # Wait for MongoDB to be ready
         if verbose:
             console.print("[cyan]Waiting for MongoDB to be ready...[/cyan]")
 

@@ -162,12 +162,10 @@ class StructuralIntentParser:
         """
         normalized = query.lower().strip()
 
-        # Compute individual scores for each intent family
         chapter_score = self._score_chapter_enum(normalized)
         section_score = self._score_section_enum(normalized)
         broad_score = self._score_broad_coverage(normalized)
 
-        # Track highest-confidence non-unknown candidate
         candidates: list[tuple[float, QueryIntent, str | None, str]] = []
 
         if chapter_score >= _MIN_CONFIDENCE_THRESHOLD:
@@ -187,9 +185,7 @@ class StructuralIntentParser:
         if broad_score >= _MIN_CONFIDENCE_THRESHOLD:
             target = _extract_chapter_target(normalized)  # e.g. "chapter 3"
             reason = _build_reason("broad coverage", broad_score, normalized)
-            candidates.append(
-                (broad_score, QueryIntent.BROAD_COVERAGE, target, reason)
-            )
+            candidates.append((broad_score, QueryIntent.BROAD_COVERAGE, target, reason))
 
         if not candidates:
             return IntentDecision(
@@ -200,7 +196,6 @@ class StructuralIntentParser:
                 suggested_pipeline="semantic",
             )
 
-        # Select highest-confidence result, preferring structural when tied
         def _rank(c: tuple[float, QueryIntent, str | None, str]) -> tuple[bool, float]:
             structural_priority = (
                 c[1] == QueryIntent.CHAPTER_ENUMERATE
@@ -209,9 +204,7 @@ class StructuralIntentParser:
             )
             return (structural_priority, c[0])
 
-        best_score, best_intent, best_target, best_reason = max(
-            candidates, key=_rank
-        )
+        best_score, best_intent, best_target, best_reason = max(candidates, key=_rank)
         pipeline = _suggest_pipeline(best_intent, best_target)
 
         return IntentDecision(
@@ -329,10 +322,7 @@ def _extract_section_target(query: str) -> str | None:
 def _build_reason(intent_label: str, confidence: float, query: str) -> str:
     """Construct a human-readable reason string for an intent decision."""
     rounded = round(confidence * 100)
-    return (
-        f"Query '{query}' classified as {intent_label} "
-        f"with {rounded}% confidence."
-    )
+    return f"Query '{query}' classified as {intent_label} with {rounded}% confidence."
 
 
 def _suggest_pipeline(intent: QueryIntent, target: str | None) -> str:

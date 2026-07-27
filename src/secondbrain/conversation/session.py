@@ -121,7 +121,6 @@ class ConversationSession:
             >>> if session is not None:
             ...     history = session.get_history()
         """
-        # Check if session exists in storage first
         if not storage.session_exists(session_id):
             return None
 
@@ -145,13 +144,9 @@ class ConversationSession:
             >>> session.add_message("user", "What is machine learning?")
             >>> session.add_message("assistant", "Machine learning is...")
         """
-        # Add to in-memory history
         self._history.append({"role": role, "content": content})
-
-        # Persist to storage
         self._storage.save_message(self._session_id, role, content)
 
-        # Trim if exceeding context window
         if len(self._history) > self._context_window:
             self.trim_context()
 
@@ -222,7 +217,6 @@ class ConversationSession:
         if len(self._history) <= self._context_window:
             return
 
-        # Keep only the most recent messages
         self._history = self._history[-self._context_window :]
         self._storage.update_messages(self._session_id, self._history)
 
@@ -242,9 +236,7 @@ class ConversationSession:
             True
         """
         self._history = []
-        # Persist the cleared history to storage
-        if self._storage:
-            self._storage.update_messages(self._session_id, [])
+        self._storage.update_messages(self._session_id, [])
 
     @property
     def session_id(self) -> str:

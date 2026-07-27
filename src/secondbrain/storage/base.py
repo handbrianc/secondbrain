@@ -204,7 +204,7 @@ class BaseVectorStorage(ABC):
     ) -> list[dict[str, Any]]:
         """Construct the shared vector-search aggregation pipeline.
 
-        Identical logic for sync and async transports – only the call site differs.
+        Identical logic for sync and async transports - only the call site differs.
         """
         return build_search_pipeline(
             embedding=embedding,
@@ -221,19 +221,23 @@ class BaseVectorStorage(ABC):
     @abstractmethod
     def validate_connection(
         self, force: bool = False
-    ) -> bool: ...  # Provided by ValidatableService
+    ) -> bool:
+        """Validate connection to MongoDB."""
+        ...  # Provided by ValidatableService
 
     @abstractmethod
     async def validate_connection_async(
         self, force: bool = False
-    ) -> bool: ...  # Provided by ValidatableService
+    ) -> bool:
+        """Validate connection to MongoDB asynchronously."""
+        ...  # Provided by ValidatableService
 
     # ------------------------------------------------------------------
     # Connection guards (call into ValidatableService via subclass)
     # ------------------------------------------------------------------
 
     def _require_connection(self, operation: str = "database operation") -> None:
-        """Synchronously validate connection before a storage operation.
+        """Validate connection synchronously before a storage operation.
 
         Raises
         ------
@@ -267,14 +271,16 @@ class BaseVectorStorage(ABC):
         )
 
     def _wait_for_index_ready(self) -> None:
-        """No-op – local MongoDB has no Atlas Search index to wait for."""
+        """No-op - local MongoDB has no Atlas Search index to wait for."""
+        raise NotImplementedError
 
     async def _wait_for_index_ready_async(self) -> None:
-        """No-op – local MongoDB has no Atlas Search index to wait for."""
+        """No-op - local MongoDB has no Atlas Search index to wait for."""
+        raise NotImplementedError
         # Atlas-search subclasses override this with polling logic
 
     # ------------------------------------------------------------------
-    # Transport-layer abstracts – MUST be implemented by concrete classes
+    # Transport-layer abstracts - MUST be implemented by concrete classes
     # ------------------------------------------------------------------
 
     @abstractmethod

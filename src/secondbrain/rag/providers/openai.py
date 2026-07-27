@@ -108,14 +108,11 @@ class OpenAILLMProvider(LocalLLMProvider):
             RuntimeError: If generation fails.
         """
         try:
-            # Convert prompt to chat format
             messages = [{"role": "user", "content": prompt}]
 
-            # Use provided overrides or defaults
             temp = temperature if temperature is not None else self._temperature
             tokens = max_tokens if max_tokens is not None else self._max_tokens
 
-            # Call OpenAI chat API
             response = self._client.chat.completions.create(
                 model=self._model,
                 messages=messages,
@@ -153,14 +150,11 @@ class OpenAILLMProvider(LocalLLMProvider):
             RuntimeError: If generation fails.
         """
         try:
-            # Convert prompt to chat format
             messages = [{"role": "user", "content": prompt}]
 
-            # Use provided overrides or defaults
             temp = temperature if temperature is not None else self._temperature
             tokens = max_tokens if max_tokens is not None else self._max_tokens
 
-            # Call OpenAI chat API asynchronously
             response = await self._async_client.chat.completions.create(
                 model=self._model,
                 messages=messages,
@@ -184,7 +178,6 @@ class OpenAILLMProvider(LocalLLMProvider):
             True if API is accessible, False otherwise.
         """
         try:
-            # Make a minimal request to check connectivity
             self._client.models.list()
             return True
         except Exception:

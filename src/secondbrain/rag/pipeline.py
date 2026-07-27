@@ -8,15 +8,15 @@ import logging
 import re
 import time
 from contextlib import suppress
-from typing import Any
+from typing import Any, cast
 
 from secondbrain.config import config
 from secondbrain.conversation import ConversationSession, QueryRewriter
-from secondbrain.rag.intent_parser import IntentDecision, QueryIntent, StructuralIntentParser
-from secondbrain.rag.interfaces import LocalLLMProvider, StreamingCallback
-from secondbrain.rag.security_filter import SecurityFilter
 from secondbrain.document.scoped_retriever import ScopedRetriever
 from secondbrain.rag.document_router import DocumentRouter
+from secondbrain.rag.intent_parser import QueryIntent, StructuralIntentParser
+from secondbrain.rag.interfaces import LocalLLMProvider, StreamingCallback
+from secondbrain.rag.security_filter import SecurityFilter
 from secondbrain.search import Searcher
 from secondbrain.utils.perf_monitor import metrics
 from secondbrain.utils.tracing import trace_operation
@@ -35,7 +35,6 @@ def filter_chapters_by_target(
     target: str | None,
 ) -> tuple[list[tuple[int, str, str]], set[int]]:
     """Scope *chapters_to_cover* to only the chapter matching *target*."""
-
     if target is not None and chapters_to_cover:
         try:
             target_num = int(target)
@@ -564,19 +563,19 @@ class RAGPipeline:
         # "5.1.3 Capturing..." as chapter titles).
         ch_entries, ch_good = self._derive_chapter_numbers(structure_chunks)
         ch_titles: dict[int, str] = {}
-        for ch_num, src, title in ch_entries:
+        for ch_num, _src, title in ch_entries:
             if ch_num in ch_good and ch_num not in ch_titles:
                 ch_titles[ch_num] = title if title else "Unknown"
 
-        # Build section-level entries from SEC_RE for subsection display
-        SEC_RE = re.compile(r"(\d+)(?:\.(\d+))+(?:\s+(.+))?")
-        DOT_LEADER = re.compile(r"\.{2,}[.\-]+")
+        # Build section-level entries from section_re for subsection display
+        section_re = re.compile(r"(\d+)(?:\.(\d+))+(?:\s+(.+))?")
+        dot_leader = re.compile(r"\.{2,}[.\-]+")
         sec_entries: list[tuple[int, str, str]] = []
         seen_sec: set[str] = set()
         for chunk in structure_chunks:
             raw = chunk.get("chunk_text", "")
-            cleaned = DOT_LEADER.sub("", raw, count=1).strip()
-            for m in SEC_RE.finditer(cleaned):
+            cleaned = dot_leader.sub("", raw, count=1).strip()
+            for m in section_re.finditer(cleaned):
                 major = int(m.group(1))
                 if major < 1 or major > 30:
                     continue
@@ -771,15 +770,18 @@ class RAGPipeline:
     def _derive_chapter_numbers(
             self, structure_chunks: list[dict[str, Any]]
         ) -> tuple[list[tuple[int, str, str]], set[int]]:
-            """Returns (entries, chapter_level_nums) where chapter_level_nums are
-            chapter numbers from CHAPTER_N_RE or BARE_CHAPTER_RE (reliable titles)."""
+            """Return reliable chapter entries from structure chunks.
+
+            Returns (entries, chapter_level_nums) where chapter_level_nums are
+            chapter numbers from CHAPTER_N_RE or BARE_CHAPTER_RE (reliable titles).
+            """
             import re
             entries: list[tuple[int, str, str]] = []
             seen: set[tuple[int, str]] = set()
-            DOT_LEADER = re.compile(r"\.{2,}[.\-]+")
-            SEC_RE = re.compile(r"(\d+)(?:\.(\d+))+(?:\s+(.+))?")
-            CHAPTER_N_RE = re.compile(r"Chapter\s+(\d+)\s+(.{2,60})", re.IGNORECASE)
-            BARE_CHAPTER_RE = re.compile(
+            dot_leader = re.compile(r"\.{2,}[.\-]+")
+            section_re = re.compile(r"(\d+)(?:\.(\d+))+(?:\s+(.+))?")
+            chapter_n_re = re.compile(r"Chapter\s+(\d+)\s+(.{2,60})", re.IGNORECASE)
+            bare_chapter_re = re.compile(
                 r"(?:^|\n)\s*(\d{1,2})\.?\s+([A-Za-z][A-Za-z0-9\s\-\(\),'/:.\u2013\u2014]{4,80})",
                 re.MULTILINE,
             )
@@ -790,7 +792,7 @@ class RAGPipeline:
             for chunk in structure_chunks:
                 raw = chunk.get("chunk_text", "")
                 source = chunk.get("source_file", "")
-                for nm in CHAPTER_N_RE.finditer(raw):
+                for nm in chapter_n_re.finditer(raw):
                     major = int(nm.group(1))
                     if major < 1 or major > 30 or (major, source) in seen:
                         continue
@@ -805,18 +807,18 @@ class RAGPipeline:
                     seen.add((major, source))
                     entries.append((major, source, title))
 
-            # Pass 2: BARE_CHAPTER_RE (e.g. "5 Working with Virtual Machines") then
-            # SEC_RE for chapters not yet claimed by the more reliable CHAPTER_N_RE.
-            # Using a separate pass prevents a BARE match on an earlier page from
-            # winning over a CHAPTER_N_RE match on a later page for the same chapter.
+            # Pass 2: bare_chapter_re (e.g. "5 Working with Virtual Machines") then
+            # section_re for chapters not yet claimed by the more reliable chapter_n_re.
+            # Using a separate pass prevents a bare match on an earlier page from
+            # winning over a chapter_n_re match on a later page for the same chapter.
             # Also detect page-footer patterns like "...68 5 Working with Virtual\nMachines"
-            # where BARE_CHAPTER_RE's start-of-line anchor misses the number.
+            # where bare_chapter_re's start-of-line anchor misses the number.
             # The \d+\s+ prefix matches the page number (e.g. "68 ") and the captured
             # (\d{1,2}) is the chapter number. Without the page-number prefix, the
             # regex would match "68 " with major=68 (rejected by >30 guard).
-            FT_CATCH = re.compile(r"\d+\s+(\d{1,2})\s+([A-Za-z][A-Za-z0-9\s\-\(\),'/:.\u2013\u2014]{4,80})")
+            ft_catch = re.compile(r"\d+\s+(\d{1,2})\s+([A-Za-z][A-Za-z0-9\s\-\(\),'/:.\u2013\u2014]{4,80})")
             # Reject common false positives: legal/license text, placeholder titles
-            LEGAL_STARTS = {
+            legal_starts = {
                 "contents", "copyright", "licensed", "license",
                 "trolltech", "red", "bootstrap",
                 "a", "an", "the", "you", "your", "this", "each", "by",
@@ -827,9 +829,9 @@ class RAGPipeline:
             for chunk in structure_chunks:
                 raw = chunk.get("chunk_text", "")
                 source = chunk.get("source_file", "")
-                cleaned = DOT_LEADER.sub("", raw, count=1).strip()
+                cleaned = dot_leader.sub("", raw, count=1).strip()
 
-                for bm in BARE_CHAPTER_RE.finditer(raw):
+                for bm in bare_chapter_re.finditer(raw):
                     major = int(bm.group(1))
                     if major < 1 or major > 30 or (major, source) in seen:
                         continue
@@ -837,7 +839,7 @@ class RAGPipeline:
                     if len(title) < 4:
                         continue
                     fw = title.lower().split()[0] if title.split() else ""
-                    if fw in LEGAL_STARTS:
+                    if fw in legal_starts:
                         continue
                     # Reject titles starting with lowercase — real chapter
                     # titles always start with uppercase (e.g. "VBoxManage",
@@ -849,7 +851,7 @@ class RAGPipeline:
                     # cross-references (e.g. "5 Capturing and Releasing
                     # Keyboard and Mouse on page 54"), not actual chapter
                     # titles.  The real chapter title (e.g. "Working with
-                    # Virtual Machines") comes from a later FT_CATCH match.
+                    # Virtual Machines") comes from a later ft_catch match.
                     if re.search(r"\bon\s+page\s+\d+", title, re.IGNORECASE):
                         continue
                     seen.add((major, source))
@@ -858,7 +860,7 @@ class RAGPipeline:
                 # Fallback: detect chapter titles in page footer patterns like
                 # "...68 5 Working with Virtual Machines" where the number is
                 # preceded by the page number (not start-of-line).
-                for fm in FT_CATCH.finditer(raw):
+                for fm in ft_catch.finditer(raw):
                     major_ft = int(fm.group(1))
                     if (major_ft < 1 or major_ft > 30
                             or (major_ft, source) in seen):
@@ -867,17 +869,17 @@ class RAGPipeline:
                     if len(title_ft) < 6:
                         continue
                     fw_ft = title_ft.lower().split()[0] if title_ft.split() else ""
-                    if fw_ft in LEGAL_STARTS:
+                    if fw_ft in legal_starts:
                         continue
                     # Reject titles starting with lowercase — same rationale
-                    # as BARE_CHAPTER_RE above (OCR noise, not real titles).
+                    # as bare_chapter_re above (OCR noise, not real titles).
                     if title_ft[0].islower():
                         continue
-                    # Reject FT_CATCH matches containing "on page N" (same
-                    # logic as BARE_CHAPTER_RE above).  Without this guard,
+                    # Reject ft_catch matches containing "on page N" (same
+                    # logic as bare_chapter_re above).  Without this guard,
                     # a cross-reference like "50 5 Working with Virtual
                     # Machines on page 54" would be accepted as the chapter
-                    # title when BARE_CHAPTER_RE properly rejected it.
+                    # title when bare_chapter_re properly rejected it.
                     if re.search(r"\bon\s+page\s+\d+", title_ft, re.IGNORECASE):
                         continue
                     seen.add((major_ft, source))
@@ -885,7 +887,7 @@ class RAGPipeline:
 
                 seen_max = max([s[0] for s in seen], default=0)
                 sec_limit = seen_max + 3 if seen_max > 0 else 999
-                for m in SEC_RE.finditer(cleaned):
+                for m in section_re.finditer(cleaned):
                     major = int(m.group(1))
                     if (major < 1 or major > 30 or major in seen_sec
                             or (major, source) in seen
@@ -970,6 +972,7 @@ class RAGPipeline:
             'source_file', 'chunk_id'.
         """
         from pymongo import MongoClient
+
         from secondbrain.config import config
         cfg = config()
         client = MongoClient(cfg.mongo_uri, directConnection=True)
@@ -1118,6 +1121,7 @@ class RAGPipeline:
 
             if chapters_to_cover:
                 from pymongo import MongoClient
+
                 from secondbrain.config import config
                 cfg_ = config()
                 client_ = MongoClient(cfg_.mongo_uri, directConnection=True)
@@ -1144,17 +1148,17 @@ class RAGPipeline:
                 # BARE_CHAPTER_RE titles (e.g. "5 Working with VMs") are NOT included
                 # here — they're less reliable and may conflict with other chapters.
                 chapter_first_pg: dict[int, int] = {}
-                CH_N = re.compile(r"Chapter\s+(\d+)\s+(.{2,60})", re.IGNORECASE)
+                ch_n = re.compile(r"Chapter\s+(\d+)\s+(.{2,60})", re.IGNORECASE)
                 for sc in structure_chunks:
                     txt = sc.get("chunk_text", "")
                     pg = sc.get("page_number", 0)
-                    # Reject TOC page numbers (typically < 10) — a CHAPTER_N_RE
+                    # Reject TOC page numbers (typically < 10) — a chapter_n_re
                     # match on page 3 is almost certainly a TOC entry, not the
                     # actual chapter start page. Without this guard, Phase 1's
-                    # SEC_HEADER_RE body-chunk scan would find the wrong start.
+                    # sec_header_re body-chunk scan would find the wrong start.
                     if pg < 10:
                         continue
-                    for nm in CH_N.finditer(txt):
+                    for nm in ch_n.finditer(txt):
                         ch = int(nm.group(1))
                         if ch in good_title_nums and ch not in chapter_first_pg:
                             chapter_first_pg[ch] = pg
@@ -1163,9 +1167,9 @@ class RAGPipeline:
                 # Use \b (word boundary) + search() instead of ^ + match() because docling
                 # often embeds section numbers in the middle of paragraph text rather than
                 # at the start of a chunk (e.g. "... features. 11.1 CPU Hot-Plugging ...").
-                # NOTE: chapters already in chapter_first_pg (from CHAPTER_N_RE above) are
+                # NOTE: chapters already in chapter_first_pg (from ch_n above) are
                 # skipped — their pages are more reliable.
-                SEC_HEADER_RE = re.compile(r"\b(\d+)\.\d+(?:\.\d+)?\s")
+                sec_header_re = re.compile(r"\b(\d+)\.\d+(?:\.\d+)?\s")
                 for c in (
                     coll_.find(
                         {"source_file": src, "chunk_role": "body"},
@@ -1177,7 +1181,7 @@ class RAGPipeline:
                     txt = c.get("chunk_text", "")[:150]
                     page = c.get("page_number", 0)
 
-                    m = SEC_HEADER_RE.search(txt)
+                    m = sec_header_re.search(txt)
                     if m:
                         ch = int(m.group(1))
                         if 1 <= ch <= 30 and ch not in chapter_first_pg:
@@ -1262,7 +1266,7 @@ class RAGPipeline:
                     # NOTE: sec_buffer = max_unique + 3 assumes sequential chapter
                     # numbering (no gap >3 between any two mapped chapters).
                     # If chapter numbers jump e.g. ch1→ch11→ch25 and ch11 is the
-                    # only target, Pass 1 drops ch25 (>14), leaving ch11 as the
+                    # only target, Pass 1 drops ch25 (>14), leaving ch11 as the
                     # last entry in sorted_pgs → end page falls back to 700,
                     # re-introducing cross-chapter leakage.  A production doc
                     # with such sparse numbering would need a smarter ceiling.
@@ -1291,7 +1295,7 @@ class RAGPipeline:
                 sorted_pgs = sorted(chapter_first_pg.items(), key=lambda x: x[1])
                 chapter_ranges_: dict[int, tuple[int, int]] = {}
                 # Build boundary page mapping for end-page computation
-                boundary_pgs = {k: v for k, v in chapter_first_pg.items()}
+                boundary_pgs = dict(chapter_first_pg.items())
                 max_ch_ = max(boundary_pgs) if boundary_pgs else 0
                 for ch_, start_pg_ in sorted_pgs:
                     # Only build ranges for target chapters
@@ -1325,7 +1329,7 @@ class RAGPipeline:
                 page_count_per_ch: dict[int, dict[int, int]] = {
                     ch: {} for ch in chapter_keys
                 }
-                chapter_buckets: dict[int, list] = {ch: [] for ch in chapter_keys}
+                chapter_buckets: dict[int, list[dict[str, Any]]] = {ch: [] for ch in chapter_keys}
                 for c in (
                     coll_.find(
                         {"source_file": src, "chunk_role": "body"},
@@ -1429,11 +1433,11 @@ class RAGPipeline:
                 # sections (e.g. ch5 section 5.1 across pages 51-59) dominate the
                 # LLM's output.
                 if len(chapter_keys) <= 2:
-                    pg_groups: dict[int, list[dict]] = {}
+                    pg_groups: dict[int, list[dict[str, Any]]] = {}
                     for fc in final_chunks:
                         p = fc.get("page_number", fc.get("page", 0))
                         pg_groups.setdefault(p, []).append(fc)
-                    interleaved: list[dict] = []
+                    interleaved: list[dict[str, Any]] = []
                     max_per_pg = max((len(g) for g in pg_groups.values()), default=0)
                     for slot in range(max_per_pg):
                         for pg in sorted(pg_groups):
@@ -1513,10 +1517,10 @@ class RAGPipeline:
                     # budget so the LLM doesn't truncate mid-way through the chapter.
                     section_prompt = (
                         "__ENUMERATION INSTRUCTIONS__\n"
-                        + f"The user asked for a section listing. "
-                        + f"List every numbered section below on its own line. "
-                        + f"For each section, include its number (e.g. 11.1) followed by "
-                        + f"a brief one-line description. Do NOT omit any section.\n"
+                        + "The user asked for a section listing. "
+                        + "List every numbered section below on its own line. "
+                        + "For each section, include its number (e.g. 11.1) followed by "
+                        + "a brief one-line description. Do NOT omit any section.\n"
                         + "=== BODY CONTENT ===\n"
                     )
                 elif is_multi_chapter:
@@ -1524,11 +1528,11 @@ class RAGPipeline:
                     # a concise overview of each chapter found in the body content.
                     section_prompt = (
                         "__CHAPTER_SUMMARY_INSTRUCTIONS__\n"
-                        + f"The user asked for a chapter-by-chapter overview. "
-                        + f"Below is the document's content organized by chapter. "
-                        + f"For each chapter listed in the roster above, provide "
-                        + f"a brief one-line summary of its key topics. "
-                        + f"Keep each chapter summary concise.\n"
+                        + "The user asked for a chapter-by-chapter overview. "
+                        + "Below is the document's content organized by chapter. "
+                        + "For each chapter listed in the roster above, provide "
+                        + "a brief one-line summary of its key topics. "
+                        + "Keep each chapter summary concise.\n"
                         + "=== BODY CONTENT ===\n"
                     )
                 else:
@@ -1609,7 +1613,7 @@ class RAGPipeline:
                 if not answer or not answer.strip():
                     answer = llm_fallback_roster
 
-                result = {"answer": answer, "query": query}
+                result: dict[str, Any] = {"answer": answer, "query": query}
                 if show_sources:
                     result["sources"] = final_chunks
                 return result
@@ -1659,7 +1663,7 @@ class RAGPipeline:
                 ):
                     try:
                         messages = [{"role": "user", "content": prompt}]
-                        accumulated_resp: list[str] = []
+                        accumulated_resp = []
 
                         def on_chunk(content: str, _reasoning: str | None) -> None:
                             if content:
@@ -1694,7 +1698,7 @@ class RAGPipeline:
             metrics.record("generation_latency", time.perf_counter() - generation_start)
 
         # 7. Build result
-        result: dict[str, Any] = {"answer": answer, "query": query}
+        result = cast(dict[str, Any], {"answer": answer, "query": query})
         if show_sources:
             result["sources"] = final_chunks
 

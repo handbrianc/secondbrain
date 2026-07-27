@@ -42,15 +42,12 @@ class MockVectorStorage:
         if not vec1 or not vec2:
             return 0.0
 
-        # Ensure same length
         min_len = min(len(vec1), len(vec2))
         vec1 = vec1[:min_len]
         vec2 = vec2[:min_len]
 
-        # Calculate dot product
         dot_product = sum(a * b for a, b in zip(vec1, vec2, strict=False))
 
-        # Calculate magnitudes
         mag1 = math.sqrt(sum(a * a for a in vec1))
         mag2 = math.sqrt(sum(b * b for b in vec2))
 
@@ -78,7 +75,6 @@ class MockVectorStorage:
         if not chunk_id:
             raise ValueError("Chunk must have a chunk_id")
 
-        # Store chunk
         self._chunks[chunk_id] = chunk
         if chunk_id not in self._chunk_ids:
             self._chunk_ids.append(chunk_id)
@@ -132,7 +128,6 @@ class MockVectorStorage:
                 result["score"] = similarity
                 scored_chunks.append(result)
 
-        # Sort by similarity descending
         scored_chunks.sort(key=lambda x: x.get("similarity", 0), reverse=True)
 
         return scored_chunks[:top_k]
@@ -158,10 +153,8 @@ class MockVectorStorage:
             List of matching chunks with similarity scores.
         """
         if not embed_gen:
-            # Return empty results if no embedding generator
             return []
 
-        # Generate query embedding
         query_embedding = embed_gen.generate(query_text)
 
         return self.search(query_embedding, top_k=top_k, threshold=threshold, **kwargs)

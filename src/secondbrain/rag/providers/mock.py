@@ -266,8 +266,7 @@ class MockLLMProviderWithContext(MockLLMProvider):
         best_length = 0
 
         for pattern, response in self._response_map.items():
-            if pattern.lower() in question.lower():
-                if len(pattern) > best_length:
+            if pattern.lower() in question.lower() and len(pattern) > best_length:
                     best_length = len(pattern)
                     best_response = response
 

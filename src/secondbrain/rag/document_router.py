@@ -20,7 +20,7 @@ _REGISTRY_CACHE_TTL = 60.0  # seconds
 
 # Regex patterns for detecting document titles in chunk content
 _CHAPTER_TITLE_RE = re.compile(
-    r"chapter\s+\d+\s+[—–\-]\s+(.{2,80})",
+    r"chapter\s+\d+\s+[-]\s+(.{2,80})",
     re.IGNORECASE,
 )
 _ABOUT_TITLE_RE = re.compile(
@@ -68,15 +68,12 @@ def _build_known_names(source_files: list[str]) -> dict[str, str]:
         normalized = _normalize_name(base)
         if normalized:
             registry[normalized] = sf
-            # Register compressed (no-space) version
             compressed = normalized.replace(" ", "")
             if compressed and compressed != normalized:
                 registry[compressed] = sf
-            # Register individual tokens
             for token in normalized.split():
                 if len(token) >= 3 and token not in registry:
                     registry[token] = sf
-        # Also register the name without extension as a short alias
         name_no_ext = re.sub(r"\.[^.]+$", "", base).lower().strip()
         if name_no_ext and name_no_ext != normalized:
             registry[name_no_ext] = sf
@@ -84,7 +81,7 @@ def _build_known_names(source_files: list[str]) -> dict[str, str]:
 
 
 class DocumentRouter:
-    """Resolves document mentions in user queries to MongoDB source_file paths.
+    r"""Resolves document mentions in user queries to MongoDB source_file paths.
 
     Maintains a fuzzy-match registry of all ingested document filenames
     extracted from the vector store at construction time (with TTL caching).
@@ -123,8 +120,7 @@ class DocumentRouter:
         source_files: list[str],
         storage: Any,
     ) -> dict[str, str]:
-        """Extract content-based title aliases for documents whose filenames
-        don't carry meaningful keywords (e.g. ``UserManual.pdf``).
+        """Extract content-based title aliases for documents.
 
         For each ``source_file``, queries the first few chunks for structural
         headings (``"Chapter 1 — About Oracle VirtualBox"``) and adds those
@@ -160,7 +156,6 @@ class DocumentRouter:
                         for tok in _normalize_name(title).split():
                             if len(tok) >= 4:
                                 title_keywords.add(tok)
-                    # Markdown headings
                     for m in _HEADING1_RE.finditer(text):
                         title = m.group(1).strip()
                         for tok in _normalize_name(title).split():
@@ -179,8 +174,14 @@ class DocumentRouter:
                                 title_keywords.add(tok)
 
                 # Register meaningful title keywords (excluding generic terms)
-                generic = {"chapter", "section", "introduction", "overview",
-                           "administration", "release"}
+                generic = {
+                    "chapter",
+                    "section",
+                    "introduction",
+                    "overview",
+                    "administration",
+                    "release",
+                }
                 for kw in title_keywords:
                     if kw not in generic and kw not in aliases:
                         aliases[kw] = sf
@@ -259,13 +260,16 @@ class DocumentRouter:
         # Picks the longest narrow match to avoid matching generic short
         # tokens like "guide" or "admin" that appear in many queries.
         compressed_query = q.replace(" ", "")
-        best_name: str | None = None
+        best_name = None
         best_len = 0
         for known_name in registry:
             compressed_known = known_name.replace(" ", "")
             if not compressed_query or not compressed_known:
                 continue
-            if compressed_query in compressed_known or compressed_known in compressed_query:
+            if (
+                compressed_query in compressed_known
+                or compressed_known in compressed_query
+            ):
                 mlen = len(compressed_known)
                 # Require at least 6 characters to avoid matching generic
                 # short tokens (e.g. "guide", "admin") that are unreliable.
