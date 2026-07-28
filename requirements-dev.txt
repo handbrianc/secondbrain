@@ -48,7 +48,7 @@ typing-extensions==4.15.0
 
 # FastAPI examples and testing
 fastapi>=0.136.3
-uvicorn>=0.1.0
+uvicorn>=0.51.0
 
 # Flask examples and testing
 flask>=3.0.0
