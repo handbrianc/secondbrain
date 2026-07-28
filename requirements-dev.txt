@@ -20,7 +20,7 @@ hypothesis==6.131.0
 pytest-hypothesis==6.0.0
 
 # Test factories
-factory-boy==3.3.0
+factory-boy==3.3.3
 
 # Security scanning
 bandit==1.8.3
