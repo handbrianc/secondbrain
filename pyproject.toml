@@ -19,8 +19,8 @@ classifiers = [
 
 dependencies = [
     "click>=8.4.1",  # CLI framework - stable API, minor updates only
-    "docling>=2.105.0",  # Document parsing - requires recent features
-    "docling-core>=2.83.1",  # Core types - matches docling version
+    "docling>=2.115.0",  # Document parsing - requires recent features
+    "docling-core>=2.88.0",  # Core types - matches docling version
     "pymongo>=4.17.0",  # MongoDB driver - async support required
     "motor>=3.0.0",  # Async MongoDB - requires pymongo 4.x compatibility
     "httpx>=0.28.1",  # HTTP client - async support for LLM calls
@@ -28,10 +28,10 @@ dependencies = [
     "pydantic-settings>=2.14.2",  # Settings management - pydantic v2 compatible
     "rich>=15.0.0",  # CLI formatting - modern terminal output
     "python-dotenv>=1.2.2",  # Environment config - stable API
-    "numpy>=2.4.6",  # Numerical computing - array API compatibility
-    "opentelemetry-api>=1.42.1",  # Telemetry - stable tracing API
-    "opentelemetry-sdk>=1.42.1",  # Telemetry - tracing implementation
-    "openai>=2.43.0",  # LLM provider - v1 SDK required
+    "numpy>=2.5.1",  # Numerical computing - array API compatibility
+    "opentelemetry-api>=1.44.0",  # Telemetry - stable tracing API
+    "opentelemetry-sdk>=1.44.0",  # Telemetry - tracing implementation
+    "openai>=2.49.0",  # LLM provider - v1 SDK required
     "anthropic>=0.112.0",  # LLM provider - Claude models support
     "typing_extensions>=4.15.0",  # Type hints - backport new features
     "pyobjc-core>=12.2.1; sys_platform == 'darwin'",  # MacOS Objective-C bridge - required for ocrmac
