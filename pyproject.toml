@@ -57,7 +57,7 @@ test = [
     "pytest-timeout>=2.2.0",  # Test timeouts - prevent hangs
     "pytest-rerunfailures>=16.4",  # Retry flaky tests - concurrent test stability
     "hypothesis>=6.0.0",  # Property-based testing - edge case discovery
-    "factory-boy>=3.3.0",  # Test factories - factory_boy for test data
+    "factory-boy>=3.3.3",  # Test factories - factory_boy for test data
     "mongomock>=4.0.0",  # Test mocking - MongoDB without server
 ]
 
@@ -108,7 +108,7 @@ bundled = [
     "pytest-timeout>=2.2.0",
     "pytest-rerunfailures>=16.4",
     "hypothesis>=6.0.0",
-    "factory-boy>=3.3.0",
+    "factory-boy>=3.3.3",
     "mongomock>=4.0.0",
     # All security deps
     "bandit>=1.7.0",
