@@ -2,7 +2,7 @@
 name = "secondbrain"
 version = "0.4.0"
 description = "A local document intelligence CLI tool for semantic search"
-requires-python = ">=3.11"
+requires-python = ">=3.13"
 authors = [
     {name = "Brian Hand", email = "handbrianc@gmail.com"}
 ]
