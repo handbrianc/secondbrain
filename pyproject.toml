@@ -38,7 +38,7 @@ dependencies = [
     "pyobjc-framework-cocoa>=12.1; sys_platform == 'darwin'",  # MacOS Cocoa framework - required for ocrmac
     "pyobjc-framework-coreml>=12.1; sys_platform == 'darwin'",  # MacOS Core ML - required for ocrmac
     "pyobjc-framework-quartz>=12.1; sys_platform == 'darwin'",  # MacOS Quartz - required for ocrmac
-    "pyobjc-framework-vision>=12.1; sys_platform == 'darwin'",  # MacOS Vision - required for ocrmac
+    "pyobjc-framework-vision>=12.2.1; sys_platform == 'darwin'",  # MacOS Vision - required for ocrmac
 ]
 
 [project.optional-dependencies]
