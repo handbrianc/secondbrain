@@ -14,8 +14,7 @@ classifiers = [
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
 ]
 
 dependencies = [
@@ -186,7 +185,7 @@ where = ["src"]
 
 [tool.ruff]
 line-length = 88
-target-version = "py311"
+target-version = "py313"
 
 [tool.ruff.format]
 quote-style = "double"
@@ -207,7 +206,7 @@ convention = "numpy"
     "tests/**" = ["BLE001", "D100", "D101", "D102", "D103", "D104", "N806", "SIM117", "F841", "B017", "PTH123", "D401", "SIM105"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.13"
 strict = true
 warn_return_any = true
 warn_unused_configs = true
