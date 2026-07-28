@@ -166,7 +166,7 @@ class TestCoverageGapsProcessParallel:
         with patch.object(
             ingestor,
             "_process_parallel_with_progress",
-            return_value=(0, 1),
+            return_value=(0, 1, []),
         ):
             result = ingestor.ingest(str(test_file), cores=1)
 
@@ -207,7 +207,7 @@ class TestCoverageGapsThreadPool:
             patch.object(ingestor, "_extract_text", return_value=[]),
             patch.object(ingestor, "_build_documents_with_embeddings", return_value=[]),
             patch.object(
-                ingestor, "_process_parallel_with_progress", return_value=(1, 0)
+                ingestor, "_process_parallel_with_progress", return_value=(1, 0, [])
             ),
         ):
             result = ingestor.ingest(str(test_file))

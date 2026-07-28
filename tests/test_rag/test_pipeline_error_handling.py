@@ -565,14 +565,14 @@ class TestRAGPipelineErrorHandling:
         pipeline_with_mocks: RAGPipeline,
     ) -> None:
         """Verify _format_context truncates long chunks."""
-        long_text = "x" * 1000
+        long_text = "x" * 2500
         chunks = [{"chunk_text": long_text, "source_file": "test.pdf", "page": 1}]
 
         result = pipeline_with_mocks._format_context(chunks)
 
-        # Should truncate to 500 chars + "..."
+        # Should truncate to preview limit + "..."
         assert "..." in result
-        assert len(result) < 1000
+        assert len(result) < 2500
 
     def test_build_prompt_handles_empty_context(
         self,

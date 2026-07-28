@@ -8,7 +8,7 @@ connection strings.
 import os
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -17,19 +17,6 @@ __all__ = ["Config", "config", "get_config"]
 
 
 def _validate_mongo_uri(value: str) -> str:
-    """Validate MongoDB URI format.
-
-    Args:
-        value: MongoDB URI to validate.
-
-    Returns
-    -------
-        Validated URI string.
-
-    Raises
-    ------
-        ValueError: If URI doesn't start with mongodb:// or mongodb+srv://
-    """
     if not value.startswith("mongodb://") and not value.startswith("mongodb+srv://"):
         raise ValueError(
             f"mongo_uri must start with 'mongodb://' or 'mongodb+srv://', got: {value}"
@@ -74,7 +61,7 @@ class Config(BaseSettings):
 
         # Load environment variables from file if it exists
         if env_file_path and env_file_path.exists():
-            with open(env_file_path, encoding="utf-8") as f:
+            with env_file_path.open(encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
                     if line and not line.startswith("#") and "=" in line:
@@ -170,7 +157,7 @@ class Config(BaseSettings):
 
     # RAG formatting settings
     rag_max_context_chars: int = Field(
-        default=8000,
+        default=16000,
         ge=1000,
         le=500000,
         description=(
@@ -181,7 +168,7 @@ class Config(BaseSettings):
         ),
     )
     rag_chunk_preview_chars: int = Field(
-        default=500,
+        default=1200,
         ge=100,
         le=10000,
         description=(
@@ -208,6 +195,21 @@ class Config(BaseSettings):
             "9. When the question asks for a SPECIFIC VALUE (like a model name, version number, configuration value, etc.), you MUST include the exact value from the context in your answer.\n"
             "10. NEVER generalize or omit specific values - if the context says 'all-MiniLM-L6-v2', your answer must include 'all-MiniLM-L6-v2'.\n"
             "11. Format your answer concisely and directly, matching the style of the question.\n"
+            "12. When the question asks to summarize or list chapters, sections, or parts\n"
+            "    (e.g. 'summarize by chapter', 'list all sections'), you MUST enumerate\n"
+            "    EVERY distinct chapter/section number and title present in the context —\n"
+            "    do not stop early, combine related items, or omit chapters because the\n"
+            "    answer feels 'long enough'. If the context contains 21 chapters, your\n"
+            "    answer must name all 21.\n"
+            "    IMPORTANT: Your answer will be judged a FAILURE if it omits any chapter\n"
+            "    numbers or substitutes summaries for chapter names. Enumerate all 21.\n"
+            "13. MULTI-DOCUMENT HANDLING: The context may contain content from more than\n"
+            "    one document. When answering, clearly indicate which document each piece\n"
+            "    of information comes from (e.g., 'According to the VirtualBox manual...')\n"
+            "    or 'The Proxmox VE guide states...'). Do NOT mix information from\n"
+            "    different documents without attribution. If the user asked about a\n"
+            "    specific document, prioritize information from that document and note\n"
+            "    if other documents also contain relevant information.\n"
             "\n"
             "When the answer is in the context:\n"
             "- State the answer directly in 1-2 sentences\n"
@@ -231,6 +233,24 @@ class Config(BaseSettings):
         description="Chunk overlap for splitting",
     )
 
+    # Summarization settings
+    summarizer_mode: Literal["concise", "detailed", "chapter_only"] = Field(
+        default="concise",
+        description="Summarization approach: 'concise' (brief), 'detailed' (comprehensive), or 'chapter_only' (structure only)",
+    )
+    summary_depth: int = Field(
+        default=1,
+        ge=1,
+        le=5,
+        description="Max heading depth to traverse for chapter summaries (1=top-level only, 2+=nested subsections)",
+    )
+
+    # Adaptive chunking settings
+    adaptive_chunking: bool = Field(
+        default=False,
+        description="Enable adaptive chunk sizing based on content density",
+    )
+
     # File extension settings
     supported_extensions: str = Field(
         default="pdf,docx,pptx,xlsx,html,htm,md,txt,asciidoc,adoc,tex,csv,"
@@ -240,7 +260,7 @@ class Config(BaseSettings):
 
     # Search settings
     default_top_k: int = Field(
-        default=20,
+        default=50,
         description="Default number of search results (higher = more context for better answers)",
     )
 
@@ -287,6 +307,13 @@ class Config(BaseSettings):
             "Batch size for embedding generation (1-100). "
             "Higher = better throughput, lower = less memory. "
             "Max 100 to prevent timeout on slow networks"
+        ),
+    )
+    embedding_timeout: int = Field(
+        default=300,
+        description=(
+            "Request timeout for embedding API calls in seconds (default: 300). "
+            "Increase for large documents or slow network connections."
         ),
     )
 
@@ -566,6 +593,7 @@ class Config(BaseSettings):
     @field_validator("rag_max_context_chars")
     @classmethod
     def validate_rag_max_context_chars(cls, v: int) -> int:
+        """Validate rag_max_context_chars is between 1000 and 500000."""
         if v < 1000 or v > 500000:
             raise ValueError("rag_max_context_chars must be between 1000 and 500000")
         return v
@@ -573,6 +601,7 @@ class Config(BaseSettings):
     @field_validator("rag_chunk_preview_chars")
     @classmethod
     def validate_rag_chunk_preview_chars(cls, v: int) -> int:
+        """Validate rag_chunk_preview_chars is between 100 and 10000."""
         if v < 100 or v > 10000:
             raise ValueError("rag_chunk_preview_chars must be between 100 and 10000")
         return v

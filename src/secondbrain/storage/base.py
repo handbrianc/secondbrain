@@ -5,7 +5,7 @@ import math
 import re
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, cast
 
 from bson.binary import Binary
 
@@ -204,7 +204,7 @@ class BaseVectorStorage(ABC):
     ) -> list[dict[str, Any]]:
         """Construct the shared vector-search aggregation pipeline.
 
-        Identical logic for sync and async transports – only the call site differs.
+        Identical logic for sync and async transports - only the call site differs.
         """
         return build_search_pipeline(
             embedding=embedding,
@@ -221,19 +221,23 @@ class BaseVectorStorage(ABC):
     @abstractmethod
     def validate_connection(
         self, force: bool = False
-    ) -> bool: ...  # Provided by ValidatableService
+    ) -> bool:
+        """Validate connection to MongoDB."""
+        ...  # Provided by ValidatableService
 
     @abstractmethod
     async def validate_connection_async(
         self, force: bool = False
-    ) -> bool: ...  # Provided by ValidatableService
+    ) -> bool:
+        """Validate connection to MongoDB asynchronously."""
+        ...  # Provided by ValidatableService
 
     # ------------------------------------------------------------------
     # Connection guards (call into ValidatableService via subclass)
     # ------------------------------------------------------------------
 
     def _require_connection(self, operation: str = "database operation") -> None:
-        """Synchronously validate connection before a storage operation.
+        """Validate connection synchronously before a storage operation.
 
         Raises
         ------
@@ -267,14 +271,15 @@ class BaseVectorStorage(ABC):
         )
 
     def _wait_for_index_ready(self) -> None:
-        """No-op – local MongoDB has no Atlas Search index to wait for."""
+        """Synchronous index-readiness hook; subclasses must override."""
+        raise NotImplementedError
 
     async def _wait_for_index_ready_async(self) -> None:
-        """No-op – local MongoDB has no Atlas Search index to wait for."""
-        # Atlas-search subclasses override this with polling logic
+        """Asynchronous index-readiness hook; subclasses must override."""
+        raise NotImplementedError
 
     # ------------------------------------------------------------------
-    # Transport-layer abstracts – MUST be implemented by concrete classes
+    # Transport-layer abstracts - MUST be implemented by concrete classes
     # ------------------------------------------------------------------
 
     @abstractmethod
@@ -414,3 +419,8 @@ class BaseVectorStorage(ABC):
             "database": self.db_name,
             "collection": self.collection_name,
         }
+
+    def list_source_files(self) -> list[str]:
+        """Return distinct source file paths from the collection."""
+        self._require_connection("list source files")
+        return cast("list[str]", self._execute_distinct("source_file"))

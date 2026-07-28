@@ -14,12 +14,23 @@ from __future__ import annotations
 import hashlib
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from secondbrain.document.protocols import Segment
 
-# Configure logging suppressions for docling subprocesses
+
+def _element_text(el: Any) -> str:
+    if hasattr(el, "export_to_data_frame"):
+        try:
+            return str(el.export_to_data_frame().to_csv(index=False))
+        except Exception:
+            return str(el)
+    if hasattr(el, "text") and el.text:
+        return str(el.text)
+    return ""
+
+
 _log = logging.getLogger("RapidOCR")
 _log.setLevel(logging.ERROR)
 _log = logging.getLogger("docling")
@@ -57,15 +68,22 @@ def _extract_and_chunk_file(
             AcceleratorOptions,
         )
         from docling.datamodel.base_models import InputFormat
-        from docling.datamodel.pipeline_options import PdfPipelineOptions
+        from docling.datamodel.pipeline_options import (
+            PdfPipelineOptions,
+            RapidOcrOptions,
+        )
         from docling.document_converter import DocumentConverter, PdfFormatOption
 
         pdf_options = PdfFormatOption(
             pipeline_options=PdfPipelineOptions(
                 do_ocr=True,
-                do_table_structure=False,
+                do_table_structure=True,
+                ocr_options=RapidOcrOptions(
+                    backend="torch",
+                    rapidocr_params={"EngineConfig.torch.use_mps": True},
+                ),
                 accelerator_options=AcceleratorOptions(
-                    device=AcceleratorDevice.CPU, num_threads=4
+                    device=AcceleratorDevice.AUTO, num_threads=4
                 ),
             )
         )
@@ -79,16 +97,18 @@ def _extract_and_chunk_file(
 
         if hasattr(content, "texts") and content.texts:
             for text_item in content.texts:
-                if not hasattr(text_item, "text") or not text_item.text:
+                txt = _element_text(text_item)
+                if not txt:
                     continue
 
                 page_num = 1
-                if hasattr(text_item, "prov") and text_item.prov:
-                    prov = text_item.prov[0]
-                    if hasattr(prov, "page_no"):
-                        page_num = prov.page_no
+                prov = getattr(text_item, "prov", None) or []
+                if prov:
+                    p = prov[0]
+                    if hasattr(p, "page_no"):
+                        page_num = p.page_no
 
-                segments.append({"text": text_item.text, "page": page_num})
+                segments.append({"text": txt, "page": page_num})
 
         # Fallback: read file directly for plain text formats
         if not segments:
@@ -137,7 +157,7 @@ def _extract_chunk_and_embed_file(
         'documents' (list[dict]), 'error' (str | None).
     """
     # Import chunker here to avoid circular imports at module load time
-    from secondbrain.document.chunker import _chunk_segments
+    from secondbrain.document.chunker import _chunk_segments, _Segment
 
     file_path = Path(file_path_str)
     try:
@@ -151,15 +171,22 @@ def _extract_chunk_and_embed_file(
             AcceleratorOptions,
         )
         from docling.datamodel.base_models import InputFormat
-        from docling.datamodel.pipeline_options import PdfPipelineOptions
+        from docling.datamodel.pipeline_options import (
+            PdfPipelineOptions,
+            RapidOcrOptions,
+        )
         from docling.document_converter import DocumentConverter, PdfFormatOption
 
         pdf_options = PdfFormatOption(
             pipeline_options=PdfPipelineOptions(
                 do_ocr=True,
-                do_table_structure=False,
+                do_table_structure=True,
+                ocr_options=RapidOcrOptions(
+                    backend="torch",
+                    rapidocr_params={"EngineConfig.torch.use_mps": True},
+                ),
                 accelerator_options=AcceleratorOptions(
-                    device=AcceleratorDevice.CPU, num_threads=4
+                    device=AcceleratorDevice.AUTO, num_threads=4
                 ),
             )
         )
@@ -171,21 +198,23 @@ def _extract_chunk_and_embed_file(
         segments: list[Segment] = []
         if hasattr(content, "texts") and content.texts:
             for text_item in content.texts:
-                if not hasattr(text_item, "text") or not text_item.text:
+                txt = _element_text(text_item)
+                if not txt:
                     continue
                 page_num = 1
-                if hasattr(text_item, "prov") and text_item.prov:
-                    prov = text_item.prov[0]
-                    if hasattr(prov, "page_no"):
-                        page_num = prov.page_no
-                segments.append({"text": text_item.text, "page": page_num})
+                prov = getattr(text_item, "prov", None) or []
+                if prov:
+                    p = prov[0]
+                    if hasattr(p, "page_no"):
+                        page_num = p.page_no
+                segments.append({"text": txt, "page": page_num})
 
         if not segments:
             with file_path.open(encoding="utf-8", errors="ignore") as f:
                 text = f.read()
             segments = [{"text": text, "page": 1}]
 
-        chunks = _chunk_segments(segments, chunk_size, chunk_overlap)
+        chunks = _chunk_segments(cast(list[_Segment], segments), chunk_size, chunk_overlap)
 
         from secondbrain.config import config
 
@@ -209,6 +238,7 @@ def _extract_chunk_and_embed_file(
                         "text": cleaned,
                         "page": chunk["page"],
                         "text_hash": text_hash,
+                        "chunk_role": chunk.get("chunk_role", "body"),
                     }
                 )
 
@@ -240,6 +270,7 @@ def _extract_chunk_and_embed_file(
                 "source_file": str(file_path),
                 "page_number": chunk_item["page"],
                 "chunk_text": chunk_item["text"],
+                "chunk_role": chunk_item.get("chunk_role", "body"),
                 "embedding": embedding,
                 "file_type": file_type,
                 "ingested_at": ingested_at,

@@ -78,7 +78,7 @@ class TestSharedRateLimiterAcquire:
         limiter = SharedRateLimiter(max_requests=5, window_seconds=60.0)
 
         # Should allow 5 requests
-        for i in range(5):
+        for _i in range(5):
             assert limiter.acquire() is True
 
         # 6th request should be denied

@@ -66,7 +66,6 @@ class VectorStorage(ValidatableService, BaseVectorStorage):
         self._collection: Collection[Any] | None = None
         self._index_created: bool = False
         self._async_client: httpx.AsyncClient | None = None
-        # Config-based retry settings
         self._index_ready_retry_count: int = cfg.index_ready_retry_count
         self._index_ready_retry_delay: float = cfg.index_ready_retry_delay
         super().__init__(cache_ttl=cfg.connection_cache_ttl)
@@ -117,7 +116,6 @@ class VectorStorage(ValidatableService, BaseVectorStorage):
 
         Local MongoDB does not use Atlas Search indexes, so no waiting is needed.
         """
-        # No index to wait for in local MongoDB
         pass
 
     async def _require_connection_async(
@@ -144,7 +142,6 @@ class VectorStorage(ValidatableService, BaseVectorStorage):
 
         Local MongoDB does not use Atlas Search indexes, so no waiting is needed.
         """
-        # No index to wait for in local MongoDB
         pass
 
     def close(self) -> None:
@@ -366,7 +363,6 @@ class VectorStorage(ValidatableService, BaseVectorStorage):
         """Store a document with embedding."""
         self._require_connection("store document")
 
-        # Prepare document for storage
         doc = self._prepare_document_for_storage(document)
         with trace_operation("storage_insert_one"):
             result = self.collection.insert_one(doc)
@@ -380,7 +376,6 @@ class VectorStorage(ValidatableService, BaseVectorStorage):
         # Add timestamps to all documents (supports both old and new formats)
         docs_with_timestamps = self._add_ingestion_timestamps(documents)
 
-        # Prepare documents for storage
         docs_prepared = [
             self._prepare_document_for_storage(doc) for doc in docs_with_timestamps
         ]
@@ -400,7 +395,6 @@ class VectorStorage(ValidatableService, BaseVectorStorage):
         """Search for similar embeddings."""
         self._require_connection("search")
 
-        # Ensure index exists and wait for it to be ready
         self._wait_for_index_ready()
 
         # Use vector search pipeline for local MongoDB
@@ -459,6 +453,7 @@ class VectorStorage(ValidatableService, BaseVectorStorage):
                     "chunk_id": 1,
                     "source_file": 1,
                     "page_number": 1,
+                    "element_type": 1,
                     "chunk_text": 1,
                 },
             )
@@ -556,7 +551,6 @@ class VectorStorage(ValidatableService, BaseVectorStorage):
         """
         await self._require_connection_async("store document")
 
-        # Prepare document for storage
         doc = self._prepare_document_for_storage(document)
         result = await asyncio.to_thread(lambda: self.collection.insert_one(doc))
         return str(result.inserted_id)
@@ -577,7 +571,6 @@ class VectorStorage(ValidatableService, BaseVectorStorage):
         # Add timestamps to all documents (supports both old and new formats)
         docs_with_timestamps = self._add_ingestion_timestamps(documents)
 
-        # Prepare documents for storage
         docs_prepared = [
             self._prepare_document_for_storage(doc) for doc in docs_with_timestamps
         ]
@@ -657,6 +650,7 @@ class VectorStorage(ValidatableService, BaseVectorStorage):
                     "chunk_id": 1,
                     "source_file": 1,
                     "page_number": 1,
+                    "element_type": 1,
                     "chunk_text": 1,
                 },
             )
@@ -998,7 +992,7 @@ class AsyncVectorStorage(ValidatableService, BaseVectorStorage):
             return False
 
     def _do_validate(self) -> bool:
-        """Synchronous validation using Motor.
+        """Validate synchronously using Motor.
 
         Provided to satisfy the ValidatableService abstract requirement.
         Async code paths should use _do_validate_async directly.
@@ -1017,9 +1011,11 @@ class AsyncVectorStorage(ValidatableService, BaseVectorStorage):
     # ------------------------------------------------------------------
 
     def validate_connection(self, force: bool = False) -> bool:
+        """Validate connection to MongoDB."""
         return super().validate_connection(force=force)
 
     async def validate_connection_async(self, force: bool = False) -> bool:
+        """Validate connection to MongoDB asynchronously."""
         return await super().validate_connection_async(force=force)
 
     # ------------------------------------------------------------------
@@ -1130,6 +1126,7 @@ class AsyncVectorStorage(ValidatableService, BaseVectorStorage):
                     "chunk_id": 1,
                     "source_file": 1,
                     "page_number": 1,
+                    "element_type": 1,
                     "chunk_text": 1,
                 },
             )

@@ -35,6 +35,7 @@ class StorableDocument:
         embedding: Vector embedding for semantic search.
         metadata: Reference to parent document metadata.
         page_number: Page number in source document (if applicable).
+        element_type: Element type tag (e.g. 'table', 'figure', 'text') for filtered storage queries.
 
     Note
     ----
@@ -48,3 +49,4 @@ class StorableDocument:
     embedding: EmbeddingVector
     metadata: DocumentMetadata
     page_number: int | None = None
+    element_type: str | None = None

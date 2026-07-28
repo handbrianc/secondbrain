@@ -108,6 +108,7 @@ class MockEmbeddingProvider(EmbeddingProvider):
         pass
 
     def __repr__(self) -> str:
+        """Return string representation."""
         # Use old class name in repr for backward compatibility
         return f"MockEmbeddingGenerator(model={self.model_name}, dimension={self.dimension})"
 

@@ -60,6 +60,7 @@ class EmbeddingProviderFactory:
                     api_key=config.embedding_api_key,
                     api_base=config.embedding_api_base,
                     dimensions=config.embedding_dimensions,
+                    timeout=config.embedding_timeout,
                 ),
             )
 
@@ -74,6 +75,7 @@ class EmbeddingProviderFactory:
         api_key: str | None = None,
         api_base: str | None = None,
         dimensions: int | None = None,
+        timeout: int | None = None,
     ) -> OpenAIEmbeddingProvider:
         """Create an OpenAI-compatible embedding provider.
 
@@ -82,6 +84,7 @@ class EmbeddingProviderFactory:
             api_key: API key (defaults to config or env var).
             api_base: Base URL for OpenAI-compatible API (defaults to config).
             dimensions: Output dimensions (defaults to config).
+            timeout: Request timeout in seconds (defaults to config, 300s).
 
         Returns:
             Configured OpenAIEmbeddingProvider instance.
@@ -95,4 +98,5 @@ class EmbeddingProviderFactory:
             api_key=api_key or cfg.embedding_api_key,
             api_base=api_base or cfg.embedding_api_base,
             dimensions=dimensions or cfg.embedding_dimensions,
+            timeout=timeout or cfg.embedding_timeout,
         )

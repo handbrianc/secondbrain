@@ -21,6 +21,8 @@ class MessageFactory(Factory):
     """
 
     class Meta:
+        """MessageFactory for testing."""
+
         model = dict
 
     role = Faker("random_element", elements=["user", "assistant", "system"])

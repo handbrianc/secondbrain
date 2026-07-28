@@ -194,7 +194,6 @@ class CircuitBreaker:
                     self._backoff_multiplier = 1
                     self._current_recovery_timeout = self.config.recovery_timeout
             elif self._state == CircuitState.CLOSED:
-                # Reset failure count on success in closed state
                 self._failure_count = 0
 
     def record_failure(self) -> None:

@@ -10,6 +10,7 @@ class ChunkInfo(TypedDict):
     source_file: str
     page_number: int | None
     chunk_text: str
+    element_type: str | None
 
 
 class SearchResult(ChunkInfo, total=False):

@@ -10,7 +10,7 @@ import re
 from collections.abc import Sequence
 from typing import Any
 
-from secondbrain.config import config, get_config
+from secondbrain.config import config
 from secondbrain.embedding import EmbeddingProvider, EmbeddingProviderFactory
 from secondbrain.storage import (
     SearchResult,
@@ -147,16 +147,13 @@ class Searcher:
         file_type_filter: str | None = None,
     ) -> list[dict[str, Any]]:
         """Search for similar documents using semantic similarity."""
-        # Sanitize query to prevent injection attacks
         sanitized_query = sanitize_query(query)
 
         top_k = top_k or self._config.default_top_k
 
-        # Validate connections
         if not self.storage.validate_connection():
             raise RuntimeError("Cannot connect to MongoDB")
 
-        # Generate query embedding
         with trace_operation("search_generate_embedding") as span:
             if span:
                 span.set_attribute("search.query_length", len(sanitized_query))
@@ -167,7 +164,6 @@ class Searcher:
                     span.set_attribute("search.file_type_filter", file_type_filter)
             query_embedding = self.embedding_gen.generate(sanitized_query)
 
-        # Search in storage
         with trace_operation("search_storage") as span:
             if span:
                 span.set_attribute("search.top_k", top_k)

@@ -6,7 +6,7 @@ configuration and direct constructor calls.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 
@@ -40,6 +40,7 @@ class TestEmbeddingProviderFactoryCreateFromConfig:
             api_key="sk-test-key",
             api_base="https://api.openai.com/v1",
             dimensions=1536,
+            timeout=ANY,
         )
 
     def test_create_openai_provider_without_api_base(self) -> None:
@@ -144,6 +145,7 @@ class TestEmbeddingProviderFactoryCreateOpenAI:
             api_key="sk-direct-key",
             api_base="https://custom.example.com/v1",
             dimensions=1024,
+            timeout=ANY,
         )
 
     def test_create_openai_no_args_uses_config_defaults(self) -> None:
@@ -172,13 +174,12 @@ class TestEmbeddingProviderFactoryCreateOpenAI:
             api_key="sk-config-default",
             api_base=None,
             dimensions=1536,
+            timeout=ANY,
         )
 
 
 class TestOpenAIEmbeddingProviderVariants:
-    """Tests demonstrating that OpenAIEmbeddingProvider handles OpenAI-compatible
-    endpoints (Ollama, LM Studio, vLLM, Azure OpenAI) via api_base override.
-    """
+    """Tests demonstrating OpenAIEmbeddingProvider endpoint variants."""
 
     def test_azure_openai_style_endpoint(self) -> None:
         """Azure OpenAI and OpenAI-compatible services use api_base to point at custom endpoints."""

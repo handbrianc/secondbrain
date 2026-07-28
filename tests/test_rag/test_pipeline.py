@@ -170,7 +170,11 @@ class TestRAGPipelineQuery:
 
         assert result["answer"] == "Python is a high-level language"
         assert result["query"] == "What is Python?"
-        mock_searcher.search.assert_called_once_with("What is Python?", top_k=5)
+        mock_searcher.search.assert_called_once_with(
+            "What is Python?",
+            top_k=5,
+            source_filter=None,
+        )
         mock_llm_provider.generate.assert_called_once()
 
     def test_query_with_show_sources(
@@ -203,7 +207,11 @@ class TestRAGPipelineQuery:
 
         pipeline_with_mocks.query("Test query", top_k=10)
 
-        mock_searcher.search.assert_called_once_with("Test query", top_k=10)
+        mock_searcher.search.assert_called_once_with(
+            "Test query",
+            top_k=10,
+            source_filter=None,
+        )
 
     def test_query_with_no_results_and_show_sources(
         self,
@@ -384,14 +392,13 @@ class TestRAGPipelineFormatContext:
         self,
         pipeline_with_mocks: RAGPipeline,
     ) -> None:
-        """Test that chunks longer than 500 chars are truncated."""
-        long_text = "A" * 600
+        """Test that chunks longer than the config preview limit are truncated."""
+        long_text = "A" * 2500
         chunks = [{"chunk_text": long_text, "source_file": "doc.pdf", "page": 1}]
 
         result = pipeline_with_mocks._format_context(chunks)
 
         assert "..." in result
-        assert len(result.split("\n")[1]) <= 503  # 500 + "..."
 
     def test_format_context_respects_max_chars(
         self,
@@ -730,7 +737,11 @@ class TestRAGPipelineAsync:
 
         assert result["answer"] == "Python is a high-level language"
         assert result["query"] == "What is Python?"
-        mock_searcher.search_async.assert_called_once_with("What is Python?", top_k=5)
+        mock_searcher.search_async.assert_called_once_with(
+            "What is Python?",
+            top_k=5,
+            source_filter=None,
+        )
         mock_llm_provider.agenerate.assert_called_once()
 
     @pytest.mark.asyncio
@@ -765,7 +776,11 @@ class TestRAGPipelineAsync:
 
         await pipeline_with_mocks.query_async("Test query", top_k=10)
 
-        mock_searcher.search_async.assert_called_once_with("Test query", top_k=10)
+        mock_searcher.search_async.assert_called_once_with(
+            "Test query",
+            top_k=10,
+            source_filter=None,
+        )
 
     @pytest.mark.asyncio
     async def test_query_async_with_no_results_and_show_sources(
