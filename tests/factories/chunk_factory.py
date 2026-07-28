@@ -38,6 +38,8 @@ class ChunkFactory(Factory):
     """
 
     class Meta:
+        """ChunkFactory for testing."""
+
         model = DocumentChunk
 
     chunk_id = Sequence(lambda n: ChunkId(f"chunk_{n:04d}"))

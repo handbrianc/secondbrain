@@ -96,7 +96,6 @@ def ingest(
     chunk_size = cfg.chunk_size if chunk_size is None else chunk_size
     chunk_overlap = cfg.chunk_overlap if chunk_overlap is None else chunk_overlap
 
-    # Validate and resolve core count
     if cores is not None:
         if cores <= 0:
             raise CLIValidationError("cores must be positive")
@@ -112,9 +111,6 @@ def ingest(
         verbose = ctx.obj.get("verbose", False)
 
     console.print(f"[bold]Ingesting: {path}[/bold]")
-
-    # Collect files to show progress
-    from pathlib import Path
 
     from secondbrain.document import is_supported
 
@@ -225,7 +221,6 @@ def search(
 
     cfg = config()
     top_k = top_k or cfg.default_top_k
-    # Use provided min_score or fall back to default constant
     effective_min_score = (
         min_score if min_score is not None else DEFAULT_MIN_SIMILARITY_THRESHOLD
     )
@@ -307,7 +302,6 @@ def delete(
     """Delete documents from the vector database."""
     from secondbrain.management import Deleter
 
-    # Validate options
     if not any([source, chunk_id, all]):
         console.print("[red]Error: Must specify --source, --chunk-id, or --all[/red]")
         sys.exit(1)
@@ -318,7 +312,6 @@ def delete(
         )
         sys.exit(1)
 
-    # Get confirmation
     if not yes:
         if all:
             if not click.confirm("Delete all documents? This cannot be undone."):
@@ -582,6 +575,95 @@ def chat(
     )
 
 
+def _run_chat_with_spinner(
+    pipeline: Any,
+    query: str,
+    session_obj: Any,
+    top_k: int,
+    show_sources: bool,
+) -> dict[str, Any]:
+    """Run chat with a Rich spinner that animates until streaming starts.
+
+    Uses a background thread so the spinner can animate while the LLM
+    generates its first response token.  All output is routed through a
+    ``queue.Queue`` to avoid interleaving with Rich's Live display.
+    The spinner is written to stderr so it never pollutes stdout.
+    """
+    import queue
+    import threading
+
+    chunk_queue: queue.Queue[str] = queue.Queue()
+    done_event = threading.Event()
+    has_streamed: list[bool] = [False]
+
+    def on_chunk(content: str, _reasoning: str | None) -> None:
+        if content:
+            has_streamed[0] = True
+            chunk_queue.put(content)
+
+    pipeline._on_chunk = on_chunk
+
+    result_container: dict[str, Any] = {}
+
+    def _run() -> None:
+        try:
+            result_container["result"] = pipeline.chat(
+                query, session_obj, top_k=top_k, show_sources=show_sources
+            )
+        except BaseException as exc:
+            result_container["error"] = exc
+        finally:
+            done_event.set()
+
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+
+    import sys as _sys
+
+    first_chunk: str | None = None
+    with console.status("[bold cyan]Thinking...", spinner="dots"):
+        while True:
+            try:
+                first_chunk = chunk_queue.get(timeout=0.1)
+                break
+            except queue.Empty:
+                if done_event.is_set():
+                    break
+
+    # Continuously drain the queue until the thread has finished
+    # *and* the queue is empty.  This handles streaming responses
+    # where chunks arrive after the first one broke the spinner.
+    wrote_first = False
+    if first_chunk is not None:
+        _sys.stdout.write(first_chunk)
+        wrote_first = True
+    while not done_event.is_set() or not chunk_queue.empty():
+        try:
+            chunk = chunk_queue.get(timeout=0.1)
+            _sys.stdout.write(chunk)
+            wrote_first = True
+        except queue.Empty:
+            pass
+    if wrote_first:
+        _sys.stdout.flush()
+
+    t.join()
+
+    # Propagate any exception that occurred in the background thread.
+    if "error" in result_container:
+        raise result_container["error"]
+
+    result: dict[str, Any] = result_container.get("result", {})
+
+    # Non-streaming path: no chunks came through the streaming
+    # callback, but the answer is in result["answer"].
+    if not has_streamed[0] and result.get("answer"):
+        _sys.stdout.write(result["answer"])
+        _sys.stdout.flush()
+
+    return result
+
+
 def _single_turn_chat(
     query: str,
     session: str | None,
@@ -590,23 +672,37 @@ def _single_turn_chat(
     model: str | None,
     show_sources: bool,
 ) -> None:
-    """Handle single-turn chat with a query."""
+    """Handle single-turn chat with a query.
+
+    Shows a thinking spinner until the first response token arrives,
+    then streams subsequent tokens directly to the terminal.
+    """
     from secondbrain.config import config
     from secondbrain.conversation import ConversationSession, ConversationStorage
     from secondbrain.rag import RAGPipeline
+    from secondbrain.rag.intent_parser import StructuralIntentParser
     from secondbrain.rag.providers import LLMProviderFactory
     from secondbrain.search import Searcher
 
     cfg = config()
+
+    intent_parser = StructuralIntentParser(cfg)
+    intent_result = intent_parser.parse(query)
+    click.echo(
+        f"\u25b6 Detected intent: {'general query' if intent_result.intent.name == 'UNKNOWN' else intent_result.intent.name.lower().replace('_', ' ')}",
+        err=True,
+    )
 
     with ConversationStorage() as storage:
         if session is None:
             session_obj = ConversationSession.create(storage=storage)
             console.print(f"[dim]Created new session: {session_obj.session_id}[/dim]")
         else:
-            session_obj = ConversationSession.load(session, storage)  # type: ignore[assignment]
-            if session_obj is None:
+            loaded = ConversationSession.load(session, storage)
+            if loaded is None:
                 session_obj = ConversationSession.create(session, storage)
+            else:
+                session_obj = loaded
 
     searcher = Searcher(verbose=False)
     llm_provider = LLMProviderFactory.create_from_config(cfg)
@@ -618,15 +714,18 @@ def _single_turn_chat(
         context_window=cfg.rag_context_window,
     )
 
-    with console.status("[cyan]Thinking...", spinner="dots"):
-        result = pipeline.chat(
-            query, session_obj, top_k=top_k, show_sources=show_sources
-        )
+    result = _run_chat_with_spinner(
+        pipeline,
+        query,
+        session_obj,
+        top_k=top_k,
+        show_sources=show_sources,
+    )
 
-    console.print("\n[bold green]Answer:[/bold green]")
-    console.print(result["answer"])
+    # Ensure trailing newline after streamed output
+    sys.stdout.write("\n")
+    sys.stdout.flush()
 
-    # Show sources if requested
     if show_sources and result.get("sources"):
         console.print("\n[bold blue]Sources:[/bold blue]")
         for i, chunk in enumerate(result["sources"], 1):
@@ -649,43 +748,38 @@ def _interactive_chat(
     from secondbrain.config import config
     from secondbrain.conversation import ConversationSession, ConversationStorage
     from secondbrain.rag import RAGPipeline
+    from secondbrain.rag.intent_parser import StructuralIntentParser
     from secondbrain.rag.providers import LLMProviderFactory
     from secondbrain.search import Searcher
 
     cfg = config()
 
+    intent_parser = StructuralIntentParser(cfg)
     console.print("\n[bold]SecondBrain Interactive Chat[/bold]")
     console.print("=" * 60)
     console.print(f"Session: [cyan]{session}[/cyan]")
     console.print("Type /quit to exit, /clear to clear history, /help for commands\n")
 
-    # Load or create session
     with ConversationStorage() as storage:
         if session is None:
             session_obj = ConversationSession.create(storage=storage)
             console.print(f"[dim]Created new session: {session_obj.session_id}[/dim]")
         else:
-            session_obj = ConversationSession.load(session, storage)  # type: ignore[assignment]
-            if session_obj is None:
+            loaded = ConversationSession.load(session, storage)
+            if loaded is None:
                 session_obj = ConversationSession.create(session, storage)
                 console.print(
                     f"[dim]Created new session: {session_obj.session_id}[/dim]"
                 )
-            elif not session_obj.is_empty:
-                console.print(
-                    f"[dim]Resuming session with {session_obj.message_count} messages[/dim]"
-                )
+            else:
+                session_obj = loaded
+                if not session_obj.is_empty:
+                    console.print(
+                        f"[dim]Resuming session with {session_obj.message_count} messages[/dim]"
+                    )
 
     searcher = Searcher(verbose=False)
     llm_provider = LLMProviderFactory.create_from_config(cfg)
-
-    # Initialize RAG pipeline
-    pipeline = RAGPipeline(
-        searcher=searcher,
-        llm_provider=llm_provider,
-        top_k=top_k,
-        context_window=cfg.rag_context_window,
-    )
 
     history_file = Path("~/.secondbrain_chat_history").expanduser()
 
@@ -706,7 +800,6 @@ def _interactive_chat(
             if not user_input:
                 continue
 
-            # Handle special commands
             if user_input.startswith("/"):
                 command = user_input.lower()
                 if command == "/quit" or command == "/exit":
@@ -726,15 +819,30 @@ def _interactive_chat(
                     console.print(f"[yellow]Unknown command: {user_input}[/yellow]")
                     continue
 
-            with console.status("[cyan]Thinking...", spinner="dots"):
-                result = pipeline.chat(
-                    user_input, session_obj, top_k=top_k, show_sources=show_sources
-                )
+            intent_result = intent_parser.parse(user_input)
+            click.echo(
+                f"\u25b6 Detected intent: {'general query' if intent_result.intent.name == 'UNKNOWN' else intent_result.intent.name.lower().replace('_', ' ')}",
+                err=True,
+            )
 
-            console.print("\n[bold green]Assistant:[/bold green]")
-            console.print(result["answer"])
+            streaming_pipeline = RAGPipeline(
+                searcher=searcher,
+                llm_provider=llm_provider,
+                top_k=top_k,
+                context_window=cfg.rag_context_window,
+            )
 
-            # Show sources if requested
+            result = _run_chat_with_spinner(
+                streaming_pipeline,
+                user_input,
+                session_obj,
+                top_k=top_k,
+                show_sources=show_sources,
+            )
+
+            sys.stdout.write("\n")
+            sys.stdout.flush()
+
             if show_sources and result.get("sources"):
                 console.print("\n[bold blue]Sources:[/bold blue]")
                 for i, chunk in enumerate(result["sources"], 1):
@@ -803,9 +911,7 @@ def start(
     """
     from secondbrain.utils.docker_manager import DockerManager
 
-    # Auto-detect compose file if not specified
     if compose_file is None:
-        # Check common locations
         possible_paths = [
             Path.cwd() / "docker-compose.yml",
             Path.cwd() / "docker-compose.prod.yml",
@@ -827,7 +933,6 @@ def start(
     try:
         manager = DockerManager(compose_file=compose_file, project_name=project_name)
 
-        # Check if Docker is available
         if not manager.check_docker_installed():
             raise DockerNotInstalledError(
                 "[red]✗ Docker is not installed or not in PATH[/red]\n\n"
@@ -842,11 +947,9 @@ def start(
                 "  - https://docs.docker.com/compose/install/"
             )
 
-        # Start MongoDB
         console.print("[cyan]Starting MongoDB...[/cyan]")
         manager.start_mongo()
 
-        # Wait for ready if requested
         if wait:
             console.print("[cyan]Waiting for services to be ready...[/cyan]")
             manager.wait_for_mongo_ready()
@@ -866,6 +969,157 @@ def start(
     except Exception as e:
         console.print(f"[red]Unexpected error: {e}[/red]")
         sys.exit(1)
+
+
+@handle_cli_errors
+@cli.command()
+@click.option(
+    "--chapter",
+    "-c",
+    type=int,
+    help="Chapter number to summarize (required when not using --by-section)",
+)
+@click.option(
+    "--by-section",
+    is_flag=True,
+    help="Summarize by section instead of by chapter. Requires --chapter to specify the parent chapter.",
+)
+@click.option(
+    "--section-id",
+    "-s",
+    type=str,
+    help="Section ID (dot-separated, e.g. '3.9'). Used with --by-section.",
+)
+@click.pass_context
+def summarize(
+    ctx: click.Context,
+    chapter: int | None,
+    by_section: bool,
+    section_id: str | None,
+) -> None:
+    """Summarize document content by chapter or section.
+
+    Produces a concise summary of the specified chapter or section using
+    an LLM. Outputs the summary with title, content, chunk count, and
+    token usage.
+
+    Examples:
+    --------
+        secondbrain summarize --chapter 3          # Summarize chapter 3
+        secondbrain summarize -c 2 --by-section    # Summarize a section within chapter 2
+        secondbrain summarize -c 2 --by-section -s 2.9   # Summarize section 2.9 of chapter 2
+    --------
+    """
+    import asyncio
+
+    from secondbrain.document.summarizer import Summarizer
+    from secondbrain.embedding import EmbeddingProviderFactory
+    from secondbrain.rag.providers import LLMProviderFactory
+    from secondbrain.storage import VectorStorage
+
+    if by_section and chapter is None:
+        console.print(
+            "[red]Error: --by-section requires --chapter to specify the parent chapter[/red]"
+        )
+        sys.exit(1)
+
+    if section_id is not None and not by_section:
+        console.print("[red]Error: --section-id requires --by-section flag[/red]")
+        sys.exit(1)
+
+    if chapter is None and not by_section:
+        console.print(
+            "[red]Error: Must specify --chapter or use --by-section with --chapter[/red]"
+        )
+        sys.exit(1)
+
+    cfg = config()
+
+    llm_provider = LLMProviderFactory.create_from_config(cfg)
+    embedder = EmbeddingProviderFactory.create_from_config(cfg)
+    storage = VectorStorage()
+
+    max_tokens = getattr(cfg, "llm_max_tokens", 512)
+    summary_model = getattr(cfg, "llm_model", None)
+
+    summarizer = Summarizer(
+        llm_provider=llm_provider,
+        embedder=embedder,
+        storage=storage,
+        max_summary_tokens=max_tokens,
+        summary_model=summary_model,
+    )
+
+    async def _run() -> tuple[bool, str]:
+        """Run summarization and return (has_content, formatted_output)."""
+        try:
+            if by_section:
+                section_id_value: str = section_id  # type: ignore[assignment]
+                section_result = await summarizer.summarize_by_section(section_id_value)
+                if not section_result.summary:
+                    return (False, "")
+                tokens_used = getattr(section_result, "token_budget_used", 0) or max_tokens
+                return (
+                    True,
+                    _format_section_summary(section_result, tokens_used),
+                )
+            else:
+                chapter_num: int = chapter  # type: ignore[assignment]
+                chapter_result = await summarizer.summarize_by_chapter(chapter_num)
+                if not chapter_result.summary:
+                    return (False, "")
+                tokens_used = getattr(chapter_result, "token_budget_used", 0) or max_tokens
+                return (
+                    True,
+                    _format_chapter_summary(chapter_result, tokens_used),
+                )
+        finally:
+            storage.close()
+            if hasattr(embedder, "close"):
+                embedder.close()
+
+    has_content, output = asyncio.run(_run())
+
+    if not has_content:
+        console.print(
+            "[yellow]No content found for the specified chapter or section.[/yellow]\n"
+            "[dim]This may mean the document hasn't been ingested yet, "
+            "or the chapter/section doesn't exist.[/dim]"
+        )
+        return
+
+    console.print(output)
+
+
+def _format_chapter_summary(result: Any, tokens_used: int) -> str:
+    """Format chapter summary for display."""
+    lines = [
+        "",
+        f"[bold cyan]Chapter {result.chapter_id}: {result.chapter_title}[/bold cyan]",
+        "─" * 60,
+        "",
+        result.summary,
+        "",
+        "─" * 60,
+        f"[dim]Chunks processed: {result.chunk_count}  |  Tokens used: {tokens_used}[/dim]",
+    ]
+    return "\n".join(lines)
+
+
+def _format_section_summary(result: Any, tokens_used: int) -> str:
+    """Format section summary for display."""
+    lines = [
+        "",
+        f"[bold cyan]Section {result.section_id}: {result.section_title}[/bold cyan]",
+        f"[dim](Part of Chapter {result.belongs_to_chapter})[/dim]",
+        "─" * 60,
+        "",
+        result.summary,
+        "",
+        "─" * 60,
+        f"[dim]Tokens used: {tokens_used}[/dim]",
+    ]
+    return "\n".join(lines)
 
 
 @handle_cli_errors
@@ -918,9 +1172,7 @@ def stop(
     """
     import subprocess
 
-    # Auto-detect compose file if not specified
     if compose_file is None:
-        # Check common locations
         possible_paths = [
             Path.cwd() / "docker-compose.yml",
             Path.cwd() / "docker-compose.prod.yml",
@@ -937,7 +1189,6 @@ def stop(
                 "or place docker-compose.yml in the current directory or project root."
             )
 
-    # Get confirmation
     if not force:
         action = "remove volumes" if remove_volumes else "stop containers"
         if not click.confirm(
@@ -948,7 +1199,6 @@ def stop(
 
     console.print(f"[cyan]Stopping Docker Compose stack from: {compose_file}[/cyan]")
 
-    # Check if Docker is available
     if (
         subprocess.run(
             ["docker", "--version"], capture_output=True, check=False
@@ -962,7 +1212,6 @@ def stop(
         sys.exit(1)
 
     try:
-        # Run docker compose down
         cmd = [
             "docker",
             "compose",
@@ -976,7 +1225,6 @@ def stop(
         if remove_volumes:
             cmd.append("-v")
 
-        console.print("[cyan]Stopping services...[/cyan]")
         result = subprocess.run(
             cmd,
             capture_output=True,

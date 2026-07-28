@@ -122,29 +122,22 @@ class QueryRewriter:
             >>> rewriter.rewrite("What about pricing?", history)
             "What about the pricing of the ACME contract?"
         """
-        # If history is empty, return query as-is
         if not conversation_history or not isinstance(conversation_history, list):
             logger.debug("No conversation history provided, returning original query")
             return query
 
-        # Limit history to context_window messages
         recent_history = (
             conversation_history[-self._context_window :]
             if len(conversation_history) > self._context_window
             else conversation_history
         )
 
-        # Build prompt with conversation context
         prompt = self._build_rewrite_prompt(query, recent_history)
 
-        # Call LLM to rewrite query
         try:
             rewritten = self._call_llm_safely(prompt)
-
-            # Clean up the response
             rewritten = self._clean_llm_response(rewritten)
 
-            # Validate the rewrite is meaningful
             if self._is_valid_rewrite(query, rewritten):
                 logger.info(f"Query rewritten: '{query}' -> '{rewritten}'")
                 return rewritten
@@ -206,10 +199,7 @@ class QueryRewriter:
             >>> history = [{"role": "user", "content": "What is AI?"}]
             >>> prompt = rewriter._build_rewrite_prompt("How does it work?", history)
         """
-        # Format history
         context = self._format_history(history)
-
-        # Build template
         return self.REWRITE_TEMPLATE.format(context=context, query=query)
 
     def _format_history(self, history: list[dict[str, Any]]) -> str:
@@ -275,7 +265,6 @@ class QueryRewriter:
             >>> cleaned
             "The answer is 42"
         """
-        # Strip whitespace
         cleaned = response.strip()
 
         # Remove common prefixes that LLMs sometimes add
@@ -292,7 +281,6 @@ class QueryRewriter:
                 cleaned = cleaned[len(prefix) :].strip()
                 break
 
-        # Remove extra newlines
         while "\n\n\n" in cleaned:
             cleaned = cleaned.replace("\n\n\n", "\n\n")
 
@@ -315,7 +303,6 @@ class QueryRewriter:
             >>> rewriter._is_valid_rewrite("Hello", "")
             False
         """
-        # Check if rewritten is empty or just whitespace
         if not rewritten or not rewritten.strip():
             return False
 
@@ -327,7 +314,6 @@ class QueryRewriter:
         if rewritten.strip().lower() == original.strip().lower():
             return True
 
-        # Check for obvious failure patterns
         failure_patterns = [
             "i cannot",
             "i can't",
@@ -387,8 +373,6 @@ class QueryRewriter:
             >>> rewriter.should_rewrite("How does it work?")
             True
         """
-        # Use _is_standalone_query to decide
-        # Return True if rewriting needed (i.e., NOT standalone)
         return not self._is_standalone_query(query)
 
     @property

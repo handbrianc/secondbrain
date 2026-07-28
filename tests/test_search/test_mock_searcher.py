@@ -271,7 +271,7 @@ class TestMockSearcherContent:
         """Test that chunks reference correct source files."""
         searcher = MockSearcher()
 
-        source_files = set(chunk["source_file"] for chunk in searcher._test_chunks)
+        source_files = {chunk["source_file"] for chunk in searcher._test_chunks}
 
         assert "tests/config.md" in source_files
         assert "tests/architecture.md" in source_files

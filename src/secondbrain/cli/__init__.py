@@ -32,9 +32,8 @@ def cli(ctx: click.Context, verbose: bool) -> None:
     setup_logging(verbose=verbose)
 
 
-# Import and register commands after cli group is defined
 # This ensures commands are properly decorated and registered
-from . import commands
+from . import commands  # noqa: E402
 
 
 def main() -> None:

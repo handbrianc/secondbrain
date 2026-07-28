@@ -22,14 +22,10 @@ T = TypeVar("T")
 def handle_cli_errors(func: Callable[P, T]) -> Callable[P, T]:
     """Handle CLI errors gracefully by catching exceptions.
 
-    Catches specific exceptions, displays user-friendly error messages,
-    logs full traceback for debugging, and exits with status 1.
-
     Args:
         func: Function to decorate.
 
-    Returns
-    -------
+    Returns:
         Wrapped function with error handling.
     """
 

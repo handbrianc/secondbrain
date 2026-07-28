@@ -40,7 +40,7 @@ class TestDocumentMetadataFactory:
 
         assert len(metadata_list) == 5
         # Each should have unique values
-        assert len(set(m.ingested_at for m in metadata_list)) == 5
+        assert len({m.ingested_at for m in metadata_list}) == 5
 
 
 class TestDocumentChunkFactory:
@@ -88,7 +88,7 @@ class TestDocumentChunkFactory:
 
         assert len(chunks) == 10
         # Each should have unique IDs
-        assert len(set(c.chunk_id for c in chunks)) == 10
+        assert len({c.chunk_id for c in chunks}) == 10
 
 
 class TestChunkFactory:
@@ -178,7 +178,7 @@ class TestSessionFactory:
 
         assert len(sessions) == 3
         # Each should have unique session IDs
-        assert len(set(s["session_id"] for s in sessions)) == 3
+        assert len({s["session_id"] for s in sessions}) == 3
 
 
 class TestFactoryIntegration:

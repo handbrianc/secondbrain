@@ -26,9 +26,8 @@ from typing import Any
 import httpx
 from openai import APIError, AsyncOpenAI, OpenAI
 
-from secondbrain.exceptions import ServiceUnavailableError
-
 from secondbrain.embedding.interfaces import EmbeddingProvider
+from secondbrain.exceptions import ServiceUnavailableError
 
 
 class OpenAIEmbeddingProvider(EmbeddingProvider):

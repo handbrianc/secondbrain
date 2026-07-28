@@ -263,7 +263,7 @@ class TestDocumentIngestorIngestErrorHandling:
             patch.object(
                 ingestor,
                 "_process_parallel_with_progress",
-                return_value=(0, 1),  # 0 successful, 1 failed
+                return_value=(0, 1, []),  # 0 successful, 1 failed
             ),
         ):
             result = ingestor.ingest(str(tmp_path))

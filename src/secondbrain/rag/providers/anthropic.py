@@ -95,14 +95,11 @@ class AnthropicLLMProvider(LocalLLMProvider):
             RuntimeError: If generation fails.
         """
         try:
-            # Convert prompt to messages format
             messages = [{"role": "user", "content": prompt}]
 
-            # Use provided overrides or defaults
             temp = temperature if temperature is not None else self._temperature
             tokens = max_tokens if max_tokens is not None else self._max_tokens
 
-            # Call Anthropic API
             response = self._client.messages.create(
                 model=self._model,
                 messages=messages,  # type: ignore
@@ -140,14 +137,11 @@ class AnthropicLLMProvider(LocalLLMProvider):
             RuntimeError: If generation fails.
         """
         try:
-            # Convert prompt to messages format
             messages = [{"role": "user", "content": prompt}]
 
-            # Use provided overrides or defaults
             temp = temperature if temperature is not None else self._temperature
             tokens = max_tokens if max_tokens is not None else self._max_tokens
 
-            # Call Anthropic API asynchronously
             response = await self._async_client.messages.create(
                 model=self._model,
                 messages=messages,  # type: ignore
@@ -171,7 +165,6 @@ class AnthropicLLMProvider(LocalLLMProvider):
             True if API is accessible, False otherwise.
         """
         try:
-            # Make a minimal request to check connectivity
             self._client.models.list()
             return True
         except Exception:

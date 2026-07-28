@@ -307,14 +307,14 @@ class TestInjectTimeoutContextManager:
         """Test timeout context with custom timeout value."""
         injector = FailureInjector()
         with injector.inject_timeout(timeout_value=15.0):
-            config = list(injector._active_failures.values())[0]
+            config = next(iter(injector._active_failures.values()))
             assert config.timeout_value == 15.0
 
     def test_timeout_context_with_custom_error_message(self):
         """Test timeout context with custom error message."""
         injector = FailureInjector()
         with injector.inject_timeout(error_message="Custom timeout"):
-            config = list(injector._active_failures.values())[0]
+            config = next(iter(injector._active_failures.values()))
             assert config.error_message == "Custom timeout"
 
     def test_timeout_context_cleanup_on_exception(self):
@@ -349,7 +349,7 @@ class TestInjectConnectionErrorContextManager:
         """Test connection error context with custom message."""
         injector = FailureInjector()
         with injector.inject_connection_error(error_message="Custom connection error"):
-            config = list(injector._active_failures.values())[0]
+            config = next(iter(injector._active_failures.values()))
             assert config.error_message == "Custom connection error"
 
     def test_connection_error_context_cleanup_on_exception(self):
@@ -378,7 +378,7 @@ class TestInjectGeneralFailureContextManager:
         """Test general failure context with probability."""
         injector = FailureInjector()
         with injector.inject_general_failure(duration=2.0, probability=0.5):
-            config = list(injector._active_failures.values())[0]
+            config = next(iter(injector._active_failures.values()))
             assert config.probability == 0.5
 
     def test_general_failure_context_with_delay(self):
@@ -391,7 +391,7 @@ class TestInjectGeneralFailureContextManager:
         """Test general failure context with custom message."""
         injector = FailureInjector()
         with injector.inject_general_failure(error_message="Custom failure"):
-            config = list(injector._active_failures.values())[0]
+            config = next(iter(injector._active_failures.values()))
             assert config.error_message == "Custom failure"
 
 
@@ -410,7 +410,7 @@ class TestInjectNetworkPartitionContextManager:
         """Test network partition context with partition type."""
         injector = FailureInjector()
         with injector.inject_network_partition(partition_type="partial"):
-            config = list(injector._active_failures.values())[0]
+            config = next(iter(injector._active_failures.values()))
             # The partition_type is stored in error_message for this implementation
             assert config is not None
 
@@ -419,7 +419,7 @@ class TestInjectNetworkPartitionContextManager:
         injector = FailureInjector()
         services = ["service1", "service2"]
         with injector.inject_network_partition(affected_services=services):
-            config = list(injector._active_failures.values())[0]
+            config = next(iter(injector._active_failures.values()))
             assert config is not None
 
     def test_network_partition_context_with_delay(self):
@@ -685,28 +685,28 @@ class TestEdgeCases:
         """Test failure with zero probability."""
         injector = FailureInjector()
         with injector.inject_general_failure(probability=0.0):
-            config = list(injector._active_failures.values())[0]
+            config = next(iter(injector._active_failures.values()))
             assert config.probability == 0.0
 
     def test_probability_one(self):
         """Test failure with probability of one."""
         injector = FailureInjector()
         with injector.inject_general_failure(probability=1.0):
-            config = list(injector._active_failures.values())[0]
+            config = next(iter(injector._active_failures.values()))
             assert config.probability == 1.0
 
     def test_null_error_message(self):
         """Test failure with null error message."""
         injector = FailureInjector()
         with injector.inject_timeout(error_message=None):
-            config = list(injector._active_failures.values())[0]
+            config = next(iter(injector._active_failures.values()))
             assert config.error_message is None
 
     def test_empty_error_message(self):
         """Test failure with empty error message."""
         injector = FailureInjector()
         with injector.inject_timeout(error_message=""):
-            config = list(injector._active_failures.values())[0]
+            config = next(iter(injector._active_failures.values()))
             assert config.error_message == ""
 
 
@@ -721,7 +721,7 @@ class TestThreadSafety:
 
         def worker(worker_id):
             try:
-                for i in range(10):
+                for _i in range(10):
                     injector.inject(failure_type=FailureType.TIMEOUT, duration=0.1)
                     injector.reset()
             except Exception as e:
@@ -1380,7 +1380,7 @@ class TestLatencyInjectionScenarios:
         # Should have variance due to jitter
         assert max(latencies) > min(latencies)
         # All should be at least 50ms
-        assert all(l >= 0.04 for l in latencies)
+        assert all(lat >= 0.04 for lat in latencies)
 
     def test_latency_duration(self):
         """Test latency injection with duration."""
@@ -1572,7 +1572,7 @@ class TestEdgeCasesAndBoundaries:
                 results.append(False)
 
         threads = []
-        for i in range(5):
+        for _i in range(5):
             t = threading.Thread(target=inject_failure, args=(FailureType.TIMEOUT, 0.1))
             threads.append(t)
             t.start()
@@ -1624,7 +1624,7 @@ class TestFailureCountAndRepeat:
         injector._active_failures["test"] = config
 
         # Should be able to fail multiple times
-        for i in range(5):
+        for _i in range(5):
             with pytest.raises(InjectedFailureError):
                 injector.raise_failure(FailureType.GENERAL_FAILURE)
 

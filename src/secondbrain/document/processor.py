@@ -19,22 +19,31 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from typing_extensions import TypedDict
 
 # Apply MPS patch before any docling import
+from secondbrain.document.chunker import classify_chunk_role
 from secondbrain.utils.mps_patch import patch_transformers_for_mps
 
 patch_transformers_for_mps()
+
+# Suppress PyTorch user warnings about padding+dilation on MPS - harmless
+warnings.filterwarnings(
+    "ignore",
+    r"Using padding='same' with even kernel lengths and odd dilation",
+    module="torch",
+)
 
 
 def create_docling_converter() -> "DocumentConverter":  # noqa: UP037
     """Create a configured DocumentConverter supporting all docling formats.
 
     Returns a converter pre-configured with:
-    - PDF: OCR enabled, CPU-accelerated, table structure disabled
+    - PDF: OCR enabled, auto device detection, table structure disabled
     - All other formats use docling defaults
 
     Factory exists to centralize format configuration and avoid bare
@@ -50,19 +59,35 @@ def create_docling_converter() -> "DocumentConverter":  # noqa: UP037
         AcceleratorOptions,
     )
     from docling.datamodel.base_models import InputFormat
-    from docling.datamodel.pipeline_options import PdfPipelineOptions
+    from docling.datamodel.pipeline_options import PdfPipelineOptions, RapidOcrOptions
     from docling.document_converter import DocumentConverter, PdfFormatOption
 
     pdf_options = PdfFormatOption(
         pipeline_options=PdfPipelineOptions(
             do_ocr=True,
-            do_table_structure=False,
+            do_table_structure=True,
+            ocr_options=RapidOcrOptions(
+                backend="torch",
+                rapidocr_params={"EngineConfig.torch.use_mps": True},
+            ),
             accelerator_options=AcceleratorOptions(
-                device=AcceleratorDevice.CPU, num_threads=4
+                device=AcceleratorDevice.AUTO, num_threads=4
             ),
         )
     )
+
     return DocumentConverter(format_options={InputFormat.PDF: pdf_options})
+
+
+def _segment_as_text(item: Any) -> str:
+    if hasattr(item, "export_to_data_frame"):
+        try:
+            return str(item.export_to_data_frame().to_csv(index=False))
+        except Exception:
+            return str(item)
+    if hasattr(item, "text") and item.text:
+        return str(item.text)
+    return ""
 
 
 if TYPE_CHECKING:
@@ -85,7 +110,7 @@ class _Segment(TypedDict):
 
 
 def create_converter() -> DocumentConverter:
-    """Create a configured DocumentConverter with CPU acceleration.
+    """Create a configured DocumentConverter with automatic device detection.
 
     Lazily imports docling internals. Calling this function incurs the
     docling cold-start cost once; subsequent calls reuse the same process.
@@ -104,15 +129,19 @@ def create_converter() -> DocumentConverter:
         AcceleratorOptions,
     )
     from docling.datamodel.base_models import InputFormat
-    from docling.datamodel.pipeline_options import PdfPipelineOptions
+    from docling.datamodel.pipeline_options import PdfPipelineOptions, RapidOcrOptions
     from docling.document_converter import DocumentConverter, PdfFormatOption
 
     pdf_options = PdfFormatOption(
         pipeline_options=PdfPipelineOptions(
             do_ocr=True,
-            do_table_structure=False,
+            do_table_structure=True,
+            ocr_options=RapidOcrOptions(
+                backend="torch",
+                rapidocr_params={"EngineConfig.torch.use_mps": True},
+            ),
             accelerator_options=AcceleratorOptions(
-                device=AcceleratorDevice.CPU, num_threads=4
+                device=AcceleratorDevice.AUTO, num_threads=4
             ),
         )
     )
@@ -275,15 +304,22 @@ def _extract_chunk_and_embed_file(
             AcceleratorOptions,
         )
         from docling.datamodel.base_models import InputFormat
-        from docling.datamodel.pipeline_options import PdfPipelineOptions
+        from docling.datamodel.pipeline_options import (
+            PdfPipelineOptions,
+            RapidOcrOptions,
+        )
         from docling.document_converter import DocumentConverter, PdfFormatOption
 
         pdf_options = PdfFormatOption(
             pipeline_options=PdfPipelineOptions(
                 do_ocr=True,
-                do_table_structure=False,
+                do_table_structure=True,
+                ocr_options=RapidOcrOptions(
+                    backend="torch",
+                    rapidocr_params={"EngineConfig.torch.use_mps": True},
+                ),
                 accelerator_options=AcceleratorOptions(
-                    device=AcceleratorDevice.CPU, num_threads=4
+                    device=AcceleratorDevice.AUTO, num_threads=4
                 ),
             )
         )
@@ -318,7 +354,7 @@ def _extract_chunk_and_embed_file(
         #   chunks = chunk_segments(segments, chunk_size, chunk_overlap)
         #
         # Inline minimal chunker for this worker only — not exported from this module.
-        MIN_SEGMENT_SIZE = 200
+        min_segment_size = 200
         merged_segments: list[_Segment] = []
         current_text = ""
         current_page = 0
@@ -334,7 +370,7 @@ def _extract_chunk_and_embed_file(
                 and not any(p in stripped for p in [".", ":", "-", "—"])
                 and not stripped.endswith(".")
             )
-            if len(current_text) < MIN_SEGMENT_SIZE or is_likely_title:
+            if len(current_text) < min_segment_size or is_likely_title:
                 if current_text:
                     current_text += " " + stripped
                 else:
@@ -348,18 +384,37 @@ def _extract_chunk_and_embed_file(
         if current_text:
             merged_segments.append({"text": current_text, "page": current_page})
 
-        chunks: list[_Segment] = []
+        chunks: list[dict[str, Any]] = []
+        total_segs = len(merged_segments)
+        seg_counter = 0
         for segment in merged_segments:
             text = segment["text"]
             page = segment.get("page", 0)
             if not text.strip():
                 continue
+            is_likely_title_for_seg = (
+                len(text.strip()) < 100
+                and not any(p in text.strip() for p in [".", ":", "-", "—"])
+                and not text.strip().endswith(".")
+            )
             start = 0
             while start < len(text):
                 if start + chunk_size >= len(text):
                     chunk_text = text[start:].rstrip()
                     if chunk_text:
-                        chunks.append({"text": chunk_text, "page": page})
+                        chunks.append(
+                            {
+                                "text": chunk_text,
+                                "page": page,
+                                "chunk_role": classify_chunk_role(
+                                    chunk_text,
+                                    seg_counter,
+                                    total_segs,
+                                    is_likely_title_for_seg,
+                                ),
+                            }
+                        )
+                    seg_counter += 1
                     break
                 next_start = start + chunk_size
                 chunk_end = next_start
@@ -368,7 +423,19 @@ def _extract_chunk_and_embed_file(
                     chunk_end = last_space
                 chunk_text = text[start:chunk_end]
                 if chunk_text.strip():
-                    chunks.append({"text": chunk_text, "page": page})
+                    chunks.append(
+                        {
+                            "text": chunk_text,
+                            "page": page,
+                            "chunk_role": classify_chunk_role(
+                                chunk_text,
+                                seg_counter,
+                                total_segs,
+                                is_likely_title_for_seg,
+                            ),
+                        }
+                    )
+                    seg_counter += 1
                 new_start = chunk_end - chunk_overlap
                 start = chunk_end if new_start <= start else new_start
 
@@ -390,6 +457,7 @@ def _extract_chunk_and_embed_file(
                         "text": cleaned,
                         "page": chunk["page"],
                         "text_hash": text_hash,
+                        "chunk_role": chunk.get("chunk_role", "body"),
                     }
                 )
 
@@ -443,6 +511,7 @@ def _extract_chunk_and_embed_file(
                 "embedding": embedding,
                 "file_type": file_type,
                 "ingested_at": ingested_at,
+                "chunk_role": chunk_item.get("chunk_role", "body"),
             }
             documents.append(doc)
 

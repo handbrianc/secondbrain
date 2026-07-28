@@ -93,8 +93,7 @@ class TestSupportedExtensions:
 
 
 class TestChunkSegmentsCompatibility:
-    """Pin the output contract of the chunk_segments function against what
-    DocumentIngestor._chunk_text() and _deduplicate_and_chunk_segments() produce.
+    """Pin the output contract of the chunk_segments function.
 
     These tests deliberately reproduce edge-case expectations that live tests
     already assert so we have a standalone anchor during migration.

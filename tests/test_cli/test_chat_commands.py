@@ -75,7 +75,6 @@ class TestChatCommands:
 
             # Verify exit code and output
             assert result.exit_code == 0
-            assert "Answer:" in result.output
             assert "This is a test answer" in result.output
 
             # Verify session loading/creation

@@ -49,6 +49,7 @@ _trace_context_var: contextvars.ContextVar[dict[str, str] | None] = (
 
 
 def extract_trace_context(headers: dict[str, str]) -> dict[str, str]:
+    """Extract trace context from incoming request headers."""
     normalized_headers = {k.lower(): v for k, v in headers.items()}
     traceparent = normalized_headers.get("traceparent", "")
 
@@ -70,6 +71,7 @@ def extract_trace_context(headers: dict[str, str]) -> dict[str, str]:
 
 
 def inject_trace_context(headers: dict[str, str]) -> dict[str, str]:
+    """Inject current trace context into outgoing request headers."""
     result = headers.copy()
     current_context = get_current_trace_context()
 
@@ -91,6 +93,7 @@ def inject_trace_context(headers: dict[str, str]) -> dict[str, str]:
 
 
 def get_current_trace_context() -> dict[str, str] | None:
+    """Get the current trace context from thread-local storage."""
     return _trace_context_var.get()
 
 
@@ -98,6 +101,7 @@ def get_current_trace_context() -> dict[str, str] | None:
 def set_trace_context(
     trace_id: str, span_id: str, flags: str = "01", tracestate: str | None = None
 ) -> Generator[None, None, None]:
+    """Set the current trace context in thread-local storage."""
     if len(trace_id) != 32 or not all(
         c in "0123456789abcdef" for c in trace_id.lower()
     ):
@@ -123,6 +127,7 @@ def set_trace_context(
 
 
 def is_tracing_enabled() -> bool:
+    """Check if tracing is enabled via environment variable."""
     global _tracing_enabled
     if not _tracing_enabled:
         _tracing_enabled = (
@@ -132,6 +137,7 @@ def is_tracing_enabled() -> bool:
 
 
 def is_metrics_enabled() -> bool:
+    """Check if metrics are enabled via environment variable."""
     global _metrics_enabled
     if not _metrics_enabled:
         _metrics_enabled = os.getenv("OTEL_METRICS_ENABLED", "true").lower() == "true"
@@ -143,6 +149,7 @@ def setup_tracing(
     service_version: str = "0.1.0",
     environment: str = "development",
 ) -> None:
+    """Set up OpenTelemetry tracing and metrics."""
     global _tracer, _tracing_enabled, _meter, _metrics_enabled
     global _operations_counter, _duration_histogram, _errors_counter
 
@@ -261,6 +268,7 @@ def setup_tracing(
 
 
 def get_tracer() -> Any:
+    """Get the global OpenTelemetry tracer instance."""
     global _tracer
 
     if not OTTEL_AVAILABLE:
@@ -276,6 +284,7 @@ def get_tracer() -> Any:
 
 
 def get_meter() -> Any:
+    """Get the global OpenTelemetry meter instance."""
     global _meter
 
     if not OTTEL_AVAILABLE or not otel_metrics:
@@ -293,6 +302,7 @@ def get_meter() -> Any:
 def record_operation(
     operation_name: str, duration_ms: float, success: bool = True
 ) -> None:
+    """Record an operation duration and count metric."""
     if not _metrics_enabled or not _meter:
         return
 
@@ -311,6 +321,7 @@ def record_operation(
 
 @contextmanager
 def trace_operation(operation_name: str) -> Generator[Any, None, None]:
+    """Context manager for tracing an operation."""
     if not OTTEL_AVAILABLE or not is_tracing_enabled():
         yield None
         return
@@ -337,6 +348,7 @@ def trace_operation(operation_name: str) -> Generator[Any, None, None]:
 def trace_decorator(
     operation_name: str,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    """Wrap a function with tracing."""
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -362,6 +374,7 @@ class _NoOpTracer:
 
 
 def shutdown_tracing() -> None:
+    """Shut down tracing and reset state."""
     global _tracer, _tracing_enabled
 
     if not OTTEL_AVAILABLE:

@@ -216,7 +216,6 @@ class FailureInjector:
             delay,
         )
 
-        # Schedule cleanup if duration is specified
         if duration is not None and delay == 0:
             self._schedule_cleanup(failure_key, duration)
 
@@ -288,13 +287,11 @@ class FailureInjector:
         with self._lock:
             for config in self._active_failures.values():
                 if config.failure_type == failure_type:
-                    # Check probability
                     import random
 
                     if random.random() > config.probability:
                         return False
 
-                    # Check repeat count
                     return (
                         config.repeat_count is None
                         or self._failure_count < config.repeat_count
@@ -624,7 +621,6 @@ class FailureInjector:
         try:
             if delay > 0:
                 time.sleep(delay)
-            # Simulate latency by sleeping
             actual_latency = latency_ms / 1000.0
             if jitter_ms > 0:
                 actual_latency += random.uniform(0, jitter_ms / 1000.0)

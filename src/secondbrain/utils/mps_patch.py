@@ -12,6 +12,7 @@ Solution: Monkey-patch the function to use float32 throughout.
 
 import importlib.util
 import logging
+from typing import Any, cast
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,11 @@ def _mps_is_available_without_import() -> bool:
 
 
 def patch_transformers_for_mps() -> None:
+    """Patch transformers library to avoid float64 on MPS.
+
+    This must be called before any docling imports that use the
+    RT-DETR layout model.
+    """
     global _mps_patched
     if _mps_patched:
         return
@@ -32,18 +38,6 @@ def patch_transformers_for_mps() -> None:
         return
     import torch
 
-    """Patch transformers library to avoid float64 on MPS.
-
-    This must be called before any docling imports that use the
-    RT-DETR layout model.
-
-    The patch replaces build_2d_sinusoidal_position_embedding with
-    a version that uses float32 for all intermediate calculations,
-    avoiding the MPS float64 limitation while maintaining the same
-    final output dtype (float32).
-
-    Only applied when MPS is available.
-    """
     if not torch.backends.mps.is_available():
         logger.debug("MPS not available, skipping transformers patch")
         return
@@ -106,7 +100,7 @@ def patch_transformers_for_mps() -> None:
             return pos_embed.to(dtype)
 
         # Apply patch
-        modeling_rt_detr_v2.build_2d_sinusoidal_position_embedding = (
+        cast(Any, modeling_rt_detr_v2).build_2d_sinusoidal_position_embedding = (
             patched_build_2d_sinusoidal_position_embedding
         )
 

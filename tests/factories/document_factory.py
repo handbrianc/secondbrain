@@ -31,6 +31,8 @@ class DocumentMetadataFactory(Factory):
     """
 
     class Meta:
+        """DocumentMetadataFactory for testing."""
+
         model = DocumentMetadata
 
     source_file = Faker("file_path")
@@ -60,6 +62,8 @@ class DocumentChunkFactory(Factory):
     """
 
     class Meta:
+        """DocumentChunkFactory for testing."""
+
         model = DocumentChunk
 
     chunk_id = Sequence(lambda n: ChunkId(f"chunk_{n:04d}"))

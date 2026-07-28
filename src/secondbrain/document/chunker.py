@@ -13,10 +13,65 @@ Exports:
 from __future__ import annotations
 
 import hashlib
+import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, NotRequired
 
 from typing_extensions import TypedDict
+
+ElementTypeLiteral = Literal[
+    "navigation",
+    "heading",
+    "toc_entry",
+    "caption",
+    "body",
+    "table_row",
+    "table_caption",
+]
+
+
+# TODO(element_type-migration): once migrated, return ElementTypeLiteral
+def classify_chunk_role(
+    text: str, seg_count: int, total_segs: int, is_likely_title: bool
+) -> str:
+    """
+    Classify chunk by structural role using only statistical signals.
+
+    Thresholds are document-universal (char density, whitespace ratio, dot-chain density).
+    """
+    if is_likely_title:
+        pos = seg_count / max(total_segs, 1)
+        if pos < 0.025:
+            return "navigation"
+        # Section-number-prefixed headers (e.g. "11.18 Configuring the Autostart
+        # Service") are inline section markers within chapters, not document-level
+        # headings.  Classify as body so the retrieval pipeline can match them
+        # via SEC_HEADER_RE during bucket collection.
+        if re.match(r"\d+\.\d+(\.\d+)?\s", text):
+            return "body"
+        return "heading"
+
+    pos = seg_count / max(total_segs, 1)
+    if pos < 0.025:
+        return "navigation"
+
+    total = len(text)
+    if total == 0:
+        return "body"
+
+    alpha = sum(c.isalpha() for c in text)
+    char_density = alpha / total
+
+    dot_chain_hits = text.count(" . ")
+    dot_chain_density = dot_chain_hits / total
+    if dot_chain_density > 0.055:
+        return "toc_entry"
+
+    if char_density < 0.48:
+        return "caption"
+
+    return "body"
+
 
 DEFAULT_MIN_SEGMENT_SIZE = 200
 
@@ -24,6 +79,7 @@ DEFAULT_MIN_SEGMENT_SIZE = 200
 class _Segment(TypedDict):
     text: str
     page: int
+    chunk_role: NotRequired[str]
 
 
 def chunk_segments(
@@ -51,6 +107,7 @@ def chunk_segments(
     merged_segments: list[_Segment] = []
     current_text = ""
     current_page = 0
+    seg_counter = 0
 
     for _i, segment in enumerate(segments):
         text = segment["text"]
@@ -66,6 +123,25 @@ def chunk_segments(
             and not any(p in stripped for p in [".", ":", "-", "—"])
             and not stripped.endswith(".")
         )
+        # Section-number-prefixed headings like "11.18 Configuring the Autostart
+        # Service" contain a dot in the section number and would be rejected by
+        # the "." check above, causing them to merge with body content.
+        if not is_likely_title and re.match(r"\d+\.\d+(\.\d+)?\s", stripped):
+            is_likely_title = True
+
+        # Section-number-prefixed titles must START a new chunk rather than
+        # merge into the previous accumulation (the default title behaviour
+        # appends via the "if is_likely_title" branch below).
+        if (
+            is_likely_title
+            and re.match(r"\d+\.\d+(\.\d+)?\s", stripped)
+            and current_text
+        ):
+            merged_segments.append({"text": current_text, "page": current_page})
+            seg_counter += 1
+            current_text = stripped
+            current_page = page
+            continue
 
         if len(current_text) < DEFAULT_MIN_SEGMENT_SIZE or is_likely_title:
             if current_text:
@@ -75,11 +151,16 @@ def chunk_segments(
             current_page = page
         else:
             merged_segments.append({"text": current_text, "page": current_page})
+            seg_counter += 1
             current_text = stripped
             current_page = page
 
     if current_text:
         merged_segments.append({"text": current_text, "page": current_page})
+        seg_counter += 1
+
+    total_segs = len(merged_segments)
+    seg_counter = 0
 
     chunks: list[_Segment] = []
 
@@ -90,12 +171,30 @@ def chunk_segments(
         if not text.strip():
             continue
 
+        is_likely_title_for_seg = (
+            len(text.strip()) < 100
+            and not any(p in text.strip() for p in [".", ":", "-", "—"])
+            and not text.strip().endswith(".")
+        )
+
         start = 0
         while start < len(text):
             if start + chunk_size >= len(text):
                 chunk_text = text[start:].rstrip()
                 if chunk_text:
-                    chunks.append({"text": chunk_text, "page": page})
+                    chunks.append(
+                        {
+                            "text": chunk_text,
+                            "page": page,
+                            "chunk_role": classify_chunk_role(
+                                chunk_text,
+                                seg_counter,
+                                total_segs,
+                                is_likely_title_for_seg,
+                            ),
+                        }
+                    )
+                seg_counter += 1
                 break
 
             next_start = start + chunk_size
@@ -106,7 +205,16 @@ def chunk_segments(
 
             chunk_text = text[start:chunk_end]
             if chunk_text.strip():
-                chunks.append({"text": chunk_text, "page": page})
+                chunks.append(
+                    {
+                        "text": chunk_text,
+                        "page": page,
+                        "chunk_role": classify_chunk_role(
+                            chunk_text, seg_counter, total_segs, is_likely_title_for_seg
+                        ),
+                    }
+                )
+                seg_counter += 1
 
             new_start = chunk_end - chunk_overlap
             start = chunk_end if new_start <= start else new_start
@@ -158,5 +266,4 @@ def deduplicate_segments(
     return all_chunks
 
 
-# Backward-compatibility alias — original __init__.py used _chunk_segments
 _chunk_segments = chunk_segments

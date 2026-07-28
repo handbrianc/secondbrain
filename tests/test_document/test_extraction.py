@@ -26,6 +26,8 @@ class TestExtractTextPdfPages:
             MagicMock(text="Content from page 2", prov=[MagicMock(page_no=1)]),
             MagicMock(text="Content from page 3", prov=[MagicMock(page_no=2)]),
         ]
+        for mt in mock_text_items:
+            del mt.export_to_data_frame  # type: ignore[attr-defined]
         mock_result.document.texts = mock_text_items
 
         with patch.object(ingestor.converter, "convert", return_value=mock_result):

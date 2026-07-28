@@ -58,7 +58,7 @@ class TestChaosAdvanced:
 
         failures_during_injection = 0
         with injector.inject_general_failure(duration=0.5, probability=1.0):
-            for i in range(3):
+            for _i in range(3):
                 if injector.should_fail(FailureType.GENERAL_FAILURE):
                     try:
                         injector.raise_failure(FailureType.GENERAL_FAILURE)
@@ -68,7 +68,7 @@ class TestChaosAdvanced:
         assert failures_during_injection == 3
 
         successes_after = 0
-        for i in range(3):
+        for _i in range(3):
             if not injector.should_fail(FailureType.GENERAL_FAILURE):
                 successes_after += 1
 
@@ -100,7 +100,7 @@ class TestChaosAdvanced:
 
         failures = 0
         with injector.inject_general_failure(duration=0.2, probability=1.0):
-            for i in range(2):
+            for _i in range(2):
                 if injector.should_fail(FailureType.GENERAL_FAILURE):
                     try:
                         injector.raise_failure(FailureType.GENERAL_FAILURE)
@@ -111,7 +111,7 @@ class TestChaosAdvanced:
         assert failures == 2
 
         successes = 0
-        for i in range(2):
+        for _i in range(2):
             if not injector.should_fail(FailureType.GENERAL_FAILURE):
                 successes += 1
 
@@ -137,7 +137,7 @@ class TestChaosAdvanced:
 
         connection_errors = 0
         with injector.inject_connection_error(duration=0.3):
-            for i in range(3):
+            for _i in range(3):
                 if injector.should_fail(FailureType.CONNECTION_ERROR):
                     try:
                         injector.raise_failure(FailureType.CONNECTION_ERROR)
@@ -153,7 +153,7 @@ class TestChaosAdvanced:
 
         timeouts = 0
         with injector.inject_timeout(duration=0.3, timeout_value=1.0):
-            for i in range(3):
+            for _i in range(3):
                 if injector.should_fail(FailureType.TIMEOUT):
                     try:
                         injector.raise_failure(FailureType.TIMEOUT)

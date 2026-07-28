@@ -49,7 +49,7 @@ def embedding_vector(dim: int = 1536, seed: int = 42) -> list[float]:
     """
     import numpy as np
 
-    # Deterministic bytes from seed – same seed → same bytes → same vector.
+    # Deterministic bytes from seed - same seed → same bytes → same vector.
     hash_bytes = hashlib.sha256(str(seed).encode()).digest()
 
     # Unpack up to 32 uint8 values and rescale to [0, 1].

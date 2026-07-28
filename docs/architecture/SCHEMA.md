@@ -30,6 +30,13 @@ Stores all ingested document chunks with their vector representations.
   // Timestamp
   "created_at": ISODate("2024-01-15T10:30:00Z"),
 
+  // Structural classification (v2.x)
+  // element_type replaces chunk_role for new documents
+  "element_type": "body",                  // See element_type field below
+
+  // Deprecated: Use element_type instead. Will be removed in v3.0.
+  // "chunk_role": "paragraph",             // Legacy field
+
   // Metadata
   "metadata": {
     "source": "/path/to/document.pdf",  // Absolute file path
@@ -60,6 +67,33 @@ Stores all ingested document chunks with their vector representations.
 | `metadata.page` | Integer | Positive |
 | `metadata.file_type` | String | Normalized extension |
 | `metadata.size` | Integer | Bytes |
+| `element_type` | String \| null | Enum values (see below) |
+
+## element_type
+
+Structural role of a chunk within its parent document. Introduced in v2.x (structural enhancement).
+
+**Type**: `string | null`
+
+**Values**:
+
+| Value | Description |
+|-------|-------------|
+| `"navigation"` | Navigation elements (menus, breadcrumbs, TOC buttons) |
+| `"heading"` | Section headings and titles |
+| `"toc_entry"` | Table of contents entries |
+| `"caption"` | Captions for figures, tables, images |
+| `"body"` | Body text paragraphs |
+| `"table_row"` | Table cell content |
+| `"table_caption"` | Caption within or beneath a table |
+
+**Note**: Preferred over `chunk_role` for new documents. Historical documents retain `chunk_role`; dual-read query ensures backwards compatibility.
+
+### chunk_role (deprecated)
+
+**Deprecated**: Use `element_type` instead. Will be removed in v3.0.
+
+Previously used to classify chunk roles. Retained for backwards compatibility with documents ingested prior to v2.x.
 
 ## Sessions Collection: `sessions`
 
