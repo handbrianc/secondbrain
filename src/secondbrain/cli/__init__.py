@@ -11,6 +11,11 @@ import click
 from rich.console import Console
 
 from secondbrain.logging import setup_logging
+from secondbrain.utils.mps_patch import patch_transformers_for_mps
+
+# Apply RT-DETR float32 patch at the earliest possible point — before any
+# docling/transformers import that might trigger the RT-DETR layout model.
+patch_transformers_for_mps()
 
 console = Console(markup=True)
 
