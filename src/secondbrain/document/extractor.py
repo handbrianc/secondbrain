@@ -259,7 +259,7 @@ def _extract_chunk_and_embed_file(
         from uuid import uuid4
 
         documents = []
-        from secondbrain.document import get_file_type
+        from secondbrain.document.ingestor import get_file_type
 
         file_type = get_file_type(file_path)
         ingested_at = datetime.now(UTC).isoformat()
