@@ -91,7 +91,7 @@ class Config(BaseSettings):
     # MongoDB settings
     mongo_uri: str = Field(
         default="mongodb://localhost:27017",
-        description="MongoDB connection URI (without credentials - set via environment variable for production)",
+        description="MongoDB connection URI (override via SECONDBRAIN_MONGO_URI env var for production)",
     )
 
     @field_validator("mongo_uri")

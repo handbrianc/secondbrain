@@ -972,10 +972,16 @@ class RAGPipeline:
             'source_file', 'chunk_id'.
         """
         from pymongo import MongoClient
+        from pymongo import errors as mongo_errors
 
         from secondbrain.config import config
         cfg = config()
-        client = MongoClient(cfg.mongo_uri, directConnection=True)
+        try:
+            client = MongoClient(cfg.mongo_uri, directConnection=True, serverSelectionTimeoutMS=2000)
+            # Validate connection quickly
+            client.admin.command("ping")
+        except (mongo_errors.ConnectionFailure, mongo_errors.ServerSelectionTimeoutError, Exception):
+            return []
         coll = client[cfg.mongo_db][cfg.mongo_collection]
 
         query_filter: dict[str, object] = {
@@ -1121,10 +1127,15 @@ class RAGPipeline:
 
             if chapters_to_cover:
                 from pymongo import MongoClient
+                from pymongo import errors as mongo_errors
 
                 from secondbrain.config import config
                 cfg_ = config()
-                client_ = MongoClient(cfg_.mongo_uri, directConnection=True)
+                try:
+                    client_ = MongoClient(cfg_.mongo_uri, directConnection=True, serverSelectionTimeoutMS=2000)
+                    client_.admin.command("ping")
+                except (mongo_errors.ConnectionFailure, mongo_errors.ServerSelectionTimeoutError, Exception):
+                    return self._generic_one_shot(query, top_k, show_sources, source_filter=source_filter)
                 coll_ = client_[cfg_.mongo_db][cfg_.mongo_collection]
 
                 # Use explicit source_filter if provided (from DocumentRouter),
