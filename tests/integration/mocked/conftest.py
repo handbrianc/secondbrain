@@ -19,7 +19,7 @@ EMBEDDING_DIMENSIONS = 384
 
 
 @pytest.fixture
-def mock_mongo_client() -> Generator[MongoClient[Any], None, None]:
+def mock_mongo_client() -> Generator[MongoClient[Any]]:
     """Provide mock MongoDB client for integration tests."""
     import mongomock  # type: ignore[unused-ignore]
 

@@ -61,7 +61,7 @@ def embedding_service_url() -> str:
 
 
 @pytest.fixture(scope="session")
-def wait_for_services() -> Generator[None, None, None]:
+def wait_for_services() -> Generator[None]:
     """Wait for test services to be healthy before running tests.
 
     This session-scoped fixture ensures MongoDB is healthy before tests run.
@@ -92,7 +92,7 @@ def wait_for_services() -> Generator[None, None, None]:
 
 
 @pytest.fixture(scope="session")
-def real_storage(wait_for_services: None) -> Generator[VectorStorage, None, None]:
+def real_storage(wait_for_services: None) -> Generator[VectorStorage]:
     """VectorStorage with real MongoDB connection.
 
     Creates a VectorStorage instance connected to the test MongoDB database.
@@ -125,7 +125,7 @@ def real_storage(wait_for_services: None) -> Generator[VectorStorage, None, None
 
 
 @pytest.fixture(scope="session")
-def mock_storage() -> Generator[MockVectorStorage, None, None]:
+def mock_storage() -> Generator[MockVectorStorage]:
     """Mock VectorStorage for integration tests without MongoDB.
 
     Provides an in-memory storage implementation for testing integration
@@ -144,7 +144,7 @@ def mock_storage() -> Generator[MockVectorStorage, None, None]:
 @pytest.fixture(scope="session")
 def real_embedding_generator(
     wait_for_services: None,
-) -> Generator[Any, None, None]:
+) -> Generator[Any]:
     """Real embedding generator using OpenAI-compatible API (e.g. Ollama, LM Studio).
 
     Creates an OpenAIEmbeddingProvider instance connected to the test
@@ -176,7 +176,7 @@ def real_embedding_generator(
 
 
 @pytest.fixture(scope="session")
-def mock_embedding_generator() -> Generator[MockEmbeddingGenerator, None, None]:
+def mock_embedding_generator() -> Generator[MockEmbeddingGenerator]:
     """Mock embedding generator for integration tests.
 
     Provides deterministic, fast embeddings for testing without
@@ -194,7 +194,7 @@ def mock_embedding_generator() -> Generator[MockEmbeddingGenerator, None, None]:
 @pytest.fixture
 async def clean_test_database(
     real_storage: VectorStorage,
-) -> AsyncGenerator[None, None]:
+) -> AsyncGenerator[None]:
     """Clean test database before and after each test.
 
     Ensures a clean slate for each test by deleting all documents
