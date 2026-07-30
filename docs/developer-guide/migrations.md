@@ -84,7 +84,7 @@ db.embeddings.updateMany(
 mongodump --uri="$SECONDBRAIN_MONGO_URI" --archive=dump.archive
 ```
 
-2. Run migration (mongosh):
+1. Run migration (mongosh):
 
 ```javascript
 // Apply changes
@@ -92,7 +92,7 @@ db.embeddings.createIndex(...)
 db.embeddings.updateMany(..., {$rename: {...}})
 ```
 
-3. Verify migration:
+1. Verify migration:
 
 ```javascript
 db.embeddings.getIndexes()
@@ -161,16 +161,16 @@ secondbrain status
 secondbrain search "test query"
 ```
 
-2. Check for errors in logs
+1. Check for errors in logs
 
-3. Confirm expected performance characteristics
+2. Confirm expected performance characteristics
 
-4. Monitor error tracking for new migration-related bugs
+3. Monitor error tracking for new migration-related bugs
 
 ## Version Compatibility Matrix
 
 | Version | Schema Version | Compatible |
-|---------|---------------|------------|
+| --------- | --------------- | ------------ |
 | 0.3.x | v1 | Read/write |
 | 0.4.0 | v2 | Read/write |
 | Future | v3 | Write only |

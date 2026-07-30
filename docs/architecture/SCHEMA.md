@@ -54,7 +54,7 @@ Stores all ingested document chunks with their vector representations.
 ### Field Types Summary
 
 | Field | Type | Constraints |
-|-------|------|-------------|
+| ------- | ------ | ------------- |
 | `_id` | ObjectId | Auto-generated, unique |
 | `chunk_id` | String | UUID v4 format |
 | `chunk_index` | Integer | Non-negative |
@@ -78,7 +78,7 @@ Structural role of a chunk within its parent document. Introduced in v2.x (struc
 **Values**:
 
 | Value | Description |
-|-------|-------------|
+| ------- | ------------- |
 | `"navigation"` | Navigation elements (menus, breadcrumbs, TOC buttons) |
 | `"heading"` | Section headings and titles |
 | `"toc_entry"` | Table of contents entries |
@@ -87,7 +87,8 @@ Structural role of a chunk within its parent document. Introduced in v2.x (struc
 | `"table_row"` | Table cell content |
 | `"table_caption"` | Caption within or beneath a table |
 
-**Note**: Preferred over `chunk_role` for new documents. Historical documents retain `chunk_role`; dual-read query ensures backwards compatibility.
+**Note**: Preferred over `chunk_role` for new documents.
+Historical documents retain `chunk_role`; dual-read query ensures backwards compatibility.
 
 ### chunk_role (deprecated)
 
@@ -99,7 +100,7 @@ Previously used to classify chunk roles. Retained for backwards compatibility wi
 
 Stores conversation history for the chat command.
 
-### Document Schema
+### Session Document Schema
 
 ```javascript
 {
@@ -229,7 +230,7 @@ Total estimate per chunk: ~11-12 KB
 With STORAGE_COMPRESSION_ENABLED=true (zstd):
 
 | Compression | Text Reduction | Vector Reduction |
-|-------------|---------------|------------------|
+| ------------- | --------------- | ------------------ |
 | None | 0% | N/A |
 | gzip | 60-80% | ~20% |
 | brotli | 65-85% | ~25% |
@@ -249,7 +250,8 @@ db.embeddings.updateMany(
 
 ### Vector Format Change (v0.3 → v0.4)
 
-Previously vectors were stored as BSON Binary. Now stored as JSON arrays for compatibility with newer MongoDB versions and vector search.
+Previously vectors were stored as BSON Binary.
+Now stored as JSON arrays for compatibility with newer MongoDB versions and vector search.
 
 Migration is manual: re-ingest affected documents.
 

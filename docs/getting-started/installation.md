@@ -29,7 +29,7 @@ Expected output: `secondbrain, version 0.4.0`
 SecondBrain depends on several key packages:
 
 | Package | Purpose | Required |
-|---------|---------|----------|
+| --------- | --------- | ---------- |
 | click | CLI framework | Yes |
 | pymongo, motor | MongoDB drivers | Yes |
 | docling | Document parsing | Yes |

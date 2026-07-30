@@ -5,7 +5,7 @@ This guide covers development setup, contribution guidelines, and technical docu
 ## Sections
 
 | Section | Description |
-|---------|-------------|
+| --------- | ------------- |
 | [Development Setup](development.md) | Setting up a local dev environment |
 | [Docker Setup](docker.md) | Running services with Docker |
 | [Configuration Reference](configuration.md) | Environment variable configuration |

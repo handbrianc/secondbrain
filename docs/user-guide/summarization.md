@@ -225,7 +225,7 @@ Behavior can be tuned via environment variables and command-line options.
 ### Environment Variables
 
 | Variable | Values | Default | Effect |
-|----------|--------|---------|--------|
+| ---------- | -------- | --------- | -------- |
 | `SECONDBRAIN_SUMMARIZER_MODE` | `brief`, `standard`, `detailed` | `standard` | Length and detail level of generated summaries |
 | `SECONDBRAIN_SUMMARY_DEPTH` | Integer (1-3) | `2` | Maximum section nesting depth to traverse |
 | `SECONDBRAIN_ADAPTIVE_CHUNKING` | `true`, `false` | `true` | Whether to adjust chunk boundaries for optimal context |
