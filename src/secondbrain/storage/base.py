@@ -271,7 +271,7 @@ class BaseVectorStorage(ABC):
         )
 
     def _wait_for_index_ready(self) -> None:
-        """Synchronous index-readiness hook; subclasses must override."""
+        """Check synchronous index readiness; subclasses must override."""
         raise NotImplementedError
 
     async def _wait_for_index_ready_async(self) -> None:

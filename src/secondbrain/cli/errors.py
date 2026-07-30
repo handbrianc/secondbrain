@@ -4,22 +4,21 @@ import logging
 import sys
 from collections.abc import Callable
 from functools import wraps
-from typing import TypeVar
+from typing import ParamSpec, TypeVar
 
 import click
 from rich.console import Console
-from typing_extensions import ParamSpec
 
 from secondbrain.exceptions import CLIValidationError
 
 console = Console(markup=True)
 logger = logging.getLogger(__name__)
 
-P = ParamSpec("P")
 T = TypeVar("T")
+P = ParamSpec("P")
 
 
-def handle_cli_errors(func: Callable[P, T]) -> Callable[P, T]:
+def handle_cli_errors[**P, T](func: Callable[P, T]) -> Callable[P, T]:
     """Handle CLI errors gracefully by catching exceptions.
 
     Args:

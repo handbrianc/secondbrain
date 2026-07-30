@@ -100,7 +100,7 @@ def get_current_trace_context() -> dict[str, str] | None:
 @contextmanager
 def set_trace_context(
     trace_id: str, span_id: str, flags: str = "01", tracestate: str | None = None
-) -> Generator[None, None, None]:
+) -> Generator[None]:
     """Set the current trace context in thread-local storage."""
     if len(trace_id) != 32 or not all(
         c in "0123456789abcdef" for c in trace_id.lower()
@@ -316,11 +316,11 @@ def record_operation(
                 1, {"operation": operation_name, "error_type": "failure"}
             )
     except Exception:
-        pass
+        logger.debug("Failed to record operation metric: %s", operation_name)
 
 
 @contextmanager
-def trace_operation(operation_name: str) -> Generator[Any, None, None]:
+def trace_operation(operation_name: str) -> Generator[Any]:
     """Context manager for tracing an operation."""
     if not OTTEL_AVAILABLE or not is_tracing_enabled():
         yield None
