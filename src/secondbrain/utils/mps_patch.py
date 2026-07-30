@@ -1,51 +1,53 @@
-"""MPS compatibility patch for transformers library.
+"""Position-embedding float64→float32 patch for transformers library.
 
-This module patches the transformers library to work around MPS float64
-incompatibility issues in docling's layout model.
+The transformers RT-DETR v2 model's ``build_2d_sinusoidal_position_embedding``
+uses ``torch.float64`` for intermediate arithmetic, which crashes on Apple
+MPS (no float64 support) and is unnecessarily expensive on CUDA/CPU.
 
-The issue: MPS (Apple Silicon GPU) doesn't support float64, but the
-transformers library's build_2d_sinusoidal_position_embedding function
-uses float64 for intermediate calculations.
+Solution: Monkey-patch the function at import time to use ``float32``
+throughout.  The patch is applied unconditionally because float32 is safe
+on every device and the precision loss (1e-7 on a 0-1 range) is negligible
+for position embeddings.
 
-Solution: Monkey-patch the function to use float32 throughout.
+Also clears the `@lru_cache` on the class-level static method so any
+pre-patch cached results are invalidated.
 """
 
-import importlib.util
 import logging
 from typing import Any, cast
 
 logger = logging.getLogger(__name__)
 
-_mps_patched = False
+_patch_applied = False
 
 
-def _mps_is_available_without_import() -> bool:
-    """Detect MPS support WITHOUT importing torch (avoids ~1.7s import penalty)."""
-    return importlib.util.find_spec("torch.backends.mps") is not None
+def _clear_lru_cache_on_static_method(klass: type, method_name: str) -> None:
+    """Clear ``lru_cache`` from a ``@staticmethod`` if the wrapper exposes cache_clear."""
+    method = getattr(klass, method_name, None)
+    if method is None:
+        return
+    cache_clear = getattr(method, "cache_clear", None)
+    if cache_clear is not None:
+        cache_clear()
+        logger.debug("Cleared LRU cache for %s.%s", klass.__name__, method_name)
 
 
 def patch_transformers_for_mps() -> None:
-    """Patch transformers library to avoid float64 on MPS.
+    """Patch transformers RT-DETR to use float32 instead of float64 for position embeddings.
 
-    This must be called before any docling imports that use the
-    RT-DETR layout model.
+    Safe to call multiple times (idempotent).  Must be called before any
+    docling imports that trigger the RT-DETR layout model.
     """
-    global _mps_patched
-    if _mps_patched:
+    global _patch_applied
+    if _patch_applied:
         return
-    if not _mps_is_available_without_import():
-        logger.debug("MPS not available (torch.backends.mps not found)")
-        return
-    import torch
-
-    if not torch.backends.mps.is_available():
-        logger.debug("MPS not available, skipping transformers patch")
-        return
+    _patch_applied = True
 
     try:
+        import torch
         from transformers.models.rt_detr_v2 import modeling_rt_detr_v2
 
-        # Create patched version using float32
+        # ---- patched implementation using float32 ---------------------------------
         def patched_build_2d_sinusoidal_position_embedding(
             height: int,
             width: int,
@@ -55,7 +57,7 @@ def patch_transformers_for_mps() -> None:
             device: torch.device | None = None,
             dtype: torch.dtype = torch.float32,
         ) -> torch.Tensor:
-            """Patched version using float32 instead of float64.
+            """Patched version using ``float32`` instead of ``float64``.
 
             Args:
                 height: Grid height in patches.
@@ -67,13 +69,12 @@ def patch_transformers_for_mps() -> None:
                 dtype: Output dtype.
 
             Returns:
-                Position embedding tensor of shape (height * width [+1], embed_dim).
+                Position embedding tensor of shape ``(height * width [+1], embed_dim)``.
             """
             if embed_dim % 4 != 0:
                 raise ValueError(f"`embed_dim` must be divisible by 4, got {embed_dim}")
 
             pos_dim = embed_dim // 4
-            # Use float32 instead of float64 for MPS compatibility
             omega = torch.arange(pos_dim, dtype=torch.float32, device=device) / pos_dim
             omega = 1.0 / (temperature**omega)
 
@@ -99,14 +100,20 @@ def patch_transformers_for_mps() -> None:
 
             return pos_embed.to(dtype)
 
-        # Apply patch
+        # ---- apply the patch ------------------------------------------------------
         cast(Any, modeling_rt_detr_v2).build_2d_sinusoidal_position_embedding = (
             patched_build_2d_sinusoidal_position_embedding
         )
 
-        logger.info("Applied MPS compatibility patch to transformers library")
+        # Clear any pre-patch cached results on the class-level LRU cache
+        _clear_lru_cache_on_static_method(
+            modeling_rt_detr_v2.RTDetrV2SinePositionEmbedding,
+            "_cached_build_2d_sinusoidal_position_embedding",
+        )
+
+        logger.info("Applied float32 patch to transformers RT-DETR position embeddings")
 
     except ImportError:
         logger.debug("RT-DETR model not available, skipping patch")
     except Exception as e:
-        logger.warning(f"Failed to apply MPS patch: {e}")
+        logger.warning("Failed to apply transformers float32 patch: %s", e)
