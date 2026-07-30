@@ -114,7 +114,7 @@ def calculate_similarity(vector_a: list[float], vector_b: list[float]) -> float:
 
 ## File Organization
 
-### Imports in __init__
+### Imports in **init**
 
 Keep `__init__.py` exports minimal:
 
@@ -132,7 +132,7 @@ Avoid importing implementation details in `__init__.py`.
 ## Naming Conventions
 
 | Element | Convention | Example |
-|---------|------------|---------|
+| --------- | ------------ | --------- |
 | Modules | snake_case | `async_client.py` |
 | Classes | PascalCase | `AsyncStorageClient` |
 | Functions | snake_case | `get_connection()` |

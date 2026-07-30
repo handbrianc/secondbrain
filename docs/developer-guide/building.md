@@ -58,7 +58,7 @@ dependencies = [
 Grouped extras for specific use cases:
 
 | Group | Purpose |
-|-------|---------|
+| ------- | --------- |
 | `lint` | Ruff and MyPy |
 | `test` | Pytest and testing utilities |
 | `docs` | MkDocs and plugins |
@@ -194,7 +194,7 @@ jobs:
 ## Distribution Formats Comparison
 
 | Format | Pros | Cons |
-|--------|------|------|
+| -------- | ------ | ------ |
 | Wheel (.whl) | Fast install, reproducible | Platform-specific wheels needed |
 | Source (.tar.gz) | Universal | Compilation required |
 | Executable | No Python needed | Large file, platform-specific |

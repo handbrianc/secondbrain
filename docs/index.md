@@ -18,7 +18,7 @@ SecondBrain is designed for developers and power users who want to maintain comp
 ## Quick Links
 
 | Section | Description |
-|---------|-------------|
+| --------- | ------------- |
 | [Getting Started](getting-started/index.md) | Installation, setup, and first steps |
 | [User Guide](user-guide/index.md) | Complete usage guide for day-to-day operations |
 | [CLI Reference](user-guide/cli-reference.md) | Detailed command-line interface documentation |
@@ -38,7 +38,7 @@ SecondBrain is designed for developers and power users who want to maintain comp
 SecondBrain supports a wide variety of document formats:
 
 | Category | Formats |
-|----------|---------|
+| ---------- | --------- |
 | Documents | PDF, DOCX, PPTX, XLSX, HTML, MD, TXT, ASCII_DOC, ADOC, TEX |
 | Data | CSV, XML, JSON |
 | Images | PNG, JPG, JPEG, TIFF, TIF, BMP, WEBP |

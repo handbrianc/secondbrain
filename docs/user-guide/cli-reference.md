@@ -12,7 +12,7 @@ Complete reference for all SecondBrain command-line interface commands.
 ## Commands Overview
 
 | Command | Description |
-|---------|-------------|
+| --------- | ------------- |
 | [`ingest`](#ingest) | Ingest documents into the vector database |
 | [`search`](#search) | Search the vector database with semantic query |
 | [`ls`](#ls) | List ingested documents and chunks |
@@ -45,7 +45,7 @@ secondbrain ingest PATH [--recursive] [--cores INT] [--batch-size INT] [--chunk-
 ### Options
 
 | Option | Description |
-|--------|-------------|
+| -------- | ------------- |
 | `--recursive, -r` | Recursively process directories |
 | `--cores, -c INT` | Number of CPU cores for parallel processing (default: auto-detect) |
 | `--batch-size, -b INT` | Batch size for ThreadPoolExecutor when cores=1 (default: 10) |
@@ -89,7 +89,7 @@ secondbrain search QUERY [--top-k INT] [--source STR] [--file-type STR] [--forma
 ### Options
 
 | Option | Description |
-|--------|-------------|
+| -------- | ------------- |
 | `--top-k INT` | Number of results to return |
 | `--source STR` | Filter results by source file path |
 | `--file-type STR` | Filter results by file type (e.g., 'pdf', 'docx') |
@@ -130,7 +130,7 @@ secondbrain ls [--source STR] [--chunk-id STR] [--limit INT] [--offset INT] [--a
 ### Options
 
 | Option | Description |
-|--------|-------------|
+| -------- | ------------- |
 | `--source STR` | Filter by source file |
 | `--chunk-id STR` | Filter by specific chunk ID |
 | `--limit INT` | Maximum number of results (default: 100, max: 10000) |
@@ -171,7 +171,7 @@ secondbrain delete [--source STR] [--chunk-id STR] [--all] [--yes]
 ### Options
 
 | Option | Description |
-|--------|-------------|
+| -------- | ------------- |
 | `--source STR` | Filter by source file |
 | `--chunk-id STR` | Filter by specific chunk ID |
 | `--all, -a` | Delete all documents |
@@ -277,7 +277,7 @@ secondbrain metrics --reset
 Available metrics:
 
 | Metric | Description |
-|--------|-------------|
+| -------- | ------------- |
 | `embedding_generate` | Sync embedding generation |
 | `embedding_generate_async` | Async embedding generation |
 | `embedding_generate_batch` | Batch sync embedding |
@@ -314,7 +314,7 @@ secondbrain chat [QUERY] [--session STR] [--top-k INT] [--temperature FLOAT] [--
 ### Options
 
 | Option | Description |
-|--------|-------------|
+| -------- | ------------- |
 | `--session, -s STR` | Session ID to use/create |
 | `--top-k, -k INT` | Number of chunks to retrieve (default: 20) |
 | `--temperature, -t FLOAT` | LLM temperature (default: 0.1) |
@@ -331,7 +331,7 @@ secondbrain chat [QUERY] [--session STR] [--top-k INT] [--temperature FLOAT] [--
 Inside the interactive REPL:
 
 | Command | Description |
-|---------|-------------|
+| --------- | ------------- |
 | `/quit, /exit` | Exit chat |
 | `/clear` | Clear conversation history |
 | `/help` | Show help |
@@ -379,7 +379,7 @@ secondbrain start [--compose-file FILE] [--project-name NAME] [--wait]
 ### Options
 
 | Option | Description |
-|--------|-------------|
+| -------- | ------------- |
 | `--compose-file, -f FILE` | Path to docker-compose.yml (default: auto-detect) |
 | `--project-name, -p NAME` | Docker Compose project name (default: secondbrain) |
 | `--wait, -w` | Wait for services to be fully ready |
@@ -412,7 +412,7 @@ secondbrain stop [--compose-file FILE] [--project-name NAME] [--remove-volumes] 
 ### Options
 
 | Option | Description |
-|--------|-------------|
+| -------- | ------------- |
 | `--compose-file, -f FILE` | Path to docker-compose.yml (default: auto-detect) |
 | `--project-name, -p NAME` | Docker Compose project name (default: secondbrain) |
 | `--remove-volumes, -v` | Remove named volumes |

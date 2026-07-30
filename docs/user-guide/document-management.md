@@ -61,7 +61,7 @@ Useful for debugging or referencing specific content sections.
 Listed results display:
 
 | Field | Description |
-|-------|-------------|
+| ------- | ------------- |
 | `chunk_id` | Unique identifier for the chunk |
 | `source` | Original file path |
 | `page` | Source page number |
@@ -86,7 +86,7 @@ secondbrain ls --source "./old_document.pdf"
 Choose one criterion per operation:
 
 | Criterion | Flag | Use Case |
-|-----------|------|----------|
+| ----------- | ------ | ---------- |
 | Source file | `--source` | Remove all chunks from a file |
 | Specific chunk | `--chunk-id` | Remove single chunk |
 | Everything | `--all` | Complete database reset |
@@ -148,7 +148,7 @@ secondbrain status
 Reports include:
 
 | Statistic | Description |
-|-----------|-------------|
+| ----------- | ------------- |
 | Total chunks | Overall document count |
 | Sources | Unique source files |
 | Storage size | MongoDB collection size |
@@ -264,13 +264,13 @@ Transfer corpus to different MongoDB instance:
 mongodump --uri="$MONGO_URI" --collection=embeddings
 ```
 
-2. Restore to target:
+1. Restore to target:
 
 ```bash
 mongorestore --uri="$NEW_MONGO_URI" dump/embeddings.bson
 ```
 
-3. Update configuration:
+1. Update configuration:
 
 ```bash
 export SECONDBRAIN_MONGO_URI="$NEW_MONGO_URI"

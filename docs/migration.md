@@ -55,7 +55,7 @@ secondbrain ingest ./documents/ --recursive --cores 4
 When adding new environment variables:
 
 | Variable | Added In | Default |
-|----------|----------|---------|
+| ---------- | ---------- | --------- |
 | `SECONDBRAIN_TEXT_COMPRESSION_ENABLED` | 0.4.0 | `false` |
 | `SECONDBRAIN_RAG_MAX_CONTEXT_CHARS` | 0.4.0 | `8000` |
 | `SECONDBRAIN_RAG_CHUNK_PREVIEW_CHARS` | 0.4.0 | `500` |
@@ -152,7 +152,7 @@ For production environments:
 ## Cross-Version Compatibility
 
 | Client Version | Server Compatible | Notes |
-|---------------|-------------------|-------|
+| --------------- | ------------------- | ------- |
 | 0.4.0 | 0.4.0, forward compat | Current stable |
 | 0.3.x | 0.4.0 | Fully compatible |
 | < 0.3 | 0.4.0 | May have issues, upgrade recommended |
