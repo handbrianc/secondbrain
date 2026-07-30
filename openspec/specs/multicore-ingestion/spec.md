@@ -1,7 +1,7 @@
 # multicore-ingestion Specification
 
 ## Purpose
-TBD - created by archiving change add-multicore-support. Update Purpose after archive.
+Define the CLI interface for parallel CPU-core configuration during document ingestion, enabling users to control the number of worker processes for multicore document processing.
 ## Requirements
 ### Requirement: CLI supports core count configuration
 The system SHALL provide a `--cores` / `-c` CLI option for the `ingest` command that specifies the number of CPU cores to use for parallel processing.

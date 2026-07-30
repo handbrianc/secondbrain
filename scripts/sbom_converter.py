@@ -15,7 +15,7 @@ def convert_cyclonedx_to_spdx(cyclonedx_path: str, spdx_path: str) -> None:
         spdx_path: Path for output SPDX file
     """
     # Read the JSON SBOM
-    with open(cyclonedx_path) as f:
+    with Path(cyclonedx_path).open() as f:
         sbom_data = json.load(f)
 
     # Extract packages from CycloneDX format
@@ -83,12 +83,12 @@ def convert_cyclonedx_to_spdx(cyclonedx_path: str, spdx_path: str) -> None:
         doc_lines.extend(pkg_lines)
 
     # Write SPDX document
-    with open(spdx_path, "w") as f:
+    with Path(spdx_path).open("w") as f:
         f.write("\n".join(doc_lines))
 
 
 def main() -> int:
-    """Main entry point for SBOM conversion."""
+    """Convert CycloneDX JSON to SPDX format (entry point)."""
     # Default paths relative to project root
     project_root = Path(__file__).parent.parent
     cyclonedx_path = project_root / "sbom.json"
