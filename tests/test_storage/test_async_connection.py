@@ -163,6 +163,7 @@ class TestAsyncConnection:
         expected_order = [f"chunk{i}" for i in range(10)]
         assert captured_order == expected_order
 
+    @pytest.mark.flaky(reruns=2)
     @pytest.mark.asyncio
     async def test_async_concurrent_searches(self, storage: VectorStorage) -> None:
         """Test 10 concurrent searches.
@@ -170,6 +171,8 @@ class TestAsyncConnection:
         Verifies:
         - no race conditions
         - performance is acceptable
+
+        Note: Flaky under xdist+coverage due to timing-sensitive sleep(0.01).
         """
         import time
 

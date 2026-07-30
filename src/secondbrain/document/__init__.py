@@ -22,16 +22,18 @@ from secondbrain.document.chunker import (
     chunk_segments,
     deduplicate_segments,
 )
-from secondbrain.document.extractor import (
-    _extract_and_chunk_file,
-    _extract_chunk_and_embed_file,
-)
 from secondbrain.document.ingestor import (
     SUPPORTED_EXTENSIONS,
     AsyncDocumentIngestor,
     DocumentIngestor,
     get_file_type,
     is_supported,
+)
+
+# Re-export worker functions from processor (the live consumer uses these)
+from secondbrain.document.processor import (
+    _extract_and_chunk_file,
+    _extract_chunk_and_embed_file,
 )
 from secondbrain.document.protocols import Segment
 
