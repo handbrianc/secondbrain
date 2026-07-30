@@ -13,6 +13,7 @@ from typing import Any
 
 from .interfaces import EmbeddingProvider
 from .mock import MockEmbeddingGenerator, MockEmbeddingProvider
+from .providers.factory import EmbeddingProviderFactory
 
 __all__ = [
     "EmbeddingProvider",
