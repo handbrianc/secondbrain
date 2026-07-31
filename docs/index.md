@@ -29,7 +29,7 @@ SecondBrain is designed for developers and power users who want to maintain comp
 
 ## System Requirements
 
-- **Python**: 3.11 or higher
+- **Python**: 3.14 or higher
 - **MongoDB**: Local installation or Docker container
 - **Docker**: Optional, for containerized setup and service management
 
