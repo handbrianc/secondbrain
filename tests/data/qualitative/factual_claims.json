@@ -20,8 +20,8 @@
          "context": "Project configuration",
          "expected": {
             "verifiable": true,
-            "fact": "Python >= 3.11",
-            "source": "pyproject.toml requires-python = \">=3.11\"",
+            "fact": "Python >= 3.14",
+            "source": "pyproject.toml requires-python = \">=3.14\"",
             "source_required": true,
             "hallucination_risk": "low"
          },
@@ -160,14 +160,14 @@
       {
          "id": "cd_internal_contradiction_version",
          "description": "Detect internal contradiction in version claims",
-         "input": "SecondBrain requires Python 3.9 but also uses features from Python 3.11",
+         "input": "SecondBrain requires Python 3.13 but also uses features from Python 3.14",
          "context": "Conflicting version requirements within documentation",
          "expected": {
             "contradiction_detected": true,
             "contradiction_type": "internal",
-            "claim1": "Python 3.9 required",
-            "claim2": "Python 3.11+ required",
-            "resolution": "Python >= 3.11 is correct",
+            "claim1": "Python 3.13 required",
+            "claim2": "Python 3.14+ required",
+            "resolution": "Python >= 3.14 is correct",
             "severity": "high"
          },
          "category": "contradiction_detection",
