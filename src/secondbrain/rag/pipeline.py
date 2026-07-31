@@ -8,7 +8,7 @@ import logging
 import re
 import time
 from contextlib import suppress
-from typing import Any, cast
+from typing import Any, ClassVar, cast
 
 from secondbrain.config import config
 from secondbrain.conversation import ConversationSession, QueryRewriter
@@ -557,17 +557,12 @@ class RAGPipeline:
     def _derive_chapter_roster(self, structure_chunks: list[dict[str, Any]]) -> str:
         import re
 
-        # Use _derive_chapter_numbers to get reliable chapter titles from
-        # CHAPTER_N_RE, BARE_CHAPTER_RE, FT_CATCH — NOT from raw section
-        # header parsing (which would pick up subsection titles like
-        # "5.1.3 Capturing..." as chapter titles).
-        ch_entries, ch_good = self._derive_chapter_numbers(structure_chunks)
+        ch_entries, ch_good, appendix_entries = self._derive_chapter_numbers(structure_chunks)
         ch_titles: dict[int, str] = {}
         for ch_num, _src, title in ch_entries:
             if ch_num in ch_good and ch_num not in ch_titles:
                 ch_titles[ch_num] = title if title else "Unknown"
 
-        # Build section-level entries from section_re for subsection display
         section_re = re.compile(r"(\d+)(?:\.(\d+))+(?:\s+(.+))?")
         dot_leader = re.compile(r"\.{2,}[.\-]+")
         sec_entries: list[tuple[int, str, str]] = []
@@ -579,11 +574,6 @@ class RAGPipeline:
                 major = int(m.group(1))
                 if major < 1 or major > 30:
                     continue
-                # Extract full section number from the match prefix
-                # (e.g. "5.1.3" from "5.1.3 Capturing...").  Using
-                # m.group(2) would only capture the LAST subgroup,
-                # producing "5.3" for "5.1.3" (colliding with real
-                # section 5.3).
                 full_match = m.group(0)
                 sec_num = full_match.split()[0] if full_match else ""
                 raw_title = (m.group(3) or "").strip().rstrip(".")
@@ -594,7 +584,6 @@ class RAGPipeline:
                     seen_sec.add(sec_key)
                     sec_entries.append((major, sec_num, raw_title))
 
-        # Combine: chapter titles from _derive_chapter_numbers, sections from SEC_RE
         sec_entries.sort(key=lambda x: (
             x[0], *[int(p) for p in x[1].split(".") if p]
         ))
@@ -610,12 +599,36 @@ class RAGPipeline:
                 prev_major = major
             else:
                 lines.append(f"  {sn} — {title}")
+
+        if appendix_entries:
+            lines.append("")
+            for label, _src, title in appendix_entries:
+                lines.append(f"[Appendix {label}] — {title}")
+
         header = (
-            "CHAPTER/SECTION INDEX (enumerate ALL of the following in your answer):\n"
+            "DOCUMENT STRUCTURE INDEX (enumerate ALL of the following in your answer):\n"
             + "\n".join(lines[:50])
             + "\n\n"
         )
         return header
+
+    _SECTION_LABEL_RE: ClassVar[re.Pattern[str]] = re.compile(
+        r"(?:Chapter|Section|Appendix|Part)\s+\S+",
+        re.IGNORECASE,
+    )
+
+    @staticmethod
+    def _infer_section_label(chunk_text: str, chunk_role: str | None) -> str | None:
+        if chunk_role not in ("heading", "toc_entry"):
+            return None
+        m = RAGPipeline._SECTION_LABEL_RE.search(chunk_text[:200])
+        if m:
+            label = m.group(0)
+            after = chunk_text[m.end():].split("\n")[0].strip().rstrip(".:-—")
+            if after:
+                return f"{label}: {after}"
+            return label
+        return None
 
     def _format_context(
         self,
@@ -648,12 +661,21 @@ class RAGPipeline:
             chunk_text = chunk.get("chunk_text", chunk.get("text", ""))
             source_file = chunk.get("source_file", chunk.get("source", "unknown"))
             page = chunk.get("page", chunk.get("page_number", "unknown"))
+            chunk_role = chunk.get("chunk_role")
 
             # Truncate chunk if too long
             if len(chunk_text) > self._config.rag_chunk_preview_chars:
                 chunk_text = chunk_text[: self._config.rag_chunk_preview_chars] + "..."
 
-            source_line = f"Source: {source_file} (page {page})"
+            tags: list[str] = []
+            if chunk_role:
+                tags.append(chunk_role)
+            if chunk_role in ("heading", "toc_entry") or chunk_role is None:
+                label = self._infer_section_label(chunk_text, chunk_role)
+                if label:
+                    tags.append(label)
+            tag_str = f" [{', '.join(tags)}]" if tags else ""
+            source_line = f"Source: {source_file} (page {page}{tag_str})"
             chunk_entry = f"{source_line}\n{chunk_text}\n"
 
             # Check if adding this chunk exceeds max_chars
@@ -767,17 +789,28 @@ class RAGPipeline:
         has_enum_signal = any(t in q for t in ENUMERATE_CHAPTER_SIGNALS)
         return has_chapter_ref and has_enum_signal
 
+    _APPENDIX_RE: ClassVar[re.Pattern[str]] = re.compile(
+        r"(?:Appendix|APPENDIX|Annex|ANNEX)\s+([A-Za-z])\s+(.{2,60})",
+    )
+    _BARE_APPENDIX_RE: ClassVar[re.Pattern[str]] = re.compile(
+        r"(?:^|\n)\s*(?:Appendix|APPENDIX|Annex|ANNEX)\s+([A-Za-z])\s*[.:-]?\s*(.{2,80})",
+        re.MULTILINE,
+    )
+
     def _derive_chapter_numbers(
             self, structure_chunks: list[dict[str, Any]]
-        ) -> tuple[list[tuple[int, str, str]], set[int]]:
-            """Return reliable chapter entries from structure chunks.
+        ) -> tuple[list[tuple[int, str, str]], set[int], list[tuple[str, str, str]]]:
+            """Return reliable chapter and appendix entries from structure chunks.
 
-            Returns (entries, chapter_level_nums) where chapter_level_nums are
-            chapter numbers from CHAPTER_N_RE or BARE_CHAPTER_RE (reliable titles).
+            Returns (entries, chapter_level_nums, appendix_entries) where
+            chapter_level_nums are chapter numbers from CHAPTER_N_RE/BARE_CHAPTER_RE
+            (reliable titles) and appendix_entries are (appendix_label, source, title).
             """
             import re
             entries: list[tuple[int, str, str]] = []
+            appendix_entries: list[tuple[str, str, str]] = []
             seen: set[tuple[int, str]] = set()
+            seen_appendix: set[tuple[str, str]] = set()
             dot_leader = re.compile(r"\.{2,}[.\-]+")
             section_re = re.compile(r"(\d+)(?:\.(\d+))+(?:\s+(.+))?")
             chapter_n_re = re.compile(r"Chapter\s+(\d+)\s+(.{2,60})", re.IGNORECASE)
@@ -785,10 +818,13 @@ class RAGPipeline:
                 r"(?:^|\n)\s*(\d{1,2})\.?\s+([A-Za-z][A-Za-z0-9\s\-\(\),'/:.\u2013\u2014]{4,80})",
                 re.MULTILINE,
             )
+            # Patterns for appendix detection
+            appendix_n_re = self._APPENDIX_RE
+            bare_appendix_re = self._BARE_APPENDIX_RE
             seen_sec: set[int] = set()
             sec_limit = 0
-            # Pass 1: CHAPTER_N_RE only — most reliable (e.g. "Chapter 5 Importing...").
-            # Processed first because it uses "Chapter N" pattern which is unambiguous.
+
+            # Pass 1: CHAPTER_N_RE + APPENDIX_N_RE (most reliable patterns)
             for chunk in structure_chunks:
                 raw = chunk.get("chunk_text", "")
                 source = chunk.get("source_file", "")
@@ -806,18 +842,18 @@ class RAGPipeline:
                         continue
                     seen.add((major, source))
                     entries.append((major, source, title))
+                for am in appendix_n_re.finditer(raw):
+                    label = am.group(1).upper()
+                    if (label, source) in seen_appendix:
+                        continue
+                    title = am.group(2).strip().rstrip(".")
+                    if len(title) < 2:
+                        continue
+                    seen_appendix.add((label, source))
+                    appendix_entries.append((label, source, title))
 
-            # Pass 2: bare_chapter_re (e.g. "5 Working with Virtual Machines") then
-            # section_re for chapters not yet claimed by the more reliable chapter_n_re.
-            # Using a separate pass prevents a bare match on an earlier page from
-            # winning over a chapter_n_re match on a later page for the same chapter.
-            # Also detect page-footer patterns like "...68 5 Working with Virtual\nMachines"
-            # where bare_chapter_re's start-of-line anchor misses the number.
-            # The \d+\s+ prefix matches the page number (e.g. "68 ") and the captured
-            # (\d{1,2}) is the chapter number. Without the page-number prefix, the
-            # regex would match "68 " with major=68 (rejected by >30 guard).
+            # Pass 2: bare_chapter_re + bare_appendix_re
             ft_catch = re.compile(r"\d+\s+(\d{1,2})\s+([A-Za-z][A-Za-z0-9\s\-\(\),'/:.\u2013\u2014]{4,80})")
-            # Reject common false positives: legal/license text, placeholder titles
             legal_starts = {
                 "contents", "copyright", "licensed", "license",
                 "trolltech", "red", "bootstrap",
@@ -841,25 +877,23 @@ class RAGPipeline:
                     fw = title.lower().split()[0] if title.split() else ""
                     if fw in legal_starts:
                         continue
-                    # Reject titles starting with lowercase — real chapter
-                    # titles always start with uppercase (e.g. "VBoxManage",
-                    # "Virtual Networking").  Lowercase starts like "slots
-                    # attached..." and "x Backspace..." are OCR noise.
                     if title[0].islower():
                         continue
-                    # Reject titles containing "on page N" — these are
-                    # cross-references (e.g. "5 Capturing and Releasing
-                    # Keyboard and Mouse on page 54"), not actual chapter
-                    # titles.  The real chapter title (e.g. "Working with
-                    # Virtual Machines") comes from a later ft_catch match.
                     if re.search(r"\bon\s+page\s+\d+", title, re.IGNORECASE):
                         continue
                     seen.add((major, source))
                     entries.append((major, source, title))
 
-                # Fallback: detect chapter titles in page footer patterns like
-                # "...68 5 Working with Virtual Machines" where the number is
-                # preceded by the page number (not start-of-line).
+                for bam in bare_appendix_re.finditer(raw):
+                    label = bam.group(1).upper()
+                    if (label, source) in seen_appendix:
+                        continue
+                    title = bam.group(2).strip().rstrip(".")
+                    if len(title) < 4:
+                        continue
+                    seen_appendix.add((label, source))
+                    appendix_entries.append((label, source, title))
+
                 for fm in ft_catch.finditer(raw):
                     major_ft = int(fm.group(1))
                     if (major_ft < 1 or major_ft > 30
@@ -871,15 +905,8 @@ class RAGPipeline:
                     fw_ft = title_ft.lower().split()[0] if title_ft.split() else ""
                     if fw_ft in legal_starts:
                         continue
-                    # Reject titles starting with lowercase — same rationale
-                    # as bare_chapter_re above (OCR noise, not real titles).
                     if title_ft[0].islower():
                         continue
-                    # Reject ft_catch matches containing "on page N" (same
-                    # logic as bare_chapter_re above).  Without this guard,
-                    # a cross-reference like "50 5 Working with Virtual
-                    # Machines on page 54" would be accepted as the chapter
-                    # title when bare_chapter_re properly rejected it.
                     if re.search(r"\bon\s+page\s+\d+", title_ft, re.IGNORECASE):
                         continue
                     seen.add((major_ft, source))
@@ -901,17 +928,8 @@ class RAGPipeline:
                     if re.match(r"\d+(?:\.\d+)*$", fw):
                         clean_title = ""
                     seen_sec.add(major)
-                    # SEC_RE matches are section headers (e.g. "5.1.3 Capturing..."),
-                    # not chapter titles.  Don't add them to `entries` — they would
-                    # pollute the chapter-title pool with section-level text.
-                    # `seen_sec` tracks claimed chapters for the sec_limit guard
-                    # above; `seen` (used by chapters_to_cover/good_title_nums)
-                    # is handled by CHAPTER_N_RE / BARE_CHAPTER_RE / FT_CATCH.
 
-            # Phase 3: chunk-boundary recovery.
-            # Handles "Chapter N" at end of one chunk with the title on the
-            # next line of a different chunk (e.g. "... Chapter 19\\nUseful
-            # Command-line Tools" split across consecutive chunks).
+            # Phase 3: chunk-boundary recovery for chapters
             if entries:
                 found_nums = {e[0] for e in entries}
                 all_seen = {s[0] for s in seen}
@@ -920,8 +938,6 @@ class RAGPipeline:
                 for gap_n in range(lo + 1, hi):
                     if gap_n in all_seen:
                         continue
-                    # Search for "Chapter N" at/near end of a chunk followed
-                    # by a plausible title in the next sequential chunk.
                     for i in range(len(structure_chunks) - 1):
                         cur = structure_chunks[i]
                         nxt = structure_chunks[i + 1]
@@ -929,12 +945,10 @@ class RAGPipeline:
                         src_cur = cur.get("source_file", "")
                         if f"Chapter {gap_n}" not in cur_text and f"chapter {gap_n}" not in cur_text:
                             continue
-                        # "Chapter N" appears near the end (last ~80 chars)
                         idx = cur_text.lower().find(f"chapter {gap_n}")
                         remaining = len(cur_text) - idx
                         if remaining > 80 or (gap_n, src_cur) in seen:
                             continue
-                        # Next chunk starts with a title-like line
                         nxt_text = nxt.get("chunk_text", "").strip()
                         first_line = nxt_text.split("\n")[0].strip()
                         if (len(first_line) >= 4
@@ -946,7 +960,65 @@ class RAGPipeline:
                             entries.append((gap_n, src_cur, title))
 
             entries.sort(key=lambda x: x[0])
-            return entries, {s[0] for s in seen}
+            appendix_entries.sort(key=lambda x: x[0])
+
+            # LLM fallback: classify unmatched structural candidates
+            if not appendix_entries and self._llm_provider is not None:
+                llm_candidates: list[str] = []
+                llm_sources: list[str] = []
+                seen_keywords: set[str] = {(e[0] if isinstance(e[0], str) else str(e[0])) for e in entries}
+                seen_keywords.update(al[0] for al in appendix_entries)
+                for chunk in structure_chunks:
+                    raw = chunk.get("chunk_text", "").strip()
+                    src = chunk.get("source_file", "")
+                    first_line = raw.split("\n")[0].strip()
+                    if not first_line or len(first_line) > 120:
+                        continue
+                    first_word = first_line.split()[0].lower() if first_line.split() else ""
+                    if first_word in seen_keywords:
+                        continue
+                    if not any(k in first_line.lower() for k in ("appendix", "annex", "supplement", "supplementary")):
+                        continue
+                    candidate = first_line[:120]
+                    llm_candidates.append(candidate)
+                    llm_sources.append(src)
+
+                if llm_candidates:
+                    import json as _json
+                    candidates_prompt = (
+                        "Classify each of the following document headings. "
+                        "If it is an appendix, respond with APPENDIX:<label> on its own line, "
+                        "where label is a single letter like A, B, C. "
+                        "If it is a chapter heading, respond with CHAPTER. "
+                        "If neither, respond with NONE. "
+                        "One response per line, in order.\n\n"
+                        + "\n".join(f"{i+1}. {c}" for i, c in enumerate(llm_candidates[:5]))
+                    )
+                    try:
+                        llm_reply = self._llm_provider.generate(
+                            prompt=candidates_prompt,
+                            temperature=0.1,
+                            max_tokens=200,
+                        )
+                        for i, line in enumerate(llm_reply.strip().split("\n")):
+                            line = line.strip()
+                            if i >= len(llm_candidates):
+                                break
+                            if line.startswith("APPENDIX:"):
+                                label = line.split(":", 1)[1].strip().upper()
+                                if label and len(label) == 1 and label.isalpha():
+                                    candidate_text = llm_candidates[i]
+                                    parts = candidate_text.split(None, 2)
+                                    title = parts[-1] if len(parts) > 1 else candidate_text
+                                    title = title.rstrip(".:-")
+                                    key = (label, llm_sources[i])
+                                    if key not in seen_appendix:
+                                        seen_appendix.add(key)
+                                        appendix_entries.append((label, llm_sources[i], title))
+                    except Exception:
+                        logger.debug("LLM appendix fallback failed", exc_info=True)
+
+            return entries, {s[0] for s in seen}, appendix_entries
 
     def _is_broad_coverage_query(self, query: str) -> bool:
         q = query.lower().strip()
@@ -1118,12 +1190,14 @@ class RAGPipeline:
             QueryIntent.CHAPTER_ENUMERATE,
             QueryIntent.SECTION_ENUMERATE,
         ):
-            chapters_to_cover, good_title_nums = self._derive_chapter_numbers(structure_chunks)
+            chapters_to_cover, good_title_nums, appendix_entries = self._derive_chapter_numbers(structure_chunks)
 
             # Scope to specific target chapter when one is specified (e.g. "chapter 11")
             chapters_to_cover, good_title_nums = filter_chapters_by_target(
                 chapters_to_cover, good_title_nums, enum_target,
             )
+            if enum_target is not None:
+                appendix_entries = []
 
             if chapters_to_cover:
                 from pymongo import MongoClient
@@ -1456,12 +1530,26 @@ class RAGPipeline:
                                 interleaved.append(pg_groups[pg][slot])
                     final_chunks = interleaved
 
-                # The roster now provides correct chapter titles
-                # (e.g. "Chapter 11 — Advanced Topics"), so the LLM
-                # will not mistake section headers for chapter titles.
-                # No need to strip deep subsection headers.
+                if appendix_entries:
+                    appendix_start_pg = max(
+                        (chapter_first_pg.get(k, 0) for k in chapter_first_pg),
+                        default=0,
+                    )
+                    appendix_body_chunks = []
+                    for c in (
+                        coll_.find(
+                            {"source_file": src, "chunk_role": "body"},
+                            {"_id": 0, "chunk_text": 1, "page_number": 1, "source_file": 1, "chunk_id": 1},
+                        )
+                        .sort("page_number", 1)
+                        .limit(2000)
+                    ):
+                        pg = c.get("page_number", 0)
+                        if pg >= appendix_start_pg:
+                            appendix_body_chunks.append(c)
+                    final_chunks.extend(appendix_body_chunks[:40])
 
-                # Build chapter roster: only use the FIRST reliable title per chapter
+                # Build chapter roster
                 ch_titles: dict[int, str] = {}
                 for ct in chapters_to_cover:
                     if ct[0] in good_title_nums and ct[0] not in ch_titles:
@@ -1486,7 +1574,14 @@ class RAGPipeline:
                         chapter_roster_lines.append(
                             f"Chapter {ch_num} — No official title (approx pages {pg_start}+)"
                         )
-                chapter_roster = "\n".join(chapter_roster_lines) + "\n"
+                chapter_roster = "\n".join(chapter_roster_lines)
+
+                if appendix_entries:
+                    chapter_roster += "\n\n" + "\n".join(
+                        f"Appendix {label} — {title}"
+                        for label, _src, title in appendix_entries
+                    )
+                chapter_roster += "\n"
 
                 # Single-chapter enumeration needs more context window to fit
                 # sampled chunks from across the full page range.
@@ -1560,7 +1655,13 @@ class RAGPipeline:
                     + body_content
                 )
 
-                llm_fallback_roster = "\n".join(chapter_roster_lines) + "\n"
+                llm_fallback_roster = "\n".join(chapter_roster_lines)
+                if appendix_entries:
+                    llm_fallback_roster += "\n\n" + "\n".join(
+                        f"Appendix {label} — {title}"
+                        for label, _src, title in appendix_entries
+                    )
+                llm_fallback_roster += "\n"
 
                 prompt = self._build_prompt(query, context_text)
 
