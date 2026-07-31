@@ -6,7 +6,7 @@ Setting up a local development environment for SecondBrain.
 
 | Component | Version | Purpose |
 | ----------- | --------- | --------- |
-| Python | 3.11+ | Runtime |
+| Python | 3.14+ | Runtime |
 | Git | Latest | Version control |
 | MongoDB | 4.4+ | Vector storage |
 | Docker | Latest | Service containers |

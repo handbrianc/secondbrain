@@ -233,7 +233,7 @@ Focus on covering:
 
 GitHub Actions runs tests on:
 
-- Multiple Python versions (3.11, 3.12)
+- Multiple Python versions (3.14)
 - Operating systems (Ubuntu, macOS)
 - With coverage reporting to Codecov
 

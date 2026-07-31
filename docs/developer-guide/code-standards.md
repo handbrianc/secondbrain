@@ -4,7 +4,7 @@ Development standards, style guidelines, and conventions for SecondBrain contrib
 
 ## Python Version
 
-Minimum Python version: **3.11**
+Minimum Python version: **3.14**
 
 New language features may be used freely at this version or above.
 
@@ -14,7 +14,7 @@ Strict type checking is enforced via MyPy:
 
 ```toml
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.14"
 strict = true
 ```
 
