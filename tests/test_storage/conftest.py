@@ -27,7 +27,7 @@ def mock_storage_config() -> MagicMock:
 
 
 @pytest.fixture(scope="module")
-def storage_with_mock(mock_storage_config: MagicMock) -> Generator[Any, None, None]:
+def storage_with_mock(mock_storage_config: MagicMock) -> Generator[Any]:
     """Module-scoped VectorStorage instance to avoid 1s+ overhead per test.
 
     This fixture creates a single VectorStorage instance with mocked config

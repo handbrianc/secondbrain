@@ -35,7 +35,7 @@ Input Path
 Multiple parsers handle different formats:
 
 | Format | Parser Action |
-|--------|---------------|
+| -------- | --------------- |
 | PDF | PdfParser extracts text, tables, structure |
 | DOCX | DocxParser reads paragraphs, tables |
 | HTML | HtmlParser strips tags, preserves text |
@@ -106,13 +106,13 @@ MongoDB.insert({
 
 ## Search Flow
 
-### High-Level Pipeline
+### Search Pipeline Stages
 
 ```
 Query Text → Embedding → Vector Search → Results Ranking → Display
 ```
 
-### Stage Breakdown
+### Search Stage Breakdown
 
 #### 1. Query Embedding
 
@@ -180,13 +180,13 @@ Filtered Matches
 
 ## Chat (RAG) Flow
 
-### High-Level Pipeline
+### Chat Pipeline Stages
 
 ```
 User Query → Retrieve → Augment Prompt → LLM Generate → Present
 ```
 
-### Stage Breakdown
+### Chat Stage Breakdown
 
 #### 1. Retrieval
 

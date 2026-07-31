@@ -861,7 +861,7 @@ def _interactive_chat(
                 with history_file.open("a") as f:
                     f.write(user_input + "\n")
                 readline.write_history_file(history_file)
-            except Exception:
+            except OSError:
                 pass
 
         except Exception as e:

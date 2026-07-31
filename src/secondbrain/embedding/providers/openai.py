@@ -82,7 +82,15 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         if self._api_key:
             client_kwargs["api_key"] = self._api_key
         else:
-            client_kwargs["api_key"] = "no-api-key-provided"
+            # Provide a sentinel for the OpenAI client credential check.
+            # This is not a real credential - it's a placeholder for
+            # local-only configurations that don't need auth.
+            # Sentinel for local-only / no-auth API configurations.
+            # This is NOT a real credential — it satisfies the OpenAI SDK
+            # client check for environments that don't require auth.
+            client_kwargs["api_key"] = os.environ.get(
+                "SECONDBRAIN_EMBEDDING_API_KEY", ""
+            ) or "no-auth-placeholder"
         if api_base:
             client_kwargs["base_url"] = api_base
             client_kwargs["default_query"] = {"drop_params": "true"}

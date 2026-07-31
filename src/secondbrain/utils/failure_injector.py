@@ -772,7 +772,7 @@ def inject_latency(
 if _HAS_PYTEST:
 
     @pytest.fixture
-    def failure_injector() -> Generator[FailureInjector, None, None]:
+    def failure_injector() -> Generator[FailureInjector]:
         """Pytest fixture providing FailureInjector with automatic cleanup.
 
         Yields:

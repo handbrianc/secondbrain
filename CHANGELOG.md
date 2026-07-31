@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 #### Conversational RAG
+
 - **Conversational RAG with Local LLM**: Integration with Ollama for context-aware conversations
   - Query rewriting using conversation history for improved context
   - Local LLM processing with Ollama backend
@@ -26,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Automatic session cleanup and expiration
 
 #### Configuration
+
 - **New Environment Variables**:
   - `OLLAMA_HOST`: Ollama API endpoint (default: `http://localhost:11434`)
   - `LLM_MODEL`: LLM model name for RAG (default: `llama3.1:latest`)
@@ -33,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `SECONDBRAIN_SESSION_TTL`: Session expiration time in seconds
 
 #### Dependencies
+
 - **RAG Optional Dependency Group**: `rag` extra for RAG features
   - Install with: `pip install -e ".[rag]"`
   - Isolates RAG dependencies from core functionality
@@ -49,18 +52,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 #### Resilience & Reliability
+
 - **Circuit Breaker Pattern**: Automatic service failure handling for MongoDB and sentence-transformers
   - Configurable failure and success thresholds
   - Automatic recovery with half-open state
   - Prevents cascade failures during service outages
   - See `examples/circuit_breaker_usage.py` for usage
 
-- **Enhanced Error Handling**: 
+- **Enhanced Error Handling**:
   - CircuitBreakerError exception for open circuit state
   - Graceful degradation with fallback strategies
   - Retry logic with exponential backoff support
 
 #### Testing
+
 - **Chaos Testing Suite** (`tests/test_chaos/`):
   - Service failure scenarios (MongoDB, sentence-transformers)
   - Network partition simulation and recovery
@@ -74,6 +79,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Batch operation concurrency
 
 #### Security
+
 - **Security Scanning Infrastructure**:
   - `scripts/security_scan.sh` for comprehensive security checks
   - pip-audit integration for dependency vulnerability detection
@@ -85,6 +91,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - SBOM generation and scanning procedures
 
 #### Documentation
+
 - **Migration Guide** (`docs/migration.md`):
   - Version upgrade instructions
   - Breaking changes documentation

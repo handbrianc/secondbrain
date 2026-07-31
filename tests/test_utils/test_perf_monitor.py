@@ -1,7 +1,6 @@
 """Tests for performance monitoring utilities."""
 
 import asyncio
-import time
 from unittest.mock import patch
 
 import pytest
@@ -115,7 +114,7 @@ class TestTimingDecorator:
 
             @timing("test_timing")
             def test_func() -> None:
-                time.sleep(0.01)
+                pass
 
             test_func()
             mock_record.assert_called_once()
@@ -128,7 +127,6 @@ class TestTimingDecorator:
 
             @timing("test_timing")
             def failing_func() -> None:
-                time.sleep(0.01)
                 raise ValueError("Test error")
 
             with pytest.raises(ValueError):

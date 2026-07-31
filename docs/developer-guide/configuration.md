@@ -33,7 +33,7 @@ Configuration options are organized by functional area:
 Logging verbosity level.
 
 | Detail | Value |
-|--------|-------|
+| -------- | ------- |
 | Env Var | `SECONDBRAIN_LOG_LEVEL` |
 | Default | `INFO` |
 | Options | `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL` |
@@ -43,7 +43,7 @@ Logging verbosity level.
 Output format for log messages.
 
 | Detail | Value |
-|--------|-------|
+| -------- | ------- |
 | Env Var | `SECONDBRAIN_LOG_FORMAT` |
 | Default | `pretty` |
 | Options | `pretty`, `json` |
@@ -57,7 +57,7 @@ Output format for log messages.
 MongoDB connection URI.
 
 | Detail | Value |
-|--------|-------|
+| -------- | ------- |
 | Env Var | `SECONDBRAIN_MONGO_URI` |
 | Default | `mongodb://localhost:27017` |
 | Validation | Must start with `mongodb://` or `mongodb+srv://` |
@@ -127,7 +127,7 @@ Common models:
 Vector dimensionality.
 
 | Detail | Value |
-|--------|-------|
+| -------- | ------- |
 | Env Var | `SECONDBRAIN_EMBEDDING_DIMENSIONS` |
 | Default | `1536` |
 | Constraint | Must be positive integer |
@@ -135,7 +135,7 @@ Vector dimensionality.
 Must match your embedding model's actual dimensions:
 
 | Model | Dimensions |
-|-------|------------|
+| ------- | ------------ |
 | text-embedding-3-small | 1536 |
 | text-embedding-3-large | 3072 |
 | all-MiniLM-L6-v2 | 384 |
@@ -172,7 +172,7 @@ SECONDBRAIN_EMBEDDING_API_BASE=http://localhost:11434/v1
 LRU cache size for embeddings.
 
 | Detail | Value |
-|--------|-------|
+| -------- | ------- |
 | Env Var | `SECONDBRAIN_EMBEDDING_CACHE_SIZE` |
 | Default | `1000` |
 | Range | 0 to unlimited |
@@ -185,7 +185,7 @@ Set to `0` to disable caching.
 Batch size for embedding generation.
 
 | Detail | Value |
-|--------|-------|
+| -------- | ------- |
 | Env Var | `SECONDBRAIN_EMBEDDING_BATCH_SIZE` |
 | Default | `20` |
 | Range | 1-100 |
@@ -201,7 +201,7 @@ Used for RAG chat functionality.
 LLM provider type.
 
 | Detail | Value |
-|--------|-------|
+| -------- | ------- |
 | Env Var | `SECONDBRAIN_LLM_PROVIDER` |
 | Default | `openai` |
 | Options | `openai`, `anthropic` |
@@ -231,7 +231,7 @@ For Ollama, LM Studio, Groq, Azure OpenAI, etc.
 Generation temperature.
 
 | Detail | Value |
-|--------|-------|
+| -------- | ------- |
 | Env Var | `SECONDBRAIN_LLM_TEMPERATURE` |
 | Default | `0.1` |
 | Range | 0.0-2.0 |
@@ -283,7 +283,7 @@ Maximum retry attempts for LLM generation.
 Maximum total characters for RAG context.
 
 | Detail | Value |
-|--------|-------|
+| -------- | ------- |
 | Env Var | `SECONDBRAIN_RAG_MAX_CONTEXT_CHARS` |
 | Default | `8000` |
 | Range | 1000-500000 |
@@ -293,7 +293,7 @@ Maximum total characters for RAG context.
 Maximum characters per chunk in RAG context.
 
 | Detail | Value |
-|--------|-------|
+| -------- | ------- |
 | Env Var | `SECONDBRAIN_RAG_CHUNK_PREVIEW_CHARS` |
 | Default | `500` |
 | Range | 100-10000 |
@@ -318,7 +318,7 @@ System prompt for RAG chat.
 Target chunk size in characters.
 
 | Detail | Value |
-|--------|-------|
+| -------- | ------- |
 | Env Var | `SECONDBRAIN_CHUNK_SIZE` |
 | Default | `4096` |
 | Constraint | Must be positive integer |
@@ -328,7 +328,7 @@ Target chunk size in characters.
 Overlap between adjacent chunks.
 
 | Detail | Value |
-|--------|-------|
+| -------- | ------- |
 | Env Var | `SECONDBRAIN_CHUNK_OVERLAP` |
 | Default | `50` |
 | Constraint | Must be non-negative and less than `CHUNK_SIZE` |
@@ -404,7 +404,7 @@ Enable streaming chunk processing.
 Chunk batch size for streaming.
 
 | Detail | Value |
-|--------|-------|
+| -------- | ------- |
 | Env Var | `SECONDBRAIN_STREAMING_CHUNK_BATCH_SIZE` |
 | Default | `100` |
 | Range | 1-200 |
@@ -485,7 +485,7 @@ Opt-in feature using gzip/brotli/zstd.
 Compression algorithm.
 
 | Detail | Value |
-|--------|-------|
+| -------- | ------- |
 | Env Var | `SECONDBRAIN_TEXT_COMPRESSION_ALGORITHM` |
 | Default | `gzip` |
 | Options | `gzip`, `brotli`, `zstd` |
@@ -495,7 +495,7 @@ Compression algorithm.
 Embedding storage precision.
 
 | Detail | Value |
-|--------|-------|
+| -------- | ------- |
 | Env Var | `SECONDBRAIN_EMBEDDING_DTYPE` |
 | Default | `float32` |
 | Options | `float32`, `float64` |
@@ -507,7 +507,7 @@ float32 recommended — 50% smaller storage with acceptable precision.
 Vector storage format.
 
 | Detail | Value |
-|--------|-------|
+| -------- | ------- |
 | Env Var | `SECONDBRAIN_EMBEDDING_STORAGE_FORMAT` |
 | Default | `array` |
 | Options | `array`, `binary` |

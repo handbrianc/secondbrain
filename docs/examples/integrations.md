@@ -264,8 +264,8 @@ uvicorn app:app --reload --host 0.0.0.0 --port 8000
 
 FastAPI automatically generates OpenAPI docs:
 
-- Swagger UI: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
+- Swagger UI: <http://localhost:8000/docs>
+- ReDoc: <http://localhost:8000/redoc>
 
 ### Test with curl
 

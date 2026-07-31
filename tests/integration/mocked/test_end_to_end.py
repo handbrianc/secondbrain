@@ -42,7 +42,7 @@ warnings.filterwarnings(
 
 
 @pytest.fixture
-def mongomock_client() -> Generator[mongomock.MongoClient[Any], None, None]:
+def mongomock_client() -> Generator[mongomock.MongoClient[Any]]:
     """Create a clean mongomock client for each test."""
     client = mongomock.MongoClient()
     try:

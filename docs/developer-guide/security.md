@@ -16,7 +16,7 @@ All document processing happens locally:
 Understand which operations contact external services:
 
 | Operation | External Contact | Data Shared |
-|-----------|-----------------|-------------|
+| ----------- | ----------------- | ------------- |
 | Embedding generation | Embedding API | Text chunks for vectorization |
 | LLM chat (RAG) | LLM API | Retrieved chunks + conversation |
 | Application telemetry | Optional OTLP | Logs and traces |

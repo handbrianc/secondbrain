@@ -7,7 +7,7 @@ Comprehensive guide to writing and running tests for SecondBrain.
 SecondBrain uses pytest with several plugins:
 
 | Plugin | Purpose |
-|--------|---------|
+| -------- | --------- |
 | pytest-asyncio | Async test support |
 | pytest-xdist | Parallel execution |
 | pytest-timeout | Prevent hanging tests |
@@ -70,7 +70,7 @@ pytest tests/**/test_*storage*
 Mark tests by category for selective execution:
 
 | Marker | Purpose |
-|--------|---------|
+| -------- | --------- |
 | `@pytest.mark.unit` | Unit tests with mocks |
 | `@pytest.mark.integration` | Require external services |
 | `@pytest.mark.fast` | Under 50ms execution |
@@ -233,7 +233,7 @@ Focus on covering:
 
 GitHub Actions runs tests on:
 
-- Multiple Python versions (3.11, 3.12)
+- Multiple Python versions (3.14)
 - Operating systems (Ubuntu, macOS)
 - With coverage reporting to Codecov
 

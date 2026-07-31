@@ -155,7 +155,7 @@ secondbrain search "implementation details" \
 Similarity scores represent cosine similarity between query and document vectors:
 
 | Score Range | Interpretation |
-|-------------|----------------|
+| ------------- | ---------------- |
 | 0.8 - 1.0 | Very high relevance, near-exact match |
 | 0.6 - 0.8 | Strong relevance |
 | 0.4 - 0.6 | Moderate relevance |
@@ -174,7 +174,7 @@ Factors affecting scores:
 ### Optimal Chunk Sizes at Ingestion
 
 | Content Type | Recommended chunk_size |
-|--------------|------------------------|
+| -------------- | ------------------------ |
 | Q&A pairs | 512-1024 |
 | Technical docs | 1024-2048 |
 | Long articles | 2048-4096 |
@@ -232,7 +232,7 @@ If search returns nothing:
 secondbrain search "your query" --min-score 0.2
 ```
 
-2. Broaden the query:
+1. Broaden the query:
 
 ```bash
 # Instead of exact phrase
@@ -242,13 +242,13 @@ secondbrain search "performance optimization techniques"
 secondbrain search "optimization"
 ```
 
-3. Check if documents exist:
+1. Check if documents exist:
 
 ```bash
 secondbrain ls --source "./relevant-file.pdf"
 ```
 
-4. Re-ingest with adjusted chunking:
+1. Re-ingest with adjusted chunking:
 
 Documents might need different chunk sizes to match your query granularity.
 

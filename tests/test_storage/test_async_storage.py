@@ -17,7 +17,7 @@ class TestAsyncVectorStorage:
     """Tests for AsyncVectorStorage class."""
 
     @pytest.fixture
-    def async_storage(self) -> Generator[AsyncVectorStorage, None, None]:
+    def async_storage(self) -> Generator[AsyncVectorStorage]:
         """Create an AsyncVectorStorage instance with mocked config and fresh state."""
         with (
             patch("secondbrain.storage.storage.config") as mock_config_func,
