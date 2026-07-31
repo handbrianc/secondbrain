@@ -42,13 +42,13 @@ docker ps  # For Docker MongoDB
 mongod --version  # For local MongoDB
 ```
 
-2. Start MongoDB if not running:
+1. Start MongoDB if not running:
 
 ```bash
 secondbrain start --wait
 ```
 
-3. Check the connection URI is correct:
+1. Check the connection URI is correct:
 
 ```bash
 echo $SECONDBRAIN_MONGO_URI
@@ -128,13 +128,13 @@ chmod 644 /path/to/file
 secondbrain ingest ./documents/ --recursive
 ```
 
-2. Similarity threshold too high:
+1. Similarity threshold too high:
 
 ```bash
 secondbrain search "query" --min-score 0.3
 ```
 
-3. Wrong collection or database queried:
+1. Wrong collection or database queried:
 
 ```bash
 echo $SECONDBRAIN_MONGO_DB
@@ -153,13 +153,13 @@ echo $SECONDBRAIN_MONGO_COLLECTION
 export SECONDBRAIN_CHUNK_SIZE=2048  # Smaller chunks
 ```
 
-2. Increase top-k for more candidate results:
+1. Increase top-k for more candidate results:
 
 ```bash
 secondbrain search "query" --top-k 50
 ```
 
-3. Lower minimum score threshold:
+1. Lower minimum score threshold:
 
 ```bash
 secondbrain search "query" --min-score 0.3
@@ -202,7 +202,7 @@ secondbrain search --help
 secondbrain health
 ```
 
-2. Restart services:
+1. Restart services:
 
 ```bash
 secondbrain stop
@@ -223,13 +223,13 @@ secondbrain start --wait
 secondbrain ingest ./docs --recursive --cores 4
 ```
 
-2. Adjust batch size:
+1. Adjust batch size:
 
 ```bash
 secondbrain ingest ./docs --batch-size 20
 ```
 
-3. Disable text compression temporarily:
+1. Disable text compression temporarily:
 
 ```bash
 export SECONDBRAIN_TEXT_COMPRESSION_ENABLED=false
@@ -247,7 +247,7 @@ export SECONDBRAIN_TEXT_COMPRESSION_ENABLED=false
 export SECONDBRAIN_STREAMING_CHUNK_BATCH_SIZE=50
 ```
 
-2. Limit worker processes:
+1. Limit worker processes:
 
 ```bash
 export SECONDBRAIN_MAX_WORKERS=2

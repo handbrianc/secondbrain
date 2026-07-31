@@ -16,8 +16,8 @@ Before installing SecondBrain, ensure your system meets these requirements:
 ### Minimum Requirements
 
 | Component | Requirement |
-|-----------|-------------|
-| Python | 3.11 or higher |
+| ----------- | ------------- |
+| Python | 3.14 or higher |
 | MongoDB | 4.4+ (local or Docker) |
 | Memory | 4GB RAM minimum |
 | Disk Space | 500MB for installation |
@@ -25,7 +25,7 @@ Before installing SecondBrain, ensure your system meets these requirements:
 ### Optional Dependencies
 
 | Component | Purpose |
-|-----------|---------|
+| ----------- | --------- |
 | Docker | Containerized MongoDB and service management |
 | Tesseract OCR | Image optical character recognition |
 | FFmpeg | Audio transcription preprocessing |

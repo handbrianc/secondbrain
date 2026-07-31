@@ -186,6 +186,7 @@ def build_search_pipeline(
                 "page_number": 1,
                 "chunk_text": 1,
                 "element_type": 1,
+                "chunk_role": 1,
                 "score": 1,
             }
         }

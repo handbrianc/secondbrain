@@ -5,7 +5,7 @@
 
 SecondBrain is a local document intelligence CLI for semantic search using MongoDB vector search and OpenAI-compatible embedding APIs.
 
-**Stack:** Python 3.11+, Click, Pydantic 2, Motor, OpenAI-compatible API, Docker
+**Stack:** Python 3.14+, Click, Pydantic 2, Motor, OpenAI-compatible API, Docker
 
 ---
 
@@ -28,7 +28,7 @@ secondbrain/
 ## WHERE TO LOOK
 
 | Task | Location | Notes |
-|------|----------|-------|
+| ------ | ---------- | ------- |
 | CLI commands | `src/secondbrain/cli/__init__.py` | Entry point: `secondbrain.cli:main` |
 | Core logic | `src/secondbrain/` | 13 submodules (storage, search, utils, etc.) |
 | Tests | `tests/` | 20+ specialized test directories |
@@ -41,10 +41,12 @@ secondbrain/
 ## CODE MAP
 
 **Entry Points**:
+
 - `main()` in `src/secondbrain/cli/__init__.py:39-42`
 - `cli` Click group in `src/secondbrain/cli/__init__.py:18-32`
 
 **Core Modules**:
+
 - `storage/` - MongoDB vector storage (5 files)
 - `utils/` - Circuit breaker, connections, tracing (8 files)
 - `rag/` - LLM providers, pipeline (5 files)
@@ -64,9 +66,10 @@ secondbrain/
 3. **No `__main__.py`**: Cannot run via `python -m secondbrain`
 4. **Inline Python in shell scripts**: `scripts/generate-sbom.sh` contains 60+ lines of embedded Python
 5. **Pre-commit runs full test suite**: `pytest` with `always_run: true` (slow)
-6. **Hard-coded credentials**: `scripts/init-mongo.js` contains `pwd: 'supersecretpassword123'` ⚠️
+6. **Hard-coded credentials**: ✅ RESOLVED: `scripts/init-mongo.js` now uses `MONGO_ADMIN_PASSWORD` env var (May 2026)
 
 **Standard patterns followed:**
+
 - `src/` organization ✓
 - `pyproject.toml` as single config source ✓
 - GitHub Actions CI/CD supported ✓
@@ -91,17 +94,20 @@ secondbrain/
 ## UNIQUE STYLES
 
 **Testing:**
+
 - Parallel execution with `pytest-xdist` (`--dist=loadfile`)
 - 120s timeout per test
 - Extensive test markers: `integration`, `unit`, `slow`, `fast`, `qualitative`, `safety`, `factual`, `hallucination`
 - Property-based testing with Hypothesis (100 examples, 500ms deadline)
 
 **Security:**
+
 - Comprehensive scanning: pip-audit, safety, bandit, SBOM generation
 - Pre-commit hooks include security checks
 - CI/CD automation supported (GitHub Actions, local workflows)
 
 **Documentation:**
+
 - MkDocs with comprehensive structure (api/, architecture/, developer-guide/, user-guide/)
 - NumPy-style docstrings required
 - Extensive examples in `docs/examples/`
@@ -136,7 +142,8 @@ pytest
 ## TECHNICAL DEBT
 
 **High Priority:**
-- **Hard-coded password** in `scripts/init-mongo.js` - use env vars
+
+- **Hard-coded password** in `scripts/init-mongo.js` - ✅ RESOLVED: now uses `MONGO_ADMIN_PASSWORD` env var
 - **Inline Python** in `scripts/generate-sbom.sh` - extract to `.py` module
 - **Duplicate tests** - ✅ RESOLVED: Removed `tests/test_integration/` directory (consolidated into `tests/integration/mocked/`)
 - **Orphaned package** `src/secondbrain_cli/` - safe to remove
@@ -146,7 +153,7 @@ pytest
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **secondbrain** (9199 symbols, 14566 relationships, 70 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **secondbrain** (9381 symbols, 17200 relationships, 196 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 

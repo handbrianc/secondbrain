@@ -34,10 +34,7 @@ def run_command(cmd: list[str], description: str) -> bool:
 
 def main():
     """Run mutation testing workflow."""
-    if len(sys.argv) > 1:
-        command = sys.argv[1]
-    else:
-        command = "full"
+    command = sys.argv[1] if len(sys.argv) > 1 else "full"
 
     if command == "quick":
         # Run mutation testing on a specific module (faster)

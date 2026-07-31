@@ -13,7 +13,7 @@ SecondBrain supports the following document formats:
 ### Documents
 
 | Format | Extensions | Notes |
-|--------|------------|-------|
+| -------- | ------------ | ------- |
 | PDF | `.pdf` | Text and tables extracted via Docling |
 | Word | `.docx` | Full text and paragraph extraction |
 | PowerPoint | `.pptx` | Slide text and bullet points |
@@ -30,7 +30,7 @@ SecondBrain supports the following document formats:
 ### Images (with OCR)
 
 | Format | Extensions | OCR Engine |
-|--------|------------|------------|
+| -------- | ------------ | ------------ |
 | PNG | `.png` | Docling/Tesseract |
 | JPEG | `.jpg`, `.jpeg` | Docling/Tesseract |
 | TIFF | `.tiff`, `.tif` | Docling/Tesseract |
@@ -40,7 +40,7 @@ SecondBrain supports the following document formats:
 ### Audio/Video
 
 | Format | Extensions | Processing |
-|--------|------------|------------|
+| -------- | ------------ | ------------ |
 | WAV | `.wav` | Transcription |
 | MP3 | `.mp3` | Transcription |
 | WebVTT | `.vtt` | Subtitle extraction |
@@ -227,7 +227,7 @@ secondbrain ingest ./samples/ --recursive -v
 secondbrain ingest ./huge/ --batch-size 2
 ```
 
-2. Process directory in smaller chunks:
+1. Process directory in smaller chunks:
 
 ```bash
 mkdir /tmp/part1 /tmp/part2

@@ -13,6 +13,7 @@ from typing import Any
 
 from .interfaces import EmbeddingProvider
 from .mock import MockEmbeddingGenerator, MockEmbeddingProvider
+from .providers.factory import EmbeddingProviderFactory
 
 __all__ = [
     "EmbeddingProvider",
@@ -24,12 +25,8 @@ __all__ = [
 
 
 def __getattr__(name: str) -> Any:
-    """Lazy import for EmbeddingProviderFactory and OpenAIEmbeddingProvider to avoid circular imports."""
-    if name == "EmbeddingProviderFactory":
-        from .providers.factory import EmbeddingProviderFactory
-
-        return EmbeddingProviderFactory
-    elif name == "OpenAIEmbeddingProvider":
+    """Lazy import for OpenAIEmbeddingProvider to avoid circular imports."""
+    if name == "OpenAIEmbeddingProvider":
         from .providers.openai import OpenAIEmbeddingProvider
 
         return OpenAIEmbeddingProvider

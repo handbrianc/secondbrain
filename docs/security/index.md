@@ -7,7 +7,7 @@ Security considerations for deploying and using SecondBrain.
 ### In-Scope Threats
 
 | Threat | Mitigation |
-|--------|------------|
+| -------- | ------------ |
 | API key exposure | Environment variables, no hardcoding |
 | Unauthorized MongoDB access | Authentication, network isolation |
 | Malicious file ingestion | Input validation, path traversal prevention |
@@ -34,7 +34,7 @@ All document processing happens locally:
 ### Data That Leaves Your Machine
 
 | Operation | External Destination | Data Shared |
-|-----------|---------------------|-------------|
+| ----------- | --------------------- | ------------- |
 | Embedding (OpenAI-compatible) | Your configured API endpoint | Text chunks for vectorization |
 | Embedding (local Ollama) | localhost only | No external transmission |
 | LLM Chat (OpenAI/Anthropic) | Respective API | Retrieved chunks + conversation |

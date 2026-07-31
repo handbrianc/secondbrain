@@ -407,7 +407,7 @@ class TestDeriveChapterNumbers:
             },
         ]
 
-        entries, _ = pipeline._derive_chapter_numbers(structure_chunks)
+        entries, _, _ = pipeline._derive_chapter_numbers(structure_chunks)
         majors = sorted(e[0] for e in entries)
 
         # Chunk 1 contribution
@@ -452,7 +452,7 @@ class TestDeriveChapterNumbers:
             },
         ]
 
-        entries, _ = pipeline._derive_chapter_numbers(structure_chunks)
+        entries, _, _ = pipeline._derive_chapter_numbers(structure_chunks)
         majors = sorted(e[0] for e in entries)
 
         assert 35 not in majors, "chapter 35 is out of range and must be absent"
@@ -486,7 +486,7 @@ class TestDeriveChapterNumbers:
             },
         ]
 
-        entries, _ = pipeline._derive_chapter_numbers(structure_chunks)
+        entries, _, _ = pipeline._derive_chapter_numbers(structure_chunks)
         majors = sorted(e[0] for e in entries)
 
         # Chapters from CHAPTER_N_RE must be present
@@ -514,7 +514,7 @@ class TestDeriveChapterNumbers:
             },
         ]
 
-        entries, _ = pipeline._derive_chapter_numbers(structure_chunks)
+        entries, _, _ = pipeline._derive_chapter_numbers(structure_chunks)
         majors = [e[0] for e in entries]
 
         assert 11 not in majors, (
@@ -547,7 +547,7 @@ class TestDeriveChapterNumbers:
             },
         ]
 
-        entries, _ = pipeline._derive_chapter_numbers(structure_chunks)
+        entries, _, _ = pipeline._derive_chapter_numbers(structure_chunks)
         assert all(len(e) == 3 for e in entries), (
             f"Expected 3-element chapter tuples, got: {entries}"
         )
@@ -575,7 +575,7 @@ class TestDeriveChapterNumbers:
             },
         ]
 
-        entries, _ = pipeline._derive_chapter_numbers(structure_chunks)
+        entries, _, _ = pipeline._derive_chapter_numbers(structure_chunks)
         majors = sorted(e[0] for e in entries)
 
         assert 15 in majors, "chapter 15 from CHAPTER_N_RE must be present"
@@ -612,7 +612,7 @@ class TestDeriveChapterNumbers:
             },
         ]
 
-        entries, _ = pipeline._derive_chapter_numbers(structure_chunks)
+        entries, _, _ = pipeline._derive_chapter_numbers(structure_chunks)
         majors = sorted(e[0] for e in entries)
 
         assert 19 in majors, "chapter 19 from CHAPTER_N_RE must be present"

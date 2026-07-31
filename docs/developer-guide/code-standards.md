@@ -4,7 +4,7 @@ Development standards, style guidelines, and conventions for SecondBrain contrib
 
 ## Python Version
 
-Minimum Python version: **3.11**
+Minimum Python version: **3.14**
 
 New language features may be used freely at this version or above.
 
@@ -14,7 +14,7 @@ Strict type checking is enforced via MyPy:
 
 ```toml
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.14"
 strict = true
 ```
 
@@ -114,7 +114,7 @@ def calculate_similarity(vector_a: list[float], vector_b: list[float]) -> float:
 
 ## File Organization
 
-### Imports in __init__
+### Imports in **init**
 
 Keep `__init__.py` exports minimal:
 
@@ -132,7 +132,7 @@ Avoid importing implementation details in `__init__.py`.
 ## Naming Conventions
 
 | Element | Convention | Example |
-|---------|------------|---------|
+| --------- | ------------ | --------- |
 | Modules | snake_case | `async_client.py` |
 | Classes | PascalCase | `AsyncStorageClient` |
 | Functions | snake_case | `get_connection()` |

@@ -39,11 +39,10 @@ def _element_text(el: Any) -> str:
     return ""
 
 
-# Access config through module namespace so test patches apply correctly
 def _get_doc_config() -> Any:
-    import secondbrain.document
+    from secondbrain.config import config
 
-    return secondbrain.document.config()
+    return config()
 
 
 def _detect_cpu_count() -> int | None:
@@ -819,8 +818,8 @@ class DocumentIngestor:
         cfg = config()
         embedding_model_name = cfg.embedding_model
 
-        # Import extractor worker at call time to avoid circular import
-        from secondbrain.document.extractor import _extract_chunk_and_embed_file
+        # Import worker from processor (not extractor) to avoid cyclic import
+        from secondbrain.document.processor import _extract_chunk_and_embed_file
 
         with (
             trace_operation("ingest_thread_progress") as span,
@@ -848,7 +847,7 @@ class DocumentIngestor:
                 while not progress_queue.empty():
                     try:
                         progress_queue.get_nowait()
-                    except Exception:
+                    except queue.Empty:
                         break
 
                 done_futures = []

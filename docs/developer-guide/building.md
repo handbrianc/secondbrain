@@ -11,7 +11,7 @@ Defined in `pyproject.toml`:
 name = "secondbrain"
 version = "0.4.0"
 description = "A local document intelligence CLI tool for semantic search"
-requires-python = ">=3.13"
+requires-python = ">=3.14"
 authors = [
     {name = "Bishal Chand", email = "bishal.chand@gmail.com"}
 ]
@@ -58,7 +58,7 @@ dependencies = [
 Grouped extras for specific use cases:
 
 | Group | Purpose |
-|-------|---------|
+| ------- | --------- |
 | `lint` | Ruff and MyPy |
 | `test` | Pytest and testing utilities |
 | `docs` | MkDocs and plugins |
@@ -174,7 +174,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version: '3.14'
           
       - name: Install dependencies
         run: |
@@ -194,7 +194,7 @@ jobs:
 ## Distribution Formats Comparison
 
 | Format | Pros | Cons |
-|--------|------|------|
+| -------- | ------ | ------ |
 | Wheel (.whl) | Fast install, reproducible | Platform-specific wheels needed |
 | Source (.tar.gz) | Universal | Compilation required |
 | Executable | No Python needed | Large file, platform-specific |

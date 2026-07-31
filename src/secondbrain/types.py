@@ -11,6 +11,11 @@ class ChunkInfo(TypedDict):
     page_number: int | None
     chunk_text: str
     element_type: str | None
+    chunk_role: str | None
+    """Structural role assigned at chunk time: 'heading', 'body', 'navigation', 'caption', 'toc_entry'."""
+
+    section_label: str | None
+    """Human-readable section path, e.g. 'Chapter 3', 'Appendix A', '3.1 Introduction'."""
 
 
 class SearchResult(ChunkInfo, total=False):

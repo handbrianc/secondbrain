@@ -81,13 +81,22 @@ class StructuralIntentParser:
     """
 
     CHAPTER_ENUMERATE_TRIGGERS: ClassVar[list[str]] = [
-        "summarize",
+        # NOTE: "summarize" alone is deliberately excluded from this list.
+        # It appears in BROAD_COVERAGE_TRIGGERS and queries like
+        # "summarize the proxmox admin guide by chapter with details"
+        # should NOT trigger chapter enumeration — the user wants an
+        # overall summary, not per-chapter breakdown.  Only explicit
+        # enumeration phrases ("summarize chapter N", "list all chapters",
+        # "each chapter", etc.) should trigger CHAPTER_ENUMERATE.
+        "summarize chapter",
         "summarize each",
         "what chapters",
         "what chapters are",
         "list the chapters",
         "list all chapters",
         "all chapters",
+        "each chapter",
+        "every chapter",
         "chapter structure",
         "how many chapters",
         "outline of",

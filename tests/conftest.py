@@ -204,7 +204,7 @@ def mock_embedding_gen():
 @pytest.fixture(scope="session")
 def vector_storage_fixture(
     request: pytest.FixtureRequest, tmp_path_factory: pytest.TempPathFactory
-) -> Generator[Any, None, None]:
+) -> Generator[Any]:
     from unittest.mock import MagicMock
 
     from secondbrain.storage import VectorStorage
@@ -235,7 +235,7 @@ def mock_searcher():
 
 
 @pytest.fixture(scope="function", autouse=True)
-def cleanup_mongo_connections() -> Generator[None, None, None]:
+def cleanup_mongo_connections() -> Generator[None]:
     yield
     # Prevent env var leakage across randomized test order
     for _key in (
