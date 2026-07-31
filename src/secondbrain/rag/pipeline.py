@@ -962,7 +962,27 @@ class RAGPipeline:
             entries.sort(key=lambda x: x[0])
             appendix_entries.sort(key=lambda x: x[0])
 
-            # LLM fallback: classify unmatched structural candidates
+            # Post-validation: drop outlier chapters that are likely false
+            # positives from over-eager pass-2 regex patterns (bare_chapter_re,
+            # ft_catch).  Find the longest consecutive run of chapter numbers;
+            # if it accounts for >= 60 % of detected chapters AND there are
+            # at least 5 total entries (too few data points makes the ratio
+            # unreliable), exclude chapters outside that run.
+            if len(entries) >= 5:
+                all_nums = sorted({e[0] for e in entries})
+                runs: list[list[int]] = [[all_nums[0]]]
+                for n in all_nums[1:]:
+                    if n == runs[-1][-1] + 1:
+                        runs[-1].append(n)
+                    else:
+                        runs.append([n])
+                main_run = max(runs, key=len)
+                if len(main_run) / len(all_nums) >= 0.60:
+                    main_set = set(main_run)
+                    entries = [e for e in entries if e[0] in main_set]
+                    seen = {(n, s) for (n, s) in seen if n in main_set}
+
+            # LLM fallback: classify unmatched appendix candidates
             if not appendix_entries and self._llm_provider is not None:
                 llm_candidates: list[str] = []
                 llm_sources: list[str] = []
@@ -1255,6 +1275,11 @@ class RAGPipeline:
                 # NOTE: chapters already in chapter_first_pg (from ch_n above) are
                 # skipped — their pages are more reliable.
                 sec_header_re = re.compile(r"\b(\d+)\.\d+(?:\.\d+)?\s")
+                # Parallel scan for letter-prefixed section numbers (e.g. "A.1", "B.2.3")
+                # to detect appendix labels from actual document body content.  This is the
+                # most universal approach — works for any document regardless of TOC format.
+                appendix_sec_re = re.compile(r"\b([A-Za-z])\.\d+\s")
+                appendix_labels_found: set[str] = set()
                 for c in (
                     coll_.find(
                         {"source_file": src, "chunk_role": "body"},
@@ -1265,6 +1290,11 @@ class RAGPipeline:
                 ):
                     txt = c.get("chunk_text", "")[:150]
                     page = c.get("page_number", 0)
+
+                    # Detect appendix labels from body section numbering
+                    am = appendix_sec_re.search(txt)
+                    if am:
+                        appendix_labels_found.add(am.group(1).upper())
 
                     m = sec_header_re.search(txt)
                     if m:
@@ -1301,6 +1331,14 @@ class RAGPipeline:
                                 missing.remove(ch_num)
                         if not missing:
                             break
+
+                # Merge appendix labels detected from body section numbering
+                # into appendix_entries (from _derive_chapter_numbers).
+                seen_appendix_labels: set[str] = {al[0] for al in appendix_entries}
+                for label in sorted(appendix_labels_found):
+                    if label not in seen_appendix_labels:
+                        seen_appendix_labels.add(label)
+                        appendix_entries.append((label, src, f"Appendix {label}"))
 
                 # Phase 3: interpolate page numbers for chapters still missing
                 # Only interpolates chapters known to exist (from _derive_chapter_numbers)
