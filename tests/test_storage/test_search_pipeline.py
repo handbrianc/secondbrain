@@ -188,6 +188,7 @@ class TestBuildSearchPipeline:
         assert project["source_file"] == 1
         assert project["page_number"] == 1
         assert project["chunk_text"] == 1
+        assert project["chunk_role"] == 1
         assert project["score"] == 1
 
         # Should explicitly exclude _id (set to 0)
