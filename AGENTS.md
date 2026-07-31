@@ -5,7 +5,7 @@
 
 SecondBrain is a local document intelligence CLI for semantic search using MongoDB vector search and OpenAI-compatible embedding APIs.
 
-**Stack:** Python 3.11+, Click, Pydantic 2, Motor, OpenAI-compatible API, Docker
+**Stack:** Python 3.14+, Click, Pydantic 2, Motor, OpenAI-compatible API, Docker
 
 ---
 

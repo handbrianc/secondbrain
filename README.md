@@ -2,7 +2,7 @@
 
 A privacy-first document intelligence CLI that ingests documents, generates embeddings, and provides semantic search over your documents using MongoDB and OpenAI-compatible embedding services.
 
-![Python Version](https://img.shields.io/badge/python-3.11+-blue.svg)
+![Python Version](https://img.shields.io/badge/python-3.14+-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 
 ## Why SecondBrain?
@@ -15,7 +15,7 @@ A privacy-first document intelligence CLI that ingests documents, generates embe
 
 ## Prerequisites
 
-- Python 3.11+
+- Python 3.14+
 - MongoDB (local or Docker)
 - Docker (optional, for containerized setup)
 
