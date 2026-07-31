@@ -17,7 +17,7 @@ Before installing SecondBrain, ensure your system meets these requirements:
 
 | Component | Requirement |
 | ----------- | ------------- |
-| Python | 3.11 or higher |
+| Python | 3.14 or higher |
 | MongoDB | 4.4+ (local or Docker) |
 | Memory | 4GB RAM minimum |
 | Disk Space | 500MB for installation |
