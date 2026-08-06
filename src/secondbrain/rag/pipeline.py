@@ -849,6 +849,16 @@ class RAGPipeline:
                     title = am.group(2).strip().rstrip(".")
                     if len(title) < 2:
                         continue
+                    # Skip false positives: mid-sentence references like
+                    # "Appendix A of the Specification" (title starts with
+                    # a preposition/article/conjunction, not a heading).
+                    _fpa = title.lower().split()[0] if title.split() else ""
+                    if _fpa in (
+                        "of", "to", "in", "for", "the", "and", "or",
+                        "by", "with", "from", "at", "on", "is", "are",
+                        "its", "this", "that", "was", "were", "been",
+                    ):
+                        continue
                     seen_appendix.add((label, source))
                     appendix_entries.append((label, source, title))
 
@@ -861,6 +871,12 @@ class RAGPipeline:
                 "if", "as", "subject", "whereas", "notwithstanding",
                 "accepting", "submission", "disclaimer", "disclaimers",
                 "limitation",
+                "at",  # "15 At least moderately important"
+                # Report / white-paper false-positive starters — these
+                # first words appear in non-chapter section headings
+                # (e.g. "8 Key findings", "22 Question:") and would
+                # otherwise be hallucinated as chapter numbers.
+                "key", "question", "questions", "figure", "table",
             }
             for chunk in structure_chunks:
                 raw = chunk.get("chunk_text", "")
@@ -874,7 +890,7 @@ class RAGPipeline:
                     title = bm.group(2).strip().rstrip(".")
                     if len(title) < 4:
                         continue
-                    fw = title.lower().split()[0] if title.split() else ""
+                    fw = (title.lower().split()[0] if title.split() else "").rstrip(":;,.")
                     if fw in legal_starts:
                         continue
                     if title[0].islower():
@@ -902,7 +918,7 @@ class RAGPipeline:
                     title_ft = fm.group(2).strip().rstrip(".")
                     if len(title_ft) < 6:
                         continue
-                    fw_ft = title_ft.lower().split()[0] if title_ft.split() else ""
+                    fw_ft = (title_ft.lower().split()[0] if title_ft.split() else "").rstrip(":;,.")
                     if fw_ft in legal_starts:
                         continue
                     if title_ft[0].islower():
@@ -1209,6 +1225,7 @@ class RAGPipeline:
         if has_section_target or intent_decision.intent in (
             QueryIntent.CHAPTER_ENUMERATE,
             QueryIntent.SECTION_ENUMERATE,
+            QueryIntent.BROAD_COVERAGE,
         ):
             chapters_to_cover, good_title_nums, appendix_entries = self._derive_chapter_numbers(structure_chunks)
 
@@ -1414,11 +1431,17 @@ class RAGPipeline:
                 # even when they are not target chapters, then restrict the
                 # output page ranges to only target chapters below.
                 target_ch_nums = {ct[0] for ct in chapters_to_cover}
+
                 # Build sorted page ranges from ALL boundary chapters
                 sorted_pgs = sorted(chapter_first_pg.items(), key=lambda x: x[1])
                 chapter_ranges_: dict[int, tuple[int, int]] = {}
-                # Build boundary page mapping for end-page computation
-                boundary_pgs = dict(chapter_first_pg.items())
+                # Build boundary page mapping for end-page computation.
+                # Keep ALL chapter boundaries so that end-page calculation for a
+                # target chapter can see the next non-target chapter boundary.
+                # We guard against sec_header_re false positives (which produce
+                # start>end ranges) by skipping any next-chapter boundary whose
+                # page number is <= the current chapter's start page.
+                boundary_pgs = dict(chapter_first_pg)
                 max_ch_ = max(boundary_pgs) if boundary_pgs else 0
                 for ch_, start_pg_ in sorted_pgs:
                     # Only build ranges for target chapters
@@ -1428,9 +1451,11 @@ class RAGPipeline:
                     # boundary map — NOT the next entry in page-sorted order.
                     # Otherwise interleaved page numbers produce wrong end pages
                     # (e.g. ch5 at p51 with ch1 at p56 in page order → end=55).
+                    # Skip any boundary whose page is <= start_pg_ to avoid
+                    # false positives producing start>end ranges.
                     end_pg_ = 700
                     for nxt in range(ch_ + 1, max_ch_ + 2):
-                        if nxt in boundary_pgs:
+                        if nxt in boundary_pgs and boundary_pgs[nxt] > start_pg_:
                             end_pg_ = boundary_pgs[nxt] - 1
                             break
                     chapter_ranges_[ch_] = (start_pg_, end_pg_)
@@ -1569,23 +1594,43 @@ class RAGPipeline:
                     final_chunks = interleaved
 
                 if appendix_entries:
+                    # Use only target chapters for the appendix start page.
+                    # Non-target chapters from sec_header_re false positives
+                    # (e.g. a phantom "22.3" at the very end of the document)
+                    # would push the start page past all appendix content.
                     appendix_start_pg = max(
-                        (chapter_first_pg.get(k, 0) for k in chapter_first_pg),
+                        (
+                            chapter_first_pg.get(k, 0)
+                            for k in target_ch_nums
+                            if k in chapter_first_pg
+                        ),
                         default=0,
                     )
-                    appendix_body_chunks = []
-                    for c in (
+                    _max_appendix = 200
+                    appendix_body_chunks = list(
                         coll_.find(
-                            {"source_file": src, "chunk_role": "body"},
+                            {
+                                "source_file": src,
+                                "chunk_role": "body",
+                                "page_number": {"$gte": appendix_start_pg},
+                            },
                             {"_id": 0, "chunk_text": 1, "page_number": 1, "source_file": 1, "chunk_id": 1},
                         )
                         .sort("page_number", 1)
-                        .limit(2000)
-                    ):
-                        pg = c.get("page_number", 0)
-                        if pg >= appendix_start_pg:
-                            appendix_body_chunks.append(c)
-                    final_chunks.extend(appendix_body_chunks[:40])
+                        .limit(_max_appendix)
+                    )
+                    final_chunks.extend(appendix_body_chunks)
+                    # Re-deduplicate to remove any overlap between appendix
+                    # chunks and already-selected body chunks.
+                    _seen_ids: set[str] = set()
+                    _deduped: list[dict[str, Any]] = []
+                    for c in final_chunks:
+                        cid = c.get("chunk_id")
+                        if cid is None or cid not in _seen_ids:
+                            if cid is not None:
+                                _seen_ids.add(cid)
+                            _deduped.append(c)
+                    final_chunks = _deduped
 
                 # Build chapter roster
                 ch_titles: dict[int, str] = {}
@@ -1652,6 +1697,18 @@ class RAGPipeline:
                         f"section {raw_section_target}. Provide a detailed, focused summary "
                         f"of section {raw_section_target} specifically. Include its key "
                         f"topics, instructions, and any important details.\n"
+                        + "=== BODY CONTENT ===\n"
+                    )
+                elif has_section_target:
+                    # User asked about a specific chapter (e.g. "tell me about chapter 11").
+                    # Provide a thorough section-level breakdown instead of a concise summary.
+                    section_prompt = (
+                        "__DETAILED_CHAPTER_SUMMARY_INSTRUCTIONS__\n"
+                        + f"The user asked for details about chapter {enum_target}. "
+                        + "Below is the content of that chapter. Provide a thorough, detailed "
+                        + "summary of the chapter's content, organized by its numbered sections. "
+                        + "For each section, include its number, title, and a description of its "
+                        + "key topics and important details. Do NOT omit any section.\n"
                         + "=== BODY CONTENT ===\n"
                     )
                 elif wants_sections:
@@ -1725,10 +1782,7 @@ class RAGPipeline:
                                     if self._on_chunk and content:
                                         self._on_chunk(content, _reasoning)
 
-                                # Use 8192 max_tokens for enumeration queries
-                                # (wants_sections) so the LLM can list all 92+
-                                # sections without truncating mid-output.
-                                enum_max_tokens = 8192 if wants_sections else 4096
+                                enum_max_tokens = self._config.llm_max_tokens
                                 self._llm_provider.stream_chat(
                                     messages=messages,
                                     on_chunk=on_chunk,
@@ -1740,7 +1794,7 @@ class RAGPipeline:
                                 answer = ""
 
                         if not answer or not answer.strip():
-                            enum_max_tokens = 8192 if wants_sections else 4096
+                            enum_max_tokens = self._config.llm_max_tokens
                             answer = self._llm_provider.generate(
                                 prompt=prompt,
                                 temperature=self._config.llm_temperature,
