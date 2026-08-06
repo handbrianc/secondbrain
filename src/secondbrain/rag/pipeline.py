@@ -1436,13 +1436,12 @@ class RAGPipeline:
                 sorted_pgs = sorted(chapter_first_pg.items(), key=lambda x: x[1])
                 chapter_ranges_: dict[int, tuple[int, int]] = {}
                 # Build boundary page mapping for end-page computation.
-                # Filter to only target chapters to prevent sec_header_re false
-                # positives (non-target chapters with early-page section headers)
-                # from producing invalid start>end ranges.
-                boundary_pgs = {
-                    k: v for k, v in chapter_first_pg.items()
-                    if k in target_ch_nums
-                }
+                # Keep ALL chapter boundaries so that end-page calculation for a
+                # target chapter can see the next non-target chapter boundary.
+                # We guard against sec_header_re false positives (which produce
+                # start>end ranges) by skipping any next-chapter boundary whose
+                # page number is <= the current chapter's start page.
+                boundary_pgs = dict(chapter_first_pg)
                 max_ch_ = max(boundary_pgs) if boundary_pgs else 0
                 for ch_, start_pg_ in sorted_pgs:
                     # Only build ranges for target chapters
@@ -1452,9 +1451,11 @@ class RAGPipeline:
                     # boundary map — NOT the next entry in page-sorted order.
                     # Otherwise interleaved page numbers produce wrong end pages
                     # (e.g. ch5 at p51 with ch1 at p56 in page order → end=55).
+                    # Skip any boundary whose page is <= start_pg_ to avoid
+                    # false positives producing start>end ranges.
                     end_pg_ = 700
                     for nxt in range(ch_ + 1, max_ch_ + 2):
-                        if nxt in boundary_pgs:
+                        if nxt in boundary_pgs and boundary_pgs[nxt] > start_pg_:
                             end_pg_ = boundary_pgs[nxt] - 1
                             break
                     chapter_ranges_[ch_] = (start_pg_, end_pg_)
@@ -1605,19 +1606,31 @@ class RAGPipeline:
                         ),
                         default=0,
                     )
-                    appendix_body_chunks = []
-                    for c in (
+                    _max_appendix = 200
+                    appendix_body_chunks = list(
                         coll_.find(
-                            {"source_file": src, "chunk_role": "body"},
+                            {
+                                "source_file": src,
+                                "chunk_role": "body",
+                                "page_number": {"$gte": appendix_start_pg},
+                            },
                             {"_id": 0, "chunk_text": 1, "page_number": 1, "source_file": 1, "chunk_id": 1},
                         )
                         .sort("page_number", 1)
-                        .limit(5000)
-                    ):
-                        pg = c.get("page_number", 0)
-                        if pg >= appendix_start_pg:
-                            appendix_body_chunks.append(c)
+                        .limit(_max_appendix)
+                    )
                     final_chunks.extend(appendix_body_chunks)
+                    # Re-deduplicate to remove any overlap between appendix
+                    # chunks and already-selected body chunks.
+                    _seen_ids: set[str] = set()
+                    _deduped: list[dict[str, Any]] = []
+                    for c in final_chunks:
+                        cid = c.get("chunk_id")
+                        if cid is None or cid not in _seen_ids:
+                            if cid is not None:
+                                _seen_ids.add(cid)
+                            _deduped.append(c)
+                    final_chunks = _deduped
 
                 # Build chapter roster
                 ch_titles: dict[int, str] = {}
