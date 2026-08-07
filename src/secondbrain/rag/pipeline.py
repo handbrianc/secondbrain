@@ -1959,6 +1959,104 @@ class RAGPipeline:
             return router.resolve_source_file(doc_name)
         return None
 
+    def _contextual_search(
+        self,
+        query: str,
+        conversation_history: list[dict[str, Any]] | None,
+        top_k: int,
+    ) -> list[dict[str, Any]] | None:
+        """Check whether *query* is a grounded follow-up and run the sync search.
+
+        Only attempts retrieval when the query references an entity from the
+        conversation (a genuine follow-up). Returns the retrieved chunks when
+        relevant, or ``None`` when the query is not a follow-up, nothing relevant
+        is retrieved, or the search fails — so the caller can fall through to the
+        knowledge fallback.
+        """
+        terms = self._extract_contextual_terms(conversation_history)
+        if not terms or not self._query_references_context(query, terms):
+            return None
+        contextual_query = self._build_contextual_search_query(
+            query, conversation_history
+        )
+        if not contextual_query.strip():
+            return None
+        try:
+            chunks = self._searcher.search(contextual_query, top_k=top_k)
+        except Exception as exc:
+            logger.warning(
+                "Contextual re-retrieval failed: %s: %s", type(exc).__name__, exc
+            )
+            return None
+        if not self._has_relevant_chunks(chunks):
+            return None
+        return chunks
+
+    async def _contextual_search_async(
+        self,
+        query: str,
+        conversation_history: list[dict[str, Any]] | None,
+        top_k: int,
+    ) -> list[dict[str, Any]] | None:
+        """Async variant of :meth:`_contextual_search` (uses ``search_async``)."""
+        terms = self._extract_contextual_terms(conversation_history)
+        if not terms or not self._query_references_context(query, terms):
+            return None
+        contextual_query = self._build_contextual_search_query(
+            query, conversation_history
+        )
+        if not contextual_query.strip():
+            return None
+        try:
+            if hasattr(self._searcher, "search_async"):
+                chunks = await self._searcher.search_async(
+                    contextual_query, top_k=top_k
+                )
+            else:
+                chunks = self._searcher.search(contextual_query, top_k=top_k)
+        except Exception as exc:
+            logger.warning(
+                "Contextual re-retrieval failed: %s: %s", type(exc).__name__, exc
+            )
+            return None
+        if not self._has_relevant_chunks(chunks):
+            return None
+        return chunks
+
+    def _generate(self, prompt: str) -> str:
+        """Run the LLM synchronously with the pipeline's temperature/max_tokens."""
+        return self._llm_provider.generate(
+            prompt=prompt,
+            temperature=self._config.llm_temperature,
+            max_tokens=self._config.llm_max_tokens,
+        )
+
+    async def _agenerate(self, prompt: str) -> str:
+        """Run the LLM asynchronously (falls back to the sync ``generate``)."""
+        if hasattr(self._llm_provider, "agenerate"):
+            return await self._llm_provider.agenerate(
+                prompt=prompt,
+                temperature=self._config.llm_temperature,
+                max_tokens=self._config.llm_max_tokens,
+            )
+        return self._llm_provider.generate(
+            prompt=prompt,
+            temperature=self._config.llm_temperature,
+            max_tokens=self._config.llm_max_tokens,
+        )
+
+    @staticmethod
+    def _no_result_notice(query: str) -> str:
+        """Return the static notice when no relevant documents are found."""
+        return f"I couldn't find relevant documents for your query: {query}"
+
+    @staticmethod
+    def _apply_llm_fallback(notice: str, llm_answer: object) -> str:
+        """Append a non-empty LLM answer to the static *notice*."""
+        if isinstance(llm_answer, str) and llm_answer.strip():
+            return f"{notice}\n\n{llm_answer}"
+        return notice
+
     def _build_knowledge_fallback_prompt(
         self,
         query: str,
@@ -2086,16 +2184,6 @@ class RAGPipeline:
         ranked = sorted(counts, key=_rank)
         return ranked[:max_terms]
 
-    async def _build_contextual_search_query_async(
-        self, query: str, conversation_history: list[dict[str, Any]] | None = None
-    ) -> str:
-        """Async variant of :meth:`_build_contextual_search_query`.
-
-        Term extraction is pure string logic with no I/O, so this simply defers
-        to the synchronous implementation.
-        """
-        return self._build_contextual_search_query(query, conversation_history)
-
     def _query_references_context(self, query: str, terms: list[str]) -> bool:
         """Whether *query* refers to any entity named by an extracted term.
 
@@ -2136,33 +2224,26 @@ class RAGPipeline:
         not a follow-up or nothing relevant is retrieved, so the caller can use
         the knowledge fallback.
         """
-        terms = self._extract_contextual_terms(conversation_history)
-        if not terms or not self._query_references_context(query, terms):
-            return None
-        contextual_query = self._build_contextual_search_query(query, conversation_history)
-        if not contextual_query.strip():
-            return None
-        try:
-            chunks = self._searcher.search(contextual_query, top_k=top_k)
-        except Exception as exc:
-            logger.warning("Contextual re-retrieval failed: %s: %s", type(exc).__name__, exc)
-            return None
-        if not self._has_relevant_chunks(chunks):
+        chunks = self._contextual_search(query, conversation_history, top_k)
+        if chunks is None:
             return None
         context_text = self._format_context(chunks)
         prompt = self._build_prompt(query, context_text, conversation_history or [])
         try:
-            answer = self._llm_provider.generate(
-                prompt=prompt,
-                temperature=self._config.llm_temperature,
-                max_tokens=self._config.llm_max_tokens,
-            )
+            answer = self._generate(prompt)
         except Exception as exc:
-            logger.warning("Grounded generation failed: %s: %s", type(exc).__name__, exc)
+            logger.warning(
+                "Grounded generation failed: %s: %s", type(exc).__name__, exc
+            )
             return None
         if not answer or not answer.strip():
             return None
-        result: dict[str, Any] = {"answer": answer, "query": query, "rewritten_query": query, "grounded_retry": True}
+        result: dict[str, Any] = {
+            "answer": answer,
+            "query": query,
+            "rewritten_query": query,
+            "grounded_retry": True,
+        }
         if show_sources:
             result["sources"] = chunks
         return result
@@ -2181,45 +2262,26 @@ class RAGPipeline:
         but uses the provider's async ``search_async``/``agenerate`` when
         available, falling back to the sync equivalents otherwise.
         """
-        terms = self._extract_contextual_terms(conversation_history)
-        if not terms or not self._query_references_context(query, terms):
-            return None
-        contextual_query = await self._build_contextual_search_query_async(
-            query, conversation_history
-        )
-        if not contextual_query.strip():
-            return None
-        try:
-            if hasattr(self._searcher, "search_async"):
-                chunks = await self._searcher.search_async(contextual_query, top_k=top_k)
-            else:
-                chunks = self._searcher.search(contextual_query, top_k=top_k)
-        except Exception as exc:
-            logger.warning("Contextual re-retrieval failed: %s: %s", type(exc).__name__, exc)
-            return None
-        if not self._has_relevant_chunks(chunks):
+        chunks = await self._contextual_search_async(query, conversation_history, top_k)
+        if chunks is None:
             return None
         context_text = self._format_context(chunks)
         prompt = self._build_prompt(query, context_text, conversation_history or [])
         try:
-            if hasattr(self._llm_provider, "agenerate"):
-                answer = await self._llm_provider.agenerate(
-                    prompt=prompt,
-                    temperature=self._config.llm_temperature,
-                    max_tokens=self._config.llm_max_tokens,
-                )
-            else:
-                answer = self._llm_provider.generate(
-                    prompt=prompt,
-                    temperature=self._config.llm_temperature,
-                    max_tokens=self._config.llm_max_tokens,
-                )
+            answer = await self._agenerate(prompt)
         except Exception as exc:
-            logger.warning("Grounded generation failed: %s: %s", type(exc).__name__, exc)
+            logger.warning(
+                "Grounded generation failed: %s: %s", type(exc).__name__, exc
+            )
             return None
         if not answer or not answer.strip():
             return None
-        result: dict[str, Any] = {"answer": answer, "query": query, "rewritten_query": query, "grounded_retry": True}
+        result: dict[str, Any] = {
+            "answer": answer,
+            "query": query,
+            "rewritten_query": query,
+            "grounded_retry": True,
+        }
         if show_sources:
             result["sources"] = chunks
         return result
@@ -2228,10 +2290,13 @@ class RAGPipeline:
         """Return True if any retrieved chunk meets the relevance score threshold.
 
         A chunk counts as relevant when its cosine-similarity ``score`` is at
-        least ``rag_min_similarity_threshold``. Chunks without a ``score`` field
-        are treated as relevant so existing behaviour is preserved for score-less
-        context (e.g. unit-test fixtures). Returns False only when *chunks* is
-        empty or every scored chunk falls below the threshold.
+        least ``rag_min_similarity_threshold``. When none of the chunks carry a
+        ``score`` they are all treated as relevant, so existing behaviour is
+        preserved for score-less context (e.g. unit-test fixtures). When at least
+        one chunk has a score, only the scored chunks are evaluated — a single
+        score-less chunk cannot bypass the threshold gate on an otherwise-scored
+        batch. Returns False only when *chunks* is empty or every scored chunk
+        falls below the threshold.
 
         Args:
             chunks: Retrieved chunk dicts (each may carry a ``score``).
@@ -2241,10 +2306,9 @@ class RAGPipeline:
         """
         if not chunks:
             return False
-        scores = [c.get("score") for c in chunks]
-        scored = [s for s in scores if s is not None]
-        if len(scored) != len(scores):
-            return True  # no score signal -> do not gate (backward compatible)
+        scored = [c["score"] for c in chunks if c.get("score") is not None]
+        if not scored:
+            return True  # no score signal at all -> do not gate (backward compatible)
         return any(s >= self._config.rag_min_similarity_threshold for s in scored)
 
     def _handle_no_results(
@@ -2273,13 +2337,14 @@ class RAGPipeline:
                 turns even when no documents matched.
 
         Returns:
-            Fallback response text.
+            The static no-results notice, or the notice followed by a non-empty
+            LLM knowledge answer when the fallback is enabled and succeeds.
 
         Example:
             >>> pipeline._handle_no_results("What is Python?")
             "I couldn't find relevant documents for your query: What is Python?"
         """
-        notice = f"I couldn't find relevant documents for your query: {query}"
+        notice = self._no_result_notice(query)
 
         if not allow_llm_fallback or not self._config.rag_llm_fallback_enabled:
             return notice
@@ -2288,11 +2353,7 @@ class RAGPipeline:
             query, conversation_history=conversation_history
         )
         try:
-            llm_answer = self._llm_provider.generate(
-                prompt=prompt,
-                temperature=self._config.llm_temperature,
-                max_tokens=self._config.llm_max_tokens,
-            )
+            llm_answer = self._generate(prompt)
         except Exception as exc:
             logger.warning(
                 "LLM knowledge fallback failed for query %r: %s: %s",
@@ -2302,9 +2363,7 @@ class RAGPipeline:
             )
             return notice
 
-        if isinstance(llm_answer, str) and llm_answer.strip():
-            return f"{notice}\n\n{llm_answer}"
-        return notice
+        return self._apply_llm_fallback(notice, llm_answer)
 
     async def _handle_no_results_async(
         self,
@@ -2331,7 +2390,7 @@ class RAGPipeline:
         Returns:
             Fallback response text.
         """
-        notice = f"I couldn't find relevant documents for your query: {query}"
+        notice = self._no_result_notice(query)
 
         if not allow_llm_fallback or not self._config.rag_llm_fallback_enabled:
             return notice
@@ -2340,18 +2399,7 @@ class RAGPipeline:
             query, conversation_history=conversation_history
         )
         try:
-            if hasattr(self._llm_provider, "agenerate"):
-                llm_answer = await self._llm_provider.agenerate(
-                    prompt=prompt,
-                    temperature=self._config.llm_temperature,
-                    max_tokens=self._config.llm_max_tokens,
-                )
-            else:
-                llm_answer = self._llm_provider.generate(
-                    prompt=prompt,
-                    temperature=self._config.llm_temperature,
-                    max_tokens=self._config.llm_max_tokens,
-                )
+            llm_answer = await self._agenerate(prompt)
         except Exception as exc:
             logger.warning(
                 "LLM knowledge fallback (async) failed for query %r: %s: %s",
@@ -2361,9 +2409,7 @@ class RAGPipeline:
             )
             return notice
 
-        if isinstance(llm_answer, str) and llm_answer.strip():
-            return f"{notice}\n\n{llm_answer}"
-        return notice
+        return self._apply_llm_fallback(notice, llm_answer)
 
     def _rewrite_query_with_history(
         self,

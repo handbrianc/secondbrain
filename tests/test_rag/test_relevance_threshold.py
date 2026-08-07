@@ -79,6 +79,33 @@ class TestHasRelevantChunks:
         ]
         assert pipeline._has_relevant_chunks(chunks) is True
 
+    def test_scoreless_among_below_threshold_scored_is_not_relevant(
+        self, pipeline: RAGPipeline
+    ) -> None:
+        """Score-less chunk must not bypass the gate on a below-threshold batch.
+
+        Regression test: previously any single score-less chunk disabled the
+        gate entirely, treating the whole batch as relevant.
+        """
+        chunks = [
+            {"chunk_text": "a", "score": 0.3},
+            {"chunk_text": "b", "source_file": "test.pdf", "page": 1},
+        ]
+        assert pipeline._has_relevant_chunks(chunks) is False
+
+    def test_scoreless_among_above_threshold_scored_is_relevant(
+        self, pipeline: RAGPipeline
+    ) -> None:
+        """Score-less chunk alongside an above-threshold scored chunk is relevant.
+
+        The high score carries the batch regardless of the score-less chunk.
+        """
+        chunks = [
+            {"chunk_text": "a", "score": 0.6},
+            {"chunk_text": "b", "source_file": "test.pdf", "page": 1},
+        ]
+        assert pipeline._has_relevant_chunks(chunks) is True
+
 
 class TestRelevanceGateInQuery:
     """The query() path routes below-threshold chunks through the fallback."""
