@@ -7,6 +7,7 @@ Retrieval-Augmented Generation workflow for conversational Q&A.
 import logging
 import re
 import time
+from collections import Counter
 from contextlib import suppress
 from typing import Any, ClassVar, cast
 
@@ -244,7 +245,7 @@ class RAGPipeline:
                 logger.debug("retrieval_latency: %.3fs", retrieval_duration)
 
             # Step 2: Handle no results
-            if not chunks:
+            if not self._has_relevant_chunks(chunks):
                 fallback_answer = self._handle_no_results(query)
                 result: dict[str, Any] = {"answer": fallback_answer, "query": query}
                 if show_sources:
@@ -420,8 +421,29 @@ class RAGPipeline:
                 logger.debug("retrieval_latency: %.3fs", retrieval_duration)
 
             # Step 3: Handle no results
-            if not chunks:
-                fallback_answer = self._handle_no_results(query)
+            if not self._has_relevant_chunks(chunks):
+                # First attempt a grounded re-retrieval: disambiguate the query
+                # from conversation history and re-query the vector DB so a
+                # multi-turn follow-up can retrieve the actual source document.
+                # Only if that returns nothing relevant do we fall through to the
+                # knowledge fallback below.
+                history = session.get_history(limit=self._context_window)
+                grounded: dict[str, Any] | None = None
+                if self._config.rag_llm_fallback_enabled:
+                    grounded = self._grounded_context_retry(
+                        rewritten_query,
+                        conversation_history=history,
+                        top_k=effective_top_k,
+                        show_sources=show_sources,
+                    )
+                if grounded is not None:
+                    return grounded
+                # Thread conversation history so the LLM knowledge fallback can
+                # leverage prior turns for this multi-turn chat follow-up.
+                fallback_answer = self._handle_no_results(
+                    rewritten_query,
+                    conversation_history=history,
+                )
                 result: dict[str, Any] = {
                     "answer": fallback_answer,
                     "rewritten_query": rewritten_query,
@@ -522,7 +544,9 @@ class RAGPipeline:
                         "Empty LLM response after %d attempts. Returning fallback response.",
                         max_retries,
                     )
-                    fallback_answer = self._handle_no_results(query)
+                    fallback_answer = self._handle_no_results(
+                        query, allow_llm_fallback=False
+                    )
                     result = {
                         "answer": fallback_answer,
                         "rewritten_query": rewritten_query,
@@ -1135,8 +1159,8 @@ class RAGPipeline:
             top_k=top_k,
             source_filter=source_filter,
         )
-        if not chunks:
-            return {"answer": f"No relevant documents found for: {query}", "query": query}
+        if not self._has_relevant_chunks(chunks):
+            return {"answer": self._handle_no_results(query), "query": query}
         context = self._format_context(chunks)
         prompt = self._build_prompt(query, context)
         answer = self._llm_provider.generate(
@@ -1822,14 +1846,19 @@ class RAGPipeline:
                     result["sources"] = final_chunks
                 return result
             else:
-                # Target chapter not found — avoid falling through to
-                # generic structural iteration which pulls content from
-                # every chapter (cross-chapter leakage).
-                target_label = f"chapter {intent_decision.target}" if intent_decision.target else "requested chapter"
-                fallback = (
-                    f"I couldn't find {target_label} in the document."
-                )
-                return {"answer": fallback, "query": query}
+                # No chapters were detected/covered. If the user explicitly
+                # requested a specific chapter (e.g. "chapter 5") that does
+                # not exist, report it. Otherwise (e.g. "summarize X" with no
+                # chapter number), fall through to the generic top-k search
+                # below instead of emitting a misleading "couldn't find
+                # chapter" error.
+                if intent_decision.target is not None:
+                    target_label = f"chapter {intent_decision.target}"
+                    return {
+                        "answer": f"I couldn't find {target_label} in the document.",
+                        "query": query,
+                    }
+                # else: fall through to generic search (Branch B) below
 
         # 2. Generic top-k search: one embedding call, no per-page
         # iteration (which would make 8000+ embedding requests).
@@ -1843,9 +1872,9 @@ class RAGPipeline:
         accumulated.sort(key=lambda c: c.get("score", 0.0), reverse=True)
         final_chunks = self._dedupe_by_text_hash(accumulated)[:top_k]
 
-        if not final_chunks:
+        if not self._has_relevant_chunks(final_chunks):
             return {
-                "answer": f"I couldn't find relevant documents for your query: {query}",
+                "answer": self._handle_no_results(query),
                 "query": query,
             }
 
@@ -1930,14 +1959,318 @@ class RAGPipeline:
             return router.resolve_source_file(doc_name)
         return None
 
+    def _build_knowledge_fallback_prompt(
+        self,
+        query: str,
+        conversation_history: list[dict[str, Any]] | None = None,
+    ) -> str:
+        """Build a self-contained instruction prompt for the LLM knowledge fallback.
+
+        The prompt explains that no matching documents exist in the local
+        knowledge base and instructs the model to answer using the supplied
+        conversation context (if any) and its own general knowledge — or to
+        honestly state it has no information.
+
+        When ``conversation_history`` is provided and non-empty, a
+        "Relevant conversation context" section (built with
+        :meth:`_format_history`) is inserted before the no-documents
+        instructions so a multi-turn follow-up can leverage earlier turns in the
+        chat session. When it is None/empty, the prompt is stateless and matches
+        the original single-turn behaviour exactly.
+
+        Args:
+            query: The user's original query.
+            conversation_history: Optional list of prior message dicts (with
+                ``role``/``content`` keys) from the chat session to give the
+                model conversational context.
+
+        Returns:
+            The instruction prompt to send to the LLM.
+        """
+        conversation_section = ""
+        if conversation_history:
+            formatted = self._format_history(conversation_history)
+            if formatted:
+                conversation_section = (
+                    "Relevant conversation context (from this chat session):\n"
+                    f"{formatted}\n\n"
+                )
+        return (
+            f"The user asked: {query}\n\n"
+            f"{conversation_section}"
+            "There are no matching documents for this question in the local "
+            "knowledge base, so no retrieved context is available.\n"
+            "Using ONLY the conversation context above and your own general "
+            "knowledge, answer the user's question if you have enough information "
+            "to do so accurately. If you do NOT have enough information, reply "
+            "with a short, honest statement that you do not have information on "
+            "it. Do not fabricate facts or present guesswork as established "
+            "knowledge."
+        )
+
+    def _build_contextual_search_query(
+        self, query: str, conversation_history: list[dict[str, Any]] | None = None
+    ) -> str:
+        """Derive an augmented retrieval query from recent conversation terms.
+
+        Appends distinctive named entities and technical tokens (e.g. a person
+        name and a hyphenated term such as "ADOS-2") extracted from the most
+        recent conversation turns so a multi-turn follow-up like "what
+        challenges will brian face..." can retrieve the source document for the
+        actual entity (Brian Hand / an ADOS-2 report), rather than relying on a
+        generic knowledge answer.
+
+        Args:
+            query: The user's latest (rewritten) query.
+            conversation_history: Recent conversation messages.
+
+        Returns:
+            The *query* augmented with extracted terms, or *query* unchanged
+            when no usable history/terms are available.
+        """
+        terms = self._extract_contextual_terms(conversation_history)
+        if not terms:
+            return query
+        return f"{query} {' '.join(terms)}"
+
+    def _extract_contextual_terms(
+        self,
+        conversation_history: list[dict[str, Any]] | None,
+        max_terms: int = 5,
+        recent_turns: int = 20,
+    ) -> list[str]:
+        """Extract the most distinctive entity/technical terms from conversation.
+
+        Counts occurrences of multi-word proper nouns and hyphenated tokens
+        containing digits (e.g. "ADOS-2") across the recent *recent_turns*
+        messages, preferring terms that recur — repeated entities are the most
+        likely subject — so an entity established several turns back is still
+        captured. Sentence-leading filler words are skipped. Technical tokens
+        get a small boost since they are strong document discriminators.
+
+        Args:
+            conversation_history: Recent conversation messages.
+            max_terms: Maximum number of terms to return.
+            recent_turns: How many of the most recent messages to scan.
+
+        Returns:
+            At most *max_terms* unique terms, ranked by descending frequency
+            with ties broken by first appearance, or an empty list.
+        """
+        if not conversation_history:
+            return []
+        text = "\n".join(
+            m.get("content", "") for m in conversation_history[-recent_turns:]
+        )
+        filler = {
+            "The", "According", "Based", "Yes", "This", "That", "Since",
+            "Using", "Please", "Note", "As", "Our", "Do", "Not", "Only",
+            "There", "I", "You", "Your", "If", "In", "On", "For", "A", "An",
+            "But", "And", "So", "It", "We", "Or", "Because", "Regarding",
+        }
+        names = [
+            n for n in re.findall(r"[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+", text)
+            if n.split()[0] not in filler
+        ]
+        technical = re.findall(r"[A-Za-z][A-Za-z0-9]*-[A-Za-z0-9]*[0-9]+\b", text)
+        technical_set = set(technical)
+        counts = Counter(names + technical)
+        seen: dict[str, int] = {}
+        for token in names + technical:
+            seen.setdefault(token, len(seen))
+
+        def _rank(token: str) -> tuple[int, int]:
+            boost = 1 if token in technical_set else 0
+            return (-(counts[token] + boost), seen[token])
+
+        ranked = sorted(counts, key=_rank)
+        return ranked[:max_terms]
+
+    async def _build_contextual_search_query_async(
+        self, query: str, conversation_history: list[dict[str, Any]] | None = None
+    ) -> str:
+        """Async variant of :meth:`_build_contextual_search_query`.
+
+        Term extraction is pure string logic with no I/O, so this simply defers
+        to the synchronous implementation.
+        """
+        return self._build_contextual_search_query(query, conversation_history)
+
+    def _query_references_context(self, query: str, terms: list[str]) -> bool:
+        """Whether *query* refers to any entity named by an extracted term.
+
+        Restricts the grounded re-retrieval to genuine multi-turn follow-ups,
+        which reference an entity established in earlier turns (e.g. a follow-up
+        about "brian" cites the extracted "Brian Hand"). A fresh, self-contained
+        question such as "what is the speed of light" shares no tokens with the
+        history terms and must not be re-queried with unrelated conversation
+        topics, which would otherwise return irrelevant-but-high-scoring chunks.
+
+        Args:
+            query: The user's latest query.
+            terms: Contextual terms extracted from the conversation history.
+
+        Returns:
+            True if the query references a history entity, False otherwise.
+        """
+        lowered = query.lower()
+        for term in terms:
+            for token in term.split():
+                base = token.lower().rstrip("'s").split("-")[0]
+                if len(base) >= 3 and base in lowered:
+                    return True
+        return False
+
+    def _grounded_context_retry(
+        self,
+        query: str,
+        conversation_history: list[dict[str, Any]] | None,
+        top_k: int,
+        show_sources: bool,
+    ) -> dict[str, Any] | None:
+        """Re-query the vector DB with a context-augmented query.
+
+        Only attempted when the query references an entity from the
+        conversation (a genuine follow-up). If relevant chunks are found,
+        return a dict with a grounded RAG answer. Returns None when the query is
+        not a follow-up or nothing relevant is retrieved, so the caller can use
+        the knowledge fallback.
+        """
+        terms = self._extract_contextual_terms(conversation_history)
+        if not terms or not self._query_references_context(query, terms):
+            return None
+        contextual_query = self._build_contextual_search_query(query, conversation_history)
+        if not contextual_query.strip():
+            return None
+        try:
+            chunks = self._searcher.search(contextual_query, top_k=top_k)
+        except Exception as exc:
+            logger.warning("Contextual re-retrieval failed: %s: %s", type(exc).__name__, exc)
+            return None
+        if not self._has_relevant_chunks(chunks):
+            return None
+        context_text = self._format_context(chunks)
+        prompt = self._build_prompt(query, context_text, conversation_history or [])
+        try:
+            answer = self._llm_provider.generate(
+                prompt=prompt,
+                temperature=self._config.llm_temperature,
+                max_tokens=self._config.llm_max_tokens,
+            )
+        except Exception as exc:
+            logger.warning("Grounded generation failed: %s: %s", type(exc).__name__, exc)
+            return None
+        if not answer or not answer.strip():
+            return None
+        result: dict[str, Any] = {"answer": answer, "query": query, "rewritten_query": query, "grounded_retry": True}
+        if show_sources:
+            result["sources"] = chunks
+        return result
+
+    async def _grounded_context_retry_async(
+        self,
+        query: str,
+        conversation_history: list[dict[str, Any]] | None,
+        top_k: int,
+        show_sources: bool,
+    ) -> dict[str, Any] | None:
+        """Async variant of :meth:`_grounded_context_retry`.
+
+        Identical contract (returns a grounded answer dict if the query is a
+        follow-up referencing history and relevant chunks are found, else None)
+        but uses the provider's async ``search_async``/``agenerate`` when
+        available, falling back to the sync equivalents otherwise.
+        """
+        terms = self._extract_contextual_terms(conversation_history)
+        if not terms or not self._query_references_context(query, terms):
+            return None
+        contextual_query = await self._build_contextual_search_query_async(
+            query, conversation_history
+        )
+        if not contextual_query.strip():
+            return None
+        try:
+            if hasattr(self._searcher, "search_async"):
+                chunks = await self._searcher.search_async(contextual_query, top_k=top_k)
+            else:
+                chunks = self._searcher.search(contextual_query, top_k=top_k)
+        except Exception as exc:
+            logger.warning("Contextual re-retrieval failed: %s: %s", type(exc).__name__, exc)
+            return None
+        if not self._has_relevant_chunks(chunks):
+            return None
+        context_text = self._format_context(chunks)
+        prompt = self._build_prompt(query, context_text, conversation_history or [])
+        try:
+            if hasattr(self._llm_provider, "agenerate"):
+                answer = await self._llm_provider.agenerate(
+                    prompt=prompt,
+                    temperature=self._config.llm_temperature,
+                    max_tokens=self._config.llm_max_tokens,
+                )
+            else:
+                answer = self._llm_provider.generate(
+                    prompt=prompt,
+                    temperature=self._config.llm_temperature,
+                    max_tokens=self._config.llm_max_tokens,
+                )
+        except Exception as exc:
+            logger.warning("Grounded generation failed: %s: %s", type(exc).__name__, exc)
+            return None
+        if not answer or not answer.strip():
+            return None
+        result: dict[str, Any] = {"answer": answer, "query": query, "rewritten_query": query, "grounded_retry": True}
+        if show_sources:
+            result["sources"] = chunks
+        return result
+
+    def _has_relevant_chunks(self, chunks: list[dict[str, Any]]) -> bool:
+        """Return True if any retrieved chunk meets the relevance score threshold.
+
+        A chunk counts as relevant when its cosine-similarity ``score`` is at
+        least ``rag_min_similarity_threshold``. Chunks without a ``score`` field
+        are treated as relevant so existing behaviour is preserved for score-less
+        context (e.g. unit-test fixtures). Returns False only when *chunks* is
+        empty or every scored chunk falls below the threshold.
+
+        Args:
+            chunks: Retrieved chunk dicts (each may carry a ``score``).
+
+        Returns:
+            True if there is usable relevant context, False otherwise.
+        """
+        if not chunks:
+            return False
+        scores = [c.get("score") for c in chunks]
+        scored = [s for s in scores if s is not None]
+        if len(scored) != len(scores):
+            return True  # no score signal -> do not gate (backward compatible)
+        return any(s >= self._config.rag_min_similarity_threshold for s in scored)
+
     def _handle_no_results(
         self,
         query: str,
+        allow_llm_fallback: bool = True,
+        conversation_history: list[dict[str, Any]] | None = None,
     ) -> str:
         """Handle case when no documents retrieved.
 
+        Always reports that no relevant documents were found in the knowledge
+        base. When ``allow_llm_fallback`` is True and the
+        ``rag_llm_fallback_enabled`` config flag is set, it additionally asks the
+        LLM to answer from its own knowledge (and the supplied conversation
+        context, if any) and appends that answer when non-empty. The static
+        notice is always returned first.
+
         Args:
             query: Original query.
+            allow_llm_fallback: Whether this call may use the LLM knowledge
+                fallback. Pass False to return only the static notice (e.g. when
+                the LLM has already failed in the same request).
+            conversation_history: Optional list of prior message dicts (with
+                ``role``/``content`` keys) from the chat session, threaded into
+                the fallback prompt so a multi-turn follow-up can use earlier
+                turns even when no documents matched.
 
         Returns:
             Fallback response text.
@@ -1946,7 +2279,91 @@ class RAGPipeline:
             >>> pipeline._handle_no_results("What is Python?")
             "I couldn't find relevant documents for your query: What is Python?"
         """
-        return f"I couldn't find relevant documents for your query: {query}"
+        notice = f"I couldn't find relevant documents for your query: {query}"
+
+        if not allow_llm_fallback or not self._config.rag_llm_fallback_enabled:
+            return notice
+
+        prompt = self._build_knowledge_fallback_prompt(
+            query, conversation_history=conversation_history
+        )
+        try:
+            llm_answer = self._llm_provider.generate(
+                prompt=prompt,
+                temperature=self._config.llm_temperature,
+                max_tokens=self._config.llm_max_tokens,
+            )
+        except Exception as exc:
+            logger.warning(
+                "LLM knowledge fallback failed for query %r: %s: %s",
+                query,
+                type(exc).__name__,
+                exc,
+            )
+            return notice
+
+        if isinstance(llm_answer, str) and llm_answer.strip():
+            return f"{notice}\n\n{llm_answer}"
+        return notice
+
+    async def _handle_no_results_async(
+        self,
+        query: str,
+        allow_llm_fallback: bool = True,
+        conversation_history: list[dict[str, Any]] | None = None,
+    ) -> str:
+        """Async variant of :meth:`_handle_no_results`.
+
+        Identical behaviour to the sync version but uses the provider's async
+        ``agenerate`` method when available for the LLM knowledge fallback. Falls
+        back to the sync ``generate`` method when ``agenerate`` is unavailable.
+        Never raises: on any failure the static notice is returned unchanged.
+
+        Args:
+            query: Original query.
+            allow_llm_fallback: Whether this call may use the LLM knowledge
+                fallback.
+            conversation_history: Optional list of prior message dicts (with
+                ``role``/``content`` keys) from the chat session, threaded into
+                the fallback prompt so a multi-turn follow-up can use earlier
+                turns even when no documents matched.
+
+        Returns:
+            Fallback response text.
+        """
+        notice = f"I couldn't find relevant documents for your query: {query}"
+
+        if not allow_llm_fallback or not self._config.rag_llm_fallback_enabled:
+            return notice
+
+        prompt = self._build_knowledge_fallback_prompt(
+            query, conversation_history=conversation_history
+        )
+        try:
+            if hasattr(self._llm_provider, "agenerate"):
+                llm_answer = await self._llm_provider.agenerate(
+                    prompt=prompt,
+                    temperature=self._config.llm_temperature,
+                    max_tokens=self._config.llm_max_tokens,
+                )
+            else:
+                llm_answer = self._llm_provider.generate(
+                    prompt=prompt,
+                    temperature=self._config.llm_temperature,
+                    max_tokens=self._config.llm_max_tokens,
+                )
+        except Exception as exc:
+            logger.warning(
+                "LLM knowledge fallback (async) failed for query %r: %s: %s",
+                query,
+                type(exc).__name__,
+                exc,
+            )
+            return notice
+
+        if isinstance(llm_answer, str) and llm_answer.strip():
+            return f"{notice}\n\n{llm_answer}"
+        return notice
 
     def _rewrite_query_with_history(
         self,
@@ -2080,8 +2497,8 @@ class RAGPipeline:
                 metrics.record("retrieval_latency_async", retrieval_duration)
                 logger.debug("retrieval_latency_async: %.3fs", retrieval_duration)
 
-            if not chunks:
-                fallback_answer = self._handle_no_results(query)
+            if not self._has_relevant_chunks(chunks):
+                fallback_answer = await self._handle_no_results_async(query)
                 result: dict[str, Any] = {"answer": fallback_answer, "query": query}
                 if show_sources:
                     result["sources"] = []
@@ -2203,8 +2620,29 @@ class RAGPipeline:
                 metrics.record("retrieval_latency_async", retrieval_duration)
                 logger.debug("retrieval_latency_async: %.3fs", retrieval_duration)
 
-            if not chunks:
-                fallback_answer = self._handle_no_results(query)
+            if not self._has_relevant_chunks(chunks):
+                # First attempt a grounded re-retrieval: disambiguate the query
+                # from conversation history and re-query the vector DB so a
+                # multi-turn follow-up can retrieve the actual source document.
+                # Only if that returns nothing relevant do we fall through to the
+                # knowledge fallback below.
+                history = session.get_history(limit=self._context_window)
+                grounded: dict[str, Any] | None = None
+                if self._config.rag_llm_fallback_enabled:
+                    grounded = await self._grounded_context_retry_async(
+                        rewritten_query,
+                        conversation_history=history,
+                        top_k=effective_top_k,
+                        show_sources=show_sources,
+                    )
+                if grounded is not None:
+                    return grounded
+                # Thread conversation history so the LLM knowledge fallback can
+                # leverage prior turns for this multi-turn chat follow-up.
+                fallback_answer = await self._handle_no_results_async(
+                    rewritten_query,
+                    conversation_history=history,
+                )
                 result: dict[str, Any] = {
                     "answer": fallback_answer,
                     "rewritten_query": rewritten_query,

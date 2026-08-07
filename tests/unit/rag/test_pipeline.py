@@ -703,3 +703,52 @@ class TestFilterChaptersByTarget:
         filtered, filtered_titles = filter_chapters_by_target([], set(), "11")
         assert filtered == []
         assert filtered_titles == set()
+
+
+class TestIterativeQueryNoChaptersFallThrough:
+    """Broad-coverage query with no detected chapters and no chapter target
+    must fall through to generic search rather than error on a chapter."""
+
+    def test_broad_coverage_no_target_empty_chapters_falls_through(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from secondbrain.rag.intent_parser import IntentDecision, QueryIntent
+
+        pipeline = _make_pipeline_for_tracker(GenerateOnlyTracker())
+        pipeline._config.streaming_enabled = False
+
+        monkeypatch.setattr(
+            pipeline,
+            "_probe_document_structure",
+            lambda top_k, source_filter=None: [
+                {
+                    "chunk_text": "Introduction",
+                    "chunk_role": "heading",
+                    "source_file": "a.pdf",
+                    "page": 1,
+                }
+            ],
+        )
+        monkeypatch.setattr(
+            pipeline, "_derive_chapter_numbers", lambda structure: ([], set(), [])
+        )
+        monkeypatch.setattr(
+            pipeline._intent_parser,
+            "parse",
+            lambda q: IntentDecision(
+                intent=QueryIntent.BROAD_COVERAGE,
+                confidence=0.5,
+                target=None,
+                reason="test",
+                suggested_pipeline="structural",
+            ),
+        )
+
+        result = pipeline._iterative_query(
+            "summarize the state of AI 2026 by chapter",
+            top_k=5,
+            show_sources=False,
+        )
+
+        assert "I couldn't find" not in result["answer"]
+        assert result["answer"] == "Generated (no streaming available)"

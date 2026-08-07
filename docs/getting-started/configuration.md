@@ -89,6 +89,8 @@ During testing (`PYTEST_CURRENT_TEST` is set), configuration additionally loads 
 | ---------- | --------- | ------------- |
 | `SECONDBRAIN_RAG_CONTEXT_WINDOW` | `5` | Recent messages in conversation context |
 | `SECONDBRAIN_RAG_MAX_RETRIES` | `3` | Maximum LLM retry attempts |
+| `SECONDBRAIN_RAG_LLM_FALLBACK_ENABLED` | `true` | When no documents are found in the vector DB, allow the LLM to answer from its own knowledge if it has any |
+| `SECONDBRAIN_RAG_MIN_SIMILARITY_THRESHOLD` | `0.46` | Minimum cosine-similarity score for a retrieved chunk to count as relevant context in the RAG/chat path; chunks below this trigger the LLM-knowledge fallback (same as the search CLI) |
 | `SECONDBRAIN_RAG_MAX_CONTEXT_CHARS` | `8000` | Maximum context characters |
 | `SECONDBRAIN_RAG_CHUNK_PREVIEW_CHARS` | `500` | Per-chunk preview length |
 | `SECONDBRAIN_STREAMING_ENABLED` | `true` | Enable streaming processing |

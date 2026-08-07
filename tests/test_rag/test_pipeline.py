@@ -318,9 +318,11 @@ class TestRAGPipelineChat:
 
         result = pipeline_with_rewriter.chat("Query", session, show_sources=True)
 
+        # With SECONDBRAIN_RAG_LLM_FALLBACK_ENABLED=true (default), the LLM
+        # knowledge fallback appends the mock's "Generated answer" to the notice.
         assert (
             result["answer"]
-            == "I couldn't find relevant documents for your query: Query"
+            == "I couldn't find relevant documents for your query: Query\n\nGenerated answer"
         )
         assert "sources" in result
         assert result["sources"] == []
@@ -895,9 +897,11 @@ class TestRAGPipelineAsync:
             "Query", session, show_sources=True
         )
 
+        # With SECONDBRAIN_RAG_LLM_FALLBACK_ENABLED=true (default), the async LLM
+        # knowledge fallback appends the mock's "Async generated answer".
         assert (
             result["answer"]
-            == "I couldn't find relevant documents for your query: Query"
+            == "I couldn't find relevant documents for your query: Query\n\nAsync generated answer"
         )
         assert "sources" in result
         assert result["sources"] == []

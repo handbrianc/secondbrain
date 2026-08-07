@@ -13,6 +13,8 @@ from typing import Any, Literal
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from secondbrain.constants import DEFAULT_MIN_SIMILARITY_THRESHOLD
+
 __all__ = ["Config", "config", "get_config"]
 
 
@@ -153,6 +155,24 @@ class Config(BaseSettings):
         default=3,
         ge=1,
         description="Maximum retry attempts for LLM generation in RAG chat (default: 3)",
+    )
+    rag_llm_fallback_enabled: bool = Field(
+        default=True,
+        description=(
+            "When no documents are found in the vector DB, allow the LLM to answer "
+            "from its own knowledge if it has any (default: true)"
+        ),
+    )
+    rag_min_similarity_threshold: float = Field(
+        default=DEFAULT_MIN_SIMILARITY_THRESHOLD,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Minimum cosine-similarity score for a retrieved chunk to count as "
+            "relevant context in the RAG/chat path. Chunks below this are treated "
+            "as 'no relevant documents' and trigger the LLM-knowledge fallback "
+            "(default: 0.46, same as the search CLI)."
+        ),
     )
 
     # RAG formatting settings
