@@ -374,15 +374,18 @@ class _NoOpTracer:
 
 
 def shutdown_tracing() -> None:
-    """Shut down tracing and reset state."""
-    global _tracer, _tracing_enabled
+    """Shut down tracing and metrics providers and reset module state.
+
+    Stops both the span processor and the periodic metric reader so no
+    OpenTelemetry background thread keeps exporting (and crashing on a closed
+    stream) after the owning process begins shutting down.
+    """
+    global _tracer, _tracing_enabled, _meter, _metrics_enabled
 
     if not OTTEL_AVAILABLE:
         return
 
-    if _tracer is not None:
-        if otel_trace is None:
-            return
+    if otel_trace is not None:
         try:
             from opentelemetry.sdk.trace import TracerProvider
 
@@ -393,8 +396,21 @@ def shutdown_tracing() -> None:
         except Exception as e:
             logger.warning("Error during OpenTelemetry shutdown: %s", e)
 
+    if otel_metrics is not None:
+        try:
+            from opentelemetry.sdk.metrics import MeterProvider
+
+            provider = otel_metrics.get_meter_provider()
+            if isinstance(provider, MeterProvider):
+                provider.shutdown()
+                logger.info("OpenTelemetry metrics shutdown")
+        except Exception as e:
+            logger.warning("Error during OpenTelemetry metrics shutdown: %s", e)
+
     _tracer = None
+    _meter = None
     _tracing_enabled = False
+    _metrics_enabled = False
 
 
 class _NoOpSpan:
