@@ -206,12 +206,12 @@ class FailureInjectorCore:
         """
         # Find any active config for this failure type
         config: FailureConfig | None = None
-        for _key, cfg in self._active_failures.items():
-            if cfg.failure_type == failure_type:
-                config = cfg
-                break
-
-        self._failure_count += 1
+        with self._lock:
+            for _key, cfg in self._active_failures.items():
+                if cfg.failure_type == failure_type:
+                    config = cfg
+                    break
+            self._failure_count += 1
 
         if failure_type == FailureType.TIMEOUT:
             timeout_value = config.timeout_value if config else 30.0

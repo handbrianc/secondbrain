@@ -38,15 +38,6 @@ def _detect_cpu_count() -> int | None:
     """Wrap os.cpu_count() for testability."""
     return os.cpu_count()
 
-
-# Suppress docling deprecation warnings (upstream library issue)
-warnings.filterwarnings(
-    "ignore",
-    message=".*This field is deprecated.*",
-    category=DeprecationWarning,
-    module="docling",
-)
-
 MAX_MEMORY_BATCH_SIZE = 100
 
 # Supported file extensions

@@ -199,7 +199,7 @@ def stop(
     console.print(f"[cyan]Stopping Docker Compose stack from: {compose_file}[/cyan]")
 
     if (
-        subprocess.run(
+        subprocess.run(  # nosec B603
             ["docker", "--version"], capture_output=True, check=False
         ).returncode
         != 0
@@ -224,7 +224,7 @@ def stop(
         if remove_volumes:
             cmd.append("-v")
 
-        result = subprocess.run(
+        result = subprocess.run(  # nosec B603
             cmd,
             capture_output=True,
             text=True,

@@ -15,6 +15,8 @@ except ImportError:
     _HAS_PYTEST = False
     pytest = None  # type: ignore
 
+failure_injector: Any = None
+
 
 def inject_timeout(
     duration: float | None = None,

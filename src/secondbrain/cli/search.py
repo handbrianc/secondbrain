@@ -56,7 +56,7 @@ def search(
     source: str | None,
     file_type: str | None,
     format: str,
-    min_score: float,
+    min_score: float | None,
 ) -> None:
     """Search the vector database with semantic query.
 
