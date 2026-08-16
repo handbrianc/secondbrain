@@ -3,7 +3,7 @@
 # Install with: pip install -r requirements-dev.txt
 
 # Core development tools
-ruff==0.15.5
+ruff==0.16.1
 mypy==1.15.0
 pre-commit==4.6.1
 
