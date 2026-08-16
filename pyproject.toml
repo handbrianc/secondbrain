@@ -44,7 +44,7 @@ dependencies = [
 [project.optional-dependencies]
 # Core linting and formatting only
 lint = [
-    "ruff>=0.15.5",  # Linting/formatting - fast Rust-based tool
+    "ruff>=0.16.1",  # Linting/formatting - fast Rust-based tool
     "mypy>=1.8.0",  # Type checking - static analysis
 ]
 
@@ -98,7 +98,7 @@ web = [
 # Bundled extras (combines all dev tools - backward compatible with [dev])
 bundled = [
     # All lint deps
-    "ruff>=0.15.5",
+    "ruff>=0.16.1",
     "mypy>=1.8.0",
     # All test deps
     "pytest>=9.1.1",
