@@ -3,13 +3,13 @@
 # Install with: pip install -r requirements-dev.txt
 
 # Core development tools
-ruff==0.15.5
-mypy==1.15.0
-pre-commit==4.6.0
+ruff==0.16.1
+mypy==2.3.0
+pre-commit==4.6.1
 
 # Testing framework
 pytest==9.1.1
-pytest-asyncio==1.0.0
+pytest-asyncio==1.4.0
 pytest-cov==6.1.1
 pytest-benchmark==5.1.0
 pytest-xdist==3.8.0
@@ -25,7 +25,7 @@ factory-boy==3.3.3
 # Security scanning
 bandit==1.8.3
 safety==3.2.10
-pip-audit==2.10.0
+pip-audit==2.10.1
 cyclonedx-bom==7.6.2
 
 # Code quality
@@ -64,7 +64,7 @@ urllib3>=2.7.0
 setuptools>=83.0.0
 cryptography>=49.0.0
 pillow>=12.3.0
-paramiko>=3.5.0
+paramiko>=5.0.0
 PyJWT>=2.13.0
 pyasn1>=0.6.3
 pyopenssl>=26.4.0

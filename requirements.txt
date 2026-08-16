@@ -39,6 +39,7 @@ charset-normalizer==3.4.5
 click==8.4.2
     # via
     #   -r requirements.in
+    #   python-oxmsg
     #   typer
 colorlog==6.10.1
     # via rapidocr
@@ -60,9 +61,9 @@ dnspython==2.8.0
     # via pymongo
 doclang==0.7.2
     # via docling-core
-docling==2.110.0
+docling==2.119.0
     # via -r requirements.in
-docling-core[chunking]==2.86.0
+docling-core[chunking]==2.91.0
     # via
     #   -r requirements.in
     #   docling-ibm-models
@@ -72,7 +73,7 @@ docling-ibm-models==3.13.3
     # via docling-slim
 docling-parse==7.5.0
     # via docling-slim
-docling-slim[standard]==2.110.0
+docling-slim[standard]==2.119.0
     # via docling
 docstring-parser==0.18.0
     # via anthropic
@@ -134,7 +135,6 @@ latex2mathml==3.79.0
 lxml==6.0.2
     # via
     #   doclang
-    #   docling-slim
     #   python-docx
     #   python-pptx
 mail-parser==4.4.0
@@ -157,7 +157,7 @@ multiprocess==0.70.19
     # via mpire
 networkx==3.6.1
     # via torch
-numpy==2.4.6
+numpy==2.5.1
     # via
     #   -r requirements.in
     #   accelerate
@@ -210,22 +210,24 @@ nvidia-nvshmem-cu12==3.4.5
     # via torch
 nvidia-nvtx-cu12==12.8.90
     # via torch
+olefile==0.47
+    # via python-oxmsg
 omegaconf==2.3.0
     # via rapidocr
-openai==2.44.0
+openai==2.53.0
     # via -r requirements.in
 opencv-python==4.13.0.92
     # via rapidocr
 openpyxl==3.1.5
     # via docling-slim
-opentelemetry-api==1.43.0
+opentelemetry-api==1.44.0
     # via
     #   -r requirements.in
     #   opentelemetry-sdk
     #   opentelemetry-semantic-conventions
-opentelemetry-sdk==1.43.0
+opentelemetry-sdk==1.44.0
     # via -r requirements.in
-opentelemetry-semantic-conventions==0.64b0
+opentelemetry-semantic-conventions==0.65b0
     # via opentelemetry-sdk
 packaging==26.0
     # via
@@ -290,6 +292,8 @@ python-dotenv==1.2.2
     #   -r requirements.in
     #   docling-slim
     #   pydantic-settings
+python-oxmsg==0.0.2
+    # via docling-slim
 python-pptx==1.0.2
     # via docling-slim
 pyyaml==6.0.3
@@ -402,7 +406,6 @@ typing-extensions==4.15.0
     # via
     #   -r requirements.in
     #   anthropic
-    #   anyio
     #   beautifulsoup4
     #   docling-core
     #   huggingface-hub
@@ -414,8 +417,8 @@ typing-extensions==4.15.0
     #   pydantic
     #   pydantic-core
     #   python-docx
+    #   python-oxmsg
     #   python-pptx
-    #   referencing
     #   torch
     #   typing-inspection
 typing-inspection==0.4.2
