@@ -219,16 +219,12 @@ class BaseVectorStorage(ABC):
     # ------------------------------------------------------------------
 
     @abstractmethod
-    def validate_connection(
-        self, force: bool = False
-    ) -> bool:
+    def validate_connection(self, force: bool = False) -> bool:
         """Validate connection to MongoDB."""
         ...  # Provided by ValidatableService
 
     @abstractmethod
-    async def validate_connection_async(
-        self, force: bool = False
-    ) -> bool:
+    async def validate_connection_async(self, force: bool = False) -> bool:
         """Validate connection to MongoDB asynchronously."""
         ...  # Provided by ValidatableService
 

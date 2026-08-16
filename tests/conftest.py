@@ -254,6 +254,12 @@ def cleanup_mongo_connections() -> Generator[None]:
     _tm._tracing_enabled = False
     _tm._tracer = None
     _tm._metrics_enabled = False
+    # Restore telemetry env vars after any test that toggles them, so a test
+    # enabling tracing/metrics does not leak the "on" state to later tests.
+    # (Provider shutdown is handled once at session finish by shutdown_tracing so
+    # shared in-memory exporters used by the OTel integration tests stay alive.)
+    os.environ["SECONDBRAIN_TRACING_ENABLED"] = "false"
+    os.environ["OTEL_METRICS_ENABLED"] = "false"
     # Reset Config singleton cache
     import secondbrain.config as _cm
 

@@ -4,7 +4,8 @@ Comprehensive guide to ingesting documents into SecondBrain's vector database.
 
 ## Overview
 
-The `ingest` command parses supported file types, splits content into chunks, generates embeddings, and stores vectors in MongoDB.
+The `ingest` command parses supported file types, splits content into chunks, generates embeddings, and stores vectors
+in MongoDB.
 
 ## Supported File Types
 
@@ -12,38 +13,38 @@ SecondBrain supports the following document formats:
 
 ### Documents
 
-| Format | Extensions | Notes |
-| -------- | ------------ | ------- |
-| PDF | `.pdf` | Text and tables extracted via Docling |
-| Word | `.docx` | Full text and paragraph extraction |
-| PowerPoint | `.pptx` | Slide text and bullet points |
-| Excel | `.xlsx` | Tabular data preservation |
-| HTML | `.html`, `.htm` | Web page content extraction |
-| Markdown | `.md` | Plain text with formatting preserved |
-| Plain Text | `.txt` | UTF-8 text files |
-| ASCII Doc | `.asciidoc`, `.adoc` | AsciiDoctor format |
-| LaTeX | `.tex` | TeX document format |
-| CSV | `.csv` | Structured tabular data |
-| XML | `.xml` | Markup document format |
-| JSON | `.json` | Structured JSON data |
+| Format     | Extensions           | Notes                                 |
+| ---------- | -------------------- | ------------------------------------- |
+| PDF        | `.pdf`               | Text and tables extracted via Docling |
+| Word       | `.docx`              | Full text and paragraph extraction    |
+| PowerPoint | `.pptx`              | Slide text and bullet points          |
+| Excel      | `.xlsx`              | Tabular data preservation             |
+| HTML       | `.html`, `.htm`      | Web page content extraction           |
+| Markdown   | `.md`                | Plain text with formatting preserved  |
+| Plain Text | `.txt`               | UTF-8 text files                      |
+| ASCII Doc  | `.asciidoc`, `.adoc` | AsciiDoctor format                    |
+| LaTeX      | `.tex`               | TeX document format                   |
+| CSV        | `.csv`               | Structured tabular data               |
+| XML        | `.xml`               | Markup document format                |
+| JSON       | `.json`              | Structured JSON data                  |
 
 ### Images (with OCR)
 
-| Format | Extensions | OCR Engine |
-| -------- | ------------ | ------------ |
-| PNG | `.png` | Docling/Tesseract |
-| JPEG | `.jpg`, `.jpeg` | Docling/Tesseract |
-| TIFF | `.tiff`, `.tif` | Docling/Tesseract |
-| BMP | `.bmp` | Docling/Tesseract |
-| WebP | `.webp` | Docling/Tesseract |
+| Format | Extensions      | OCR Engine        |
+| ------ | --------------- | ----------------- |
+| PNG    | `.png`          | Docling/Tesseract |
+| JPEG   | `.jpg`, `.jpeg` | Docling/Tesseract |
+| TIFF   | `.tiff`, `.tif` | Docling/Tesseract |
+| BMP    | `.bmp`          | Docling/Tesseract |
+| WebP   | `.webp`         | Docling/Tesseract |
 
 ### Audio/Video
 
-| Format | Extensions | Processing |
-| -------- | ------------ | ------------ |
-| WAV | `.wav` | Transcription |
-| MP3 | `.mp3` | Transcription |
-| WebVTT | `.vtt` | Subtitle extraction |
+| Format | Extensions | Processing          |
+| ------ | ---------- | ------------------- |
+| WAV    | `.wav`     | Transcription       |
+| MP3    | `.mp3`     | Transcription       |
+| WebVTT | `.vtt`     | Subtitle extraction |
 
 ## Chunking Configuration
 
@@ -51,10 +52,10 @@ Documents are split into overlapping chunks to enable granular retrieval.
 
 ### Default Parameters
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `chunk_size` | 4096 | Target chunk size in characters |
-| `chunk_overlap` | 50 | Overlap between consecutive chunks |
+| Parameter       | Default | Description                        |
+| --------------- | ------- | ---------------------------------- |
+| `chunk_size`    | 4096    | Target chunk size in characters    |
+| `chunk_overlap` | 50      | Overlap between consecutive chunks |
 
 ### Tuning Guidelines
 
@@ -107,10 +108,10 @@ secondbrain ingest ./papers/ --recursive --cores 4
 
 ### How Parallelism Works
 
-| Cores | Behavior |
-|-------|----------|
-| 1 | ThreadPoolExecutor with configurable batch size |
-| 2+ | Parallel file processing with progress tracking |
+| Cores | Behavior                                        |
+| ----- | ----------------------------------------------- |
+| 1     | ThreadPoolExecutor with configurable batch size |
+| 2+    | Parallel file processing with progress tracking |
 
 ## Batch Processing
 

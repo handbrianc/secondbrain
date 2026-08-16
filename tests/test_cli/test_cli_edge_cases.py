@@ -120,7 +120,9 @@ class TestCLIBatchValidation:
 
         runner = CliRunner()
         # Use a non-existent path - Click will reject it via Path(exists=True)
-        result = runner.invoke(cli, ["ingest", "/nonexistent/path", "--batch-size", "0"])
+        result = runner.invoke(
+            cli, ["ingest", "/nonexistent/path", "--batch-size", "0"]
+        )
         # Click's IntRange validation returns exit code 2
         assert result.exit_code == 2
         assert (
@@ -335,7 +337,7 @@ class TestCLILargeResultSets:
 class TestCLIHealthEdgeCases:
     """Tests for health check edge cases."""
 
-    @patch("secondbrain.cli.commands.get_health_status")
+    @patch("secondbrain.cli.system.get_health_status")
     def test_health_command_with_degraded_services(
         self, mock_get_health_status: MagicMock
     ) -> None:
@@ -353,7 +355,7 @@ class TestCLIHealthEdgeCases:
         assert result.exit_code == 0
         assert "degraded" in result.output.lower()
 
-    @patch("secondbrain.cli.commands.get_health_status")
+    @patch("secondbrain.cli.system.get_health_status")
     def test_health_command_json_format(
         self, mock_get_health_status: MagicMock
     ) -> None:

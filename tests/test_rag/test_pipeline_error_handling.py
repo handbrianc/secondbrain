@@ -4,7 +4,7 @@ This module provides comprehensive error handling tests for the RAGPipeline clas
 covering fallback logic, error recovery, provider failures, and edge cases.
 """
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from openai import APIError as OpenAI_APIError
@@ -502,27 +502,41 @@ class TestRAGPipelineErrorHandling:
         mock_searcher: MagicMock,
         mock_llm_provider: MagicMock,
         mock_config: dict[str, str],
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Verify pipeline handles case when no context is found."""
-        # Mock empty search results
-        mock_searcher.search.return_value = []
+        # Disable the LLM knowledge fallback so the no-results path returns only
+        # the static notice and never consults the LLM. (New documented behaviour:
+        # with SECONDBRAIN_RAG_LLM_FALLBACK_ENABLED=true — the default — the LLM
+        # would be asked to answer from its own knowledge instead.)
+        from secondbrain.config import get_config
 
-        pipeline = RAGPipeline(
-            searcher=mock_searcher,
-            llm_provider=mock_llm_provider,
-            top_k=5,
-        )
+        monkeypatch.setenv("SECONDBRAIN_RAG_LLM_FALLBACK_ENABLED", "false")
+        get_config.cache_clear()
+        try:
+            # Mock empty search results
+            mock_searcher.search.return_value = []
 
-        result = pipeline.query("test query")
+            pipeline = RAGPipeline(
+                searcher=mock_searcher,
+                llm_provider=mock_llm_provider,
+                top_k=5,
+            )
 
-        # Should handle no results gracefully with fallback message
-        assert "answer" in result
-        assert (
-            "couldn't find" in result["answer"].lower()
-            or "no relevant" in result["answer"].lower()
-        )
-        # LLM should not be called when no context found
-        mock_llm_provider.generate.assert_not_called()
+            result = pipeline.query("test query")
+
+            # Should handle no results gracefully with fallback message
+            assert "answer" in result
+            assert (
+                "couldn't find" in result["answer"].lower()
+                or "no relevant" in result["answer"].lower()
+            )
+            # LLM should not be called when no context found (fallback disabled)
+            mock_llm_provider.generate.assert_not_called()
+        finally:
+            # Rebuild config so the fallback flag returns to its default for
+            # subsequent tests in this session.
+            get_config.cache_clear()
 
     def test_handles_exception_during_query_processing(
         self,
@@ -808,25 +822,36 @@ class TestRAGPipelineFallbackLogic:
         self,
         mock_searcher: MagicMock,
         mock_config: dict[str, str],
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Verify fallback chain executes in correct order."""
-        # Mock empty search results (first fallback point)
-        mock_searcher.search.return_value = []
+        # Disable the LLM knowledge fallback so the no-results path does not
+        # consult the LLM (new documented behaviour: with the flag defaulting to
+        # true, the LLM would be asked to answer from its own knowledge).
+        from secondbrain.config import get_config
 
-        mock_llm_provider = MagicMock(spec=LocalLLMProvider)
-        mock_llm_provider.generate.return_value = "Generated answer"
+        monkeypatch.setenv("SECONDBRAIN_RAG_LLM_FALLBACK_ENABLED", "false")
+        get_config.cache_clear()
+        try:
+            # Mock empty search results (first fallback point)
+            mock_searcher.search.return_value = []
 
-        pipeline = RAGPipeline(
-            searcher=mock_searcher,
-            llm_provider=mock_llm_provider,
-            top_k=5,
-        )
+            mock_llm_provider = MagicMock(spec=LocalLLMProvider)
+            mock_llm_provider.generate.return_value = "Generated answer"
 
-        result = pipeline.query("test query")
+            pipeline = RAGPipeline(
+                searcher=mock_searcher,
+                llm_provider=mock_llm_provider,
+                top_k=5,
+            )
 
-        # Should not call LLM when no context found
-        mock_llm_provider.generate.assert_not_called()
-        assert "couldn't find" in result["answer"].lower()
+            result = pipeline.query("test query")
+
+            # Should not call LLM when no context found
+            mock_llm_provider.generate.assert_not_called()
+            assert "couldn't find" in result["answer"].lower()
+        finally:
+            get_config.cache_clear()
 
     def test_pipeline_timeout_handling(
         self,
@@ -1130,3 +1155,135 @@ class TestRAGPipelineFallbackLogic:
         assert "answer" in result
         # LLM should be called with history included
         assert mock_llm_provider.generate.called
+
+
+class TestRAGNoResultsLLMFallback:
+    """Tests for the LLM knowledge fallback in the no-results path."""
+
+    NOTICE_PREFIX = "I couldn't find relevant documents for your query:"
+
+    def _build_pipeline(
+        self,
+        mock_searcher: MagicMock,
+        mock_llm_provider: MagicMock,
+    ) -> RAGPipeline:
+        mock_searcher.search.return_value = []
+        return RAGPipeline(
+            searcher=mock_searcher,
+            llm_provider=mock_llm_provider,
+            top_k=5,
+        )
+
+    def test_handle_no_results_appends_llm_answer(
+        self,
+        mock_searcher: MagicMock,
+        mock_llm_provider: MagicMock,
+        mock_config: dict[str, str],
+    ) -> None:
+        """Fallback enabled + non-empty LLM answer -> notice with answer appended."""
+        mock_llm_provider.generate.return_value = "Python is a language."
+        pipeline = self._build_pipeline(mock_searcher, mock_llm_provider)
+
+        result = pipeline._handle_no_results("What is Python?", allow_llm_fallback=True)
+
+        assert result.startswith(self.NOTICE_PREFIX)
+        assert "Python is a language." in result
+        mock_llm_provider.generate.assert_called_once()
+
+    def test_handle_no_results_ignores_empty_llm_answer(
+        self,
+        mock_searcher: MagicMock,
+        mock_llm_provider: MagicMock,
+        mock_config: dict[str, str],
+    ) -> None:
+        """Empty/whitespace LLM answer -> notice only, nothing appended."""
+        mock_llm_provider.generate.return_value = "   \n  "
+        pipeline = self._build_pipeline(mock_searcher, mock_llm_provider)
+
+        result = pipeline._handle_no_results("What is Python?")
+
+        assert result == f"{self.NOTICE_PREFIX} What is Python?"
+        mock_llm_provider.generate.assert_called_once()
+
+    def test_handle_no_results_disabled_skips_llm(
+        self,
+        mock_searcher: MagicMock,
+        mock_llm_provider: MagicMock,
+        mock_config: dict[str, str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """rag_llm_fallback_enabled=false -> notice only, generate NOT called."""
+        from secondbrain.config import get_config
+
+        mock_llm_provider.generate.return_value = "Should never be used"
+        monkeypatch.setenv("SECONDBRAIN_RAG_LLM_FALLBACK_ENABLED", "false")
+        get_config.cache_clear()
+        try:
+            pipeline = self._build_pipeline(mock_searcher, mock_llm_provider)
+            result = pipeline._handle_no_results("What is Python?")
+        finally:
+            get_config.cache_clear()
+
+        assert result == f"{self.NOTICE_PREFIX} What is Python?"
+        mock_llm_provider.generate.assert_not_called()
+
+    def test_handle_no_results_llm_exception_returns_notice(
+        self,
+        mock_searcher: MagicMock,
+        mock_llm_provider: MagicMock,
+        mock_config: dict[str, str],
+    ) -> None:
+        """LLM raises -> notice only returned, no exception propagates."""
+        mock_llm_provider.generate.side_effect = RuntimeError("LLM down")
+        pipeline = self._build_pipeline(mock_searcher, mock_llm_provider)
+
+        result = pipeline._handle_no_results("What is Python?")
+
+        assert result == f"{self.NOTICE_PREFIX} What is Python?"
+
+    @pytest.mark.asyncio
+    async def test_handle_no_results_async_appends_llm_answer(
+        self,
+        mock_searcher: MagicMock,
+        mock_llm_provider: MagicMock,
+        mock_config: dict[str, str],
+    ) -> None:
+        """Async fallback appends a non-empty agenerate() answer."""
+        mock_llm_provider.agenerate = AsyncMock(return_value="Python is a language.")
+        pipeline = self._build_pipeline(mock_searcher, mock_llm_provider)
+
+        result = await pipeline._handle_no_results_async("What is Python?")
+
+        assert result.startswith(self.NOTICE_PREFIX)
+        assert "Python is a language." in result
+        mock_llm_provider.agenerate.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_handle_no_results_async_ignores_empty_llm_answer(
+        self,
+        mock_searcher: MagicMock,
+        mock_llm_provider: MagicMock,
+        mock_config: dict[str, str],
+    ) -> None:
+        """Async fallback returns notice only for an empty/mock (non-str) answer."""
+        mock_llm_provider.agenerate = AsyncMock(return_value="")
+        pipeline = self._build_pipeline(mock_searcher, mock_llm_provider)
+
+        result = await pipeline._handle_no_results_async("What is Python?")
+
+        assert result == f"{self.NOTICE_PREFIX} What is Python?"
+
+    @pytest.mark.asyncio
+    async def test_handle_no_results_async_llm_exception_returns_notice(
+        self,
+        mock_searcher: MagicMock,
+        mock_llm_provider: MagicMock,
+        mock_config: dict[str, str],
+    ) -> None:
+        """Async fallback returns notice only when agenerate() raises."""
+        mock_llm_provider.agenerate = AsyncMock(side_effect=RuntimeError("LLM down"))
+        pipeline = self._build_pipeline(mock_searcher, mock_llm_provider)
+
+        result = await pipeline._handle_no_results_async("What is Python?")
+
+        assert result == f"{self.NOTICE_PREFIX} What is Python?"

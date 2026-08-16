@@ -3,6 +3,7 @@
 ## Security Features
 
 ### Circuit Breaker Pattern
+
 The circuit breaker protects against cascade failures:
 
 ```python
@@ -20,6 +21,7 @@ def risky_operation():
 ```
 
 ### Rate Limiting
+
 Rate limiting protects downstream services:
 
 ```python
@@ -35,6 +37,7 @@ if limiter.acquire():
 ```
 
 ### Security Filter
+
 The security filter validates user input:
 
 ```python
@@ -50,6 +53,7 @@ if violations:
 ## Error Types
 
 ### StorageConnectionError
+
 Raised when MongoDB connection fails:
 
 ```python
@@ -62,6 +66,7 @@ except StorageConnectionError as e:
 ```
 
 ### ValidationError
+
 Raised for invalid input:
 
 ```python
@@ -74,6 +79,7 @@ except ValidationError as e:
 ```
 
 ### CircuitBreakerOpenError
+
 Raised when circuit breaker is open:
 
 ```python
@@ -86,6 +92,7 @@ except CircuitBreakerOpenError:
 ```
 
 ### RateLimitExceededError
+
 Raised when rate limit is exceeded:
 
 ```python
@@ -100,6 +107,7 @@ except RateLimitExceededError:
 ## Error Handling Best Practices
 
 ### 1. Fail Fast
+
 Validate inputs early and raise specific exceptions:
 
 ```python
@@ -114,6 +122,7 @@ def process_query(query: str) -> dict:
 ```
 
 ### 2. Provide Context
+
 Include helpful error messages:
 
 ```python
@@ -125,6 +134,7 @@ raise StorageConnectionError(
 ```
 
 ### 3. Use Specific Exceptions
+
 Avoid generic Exception:
 
 ```python
@@ -140,6 +150,7 @@ except Exception:
 ```
 
 ### 4. Implement Retry Logic
+
 For transient failures:
 
 ```python
@@ -156,6 +167,7 @@ class MyService(ValidatableService):
 ```
 
 ### 5. Circuit Breaker Recovery
+
 Automatic recovery from failures:
 
 ```python
@@ -174,6 +186,7 @@ breaker = CircuitBreaker(
 ## Monitoring and Observability
 
 ### Structured Logging
+
 ```python
 import logging
 
@@ -190,6 +203,7 @@ logger.info(
 ```
 
 ### OpenTelemetry Tracing
+
 ```python
 from secondbrain.utils.tracing import trace_operation
 
@@ -200,6 +214,7 @@ def process_query(query):
 ```
 
 ### Health Checks
+
 ```python
 from secondbrain.utils.connections import ValidatableService
 

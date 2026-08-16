@@ -32,21 +32,21 @@ Configuration options are organized by functional area:
 
 Logging verbosity level.
 
-| Detail | Value |
-| -------- | ------- |
-| Env Var | `SECONDBRAIN_LOG_LEVEL` |
-| Default | `INFO` |
+| Detail  | Value                                           |
+| ------- | ----------------------------------------------- |
+| Env Var | `SECONDBRAIN_LOG_LEVEL`                         |
+| Default | `INFO`                                          |
 | Options | `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL` |
 
 ### LOG_FORMAT
 
 Output format for log messages.
 
-| Detail | Value |
-| -------- | ------- |
+| Detail  | Value                    |
+| ------- | ------------------------ |
 | Env Var | `SECONDBRAIN_LOG_FORMAT` |
-| Default | `pretty` |
-| Options | `pretty`, `json` |
+| Default | `pretty`                 |
+| Options | `pretty`, `json`         |
 
 ---
 
@@ -56,10 +56,10 @@ Output format for log messages.
 
 MongoDB connection URI.
 
-| Detail | Value |
-| -------- | ------- |
-| Env Var | `SECONDBRAIN_MONGO_URI` |
-| Default | `mongodb://localhost:27017` |
+| Detail     | Value                                            |
+| ---------- | ------------------------------------------------ |
+| Env Var    | `SECONDBRAIN_MONGO_URI`                          |
+| Default    | `mongodb://localhost:27017`                      |
 | Validation | Must start with `mongodb://` or `mongodb+srv://` |
 
 Examples:
@@ -79,19 +79,19 @@ SECONDBRAIN_MONGO_URI=mongodb+srv://user:password@cluster.mongodb.net
 
 Database name.
 
-| Detail | Value |
-|--------|-------|
+| Detail  | Value                  |
+| ------- | ---------------------- |
 | Env Var | `SECONDBRAIN_MONGO_DB` |
-| Default | `secondbrain` |
+| Default | `secondbrain`          |
 
 ### MONGO_COLLECTION
 
 Collection name for embeddings.
 
-| Detail | Value |
-|--------|-------|
+| Detail  | Value                          |
+| ------- | ------------------------------ |
 | Env Var | `SECONDBRAIN_MONGO_COLLECTION` |
-| Default | `embeddings` |
+| Default | `embeddings`                   |
 
 ---
 
@@ -101,10 +101,10 @@ Collection name for embeddings.
 
 Embedding service provider type.
 
-| Detail | Value |
-|--------|-------|
+| Detail  | Value                            |
+| ------- | -------------------------------- |
 | Env Var | `SECONDBRAIN_EMBEDDING_PROVIDER` |
-| Default | `openai` |
+| Default | `openai`                         |
 
 Supports OpenAI or any OpenAI-compatible API (Ollama, LM Studio, vLLM).
 
@@ -112,10 +112,10 @@ Supports OpenAI or any OpenAI-compatible API (Ollama, LM Studio, vLLM).
 
 Model identifier for embeddings.
 
-| Detail | Value |
-|--------|-------|
+| Detail  | Value                         |
+| ------- | ----------------------------- |
 | Env Var | `SECONDBRAIN_EMBEDDING_MODEL` |
-| Default | `text-embedding-3-small` |
+| Default | `text-embedding-3-small`      |
 
 Common models:
 
@@ -126,29 +126,29 @@ Common models:
 
 Vector dimensionality.
 
-| Detail | Value |
-| -------- | ------- |
-| Env Var | `SECONDBRAIN_EMBEDDING_DIMENSIONS` |
-| Default | `1536` |
-| Constraint | Must be positive integer |
+| Detail     | Value                              |
+| ---------- | ---------------------------------- |
+| Env Var    | `SECONDBRAIN_EMBEDDING_DIMENSIONS` |
+| Default    | `1536`                             |
+| Constraint | Must be positive integer           |
 
 Must match your embedding model's actual dimensions:
 
-| Model | Dimensions |
-| ------- | ------------ |
-| text-embedding-3-small | 1536 |
-| text-embedding-3-large | 3072 |
-| all-MiniLM-L6-v2 | 384 |
-| mxbai-embed-large | 1024 |
+| Model                  | Dimensions |
+| ---------------------- | ---------- |
+| text-embedding-3-small | 1536       |
+| text-embedding-3-large | 3072       |
+| all-MiniLM-L6-v2       | 384        |
+| mxbai-embed-large      | 1024       |
 
 ### EMBEDDING_API_KEY
 
 API key for embedding provider.
 
-| Detail | Value |
-|--------|-------|
+| Detail  | Value                           |
+| ------- | ------------------------------- |
 | Env Var | `SECONDBRAIN_EMBEDDING_API_KEY` |
-| Default | `None` |
+| Default | `None`                          |
 
 Set to API key for commercial providers. Self-hosted models may not require one.
 
@@ -156,10 +156,10 @@ Set to API key for commercial providers. Self-hosted models may not require one.
 
 Custom endpoint base URL.
 
-| Detail | Value |
-|--------|-------|
+| Detail  | Value                            |
+| ------- | -------------------------------- |
 | Env Var | `SECONDBRAIN_EMBEDDING_API_BASE` |
-| Default | `None` |
+| Default | `None`                           |
 
 Used for self-hosted endpoints:
 
@@ -171,12 +171,12 @@ SECONDBRAIN_EMBEDDING_API_BASE=http://localhost:11434/v1
 
 LRU cache size for embeddings.
 
-| Detail | Value |
-| -------- | ------- |
-| Env Var | `SECONDBRAIN_EMBEDDING_CACHE_SIZE` |
-| Default | `1000` |
-| Range | 0 to unlimited |
-| Memory | ~1.5MB per 1000 embeddings (384 dims × 4 bytes) |
+| Detail  | Value                                           |
+| ------- | ----------------------------------------------- |
+| Env Var | `SECONDBRAIN_EMBEDDING_CACHE_SIZE`              |
+| Default | `1000`                                          |
+| Range   | 0 to unlimited                                  |
+| Memory  | ~1.5MB per 1000 embeddings (384 dims × 4 bytes) |
 
 Set to `0` to disable caching.
 
@@ -184,11 +184,11 @@ Set to `0` to disable caching.
 
 Batch size for embedding generation.
 
-| Detail | Value |
-| -------- | ------- |
+| Detail  | Value                              |
+| ------- | ---------------------------------- |
 | Env Var | `SECONDBRAIN_EMBEDDING_BATCH_SIZE` |
-| Default | `20` |
-| Range | 1-100 |
+| Default | `20`                               |
+| Range   | 1-100                              |
 
 ---
 
@@ -200,29 +200,29 @@ Used for RAG chat functionality.
 
 LLM provider type.
 
-| Detail | Value |
-| -------- | ------- |
+| Detail  | Value                      |
+| ------- | -------------------------- |
 | Env Var | `SECONDBRAIN_LLM_PROVIDER` |
-| Default | `openai` |
-| Options | `openai`, `anthropic` |
+| Default | `openai`                   |
+| Options | `openai`, `anthropic`      |
 
 ### LLM_MODEL
 
 Model identifier for chat completions.
 
-| Detail | Value |
-|--------|-------|
+| Detail  | Value                   |
+| ------- | ----------------------- |
 | Env Var | `SECONDBRAIN_LLM_MODEL` |
-| Default | `gpt-4o-mini` |
+| Default | `gpt-4o-mini`           |
 
 ### OPENAI_BASE_URL
 
 OpenAI-compatible API base URL.
 
-| Detail | Value |
-|--------|-------|
+| Detail  | Value                         |
+| ------- | ----------------------------- |
 | Env Var | `SECONDBRAIN_OPENAI_BASE_URL` |
-| Default | `None` |
+| Default | `None`                        |
 
 For Ollama, LM Studio, Groq, Azure OpenAI, etc.
 
@@ -230,11 +230,11 @@ For Ollama, LM Studio, Groq, Azure OpenAI, etc.
 
 Generation temperature.
 
-| Detail | Value |
-| -------- | ------- |
+| Detail  | Value                         |
+| ------- | ----------------------------- |
 | Env Var | `SECONDBRAIN_LLM_TEMPERATURE` |
-| Default | `0.1` |
-| Range | 0.0-2.0 |
+| Default | `0.1`                         |
+| Range   | 0.0-2.0                       |
 
 Lower values produce more deterministic outputs.
 
@@ -242,19 +242,19 @@ Lower values produce more deterministic outputs.
 
 Maximum tokens in response.
 
-| Detail | Value |
-|--------|-------|
+| Detail  | Value                        |
+| ------- | ---------------------------- |
 | Env Var | `SECONDBRAIN_LLM_MAX_TOKENS` |
-| Default | `2048` |
+| Default | `2048`                       |
 
 ### LLM_TIMEOUT
 
 Request timeout in seconds.
 
-| Detail | Value |
-|--------|-------|
+| Detail  | Value                     |
+| ------- | ------------------------- |
 | Env Var | `SECONDBRAIN_LLM_TIMEOUT` |
-| Default | `120` |
+| Default | `120`                     |
 
 ---
 
@@ -264,39 +264,39 @@ Request timeout in seconds.
 
 Recent message count kept in conversation context.
 
-| Detail | Value |
-|--------|-------|
+| Detail  | Value                            |
+| ------- | -------------------------------- |
 | Env Var | `SECONDBRAIN_RAG_CONTEXT_WINDOW` |
-| Default | `5` |
+| Default | `5`                              |
 
 ### RAG_MAX_RETRIES
 
 Maximum retry attempts for LLM generation.
 
-| Detail | Value |
-|--------|-------|
+| Detail  | Value                         |
+| ------- | ----------------------------- |
 | Env Var | `SECONDBRAIN_RAG_MAX_RETRIES` |
-| Default | `3` |
+| Default | `3`                           |
 
 ### RAG_MAX_CONTEXT_CHARS
 
 Maximum total characters for RAG context.
 
-| Detail | Value |
-| -------- | ------- |
+| Detail  | Value                               |
+| ------- | ----------------------------------- |
 | Env Var | `SECONDBRAIN_RAG_MAX_CONTEXT_CHARS` |
-| Default | `8000` |
-| Range | 1000-500000 |
+| Default | `8000`                              |
+| Range   | 1000-500000                         |
 
 ### RAG_CHUNK_PREVIEW_CHARS
 
 Maximum characters per chunk in RAG context.
 
-| Detail | Value |
-| -------- | ------- |
+| Detail  | Value                                 |
+| ------- | ------------------------------------- |
 | Env Var | `SECONDBRAIN_RAG_CHUNK_PREVIEW_CHARS` |
-| Default | `500` |
-| Range | 100-10000 |
+| Default | `500`                                 |
+| Range   | 100-10000                             |
 
 Constraint: Must be less than `RAG_MAX_CONTEXT_CHARS`.
 
@@ -304,10 +304,10 @@ Constraint: Must be less than `RAG_MAX_CONTEXT_CHARS`.
 
 System prompt for RAG chat.
 
-| Detail | Value |
-|--------|-------|
+| Detail  | Value                           |
+| ------- | ------------------------------- |
 | Env Var | `SECONDBRAIN_RAG_SYSTEM_PROMPT` |
-| Default | (Built-in instruction set) |
+| Default | (Built-in instruction set)      |
 
 ---
 
@@ -317,29 +317,29 @@ System prompt for RAG chat.
 
 Target chunk size in characters.
 
-| Detail | Value |
-| -------- | ------- |
-| Env Var | `SECONDBRAIN_CHUNK_SIZE` |
-| Default | `4096` |
+| Detail     | Value                    |
+| ---------- | ------------------------ |
+| Env Var    | `SECONDBRAIN_CHUNK_SIZE` |
+| Default    | `4096`                   |
 | Constraint | Must be positive integer |
 
 ### CHUNK_OVERLAP
 
 Overlap between adjacent chunks.
 
-| Detail | Value |
-| -------- | ------- |
-| Env Var | `SECONDBRAIN_CHUNK_OVERLAP` |
-| Default | `50` |
+| Detail     | Value                                           |
+| ---------- | ----------------------------------------------- |
+| Env Var    | `SECONDBRAIN_CHUNK_OVERLAP`                     |
+| Default    | `50`                                            |
 | Constraint | Must be non-negative and less than `CHUNK_SIZE` |
 
 ### SUPPORTED_EXTENSIONS
 
 Comma-separated list of supported file extensions.
 
-| Detail | Value |
-|--------|-------|
-| Env Var | `SECONDBRAIN_SUPPORTED_EXTENSIONS` |
+| Detail  | Value                                |
+| ------- | ------------------------------------ |
+| Env Var | `SECONDBRAIN_SUPPORTED_EXTENSIONS`   |
 | Default | Comprehensive list of common formats |
 
 Without leading dots, comma-separated.
@@ -348,10 +348,10 @@ Without leading dots, comma-separated.
 
 Maximum file size in bytes.
 
-| Detail | Value |
-|--------|-------|
+| Detail  | Value                             |
+| ------- | --------------------------------- |
 | Env Var | `SECONDBRAIN_MAX_FILE_SIZE_BYTES` |
-| Default | `104857600` (100MB) |
+| Default | `104857600` (100MB)               |
 
 ---
 
@@ -361,19 +361,19 @@ Maximum file size in bytes.
 
 Default number of search results.
 
-| Detail | Value |
-|--------|-------|
+| Detail  | Value                       |
+| ------- | --------------------------- |
 | Env Var | `SECONDBRAIN_DEFAULT_TOP_K` |
-| Default | `20` |
+| Default | `20`                        |
 
 ### MIN_SIMILARITY_THRESHOLD
 
 Global minimum similarity score (constant, not env var).
 
-| Detail | Value |
-|--------|-------|
+| Detail   | Value                              |
+| -------- | ---------------------------------- |
 | Constant | `DEFAULT_MIN_SIMILARITY_THRESHOLD` |
-| Value | `0.46` |
+| Value    | `0.46`                             |
 
 Can be overridden per-query with `--min-score` flag.
 
@@ -385,74 +385,74 @@ Can be overridden per-query with `--min-score` flag.
 
 Worker process count for parallel processing.
 
-| Detail | Value |
-|--------|-------|
-| Env Var | `SECONDBRAIN_MAX_WORKERS` |
+| Detail  | Value                          |
+| ------- | ------------------------------ |
+| Env Var | `SECONDBRAIN_MAX_WORKERS`      |
 | Default | `None` (auto-detect CPU count) |
 
 ### STREAMING_ENABLED
 
 Enable streaming chunk processing.
 
-| Detail | Value |
-|--------|-------|
+| Detail  | Value                           |
+| ------- | ------------------------------- |
 | Env Var | `SECONDBRAIN_STREAMING_ENABLED` |
-| Default | `true` |
+| Default | `true`                          |
 
 ### STREAMING_CHUNK_BATCH_SIZE
 
 Chunk batch size for streaming.
 
-| Detail | Value |
-| -------- | ------- |
+| Detail  | Value                                    |
+| ------- | ---------------------------------------- |
 | Env Var | `SECONDBRAIN_STREAMING_CHUNK_BATCH_SIZE` |
-| Default | `100` |
-| Range | 1-200 |
+| Default | `100`                                    |
+| Range   | 1-200                                    |
 
 ### RATE_LIMIT_ENABLED
 
 Enable request rate limiting.
 
-| Detail | Value |
-|--------|-------|
+| Detail  | Value                            |
+| ------- | -------------------------------- |
 | Env Var | `SECONDBRAIN_RATE_LIMIT_ENABLED` |
-| Default | `true` |
+| Default | `true`                           |
 
 ### RATE_LIMIT_MAX_REQUESTS
 
 Requests per rate limit window.
 
-| Detail | Value |
-|--------|-------|
+| Detail  | Value                                 |
+| ------- | ------------------------------------- |
 | Env Var | `SECONDBRAIN_RATE_LIMIT_MAX_REQUESTS` |
-| Default | `10` |
+| Default | `10`                                  |
 
 ### RATE_LIMIT_WINDOW_SECONDS
 
 Rate limit window duration.
 
-| Detail | Value |
-|--------|-------|
+| Detail  | Value                                   |
+| ------- | --------------------------------------- |
 | Env Var | `SECONDBRAIN_RATE_LIMIT_WINDOW_SECONDS` |
-| Default | `1.0` |
+| Default | `1.0`                                   |
 
 ### INDEX_READY_RETRY_COUNT
 
 Retries for vector index initialization.
 
-| Detail | Value |
-|--------|-------|
+| Detail  | Value                                 |
+| ------- | ------------------------------------- |
 | Env Var | `SECONDBRAIN_INDEX_READY_RETRY_COUNT` |
-| Default | `15` |
+| Default | `15`                                  |
 
 ### CIRCUIT_BREAKER_ENABLED
 
 Enable circuit breaker pattern.
 
-| Detail | Value |
-|--------|-------|
+| Detail  | Value                                 |
+| ------- | ------------------------------------- |
 | Env Var | `SECONDBRAIN_CIRCUIT_BREAKER_ENABLED` |
-| Default | `true` |
+| Default | `true`                                |
 
 ---
 
@@ -462,10 +462,10 @@ Enable circuit breaker pattern.
 
 Enable MongoDB collection compression.
 
-| Detail | Value |
-|--------|-------|
+| Detail  | Value                                     |
+| ------- | ----------------------------------------- |
 | Env Var | `SECONDBRAIN_STORAGE_COMPRESSION_ENABLED` |
-| Default | `true` |
+| Default | `true`                                    |
 
 Enables zstd compression, reducing storage by 40-60%.
 
@@ -473,10 +473,10 @@ Enables zstd compression, reducing storage by 40-60%.
 
 Enable text content compression.
 
-| Detail | Value |
-|--------|-------|
+| Detail  | Value                                  |
+| ------- | -------------------------------------- |
 | Env Var | `SECONDBRAIN_TEXT_COMPRESSION_ENABLED` |
-| Default | `false` |
+| Default | `false`                                |
 
 Opt-in feature using gzip/brotli/zstd.
 
@@ -484,21 +484,21 @@ Opt-in feature using gzip/brotli/zstd.
 
 Compression algorithm.
 
-| Detail | Value |
-| -------- | ------- |
+| Detail  | Value                                    |
+| ------- | ---------------------------------------- |
 | Env Var | `SECONDBRAIN_TEXT_COMPRESSION_ALGORITHM` |
-| Default | `gzip` |
-| Options | `gzip`, `brotli`, `zstd` |
+| Default | `gzip`                                   |
+| Options | `gzip`, `brotli`, `zstd`                 |
 
 ### EMBEDDING_DTYPE
 
 Embedding storage precision.
 
-| Detail | Value |
-| -------- | ------- |
+| Detail  | Value                         |
+| ------- | ----------------------------- |
 | Env Var | `SECONDBRAIN_EMBEDDING_DTYPE` |
-| Default | `float32` |
-| Options | `float32`, `float64` |
+| Default | `float32`                     |
+| Options | `float32`, `float64`          |
 
 float32 recommended — 50% smaller storage with acceptable precision.
 
@@ -506,11 +506,11 @@ float32 recommended — 50% smaller storage with acceptable precision.
 
 Vector storage format.
 
-| Detail | Value |
-| -------- | ------- |
+| Detail  | Value                                  |
+| ------- | -------------------------------------- |
 | Env Var | `SECONDBRAIN_EMBEDDING_STORAGE_FORMAT` |
-| Default | `array` |
-| Options | `array`, `binary` |
+| Default | `array`                                |
+| Options | `array`, `binary`                      |
 
 !!! Warning
     `binary` format is deprecated and incompatible with vector search. Use `array`.

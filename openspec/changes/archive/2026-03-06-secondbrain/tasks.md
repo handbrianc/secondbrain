@@ -1,3 +1,5 @@
+# SecondBrain — Tasks
+
 ## 1. Project Setup
 
 - [x] 1.1 Initialize Python project with pyproject.toml

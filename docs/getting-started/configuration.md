@@ -1,6 +1,7 @@
 # Configuration Guide
 
-SecondBrain uses environment variables prefixed with `SECONDBRAIN_` for all configuration. This follows 12-factor app principles for consistent, production-ready settings management.
+SecondBrain uses environment variables prefixed with `SECONDBRAIN_` for all configuration. This follows 12-factor app
+principles for consistent, production-ready settings management.
 
 ## Quick Configuration
 
@@ -36,83 +37,103 @@ During testing (`PYTEST_CURRENT_TEST` is set), configuration additionally loads 
 
 ### MongoDB Configuration
 
-| Variable | Default | Description |
-| ---------- | --------- | ------------- |
-| `SECONDBRAIN_MONGO_URI` | `mongodb://localhost:27017` | MongoDB connection URI |
-| `SECONDBRAIN_MONGO_DB` | `secondbrain` | Database name |
-| `SECONDBRAIN_MONGO_COLLECTION` | `embeddings` | Collection for vector storage |
+| Variable                       | Default                     | Description                   |
+| ------------------------------ | --------------------------- | ----------------------------- |
+| `SECONDBRAIN_MONGO_URI`        | `mongodb://localhost:27017` | MongoDB connection URI        |
+| `SECONDBRAIN_MONGO_DB`         | `secondbrain`               | Database name                 |
+| `SECONDBRAIN_MONGO_COLLECTION` | `embeddings`                | Collection for vector storage |
 
 ### Embedding Settings
 
-| Variable | Default | Description |
-| ---------- | --------- | ------------- |
-| `SECONDBRAIN_EMBEDDING_PROVIDER` | `openai` | Provider type (openai or compatible) |
-| `SECONDBRAIN_EMBEDDING_MODEL` | `text-embedding-3-small` | Model name |
-| `SECONDBRAIN_EMBEDDING_DIMENSIONS` | `1536` | Vector dimensionality |
-| `SECONDBRAIN_EMBEDDING_API_KEY` | `None` | API key for provider |
-| `SECONDBRAIN_EMBEDDING_API_BASE` | `None` | Custom endpoint base URL |
-| `SECONDBRAIN_EMBEDDING_CACHE_SIZE` | `1000` | LRU cache size (0 disables) |
-| `SECONDBRAIN_EMBEDDING_BATCH_SIZE` | `20` | Batch size (1-100) |
+| Variable                           | Default                  | Description                          |
+| ---------------------------------- | ------------------------ | ------------------------------------ |
+| `SECONDBRAIN_EMBEDDING_PROVIDER`   | `openai`                 | Provider type (openai or compatible) |
+| `SECONDBRAIN_EMBEDDING_MODEL`      | `text-embedding-3-small` | Model name                           |
+| `SECONDBRAIN_EMBEDDING_DIMENSIONS` | `1536`                   | Vector dimensionality                |
+| `SECONDBRAIN_EMBEDDING_API_KEY`    | `None`                   | API key for provider                 |
+| `SECONDBRAIN_EMBEDDING_API_BASE`   | `None`                   | Custom endpoint base URL             |
+| `SECONDBRAIN_EMBEDDING_CACHE_SIZE` | `1000`                   | LRU cache size (0 disables)          |
+| `SECONDBRAIN_EMBEDDING_BATCH_SIZE` | `20`                     | Batch size (1-100)                   |
 
 ### LLM Configuration (for RAG chat)
 
-| Variable | Default | Description |
-| ---------- | --------- | ------------- |
-| `SECONDBRAIN_LLM_PROVIDER` | `openai` | Provider type (openai, anthropic) |
-| `SECONDBRAIN_LLM_MODEL` | `gpt-4o-mini` | Model name |
-| `SECONDBRAIN_LLM_TEMPERATURE` | `0.1` | Generation temperature (0.0-2.0) |
-| `SECONDBRAIN_LLM_MAX_TOKENS` | `2048` | Maximum response tokens |
-| `SECONDBRAIN_LLM_TIMEOUT` | `120` | Request timeout in seconds |
-| `SECONDBRAIN_OPENAI_BASE_URL` | `None` | OpenAI-compatible API base URL |
+| Variable                      | Default       | Description                       |
+| ----------------------------- | ------------- | --------------------------------- |
+| `SECONDBRAIN_LLM_PROVIDER`    | `openai`      | Provider type (openai, anthropic) |
+| `SECONDBRAIN_LLM_MODEL`       | `gpt-4o-mini` | Model name                        |
+| `SECONDBRAIN_LLM_TEMPERATURE` | `0.1`         | Generation temperature (0.0-2.0)  |
+| `SECONDBRAIN_LLM_MAX_TOKENS`  | `2048`        | Maximum response tokens           |
+| `SECONDBRAIN_LLM_TIMEOUT`     | `120`         | Request timeout in seconds        |
+| `SECONDBRAIN_OPENAI_BASE_URL` | `None`        | OpenAI-compatible API base URL    |
 
 ### Document Processing
 
-| Variable | Default | Description |
-| ---------- | --------- | ------------- |
-| `SECONDBRAIN_CHUNK_SIZE` | `4096` | Target chunk size in characters |
-| `SECONDBRAIN_CHUNK_OVERLAP` | `50` | Overlap between chunks |
+| Variable                           | Default              | Description                     |
+| ---------------------------------- | -------------------- | ------------------------------- |
+| `SECONDBRAIN_CHUNK_SIZE`           | `4096`               | Target chunk size in characters |
+| `SECONDBRAIN_CHUNK_OVERLAP`        | `50`                 | Overlap between chunks          |
 | `SECONDBRAIN_SUPPORTED_EXTENSIONS` | (comprehensive list) | Comma-separated file extensions |
-| `SECONDBRAIN_MAX_FILE_SIZE_BYTES` | `104857600` | Maximum file size (100MB) |
+| `SECONDBRAIN_MAX_FILE_SIZE_BYTES`  | `104857600`          | Maximum file size (100MB)       |
 
 ### Search Settings
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `SECONDBRAIN_DEFAULT_TOP_K` | `20` | Default number of search results |
-| `MIN_SCORE` | `0.46` | Minimum similarity threshold (constant) |
+| Variable                    | Default | Description                             |
+| --------------------------- | ------- | --------------------------------------- |
+| `SECONDBRAIN_DEFAULT_TOP_K` | `50`    | Default number of search results        |
+| `MIN_SCORE`                 | `0.46`  | Minimum similarity threshold (constant) |
 
 ## Advanced Settings
 
 ### RAG/Pipeline Settings
 
-| Variable | Default | Description |
-| ---------- | --------- | ------------- |
-| `SECONDBRAIN_RAG_CONTEXT_WINDOW` | `5` | Recent messages in conversation context |
-| `SECONDBRAIN_RAG_MAX_RETRIES` | `3` | Maximum LLM retry attempts |
-| `SECONDBRAIN_RAG_MAX_CONTEXT_CHARS` | `8000` | Maximum context characters |
-| `SECONDBRAIN_RAG_CHUNK_PREVIEW_CHARS` | `500` | Per-chunk preview length |
-| `SECONDBRAIN_STREAMING_ENABLED` | `true` | Enable streaming processing |
-| `SECONDBRAIN_STREAMING_CHUNK_BATCH_SIZE` | `100` | Streaming batch size (1-200) |
+| Variable                                   | Default | Description                                                                                                                                                                            |
+| ------------------------------------------ | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SECONDBRAIN_RAG_CONTEXT_WINDOW`           | `5`     | Recent messages in conversation context                                                                                                                                                |
+| `SECONDBRAIN_RAG_MAX_RETRIES`              | `3`     | Maximum LLM retry attempts                                                                                                                                                             |
+| `SECONDBRAIN_RAG_LLM_FALLBACK_ENABLED`     | `true`  | When no documents are found in the vector DB, allow the LLM to answer from its own knowledge if it has any                                                                             |
+| `SECONDBRAIN_RAG_MIN_SIMILARITY_THRESHOLD` | `0.46`  | Minimum cosine-similarity score for a retrieved chunk to count as relevant context in the RAG/chat path; chunks below this trigger the LLM-knowledge fallback (same as the search CLI) |
+| `SECONDBRAIN_RAG_MAX_CONTEXT_CHARS`        | `16000` | Maximum context characters                                                                                                                                                             |
+| `SECONDBRAIN_RAG_CHUNK_PREVIEW_CHARS`      | `1200`  | Per-chunk preview length                                                                                                                                                               |
+| `SECONDBRAIN_STREAMING_ENABLED`            | `true`  | Enable streaming processing                                                                                                                                                            |
+| `SECONDBRAIN_STREAMING_CHUNK_BATCH_SIZE`   | `100`   | Streaming batch size (1-200)                                                                                                                                                           |
 
 ### Performance Settings
 
-| Variable | Default | Description |
-| ---------- | --------- | ------------- |
-| `SECONDBRAIN_MAX_WORKERS` | `None` | Worker processes (auto-detect if unset) |
-| `SECONDBRAIN_RATE_LIMIT_ENABLED` | `true` | Enable rate limiting |
-| `SECONDBRAIN_RATE_LIMIT_MAX_REQUESTS` | `10` | Requests per window |
-| `SECONDBRAIN_RATE_LIMIT_WINDOW_SECONDS` | `1.0` | Rate limit window duration |
-| `SECONDBRAIN_INDEX_READY_RETRY_COUNT` | `15` | Index check retries |
+| Variable                                | Default | Description                             |
+| --------------------------------------- | ------- | --------------------------------------- |
+| `SECONDBRAIN_MAX_WORKERS`               | `None`  | Worker processes (auto-detect if unset) |
+| `SECONDBRAIN_RATE_LIMIT_ENABLED`        | `true`  | Enable rate limiting                    |
+| `SECONDBRAIN_RATE_LIMIT_MAX_REQUESTS`   | `10`    | Requests per window                     |
+| `SECONDBRAIN_RATE_LIMIT_WINDOW_SECONDS` | `1.0`   | Rate limit window duration              |
+| `SECONDBRAIN_INDEX_READY_RETRY_COUNT`   | `15`    | Index check retries                     |
 
 ### Storage Optimization
 
-| Variable | Default | Description |
-| ---------- | --------- | ------------- |
-| `SECONDBRAIN_STORAGE_COMPRESSION_ENABLED` | `true` | Enable zstd compression |
-| `SECONDBRAIN_TEXT_COMPRESSION_ENABLED` | `false` | Enable text compression |
-| `SECONDBRAIN_TEXT_COMPRESSION_ALGORITHM` | `gzip` | Algorithm: gzip, brotli, zstd |
-| `SECONDBRAIN_EMBEDDING_DTYPE` | `float32` | Storage precision |
-| `SECONDBRAIN_EMBEDDING_STORAGE_FORMAT` | `array` | Storage format (array recommended) |
+| Variable                                  | Default   | Description                        |
+| ----------------------------------------- | --------- | ---------------------------------- |
+| `SECONDBRAIN_STORAGE_COMPRESSION_ENABLED` | `true`    | Enable zstd compression            |
+| `SECONDBRAIN_TEXT_COMPRESSION_ENABLED`    | `false`   | Enable text compression            |
+| `SECONDBRAIN_TEXT_COMPRESSION_ALGORITHM`  | `gzip`    | Algorithm: gzip, brotli, zstd      |
+| `SECONDBRAIN_EMBEDDING_DTYPE`             | `float32` | Storage precision                  |
+| `SECONDBRAIN_EMBEDDING_STORAGE_FORMAT`    | `array`   | Storage format (array recommended) |
+
+## Logging
+
+SecondBrain follows the 12-Factor principle for logs: structured logs are written to
+**stdout/stderr by default**, so a process manager or container runtime can collect them (Factor XI).
+Set `SECONDBRAIN_LOG_FORMAT=json` for structured output suitable for downstream log aggregation.
+
+**File logging is an opt-in operator choice** for long-running agents that must persist logs
+beyond their process lifetime. Enable it only when you need on-disk retention:
+
+| Variable                       | Default            | Purpose                                                          |
+| ------------------------------ | ------------------ | ---------------------------------------------------------------- |
+| `SECONDBRAIN_LOG_FILE`         | *(unset — stdout)* | Path to a rotating log file. When unset, logs go to stdout only. |
+| `SECONDBRAIN_LOG_MAX_BYTES`    | `10485760`         | Max file size before rotation (10 MB).                           |
+| `SECONDBRAIN_LOG_BACKUP_COUNT` | `5`                | Number of rotated backup files to keep.                          |
+
+When `SECONDBRAIN_LOG_FILE` is unset, no file handler is created and all output stays on stdout,
+preserving the 12-Factor delivery model.
 
 ## Configuration Validation
 

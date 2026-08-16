@@ -14,9 +14,7 @@ from secondbrain.config import config
 from secondbrain.embedding import EmbeddingProvider, EmbeddingProviderFactory
 from secondbrain.storage import (
     SearchResult,
-    StorageConnectionError,
     VectorStorage,
-    build_search_pipeline,
 )
 from secondbrain.utils.tracing import trace_operation
 

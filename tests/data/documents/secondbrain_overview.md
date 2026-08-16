@@ -2,17 +2,21 @@
 
 ## Overview
 
-SecondBrain is a powerful local document intelligence CLI tool that enables semantic search over your documents using state-of-the-art embedding models and MongoDB vector search.
+SecondBrain is a powerful local document intelligence CLI tool that enables semantic search over your documents using
+state-of-the-art embedding models and MongoDB vector search.
 
 ## Key Features
 
 ### Privacy-First Design
+
 - All processing happens locally - no data leaves your machine
 - No external API calls for embeddings or search
 - Full control over your data and configuration
 
 ### Multi-Format Support
+
 SecondBrain supports the following document formats:
+
 - **PDF** - Portable Document Format
 - **DOCX** - Microsoft Word documents
 - **PPTX** - Microsoft PowerPoint presentations
@@ -23,12 +27,14 @@ SecondBrain supports the following document formats:
 - **Audio** - WAV, MP3 with speech-to-text
 
 ### Smart Chunking
+
 - Default chunk size: 4096 tokens
 - Configurable chunk overlap for context preservation
 - Word-boundary aware chunking to avoid cutting words
 - Multicore processing for fast ingestion
 
 ### Semantic Search
+
 - Uses OpenAI-compatible embeddings
 - MongoDB vector search with cosine similarity
 - Configurable top-k results and similarity thresholds
@@ -72,6 +78,7 @@ SecondBrain supports the following document formats:
 SecondBrain uses environment variables prefixed with `SECONDBRAIN_`:
 
 ### Core Configuration
+
 ```bash
 SECONDBRAIN_MONGO_URI=mongodb://localhost:27017
 SECONDBRAIN_MONGO_DB=secondbrain
@@ -82,6 +89,7 @@ SECONDBRAIN_CHUNK_OVERLAP=200
 ```
 
 ### Performance Tuning
+
 ```bash
 SECONDBRAIN_MAX_WORKERS=4
 SECONDBRAIN_RATE_LIMIT_ENABLED=true
@@ -91,6 +99,7 @@ SECONDBRAIN_CIRCUIT_BREAKER_THRESHOLD=5
 ```
 
 ### Logging
+
 ```bash
 SECONDBRAIN_LOG_LEVEL=INFO
 SECONDBRAIN_LOG_FORMAT=pretty
@@ -98,6 +107,7 @@ SECONDBRAIN_LOG_FILE=secondbrain.log
 ```
 
 ### Connection Settings
+
 ```bash
 SECONDBRAIN_MONGO_CONNECT_TIMEOUT=5000
 SECONDBRAIN_MONGO_SOCKET_TIMEOUT=10000
@@ -109,6 +119,7 @@ SECONDBRAIN_INDEX_READY_RETRY_DELAY=2.0
 ## CLI Commands
 
 ### Ingest Documents
+
 ```bash
 # Basic ingestion
 secondbrain ingest /path/to/documents/
@@ -121,6 +132,7 @@ secondbrain ingest /path/to/documents/ --collection my_docs
 ```
 
 ### Search
+
 ```bash
 # Basic search
 secondbrain search "what is this about?"
@@ -133,6 +145,7 @@ secondbrain search "architecture" --show-sources
 ```
 
 ### Chat
+
 ```bash
 # Interactive chat
 secondbrain chat
@@ -145,6 +158,7 @@ secondbrain chat --session my-session
 ```
 
 ### Management
+
 ```bash
 # List documents
 secondbrain ls
@@ -162,16 +176,19 @@ secondbrain health
 ## Error Handling
 
 ### Circuit Breaker
+
 - Automatic failure handling with self-recovery
 - Configurable threshold and reset timeout
 - Prevents cascade failures
 
 ### Rate Limiting
+
 - Protects downstream services
 - Configurable requests per second
 - Queue-based request management
 
 ### Error Types
+
 - `StorageConnectionError` - MongoDB connection issues
 - `ValidationError` - Input validation failures
 - `CircuitBreakerOpenError` - Circuit breaker triggered
@@ -180,6 +197,7 @@ secondbrain health
 ## Testing
 
 ### Test Profiles
+
 ```bash
 # Fast tests (no integration)
 pytest -m "not integration"
@@ -192,6 +210,7 @@ pytest
 ```
 
 ### Test Categories
+
 - Unit tests with mocks
 - Integration tests with services
 - Property-based tests with Hypothesis
@@ -200,6 +219,7 @@ pytest
 ## Development
 
 ### Setup
+
 ```bash
 python -m venv venv
 source venv/bin/activate
@@ -208,6 +228,7 @@ pre-commit install
 ```
 
 ### Code Quality
+
 ```bash
 ruff check .
 ruff format .
@@ -216,6 +237,7 @@ pytest
 ```
 
 ### Contributing
+
 - Follow PEP 8 style guidelines
 - Add type hints to all functions
 - Write tests for new features
