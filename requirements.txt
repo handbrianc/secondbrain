@@ -110,7 +110,7 @@ huggingface-hub==0.36.2
     #   docling-slim
     #   tokenizers
     #   transformers
-idna==3.11
+idna==3.18
     # via
     #   anyio
     #   httpx
@@ -235,7 +235,7 @@ packaging==26.0
     #   transformers
 pandas==3.0.1
     # via docling-core
-pillow==12.1.1
+pillow==12.3.0
     # via
     #   docling-core
     #   docling-ibm-models
@@ -264,7 +264,7 @@ pydantic==2.13.4
     #   pydantic-settings
 pydantic-core==2.46.4
     # via pydantic
-pydantic-settings==2.14.2
+pydantic-settings==2.15.0
     # via
     #   -r requirements.in
     #   docling-core
@@ -422,7 +422,7 @@ typing-inspection==0.4.2
     # via
     #   pydantic
     #   pydantic-settings
-urllib3==2.6.3
+urllib3==2.7.0
     # via requests
 websockets==16.0
     # via docling-slim

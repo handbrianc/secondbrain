@@ -4,7 +4,8 @@ Guide to performing effective semantic searches with SecondBrain.
 
 ## Overview
 
-The `search` command performs vector similarity search against your ingested document corpus. Queries are converted to embeddings and compared against stored document vectors.
+The `search` command performs vector similarity search against your ingested document corpus. Queries are converted to
+embeddings and compared against stored document vectors.
 
 ## Basic Search Syntax
 

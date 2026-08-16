@@ -20,7 +20,7 @@ class TestAsyncVectorStorage:
     def async_storage(self) -> Generator[AsyncVectorStorage]:
         """Create an AsyncVectorStorage instance with mocked config and fresh state."""
         with (
-            patch("secondbrain.storage.storage.config") as mock_config_func,
+            patch("secondbrain.storage._async.config") as mock_config_func,
             patch.object(ValidatableService, "_do_validate", return_value=True),
         ):
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri
@@ -48,7 +48,7 @@ class TestAsyncVectorStorage:
     async def test_init_with_overrides(self) -> None:
         """Test initialization with custom parameters."""
         with (
-            patch("secondbrain.storage.storage.config") as mock_config_func,
+            patch("secondbrain.storage._async.config") as mock_config_func,
             patch.object(ValidatableService, "_do_validate", return_value=True),
         ):
             mock_config_func.return_value.mongo_uri = _test_config.mongo_uri

@@ -706,8 +706,10 @@ class TestFilterChaptersByTarget:
 
 
 class TestIterativeQueryNoChaptersFallThrough:
-    """Broad-coverage query with no detected chapters and no chapter target
-    must fall through to generic search rather than error on a chapter."""
+    """Broad-coverage query with no detected chapters and no chapter target.
+
+    must fall through to generic search rather than error on a chapter.
+    """
 
     def test_broad_coverage_no_target_empty_chapters_falls_through(
         self, monkeypatch: pytest.MonkeyPatch

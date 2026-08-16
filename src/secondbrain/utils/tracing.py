@@ -349,6 +349,7 @@ def trace_decorator(
     operation_name: str,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Wrap a function with tracing."""
+
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:

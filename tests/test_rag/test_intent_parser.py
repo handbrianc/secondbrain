@@ -36,9 +36,7 @@ class TestIntentClassification:
             "tell me more about this",
         ]:
             decision = self.parse(q)
-            assert decision.intent is QueryIntent.UNKNOWN, (
-                f"{q!r} -> {decision.intent}"
-            )
+            assert decision.intent is QueryIntent.UNKNOWN, f"{q!r} -> {decision.intent}"
             assert decision.suggested_pipeline == "semantic", (
                 f"{q!r} -> {decision.suggested_pipeline}"
             )

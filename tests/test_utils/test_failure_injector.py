@@ -760,14 +760,14 @@ class TestLogging:
 
     def test_injection_start_logged(self):
         """Test that injection start is logged."""
-        with patch("secondbrain.utils.failure_injector.logger") as mock_logger:
+        with patch("secondbrain.utils.failure_injector.core.logger") as mock_logger:
             injector = FailureInjector()
             injector.inject(failure_type=FailureType.TIMEOUT, duration=1.0)
             mock_logger.info.assert_called()
 
     def test_reset_logged(self):
         """Test that reset is logged."""
-        with patch("secondbrain.utils.failure_injector.logger") as mock_logger:
+        with patch("secondbrain.utils.failure_injector.core.logger") as mock_logger:
             injector = FailureInjector()
             injector.reset()
             mock_logger.info.assert_called()

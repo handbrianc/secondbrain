@@ -1,14 +1,19 @@
+# Add Multicore Support — Tasks
+
 ## 1. Configuration Setup
 
-- [x] 1.1 Add `max_workers` field to `Config` class in `src/secondbrain/config/__init__.py` with default `None` and description "Maximum number of worker processes for parallel processing"
-- [x] 1.2 Add validation for `max_workers` to ensure it's positive when set (add to existing `validate_config_values` method)
+- [x] 1.1 Add `max_workers` field to `Config` class in `src/secondbrain/config/__init__.py` with default `None` and
+  description "Maximum number of worker processes for parallel processing"
+- [x] 1.2 Add validation for `max_workers` to ensure it's positive when set (add to existing `validate_config_values`
+  method)
 - [x] 1.3 Update `get_config()` documentation to mention multicore settings
 
 ## 2. CLI Interface Updates
 
 - [x] 2.1 Add `--cores` / `-c` option to `ingest` command in `src/secondbrain/cli/commands.py`
 - [x] 2.2 Update `ingest` function signature to accept `cores: int | None` parameter
-- [x] 2.3 Add help text explaining multicore usage: "Number of CPU cores to use for parallel processing (default: auto-detect)"
+- [x] 2.3 Add help text explaining multicore usage: "Number of CPU cores to use for parallel processing (default:
+  auto-detect)"
 - [x] 2.4 Add validation logic to clamp core count to available CPU count with warning message
 - [x] 2.5 Update CLI help text for `--batch-size` to mention compatibility with `--cores`
 
@@ -22,7 +27,8 @@
 
 ## 4. DocumentIngestor Refactoring
 
-- [x] 4.1 Import `ProcessPoolExecutor` and `as_completed` from `concurrent.futures` in `src/secondbrain/document/__init__.py`
+- [x] 4.1 Import `ProcessPoolExecutor` and `as_completed` from `concurrent.futures` in
+  `src/secondbrain/document/__init__.py`
 - [x] 4.2 Import `os` module for CPU count detection
 - [x] 4.3 Update `ingest()` method signature to accept `cores: int | None = None` parameter
 - [x] 4.4 Add core count resolution logic: `cores or config.max_workers or os.cpu_count()`
@@ -50,7 +56,8 @@
 
 ## 7. Rate Limiting Integration
 
-- [x] 7.1 Verify rate limiter is thread-safe and works across process boundaries (threading.Lock, embedding phase runs in main process)
+- [x] 7.1 Verify rate limiter is thread-safe and works across process boundaries (threading.Lock, embedding phase runs
+  in main process)
 - [x] 7.2 Test that multiple workers don't exceed rate limit threshold (covered by existing rate limiter tests)
 - [x] 7.3 Add rate limit queue logging in verbose mode
 

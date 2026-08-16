@@ -1,6 +1,11 @@
+# Conversational RAG — Proposal
+
 ## Why
 
-Users currently have semantic search capability but lack conversational Q&A on ingested content. Adding RAG (Retrieval Augmented Generation) enables natural multi-turn conversations where context is preserved across queries, transforming the CLI from a search tool into an intelligent document assistant. This positions the system for future MCP service conversion, allowing the same RAG capabilities to be exposed as a service API.
+Users currently have semantic search capability but lack conversational Q&A on ingested content. Adding RAG (Retrieval
+Augmented Generation) enables natural multi-turn conversations where context is preserved across queries, transforming
+the CLI from a search tool into an intelligent document assistant. This positions the system for future MCP service
+conversion, allowing the same RAG capabilities to be exposed as a service API.
 
 ## What Changes
 
@@ -30,17 +35,20 @@ Users currently have semantic search capability but lack conversational Q&A on i
 
 ### Modified Capabilities
 
-- *No existing capabilities modified* - All new functionality is additive; existing semantic search (`search` command) remains unchanged
+- *No existing capabilities modified* - All new functionality is additive; existing semantic search (`search` command)
+  remains unchanged
 
 ## Impact
 
 **Code**:
+
 - New module: `src/secondbrain/conversation/` (session management, query rewriting)
 - New module: `src/secondbrain/rag/` (RAG pipeline, local LLM interface abstraction)
 - New CLI command: `chat` in `src/secondbrain/cli/commands.py`
 - Modified: `src/secondbrain/storage/storage.py` (new conversation collection schema)
 
 **Dependencies**:
+
 - Add HTTP client for local LLM API calls (httpx already available)
 - Add conversation memory library (LangChain Memory or custom implementation)
 - **No cloud LLM SDK dependencies** - all local via standard HTTP APIs
@@ -48,6 +56,7 @@ Users currently have semantic search capability but lack conversational Q&A on i
 
 **Configuration (12-Factor)**:
 All LLM configuration via environment variables with sensible defaults:
+
 - `SECONDBRAIN_LLM_PROVIDER`: Backend type (ollama, vllm, llama-cpp, etc.)
 - `SECONDBRAIN_LLM_ENDPOINT`: Local model server URL
 - `SECONDBRAIN_LLM_MODEL`: Model name/identifier
@@ -56,11 +65,13 @@ All LLM configuration via environment variables with sensible defaults:
 - `SECONDBRAIN_LLM_TIMEOUT`: Request timeout in seconds
 
 **APIs**:
+
 - New `ConversationSession` class for state management
 - New `RAGPipeline` class for retrieval + generation orchestration
 - New `LocalLLMProvider` protocol/interface for pluggable local backends
 
 **Systems**:
+
 - MongoDB: New `conversations` collection for session storage
 - Local LLM server: External backing service (Ollama, vLLM, etc.)
 - No changes to existing ingestion or vector search infrastructure

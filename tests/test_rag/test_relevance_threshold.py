@@ -123,8 +123,18 @@ class TestRelevanceGateInQuery:
         get_config.cache_clear()
         try:
             mock_searcher.search.return_value = [
-                {"chunk_text": "irrelevant", "source_file": "ai.pdf", "page": 1, "score": 0.3},
-                {"chunk_text": "more", "source_file": "ai.pdf", "page": 2, "score": 0.37},
+                {
+                    "chunk_text": "irrelevant",
+                    "source_file": "ai.pdf",
+                    "page": 1,
+                    "score": 0.3,
+                },
+                {
+                    "chunk_text": "more",
+                    "source_file": "ai.pdf",
+                    "page": 2,
+                    "score": 0.37,
+                },
             ]
             pipeline = RAGPipeline(
                 searcher=mock_searcher,
@@ -147,7 +157,12 @@ class TestRelevanceGateInQuery:
         """At least one chunk above threshold -> normal RAG generation path."""
         mock_searcher.search.return_value = [
             {"chunk_text": "low", "source_file": "ai.pdf", "page": 1, "score": 0.3},
-            {"chunk_text": "relevant", "source_file": "proxmox.pdf", "page": 1, "score": 0.6},
+            {
+                "chunk_text": "relevant",
+                "source_file": "proxmox.pdf",
+                "page": 1,
+                "score": 0.6,
+            },
         ]
         pipeline = RAGPipeline(
             searcher=mock_searcher,
@@ -179,7 +194,12 @@ class TestRelevanceGateAsync:
         try:
             mock_searcher.search_async = AsyncMock(
                 return_value=[
-                    {"chunk_text": "irrelevant", "source_file": "ai.pdf", "page": 1, "score": 0.3},
+                    {
+                        "chunk_text": "irrelevant",
+                        "source_file": "ai.pdf",
+                        "page": 1,
+                        "score": 0.3,
+                    },
                 ]
             )
             pipeline = RAGPipeline(
@@ -206,7 +226,12 @@ class TestRelevanceGateGeneric:
     ) -> None:
         """Below-threshold chunks -> _handle_no_results notice in the answer."""
         mock_searcher.search.return_value = [
-            {"chunk_text": "irrelevant", "source_file": "x.pdf", "page": 1, "score": 0.3},
+            {
+                "chunk_text": "irrelevant",
+                "source_file": "x.pdf",
+                "page": 1,
+                "score": 0.3,
+            },
         ]
         pipeline = RAGPipeline(
             searcher=mock_searcher,
@@ -289,10 +314,17 @@ class TestChatFallbackThreadsHistory:
         )
 
         mock_searcher.search.return_value = [
-            {"chunk_text": "irrelevant", "source_file": "x.pdf", "page": 1, "score": 0.3},
+            {
+                "chunk_text": "irrelevant",
+                "source_file": "x.pdf",
+                "page": 1,
+                "score": 0.3,
+            },
         ]
         rewriter = MagicMock(spec=QueryRewriter)
-        rewriter.rewrite_query.return_value = "what challenges will brian face as a vice president?"
+        rewriter.rewrite_query.return_value = (
+            "what challenges will brian face as a vice president?"
+        )
         rewriter.should_rewrite.return_value = True
         rewriter.context_window = 10
 
@@ -339,7 +371,9 @@ class TestBuildContextualSearchQuery:
         assert pipeline._build_contextual_search_query("some query", []) == "some query"
 
     def test_none_history_returns_query_unchanged(self, pipeline: RAGPipeline) -> None:
-        assert pipeline._build_contextual_search_query("some query", None) == "some query"
+        assert (
+            pipeline._build_contextual_search_query("some query", None) == "some query"
+        )
 
     def test_history_augments_query_with_terms(self, pipeline: RAGPipeline) -> None:
         result = pipeline._build_contextual_search_query(
@@ -366,7 +400,10 @@ class TestGroundedContextRetry:
     def _history(self) -> list[dict]:
         return [
             {"role": "user", "content": "is brian autistic?"},
-            {"role": "assistant", "content": "Yes, per the ADOS-2 report Brian Hand..."},
+            {
+                "role": "assistant",
+                "content": "Yes, per the ADOS-2 report Brian Hand...",
+            },
         ]
 
     def test_returns_grounded_dict_when_relevant_chunk_found(
@@ -377,8 +414,12 @@ class TestGroundedContextRetry:
     ) -> None:
         mock_llm_provider.generate.return_value = "Grounded answer from source"
         mock_searcher.search.return_value = [
-            {"chunk_text": "ADOS-2 autism evaluation of Brian Hand...",
-             "source_file": "BH ADOS Report (1).pdf", "page": 1, "score": 0.62},
+            {
+                "chunk_text": "ADOS-2 autism evaluation of Brian Hand...",
+                "source_file": "BH ADOS Report (1).pdf",
+                "page": 1,
+                "score": 0.62,
+            },
         ]
         result = pipeline._grounded_context_retry(
             "what challenges will brian face as a vice president?",
@@ -402,7 +443,12 @@ class TestGroundedContextRetry:
     ) -> None:
         mock_llm_provider.generate.return_value = "Brian Hand ADOS-2 autism report"
         mock_searcher.search.return_value = [
-            {"chunk_text": "irrelevant", "source_file": "x.pdf", "page": 1, "score": 0.3},
+            {
+                "chunk_text": "irrelevant",
+                "source_file": "x.pdf",
+                "page": 1,
+                "score": 0.3,
+            },
         ]
         result = pipeline._grounded_context_retry(
             "what challenges will brian face as a vice president?",
@@ -446,6 +492,7 @@ class TestChatGroundedRetry:
         mock_llm_provider: MagicMock,
     ) -> None:
         """Below-threshold first search, then contextual re-query finds the report."""
+
         def smart_generate(*, prompt: str, **_: object) -> str:
             if "You are disambiguating" in prompt:
                 return "Brian Hand ADOS-2 autism report"
@@ -454,10 +501,23 @@ class TestChatGroundedRetry:
         mock_llm_provider.generate.side_effect = smart_generate
         mock_searcher.search.side_effect = [
             # First retrieval (original rewritten query): only irrelevant chunks.
-            [{"chunk_text": "irrelevant", "source_file": "x.pdf", "page": 1, "score": 0.3}],
+            [
+                {
+                    "chunk_text": "irrelevant",
+                    "source_file": "x.pdf",
+                    "page": 1,
+                    "score": 0.3,
+                }
+            ],
             # Contextual re-retrieval: the actual ADOS report.
-            [{"chunk_text": "ADOS-2 autism evaluation of Brian Hand...",
-              "source_file": "BH ADOS Report (1).pdf", "page": 1, "score": 0.62}],
+            [
+                {
+                    "chunk_text": "ADOS-2 autism evaluation of Brian Hand...",
+                    "source_file": "BH ADOS Report (1).pdf",
+                    "page": 1,
+                    "score": 0.62,
+                }
+            ],
         ]
         pipeline = RAGPipeline(
             searcher=mock_searcher,
@@ -488,7 +548,12 @@ class TestChatGroundedRetry:
         get_config.cache_clear()
         try:
             mock_searcher.search.return_value = [
-                {"chunk_text": "irrelevant", "source_file": "x.pdf", "page": 1, "score": 0.3},
+                {
+                    "chunk_text": "irrelevant",
+                    "source_file": "x.pdf",
+                    "page": 1,
+                    "score": 0.3,
+                },
             ]
             pipeline = RAGPipeline(
                 searcher=mock_searcher,
@@ -509,6 +574,7 @@ class TestChatGroundedRetry:
         mock_llm_provider: MagicMock,
     ) -> None:
         """chat_async grounds a follow-up via contextual re-query."""
+
         def smart_agenerate(*, prompt: str, **_: object) -> str:
             if "You are disambiguating" in prompt:
                 return "Brian Hand ADOS-2 autism report"
@@ -517,9 +583,22 @@ class TestChatGroundedRetry:
         mock_llm_provider.agenerate = AsyncMock(side_effect=smart_agenerate)
         mock_searcher.search_async = AsyncMock(
             side_effect=[
-                [{"chunk_text": "irrelevant", "source_file": "x.pdf", "page": 1, "score": 0.3}],
-                [{"chunk_text": "ADOS-2 autism evaluation of Brian Hand...",
-                  "source_file": "BH ADOS Report (1).pdf", "page": 1, "score": 0.62}],
+                [
+                    {
+                        "chunk_text": "irrelevant",
+                        "source_file": "x.pdf",
+                        "page": 1,
+                        "score": 0.3,
+                    }
+                ],
+                [
+                    {
+                        "chunk_text": "ADOS-2 autism evaluation of Brian Hand...",
+                        "source_file": "BH ADOS Report (1).pdf",
+                        "page": 1,
+                        "score": 0.62,
+                    }
+                ],
             ]
         )
         pipeline = RAGPipeline(
@@ -539,8 +618,10 @@ class TestChatGroundedRetry:
 
 
 class TestGroundedRetryRequiresFollowUp:
-    """Fresh self-contained questions must skip the context-augmented re-query so
-    they are not polluted by unrelated conversation topics."""
+    """Fresh self-contained questions must skip the context-augmented re-query so.
+
+    they are not polluted by unrelated conversation topics.
+    """
 
     def _session(self) -> ConversationSession:
         session = ConversationSession("test-session", MagicMock(), context_window=10)
@@ -550,7 +631,9 @@ class TestGroundedRetryRequiresFollowUp:
         )
         return session
 
-    def test_fresh_question_does_not_reference_context(self, pipeline: RAGPipeline) -> None:
+    def test_fresh_question_does_not_reference_context(
+        self, pipeline: RAGPipeline
+    ) -> None:
         assert not pipeline._query_references_context(
             "what is the speed of light",
             ["ADOS-2", "Brian Hand", "Autism Spectrum"],
@@ -569,8 +652,12 @@ class TestGroundedRetryRequiresFollowUp:
         pipeline: RAGPipeline,
     ) -> None:
         mock_searcher.search.return_value = [
-            {"chunk_text": "ADOS-2 Brian Hand report",
-             "source_file": "BH ADOS Report (1).pdf", "page": 1, "score": 0.62},
+            {
+                "chunk_text": "ADOS-2 Brian Hand report",
+                "source_file": "BH ADOS Report (1).pdf",
+                "page": 1,
+                "score": 0.62,
+            },
         ]
         result = pipeline._grounded_context_retry(
             "what is the speed of light",
@@ -586,10 +673,17 @@ class TestGroundedRetryRequiresFollowUp:
         mock_searcher: MagicMock,
         mock_llm_provider: MagicMock,
     ) -> None:
-        """A self-contained question amid unrelated history is not grounded via
-        the topic-polluted re-query; it uses the knowledge-fallback notice."""
+        """A self-contained question amid unrelated history is not grounded via.
+
+        the topic-polluted re-query; it uses the knowledge-fallback notice.
+        """
         mock_searcher.search.return_value = [
-            {"chunk_text": "irrelevant", "source_file": "x.pdf", "page": 1, "score": 0.3},
+            {
+                "chunk_text": "irrelevant",
+                "source_file": "x.pdf",
+                "page": 1,
+                "score": 0.3,
+            },
         ]
         pipeline = RAGPipeline(
             searcher=mock_searcher,
