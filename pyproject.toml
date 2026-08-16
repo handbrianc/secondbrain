@@ -65,7 +65,7 @@ test = [
 security = [
     "bandit>=1.7.0",  # Security scanning - Python security issues
     "safety>=3.0.0",  # Vulnerability check - dependency audits
-    "pip-audit>=2.10.0",  # Security audit - PyPI vulnerability check
+    "pip-audit>=2.10.1",  # Security audit - PyPI vulnerability check
     "cyclonedx-bom>=7.0.0",  # SBOM generation - supply chain security
 ]
 
@@ -113,7 +113,7 @@ bundled = [
     # All security deps
     "bandit>=1.7.0",
     "safety>=3.0.0",
-    "pip-audit>=2.10.0",
+    "pip-audit>=2.10.1",
     "cyclonedx-bom>=7.0.0",
     # Misc dev tools
     "pre-commit>=4.6.0",
