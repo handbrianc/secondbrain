@@ -80,7 +80,7 @@ docs = [
 
 # Mutation testing
 mutation = [
-    "mutmut>=3.6.0",  # Mutation testing - verify test quality
+    "mutmut>=3.7.0",  # Mutation testing - verify test quality
 ]
 
 # Pre-commit hooks
@@ -149,7 +149,7 @@ bundled = [
     "reportlab>=5.0.0",
     "python-docx>=1.0.0",
     # Bundled extras (depends on mutation)
-    "mutmut>=3.6.0",
+    "mutmut>=3.7.0",
 ]
 
 # Alias [dev] to [bundled] for backward compatibility
