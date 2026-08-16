@@ -13,7 +13,7 @@ class TestAsyncValidation:
     @pytest.fixture
     def storage(self):
         """Create a VectorStorage instance with mocked config."""
-        import secondbrain.storage.storage as storage_module
+        import secondbrain.storage._sync as storage_module
 
         _mock_config = MagicMock()
         _mock_config.mongo_uri = "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"

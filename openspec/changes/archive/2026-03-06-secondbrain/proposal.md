@@ -2,7 +2,10 @@
 
 ## Why
 
-A local document intelligence tool is needed that allows users to ingest documents, generate embeddings using OpenAI-compatible API with the embeddinggemma model, and store vectors in MongoDB for semantic search. The tool should be a CLI-only application (not a server), following industry best practices including 12-factor app principles, high test coverage, security compliance, and SBOM management.
+A local document intelligence tool is needed that allows users to ingest documents, generate embeddings using
+OpenAI-compatible API with the embeddinggemma model, and store vectors in MongoDB for semantic search. The tool should
+be a CLI-only application (not a server), following industry best practices including 12-factor app principles, high
+test coverage, security compliance, and SBOM management.
 
 ## What Changes
 
@@ -40,8 +43,10 @@ A local document intelligence tool is needed that allows users to ingest documen
 
 ### New Capabilities
 
-- **document-ingestion**: Parse and process documents using Docling, chunk content, generate embeddings via OpenAI-compatible API, and store in MongoDB
-- **embedding-generation**: Use embeddinggemma:latest model via OpenAI-compatible API API to generate semantic embeddings
+- **document-ingestion**: Parse and process documents using Docling, chunk content, generate embeddings via
+  OpenAI-compatible API, and store in MongoDB
+- **embedding-generation**: Use embeddinggemma:latest model via OpenAI-compatible API API to generate semantic
+  embeddings
 - **vector-storage**: Store embeddings in MongoDB with metadata (source file, page number, chunk text)
 - **semantic-search**: Perform cosine similarity search on stored embeddings
 - **document-management**: List and delete ingested documents/chunks from the database
@@ -91,7 +96,7 @@ A local document intelligence tool is needed that allows users to ingest documen
 10. **Dev/Prod Parity**: Docker containers ensure consistent environments
 11. **Logs**: Log to stdout, use structured logging for CLI output
 12. **Admin Processes**: Built-in CLI commands for management tasks
-12. **Admin Processes**: Built-in CLI commands for management tasks
+13. **Admin Processes**: Built-in CLI commands for management tasks
 
 ### Code Quality Requirements
 
@@ -104,6 +109,7 @@ A local document intelligence tool is needed that allows users to ingest documen
   - Testing (pytest warnings)
   - Security scans (bandit, safety)
 - **Pre-commit Hooks**: Enforce linting, formatting, and type checking before commits
+
 ### Quality Requirements
 
 - **Test Coverage**: Minimum 80% code coverage
@@ -160,7 +166,7 @@ secondbrain delete --all
 - `SECONDBRAIN_MONGO_URI`: MongoDB connection string (default: mongodb://localhost:27017)
 - `SECONDBRAIN_MONGO_DB`: Database name (default: secondbrain)
 - `SECONDBRAIN_MONGO_COLLECTION`: Collection name (default: embeddings)
-- `SECONDBRAIN_SENTENCE_TRANSFORMERS_URL`: OpenAI-compatible API API URL (default: http://localhost:local embedding)
+- `SECONDBRAIN_SENTENCE_TRANSFORMERS_URL`: OpenAI-compatible API API URL (default: <http://localhost:local> embedding)
 - `SECONDBRAIN_MODEL`: Embedding model (default: embeddinggemma:latest)
 - `SECONDBRAIN_CHUNK_SIZE`: Chunk size for document splitting (default: 512)
 - `SECONDBRAIN_CHUNK_OVERLAP`: Chunk overlap for splitting (default: 50)

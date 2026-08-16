@@ -202,7 +202,7 @@ extend-ignore = ["E501", "D406", "D407"]
 convention = "numpy"
 
 [tool.ruff.lint.per-file-ignores]
-"__init__.py" = ["F401"]
+"__init__.py" = ["F401"]  # __init__ files intentionally re-export names consumed directly by callers
     "tests/**" = ["BLE001", "D100", "D101", "D102", "D103", "D104", "N806", "SIM117", "F841", "B017", "PTH123", "D401", "SIM105"]
 
 [tool.mypy]

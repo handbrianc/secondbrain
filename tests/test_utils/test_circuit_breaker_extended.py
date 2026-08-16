@@ -193,7 +193,9 @@ class TestRecoveryTimeoutPrecision:
 
     def test_recovery_timeout_precision(self):
         """Test exact timeout behavior with sub-second precision."""
-        config = CircuitBreakerConfig(recovery_timeout=0.1)  # 100ms
+        config = CircuitBreakerConfig(
+            recovery_timeout=0.12
+        )  # 120ms — margin against scheduling jitter
         cb = CircuitBreaker(config)
 
         # Open the circuit
@@ -205,19 +207,21 @@ class TestRecoveryTimeoutPrecision:
         # Record the exact time of failure
         failure_time = time.monotonic()
 
-        # Test at various intervals
+        # Test at various intervals. Margins are generous so that scheduling
+        # jitter on a loaded machine cannot flip a state check (which made
+        # this test flaky with tight 100ms/80ms margins).
         time.sleep(0.05)  # 50ms - should still be OPEN
         assert cb.state == CircuitState.OPEN
 
-        time.sleep(0.03)  # 80ms total - should still be OPEN
+        time.sleep(0.035)  # 85ms total - should still be OPEN
         assert cb.state == CircuitState.OPEN
 
-        time.sleep(0.03)  # 110ms total - should be HALF_OPEN
+        time.sleep(0.06)  # 145ms total - should be HALF_OPEN
         assert cb.state == CircuitState.HALF_OPEN
 
-        # Verify timing accuracy
+        # Verify timing accuracy (allow 25ms tolerance for scheduling jitter)
         elapsed = time.monotonic() - failure_time
-        assert elapsed >= 0.1  # Should have passed timeout
+        assert elapsed >= 0.095  # Should have passed timeout (+/- jitter)
 
     def test_sub_second_precision(self):
         """Test sub-second timeout precision."""

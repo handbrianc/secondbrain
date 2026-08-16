@@ -4,25 +4,25 @@ Complete reference for all SecondBrain command-line interface commands.
 
 ## Global Options
 
-| Option | Description |
-|--------|-------------|
-| `--help, -h` | Show help message and exit |
-| `--version, -v` | Show version number |
+| Option          | Description                |
+| --------------- | -------------------------- |
+| `--help, -h`    | Show help message and exit |
+| `--version, -v` | Show version number        |
 
 ## Commands Overview
 
-| Command | Description |
-| --------- | ------------- |
-| [`ingest`](#ingest) | Ingest documents into the vector database |
-| [`search`](#search) | Search the vector database with semantic query |
-| [`ls`](#ls) | List ingested documents and chunks |
-| [`delete`](#delete) | Delete documents from the vector database |
-| [`status`](#status) | Show statistics about the vector database |
-| [`health`](#health) | Check health status of all services |
-| [`metrics`](#metrics) | Show performance metrics and statistics |
-| [`chat`](#chat) | Conversational Q&A with your documents |
-| [`start`](#start) | Start the production Docker Compose stack |
-| [`stop`](#stop) | Stop the production Docker Compose stack |
+| Command               | Description                                    |
+| --------------------- | ---------------------------------------------- |
+| [`ingest`](#ingest)   | Ingest documents into the vector database      |
+| [`search`](#search)   | Search the vector database with semantic query |
+| [`ls`](#ls)           | List ingested documents and chunks             |
+| [`delete`](#delete)   | Delete documents from the vector database      |
+| [`status`](#status)   | Show statistics about the vector database      |
+| [`health`](#health)   | Check health status of all services            |
+| [`metrics`](#metrics) | Show performance metrics and statistics        |
+| [`chat`](#chat)       | Conversational Q&A with your documents         |
+| [`start`](#start)     | Start the production Docker Compose stack      |
+| [`stop`](#stop)       | Stop the production Docker Compose stack       |
 
 ---
 
@@ -38,19 +38,19 @@ secondbrain ingest PATH [--recursive] [--cores INT] [--batch-size INT] [--chunk-
 
 ### Arguments
 
-| Argument | Description |
-|----------|-------------|
-| `PATH` | Path to file or directory to ingest |
+| Argument | Description                         |
+| -------- | ----------------------------------- |
+| `PATH`   | Path to file or directory to ingest |
 
 ### Options
 
-| Option | Description |
-| -------- | ------------- |
-| `--recursive, -r` | Recursively process directories |
-| `--cores, -c INT` | Number of CPU cores for parallel processing (default: auto-detect) |
-| `--batch-size, -b INT` | Batch size for ThreadPoolExecutor when cores=1 (default: 10) |
-| `--chunk-size INT` | Override default chunk size |
-| `--chunk-overlap INT` | Override default chunk overlap |
+| Option                 | Description                                                        |
+| ---------------------- | ------------------------------------------------------------------ |
+| `--recursive, -r`      | Recursively process directories                                    |
+| `--cores, -c INT`      | Number of CPU cores for parallel processing (default: auto-detect) |
+| `--batch-size, -b INT` | Batch size for ThreadPoolExecutor when cores=1 (default: 10)       |
+| `--chunk-size INT`     | Override default chunk size                                        |
+| `--chunk-overlap INT`  | Override default chunk overlap                                     |
 
 ### Examples
 
@@ -82,18 +82,18 @@ secondbrain search QUERY [--top-k INT] [--source STR] [--file-type STR] [--forma
 
 ### Arguments
 
-| Argument | Description |
-|----------|-------------|
-| `QUERY` | Search query text |
+| Argument | Description       |
+| -------- | ----------------- |
+| `QUERY`  | Search query text |
 
 ### Options
 
-| Option | Description |
-| -------- | ------------- |
-| `--top-k INT` | Number of results to return |
-| `--source STR` | Filter results by source file path |
-| `--file-type STR` | Filter results by file type (e.g., 'pdf', 'docx') |
-| `--format` | Output format: `table` (default) or `json` |
+| Option              | Description                                                 |
+| ------------------- | ----------------------------------------------------------- |
+| `--top-k INT`       | Number of results to return                                 |
+| `--source STR`      | Filter results by source file path                          |
+| `--file-type STR`   | Filter results by file type (e.g., 'pdf', 'docx')           |
+| `--format`          | Output format: `table` (default) or `json`                  |
 | `--min-score FLOAT` | Minimum similarity score threshold (0.0-1.0, default: 0.46) |
 
 ### Examples
@@ -129,13 +129,13 @@ secondbrain ls [--source STR] [--chunk-id STR] [--limit INT] [--offset INT] [--a
 
 ### Options
 
-| Option | Description |
-| -------- | ------------- |
-| `--source STR` | Filter by source file |
-| `--chunk-id STR` | Filter by specific chunk ID |
-| `--limit INT` | Maximum number of results (default: 100, max: 10000) |
-| `--offset INT` | Offset for pagination |
-| `--all, -a` | List all documents (ignores limit) |
+| Option           | Description                                          |
+| ---------------- | ---------------------------------------------------- |
+| `--source STR`   | Filter by source file                                |
+| `--chunk-id STR` | Filter by specific chunk ID                          |
+| `--limit INT`    | Maximum number of results (default: 100, max: 10000) |
+| `--offset INT`   | Offset for pagination                                |
+| `--all, -a`      | List all documents (ignores limit)                   |
 
 ### Examples
 
@@ -170,12 +170,12 @@ secondbrain delete [--source STR] [--chunk-id STR] [--all] [--yes]
 
 ### Options
 
-| Option | Description |
-| -------- | ------------- |
-| `--source STR` | Filter by source file |
+| Option           | Description                 |
+| ---------------- | --------------------------- |
+| `--source STR`   | Filter by source file       |
 | `--chunk-id STR` | Filter by specific chunk ID |
-| `--all, -a` | Delete all documents |
-| `--yes, -y` | Skip confirmation prompt |
+| `--all, -a`      | Delete all documents        |
+| `--yes, -y`      | Skip confirmation prompt    |
 
 ### Examples
 
@@ -232,8 +232,8 @@ secondbrain health [--output text|json]
 
 ### Options
 
-| Option | Description |
-|--------|-------------|
+| Option     | Description                               |
+| ---------- | ----------------------------------------- |
 | `--output` | Output format: `text` (default) or `json` |
 
 ### Examples
@@ -260,8 +260,8 @@ secondbrain metrics [--reset]
 
 ### Options
 
-| Option | Description |
-|--------|-------------|
+| Option        | Description       |
+| ------------- | ----------------- |
 | `--reset, -r` | Reset all metrics |
 
 ### Examples
@@ -276,18 +276,18 @@ secondbrain metrics --reset
 
 Available metrics:
 
-| Metric | Description |
-| -------- | ------------- |
-| `embedding_generate` | Sync embedding generation |
-| `embedding_generate_async` | Async embedding generation |
-| `embedding_generate_batch` | Batch sync embedding |
-| `embedding_generate_batch_async` | Batch async embedding |
-| `storage_store` | Sync storage writes |
-| `storage_store_async` | Async storage writes |
-| `storage_store_batch` | Batch sync writes |
-| `storage_store_batch_async` | Batch async writes |
-| `storage_search` | Sync search queries |
-| `storage_search_async` | Async search queries |
+| Metric                           | Description                |
+| -------------------------------- | -------------------------- |
+| `embedding_generate`             | Sync embedding generation  |
+| `embedding_generate_async`       | Async embedding generation |
+| `embedding_generate_batch`       | Batch sync embedding       |
+| `embedding_generate_batch_async` | Batch async embedding      |
+| `storage_store`                  | Sync storage writes        |
+| `storage_store_async`            | Async storage writes       |
+| `storage_store_batch`            | Batch sync writes          |
+| `storage_store_batch_async`      | Batch async writes         |
+| `storage_search`                 | Sync search queries        |
+| `storage_search_async`           | Async search queries       |
 
 Each metric reports: Count, Total, Average, Min, and Max times.
 
@@ -307,34 +307,34 @@ secondbrain chat [QUERY] [--session STR] [--top-k INT] [--temperature FLOAT] [--
 
 ### Arguments
 
-| Argument | Description |
-|----------|-------------|
-| `QUERY` | Initial query (optional - enters interactive mode if omitted) |
+| Argument | Description                                                   |
+| -------- | ------------------------------------------------------------- |
+| `QUERY`  | Initial query (optional - enters interactive mode if omitted) |
 
 ### Options
 
-| Option | Description |
-| -------- | ------------- |
-| `--session, -s STR` | Session ID to use/create |
-| `--top-k, -k INT` | Number of chunks to retrieve (default: 20) |
-| `--temperature, -t FLOAT` | LLM temperature (default: 0.1) |
-| `--model, -m STR` | LLM model name |
-| `--show-sources` | Show retrieved sources |
-| `--list-sessions` | List all conversation sessions |
-| `--history` | Show session history |
-| `--delete-session, -d STR` | Delete a session |
-| `--create, -c` | Create new session with UUID |
-| `--check-llm` | Check if LLM provider is available |
+| Option                     | Description                                |
+| -------------------------- | ------------------------------------------ |
+| `--session, -s STR`        | Session ID to use/create                   |
+| `--top-k, -k INT`          | Number of chunks to retrieve (default: 20) |
+| `--temperature, -t FLOAT`  | LLM temperature (default: 0.1)             |
+| `--model, -m STR`          | LLM model name                             |
+| `--show-sources`           | Show retrieved sources                     |
+| `--list-sessions`          | List all conversation sessions             |
+| `--history`                | Show session history                       |
+| `--delete-session, -d STR` | Delete a session                           |
+| `--create, -c`             | Create new session with UUID               |
+| `--check-llm`              | Check if LLM provider is available         |
 
 ### Interactive Mode Commands
 
 Inside the interactive REPL:
 
-| Command | Description |
-| --------- | ------------- |
-| `/quit, /exit` | Exit chat |
-| `/clear` | Clear conversation history |
-| `/help` | Show help |
+| Command        | Description                |
+| -------------- | -------------------------- |
+| `/quit, /exit` | Exit chat                  |
+| `/clear`       | Clear conversation history |
+| `/help`        | Show help                  |
 
 ### Examples
 
@@ -378,11 +378,11 @@ secondbrain start [--compose-file FILE] [--project-name NAME] [--wait]
 
 ### Options
 
-| Option | Description |
-| -------- | ------------- |
-| `--compose-file, -f FILE` | Path to docker-compose.yml (default: auto-detect) |
+| Option                    | Description                                        |
+| ------------------------- | -------------------------------------------------- |
+| `--compose-file, -f FILE` | Path to docker-compose.yml (default: auto-detect)  |
 | `--project-name, -p NAME` | Docker Compose project name (default: secondbrain) |
-| `--wait, -w` | Wait for services to be fully ready |
+| `--wait, -w`              | Wait for services to be fully ready                |
 
 ### Examples
 
@@ -411,12 +411,12 @@ secondbrain stop [--compose-file FILE] [--project-name NAME] [--remove-volumes] 
 
 ### Options
 
-| Option | Description |
-| -------- | ------------- |
-| `--compose-file, -f FILE` | Path to docker-compose.yml (default: auto-detect) |
+| Option                    | Description                                        |
+| ------------------------- | -------------------------------------------------- |
+| `--compose-file, -f FILE` | Path to docker-compose.yml (default: auto-detect)  |
 | `--project-name, -p NAME` | Docker Compose project name (default: secondbrain) |
-| `--remove-volumes, -v` | Remove named volumes |
-| `--force, -y` | Skip confirmation prompt |
+| `--remove-volumes, -v`    | Remove named volumes                               |
+| `--force, -y`             | Skip confirmation prompt                           |
 
 ### Examples
 

@@ -1,6 +1,10 @@
+# Add Multicore Support — Proposal
+
 ## Why
 
-The current CLI has basic parallel processing via ThreadPoolExecutor for ingestion, but lacks true multicore utilization for CPU-bound tasks like text extraction, chunking, and embedding generation. As document volumes grow, leveraging multiple CPU cores will significantly reduce processing time and improve throughput.
+The current CLI has basic parallel processing via ThreadPoolExecutor for ingestion, but lacks true multicore
+utilization for CPU-bound tasks like text extraction, chunking, and embedding generation. As document volumes grow,
+leveraging multiple CPU cores will significantly reduce processing time and improve throughput.
 
 ## What Changes
 
@@ -17,7 +21,8 @@ The current CLI has basic parallel processing via ThreadPoolExecutor for ingesti
 
 ### New Capabilities
 
-- `multicore-ingestion`: Enable parallel document ingestion across multiple CPU cores with configurable worker count, progress tracking, and memory-efficient batch processing
+- `multicore-ingestion`: Enable parallel document ingestion across multiple CPU cores with configurable worker count,
+  progress tracking, and memory-efficient batch processing
 
 ### Modified Capabilities
 
@@ -26,19 +31,23 @@ The current CLI has basic parallel processing via ThreadPoolExecutor for ingesti
 ## Impact
 
 **Code Changes:**
+
 - `cli/commands.py`: Add `--cores` option to `ingest` command
 - `document/__init__.py`: Refactor `DocumentIngestor.ingest()` to support multiprocessing
 - `embedding/generator.py`: Enhance `generate_batch()` for multicore utilization
 - `config/__init__.py`: Add `max_workers` configuration option
 
 **Dependencies:**
+
 - No new dependencies (uses Python's built-in `multiprocessing` and `concurrent.futures`)
 
 **Performance:**
+
 - Expected 2-4x speedup on 4-core systems for large document batches
 - Reduced wall-clock time for CPU-bound operations
 - Better resource utilization on multi-core machines
 
 **Compatibility:**
+
 - Backward compatible - defaults to current behavior if `--cores` not specified
 - Windows/macOS/Linux compatible (uses `concurrent.futures` for cross-platform support)

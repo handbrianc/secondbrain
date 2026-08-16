@@ -1,6 +1,7 @@
 # SecondBrain - Local Document Intelligence CLI
 
-A privacy-first document intelligence CLI that ingests documents, generates embeddings, and provides semantic search over your documents using MongoDB and OpenAI-compatible embedding services.
+A privacy-first document intelligence CLI that ingests documents, generates embeddings, and provides semantic search
+over your documents using MongoDB and OpenAI-compatible embedding services.
 
 ![Python Version](https://img.shields.io/badge/python-3.14+-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
@@ -124,7 +125,7 @@ See `docs/getting-started/configuration.md` for the full configuration reference
 ## Supported File Types
 
 | Format | Extension | Notes |
-|--------|-----------|-------|
+| -------- | ----------- | ------- |
 | PDF | `.pdf` | Text and tables extracted |
 | Word | `.docx` | Full text extraction |
 | PowerPoint | `.pptx` | Slide text and content |
@@ -144,6 +145,7 @@ Search Query ← Searcher ← Embedder ← Query
 ```
 
 Key components:
+
 - **Document Ingestor** (`secondbrain ingest`) - parses and chunks supported file types
 - **Embedding Engine** - OpenAI-compatible API for vector generation
 - **Vector Storage** - MongoDB vector search with `$vectorSearch` for similarity retrieval

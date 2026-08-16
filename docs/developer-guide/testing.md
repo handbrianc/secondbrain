@@ -178,6 +178,31 @@ Standard fixture locations:
 - `tests/unit/conftest.py` - Unit-specific fixtures
 - `tests/integration/conftest.py` - Integration fixtures
 
+## Integration Tests Require Live Services
+
+The integration test suite (`tests/integration/`, marked `@pytest.mark.integration`, 16 tests)
+exercises real MongoDB vector search and a live local LLM (Ollama). These tests are **deselected
+by default** and only run when their external services are available:
+
+```bash
+# Start Mongo + Ollama, then run with integration included
+docker compose -f docker-compose.test.yml up -d
+pytest -m "integration"
+```
+
+Because they depend on Dockerized MongoDB plus an Ollama server (and its installed embedding/LLM
+models), they are **environment-constrained**: they cannot pass in an offline build environment or
+on CI hosts without those services. In such environments this is a known, accepted gap rather than
+a test failure — the suites below (`tests/integration/mocked/`) are intended to run without live
+services:
+
+```bash
+# All tests except live-service integration tests (the standard fast run)
+pytest -m "not integration"
+```
+
+Expect 16 deselected tests in the default run when the live services are not provisioned.
+
 ## Testing External Services
 
 Integration tests requiring live services use markers:

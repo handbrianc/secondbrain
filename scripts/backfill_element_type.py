@@ -220,8 +220,8 @@ Examples:
     # Get MongoDB connection params from env or CLI
     mongo_uri = args.mongo_uri or os.getenv("SECONDBRAIN_MONGO_URI", "")
     db_name = args.db_name or os.getenv("SECONDBRAIN_MONGO_DB", "secondbrain")
-    collection_name = (
-        args.collection_name or os.getenv("SECONDBRAIN_MONGO_COLLECTION", "embeddings")
+    collection_name = args.collection_name or os.getenv(
+        "SECONDBRAIN_MONGO_COLLECTION", "embeddings"
     )
 
     if not mongo_uri:
@@ -237,12 +237,10 @@ Examples:
     ci_mode = os.getenv("CI", "").lower() in ("true", "1", "yes")
     if not args.execute and not ci_mode:
         print(
-            "\n"
-            + "=" * 60 + "\n"
+            "\n" + "=" * 60 + "\n"
             " WARNING: This is a LIVE database mutation!\n"
             " Running in DRY-RUN mode by default.\n"
-            " Use --execute to apply changes.\n"
-            + "=" * 60 + "\n",
+            " Use --execute to apply changes.\n" + "=" * 60 + "\n",
             file=sys.stderr,
         )
 

@@ -4,9 +4,9 @@ Practical examples demonstrating SecondBrain usage patterns.
 
 ## Examples Index
 
-| Section | Description |
-|---------|-------------|
-| [Basic Usage](basic-usage.md) | Common CLI workflows: ingest, search, list |
+| Section                         | Description                                            |
+| ------------------------------- | ------------------------------------------------------ |
+| [Basic Usage](basic-usage.md)   | Common CLI workflows: ingest, search, list             |
 | [Integrations](integrations.md) | Using SecondBrain programmatically with Flask, FastAPI |
 
 ## Quick Examples

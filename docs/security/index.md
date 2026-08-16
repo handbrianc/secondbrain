@@ -193,6 +193,57 @@ Automate security scanning:
     bandit -r src/ --failxit || true
 ```
 
+## License Compliance
+
+SecondBrain is distributed under the MIT License (see `LICENSE.md`). Its **direct**
+dependencies are MIT/Apache-2.0/BSD compatible. However, the resolved dependency tree (see
+`sbom.json` / `sbom.spdx`) includes several **transitive** dependencies carrying copyleft
+licenses. These cannot be re-licensed and are not generally replaceable without forking or
+re-architecting the ingestion/ML stack, so the project documents the following accepted risk:
+
+| Package | License | Component Type | Risk Assessment |
+| --------- | ---------- | --------------- | ----------------- |
+| `pyinstaller`, `pyinstaller-hooks-contrib` | GPL-2.0-only | Build/packaging tooling | Not distributed with the app; used only in standalone build scripts |
+| `paramiko` | LGPL-2.1 | Transitive SSH library | Weak copyleft (LGPL) — linking permitted with obligations; used only as a transitive dep |
+| `certifi` | MPL-2.0 | CA bundle (transitive) | File-level weak copyleft; MPL-2.0 is permissive for static use |
+| `hypothesis` | MPL-2.0 | Test tooling | Test-only, not shipped in the runtime artifact |
+| `pytest-rerunfailures` | MPL-2.0 | Test tooling | Test-only, not shipped in the runtime artifact |
+
+**Accepted-risk rationale:** These components are either (a) build/test-only and never
+distributed in the runtime artifact, or (b) weakly-protective (LGPL-2.1, MPL-2.0) libraries
+whose copyleft obligations apply to modifications of the library itself rather than to
+SecondBrain's MIT code. No strong copyleft (GPL-3.0/AGPL) library is linked into the runtime
+application.
+
+**Mitigations:**
+
+- Ensure the distributed package (wheel / container image) includes only runtime
+  dependencies, never `pyinstaller`, `hypothesis`, or `pytest-rerunfailures`.
+- Review `sbom.spdx` on every release to confirm the copyleft surface has not grown.
+- If legal review requires it, replace `paramiko` with a permissively-licensed alternative or
+  vendor it under LGPL terms.
+
+## Known Residual Advisories (Accepted Risk)
+
+Regular `pip-audit` / `safety` scans (see [Dependency Auditing](#dependency-auditing)) are
+tracked in CI. The **feasible** transitive CVE fixes were applied and locked
+(`urllib3>=2.7.0`, `setuptools>=83.0.0`, `idna>=3.18`, `cryptography>=50.0.0`, `pillow>=12.3.0`,
+`starlette>=1.0.1`, `pydantic-settings>=2.14.2`). The advisories below remain and are
+**documented as accepted risk** because the offending packages are either heavy ML/build
+dependencies or transitively pinned by `docling` such that a forced upgrade risks breaking the
+document-ingestion pipeline (verified — the upgrade path does not resolve without breaking the
+build):
+
+| Package | Advisories (count) | Why held back |
+| ---------- | ------------------- | --------------- |
+| `gitpython` | 15 | Transitive via docling-git; pin update conflicts with docling's dependency graph |
+| `pyasn1` | 4 | Transitive (cryptography-related); fix version conflicts with pinned constraints |
+| `nltk`, `aiohttp`, `twisted`, `docling`, `soupsieve`, `joserfc`, `paramiko`, `msgpack`, `h2`, `pymdown-extensions`, `torch` | 4-1 each | Heavy/transitive; forced upgrade is risky or unresolved against the pinned lock |
+
+**Tracking:** These are monitored on every release via the regenerated `sbom.json` / `sbom.spdx`
+and the CI security scan. They are not exploitable through the application's HTTP/CLI surface
+(void shell injection is disabled; these are dependency-internal advisories).
+
 ## Docker Security
 
 ### Non-Root Containers

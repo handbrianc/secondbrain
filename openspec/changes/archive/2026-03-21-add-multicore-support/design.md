@@ -1,13 +1,18 @@
+# Add Multicore Support — Design
+
 ## Context
 
-The current implementation uses `ThreadPoolExecutor` for parallel file processing in `DocumentIngestor.ingest()`, but this approach has limitations:
+The current implementation uses `ThreadPoolExecutor` for parallel file processing in `DocumentIngestor.ingest()`, but
+this approach has limitations:
 
 1. **Thread-based parallelism**: Python's GIL limits true parallelism for CPU-bound tasks
 2. **No core count control**: Users cannot configure how many workers to use
-3. **Mixed workload handling**: Text extraction (CPU-bound) and embedding generation (I/O-bound) are processed together without optimization
+3. **Mixed workload handling**: Text extraction (CPU-bound) and embedding generation (I/O-bound) are processed together
+   without optimization
 4. **Limited progress tracking**: No detailed progress reporting during multicore operations
 
 The design must balance:
+
 - CPU-bound tasks (text extraction, chunking) benefit from `multiprocessing`
 - I/O-bound tasks (embedding API calls, MongoDB writes) benefit from threading/async
 - Memory usage when spawning multiple processes
@@ -39,12 +44,14 @@ The design must balance:
 **Decision**: Use `ProcessPoolExecutor` for text extraction and chunking, `ThreadPoolExecutor` for I/O-bound tasks.
 
 **Rationale**:
+
 - `ProcessPoolExecutor` bypasses Python's GIL for true parallelism
 - `ThreadPoolExecutor` is sufficient for I/O-bound operations (network calls, disk I/O)
 - `concurrent.futures` provides consistent API across both executor types
 - Cross-platform compatible (unlike raw `multiprocessing` on Windows)
 
 **Alternatives Considered**:
+
 - **Raw `multiprocessing` module**: More control but complex API, Windows compatibility issues
 - **`joblib` library**: Simpler API but adds dependency, less flexible
 - **Pure threading**: Doesn't solve GIL limitation for CPU-bound tasks
@@ -52,15 +59,18 @@ The design must balance:
 ### 2. Separate CPU-bound and I/O-bound processing phases
 
 **Decision**: Split ingestion into two distinct phases:
+
 1. **Phase 1 (CPU-bound)**: Extract text and chunk documents using `ProcessPoolExecutor`
 2. **Phase 2 (I/O-bound)**: Generate embeddings and store using `ThreadPoolExecutor`
 
 **Rationale**:
+
 - Each phase can use the optimal parallelization strategy
 - Reduces memory overhead (embeddings generated after text extraction completes)
 - Clear separation of concerns improves maintainability
 
 **Alternatives Considered**:
+
 - **Single mixed phase**: Simpler but suboptimal parallelization strategy
 - **Async for everything**: Overly complex, doesn't help with CPU-bound tasks
 
@@ -69,11 +79,13 @@ The design must balance:
 **Decision**: Add `--cores` / `-c` CLI option that overrides `max_workers` config, which defaults to CPU count.
 
 **Rationale**:
+
 - CLI option provides immediate control for one-off operations
 - Config provides persistent default for regular users
 - CPU count auto-detection provides sensible default
 
 **Implementation**:
+
 ```python
 @click.option("--cores", "-c", type=int, help="Number of CPU cores to use")
 def ingest(..., cores: int | None):
@@ -82,6 +94,7 @@ def ingest(..., cores: int | None):
 ```
 
 **Alternatives Considered**:
+
 - **Config-only**: Less flexible for ad-hoc operations
 - **CLI-only**: Requires explicit specification every time
 - **Auto-detection based on workload**: Complex, unpredictable behavior
@@ -91,11 +104,13 @@ def ingest(..., cores: int | None):
 **Decision**: Define worker functions at module level (not methods) to ensure they can be pickled for process spawning.
 
 **Rationale**:
+
 - `ProcessPoolExecutor` requires functions to be picklable
 - Module-level functions are simpler to pickle than bound methods
 - Clear separation between worker logic and orchestration
 
 **Implementation Pattern**:
+
 ```python
 def _extract_and_chunk_file(file_path: Path, chunk_size: int, chunk_overlap: int) -> dict:
     """Worker function for process pool - must be module-level."""
@@ -110,6 +125,7 @@ class DocumentIngestor:
 ```
 
 **Alternatives Considered**:
+
 - **Lambda functions**: Cannot be pickled
 - **Bound methods**: Complex pickling, platform-specific issues
 - **`pathos` library**: More flexible but adds dependency
@@ -119,17 +135,20 @@ class DocumentIngestor:
 **Decision**: Limit batch sizes for embedding generation based on available memory.
 
 **Rationale**:
+
 - Multiple processes holding large text chunks can exhaust memory
 - Embedding vectors are large (768 floats = ~3KB each)
 - Need to balance parallelism with memory usage
 
 **Implementation**:
+
 ```python
 MAX_MEMORY_BATCH_SIZE = 100  # Max chunks to embed in one batch
 batch_size = min(len(chunks), MAX_MEMORY_BATCH_SIZE)
 ```
 
 **Alternatives Considered**:
+
 - **Dynamic memory monitoring**: Complex, overhead
 - **Fixed batch size**: May be too large for some systems or too small for others
 
@@ -139,7 +158,8 @@ batch_size = min(len(chunks), MAX_MEMORY_BATCH_SIZE)
 
 **Risk**: Creating multiple processes has startup cost (~100ms per process on typical systems).
 
-**Mitigation**: 
+**Mitigation**:
+
 - Use `ProcessPoolExecutor` which maintains worker pool
 - Only beneficial for batches of 5+ files
 - Document recommendation: use for directories, not single files
@@ -149,6 +169,7 @@ batch_size = min(len(chunks), MAX_MEMORY_BATCH_SIZE)
 **Risk**: Each process gets its own copy of Python interpreter and imported modules.
 
 **Mitigation**:
+
 - Keep worker functions minimal (only import what's needed)
 - Use `copy_on_write` semantics of fork (on Unix)
 - Limit concurrent workers via `--cores` option
@@ -159,6 +180,7 @@ batch_size = min(len(chunks), MAX_MEMORY_BATCH_SIZE)
 **Risk**: Exceptions in worker processes must be pickled and re-raised in main process.
 
 **Mitigation**:
+
 - Wrap worker functions in try-except, return error info in result dict
 - Use `future.result()` to propagate exceptions
 - Log detailed error information in worker processes
@@ -168,6 +190,7 @@ batch_size = min(len(chunks), MAX_MEMORY_BATCH_SIZE)
 **Risk**: Windows uses `spawn` method (not `fork`), requiring `if __name__ == "__main__":` guards.
 
 **Mitigation**:
+
 - Use `concurrent.futures` which abstracts platform differences
 - Ensure all worker functions are module-level
 - Test on Windows before release
@@ -177,6 +200,7 @@ batch_size = min(len(chunks), MAX_MEMORY_BATCH_SIZE)
 **Risk**: Multiple processes/threads may overwhelm OpenAI-compatible API API.
 
 **Mitigation**:
+
 - Keep rate limiter as singleton shared across workers
 - Rate limiter uses thread-safe primitives
 - Document recommendation to adjust rate limits for multicore usage

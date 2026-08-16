@@ -5,24 +5,28 @@ Thank you for considering contributing to SecondBrain! This document outlines th
 ## Development Setup
 
 1. **Clone the repository**
+
    ```bash
    git clone https://github.com/yourusername/secondbrain.git
    cd secondbrain
    ```
 
 2. **Set up a virtual environment**
+
    ```bash
    python -m venv venv
    source venv/bin/activate
    ```
 
 3. **Install with dev dependencies**
+
    ```bash
    pip install -e ".[dev]"
    pip install -e ".[test]"
    ```
 
 4. **Install pre-commit hooks**
+
    ```bash
    pre-commit install
    ```

@@ -107,7 +107,7 @@ class TestIngestStreamingEnabled:
 
         with (
             patch("secondbrain.document.DocumentIngestor", mock_ingestor_class),
-            patch("secondbrain.cli.commands.config", return_value=mock_config_func),
+            patch("secondbrain.cli.ingest.config", return_value=mock_config_func),
         ):
             runner = CliRunner()
             with runner.isolated_filesystem():

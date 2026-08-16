@@ -3,7 +3,8 @@
 **Last Updated:** 2026-05-03  
 **Commit:** 80fd894
 
-SecondBrain is a local document intelligence CLI for semantic search using MongoDB vector search and OpenAI-compatible embedding APIs.
+SecondBrain is a local document intelligence CLI for semantic search using MongoDB vector search and OpenAI-compatible
+embedding APIs.
 
 **Stack:** Python 3.14+, Click, Pydantic 2, Motor, OpenAI-compatible API, Docker
 
@@ -87,7 +88,8 @@ secondbrain/
 3. **Full test suite in pre-commit** - Use `pytest -m "not integration"` instead
 4. **Auto-installing dependencies in scripts** - Require virtual environment setup
 5. **Relative paths in scripts** - Use absolute paths or Python orchestration
-6. **Duplicate integration tests** - ✅ RESOLVED: Consolidated `tests/test_integration/` into `tests/integration/mocked/` (May 2026)
+6. **Duplicate integration tests** - ✅ RESOLVED: Consolidated `tests/test_integration/`
+   into `tests/integration/mocked/` (May 2026)
 
 ---
 
@@ -153,17 +155,24 @@ pytest
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **secondbrain** (9381 symbols, 17200 relationships, 196 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **secondbrain** (9620 symbols, 15868 relationships,
+117 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and
+navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
 ## Always Do
 
-- **MUST run impact analysis before editing any symbol.** Before modifying a function, class, or method, run `gitnexus_impact({target: "symbolName", direction: "upstream"})` and report the blast radius (direct callers, affected processes, risk level) to the user.
-- **MUST run `gitnexus_detect_changes()` before committing** to verify your changes only affect expected symbols and execution flows.
+- **MUST run impact analysis before editing any symbol.** Before modifying a function, class,
+  or method, run `gitnexus_impact({target: "symbolName", direction: "upstream"})` and report
+  the blast radius (direct callers, affected processes, risk level) to the user.
+- **MUST run `gitnexus_detect_changes()` before committing** to verify your changes only affect
+  expected symbols and execution flows.
 - **MUST warn the user** if impact analysis returns HIGH or CRITICAL risk before proceeding with edits.
-- When exploring unfamiliar code, use `gitnexus_query({query: "concept"})` to find execution flows instead of grepping. It returns process-grouped results ranked by relevance.
-- When you need full context on a specific symbol — callers, callees, which execution flows it participates in — use `gitnexus_context({name: "symbolName"})`.
+- When exploring unfamiliar code, use `gitnexus_query({query: "concept"})` to find execution flows
+  instead of grepping. It returns process-grouped results ranked by relevance.
+- When you need full context on a specific symbol — callers, callees, which execution flows it
+  participates in — use `gitnexus_context({name: "symbolName"})`.
 
 ## Never Do
 
@@ -175,7 +184,7 @@ This project is indexed by GitNexus as **secondbrain** (9381 symbols, 17200 rela
 ## Resources
 
 | Resource | Use for |
-|----------|---------|
+| ---------- | --------- |
 | `gitnexus://repo/secondbrain/context` | Codebase overview, check index freshness |
 | `gitnexus://repo/secondbrain/clusters` | All functional areas |
 | `gitnexus://repo/secondbrain/processes` | All execution flows |
@@ -184,7 +193,7 @@ This project is indexed by GitNexus as **secondbrain** (9381 symbols, 17200 rela
 ## CLI
 
 | Task | Read this skill file |
-|------|---------------------|
+| ------ | --------------------- |
 | Understand architecture / "How does X work?" | `.claude/skills/gitnexus/gitnexus-exploring/SKILL.md` |
 | Blast radius / "What breaks if I change X?" | `.claude/skills/gitnexus/gitnexus-impact-analysis/SKILL.md` |
 | Trace bugs / "Why is X failing?" | `.claude/skills/gitnexus/gitnexus-debugging/SKILL.md` |

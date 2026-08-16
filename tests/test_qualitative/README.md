@@ -2,7 +2,8 @@
 
 ## Overview
 
-This directory contains the foundation for qualitative testing of the SecondBrain document intelligence system. Qualitative tests evaluate:
+This directory contains the foundation for qualitative testing of the SecondBrain document intelligence system.
+Qualitative tests evaluate:
 
 - **Safety**: Detection and handling of PII, dangerous topics, and harmful content
 - **Factual Accuracy**: Verification of factual claims and hallucination detection
@@ -33,6 +34,7 @@ test_qualitative/
 The `conftest.py` module provides the following fixtures:
 
 ### `pii_patterns`
+
 Load PII patterns for testing sensitive data detection.
 
 ```python
@@ -43,6 +45,7 @@ def test_pii_detection(pii_patterns):
 ```
 
 ### `dangerous_topics`
+
 Load dangerous topics for testing safety filters.
 
 ```python
@@ -53,6 +56,7 @@ def test_dangerous_topic_filter(dangerous_topics):
 ```
 
 ### `factual_claims`
+
 Load factual claims for verification testing.
 
 ```python
@@ -63,6 +67,7 @@ def test_factual_accuracy(factual_claims):
 ```
 
 ### `citation_templates`
+
 Load citation templates for citation quality testing.
 
 ```python
@@ -73,6 +78,7 @@ def test_citation_quality(citation_templates):
 ```
 
 ### `edge_case_queries`
+
 Load edge case queries for robustness testing.
 
 ```python
@@ -83,6 +89,7 @@ def test_edge_case_handling(edge_case_queries):
 ```
 
 ### `llm_judge_prompts`
+
 Load LLM judge prompts for automated evaluation.
 
 ```python
@@ -128,6 +135,7 @@ Qualitative tests use the following markers (configured in `pyproject.toml`):
 - `@pytest.mark.llm_judge`: Tests using LLM-based evaluation
 
 Example:
+
 ```python
 import pytest
 
@@ -165,26 +173,31 @@ pytest tests/test_qualitative/test_safety.py
 ## Test Categories
 
 ### 1. Safety Tests (`test_safety.py`)
+
 - PII detection and redaction
 - Dangerous topic filtering
 - Harmful content prevention
 
 ### 2. Factual Accuracy Tests (`test_factual.py`)
+
 - Factual claim verification
 - Hallucination detection
 - Source attribution accuracy
 
 ### 3. Citation Tests (`test_citations.py`)
+
 - Citation format compliance
 - Source linking accuracy
 - Reference completeness
 
 ### 4. Robustness Tests (`test_robustness.py`)
+
 - Edge case handling
 - Adversarial query resistance
 - Ambiguous query resolution
 
 ### 5. LLM Judge Tests (`test_llm_judge.py`)
+
 - Automated quality evaluation
 - Response relevance scoring
 - Safety assessment automation
@@ -204,6 +217,7 @@ To add new test cases to a JSON file:
    - `severity`: Priority level (low, medium, high, critical)
 
 Example:
+
 ```json
 {
   "id": "pii_email_detection",
@@ -224,6 +238,7 @@ pip install -e ".[qualitative]"
 ```
 
 The `qualitative` extra includes:
+
 - `llama-cpp-python` - For local LLM judge evaluation
 - `transformers` - For advanced NLP tasks
 - Additional evaluation libraries as needed

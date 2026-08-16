@@ -101,7 +101,9 @@ def patch_transformers_for_mps() -> None:
             return pos_embed.to(dtype)
 
         # ---- apply the patch ------------------------------------------------------
-        cast(Any, modeling_rt_detr_v2).build_2d_sinusoidal_position_embedding = (
+        cast(
+            Any, modeling_rt_detr_v2
+        ).build_2d_sinusoidal_position_embedding = (
             patched_build_2d_sinusoidal_position_embedding
         )
 

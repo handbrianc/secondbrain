@@ -1,10 +1,13 @@
 # SecondBrain Documentation
 
-Welcome to SecondBrain, a privacy-first local document intelligence CLI that enables semantic search over your documents using MongoDB and OpenAI-compatible embedding services.
+Welcome to SecondBrain, a privacy-first local document intelligence CLI that enables semantic search over your
+documents using MongoDB and OpenAI-compatible embedding services.
 
 ## Overview
 
-SecondBrain is designed for developers and power users who want to maintain complete control over their data while enjoying powerful document search capabilities. All document parsing, chunking, and storage happen locally on your machine.
+SecondBrain is designed for developers and power users who want to maintain complete control over their data while
+enjoying powerful document search capabilities. All document parsing, chunking, and storage happen locally on your
+machine.
 
 ## Key Features
 

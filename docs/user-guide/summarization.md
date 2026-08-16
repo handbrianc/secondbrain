@@ -9,7 +9,9 @@ Guide to generating focused summaries from ingested documents using SecondBrain'
 
 ## Overview
 
-The `summarize` command extracts meaningful summaries from your ingested documents at varying levels of granularity—whole chapters or individual sections. Unlike general-purpose search, the summarizer leverages structural metadata (`element_type`) to produce contextually accurate abstracts that respect document hierarchy.
+The `summarize` command extracts meaningful summaries from your ingested documents at varying levels of
+granularity—whole chapters or individual sections. Unlike general-purpose search, the summarizer leverages structural
+metadata (`element_type`) to produce contextually accurate abstracts that respect document hierarchy.
 
 Summarization is useful for:
 
@@ -20,14 +22,16 @@ Summarization is useful for:
 
 ## Prerequisites
 
-Before using the summarizer, ensure your documents have been ingested with structural enhancement enabled (automatically applied in SecondBrain v2.x):
+Before using the summarizer, ensure your documents have been ingested with structural enhancement enabled
+(automatically applied in SecondBrain v2.x):
 
 ```bash
 # Check document structure metadata
 secondbrain ls --source "./document.pdf"
 ```
 
-Your document should have `element_type` values populated. You can verify this in the database or by running a structural search:
+Your document should have `element_type` values populated. You can verify this in the database
+or by running a structural search:
 
 ```bash
 secondbrain search "." --source "./document.pdf" --top-k 5
@@ -226,7 +230,7 @@ Behavior can be tuned via environment variables and command-line options.
 
 | Variable | Values | Default | Effect |
 | ---------- | -------- | --------- | -------- |
-| `SECONDBRAIN_SUMMARIZER_MODE` | `brief`, `standard`, `detailed` | `standard` | Length and detail level of generated summaries |
+| `SECONDBRAIN_SUMMARIZER_MODE` | `brief`, `standard`, `detailed` | `standard` | Detail level for generated summaries |
 | `SECONDBRAIN_SUMMARY_DEPTH` | Integer (1-3) | `2` | Maximum section nesting depth to traverse |
 | `SECONDBRAIN_ADAPTIVE_CHUNKING` | `true`, `false` | `true` | Whether to adjust chunk boundaries for optimal context |
 
@@ -323,7 +327,8 @@ Common issues and resolutions.
 
 ### "No chapter structure detected"
 
-**Cause**: The source document lacks heading markup visible to the parser, or headings weren't properly classified during ingestion.
+**Cause**: The source document lacks heading markup visible to the parser, or headings weren't
+properly classified during ingestion.
 
 **Solutions**:
 

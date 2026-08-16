@@ -113,12 +113,18 @@ class StructuralIntentParser:
         "sub-sections",
     ]
 
+    # NOTE: Specific factual questions ("what is X", "explain X", "describe X",
+    # "how does X", "why is X", "tell me about X", ...) are intentionally NOT
+    # listed here. They are excluded so they no longer classify as BROAD_COVERAGE
+    # and get routed to the heavy structural chapter dump. Instead they fall
+    # through to the UNKNOWN / semantic single-shot path, which has the relevance
+    # gate (_has_relevant_chunks) and the LLM-knowledge fallback
+    # (_handle_no_results) that correctly answers when no relevant docs are found.
+    # Only genuinely structural/comprehensive triggers belong here.
     BROAD_COVERAGE_TRIGGERS: ClassVar[list[str]] = [
         "summarize",
         "summarize each",
         "tell me everything",
-        "tell me more",
-        "tell me about",
         "everything about",
         "overview of",
         "give me an overview",
@@ -126,14 +132,6 @@ class StructuralIntentParser:
         "complete guide to",
         "all about",
         "summary of",
-        "explain",
-        "describe",
-        "what is",
-        "what are",
-        "how does",
-        "how do",
-        "why is",
-        "why does",
     ]
 
     def __init__(

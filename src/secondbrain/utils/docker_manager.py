@@ -113,7 +113,7 @@ class DockerManager:
             True if command is available, False otherwise.
         """
         try:
-            subprocess.run(
+            subprocess.run(  # nosec B603
                 [command, "--version"],
                 capture_output=True,
                 check=True,
@@ -147,7 +147,7 @@ class DockerManager:
             return False
 
         try:
-            subprocess.run(
+            subprocess.run(  # nosec B603
                 ["docker", "compose", "version"],
                 capture_output=True,
                 check=True,
@@ -178,7 +178,7 @@ class DockerManager:
             return False
 
         try:
-            result = subprocess.run(
+            result = subprocess.run(  # nosec B603
                 [
                     "docker",
                     "ps",
@@ -241,7 +241,7 @@ class DockerManager:
         logger.info("Starting MongoDB via docker compose...")
 
         try:
-            result = subprocess.run(
+            result = subprocess.run(  # nosec B603
                 [
                     "docker",
                     "compose",

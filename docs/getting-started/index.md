@@ -54,4 +54,5 @@ pip install -e ".[docs]"
 
 ## Next Steps
 
-After installation, proceed to the [Quick Start guide](quick-start.md) to ingest your first documents and perform your first semantic search.
+After installation, proceed to the [Quick Start guide](quick-start.md) to ingest your first
+documents and perform your first semantic search.

@@ -49,7 +49,7 @@ class TestStatusHealthMetrics:
         """
         runner = CliRunner()
 
-        with patch("secondbrain.cli.commands.get_health_status") as mock_health:
+        with patch("secondbrain.cli.system.get_health_status") as mock_health:
             mock_health.return_value = {
                 "status": "healthy",
                 "timestamp": "2024-01-15T10:30:00+00:00",

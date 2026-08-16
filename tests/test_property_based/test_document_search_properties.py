@@ -781,17 +781,19 @@ class TestChunkingCharacterPreservation:
         # (allowing for very short chunks where this is impossible)
         for chunk in chunks:
             chunk_text = chunk["text"]
-            if len(chunk_text) > chunk_size // 2 and len(chunk_text) > 5:  # Only check substantial chunks
+            if (
+                len(chunk_text) > chunk_size // 2 and len(chunk_text) > 5
+            ):  # Only check substantial chunks
                 # Chunk shouldn't start/end with what looks like a partial word
                 # (single letter followed by space or punctuation)
-                    # Check start
-                    if chunk_text[0].isalpha() and not chunk_text[1].isalpha():
-                        # First char is isolated letter - might be intentional (e.g., "A.")
-                        pass
-                    # Check end
-                    if chunk_text[-1].isalpha() and not chunk_text[-2].isalpha():
-                        # Last char is isolated letter - might be intentional
-                        pass
+                # Check start
+                if chunk_text[0].isalpha() and not chunk_text[1].isalpha():
+                    # First char is isolated letter - might be intentional (e.g., "A.")
+                    pass
+                # Check end
+                if chunk_text[-1].isalpha() and not chunk_text[-2].isalpha():
+                    # Last char is isolated letter - might be intentional
+                    pass
 
     @given(
         text=st.text(min_size=100, max_size=3000).filter(

@@ -13,7 +13,8 @@ The SecondBrain User Guide covers all aspects of operating SecondBrain in produc
 
 ### Vector Search Fundamentals
 
-SecondBrain stores document chunks as embedded vectors in MongoDB. When you search, your query is converted to a vector and compared against stored vectors using similarity metrics.
+SecondBrain stores document chunks as embedded vectors in MongoDB. When you search, your query is converted to a vector
+and compared against stored vectors using similarity metrics.
 
 ### Chunking Strategy
 
@@ -24,7 +25,8 @@ Documents are split into overlapping chunks to enable granular retrieval. Key se
 
 ### Session-Based Chat
 
-The `chat` command maintains conversation history per session, enabling multi-turn dialogues with your documents using RAG (Retrieval-Augmented Generation).
+The `chat` command maintains conversation history per session, enabling multi-turn dialogues with your documents using
+RAG (Retrieval-Augmented Generation).
 
 ## Common Operations
 

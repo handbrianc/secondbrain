@@ -1,3 +1,5 @@
+# Conversational RAG — Tasks
+
 ## 1. Core Module Structure
 
 - [x] 1.1 Create `src/secondbrain/conversation/` module with `__init__.py`
@@ -62,7 +64,7 @@
 - [x] 7.1 Add `SECONDBRAIN_RAG_CONTEXT_WINDOW` config option (default: 10)
 - [x] 7.2 Add `SECONDBRAIN_CONVERSATION_DB` config option
 - [x] 7.3 Add `SECONDBRAIN_LLM_PROVIDER` config option (default: ollama)
-- [x] 7.4 Add `SECONDBRAIN_OLLAMA_HOST` config option (default: http://localhost:11434)
+- [x] 7.4 Add `SECONDBRAIN_OLLAMA_HOST` config option (default: <http://localhost:11434>)
 - [x] 7.5 Add `SECONDBRAIN_LLM_MODEL` config option (default: llama3.2)
 - [x] 7.6 Add `SECONDBRAIN_LLM_TEMPERATURE` config option (default: 0.1)
 - [x] 7.7 Add `SECONDBRAIN_LLM_MAX_TOKENS` config option (default: 2048)
