@@ -6,6 +6,7 @@ specific injection context managers so those live in their own module.
 """
 
 import logging
+import random
 import threading
 import time
 from typing import Any, Self
@@ -160,8 +161,9 @@ class FailureInjectorCore:
 
         timer = threading.Timer(duration, cleanup)
         timer.daemon = True
-        self._cleanup_callbacks.append(timer)
-        timer.start()
+        with self._lock:
+            self._cleanup_callbacks.append(timer)
+            timer.start()
 
     def should_fail(self, failure_type: FailureType) -> bool:
         """Determine if current operation should fail based on active failures.
@@ -175,8 +177,6 @@ class FailureInjectorCore:
         with self._lock:
             for config in self._active_failures.values():
                 if config.failure_type == failure_type:
-                    import random
-
                     # nosec B311: probability gate for chaos injection — RNG is
                     # intentionally non-cryptographic (only needs to be random,
                     # not secure).
