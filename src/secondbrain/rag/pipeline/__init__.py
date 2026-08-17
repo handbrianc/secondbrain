@@ -640,7 +640,19 @@ class RAGPipeline(
                 # BARE_CHAPTER_RE titles (e.g. "5 Working with VMs") are NOT included
                 # here — they're less reliable and may conflict with other chapters.
                 chapter_first_pg: dict[int, int] = {}
-                ch_n = re.compile(r"Chapter\s+(\d+)\s+(.{2,60})", re.IGNORECASE)
+                ch_n = re.compile(
+                    r"(?:Chapter\s+(\d+)\s*[:\-]?\s*|(?:Module|Lesson)\s+(\d+)"
+                    r"\s*[:\-]\s*)(.{2,60})",
+                    re.IGNORECASE,
+                )
+                # Slide decks are extracted without heading/toc roles — every
+                # slide is real content, so an early "Module 1"/"Module 2"
+                # heading (page <10) is genuine, not a TOC entry.  Keep the
+                # TOC-page guard for manuals, which do carry heading/toc roles.
+                is_deck = not any(
+                    c.get("chunk_role") in ("heading", "toc_entry")
+                    for c in structure_chunks
+                )
                 for sc in structure_chunks:
                     txt = sc.get("chunk_text", "")
                     pg = sc.get("page_number", 0)
@@ -648,10 +660,10 @@ class RAGPipeline(
                     # match on page 3 is almost certainly a TOC entry, not the
                     # actual chapter start page. Without this guard, Phase 1's
                     # sec_header_re body-chunk scan would find the wrong start.
-                    if pg < 10:
+                    if pg < 10 and not is_deck:
                         continue
                     for nm in ch_n.finditer(txt):
-                        ch = int(nm.group(1))
+                        ch = int(nm.group(1) or nm.group(2))
                         if ch in good_title_nums and ch not in chapter_first_pg:
                             chapter_first_pg[ch] = pg
 

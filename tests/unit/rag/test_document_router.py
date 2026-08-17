@@ -267,3 +267,14 @@ class TestContainmentResolution:
         )
         assert result is None
 
+    def test_pptx_with_hyphens_roundtrips(self) -> None:
+        """Extract + resolve round-trip for a hyphenated .pptx name."""
+        sources = ["/d/Claude for Daily Work - Instructor Training.pptx"]
+        reg = _build_known_names(sources)
+        router = DocumentRouter(known_names=reg)
+        name = router.extract_document_name("Claude for Daily Work - Instructor Training")
+        assert router.resolve_source_file(name) == (
+            "/d/Claude for Daily Work - Instructor Training.pptx"
+        )
+
+

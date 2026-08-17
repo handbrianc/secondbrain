@@ -406,7 +406,11 @@ class _StructureMixin(_RAGPipelineState):
         seen_appendix: set[tuple[str, str]] = set()
         dot_leader = re.compile(r"\.{2,}[.\-]+")
         section_re = re.compile(r"(\d+)(?:\.(\d+))+(?:\s+(.+))?")
-        chapter_n_re = re.compile(r"Chapter\s+(\d+)\s+(.{2,60})", re.IGNORECASE)
+        chapter_n_re = re.compile(
+            r"(?:Chapter\s+(\d+)\s*[:\-]?\s*|(?:Module|Lesson)\s+(\d+)\s*[:\-]\s*)"
+            r"(.{2,60})",
+            re.IGNORECASE,
+        )
         bare_chapter_re = re.compile(
             r"(?:^|\n)\s*(\d{1,2})\.?\s+([A-Za-z][A-Za-z0-9\s\-\(\),'/:.\u2013\u2014]{4,80})",
             re.MULTILINE,
@@ -422,10 +426,10 @@ class _StructureMixin(_RAGPipelineState):
             raw = chunk.get("chunk_text", "")
             source = chunk.get("source_file", "")
             for nm in chapter_n_re.finditer(raw):
-                major = int(nm.group(1))
+                major = int(nm.group(1) or nm.group(2))
                 if major < 1 or major > 30 or (major, source) in seen:
                     continue
-                title = nm.group(2).strip().rstrip(".")
+                title = nm.group(3).strip().rstrip(".")
                 if len(title) < 2:
                     continue
                 fw = title.lower().split()[0] if title.split() else ""

@@ -626,6 +626,35 @@ class TestDeriveChapterNumbers:
         )
 
 
+    def test_module_with_colon_detected(self) -> None:
+        """'Module N: Title' is a real structural heading, like 'Chapter N'."""
+        pipeline = self._make_test_pipeline()
+        text = "Module 7: Completion & Best Practices Transition: \"Final module\""
+        entries, good, _ = pipeline._derive_chapter_numbers(
+            [{"chunk_text": text, "source_file": "deck.pptx"}]
+        )
+        assert sorted(e[0] for e in entries) == [7], f"got {entries}"
+        assert good == {7}
+
+    def test_module_reference_without_colon_not_a_heading(self) -> None:
+        """A bare 'Module 7 Circulate' reference (no colon) is not a heading."""
+        pipeline = self._make_test_pipeline()
+        text = "\n".join(
+            [
+                "Module 1: Meet Your AI Assistant Transition: \"Let's start\"",
+                "Module 2: The 3-Part Prompt Formula Transition: \"Now the single\"",
+                "Module 7 Circulate and check that students verify (step 3) —",
+                "Module 3: Working with Everyday Files Transition: \"Now let's\"",
+            ]
+        )
+        entries, _, _ = pipeline._derive_chapter_numbers(
+            [{"chunk_text": text, "source_file": "deck.pptx"}]
+        )
+        nums = sorted(e[0] for e in entries)
+        assert nums == [1, 2, 3], f"got {nums}"
+        assert 7 not in nums, "bare 'Module 7 Circulate' reference must not add chapter 7"
+
+
 class TestCodeContentGate:
     """Code-like content must not be treated as a prose chapter structure.
 

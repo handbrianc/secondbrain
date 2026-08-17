@@ -73,7 +73,7 @@ def _normalize_name(name: str) -> str:
     name = name.lower().strip()
     name = re.sub(r"[_-]", " ", name)
     name = re.sub(r"\s+", " ", name)
-    name = re.sub(r"\.(pdf|docx?|txt|md|html?)$", "", name)
+    name = re.sub(r"\.(pdf|docx?|xlsx?|pptx?|txt|md|html?|csv)$", "", name)
     return name.strip()
 
 
