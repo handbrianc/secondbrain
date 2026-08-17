@@ -785,6 +785,7 @@ class _StructureMixin(_RAGPipelineState):
                 {
                     "_id": 0,
                     "chunk_text": 1,
+                    "chunk_role": 1,
                     "page_number": 1,
                     "source_file": 1,
                     "chunk_id": 1,
@@ -806,6 +807,7 @@ class _StructureMixin(_RAGPipelineState):
                     {
                         "_id": 0,
                         "chunk_text": 1,
+                        "chunk_role": 1,
                         "page_number": 1,
                         "source_file": 1,
                         "chunk_id": 1,
