@@ -15,5 +15,5 @@ opentelemetry-api>=1.44.0
 opentelemetry-sdk>=1.44.0
 openai>=2.49.0
 anthropic>=0.112.0
-typing_extensions>=4.15.0
+typing_extensions>=4.16.0
 
