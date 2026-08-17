@@ -232,6 +232,11 @@ class _StructureMixin(_RAGPipelineState):
     def _derive_chapter_roster(self, structure_chunks: list[dict[str, Any]]) -> str:
         import re
 
+        if self._chunks_are_code_like(structure_chunks):
+            # No prose structure to enumerate (see _chunks_are_code_like) — emit
+            # an empty header so the LLM never sees a fabricated chapter index.
+            return ""
+
         ch_entries, ch_good, appendix_entries = self._derive_chapter_numbers(
             structure_chunks
         )
@@ -330,6 +335,53 @@ class _StructureMixin(_RAGPipelineState):
         re.MULTILINE,
     )
 
+    @staticmethod
+    def _chunks_are_code_like(structure_chunks: list[dict[str, Any]]) -> bool:
+        """Return True when structure-probe chunks look like source code, not prose.
+
+        Structural chapter extraction is only meaningful for prose manuals.
+        Source code — especially bundled/minified output — sets off the
+        chapter/section regexes on version numbers, identifiers and SVG/data
+        path fragments (e.g. ``8.5``, ``7.0.0``, ``25.8``), producing
+        hallucinated chapters for documents that have none.  This gate is
+        intentionally conservative: it only fires on unambiguous code signals
+        (near-zero whitespace density, or pervasive code punctuation), so
+        genuine prose documents are never suppressed.
+
+        Parameters
+        ----------
+        structure_chunks :
+            List of probe chunk dicts (each with a ``chunk_text`` key).
+
+        Returns
+        -------
+        bool
+            True when the sampled content is clearly code, False otherwise.
+        """
+        if not structure_chunks:
+            return False
+        text = "".join(
+            (c.get("chunk_text") or "")[:4000] for c in structure_chunks[:24]
+        )
+        n = len(text)
+        if n < 200:
+            # Too little signal to classify — never suppress a prose document.
+            return False
+
+        # Signal 1: bundled / minified output has almost no whitespace at all
+        # (prose has a blank between essentially every word, ~15%+ whitespace).
+        whitespace = sum(1 for ch in text if ch.isspace())
+        if whitespace / n < 0.05:
+            return True
+
+        # Signal 2: code punctuation density.  Braces, semicolons, and
+        # operators appear constantly in source code (formatted or not) but are
+        # essentially absent from prose.  Parens and quotes are excluded as
+        # they occur in ordinary writing.
+        code_punct = "{};=<>&|#`"
+        density = sum(1 for ch in text if ch in code_punct) / n
+        return density > 0.02
+
     def _derive_chapter_numbers(
         self, structure_chunks: list[dict[str, Any]]
     ) -> tuple[list[tuple[int, str, str]], set[int], list[tuple[str, str, str]]]:
@@ -341,13 +393,24 @@ class _StructureMixin(_RAGPipelineState):
         """
         import re
 
+        if self._chunks_are_code_like(structure_chunks):
+            # Code files (bundled JS, source, etc.) have no prose chapter
+            # structure — the regexes below would just hallucinate chapters
+            # from version numbers and identifiers.  Suppress entirely so the
+            # pipeline falls through to generic search.
+            return [], set(), []
+
         entries: list[tuple[int, str, str]] = []
         appendix_entries: list[tuple[str, str, str]] = []
         seen: set[tuple[int, str]] = set()
         seen_appendix: set[tuple[str, str]] = set()
         dot_leader = re.compile(r"\.{2,}[.\-]+")
         section_re = re.compile(r"(\d+)(?:\.(\d+))+(?:\s+(.+))?")
-        chapter_n_re = re.compile(r"Chapter\s+(\d+)\s+(.{2,60})", re.IGNORECASE)
+        chapter_n_re = re.compile(
+            r"(?:Chapter\s+(\d+)\s*[:\-]?\s*|(?:Module|Lesson)\s+(\d+)\s*[:\-]\s*)"
+            r"(.{2,60})",
+            re.IGNORECASE,
+        )
         bare_chapter_re = re.compile(
             r"(?:^|\n)\s*(\d{1,2})\.?\s+([A-Za-z][A-Za-z0-9\s\-\(\),'/:.\u2013\u2014]{4,80})",
             re.MULTILINE,
@@ -363,10 +426,10 @@ class _StructureMixin(_RAGPipelineState):
             raw = chunk.get("chunk_text", "")
             source = chunk.get("source_file", "")
             for nm in chapter_n_re.finditer(raw):
-                major = int(nm.group(1))
+                major = int(nm.group(1) or nm.group(2))
                 if major < 1 or major > 30 or (major, source) in seen:
                     continue
-                title = nm.group(2).strip().rstrip(".")
+                title = nm.group(3).strip().rstrip(".")
                 if len(title) < 2:
                     continue
                 fw = title.lower().split()[0] if title.split() else ""
@@ -722,6 +785,7 @@ class _StructureMixin(_RAGPipelineState):
                 {
                     "_id": 0,
                     "chunk_text": 1,
+                    "chunk_role": 1,
                     "page_number": 1,
                     "source_file": 1,
                     "chunk_id": 1,
@@ -743,6 +807,7 @@ class _StructureMixin(_RAGPipelineState):
                     {
                         "_id": 0,
                         "chunk_text": 1,
+                        "chunk_role": 1,
                         "page_number": 1,
                         "source_file": 1,
                         "chunk_id": 1,
