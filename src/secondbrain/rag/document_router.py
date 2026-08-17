@@ -17,6 +17,38 @@ logger = logging.getLogger(__name__)
 _DEFAULT_SIMILARITY_THRESHOLD = 0.3
 _REGISTRY_CACHE_TTL = 60.0  # seconds
 
+# Ambiguous single-word document tokens that are too generic to uniquely
+# identify a document when they appear alone in a query.  These commonly arise
+# when _build_known_names splits a basename into individual tokens; matching on
+# them alone would scope to the wrong (or an unintended) source.
+_GENERIC_NAME_TOKENS = frozenset(
+    {
+        "guide",
+        "manual",
+        "report",
+        "book",
+        "readme",
+        "notes",
+        "text",
+        "license",
+        "changelog",
+        "home",
+        "faq",
+        "intro",
+        "summary",
+        "contents",
+        "overview",
+        "misc",
+        "draft",
+        "final",
+        "chapter",
+        "section",
+        "appendix",
+        "figure",
+        "table",
+    }
+)
+
 
 # Regex patterns for detecting document titles in chunk content
 _CHAPTER_TITLE_RE = re.compile(
@@ -235,7 +267,12 @@ class DocumentRouter:
         if not q:
             return None
 
-        query_tokens = set(q.split())
+        # Normalize each token so an in-sentence filename like "index.html"
+        # (not at end-of-string, so _normalize_name leaves the extension)
+        # still matches its bare-name registry key "index".
+        query_tokens = {
+            t for word in q.split() for t in _normalize_name(word).split()
+        }
 
         # Phase 1: Jaccard similarity on token sets
         best_name: str | None = None
@@ -253,6 +290,26 @@ class DocumentRouter:
 
         if best_score >= _DEFAULT_SIMILARITY_THRESHOLD:
             return best_name
+
+        # Phase 1.5: Containment — a document name fully present in the query.
+        # Jaccard (Phase 1) penalises a short name buried among other query
+        # words (e.g. "summarize index html by chapter" vs. known name "index"),
+        # and the Phase-2 substring gate rejects names shorter than 6 chars.
+        # When every token of a known name appears in the query the user almost
+        # certainly referenced it, so match it here.  Prefer the most specific
+        # (most tokens) candidate, and skip ambiguous single generic tokens.
+        contained: list[tuple[int, str]] = []
+        for known_name in registry:
+            known_tokens = set(known_name.split())
+            if not known_tokens or not known_tokens <= query_tokens:
+                continue
+            if len(known_tokens) == 1 and next(iter(known_tokens)) in (
+                _GENERIC_NAME_TOKENS
+            ):
+                continue
+            contained.append((len(known_tokens), known_name))
+        if contained:
+            return max(contained, key=lambda kv: kv[0])[1]
 
         # Phase 2: Substring / compressed-form fallback
         # Handles cases like "virtualbox" vs "virtual box user manual"

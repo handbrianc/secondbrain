@@ -223,3 +223,47 @@ class TestDocumentRouter:
 
         # Should only query storage once (within TTL)
         assert mock_storage.list_source_files.call_count == 1
+
+
+class TestContainmentResolution:
+    """A short document name fully present in a verbose query must resolve.
+
+    Regression: "summarize index.html by chapter" failed to resolve the source
+    because Jaccard penalised the short name among many query words (0.25 < 0.3)
+    and the substring fallback rejected names shorter than 6 chars.  The
+    containment phase matches a name whose every token appears in the query.
+    """
+
+    def test_short_filename_in_verbose_query(self) -> None:
+        router = DocumentRouter(known_names={"index": "/data/index.html"})
+        assert router.extract_document_name("summarize index by chapter") == "index"
+
+    def test_filename_with_extension_mid_query(self) -> None:
+        router = DocumentRouter(known_names={"index": "/data/index.html"})
+        assert (
+            router.extract_document_name("summarize index.html by chapter") == "index"
+        )
+
+    def test_source_scoped_when_named_in_verbose_query(self) -> None:
+        router = DocumentRouter(
+            known_names={
+                "index": "/data/index.html",
+                "ai business book": "/data/ai_book.pdf",
+            }
+        )
+        name = router.extract_document_name("summarize index.html by chapter")
+        assert router.resolve_source_file(name) == "/data/index.html"
+
+    def test_generic_single_token_not_scoped(self) -> None:
+        """A generic token like 'guide' must not scope on its own."""
+        router = DocumentRouter(
+            known_names={
+                "guide": "/g/guide.pdf",
+                "proxmox ve guide": "/p/proxmox.pdf",
+            }
+        )
+        result = router.extract_document_name(
+            "what can you tell me about the guide for this project"
+        )
+        assert result is None
+
