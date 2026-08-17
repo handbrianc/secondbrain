@@ -36,7 +36,7 @@
          "context": "Database dependency",
          "expected": {
             "verifiable": true,
-            "fact": "pymongo>=4.6.0 (requires MongoDB 7.0+ for vector search)",
+             "fact": "pymongo>=4.17.0 (requires MongoDB 7.0+ for vector search)",
             "source": "pyproject.toml dependencies",
             "source_required": true,
             "hallucination_risk": "low"
