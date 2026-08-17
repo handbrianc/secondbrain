@@ -1,7 +1,7 @@
 # Runtime dependencies (pinned for reproducibility)
 # Generated from pyproject.toml dependencies section
 click>=8.4.1
-docling>=2.118.1
+docling>=2.120.1
 docling-core>=2.91.0
 pymongo>=4.17.0
 motor>=3.0.0
@@ -10,10 +10,10 @@ pydantic>=2.13.4
 pydantic-settings>=2.15.0
 rich>=15.0.0
 python-dotenv>=1.2.2
-numpy>=2.5.1
+numpy>=2.5.2
 opentelemetry-api>=1.44.0
 opentelemetry-sdk>=1.44.0
-openai>=2.49.0
+openai>=3.0.0
 anthropic>=0.112.0
 typing_extensions>=4.15.0
 
