@@ -626,6 +626,66 @@ class TestDeriveChapterNumbers:
         )
 
 
+class TestCodeContentGate:
+    """Code-like content must not be treated as a prose chapter structure.
+
+    A bundled/minified HTML/JS file has no chapters; without this gate the
+    structural regexes hallucinate chapters from version numbers and
+    identifiers (e.g. "8.5", "7.0.0", "25.8").  The code gate must suppress
+    both chapter-number derivation and the roster header, while leaving prose
+    documents untouched.
+    """
+
+    _MINIFIED_BUNDLE = (
+        '!function(e,t){"use strict";var r={352:function(e){'
+        'e.exports={version:"7.0.0-rc.2"}},762:function(e){'
+        'e.exports={core:["es.typed-array.find-last","es7.array.includes"]}}};'
+        'var s="8.5",u="9.5",v="25.8";var p={d:"M10 4l3.5 3.5M4 13v2"};'
+        'e.version="8.0.0-alpha.0"}(this);'
+    )
+
+    def _make_test_pipeline(self) -> RAGPipeline:
+        mock_searcher = MagicMock(spec=Searcher)
+        mock_searcher.search.return_value = []
+        mock_searcher.search_async = AsyncMock(return_value=[])
+        return RAGPipeline(
+            searcher=mock_searcher,
+            llm_provider=MagicMock(),
+            top_k=5,
+            context_window=5,
+        )
+
+    def _code_chunks(self) -> list[dict[str, Any]]:
+        return [{"chunk_text": self._MINIFIED_BUNDLE, "source_file": "index.html"}]
+
+    def test_minified_bundle_flagged_as_code(self) -> None:
+        pipeline = self._make_test_pipeline()
+        assert pipeline._chunks_are_code_like(self._code_chunks()) is True
+
+    def test_code_bundle_yields_no_chapters_or_roster(self) -> None:
+        pipeline = self._make_test_pipeline()
+        entries, good, appendix = pipeline._derive_chapter_numbers(self._code_chunks())
+        assert entries == []
+        assert good == set()
+        assert appendix == []
+        assert pipeline._derive_chapter_roster(self._code_chunks()) == ""
+
+    def test_prose_not_code_like_and_keeps_roster(self) -> None:
+        prose_chunks = [
+            {
+                "chunk_text": (
+                    "Chapter 4 Results\n4.1 First topic section.\n"
+                    "Chapter 6 Discussion\n6.1 Third topic section.\n"
+                ),
+                "source_file": "chapters.pdf",
+            }
+        ]
+        pipeline = self._make_test_pipeline()
+        assert pipeline._chunks_are_code_like(prose_chunks) is False
+        roster = pipeline._derive_chapter_roster(prose_chunks)
+        assert "DOCUMENT STRUCTURE INDEX" in roster
+
+
 class TestFilterChaptersByTarget:
     """Tests for filter_chapters_by_target() — a pure function, no mocking needed.
 
