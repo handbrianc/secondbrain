@@ -56,8 +56,7 @@ CORPUS_PARAGRAPH = (
 
 #: Default URI for the local test MongoDB stack.
 DEFAULT_URI = (
-    "mongodb://testuser:testpass@localhost:27018"
-    "/secondbrain_test?authSource=admin"
+    "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
 )
 
 
