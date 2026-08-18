@@ -226,13 +226,16 @@ class TestCoverageGapsExtractText:
         test_file = tmp_path / "test.txt"
         test_file.write_text("Test")
 
-        # Mock converter to raise generic exception
+        # _extract_text resolves per-path converters via the factory
         mock_converter = MagicMock()
         mock_converter.convert.side_effect = Exception("Generic error")
-        ingestor.converter = mock_converter
 
-        with pytest.raises(Exception):
-            ingestor._extract_text(test_file)
+        with patch(
+            "secondbrain.document.docling_factory.get_converter_for_path",
+            return_value=mock_converter,
+        ):
+            with pytest.raises(Exception):
+                ingestor._extract_text(test_file)
 
     def test_extract_text_no_segments_fallback(self, tmp_path: Path) -> None:
         """Test extraction falls back to file read when no segments."""

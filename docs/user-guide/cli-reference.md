@@ -34,6 +34,7 @@ Ingest documents into the vector database.
 
 ```
 secondbrain ingest PATH [--recursive] [--cores INT] [--batch-size INT] [--chunk-size INT] [--chunk-overlap INT]
+                       [--pool {process,thread}] [--no-skip-existing]
 ```
 
 ### Arguments
@@ -51,6 +52,8 @@ secondbrain ingest PATH [--recursive] [--cores INT] [--batch-size INT] [--chunk-
 | `--batch-size, -b INT` | Batch size for ThreadPoolExecutor when cores=1 (default: 10)       |
 | `--chunk-size INT`     | Override default chunk size                                        |
 | `--chunk-overlap INT`  | Override default chunk overlap                                     |
+| `--pool`               | Pool type for CPU-bound extraction: `process` (multicore, default) or `thread` (default: config `ingest_pool`) |
+| `--no-skip-existing`   | Re-embed and re-store all chunks, ignoring chunks already present from a previous ingest |
 
 ### Examples
 
@@ -66,6 +69,9 @@ secondbrain ingest ./papers/ --recursive --cores 4
 
 # Custom chunking parameters
 secondbrain ingest ./notes/ --chunk-size 2048 --chunk-overlap 100
+
+# Use thread pool and re-ingest everything (ignore skip-existing)
+secondbrain ingest ./documents/ --pool thread --no-skip-existing
 ```
 
 ---

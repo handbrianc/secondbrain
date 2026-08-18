@@ -6,6 +6,7 @@ import hashlib
 import logging
 import time
 from collections.abc import Callable
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -70,39 +71,17 @@ class DocumentIngestor:
 
         self.embedding_cache = EmbeddingCache(max_size=cfg.embedding_cache_size)
 
-        # Lazily import docling to avoid 2+ second import overhead
+        # Lazily import docling via the shared factory to avoid 2+ second import
+        # overhead. The heavyweight docling imports happen inside the factory on
+        # first call, not at module import time.
         import logging
 
         logging.getLogger("RapidOCR").setLevel(logging.ERROR)
         logging.getLogger("docling").setLevel(logging.WARNING)
 
-        from docling.datamodel.accelerator_options import (
-            AcceleratorDevice,
-            AcceleratorOptions,
-        )
-        from docling.datamodel.base_models import InputFormat
-        from docling.datamodel.pipeline_options import (
-            PdfPipelineOptions,
-            RapidOcrOptions,
-        )
-        from docling.document_converter import DocumentConverter, PdfFormatOption
+        from secondbrain.document.docling_factory import get_shared_converter
 
-        pdf_options = PdfFormatOption(
-            pipeline_options=PdfPipelineOptions(
-                do_ocr=True,
-                do_table_structure=True,
-                ocr_options=RapidOcrOptions(
-                    backend="torch",
-                    rapidocr_params={"EngineConfig.torch.use_mps": True},
-                ),
-                accelerator_options=AcceleratorOptions(
-                    device=AcceleratorDevice.AUTO, num_threads=4
-                ),
-            )
-        )
-        self.converter = DocumentConverter(
-            format_options={InputFormat.PDF: pdf_options}
-        )
+        self.converter = get_shared_converter()
 
     def _validate_file_path(self, path: Path) -> None:
         """Validate file path for security.
@@ -671,57 +650,119 @@ class DocumentIngestor:
         embedding_gen: Any,
         storage: Any,
         max_workers: int,
+        pool: str | None = None,
+        skip_existing: bool | None = None,
     ) -> tuple[int, int, list[tuple[str, str]]]:
-        """Process files using threading with progress callback support.
+        """Process files using thread or process pooling with progress support.
 
-        Uses ThreadPoolExecutor with a Queue for progress updates. Worker threads
-        send completion status via Queue, and the main thread updates the progress
-        bar. This enables parallel processing while maintaining real-time progress.
+        Uses a ThreadPoolExecutor (shared queue + memory, real-time progress) or a
+        ProcessPoolExecutor (multicore CPU-bound extraction) depending on the
+        configured ``ingest_pool``. The main thread always owns storage: it consumes
+        every future and stores batches, so writes stay single-writer for both pools.
+
+        For the process path the threading Queue and the thread-local embedding cache
+        are NOT pickleable across process boundaries, so they are replaced with None:
+        each child re-initializes its own (empty) embedding cache inside the worker and
+        batching still applies. Progress is aggregated by the owner from each returned
+        result (success or failure advances the bar exactly once per file).
 
         Args:
             files: List of file paths to process.
             embedding_gen: EmbeddingGenerator instance.
             storage: VectorStorage instance.
-            max_workers: Number of worker threads.
+            max_workers: Number of worker threads/processes.
+            pool: Pool type: 'process', 'thread', or None to use config().ingest_pool.
 
         Returns
         -------
             Tuple of (successful_files, failed_files, failure_reasons) counts and reasons.
         """
         import queue
-        from concurrent.futures import (
-            ThreadPoolExecutor,
-            as_completed,
-        )
+        from concurrent.futures import as_completed
+
+        from secondbrain.config import config
+
+        cfg = config()
+        if pool is None:
+            pool = cfg.ingest_pool
+        if pool not in ("process", "thread"):
+            raise ValueError(f"ingest_pool must be 'process' or 'thread', got {pool!r}")
+
+        if skip_existing is None:
+            skip_existing = bool(getattr(cfg, "skip_existing_on_reingest", True))
+
+        use_process = pool == "process"
 
         successful_files = 0
         failed_files = 0
         failure_reasons: list[tuple[str, str]] = []
 
-        progress_queue: queue.Queue[tuple[str, bool]] = queue.Queue()
-        from secondbrain.config import config
-
-        cfg = config()
+        progress_queue: queue.Queue[tuple[str, bool]] | None = None
         embedding_model_name = cfg.embedding_model
 
         # Import worker from processor (not extractor) to avoid cyclic import
         from secondbrain.document.processor import _extract_chunk_and_embed_file
 
+        executor_cls: type[ThreadPoolExecutor] | type[ProcessPoolExecutor] = (
+            ProcessPoolExecutor if use_process else ThreadPoolExecutor
+        )
+
+        if not use_process:
+            progress_queue = queue.Queue()
+
+        # CPU/GPU guard: force-OCR runs OCR (often GPU/MPS-backed) inside every PDF, and
+        # many processes contending on one GPU thrash each other. Cap the process pool
+        # to a single worker when OCR is forced on (pdf_ocr_enabled=True). On-demand OCR
+        # (default) leaves the fast text path untouched, so no cap is applied.
+        if use_process and cfg.pdf_ocr_enabled:
+            logger.warning(
+                "pdf_ocr_enabled is set (force OCR on all PDFs); capping process pool "
+                "to 1 worker to avoid GPU/MPS contention between processes."
+            )
+            max_workers = 1
+
         with (
             trace_operation("ingest_thread_progress") as span,
-            ThreadPoolExecutor(max_workers=max_workers) as executor,
+            executor_cls(max_workers=max_workers) as executor,
         ):
             if span:
                 span.set_attribute("ingestion.files_total", len(files))
                 span.set_attribute("ingestion.max_workers", max_workers)
+                span.set_attribute("ingestion.pool", pool)
+
+            if use_process:
+                # Workers run in child processes. The threading Queue and the
+                # thread-local embedding cache (Todo 3) cannot be pickled across the
+                # process boundary, so pass None for both. Each child re-initializes
+                # its own empty embedding cache inside the worker and batching still
+                # applies; progress is aggregated here from returned results.
+                def worker_args(f: Path) -> tuple[Any, Any, Any, Any, Any, Any]:
+                    return (
+                        str(f),
+                        self.chunk_size,
+                        self.chunk_overlap,
+                        None,
+                        embedding_model_name,
+                        None,
+                    )
+
+            else:
+
+                def worker_args(f: Path) -> tuple[Any, Any, Any, Any, Any, Any]:
+                    return (
+                        str(f),
+                        self.chunk_size,
+                        self.chunk_overlap,
+                        progress_queue,
+                        embedding_model_name,
+                        self.embedding_cache,
+                    )
+
             futures = {
                 executor.submit(
                     _extract_chunk_and_embed_file,
-                    str(f),
-                    self.chunk_size,
-                    self.chunk_overlap,
-                    progress_queue,
-                    embedding_model_name,
+                    *worker_args(f),
+                    skip_existing=skip_existing,
                 ): f
                 for f in files
             }
@@ -730,11 +771,12 @@ class DocumentIngestor:
             pending_futures = dict(futures)
 
             while pending_futures:
-                while not progress_queue.empty():
-                    try:
-                        progress_queue.get_nowait()
-                    except queue.Empty:
-                        break
+                if progress_queue is not None:
+                    while not progress_queue.empty():
+                        try:
+                            progress_queue.get_nowait()
+                        except queue.Empty:
+                            break
 
                 done_futures = []
                 for future in as_completed(pending_futures, timeout=3600):
@@ -758,6 +800,15 @@ class DocumentIngestor:
                             continue
 
                         documents = result.get("documents", [])
+                        skipped = result.get("skipped", False)
+                        if skipped and not documents:
+                            successful_files += 1
+                            completed += 1
+                            if self.progress_callback:
+                                self.progress_callback(file_path, True)
+                            done_futures.append(future)
+                            continue
+
                         if not documents:
                             reason = "No documents produced (file may be empty, image-only, or extraction failed)"
                             logger.warning("No documents produced from %s", file_path)
@@ -818,6 +869,8 @@ class DocumentIngestor:
         recursive: bool = False,
         batch_size: int = 10,
         cores: int | None = None,
+        pool: str | None = None,
+        skip_existing: bool | None = None,
     ) -> dict[str, int | list[tuple[str, str]]]:
         """Ingest documents from a file or directory.
 
@@ -827,6 +880,10 @@ class DocumentIngestor:
             batch_size: Number of files to process in parallel (ThreadPool).
             cores: Number of CPU cores for threading. If None, uses
                 config.max_workers or auto-detects CPU count.
+            pool: Pool type: 'process', 'thread', or None to use config().ingest_pool.
+            skip_existing: If True, skip re-embedding/re-storing chunks whose
+                text_hash already exists. If None, uses
+                config().skip_existing_on_reingest.
 
         Returns
         -------
@@ -849,7 +906,7 @@ class DocumentIngestor:
         cores = self._resolve_core_count(cores)
 
         successful, failed, failure_reasons = self._process_parallel_with_progress(
-            files, embedding_gen, storage, cores
+            files, embedding_gen, storage, cores, pool, skip_existing
         )
 
         return {"success": successful, "failed": failed, "failures": failure_reasons}
@@ -858,7 +915,10 @@ class DocumentIngestor:
         """Extract text content from a file."""
         try:
             with trace_operation("extract_text"):
-                result = self.converter.convert(file_path)
+                from secondbrain.document.docling_factory import get_converter_for_path
+
+                converter = get_converter_for_path(file_path)
+                result = converter.convert(file_path)
                 content = result.document
 
                 segments: list[dict[str, Any]] = []

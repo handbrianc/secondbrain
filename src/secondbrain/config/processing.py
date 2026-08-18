@@ -34,6 +34,26 @@ class ProcessingStorageMixin:
         default=None,
         description="Maximum number of worker processes for parallel processing (default: auto-detect CPU count)",
     )
+    ingest_pool: str = Field(
+        default="process",
+        description="Pool type for CPU-bound extraction: 'process' (multicore, default) or 'thread'",
+    )
+
+    @field_validator("ingest_pool")
+    @classmethod
+    def validate_ingest_pool(cls, v: str) -> str:
+        """Validate ingest pool is one of 'process' or 'thread'."""
+        if v not in {"process", "thread"}:
+            raise ValueError("ingest_pool must be one of {'process', 'thread'}")
+        return v
+
+    skip_existing_on_reingest: bool = Field(
+        default=True,
+        description=(
+            "Skip re-embedding and re-storing chunks whose text_hash already "
+            "exists in storage when ingesting already-ingested content"
+        ),
+    )
     streaming_enabled: bool = Field(
         default=True,
         description="Enable streaming processing for memory efficiency (default: true)",
@@ -69,6 +89,17 @@ class ProcessingStorageMixin:
     text_compression_enabled: bool = Field(
         default=False,
         description="Enable text compression for chunk_text (gzip/brotli)",
+    )
+    pdf_ocr_enabled: bool = Field(
+        default=False,
+        description=(
+            "Run OCR on PDFs. False = OCR only when the PDF has no embedded "
+            "text layer (scanned). Set True to always OCR all PDFs."
+        ),
+    )
+    pdf_table_structure_enabled: bool = Field(
+        default=True,
+        description="Detect table structure in PDFs.",
     )
     text_compression_algorithm: str = Field(
         default="gzip",

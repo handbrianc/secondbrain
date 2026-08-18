@@ -44,6 +44,7 @@ secondbrain ingest ./documents/                  # single file
 secondbrain ingest ./documents/ --recursive      # entire directory tree
 secondbrain ingest ./documents/ --cores 4        # parallel with 4 CPU cores
 secondbrain ingest ./documents/ --batch-size 20  # batch size for sequential processing
+secondbrain ingest ./documents/ --cores 4 --pool process  # use process/thread pool for extraction
 
 # Search the vector database (positional arg is QUERY)
 secondbrain search "machine learning best practices"
@@ -112,6 +113,10 @@ SECONDBRAIN_CHUNK_OVERLAP=200
 
 # Performance
 SECONDBRAIN_MAX_WORKERS=4
+SECONDBRAIN_INGEST_POOL=process
+SECONDBRAIN_SKIP_EXISTING_ON_REINGEST=true
+SECONDBRAIN_PDF_OCR_ENABLED=false
+SECONDBRAIN_PDF_TABLE_STRUCTURE_ENABLED=true
 SECONDBRAIN_RATE_LIMIT_ENABLED=true
 SECONDBRAIN_CIRCUIT_BREAKER_ENABLED=true
 

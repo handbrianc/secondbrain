@@ -68,12 +68,14 @@ During testing (`PYTEST_CURRENT_TEST` is set), configuration additionally loads 
 
 ### Document Processing
 
-| Variable                           | Default              | Description                     |
-| ---------------------------------- | -------------------- | ------------------------------- |
-| `SECONDBRAIN_CHUNK_SIZE`           | `4096`               | Target chunk size in characters |
-| `SECONDBRAIN_CHUNK_OVERLAP`        | `50`                 | Overlap between chunks          |
-| `SECONDBRAIN_SUPPORTED_EXTENSIONS` | (comprehensive list) | Comma-separated file extensions |
-| `SECONDBRAIN_MAX_FILE_SIZE_BYTES`  | `104857600`          | Maximum file size (100MB)       |
+| Variable                                    | Default              | Description                                                          |
+| ------------------------------------------- | -------------------- | -------------------------------------------------------------------- |
+| `SECONDBRAIN_CHUNK_SIZE`                    | `4096`               | Target chunk size in characters                                      |
+| `SECONDBRAIN_CHUNK_OVERLAP`                 | `50`                 | Overlap between chunks                                               |
+| `SECONDBRAIN_SUPPORTED_EXTENSIONS`          | (comprehensive list) | Comma-separated file extensions                                      |
+| `SECONDBRAIN_MAX_FILE_SIZE_BYTES`           | `104857600`          | Maximum file size (100MB)                                            |
+| `SECONDBRAIN_PDF_OCR_ENABLED`               | `false`              | Run OCR on PDFs (`pdf_ocr_enabled`). `false` = OCR only when the PDF has no embedded text layer (scanned); `true` = always OCR all PDFs |
+| `SECONDBRAIN_PDF_TABLE_STRUCTURE_ENABLED`   | `true`               | Detect table structure in PDFs (`pdf_table_structure_enabled`)       |
 
 ### Search Settings
 
@@ -102,6 +104,8 @@ During testing (`PYTEST_CURRENT_TEST` is set), configuration additionally loads 
 | Variable                                | Default | Description                             |
 | --------------------------------------- | ------- | --------------------------------------- |
 | `SECONDBRAIN_MAX_WORKERS`               | `None`  | Worker processes (auto-detect if unset) |
+| `SECONDBRAIN_INGEST_POOL`               | `process` | Pool type for CPU-bound extraction (`ingest_pool`): `process` (multicore, default) or `thread` |
+| `SECONDBRAIN_SKIP_EXISTING_ON_REINGEST` | `true`  | Skip re-embedding and re-storing chunks whose text hash already exists from a previous ingest (`skip_existing_on_reingest`) |
 | `SECONDBRAIN_RATE_LIMIT_ENABLED`        | `true`  | Enable rate limiting                    |
 | `SECONDBRAIN_RATE_LIMIT_MAX_REQUESTS`   | `10`    | Requests per window                     |
 | `SECONDBRAIN_RATE_LIMIT_WINDOW_SECONDS` | `1.0`   | Rate limit window duration              |
@@ -143,6 +147,7 @@ On startup, SecondBrain validates configuration values. Invalid configurations r
 # chunk_overlap must be less than chunk_size
 # embedding_dimensions must be positive
 # embedding_batch_size must be between 1 and 100
+# ingest_pool must be one of {'process', 'thread'}
 ```
 
 ## Example Production Configuration

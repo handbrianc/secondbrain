@@ -355,6 +355,27 @@ class AsyncVectorStorage(ValidatableService, BaseVectorStorage):
         result = await insert_cursor
         return len(result.inserted_ids)
 
+    async def has_existing_hashes_async(self, hashes: list[str]) -> set[str]:
+        """Return the subset of ``hashes`` whose ``text_hash`` already exists.
+
+        Args:
+            hashes: List of text hashes to check.
+
+        Returns
+        -------
+            Set of hashes that already exist in the collection. Empty if none
+            match or ``hashes`` is empty.
+        """
+        if not hashes:
+            return set()
+        cursor = await self._execute_find(
+            {"text_hash": {"$in": hashes}}, {"text_hash": 1}, skip=0, limit=0
+        )
+        docs = await cursor.to_list(length=None)
+        return {
+            str(doc["text_hash"]) for doc in docs if doc.get("text_hash") is not None
+        }
+
     @async_timing("async_storage_search")
     async def search_async(
         self,

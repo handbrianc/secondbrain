@@ -383,6 +383,30 @@ class VectorStorage(ValidatableService, BaseVectorStorage):
             result = self.collection.insert_many(docs_prepared)
         return len(result.inserted_ids)
 
+    def has_existing_hashes(self, hashes: list[str]) -> set[str]:
+        """Return the subset of ``hashes`` whose ``text_hash`` already exists.
+
+        Queries the collection for any documents whose ``text_hash`` field is in
+        the given list and returns the set of hashes that were found, so callers
+        can avoid re-embedding and re-storing unchanged chunks on re-ingest.
+
+        Args:
+            hashes: List of text hashes to check.
+
+        Returns
+        -------
+            Set of hashes that already exist in the collection. Empty if none
+            match or ``hashes`` is empty.
+        """
+        if not hashes:
+            return set()
+        cursor = self._execute_find(
+            {"text_hash": {"$in": hashes}}, {"text_hash": 1}, skip=0, limit=0
+        )
+        return {
+            str(doc["text_hash"]) for doc in cursor if doc.get("text_hash") is not None
+        }
+
     @timing("storage_search")
     def search(
         self,

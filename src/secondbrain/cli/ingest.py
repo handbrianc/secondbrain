@@ -35,6 +35,18 @@ console = Console(markup=True)
     help="Number of CPU cores to use for parallel processing (default: auto-detect)",
 )
 @click.option(
+    "--pool",
+    type=click.Choice(["process", "thread"]),
+    default=None,
+    help="Pool type for CPU-bound extraction: 'process' (multicore, default) or 'thread'",
+)
+@click.option(
+    "--no-skip-existing",
+    is_flag=True,
+    default=False,
+    help="Re-embed and re-store all chunks, ignoring chunks already present from a previous ingest",
+)
+@click.option(
     "--verbose",
     "-v",
     is_flag=True,
@@ -49,6 +61,8 @@ def ingest(
     chunk_size: int | None,
     chunk_overlap: int | None,
     cores: int | None,
+    pool: str | None,
+    no_skip_existing: bool,
     verbose: bool,
 ) -> None:
     """Ingest documents into the vector database.
@@ -60,6 +74,9 @@ def ingest(
     cfg = config()
     chunk_size = cfg.chunk_size if chunk_size is None else chunk_size
     chunk_overlap = cfg.chunk_overlap if chunk_overlap is None else chunk_overlap
+    pool = cfg.ingest_pool if pool is None else pool
+
+    skip_existing = False if no_skip_existing else None
 
     if cores is not None:
         if cores <= 0:
@@ -119,7 +136,12 @@ def ingest(
             # Threads share memory so callbacks can update the progress bar
             # For I/O-bound work, threads perform nearly as well as processes
             results = ingestor.ingest(
-                path, recursive=recursive, batch_size=batch_size, cores=cores
+                path,
+                recursive=recursive,
+                batch_size=batch_size,
+                cores=cores,
+                pool=pool,
+                skip_existing=skip_existing,
             )
     else:
         ingestor = DocumentIngestor(
@@ -128,7 +150,12 @@ def ingest(
             verbose=verbose,
         )
         results = ingestor.ingest(
-            path, recursive=recursive, batch_size=batch_size, cores=cores
+            path,
+            recursive=recursive,
+            batch_size=batch_size,
+            cores=cores,
+            pool=pool,
+            skip_existing=skip_existing,
         )
 
     num_success = results["success"]
