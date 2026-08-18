@@ -42,6 +42,7 @@ call, preserving the repo's "avoid 2+ second import overhead" guarantee.
 
 from __future__ import annotations
 
+import os
 import threading
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -104,6 +105,11 @@ def _build_pdf_format_option(*, do_ocr: bool, do_table_structure: bool) -> Any:
     #     CUDA-only tuning path that is skipped on MPS)
     _logging.getLogger("transformers").setLevel(_logging.ERROR)
     _logging.getLogger("torch._inductor").setLevel(_logging.ERROR)
+
+    # Suppress HF-hub progress bars; setdefault preserves a user's existing override.
+    os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+    os.environ.setdefault("HF_HUB_VERBOSITY", "error")
+    _logging.getLogger("huggingface_hub").setLevel(_logging.ERROR)
 
     _disable_torch_model_compilation_on_mps()
 

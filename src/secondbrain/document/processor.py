@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
 import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -32,6 +33,10 @@ if TYPE_CHECKING:
 from secondbrain.document.chunker import classify_chunk_role
 from secondbrain.utils.mps_patch import patch_transformers_for_mps
 from secondbrain.utils.tracing import trace_operation
+
+# Suppress HF-hub progress bars before any docling/transformers import.
+os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+os.environ.setdefault("HF_HUB_VERBOSITY", "error")
 
 patch_transformers_for_mps()
 
