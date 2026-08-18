@@ -637,7 +637,19 @@ class DocumentIngestor:
         """
         cfg = config()
         if cores is None:
-            cores = cfg.max_workers or self._cpu_count_fn() or 1
+            raw = (
+                cfg.max_workers
+                if cfg.max_workers is not None
+                else self._cpu_count_fn() or 1
+            )
+            cores = raw
+            if (
+                cfg.max_workers is None
+                and cfg.max_ingest_processes
+                and cfg.max_ingest_processes > 0
+                and cores > cfg.max_ingest_processes
+            ):
+                cores = cfg.max_ingest_processes
 
         if cores <= 0:
             raise ValueError("cores must be positive")

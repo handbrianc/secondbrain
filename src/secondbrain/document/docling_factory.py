@@ -113,26 +113,57 @@ def _build_pdf_format_option(*, do_ocr: bool, do_table_structure: bool) -> Any:
 
     _disable_torch_model_compilation_on_mps()
 
+    from secondbrain.config import config
+
+    cfg = config()
+
     from docling.datamodel.accelerator_options import (
         AcceleratorDevice,
         AcceleratorOptions,
     )
-    from docling.datamodel.pipeline_options import PdfPipelineOptions, RapidOcrOptions
+    from docling.datamodel.pipeline_options import (
+        PdfPipelineOptions,
+        RapidOcrOptions,
+        TableFormerMode,
+        TableStructureOptions,
+        ThreadedPdfPipelineOptions,
+    )
     from docling.document_converter import PdfFormatOption
 
-    return PdfFormatOption(
-        pipeline_options=PdfPipelineOptions(
-            do_ocr=do_ocr,
-            do_table_structure=do_table_structure,
-            ocr_options=RapidOcrOptions(
-                backend="torch",
-                rapidocr_params={"EngineConfig.torch.use_mps": True},
-            ),
-            accelerator_options=AcceleratorOptions(
-                device=AcceleratorDevice.AUTO, num_threads=4
-            ),
-        )
+    device = getattr(AcceleratorDevice, cfg.pdf_accelerator_device.upper())
+    pipe_cls = (
+        ThreadedPdfPipelineOptions if cfg.pdf_threaded_pipeline else PdfPipelineOptions
     )
+
+    pipeline_kwargs: dict[str, Any] = {
+        "do_ocr": do_ocr,
+        "do_table_structure": do_table_structure,
+        "ocr_options": RapidOcrOptions(
+            backend="torch",
+            rapidocr_params={"EngineConfig.torch.use_mps": True},
+        ),
+        "accelerator_options": AcceleratorOptions(
+            device=device, num_threads=cfg.pdf_num_threads
+        ),
+        "generate_page_images": cfg.pdf_generate_page_images,
+        "generate_picture_images": cfg.pdf_generate_picture_images,
+        "images_scale": cfg.pdf_images_scale,
+    }
+
+    if cfg.pdf_threaded_pipeline:
+        pipeline_kwargs["layout_batch_size"] = cfg.pdf_layout_batch_size
+
+    if do_table_structure:
+        pipeline_kwargs["table_structure_options"] = TableStructureOptions(
+            mode=(
+                TableFormerMode.FAST
+                if cfg.pdf_table_fast_mode
+                else TableFormerMode.ACCURATE
+            ),
+            do_cell_matching=cfg.pdf_table_cell_matching,
+        )
+
+    return PdfFormatOption(pipeline_options=pipe_cls(**pipeline_kwargs))
 
 
 def _build_docling_converter(
@@ -153,9 +184,15 @@ def _build_converter() -> DocumentConverter:
 
     Imported lazily here (not at module scope) so that importing this module
     never triggers the 2+ second docling import overhead. This is the
-    historical default: PDFs run with OCR + table structure.
+    historical default: PDFs run with OCR. Table structure follows the
+    ``pdf_table_structure_enabled`` config setting.
     """
-    return _build_docling_converter(do_ocr=True, do_table_structure=True)
+    from secondbrain.config import config
+
+    cfg = config()
+    return _build_docling_converter(
+        do_ocr=True, do_table_structure=cfg.pdf_table_structure_enabled
+    )
 
 
 def _build_text_converter() -> DocumentConverter:

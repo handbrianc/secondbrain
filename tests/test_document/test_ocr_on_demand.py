@@ -46,9 +46,25 @@ def _reset_singletons() -> Iterator[None]:
 class _FakeCfg:
     """Minimal stand-in for the Config object's PDF fields."""
 
-    def __init__(self, ocr: bool = False, table: bool = True) -> None:
+    def __init__(
+        self,
+        ocr: bool = False,
+        table: bool = True,
+        fast: bool = True,
+        cell_matching: bool = False,
+    ) -> None:
         self.pdf_ocr_enabled = ocr
         self.pdf_table_structure_enabled = table
+        self.pdf_table_fast_mode = fast
+        self.pdf_table_cell_matching = cell_matching
+        # Docling speed levers — defaults preserve current behavior (False / auto).
+        self.pdf_accelerator_device = "auto"
+        self.pdf_num_threads = 4
+        self.pdf_threaded_pipeline = False
+        self.pdf_layout_batch_size = 4
+        self.pdf_generate_page_images = False
+        self.pdf_generate_picture_images = False
+        self.pdf_images_scale = 1.0
 
 
 @pytest.fixture

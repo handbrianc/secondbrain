@@ -98,9 +98,112 @@ class ProcessingStorageMixin:
         ),
     )
     pdf_table_structure_enabled: bool = Field(
-        default=True,
+        default=False,
         description="Detect table structure in PDFs.",
     )
+    pdf_table_fast_mode: bool = Field(
+        default=True,
+        description=(
+            "When table structure is enabled, use TableFormer 'fast' mode "
+            "instead of the slower, more accurate mode."
+        ),
+    )
+    pdf_table_cell_matching: bool = Field(
+        default=False,
+        description=(
+            "Enable docling table cell matching (post-processing). Disabled "
+            "by default for speed and OCR compatibility."
+        ),
+    )
+    pdf_accelerator_device: str = Field(
+        default="auto",
+        description="Docling accelerator device: 'auto' | 'cpu' | 'mps' | 'cuda'.",
+    )
+    pdf_num_threads: int = Field(
+        default=4,
+        description="Threads for docling inference.",
+    )
+    max_ingest_processes: int = Field(
+        default=0,
+        description=(
+            "Cap on AUTO-detected process-pool workers (0 = unlimited/auto). "
+            "Explicit --cores or configured max_workers always win."
+        ),
+    )
+    pdf_threaded_pipeline: bool = Field(
+        default=False,
+        description=(
+            "Use docling's threaded/batched PDF pipeline (ThreadedPdfPipelineOptions) "
+            "instead of the default."
+        ),
+    )
+    pdf_layout_batch_size: int = Field(
+        default=4,
+        description=(
+            "Layout-model batch size for the threaded pipeline (used only when "
+            "pdf_threaded_pipeline is true)."
+        ),
+    )
+    pdf_generate_page_images: bool = Field(
+        default=False,
+        description=(
+            "Render full-page images during parsing (unused for storage; disabled for speed)."
+        ),
+    )
+    pdf_generate_picture_images: bool = Field(
+        default=False,
+        description=(
+            "Render embedded picture images during parsing (unused for storage; "
+            "disabled for speed)."
+        ),
+    )
+    pdf_images_scale: float = Field(
+        default=1.0,
+        description="Rendering scale for generated images.",
+    )
+
+    @field_validator("pdf_accelerator_device")
+    @classmethod
+    def validate_pdf_accelerator_device(cls, v: str) -> str:
+        """Validate the accelerator device is one of the supported values."""
+        if v not in {"auto", "cpu", "mps", "cuda"}:
+            raise ValueError(
+                "pdf_accelerator_device must be one of {'auto', 'cpu', 'mps', 'cuda'}"
+            )
+        return v
+
+    @field_validator("pdf_num_threads")
+    @classmethod
+    def validate_pdf_num_threads(cls, v: int) -> int:
+        """Validate docling inference thread count is at least 1."""
+        if v < 1:
+            raise ValueError("pdf_num_threads must be >= 1")
+        return v
+
+    @field_validator("max_ingest_processes")
+    @classmethod
+    def validate_max_ingest_processes(cls, v: int) -> int:
+        """Validate the auto-detect worker cap is non-negative."""
+        if v < 0:
+            raise ValueError("max_ingest_processes must be >= 0")
+        return v
+
+    @field_validator("pdf_layout_batch_size")
+    @classmethod
+    def validate_pdf_layout_batch_size(cls, v: int) -> int:
+        """Validate the threaded-pipeline layout batch size is at least 1."""
+        if v < 1:
+            raise ValueError("pdf_layout_batch_size must be >= 1")
+        return v
+
+    @field_validator("pdf_images_scale")
+    @classmethod
+    def validate_pdf_images_scale(cls, v: float) -> float:
+        """Validate the generated-image rendering scale is positive."""
+        if v <= 0:
+            raise ValueError("pdf_images_scale must be > 0")
+        return v
+
     text_compression_algorithm: str = Field(
         default="gzip",
         description="Text compression algorithm: 'gzip', 'brotli', or 'zstd'",
