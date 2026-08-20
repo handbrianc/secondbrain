@@ -588,6 +588,11 @@ class RAGPipeline(
             chapters_to_cover, good_title_nums, appendix_entries = (
                 self._derive_chapter_numbers(structure_chunks)
             )
+            # Keep the full (un-filtered) chapter set for boundary anchoring: a
+            # target chapter's end page is bounded by the NEXT chapter's start, so
+            # the next chapter's start must also be title-anchored (not left to
+            # the noisy section-number scan that sets spurious early boundaries).
+            full_chapters = list(chapters_to_cover)
 
             # Scope to specific target chapter when one is specified (e.g. "chapter 11")
             chapters_to_cover, good_title_nums = filter_chapters_by_target(
@@ -663,12 +668,19 @@ class RAGPipeline(
                     .sort("page_number", 1)
                     .limit(3500)
                 )
-                for tn_ in chapters_to_cover:
+                for tn_ in full_chapters:
                     tn, ts_, tt_ = tn_
+                    # Detected titles often carry a trailing printed-page artifact
+                    # (e.g. "The pandas I/O System 79"); strip it so the anchor
+                    # matches the real heading ("The pandas I/O System").
+                    tt_ = re.sub(r"\s+\d{1,4}\s*$", "", tt_).rstrip(" .:;-")
                     if ts_ != src or not tt_ or len(tt_) < 4:
                         continue
+                    # Join title tokens with \s+ so wrapped headings (e.g. the title
+                    # split across lines with a trailing space) still match.
+                    toks_ = [re.escape(t) for t in tt_.split()]
                     anchor_ = re.compile(
-                        rf"(?:^|\n)\s*{tn}\.?\s+{re.escape(tt_)}",
+                        rf"(?:^|\n)\s*{tn}\.?\s+" + r"\s+".join(toks_),
                         re.IGNORECASE,
                     )
                     for bc_ in body_all_:
