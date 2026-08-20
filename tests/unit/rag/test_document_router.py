@@ -197,6 +197,31 @@ class TestDocumentRouter:
             == "virtualbox"
         )
 
+    def test_specific_doc_beats_generic_shared_token(self) -> None:
+        """A specific named document wins over a generic shared filename token.
+
+        Regression: "based on the pandascookbook what is the best way to learn
+        pandas?" resolved to the "learn" token (a component of
+        "...machinelearningwithpytorchandscikit-learn.pdf") instead of the
+        explicitly named "pandascookbook", because containment picked the
+        first among equal-token-count candidates.  The more specific (longer)
+        name must win.
+        """
+        known = {
+            "pandascookbook": "/AI Books/pandascookbook_thirdedition.pdf",
+            "machine learning with pytorch and scikit learn": (
+                "/AI Books/machinelearningwithpytorchandscikit-learn.pdf"
+            ),
+            # _build_known_names-style token alias shared by many filenames
+            "learn": "/AI Books/machinelearningwithpytorchandscikit-learn.pdf",
+        }
+        router = DocumentRouter(known_names=known)
+
+        result = router.extract_document_name(
+            "based on the pandascookbook what is the best way to learn pandas?"
+        )
+        assert result == "pandascookbook", f"got {result!r}"
+
     def test_default_threshold(self) -> None:
         """Very low overlap should not match."""
         known = {

@@ -316,7 +316,12 @@ class DocumentRouter:
                 continue
             contained.append((len(known_tokens), known_name))
         if contained:
-            return max(contained, key=lambda kv: kv[0])[1]
+            # Prefer the most specific candidate: most full-name tokens, then the
+            # longest name.  Without the length tiebreak, a generic single token
+            # shared by many filenames (e.g. "learn" from "...scikit-learn.pdf")
+            # can win over the specific document the user named ("pandascookbook")
+            # simply because it iterates earlier.
+            return max(contained, key=lambda kv: (kv[0], len(kv[1])))[1]
 
         # Phase 2: Substring / compressed-form fallback
         # Handles cases like "virtualbox" vs "virtual box user manual"
