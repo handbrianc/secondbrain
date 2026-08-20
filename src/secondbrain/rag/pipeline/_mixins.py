@@ -268,6 +268,12 @@ class _StructureMixin(_RAGPipelineState):
 
         sec_entries.sort(key=lambda x: (x[0], *[int(p) for p in x[1].split(".") if p]))
 
+        # When authoritative "Chapter N" headings were detected, section numbers
+        # from any other major are body-text noise (dataframe dumps, page stubs),
+        # not real chapters — they must not spawn fabricated `[Chapter N]` lines.
+        if ch_good:
+            sec_entries = [s for s in sec_entries if s[0] in ch_good]
+
         # Group detected subsections by their parent chapter.
         sec_by_major: dict[int, list[tuple[str, str]]] = {}
         for major, sn, title in sec_entries:
@@ -503,6 +509,14 @@ class _StructureMixin(_RAGPipelineState):
                 seen_appendix.add((label, source))
                 appendix_entries.append((label, source, title))
 
+        # Authoritative "Chapter N" headings (from chapter_n_re in pass 1) define
+        # the true chapter span.  When present, bare-number and section matches
+        # may corroborate within that span but must not invent chapters beyond
+        # it — otherwise noisy body text (e.g. "12 Selection and Assignment" or
+        # dataframe dumps) fabricates chapters for books whose chapters are all
+        # explicitly labeled "Chapter N".
+        auth_max = max((e[0] for e in entries), default=0)
+
         # Pass 2: bare_chapter_re + bare_appendix_re
         ft_catch = re.compile(
             r"\d+\s+(\d{1,2})\s+([A-Za-z][A-Za-z0-9\s\-\(\),'/:.\u2013\u2014]{4,80})"
@@ -551,7 +565,12 @@ class _StructureMixin(_RAGPipelineState):
 
             for bm in bare_chapter_re.finditer(raw):
                 major = int(bm.group(1))
-                if major < 1 or major > 30 or (major, source) in seen:
+                if (
+                    major < 1
+                    or major > 30
+                    or (auth_max > 0 and major > auth_max)
+                    or (major, source) in seen
+                ):
                     continue
                 title = bm.group(2).strip().rstrip(".")
                 if len(title) < 4:
@@ -578,7 +597,12 @@ class _StructureMixin(_RAGPipelineState):
 
             for fm in ft_catch.finditer(raw):
                 major_ft = int(fm.group(1))
-                if major_ft < 1 or major_ft > 30 or (major_ft, source) in seen:
+                if (
+                    major_ft < 1
+                    or major_ft > 30
+                    or (auth_max > 0 and major_ft > auth_max)
+                    or (major_ft, source) in seen
+                ):
                     continue
                 title_ft = fm.group(2).strip().rstrip(".")
                 if len(title_ft) < 6:

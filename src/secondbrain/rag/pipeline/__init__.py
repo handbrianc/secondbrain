@@ -660,15 +660,34 @@ class RAGPipeline(
                 for sc in structure_chunks:
                     txt = sc.get("chunk_text", "")
                     pg = sc.get("page_number", 0)
+                    role = sc.get("chunk_role", "")
                     # Reject TOC page numbers (typically < 10) — a chapter_n_re
                     # match on page 3 is almost certainly a TOC entry, not the
                     # actual chapter start page. Without this guard, Phase 1's
                     # sec_header_re body-chunk scan would find the wrong start.
                     if pg < 10 and not is_deck:
                         continue
+                    # TOC / front-structure chunks list every chapter on one
+                    # page (dot-leader "Chapter N" captions) and are never the
+                    # real opening of a chapter.  Some books carry no heading /
+                    # toc_entry roles (front matter is tagged "caption" or
+                    # "navigation"), so is_deck becomes True and the pg<10 guard
+                    # above is skipped — rejecting these roles keeps that
+                    # protection.
+                    if role in ("toc_entry", "caption", "navigation"):
+                        continue
                     for nm in ch_n.finditer(txt):
                         ch = int(nm.group(1) or nm.group(2))
                         if ch in good_title_nums and ch not in chapter_first_pg:
+                            # "Chapter N," (comma right after the number) is a
+                            # preface / cross-reference summary sentence
+                            # (e.g. "Chapter 4, The pandas I/O System, shows …"),
+                            # NOT a chapter-opening heading.  Matching those pins
+                            # every chapter to a front-matter page and starves the
+                            # real chapter of its page range.  Real headings use a
+                            # colon, period, or plain space after the number.
+                            if re.match(r"Chapter\s+\d+,", nm.group(0), re.IGNORECASE):
+                                continue
                             chapter_first_pg[ch] = pg
 
                 # Phase 1: find chapter start pages from body chunk subsection headers like "1.1 " or "11.1.1 "
@@ -866,12 +885,15 @@ class RAGPipeline(
                 # at the first few chunks (all from the same starting page).
                 # For multi-chapter, keep the original 4-chunk cap to prevent
                 # any single chapter from dominating the round-robin merge.
-                per_chapter_limit = 150 if len(chapter_keys) <= 2 else 4
-                # Per-chapter page cap: 2 chunks per page for single-chapter mode.
-                # Pages with 3+ section headers (common with docling's fine-grained
-                # extraction) get the 3rd via fallback below. For multi-chapter,
-                # keep the same cap so each chapter gets fair round-robin slots.
-                page_cap = 2
+                single_section_mode = len(chapter_keys) <= 2
+                per_chapter_limit = 150 if single_section_mode else 4
+                # Per-chapter page cap.  A small cap (2) kept only ~1/3 of the
+                # chunks on a dense page (troubleshooting chapters have many
+                # short sections per page), silently dropping whole sections from
+                # a single-chapter summary.  Raised for single-chapter mode so
+                # every section on a page is captured, bounded overall by
+                # per_chapter_limit; multi-chapter keeps 2 for fair round-robin.
+                page_cap = 12 if single_section_mode else 2
                 page_count_per_ch: dict[int, dict[int, int]] = {
                     ch: {} for ch in chapter_keys
                 }
