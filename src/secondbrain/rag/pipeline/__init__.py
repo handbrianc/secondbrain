@@ -644,6 +644,46 @@ class RAGPipeline(
                 # BARE_CHAPTER_RE titles (e.g. "5 Working with VMs") are NOT included
                 # here — they're less reliable and may conflict with other chapters.
                 chapter_first_pg: dict[int, int] = {}
+                # Title-anchored detection: the numbered chapter-title heading
+                # (e.g. "13 Troubleshooting", "12 Customizing Oracle VirtualBox") is
+                # the single most reliable chapter-start signal.  Section-number
+                # scanning below (SEC_HEADER_RE / BARE_CHAPTER_RE) mistakes TOC
+                # dot-leader entries and in-body cross-references (e.g. "see 15.16")
+                # for chapter starts, pinning chapters to the wrong page — especially
+                # for books whose chapters are numbered without the word "Chapter"
+                # (so they are invisible to CHAPTER_N_RE).  Find each chapter's
+                # title heading on a body page (skipping TOC dot-leader lines) and
+                # pre-populate, so the noisy scans cannot override it.
+                dot_leader_ = re.compile(r"\.{2,}")
+                body_all_ = list(
+                    coll_.find(
+                        {"source_file": src, "chunk_role": "body"},
+                        {"_id": 0, "chunk_text": 1, "page_number": 1},
+                    )
+                    .sort("page_number", 1)
+                    .limit(3500)
+                )
+                for tn_ in chapters_to_cover:
+                    tn, ts_, tt_ = tn_
+                    if ts_ != src or not tt_ or len(tt_) < 4:
+                        continue
+                    anchor_ = re.compile(
+                        rf"(?:^|\n)\s*{tn}\.?\s+{re.escape(tt_)}",
+                        re.IGNORECASE,
+                    )
+                    for bc_ in body_all_:
+                        btext_ = bc_.get("chunk_text", "")
+                        bm_ = anchor_.search(btext_)
+                        if not bm_:
+                            continue
+                        ble_ = btext_.find("\n", bm_.end())
+                        brest_ = btext_[bm_.end() : ble_ if ble_ != -1 else len(btext_)]
+                        if dot_leader_.search(brest_) or re.match(
+                            r"^\s*\d{1,3}\s*$", brest_
+                        ):
+                            continue
+                        chapter_first_pg[tn] = bc_.get("page_number", 0)
+                        break
                 ch_n = re.compile(
                     r"(?:Chapter\s+(\d+)\s*[:\-]?\s*|(?:Module|Lesson)\s+(\d+)"
                     r"\s*[:\-]\s*)(.{2,60})",
