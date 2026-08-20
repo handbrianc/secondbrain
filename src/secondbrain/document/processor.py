@@ -131,11 +131,18 @@ def convert_file_to_segments(file_path: Path) -> list[_Segment]:
     -------
         List of dicts with 'text' and 'page' keys.
     """
+    from secondbrain.document.fast_text import try_fast_pdf_extraction
+
+    segments: list[_Segment]
+    fast_segments = try_fast_pdf_extraction(file_path)
+    if fast_segments is not None:
+        return [{"text": s["text"], "page": s["page"]} for s in fast_segments]
+
     converter = create_converter(file_path)
     result = converter.convert(file_path)
     content = result.document
 
-    segments: list[_Segment] = []
+    segments = []
 
     if hasattr(content, "texts") and content.texts:
         for text_item in content.texts:
@@ -185,25 +192,32 @@ def _extract_and_chunk_file(
     """
     file_path = Path(file_path_str)
     try:
-        converter = create_docling_converter(file_path)
+        from secondbrain.document.fast_text import try_fast_pdf_extraction
 
-        result = converter.convert(file_path)
-        content = result.document
+        segments: list[_Segment]
+        fast_segments = try_fast_pdf_extraction(file_path)
+        if fast_segments is not None:
+            segments = [{"text": s["text"], "page": s["page"]} for s in fast_segments]
+        else:
+            converter = create_docling_converter(file_path)
 
-        segments: list[_Segment] = []
+            result = converter.convert(file_path)
+            content = result.document
 
-        if hasattr(content, "texts") and content.texts:
-            for text_item in content.texts:
-                if not hasattr(text_item, "text") or not text_item.text:
-                    continue
+            segments = []
 
-                page_num = 1
-                if hasattr(text_item, "prov") and text_item.prov:
-                    prov = text_item.prov[0]
-                    if hasattr(prov, "page_no"):
-                        page_num = prov.page_no
+            if hasattr(content, "texts") and content.texts:
+                for text_item in content.texts:
+                    if not hasattr(text_item, "text") or not text_item.text:
+                        continue
 
-                segments.append({"text": text_item.text, "page": page_num})
+                    page_num = 1
+                    if hasattr(text_item, "prov") and text_item.prov:
+                        prov = text_item.prov[0]
+                        if hasattr(prov, "page_no"):
+                            page_num = prov.page_no
+
+                    segments.append({"text": text_item.text, "page": page_num})
 
         # Fallback: read file directly for plain text formats
         if not segments:
@@ -374,31 +388,42 @@ def _extract_chunk_and_embed_file(
         _logging.getLogger("docling").setLevel(_logging.WARNING)
 
         from secondbrain.document.docling_factory import get_converter_for_path
+        from secondbrain.document.fast_text import try_fast_pdf_extraction
 
-        with trace_operation("ingest_worker_extract") as span:
-            if span is not None:
-                span.set_attribute("ingest.filesize_bytes", file_path.stat().st_size)
-            converter = get_converter_for_path(file_path)
+        segments: list[_Segment]
+        fast_segments = try_fast_pdf_extraction(file_path)
+        if fast_segments is not None:
+            with trace_operation("extract_fast_text"):
+                segments = [
+                    {"text": s["text"], "page": s["page"]} for s in fast_segments
+                ]
+        else:
+            with trace_operation("ingest_worker_extract") as span:
+                if span is not None:
+                    span.set_attribute(
+                        "ingest.filesize_bytes", file_path.stat().st_size
+                    )
+                converter = get_converter_for_path(file_path)
 
-            result = converter.convert(file_path)
-            content = result.document
+                result = converter.convert(file_path)
+                content = result.document
 
-            segments: list[_Segment] = []
-            if hasattr(content, "texts") and content.texts:
-                for text_item in content.texts:
-                    if not hasattr(text_item, "text") or not text_item.text:
-                        continue
-                    page_num = 1
-                    if hasattr(text_item, "prov") and text_item.prov:
-                        prov = text_item.prov[0]
-                        if hasattr(prov, "page_no"):
-                            page_num = prov.page_no
-                    segments.append({"text": text_item.text, "page": page_num})
+                segments = []
+                if hasattr(content, "texts") and content.texts:
+                    for text_item in content.texts:
+                        if not hasattr(text_item, "text") or not text_item.text:
+                            continue
+                        page_num = 1
+                        if hasattr(text_item, "prov") and text_item.prov:
+                            prov = text_item.prov[0]
+                            if hasattr(prov, "page_no"):
+                                page_num = prov.page_no
+                        segments.append({"text": text_item.text, "page": page_num})
 
-            if not segments:
-                with file_path.open(encoding="utf-8", errors="ignore") as f:
-                    text = f.read()
-                segments = [{"text": text, "page": 1}]
+                if not segments:
+                    with file_path.open(encoding="utf-8", errors="ignore") as f:
+                        text = f.read()
+                    segments = [{"text": text, "page": 1}]
 
         # NOTE: chunk_segments is imported here to avoid circular dep at module init
         # (chunker is in a sibling module)

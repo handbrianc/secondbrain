@@ -326,6 +326,17 @@ class MockVectorStorage:
             "initialized": self._initialized,
         }
 
+    def list_source_files(self) -> list[str]:
+        """Return the distinct source_file values across stored chunks."""
+        sources: list[str] = []
+        seen: set[str] = set()
+        for chunk in self._chunks.values():
+            src = chunk.get("source_file")
+            if isinstance(src, str) and src not in seen:
+                seen.add(src)
+                sources.append(src)
+        return sources
+
     def validate_connection(self) -> bool:
         """Validate storage connection (always True for mock).
 

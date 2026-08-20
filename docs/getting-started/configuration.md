@@ -53,7 +53,7 @@ During testing (`PYTEST_CURRENT_TEST` is set), configuration additionally loads 
 | `SECONDBRAIN_EMBEDDING_API_KEY`    | `None`                   | API key for provider                 |
 | `SECONDBRAIN_EMBEDDING_API_BASE`   | `None`                   | Custom endpoint base URL             |
 | `SECONDBRAIN_EMBEDDING_CACHE_SIZE` | `1000`                   | LRU cache size (0 disables)          |
-| `SECONDBRAIN_EMBEDDING_BATCH_SIZE` | `20`                     | Batch size (1-100)                   |
+| `SECONDBRAIN_EMBEDDING_BATCH_SIZE` | `100`                    | Batch size (1-100)                   |
 
 ### LLM Configuration (for RAG chat)
 
@@ -86,6 +86,7 @@ or behavior change:
 | `SECONDBRAIN_SUPPORTED_EXTENSIONS`          | (comprehensive list) | Comma-separated file extensions                                      |
 | `SECONDBRAIN_MAX_FILE_SIZE_BYTES`           | `104857600`          | Maximum file size (100MB)                                            |
 | `SECONDBRAIN_PDF_OCR_ENABLED`               | `false`              | Run OCR on PDFs (`pdf_ocr_enabled`). `false` = OCR only when the PDF has no embedded text layer (scanned); `true` = always OCR all PDFs |
+| `SECONDBRAIN_PDF_FAST_TEXT_ENABLED`         | `true`               | Skip docling's layout/OCR models for PDFs that have a native text layer, extracting text with pypdfium2 directly (`pdf_fast_text_enabled`). Falls back to the full docling pipeline when the PDF has no/insufficient native text (scanned/empty). Ignored when `SECONDBRAIN_PDF_OCR_ENABLED=true` |
 | `SECONDBRAIN_PDF_TABLE_STRUCTURE_ENABLED`   | `false`              | Detect table structure in PDFs (`pdf_table_structure_enabled`). Disabled by default for speed; set `true` to enable |
 | `SECONDBRAIN_PDF_TABLE_FAST_MODE`           | `true`               | When table structure is enabled, use TableFormer 'fast' mode instead of the slower, more accurate mode (`pdf_table_fast_mode`) |
 | `SECONDBRAIN_PDF_TABLE_CELL_MATCHING`       | `false`              | Enable docling table cell matching (post-processing); disabled by default for speed and OCR compatibility (`pdf_table_cell_matching`) |
@@ -117,7 +118,7 @@ or behavior change:
 | `SECONDBRAIN_RAG_MAX_CONTEXT_CHARS`        | `16000` | Maximum context characters                                                                                                                                                             |
 | `SECONDBRAIN_RAG_CHUNK_PREVIEW_CHARS`      | `1200`  | Per-chunk preview length                                                                                                                                                               |
 | `SECONDBRAIN_STREAMING_ENABLED`            | `true`  | Enable streaming processing                                                                                                                                                            |
-| `SECONDBRAIN_STREAMING_CHUNK_BATCH_SIZE`   | `100`   | Streaming batch size (1-200)                                                                                                                                                           |
+| `SECONDBRAIN_STREAMING_CHUNK_BATCH_SIZE`   | `150`   | Streaming batch size (1-200)                                                                                                                                                           |
 
 ### Performance Settings
 
@@ -182,7 +183,7 @@ SECONDBRAIN_MONGO_COLLECTION=embeddings_v2
 SECONDBRAIN_EMBEDDING_MODEL=text-embedding-3-small
 SECONDBRAIN_EMBEDDING_API_KEY=$OPENAI_API_KEY
 SECONDBRAIN_EMBEDDING_DIMENSIONS=1536
-SECONDBRAIN_EMBEDDING_BATCH_SIZE=20
+SECONDBRAIN_EMBEDDING_BATCH_SIZE=100
 
 SECONDBRAIN_LLM_MODEL=gpt-4o-mini
 SECONDBRAIN_LLM_PROVIDER=openai

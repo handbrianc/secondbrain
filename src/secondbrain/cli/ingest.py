@@ -23,7 +23,7 @@ console = Console(markup=True)
     "--batch-size",
     "-b",
     type=click.IntRange(min=1),
-    default=10,
+    default=30,
     help="Batch size for ThreadPoolExecutor (used when cores=1)",
 )
 @click.option("--chunk-size", type=int, help="Override default chunk size")

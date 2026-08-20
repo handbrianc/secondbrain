@@ -28,6 +28,8 @@ class QueryIntent(StrEnum):
     """Query asks for comprehensive/overview treatment (e.g. "tell me everything about X")."""
     SPECIFIC_ANSWER = "specific_answer"
     """Query is a focused factual question."""
+    LIST_SOURCES = "list_sources"
+    """Query asks to enumerate the distinct sources in the store (e.g. "list all sources")."""
     UNKNOWN = "unknown"
     """Intent could not be determined."""
 
@@ -134,6 +136,37 @@ class StructuralIntentParser:
         "summary of",
     ]
 
+    # Triggers that ask to enumerate the distinct sources/documents stored.
+    # These are matched against substrings, so broad phrasings ("list the
+    # sources you have stored", "all unique sources", "which documents")
+    # all fire here.  Deliberately disjoint from CHAPTER/SECTION/BROAD
+    # triggers so they never collide with structural or coverage queries.
+    LIST_SOURCES_TRIGGERS: ClassVar[list[str]] = [
+        "list all sources",
+        "list sources",
+        "list the sources",
+        "list unique sources",
+        "list your sources",
+        "all unique sources",
+        "what sources",
+        "what sources do you have",
+        "sources do you have",
+        "sources that you have",
+        "sources you have",
+        "sources stored",
+        "available sources",
+        "list all documents",
+        "list documents",
+        "list the documents",
+        "list your documents",
+        "what documents do you have",
+        "documents do you have",
+        "documents that you have",
+        "all documents stored",
+        "which documents are stored",
+        "list all unique",
+    ]
+
     def __init__(
         self,
         config: object | None = None,
@@ -172,8 +205,15 @@ class StructuralIntentParser:
         chapter_score = self._score_chapter_enum(normalized)
         section_score = self._score_section_enum(normalized)
         broad_score = self._score_broad_coverage(normalized)
+        list_score = self._score_list_sources(normalized)
 
         candidates: list[tuple[float, QueryIntent, str | None, str]] = []
+
+        if list_score >= _MIN_CONFIDENCE_THRESHOLD:
+            reason = _build_reason("source listing", list_score, normalized)
+            candidates.append(
+                (list_score, QueryIntent.LIST_SOURCES, None, reason)
+            )
 
         if chapter_score >= _MIN_CONFIDENCE_THRESHOLD:
             target = _extract_chapter_target(normalized)
@@ -243,6 +283,20 @@ class StructuralIntentParser:
     def _score_broad_coverage(self, query: str) -> float:
         """Score a lower-case query for broad-coverage intent."""
         return _trigger_score(query, self.BROAD_COVERAGE_TRIGGERS)
+
+    def _score_list_sources(self, query: str) -> float:
+        """Score a lower-case query for source-enumeration intent.
+
+        Unlike the structural scorers (which use fractional overlap), a
+        listing query is a hard, disjoint intent: any trigger present means
+        the user wants an enumeration. Returning 1.0 on any match keeps the
+        confidence above the threshold regardless of how many triggers the
+        list grows to, so a single-phrase query (e.g. "list sources") is
+        never diluted below detection.
+        """
+        if any(t in query for t in self.LIST_SOURCES_TRIGGERS):
+            return 1.0
+        return 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -334,7 +388,11 @@ def _build_reason(intent_label: str, confidence: float, query: str) -> str:
 
 def _suggest_pipeline(intent: QueryIntent, target: str | None) -> str:
     """Recommend a pipeline strategy based on detected intent and target."""
-    if intent in (QueryIntent.CHAPTER_ENUMERATE, QueryIntent.SECTION_ENUMERATE):
+    if intent in (
+        QueryIntent.CHAPTER_ENUMERATE,
+        QueryIntent.SECTION_ENUMERATE,
+        QueryIntent.LIST_SOURCES,
+    ):
         return "structural"
     if intent is QueryIntent.BROAD_COVERAGE and target is None:
         return "structural"

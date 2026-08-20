@@ -16,18 +16,18 @@ DEFAULT_TOP_K = 5  # Default number of search results
 # Document Processing Constants
 DEFAULT_CHUNK_SIZE = 4096  # Default chunk size in characters
 DEFAULT_CHUNK_OVERLAP = 50  # Default chunk overlap in characters
-DEFAULT_BATCH_SIZE = 10  # Default batch size for ThreadPoolExecutor
+DEFAULT_BATCH_SIZE = 30  # Default batch size for ThreadPoolExecutor
 MAX_MEMORY_BATCH_SIZE = 100  # Maximum chunks to process in memory (~150MB RAM)
 
 # Embedding Constants
 DEFAULT_EMBEDDING_DIMENSIONS = 384  # Default embedding dimensions (all-MiniLM-L6-v2)
 DEFAULT_EMBEDDING_CACHE_SIZE = 1000  # Default embedding cache size
-DEFAULT_EMBEDDING_BATCH_SIZE = 20  # Default batch size for embedding generation
+DEFAULT_EMBEDDING_BATCH_SIZE = 100  # Default batch size for embedding generation
 MIN_EMBEDDING_BATCH_SIZE = 1  # Minimum embedding batch size
 MAX_EMBEDDING_BATCH_SIZE = 100  # Maximum embedding batch size
 
 # Streaming Constants
-DEFAULT_STREAMING_CHUNK_BATCH_SIZE = 50  # Default streaming chunk batch size
+DEFAULT_STREAMING_CHUNK_BATCH_SIZE = 150  # Default streaming chunk batch size
 MIN_STREAMING_CHUNK_BATCH_SIZE = 1  # Minimum streaming batch size
 MAX_STREAMING_CHUNK_BATCH_SIZE = 200  # Maximum streaming batch size
 

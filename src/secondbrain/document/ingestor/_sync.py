@@ -879,7 +879,7 @@ class DocumentIngestor:
         self,
         path: str,
         recursive: bool = False,
-        batch_size: int = 10,
+        batch_size: int = 30,
         cores: int | None = None,
         pool: str | None = None,
         skip_existing: bool | None = None,
@@ -926,36 +926,44 @@ class DocumentIngestor:
     def _extract_text(self, file_path: Path) -> list[dict[str, Any]]:
         """Extract text content from a file."""
         try:
-            with trace_operation("extract_text"):
-                from secondbrain.document.docling_factory import get_converter_for_path
+            from secondbrain.document.fast_text import try_fast_pdf_extraction
 
-                converter = get_converter_for_path(file_path)
-                result = converter.convert(file_path)
-                content = result.document
+            segments = try_fast_pdf_extraction(file_path)
+            if segments is None:
+                with trace_operation("extract_text"):
+                    from secondbrain.document.docling_factory import (
+                        get_converter_for_path,
+                    )
 
-                segments: list[dict[str, Any]] = []
+                    converter = get_converter_for_path(file_path)
+                    result = converter.convert(file_path)
+                    content = result.document
 
-                if hasattr(content, "texts") and content.texts:
-                    for text_item in content.texts:
-                        txt = _element_text(text_item)
-                        if not txt:
-                            continue
+                    segments = []
 
-                        page_num = 1
-                        prov = getattr(text_item, "prov", None) or []
-                        if prov:
-                            p = prov[0]
-                            if hasattr(p, "page_no"):
-                                page_num = p.page_no
+                    if hasattr(content, "texts") and content.texts:
+                        for text_item in content.texts:
+                            txt = _element_text(text_item)
+                            if not txt:
+                                continue
 
-                        segments.append({"text": txt, "page": page_num})
+                            page_num = 1
+                            prov = getattr(text_item, "prov", None) or []
+                            if prov:
+                                p = prov[0]
+                                if hasattr(p, "page_no"):
+                                    page_num = p.page_no
 
-                if not segments:
-                    with file_path.open(encoding="utf-8", errors="ignore") as f:
-                        text = f.read()
-                        segments = [{"text": text, "page": 1}]
+                            segments.append({"text": txt, "page": page_num})
+
+                    if not segments:
+                        with file_path.open(encoding="utf-8", errors="ignore") as f:
+                            text = f.read()
+                            segments = [{"text": text, "page": 1}]
 
                 return segments
+
+            return segments
 
         except DocumentExtractionError:
             raise

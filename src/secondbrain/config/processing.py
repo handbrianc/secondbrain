@@ -59,7 +59,7 @@ class ProcessingStorageMixin:
         description="Enable streaming processing for memory efficiency (default: true)",
     )
     streaming_chunk_batch_size: int = Field(
-        default=100,
+        default=150,
         description="Number of chunks to process per streaming batch (1-200, default: 100)",
     )
 
@@ -95,6 +95,15 @@ class ProcessingStorageMixin:
         description=(
             "Run OCR on PDFs. False = OCR only when the PDF has no embedded "
             "text layer (scanned). Set True to always OCR all PDFs."
+        ),
+    )
+    pdf_fast_text_enabled: bool = Field(
+        default=True,
+        description=(
+            "Skip docling's layout/OCR models for PDFs that have a native "
+            "text layer, extracting text with pypdfium2 directly. Falls back "
+            "to the full docling pipeline when the PDF has no/insufficient "
+            "native text. Ignored when pdf_ocr_enabled is True."
         ),
     )
     pdf_table_structure_enabled: bool = Field(

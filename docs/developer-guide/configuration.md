@@ -187,7 +187,7 @@ Batch size for embedding generation.
 | Detail  | Value                              |
 | ------- | ---------------------------------- |
 | Env Var | `SECONDBRAIN_EMBEDDING_BATCH_SIZE` |
-| Default | `20`                               |
+| Default | `100`                               |
 | Range   | 1-100                              |
 
 ---
@@ -406,7 +406,7 @@ Chunk batch size for streaming.
 | Detail  | Value                                    |
 | ------- | ---------------------------------------- |
 | Env Var | `SECONDBRAIN_STREAMING_CHUNK_BATCH_SIZE` |
-| Default | `100`                                    |
+| Default | `150`                                    |
 | Range   | 1-200                                    |
 
 ### RATE_LIMIT_ENABLED

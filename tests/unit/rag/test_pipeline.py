@@ -715,6 +715,66 @@ class TestCodeContentGate:
         assert "DOCUMENT STRUCTURE INDEX" in roster
 
 
+class TestDeriveChapterRosterUnion:
+    """Regression: a detected chapter must never vanish from the roster.
+
+    The chapter index was previously built only from recognised subsections, so a
+    chapter whose heading was detected (present in ``ch_good``) but whose section
+    headers were not seen in the probe chunks was dropped while its neighbours
+    survived — e.g. chapters 13 and 17 disappearing from a cookbook index.  It
+    must appear regardless, and truncation must never remove a chapter heading.
+    """
+
+    def _make_test_pipeline(self) -> RAGPipeline:
+        mock_searcher = MagicMock(spec=Searcher)
+        mock_searcher.search.return_value = []
+        mock_searcher.search_async = AsyncMock(return_value=[])
+        return RAGPipeline(
+            searcher=mock_searcher,
+            llm_provider=MagicMock(),
+            top_k=5,
+            context_window=5,
+        )
+
+    def test_chapter_without_detected_section_still_in_roster(self) -> None:
+        # Chapter 13 has a detected heading but no "13.x" section header in the
+        # probe chunks; chapters 12 and 14 have both.  Only 13 may not vanish.
+        pipeline = self._make_test_pipeline()
+        chunks = [
+            {
+                "chunk_text": (
+                    "Chapter 12 Selection and Assignment\n"
+                    "12.1 Basic selection.\n"
+                    "Chapter 13 Advanced Selection\n"
+                    "Chapter 14 Selection and Assignment\n"
+                    "14.1 Label-based selection.\n"
+                ),
+                "source_file": "cookbook.pdf",
+            }
+        ]
+        roster = pipeline._derive_chapter_roster(chunks)
+        assert "[Chapter 12]" in roster
+        assert "[Chapter 13]" in roster, f"chapter 13 dropped:\n{roster}"
+        assert "[Chapter 14]" in roster
+
+    def test_truncation_never_drops_chapter_headings(self) -> None:
+        # Chapters 11-25 have headings but no subsections; chapters 1-10 have
+        # enough subsections that a flat 50-line cap would cut the tail.  Every
+        # chapter heading (including 25) must survive.
+        pipeline = self._make_test_pipeline()
+        parts: list[str] = []
+        for n in range(1, 11):
+            parts.append(f"Chapter {n} Topic {n}")
+            parts.append(f"{n}.1 first subsection of {n}.")
+            parts.append(f"{n}.2 second subsection of {n}.")
+        for n in range(11, 26):
+            parts.append(f"Chapter {n} Topic {n}")
+        chunks = [{"chunk_text": "\n".join(parts), "source_file": "book.pdf"}]
+        roster = pipeline._derive_chapter_roster(chunks)
+        assert "[Chapter 25]" in roster, f"tail chapter dropped:\n{roster}"
+        assert "[Chapter 11]" in roster
+
+
 class TestFilterChaptersByTarget:
     """Tests for filter_chapters_by_target() — a pure function, no mocking needed.
 

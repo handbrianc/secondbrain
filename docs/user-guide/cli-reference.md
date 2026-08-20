@@ -49,7 +49,7 @@ secondbrain ingest PATH [--recursive] [--cores INT] [--batch-size INT] [--chunk-
 | ---------------------- | ------------------------------------------------------------------ |
 | `--recursive, -r`      | Recursively process directories                                    |
 | `--cores, -c INT`      | Number of CPU cores for parallel processing (default: auto-detect) |
-| `--batch-size, -b INT` | Batch size for ThreadPoolExecutor when cores=1 (default: 10)       |
+| `--batch-size, -b INT` | Batch size for ThreadPoolExecutor when cores=1 (default: 30)       |
 | `--chunk-size INT`     | Override default chunk size                                        |
 | `--chunk-overlap INT`  | Override default chunk overlap                                     |
 | `--pool`               | Pool type for CPU-bound extraction: `process` (multicore, default) or `thread` (default: config `ingest_pool`) |

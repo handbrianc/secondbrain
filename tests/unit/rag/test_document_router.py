@@ -15,6 +15,7 @@ from secondbrain.rag.document_router import (
     _build_known_names,
     _jaccard_similarity,
     _normalize_name,
+    _title_tokens,
 )
 
 
@@ -73,6 +74,28 @@ class TestBuildKnownNames:
 
     def test_empty_input_returns_empty(self) -> None:
         assert _build_known_names([]) == {}
+
+
+class TestTitleTokens:
+    """_title_tokens TOC-artifact cleaning."""
+
+    def test_strips_leader_dots(self) -> None:
+        result = _title_tokens("Oracle VirtualBox User Manual ....... 5")
+        assert "virtualbox" in result
+        assert "oracle" in result
+        # The page number and dotted-leader tokens must not survive.
+        assert not any("." in t for t in result)
+        assert not any(t.isdigit() for t in result)
+
+    def test_strips_trailing_punctuation(self) -> None:
+        result = _title_tokens("Introducing Proxmox VE 9.1: Overview")
+        assert "proxmox" in result
+        assert "overview" in result
+
+    def test_drops_short_tokens(self) -> None:
+        result = _title_tokens("a very long title xyz")
+        assert "xyz" not in result  # len 3 < min_len 4
+        assert "long" in result
 
 
 class TestJaccardSimilarity:
@@ -155,6 +178,24 @@ class TestDocumentRouter:
 
         assert router.extract_document_name("proxmox") is not None
         assert router.extract_document_name("proxmox guide") is not None
+
+    def test_single_token_alias_matches_embedded_in_sentence(self) -> None:
+        """A clean single-token alias is resolved when buried in a sentence.
+
+        Regression: a dotted TOC-leader alias ("virtualbox......") was only
+        matchable as a whole query — never inside "summarize the virtualbox
+        user guide by chapter" — so the source filter fell through to None.
+        A clean "virtualbox" alias must match via containment.
+        """
+        known = {
+            "virtualbox": "/docs/UserManual.pdf",
+        }
+        router = DocumentRouter(known_names=known)
+
+        assert (
+            router.extract_document_name("summarize the virtualbox user guide by chapter")
+            == "virtualbox"
+        )
 
     def test_default_threshold(self) -> None:
         """Very low overlap should not match."""

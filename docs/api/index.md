@@ -53,7 +53,7 @@ ingestor = DocumentIngestor(
 results = ingestor.ingest(
     path="./documents/",
     recursive=True,
-    batch_size=10,
+    batch_size=30,
     cores=None  # Auto-detect
 )
 ```

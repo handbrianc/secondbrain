@@ -136,6 +136,8 @@ class RAGPipeline(
 
             # --- B4: Iterative RAG for broad-coverage and chapter/section-enumeration queries ---
             intent_result = self._intent_parser.parse(query)
+            if intent_result.intent is QueryIntent.LIST_SOURCES:
+                return self._list_sources_result(query)
             if intent_result.intent in (
                 QueryIntent.BROAD_COVERAGE,
                 QueryIntent.CHAPTER_ENUMERATE,
@@ -284,6 +286,8 @@ class RAGPipeline(
 
             # --- B4: Iterative RAG for broad-coverage and chapter/section-enumeration queries ---
             intent_result = self._intent_parser.parse(query)
+            if intent_result.intent is QueryIntent.LIST_SOURCES:
+                return self._list_sources_result(query)
             if intent_result.intent in (
                 QueryIntent.BROAD_COVERAGE,
                 QueryIntent.CHAPTER_ENUMERATE,

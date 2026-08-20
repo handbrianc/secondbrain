@@ -77,6 +77,24 @@ def _normalize_name(name: str) -> str:
     return name.strip()
 
 
+def _title_tokens(text: str, min_len: int = 4) -> set[str]:
+    """Return cleaned, de-duplicated tokens from a document-title string.
+
+    Strips TOC leader-dot and punctuation artifacts (". . . " leaders, trailing
+    page numbers, ".,:;") that printed tables of contents routinely leave in
+    the raw chunk text (e.g. ``"Oracle VirtualBox User Manual ....... 5"``).
+    Cleaning the tokens keeps the resulting registry aliases matchable
+    (``"virtualbox"``) when embedded inside a sentence by
+    :meth:`DocumentRouter.extract_document_name`.
+    """
+    words: set[str] = set()
+    for tok in _normalize_name(text).split():
+        clean = tok.strip(" \t.:;,()[]{}'\"`")
+        if len(clean) >= min_len:
+            words.add(clean)
+    return words
+
+
 def _jaccard_similarity(a: set[str], b: set[str]) -> float:
     """Compute Jaccard similarity between two token sets."""
     if not a or not b:
@@ -178,21 +196,12 @@ class DocumentRouter:
                     text = doc.get("chunk_text", "")
                     # "Chapter 1 — About Oracle VirtualBox"
                     for m in _CHAPTER_TITLE_RE.finditer(text):
-                        title = m.group(1).strip()
-                        for tok in _normalize_name(title).split():
-                            if len(tok) >= 4:
-                                title_keywords.add(tok)
+                        title_keywords |= _title_tokens(m.group(1))
                     # "About Oracle VirtualBox" / "Introducing ..."
                     for m in _ABOUT_TITLE_RE.finditer(text):
-                        title = m.group(1).strip()
-                        for tok in _normalize_name(title).split():
-                            if len(tok) >= 4:
-                                title_keywords.add(tok)
+                        title_keywords |= _title_tokens(m.group(1))
                     for m in _HEADING1_RE.finditer(text):
-                        title = m.group(1).strip()
-                        for tok in _normalize_name(title).split():
-                            if len(tok) >= 4:
-                                title_keywords.add(tok)
+                        title_keywords |= _title_tokens(m.group(1))
 
                 # Fallback: extract keywords from the first ~100 chars of the
                 # first chunk.  Catches cases like "PROXMOX VE ADMINISTRATION
@@ -201,9 +210,7 @@ class DocumentRouter:
                     first_text = docs[0].get("chunk_text", "")
                     prefix = first_text[:100].strip()
                     if prefix:
-                        for tok in _normalize_name(prefix).split():
-                            if len(tok) >= 4:
-                                title_keywords.add(tok)
+                        title_keywords |= _title_tokens(prefix)
 
                 # Register meaningful title keywords (excluding generic terms)
                 generic = {

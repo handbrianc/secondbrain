@@ -267,17 +267,36 @@ class _StructureMixin(_RAGPipelineState):
                     sec_entries.append((major, sec_num, raw_title))
 
         sec_entries.sort(key=lambda x: (x[0], *[int(p) for p in x[1].split(".") if p]))
-        lines: list[str] = []
-        prev_major: int | None = None
+
+        # Group detected subsections by their parent chapter.
+        sec_by_major: dict[int, list[tuple[str, str]]] = {}
         for major, sn, title in sec_entries:
-            if prev_major != major:
-                ch_title = ch_titles.get(major)
-                if ch_title:
-                    lines.append(f"[Chapter {major}] {sn} — {ch_title}")
-                else:
-                    lines.append(f"[Chapter {major}] {sn} — {title}")
-                prev_major = major
+            sec_by_major.setdefault(major, []).append((sn, title))
+
+        # Build the index from the UNION of reliably-detected chapter headings
+        # (ch_good) and chapters that have recognised subsections, so a chapter
+        # whose heading was detected but whose section headers were not seen in
+        # the probe chunks still appears instead of silently vanishing.
+        chapter_nums = sorted(set(ch_good) | set(sec_by_major))
+
+        lines: list[str] = []
+        # Cap subsection detail per chapter so one long chapter cannot starve
+        # the rest of the index, but never drop a chapter heading itself.
+        max_subsections_per_chapter = 30
+        for major in chapter_nums:
+            sections = sec_by_major.get(major, [])
+            ch_title = ch_titles.get(major)
+            if ch_title and sections:
+                first, _t = sections[0]
+                lines.append(f"[Chapter {major}] {first} — {ch_title}")
+            elif ch_title:
+                lines.append(f"[Chapter {major}] — {ch_title}")
+            elif sections:
+                sn, title = sections[0]
+                lines.append(f"[Chapter {major}] {sn} — {title}")
             else:
+                continue
+            for sn, title in sections[1 : max_subsections_per_chapter]:
                 lines.append(f"  {sn} — {title}")
 
         if appendix_entries:
@@ -287,7 +306,7 @@ class _StructureMixin(_RAGPipelineState):
 
         header = (
             "DOCUMENT STRUCTURE INDEX (enumerate ALL of the following in your answer):\n"
-            + "\n".join(lines[:50])
+            + "\n".join(lines)
             + "\n\n"
         )
         return header
@@ -766,12 +785,29 @@ class _StructureMixin(_RAGPipelineState):
             "$or": [
                 {
                     "element_type": {
-                        "$in": ["heading", "toc_entry", "body", "paragraph"]
+                        "$in": [
+                            "heading",
+                            "toc_entry",
+                            "body",
+                            "paragraph",
+                            "title",
+                            "section",
+                            "header",
+                        ]
                     }
                 },
                 {
                     "chunk_role": {
-                        "$in": ["body", "caption", "navigation", "heading", "toc_entry"]
+                        "$in": [
+                            "body",
+                            "caption",
+                            "navigation",
+                            "heading",
+                            "toc_entry",
+                            "title",
+                            "section",
+                            "header",
+                        ]
                     }
                 },
             ]
@@ -1354,6 +1390,48 @@ class _RoutingMixin(_RAGPipelineState):
         if doc_name is not None:
             return router.resolve_source_file(doc_name)
         return None
+
+    def _list_sources_result(self, query: str) -> dict[str, Any]:
+        """Build a deterministic answer enumerating ALL distinct sources.
+
+        Routes around vector search on purpose: semantic search is bounded by
+        ``top_k`` and relevance, so it would silently drop sources as the
+        corpus grows. A native ``distinct`` aggregation returns every unique
+        source regardless of database size.
+
+        Returns a result dict whose "answer" is a numbered enumeration of the
+        source files (no LLM call, no embedding generation).
+        """
+        try:
+            source_files: list[str] = list(self._searcher.list_source_files())
+        except Exception as e:
+            logger.warning("list_source_files failed: %s: %s", type(e).__name__, e)
+            return {
+                "answer": "I couldn't list the stored sources right now. Please try again.",
+                "query": query,
+                "list_sources": True,
+            }
+
+        source_files = sorted({s for s in source_files if s}, key=str.lower)
+
+        if not source_files:
+            return {
+                "answer": (
+                    "I don't have any documents stored yet. "
+                    "Ingest some with `secondbrain ingest <path>` first."
+                ),
+                "query": query,
+                "list_sources": True,
+            }
+
+        plural = "source" if len(source_files) == 1 else "sources"
+        lines = [f"I found {len(source_files)} unique {plural}:"]
+        lines.extend(f"  {i}. {s}" for i, s in enumerate(source_files, 1))
+        return {
+            "answer": "\n".join(lines),
+            "query": query,
+            "list_sources": True,
+        }
 
     def _rewrite_query_with_history(
         self,

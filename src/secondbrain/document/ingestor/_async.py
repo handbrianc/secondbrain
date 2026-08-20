@@ -73,7 +73,7 @@ class AsyncDocumentIngestor(DocumentIngestor):
         self,
         path: str,
         recursive: bool = False,
-        batch_size: int = 10,
+        batch_size: int = 30,
         max_concurrent: int = 5,
     ) -> dict[str, int]:
         """Ingest documents asynchronously from a file or directory.

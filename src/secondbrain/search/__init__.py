@@ -99,6 +99,19 @@ class Searcher:
         self.embedding_gen.close()
         self.storage.close()
 
+    def list_source_files(self) -> list[str]:
+        """Return every distinct source file path in the store, unbounded.
+
+        Uses a native MongoDB ``distinct`` aggregation (via
+        :meth:`VectorStorage.list_source_files`) rather than vector
+        similarity search, so it returns all unique sources regardless of
+        how large the corpus grows. Semantic search is bounded by ``top_k``
+        and relevance, and would silently drop sources.
+        """
+        if not self.storage.validate_connection():
+            raise RuntimeError("Cannot connect to MongoDB")
+        return self.storage.list_source_files()
+
     async def aclose(self) -> None:
         """Close async resources for embedding generator and storage.
 
