@@ -54,9 +54,9 @@ def mock_rewriter() -> MagicMock:
 def mock_config(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
     """Mock configuration for pipeline tests."""
     config: dict[str, str] = {
-        "SECONDBRAIN_MONGO_URI": _test_config.mongo_uri,
-        "SECONDBRAIN_MONGO_DB": "test_secondbrain",
-        "SECONDBRAIN_MONGO_COLLECTION": "test_embeddings",
+        "SECONDBRAIN_QDRANT_URL": _test_config.qdrant_url,
+        "SECONDBRAIN_STORAGE_BACKEND": "qdrant",
+        "SECONDBRAIN_QDRANT_COLLECTION": "test_embeddings",
         "SECONDBRAIN_LOCALHOST": TEST_LLM_HOST,
         "SECONDBRAIN_LOCAL_EMBEDDING_MODEL": "all-MiniLM-L6-v2",
         "SECONDBRAIN_CHUNK_SIZE": "512",

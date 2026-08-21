@@ -222,7 +222,7 @@ secondbrain status
 secondbrain status
 ```
 
-Displays MongoDB collection statistics including total documents, storage size, and index information.
+Displays Qdrant collection statistics including total points, storage size, and index information.
 
 ---
 

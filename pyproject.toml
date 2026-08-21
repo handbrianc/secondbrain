@@ -21,8 +21,7 @@ dependencies = [
     "click>=8.4.1",  # CLI framework - stable API, minor updates only
     "docling>=2.118.1",  # Document parsing - requires recent features
     "docling-core>=2.91.0",  # Core types - matches docling version
-    "pymongo>=4.17.0",  # MongoDB driver - async support required
-    "motor>=3.0.0",  # Async MongoDB - requires pymongo 4.x compatibility
+    "qdrant-client>=1.9.0",  # Qdrant vector DB client - production storage backend
     "httpx>=0.28.1",  # HTTP client - async support for LLM calls
     "pydantic>=2.13.4",  # Data validation - pydantic v2 compatible
     "pydantic-settings>=2.15.0",  # Settings management - pydantic v2 compatible
@@ -170,7 +169,6 @@ rag = [
 
 opentelemetry = [
     "opentelemetry-exporter-otlp>=1.20.0",  # OTLP exporter - remote tracing
-    "opentelemetry-instrumentation-pymongo>=0.40.0",  # MongoDB auto-instrumentation
 ]
 
 [project.scripts]
@@ -231,16 +229,6 @@ warn_unused_ignores = false
 module = ["google.*"]
 ignore_errors = true
 ignore_missing_imports = true
-
-
-
-[[tool.mypy.overrides]]
-module = ["pymongo", "pymongo.*", "motor", "motor.*"]
-follow_imports = "skip"
-ignore_missing_imports = true
-# Technical debt: restored incrementally — attr-defined/operator/unreachable/has-type remain for stub gaps; misc/no-any-return/valid-type/return-value removed for stricter checking
-disable_error_code = ["attr-defined", "operator", "unreachable", "has-type"]
-
 
 
 [tool.coverage.run]

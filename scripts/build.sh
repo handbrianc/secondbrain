@@ -27,7 +27,7 @@ pyinstaller --onefile \
     --add-data "src/secondbrain:secondbrain" \
     --hidden-import click \
     --hidden-import docling \
-    --hidden-import pymongo \
+    --hidden-import qdrant_client \
     --hidden-import httpx \
     --hidden-import pydantic \
     --hidden-import pydantic_settings \

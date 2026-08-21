@@ -1,79 +1,65 @@
-"""Tests for storage module."""
+"""Tests for the storage search API against a local-mode Qdrant backend."""
 
-from unittest.mock import MagicMock, patch
+from __future__ import annotations
 
 import pytest
+from qdrant_client import QdrantClient
 
-from secondbrain.storage import VectorStorage
+from secondbrain.storage.qdrant import QdrantVectorStorage
+
+DIM = 4
+
+
+@pytest.fixture
+def storage() -> QdrantVectorStorage:
+    """A QdrantVectorStorage backed by a local-mode (in-memory) Qdrant."""
+    instance = QdrantVectorStorage(collection_name="test_search_coll")
+    instance._client = QdrantClient(":memory:")
+    instance._dimensions = DIM
+    return instance
+
+
+def _doc(chunk_id: str, source: str, text: str) -> dict[str, object]:
+    return {
+        "chunk_id": chunk_id,
+        "source_file": source,
+        "page_number": 1,
+        "chunk_text": text,
+        "embedding": [0.1, 0.2, 0.3, 0.4],
+    }
 
 
 @pytest.mark.unit
 class TestVectorStorage:
-    """Tests for VectorStorage class."""
+    """Tests for the storage search API."""
 
-    def test_search_basic(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Test basic search functionality using mocked MongoClient."""
-        # Use environment-config-based Config via get_config (no patch)
-        mock_client = MagicMock()
-        mock_client.admin.command.return_value = {}
+    def test_search_basic(self, storage: QdrantVectorStorage) -> None:
+        """Test basic search functionality returns ranked results."""
+        storage.store_batch(
+            [
+                _doc("1", "test.pdf", "sample text"),
+                _doc("2", "test.pdf", "more text"),
+            ]
+        )
 
-        mock_collection = MagicMock()
-        mock_collection.aggregate.return_value = [
-            {
-                "chunk_id": "1",
-                "source_file": "test.pdf",
-                "page_number": 1,
-                "chunk_text": "sample text",
-                "score": 0.9,
-            },
-            {
-                "chunk_id": "2",
-                "source_file": "test.pdf",
-                "page_number": 1,
-                "chunk_text": "more text",
-                "score": 0.8,
-            },
-        ]
+        results = list(storage.search([0.1, 0.2, 0.3, 0.4], top_k=5))
 
-        mock_db = MagicMock()
-        mock_db.__getitem__ = lambda self, key: mock_collection
+        assert len(results) == 2
+        assert {r["chunk_id"] for r in results} == {"1", "2"}
+        assert all(r["chunk_text"] in {"sample text", "more text"} for r in results)
 
-        mock_client.__getitem__ = lambda self, key: mock_db
-        # Patch the MongoClient constructor to return our mock client
-        patcher = patch("secondbrain.storage.MongoClient", return_value=mock_client)
-        patcher.start()
-        try:
-            storage = VectorStorage()
-            storage.validate_connection = MagicMock(return_value=True)
-            storage._wait_for_index_ready = MagicMock()
-            # Mock the collection property to return our mock collection
-            storage._collection = mock_collection
-            results = storage.search(embedding=[0.1] * 384, top_k=5)
-            assert len(results) == 2
-        finally:
-            patcher.stop()
+    def test_search_with_source_filter(
+        self, storage: QdrantVectorStorage,
+    ) -> None:
+        """Test search with a source filter returns only matching source."""
+        storage.store_batch(
+            [
+                _doc("1", "test.pdf", "sample text"),
+                _doc("2", "other.pdf", "other chunk"),
+            ]
+        )
 
-    def test_search_with_source_filter(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Test search with source filter using mocked MongoClient."""
-        mock_client = MagicMock()
-        mock_client.admin.command.return_value = {}
+        results = list(storage.search([0.1, 0.2, 0.3, 0.4], source_filter="test.pdf"))
 
-        mock_collection = MagicMock()
-        mock_collection.aggregate.return_value = []
-
-        mock_db = MagicMock()
-        mock_db.__getitem__ = lambda self, key: mock_collection
-
-        mock_client.__getitem__ = lambda self, key: mock_db
-        patcher = patch("secondbrain.storage.MongoClient", return_value=mock_client)
-        patcher.start()
-        try:
-            storage = VectorStorage()
-            storage.validate_connection = MagicMock(return_value=True)
-            storage._wait_for_index_ready = MagicMock()
-            # Mock the collection property to return our mock collection
-            storage._collection = mock_collection
-            results = storage.search(embedding=[0.1] * 384, source_filter="test.pdf")
-            assert len(results) == 0
-        finally:
-            patcher.stop()
+        assert len(results) == 1
+        assert results[0]["source_file"] == "test.pdf"

@@ -1,50 +1,42 @@
-"""Shared fixtures for storage tests."""
+"""Shared fixtures for storage tests.
 
-import os
+All storage tests use a local-mode (in-memory) Qdrant backend via
+``QdrantClient(":memory:")`` so they run with no external server while still
+exercising the real Qdrant client API.
+"""
+
 from collections.abc import Generator
-from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
+from qdrant_client import QdrantClient
 
-from secondbrain.storage import VectorStorage
+from secondbrain.storage.qdrant import QdrantVectorStorage
+
+EMBEDDING_DIMENSIONS = 384
 
 
 @pytest.fixture(scope="module")
 def mock_storage_config() -> MagicMock:
     """Module-scoped mock config to avoid repeated Config initialization."""
     config = MagicMock()
-    config.mongo_uri = os.environ.get(
-        "SECONDBRAIN_MONGO_URI",
-        "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin",
-    )
-    config.mongo_db = os.environ.get("SECONDBRAIN_MONGO_DB", "secondbrain_test")
-    config.mongo_collection = os.environ.get(
-        "SECONDBRAIN_MONGO_COLLECTION", "embeddings_test"
-    )
-    config.embedding_dimensions = 384
+    config.storage_backend = "qdrant"
+    config.qdrant_url = "http://localhost:6333"
+    config.qdrant_api_key = None
+    config.qdrant_collection = "test_embeddings"
+    config.embedding_dimensions = EMBEDDING_DIMENSIONS
     return config
 
 
 @pytest.fixture(scope="module")
-def storage_with_mock(mock_storage_config: MagicMock) -> Generator[Any]:
-    """Module-scoped VectorStorage instance to avoid 1s+ overhead per test.
+def storage() -> Generator[QdrantVectorStorage]:
+    """Module-scoped local-mode Qdrant storage for public-API storage tests.
 
-    This fixture creates a single VectorStorage instance with mocked config
-    that can be reused across all tests in a module. Tests should use this
-    fixture instead of creating their own VectorStorage instances.
-
-    Example:
-        def test_something(self, storage_with_mock):
-            with patch.object(storage_with_mock, "_collection", mock_collection):
-                # test code
+    Creates a single QdrantVectorStorage backed by an in-memory Qdrant client
+    that can be reused across all tests in a module.
     """
-    with patch("secondbrain.storage.get_config", return_value=mock_storage_config):
-        storage = VectorStorage()
-        yield storage
-        storage._client = None
-        storage._db = None
-        storage._collection = None
-        storage._async_client = None
-        storage._index_created = False
-        storage.invalidate_connection_cache()
+    instance = QdrantVectorStorage(collection_name="test_embeddings")
+    instance._client = QdrantClient(":memory:")
+    instance._dimensions = EMBEDDING_DIMENSIONS
+    yield instance
+    instance.close()

@@ -179,18 +179,9 @@ class DocumentRouter:
         """
         aliases: dict[str, str] = {}
         try:
-            coll = storage.collection
             for sf in source_files:
                 title_keywords: set[str] = set()
-                cursor = (
-                    coll.find(
-                        {"source_file": sf},
-                        {"chunk_text": 1},
-                    )
-                    .sort("page_number", 1)
-                    .limit(5)
-                )
-                docs = list(cursor)
+                docs = list(storage.get_source_chunks(sf, limit=5, with_text=True))
 
                 for doc in docs:
                     text = doc.get("chunk_text", "")

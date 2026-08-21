@@ -13,7 +13,8 @@ pip install -e .
 Set required environment variables:
 
 ```bash
-export SECONDBRAIN_MONGO_URI="mongodb://localhost:27017"
+export SECONDBRAIN_STORAGE_BACKEND=qdrant
+export SECONDBRAIN_QDRANT_URL="http://localhost:6333"
 export SECONDBRAIN_OPENAI_API_KEY="your-api-key"
 ```
 
@@ -24,7 +25,7 @@ export SECONDBRAIN_CHUNK_SIZE=4096
 export SECONDBRAIN_CHUNK_OVERLAP=50
 ```
 
-## Step 3: Start MongoDB
+## Step 3: Start Qdrant
 
 Launch the Docker Compose stack with the `--wait` flag to ensure readiness:
 
@@ -36,7 +37,7 @@ You should see:
 
 ```
 Starting Docker Compose stack from: /path/to/docker-compose.yml
-Starting MongoDB...
+Starting Qdrant...
 Waiting for services to be ready...
 ✓ Docker Compose stack is fully ready
 ```

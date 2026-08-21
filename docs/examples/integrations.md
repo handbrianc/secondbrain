@@ -120,7 +120,7 @@ if __name__ == "__main__":
 ### Run the Flask App
 
 ```bash
-export SECONDBRAIN_MONGO_URI="mongodb://localhost:27017"
+export SECONDBRAIN_QDRANT_URL="http://localhost:6333"
 export SECONDBRAIN_OPENAI_API_KEY="..."
 
 python app.py
@@ -254,7 +254,7 @@ async def health_check():
 ### Run the FastAPI App
 
 ```bash
-export SECONDBRAIN_MONGO_URI="mongodb://localhost:27017"
+export SECONDBRAIN_QDRANT_URL="http://localhost:6333"
 export SECONDBRAIN_OPENAI_API_KEY="..."
 
 uvicorn app:app --reload --host 0.0.0.0 --port 8000
@@ -362,7 +362,7 @@ Ensure environment variables are set in production:
 
 ```bash
 # Containerized deployment
-SECONDBRAIN_MONGO_URI=mongodb://mongo:27017
+SECONDBRAIN_QDRANT_URL=http://qdrant:6333
 SECONDBRAIN_OPENAI_API_KEY=${OPENAI_API_KEY}
 SECONDBRAIN_LOG_LEVEL=INFO
 ```

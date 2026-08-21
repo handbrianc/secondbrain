@@ -8,7 +8,7 @@ Setting up a local development environment for SecondBrain.
 | ----------- | --------- | --------- |
 | Python | 3.14+ | Runtime |
 | Git | Latest | Version control |
-| MongoDB | 4.4+ | Vector storage |
+| Qdrant | Latest | Vector storage |
 | Docker | Latest | Service containers |
 
 ## Clone Repository
@@ -97,37 +97,35 @@ Edit `.env` with your configuration:
 # Required for embedding generation
 SECONDBRAIN_OPENAI_API_KEY=your-api-key
 
-# Point to local or Docker MongoDB
-SECONDBRAIN_MONGO_URI=mongodb://localhost:27017
+# Vector storage (Qdrant)
+SECONDBRAIN_STORAGE_BACKEND=qdrant
+SECONDBRAIN_QDRANT_URL=http://localhost:6333
+
+# Conversations (SQLite)
+SECONDBRAIN_SQLITE_PATH=~/.secondbrain/secondbrain.db
 
 # Development settings
 SECONDBRAIN_LOG_LEVEL=DEBUG
 ```
 
-## Start MongoDB
+## Start Qdrant
 
 ### Option A: Docker
 
 ```bash
 docker run -d \
-  --name secondbrain-mongo \
-  -p 27017:27017 \
-  mongo:latest
+  --name secondbrain-qdrant \
+  -p 6333:6333 \
+  qdrant/qdrant
 ```
 
-### Option B: Local MongoDB
-
-Ensure the mongod service is running:
-
-```bash
-mongod --dbpath /data/db
-```
-
-### Option C: Docker Compose
+### Option B: Docker Compose
 
 ```bash
 secondbrain start --wait
 ```
+
+Starts the `secondbrain-qdrant` container defined in `docker-compose.yml`.
 
 ## Verify Installation
 
@@ -247,14 +245,14 @@ Recommended settings in `.vscode/settings.json`:
 pip install -e .
 ```
 
-### MongoDB Connection Issues
+### Qdrant Connection Issues
 
 ```bash
-# Check MongoDB is running
-docker ps | grep mongo
+# Check the Qdrant container is running
+docker ps | grep qdrant
 
-# Test connection
-mongosh --eval "db.adminCommand('ping')"
+# Test the connection
+curl http://localhost:6333/collections
 ```
 
 ### Test Discovery Failures

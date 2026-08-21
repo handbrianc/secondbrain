@@ -66,20 +66,20 @@ Search operations SHALL be instrumented with OpenTelemetry spans.
 - **AND** it SHALL include top_k attribute
 - **AND** it SHALL include result count
 
-### Requirement: MongoDB operation instrumentation
+### Requirement: Qdrant operation instrumentation
 
-MongoDB operations SHALL be automatically instrumented.
+Qdrant operations SHALL be automatically instrumented.
 
 #### Scenario: Database queries are traced
 
-- **WHEN** MongoDB operations occur
-- **THEN** "db.mongodb.query" span SHALL be created
+- **WHEN** Qdrant operations occur
+- **THEN** "db.qdrant.query" span SHALL be created
 - **AND** it SHALL include collection name
 - **AND** it SHALL include operation type
 
 #### Scenario: Query performance is measured
 
-- **WHEN** MongoDB queries execute
+- **WHEN** Qdrant queries execute
 - **THEN** span duration SHALL reflect query time
 - **AND** slow queries SHALL be identifiable
 

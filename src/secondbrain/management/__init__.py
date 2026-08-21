@@ -4,9 +4,10 @@ This module provides classes for listing, deleting, and checking status
 of documents stored in the vector database.
 """
 
+from collections.abc import Sequence
 from typing import Any, Self, cast
 
-from secondbrain.storage import ChunkInfo, DatabaseStats, VectorStorage
+from secondbrain.storage import ChunkInfo, DatabaseStats, StorageFactory
 from secondbrain.utils.connections import ensure_service_available
 
 __all__ = [
@@ -31,7 +32,7 @@ class BaseManager:
             verbose: Enable verbose logging.
         """
         self.verbose: bool = verbose
-        self.storage: VectorStorage = VectorStorage()
+        self.storage = StorageFactory.create_from_config()
 
     def _ensure_storage_available(self) -> None:
         """Ensure MongoDB is available, raise if not.
@@ -77,7 +78,7 @@ class Lister(BaseManager):
         chunk_id: str | None = None,
         limit: int = 50,
         offset: int = 0,
-    ) -> list[ChunkInfo]:
+    ) -> Sequence[ChunkInfo]:
         """List chunks with optional filters.
 
         Args:

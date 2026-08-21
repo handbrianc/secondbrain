@@ -3,8 +3,9 @@
 
 This module measures wall-clock time and peak resident memory of the
 ``secondbrain ingest`` subprocess for each core count, using a corpus of
-plain-text files and an isolated MongoDB database/collection so that every run
-starts from a cold, fresh state.
+plain-text files and an isolated Qdrant collection so that every run starts
+from a cold, fresh state (the collection is deleted before each run and
+recreated by the ingest pipeline at the configured embedding dimension).
 
 The benchmark is driven entirely from the CLI::
 
@@ -14,9 +15,10 @@ If ``--corpus`` is omitted a plain-text corpus is generated into a temporary
 directory (and cleaned up automatically via :mod:`tempfile`).
 
 .. note::
-    MongoDB must be reachable before running; see ``--uri`` and the pre-check
+    Qdrant must be reachable before running; see ``--url`` and the pre-check
     performed at startup. The local test stack can be started with
-    ``docker-compose -f docker-compose.test.yml up -d``.
+    ``docker compose -f docker-compose.test.yml up -d`` (Qdrant publishes on
+    http://localhost:6334 in that stack).
 
 Attributes:
     CORPUS_PARAGRAPH (str): The exact paragraph of text used to build the
@@ -26,6 +28,7 @@ Attributes:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import os
 import re
 import resource
@@ -35,10 +38,7 @@ import tempfile
 import time
 from pathlib import Path
 
-try:
-    from pymongo import MongoClient
-except ImportError:  # pragma: no cover - dependency should be installed
-    MongoClient = None  # type: ignore[assignment,misc]
+from qdrant_client import QdrantClient
 
 #: The exact paragraph reused verbatim for generated corpus files.
 CORPUS_PARAGRAPH = (
@@ -54,10 +54,8 @@ CORPUS_PARAGRAPH = (
     "of the quality of the generated response."
 )
 
-#: Default URI for the local test MongoDB stack.
-DEFAULT_URI = (
-    "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
-)
+#: Default URL for the local test Qdrant stack (docker-compose.test.yml).
+DEFAULT_URL = "http://localhost:6334"
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -71,7 +69,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     Returns
     -------
     argparse.Namespace
-        The parsed namespace with ``corpus``, ``cores``, ``uri``, ``db``,
+        The parsed namespace with ``corpus``, ``cores``, ``url``,
         ``collection`` and ``repeat`` attributes.
     """
     parser = argparse.ArgumentParser(
@@ -92,22 +90,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "Default: 1,2,4,8,<os.cpu_count()>.",
     )
     parser.add_argument(
-        "--uri",
+        "--url",
         type=str,
-        default=DEFAULT_URI,
-        help="MongoDB connection URI. Default: %(default)s",
-    )
-    parser.add_argument(
-        "--db",
-        type=str,
-        default="secondbrain_bench_scale",
-        help="Database name. Default: %(default)s",
+        default=DEFAULT_URL,
+        help="Qdrant server URL. Default: %(default)s",
     )
     parser.add_argument(
         "--collection",
         type=str,
         default="embeddings_bench_scale",
-        help="Collection name. Default: %(default)s",
+        help="Qdrant collection name. Default: %(default)s",
     )
     parser.add_argument(
         "--repeat",
@@ -118,38 +110,29 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def mongo_client(uri: str, timeout_ms: int):
-    """Return a configured :class:`MongoClient`, raising if pymongo missing.
+def qdrant_client(url: str):
+    """Return a configured :class:`QdrantClient`.
 
     Parameters
     ----------
-    uri : str
-        MongoDB connection URI.
-    timeout_ms : int
-        Server selection timeout in milliseconds.
+    url : str
+        Qdrant server URL.
 
     Returns
     -------
-    MongoClient
-        A client configured with the given server-selection timeout.
-
-    Raises
-    ------
-    RuntimeError
-        If ``pymongo`` is not installed.
+    QdrantClient
+        A client pointing at the given server.
     """
-    if MongoClient is None:
-        raise RuntimeError("pymongo is not installed")
-    return MongoClient(uri, serverSelectionTimeoutMS=timeout_ms)
+    return QdrantClient(url=url)
 
 
-def check_mongo(uri: str) -> None:
-    """Verify MongoDB is reachable, exiting with code 2 on failure.
+def check_qdrant(url: str) -> None:
+    """Verify Qdrant is reachable, exiting with code 2 on failure.
 
     Parameters
     ----------
-    uri : str
-        MongoDB connection URI to ping.
+    url : str
+        Qdrant server URL to probe.
 
     Raises
     ------
@@ -158,11 +141,11 @@ def check_mongo(uri: str) -> None:
         short startup hint to stderr.
     """
     try:
-        mongo_client(uri, 2000).admin.command("ping")
+        qdrant_client(url).get_collections()
     except Exception:
         print(
-            "MongoDB unreachable — start via: "
-            "docker-compose -f docker-compose.test.yml up -d",
+            "Qdrant unreachable — start via: "
+            "docker compose -f docker-compose.test.yml up -d",
             file=sys.stderr,
         )
         sys.exit(2)
@@ -187,8 +170,7 @@ def generate_corpus(root: Path, count: int = 8) -> None:
 def ingest_once(
     corpus: Path,
     cores: int,
-    uri: str,
-    db: str,
+    url: str,
     collection: str,
 ) -> tuple[float, float, int]:
     """Run a single ``secondbrain ingest`` across ``corpus`` with ``cores``.
@@ -199,10 +181,8 @@ def ingest_once(
         Corpus directory to ingest.
     cores : int
         Number of worker cores for this run.
-    uri : str
-        MongoDB connection URI.
-    db : str
-        Target database name.
+    url : str
+        Qdrant server URL.
     collection : str
         Target collection name.
 
@@ -214,13 +194,16 @@ def ingest_once(
         and ``success_count`` is parsed from the ingested-file count reported
         on the subprocess stdout.
     """
-    # Fresh cold start: drop the collection before every run.
-    mongo_client(uri, 3000)[db][collection].drop()
+    # Fresh cold start: drop the collection before every run (it is recreated
+    # by the ingest pipeline at the configured embedding dimension).
+    client = qdrant_client(url)
+    with contextlib.suppress(Exception):
+        client.delete_collection(collection)
 
     env = dict(os.environ)
-    env["SECONDBRAIN_MONGO_URI"] = uri
-    env["SECONDBRAIN_MONGO_DB"] = db
-    env["SECONDBRAIN_MONGO_COLLECTION"] = collection
+    env["SECONDBRAIN_STORAGE_BACKEND"] = "qdrant"
+    env["SECONDBRAIN_QDRANT_URL"] = url
+    env["SECONDBRAIN_QDRANT_COLLECTION"] = collection
 
     cmd = [
         "secondbrain",
@@ -291,7 +274,7 @@ def main(argv: list[str] | None = None) -> int:
     """
     args = parse_args(argv)
 
-    check_mongo(args.uri)
+    check_qdrant(args.url)
 
     cores_list = [int(c) for c in args.cores.split(",") if c.strip()]
 
@@ -310,7 +293,7 @@ def main(argv: list[str] | None = None) -> int:
     for cores in cores_list:
         for _ in range(max(1, args.repeat)):
             wall, peak_rss_mb, success = ingest_once(
-                corpus, cores, args.uri, args.db, args.collection
+                corpus, cores, args.url, args.collection
             )
             files_per_s = (file_count / wall) if wall > 0 else 0.0
             print(

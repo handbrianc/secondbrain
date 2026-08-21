@@ -782,99 +782,55 @@ class _StructureMixin(_RAGPipelineState):
             source_filter: Optional source_file filter to scope to one document.
 
         Returns:
-            List of chunk dicts with '_id', 'chunk_text', 'page_number',
+            List of chunk dicts with 'chunk_text', 'page_number',
             'source_file', 'chunk_id'.
         """
-        from pymongo import MongoClient
-        from pymongo import errors as mongo_errors
-
-        from secondbrain.config import config
-
-        cfg = config()
+        # Structural roles that signal TOC/section/heading content.  The Qdrant
+        # OR-filter matches a chunk when its element_type OR chunk_role is one of
+        # these — identical to the former Mongo "$or" query.
+        element_types = [
+            "heading",
+            "toc_entry",
+            "body",
+            "paragraph",
+            "title",
+            "section",
+            "header",
+        ]
+        chunk_roles = [
+            "body",
+            "caption",
+            "navigation",
+            "heading",
+            "toc_entry",
+            "title",
+            "section",
+            "header",
+        ]
+        storage = self._searcher.storage
         try:
-            client = MongoClient(
-                cfg.mongo_uri, directConnection=True, serverSelectionTimeoutMS=2000
-            )
-            # Validate connection quickly
-            client.admin.command("ping")
-        except (
-            mongo_errors.ConnectionFailure,
-            mongo_errors.ServerSelectionTimeoutError,
-            Exception,
-        ):
-            return []
-        coll = client[cfg.mongo_db][cfg.mongo_collection]
-
-        query_filter: dict[str, object] = {
-            "$or": [
-                {
-                    "element_type": {
-                        "$in": [
-                            "heading",
-                            "toc_entry",
-                            "body",
-                            "paragraph",
-                            "title",
-                            "section",
-                            "header",
-                        ]
-                    }
-                },
-                {
-                    "chunk_role": {
-                        "$in": [
-                            "body",
-                            "caption",
-                            "navigation",
-                            "heading",
-                            "toc_entry",
-                            "title",
-                            "section",
-                            "header",
-                        ]
-                    }
-                },
-            ]
-        }
-        if source_filter:
-            query_filter["source_file"] = {"$regex": f"^{re.escape(source_filter)}"}
-
-        cursor = (
-            coll.find(
-                query_filter,
-                {
-                    "_id": 0,
-                    "chunk_text": 1,
-                    "chunk_role": 1,
-                    "page_number": 1,
-                    "source_file": 1,
-                    "chunk_id": 1,
-                },
-            )
-            .sort("page_number", 1)
-            .limit(10000)
-        )
-        result = list(cursor)
-        if len(result) < 5:
-            fallback_filter: dict[str, object] = {}
-            if source_filter:
-                fallback_filter["source_file"] = {
-                    "$regex": f"^{re.escape(source_filter)}"
-                }
             result = list(
-                coll.find(
-                    fallback_filter,
-                    {
-                        "_id": 0,
-                        "chunk_text": 1,
-                        "chunk_role": 1,
-                        "page_number": 1,
-                        "source_file": 1,
-                        "chunk_id": 1,
-                    },
-                ).limit(top_k)
+                storage.find_structural_chunks(
+                    element_types=element_types,
+                    chunk_roles=chunk_roles,
+                    source_prefix=source_filter,
+                    limit=10000,
+                )
             )
-        return result
+            if len(result) < 5:
+                # Fall back to ALL chunks for the source (or all chunks when no
+                # source_filter given), ordered by page and limited to top_k —
+                # preserves the former Mongo fallback query.
+                result = list(
+                    storage.find_structural_chunks(
+                        source_prefix=source_filter,
+                        limit=top_k,
+                    )
+                )
+        except Exception:  # storage unavailable → no structure to probe
+            logger.debug("Structure probing failed", exc_info=True)
+            return []
+        return [dict(c) for c in result]
 
     def _generic_one_shot(
         self,

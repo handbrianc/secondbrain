@@ -327,9 +327,9 @@ def _existing_text_hashes(hashes: list[str]) -> set[str]:
     if not hashes:
         return set()
     try:
-        from secondbrain.storage import VectorStorage
+        from secondbrain.storage import StorageFactory
 
-        storage = VectorStorage()
+        storage = StorageFactory.create_from_config()
         return set(storage.has_existing_hashes(hashes))
     except Exception as e:
         logger.warning(

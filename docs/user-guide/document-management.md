@@ -151,13 +151,13 @@ Reports include:
 | ----------- | ------------- |
 | Total chunks | Overall document count |
 | Sources | Unique source files |
-| Storage size | MongoDB collection size |
+| Storage size | Qdrant collection size |
 | Index status | Vector index health |
 | Chunk distribution | Sizes across corpus |
 
 ### Service Health
 
-Check MongoDB and embedding service connectivity:
+Check Qdrant and embedding service connectivity:
 
 ```bash
 secondbrain health
@@ -254,24 +254,19 @@ secondbrain delete --all --yes
 secondbrain ingest ./preserved_document.pdf
 ```
 
-### Migrate to New Database
+### Migrate to a New Database
 
-Transfer corpus to different MongoDB instance:
+Transfer the corpus to a different Qdrant instance:
 
-1. Dump original:
+1. Create a snapshot of the current collection (via `secondbrain start` or the Qdrant dashboard):
 
 ```bash
-mongodump --uri="$MONGO_URI" --collection=embeddings
+# Create a Qdrant snapshot of the embeddings collection
+curl -X POST "http://localhost:6333/collections/embeddings/snapshots"
 ```
 
-1. Restore to target:
+1. Restore the snapshot on the target instance and update configuration:
 
 ```bash
-mongorestore --uri="$NEW_MONGO_URI" dump/embeddings.bson
-```
-
-1. Update configuration:
-
-```bash
-export SECONDBRAIN_MONGO_URI="$NEW_MONGO_URI"
+export SECONDBRAIN_QDRANT_URL="$NEW_QDRANT_URL"
 ```

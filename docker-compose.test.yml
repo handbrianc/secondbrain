@@ -2,29 +2,19 @@
 name: secondbrain-test
 
 services:
-  mongodb:
-    image: mongo:7.0.34
-    container_name: secondbrain-mongodb-test
-    hostname: mongodb
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: secondbrain-qdrant-test
+    hostname: qdrant
     ports:
-      - "27018:27017"  # Different from dev port (27017)
-    environment:
-      MONGO_INITDB_DATABASE: secondbrain_test
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:-testuser}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:-testpass}
+      - "6334:6333"  # Different from dev port (6333)
     volumes:
-      - mongo_test_data:/data/db
-    healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
+      - qdrant_test_data:/qdrant/storage
     networks:
       - secondbrain-test-network
 
 volumes:
-  mongo_test_data:
+  qdrant_test_data:
     driver: local
 
 networks:

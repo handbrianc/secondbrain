@@ -18,7 +18,7 @@ class TestAsyncClosePatterns:
             patch(
                 "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
             ) as mock_create_from_config,
-            patch("secondbrain.search.VectorStorage") as mock_storage_class,
+            patch("secondbrain.search.StorageFactory.create_from_config") as mock_storage_class,
         ):
             mock_embed = MagicMock()
             mock_embed.aclose = AsyncMock()
@@ -41,7 +41,7 @@ class TestAsyncClosePatterns:
             patch(
                 "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
             ) as mock_create_from_config,
-            patch("secondbrain.search.VectorStorage") as mock_storage_class,
+            patch("secondbrain.search.StorageFactory.create_from_config") as mock_storage_class,
         ):
             mock_embed = MagicMock()
             mock_aclose = AsyncMock()
@@ -68,7 +68,7 @@ class TestAsyncClosePatterns:
             patch(
                 "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
             ) as mock_create_from_config,
-            patch("secondbrain.search.VectorStorage") as mock_storage_class,
+            patch("secondbrain.search.StorageFactory.create_from_config") as mock_storage_class,
         ):
             mock_embed = MagicMock()
             mock_embed.validate_connection.return_value = True
@@ -99,7 +99,7 @@ class TestAsyncClosePatterns:
             patch(
                 "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
             ) as mock_create_from_config,
-            patch("secondbrain.search.VectorStorage") as mock_storage_class,
+            patch("secondbrain.search.StorageFactory.create_from_config") as mock_storage_class,
         ):
             mock_embed = MagicMock()
             mock_embed.validate_connection.return_value = True
@@ -125,7 +125,7 @@ class TestAsyncClosePatterns:
             patch(
                 "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
             ) as mock_create_from_config,
-            patch("secondbrain.search.VectorStorage") as mock_storage_class,
+            patch("secondbrain.search.StorageFactory.create_from_config") as mock_storage_class,
         ):
             # Embedding generator without aclose
             mock_embed = MagicMock()

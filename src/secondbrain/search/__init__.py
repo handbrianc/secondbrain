@@ -14,8 +14,9 @@ from secondbrain.config import config
 from secondbrain.embedding import EmbeddingProvider, EmbeddingProviderFactory
 from secondbrain.storage import (
     SearchResult,
-    VectorStorage,
+    StorageFactory,
 )
+from secondbrain.utils.embedding_cache import EmbeddingCache
 from secondbrain.utils.tracing import trace_operation
 
 logger = logging.getLogger(__name__)
@@ -92,7 +93,10 @@ class Searcher:
         self.embedding_gen: EmbeddingProvider = (
             EmbeddingProviderFactory.create_from_config(self._config)
         )
-        self.storage = VectorStorage()
+        self.embedding_cache = EmbeddingCache(
+            max_size=self._config.embedding_cache_size
+        )
+        self.storage = StorageFactory.create_from_config()
 
     def close(self) -> None:
         """Close resources and release connections."""
@@ -173,7 +177,9 @@ class Searcher:
                     span.set_attribute("search.source_filter", source_filter)
                 if file_type_filter:
                     span.set_attribute("search.file_type_filter", file_type_filter)
-            query_embedding = self.embedding_gen.generate(sanitized_query)
+            query_embedding = self.embedding_cache.get_or_create(
+                sanitized_query, self.embedding_gen.generate
+            )
 
         with trace_operation("search_storage") as span:
             if span:
@@ -208,8 +214,17 @@ class Searcher:
             if span:
                 span.set_attribute("search.query_length", len(sanitized_query))
                 span.set_attribute("search.top_k", top_k)
-            query_embedding = await asyncio.to_thread(
-                self.embedding_gen.generate, sanitized_query
+
+            async def _generate_embedding(embed_text: str) -> list[float]:
+                generate_async = getattr(self.embedding_gen, "generate_async", None)
+                if callable(generate_async) and asyncio.iscoroutinefunction(
+                    generate_async
+                ):
+                    return await generate_async(embed_text)
+                return await asyncio.to_thread(self.embedding_gen.generate, embed_text)
+
+            query_embedding = await self.embedding_cache.get_or_create_async(
+                sanitized_query, _generate_embedding
             )
 
         with trace_operation("search_storage_async") as span:

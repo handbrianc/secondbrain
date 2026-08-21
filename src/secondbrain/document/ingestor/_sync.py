@@ -22,7 +22,7 @@ from secondbrain.document.ingestor._constants import (
     is_supported,
 )
 from secondbrain.exceptions import DocumentExtractionError
-from secondbrain.storage import VectorStorage
+from secondbrain.storage import StorageFactory
 from secondbrain.utils.embedding_cache import EmbeddingCache
 from secondbrain.utils.tracing import trace_operation
 
@@ -212,7 +212,7 @@ class DocumentIngestor:
             return None
 
         if cfg.streaming_enabled:
-            storage = VectorStorage()
+            storage = StorageFactory.create_from_config()
             docs_count = self._stream_process_chunks(
                 file_path, segments, embedding_gen, storage
             )
@@ -903,11 +903,11 @@ class DocumentIngestor:
         """
         from secondbrain.config import config
         from secondbrain.embedding import EmbeddingProviderFactory
-        from secondbrain.storage import VectorStorage
+        from secondbrain.storage import StorageFactory
 
         cfg = config()
         embedding_gen = EmbeddingProviderFactory.create_from_config(cfg)
-        storage = VectorStorage()
+        storage = StorageFactory.create_from_config(cfg)
 
         with trace_operation("ingest_collect_files"):
             files = self._collect_and_validate_files(path, recursive)

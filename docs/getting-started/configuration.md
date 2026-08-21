@@ -8,10 +8,16 @@ principles for consistent, production-ready settings management.
 Create a `.env` file in your project root:
 
 ```bash
-# Required: MongoDB connection
-SECONDBRAIN_MONGO_URI=mongodb://localhost:27017
-SECONDBRAIN_MONGO_DB=secondbrain
-SECONDBRAIN_MONGO_COLLECTION=embeddings
+# Storage backend (qdrant or mock)
+SECONDBRAIN_STORAGE_BACKEND=qdrant
+
+# Vector database: Qdrant
+SECONDBRAIN_QDRANT_URL=http://localhost:6333
+SECONDBRAIN_QDRANT_API_KEY=
+SECONDBRAIN_QDRANT_COLLECTION=embeddings
+
+# Conversations/sessions: SQLite
+SECONDBRAIN_SQLITE_PATH=~/.secondbrain/secondbrain.db
 
 # Embedding provider
 SECONDBRAIN_EMBEDDING_MODEL=text-embedding-3-small
@@ -35,13 +41,18 @@ During testing (`PYTEST_CURRENT_TEST` is set), configuration additionally loads 
 
 ## Core Settings
 
-### MongoDB Configuration
+### Storage Configuration
 
-| Variable                       | Default                     | Description                   |
-| ------------------------------ | --------------------------- | ----------------------------- |
-| `SECONDBRAIN_MONGO_URI`        | `mongodb://localhost:27017` | MongoDB connection URI        |
-| `SECONDBRAIN_MONGO_DB`         | `secondbrain`               | Database name                 |
-| `SECONDBRAIN_MONGO_COLLECTION` | `embeddings`                | Collection for vector storage |
+| Variable                       | Default                     | Description                                      |
+| ------------------------------ | --------------------------- | ------------------------------------------------ |
+| `SECONDBRAIN_STORAGE_BACKEND`  | `qdrant`                    | Storage backend: `qdrant` (production) or `mock` |
+| `SECONDBRAIN_QDRANT_URL`       | `http://localhost:6333`     | Qdrant vector database URL                       |
+| `SECONDBRAIN_QDRANT_API_KEY`   | *(unset)*                   | API key for authenticated Qdrant servers         |
+| `SECONDBRAIN_QDRANT_COLLECTION` | `embeddings`               | Qdrant collection for vector storage             |
+| `SECONDBRAIN_SQLITE_PATH`      | `~/.secondbrain/secondbrain.db` | SQLite database path for conversations/sessions |
+
+All chunk metadata (`chunk_id`, `source_file`, `page_number`, `chunk_text`, `element_type`, `chunk_role`,
+`section_label`) is stored in the Qdrant payload. Conversations, sessions, and messages persist to SQLite.
 
 ### Embedding Settings
 
@@ -176,9 +187,13 @@ On startup, SecondBrain validates configuration values. Invalid configurations r
 
 ```bash
 # Production .env.example
-SECONDBRAIN_MONGO_URI=mongodb://localhost:27017
-SECONDBRAIN_MONGO_DB=secondbrain_prod
-SECONDBRAIN_MONGO_COLLECTION=embeddings_v2
+SECONDBRAIN_STORAGE_BACKEND=qdrant
+
+SECONDBRAIN_QDRANT_URL=http://localhost:6333
+SECONDBRAIN_QDRANT_API_KEY=
+SECONDBRAIN_QDRANT_COLLECTION=embeddings_v2
+
+SECONDBRAIN_SQLITE_PATH=~/.secondbrain/secondbrain.db
 
 SECONDBRAIN_EMBEDDING_MODEL=text-embedding-3-small
 SECONDBRAIN_EMBEDDING_API_KEY=$OPENAI_API_KEY

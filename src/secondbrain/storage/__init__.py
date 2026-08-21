@@ -1,30 +1,23 @@
-"""Vector storage module for MongoDB integration.
+"""Vector storage module for Qdrant integration.
 
 Re-exports public API from submodules.
 """
 
-import time
-
-from pymongo import MongoClient
-
-from secondbrain.config import config, get_config
 from secondbrain.exceptions import StorageConnectionError
+from secondbrain.storage.factory import StorageFactory
 from secondbrain.storage.mock import MockVectorStorage
 from secondbrain.storage.models import DatabaseStats
-from secondbrain.storage.pipeline import build_search_pipeline
-from secondbrain.storage.storage import AsyncVectorStorage, VectorStorage
+from secondbrain.storage.protocol import VectorStorageProtocol
+from secondbrain.storage.qdrant import QdrantVectorStorage
 from secondbrain.types import ChunkInfo, SearchResult
 
 __all__ = [
-    "AsyncVectorStorage",
     "ChunkInfo",
     "DatabaseStats",
     "MockVectorStorage",
-    "MongoClient",
+    "QdrantVectorStorage",
     "SearchResult",
     "StorageConnectionError",
-    "VectorStorage",
-    "build_search_pipeline",
-    "get_config",
-    "time",
+    "StorageFactory",
+    "VectorStorageProtocol",
 ]

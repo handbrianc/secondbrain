@@ -259,7 +259,7 @@ class TestRAGPipelineErrorHandling:
     ) -> None:
         """Verify chat retries on empty LLM responses (up to 3 times)."""
         from secondbrain.conversation import ConversationSession
-        from secondbrain.conversation.storage import ConversationStorage
+        from secondbrain.conversation.storage_sqlite import ConversationStorage
 
         # Create a mock session
         mock_storage = MagicMock(spec=ConversationStorage)
@@ -300,7 +300,7 @@ class TestRAGPipelineErrorHandling:
     ) -> None:
         """Verify chat returns fallback response after max retries with empty responses."""
         from secondbrain.conversation import ConversationSession
-        from secondbrain.conversation.storage import ConversationStorage
+        from secondbrain.conversation.storage_sqlite import ConversationStorage
 
         # Create a mock session
         mock_storage = MagicMock(spec=ConversationStorage)
@@ -339,7 +339,7 @@ class TestRAGPipelineErrorHandling:
     ) -> None:
         """Verify pipeline treats whitespace-only responses as empty and retries."""
         from secondbrain.conversation import ConversationSession
-        from secondbrain.conversation.storage import ConversationStorage
+        from secondbrain.conversation.storage_sqlite import ConversationStorage
 
         # Create a mock session
         mock_storage = MagicMock(spec=ConversationStorage)
@@ -377,7 +377,7 @@ class TestRAGPipelineErrorHandling:
     ) -> None:
         """Verify chat handles session-related failures gracefully."""
         from secondbrain.conversation import ConversationSession
-        from secondbrain.conversation.storage import ConversationStorage
+        from secondbrain.conversation.storage_sqlite import ConversationStorage
 
         # Create a mock storage and session
         mock_storage = MagicMock(spec=ConversationStorage)
@@ -406,7 +406,7 @@ class TestRAGPipelineErrorHandling:
     ) -> None:
         """Verify chat handles query rewriter failures gracefully."""
         from secondbrain.conversation import ConversationSession, QueryRewriter
-        from secondbrain.conversation.storage import ConversationStorage
+        from secondbrain.conversation.storage_sqlite import ConversationStorage
 
         # Create mock storage and session with history
         mock_storage = MagicMock(spec=ConversationStorage)
@@ -617,7 +617,7 @@ class TestRAGPipelineErrorHandling:
     ) -> None:
         """Verify _rewrite_query_with_history handles empty history."""
         from secondbrain.conversation import ConversationSession
-        from secondbrain.conversation.storage import ConversationStorage
+        from secondbrain.conversation.storage_sqlite import ConversationStorage
 
         mock_storage = MagicMock(spec=ConversationStorage)
         session = ConversationSession(
@@ -999,7 +999,7 @@ class TestRAGPipelineFallbackLogic:
     ) -> None:
         """Verify chat falls back to original query when rewriter fails."""
         from secondbrain.conversation import ConversationSession, QueryRewriter
-        from secondbrain.conversation.storage import ConversationStorage
+        from secondbrain.conversation.storage_sqlite import ConversationStorage
 
         # Create session with history
         mock_storage = MagicMock(spec=ConversationStorage)
@@ -1042,7 +1042,7 @@ class TestRAGPipelineFallbackLogic:
     ) -> None:
         """Verify chat handles empty session history gracefully."""
         from secondbrain.conversation import ConversationSession
-        from secondbrain.conversation.storage import ConversationStorage
+        from secondbrain.conversation.storage_sqlite import ConversationStorage
 
         # Create empty session
         mock_storage = MagicMock(spec=ConversationStorage)
@@ -1126,7 +1126,7 @@ class TestRAGPipelineFallbackLogic:
     ) -> None:
         """Verify chat includes session history in context."""
         from secondbrain.conversation import ConversationSession
-        from secondbrain.conversation.storage import ConversationStorage
+        from secondbrain.conversation.storage_sqlite import ConversationStorage
 
         # Create session with history
         mock_storage = MagicMock(spec=ConversationStorage)

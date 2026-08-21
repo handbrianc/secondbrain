@@ -1,105 +1,88 @@
 # Migrations Guide
 
-Database migration procedures for SecondBrain.
+Schema migration procedures for SecondBrain.
 
 ## Overview
 
-SecondBrain stores all data in MongoDB. Migrations handle:
+SecondBrain stores data in two places: vector data in **Qdrant** (collection `embeddings`, default) and conversations
+in **SQLite** (default path `~/.secondbrain/secondbrain.db`). Migrations handle:
 
-- Schema changes to the `embeddings` collection
-- Index modifications
+- Payload schema changes in the `embeddings` Qdrant collection
+- Collection / index configuration changes
+- SQLite schema changes for conversations
 - Data transformations for new features
 
 ## Migration Philosophy
 
 - **Forward-only migrations**: Old data remains readable with current code
 - **Backward compatibility**: Previous versions may not read new schemas
-- **Atomic operations**: Each migration is idempotent where possible
+- **Idempotent operations**: Re-running a migration should be safe
 
 ## Current Schema Version
 
-As of version 0.4.0, the current schema includes:
+As of version 0.4.0, the current Qdrant payload includes:
 
-```javascript
+```json
 {
-  "_id": ObjectId,
-  "chunk_id": String,          // UUID
-  "chunk_index": Integer,
-  "text": String,              // May be compressed
-  "vector": Array[Float],      // Embedding vector
-  "metadata": {
-    "source": String,          // File path
-    "page": Integer,
-    "file_type": String,       // Extension
-    "created_at": DateTime,
-    "size": Integer
-  }
+  "chunk_id": "uuid-string",
+  "source_file": "/path/to/document.pdf",
+  "page_number": 3,
+  "chunk_text": "Extracted chunk text content...",
+  "element_type": "body",
+  "chunk_role": "body",
+  "section_label": "Introduction"
 }
 ```
 
-Indexes:
+Qdrant collection configuration:
 
-- `vector` field with `2dsphere` or `knnBeta` index type
-- Compound indexes on `(metadata.source, chunk_index)`
+- Collection: `embeddings` (default)
+- Vector size: EMBEDDING_DIMENSIONS (default 1536)
+- Distance: Cosine
+
+SQLite (conversations):
+
+- `sessions` table (session_id, created_at, updated_at)
+- `messages` table (id, session_id, role, content, timestamp, sources)
 
 ## Common Migrations
 
-### Adding a New Index
+### Adding a New Payload Field
 
-```javascript
-// Migration: add_file_type_index.js
-db.embeddings.createIndex(
-  { "metadata.file_type": 1 },
-  { name: "file_type_idx", background: true }
-)
+New payload fields can be added without recreating the collection; points written after the change carry the field:
+
+```python
+from qdrant_client import QdrantClient
+
+client = QdrantClient(url="http://localhost:6333")
+# Upsert points with the new payload field
+client.upsert(collection_name="embeddings", points=[...])
 ```
 
-### Renaming a Field
+### Recreating a Collection After a Payload/Schema Change
 
-From MongoDB shell:
+Some changes (for example, a new vector dimension) require recreating the collection:
 
-```javascript
-db.embeddings.updateMany(
-  {},
-  { $rename: { "old_field": "new_field" } }
-)
-```
-
-### Dropping Deprecated Fields
-
-```javascript
-db.embeddings.updateMany(
-  {},
-  { $unset: { "legacy_field": "" } }
+```python
+client.recreate_collection(
+    collection_name="embeddings",
+    vectors_config=models.VectorParams(size=1536, distance=models.Distance.COSINE),
 )
 ```
 
 ## Performing Migrations
 
-### Manual Migration
+### Re-ingesting Documents
 
-1. Export current data:
+Because chunk vectors and payloads are written by the ingestion pipeline, the primary migration path is to re-ingest
+affected documents:
 
 ```bash
-mongodump --uri="$SECONDBRAIN_MONGO_URI" --archive=dump.archive
-```
+# Delete affected documents
+secondbrain delete --source "/path/to/document.pdf"
 
-1. Run migration (mongosh):
-
-```javascript
-// Apply changes
-db.embeddings.createIndex(...)
-db.embeddings.updateMany(..., {$rename: {...}})
-```
-
-1. Verify migration:
-
-```javascript
-db.embeddings.getIndexes()
-// Confirm new indexes present
-
-db.embeddings.findOne()
-// Confirm expected document structure
+# Re-ingest with the new schema
+secondbrain ingest "/path/to/document.pdf"
 ```
 
 ### Programmatic Migration
@@ -107,45 +90,41 @@ db.embeddings.findOne()
 For automated deployments:
 
 ```python
-async def migrate_add_source_hash():
-    """Add computed hash for deduplication."""
-    from pymongo import MongoClient
-    
-    client = MongoClient(os.getenv("SECONDBRAIN_MONGO_URI"))
-    db = client[os.getenv("SECONDBRAIN_MONGO_DB")]
-    collection = db[os.getenv("SECONDBRAIN_MONGO_COLLECTION")]
-    
-    # Add hash field
-    cursor = collection.find({"content_hash": {"$exists": False}})
-    for doc in cursor:
-        doc["content_hash"] = compute_hash(doc["text"])
-        collection.replace_one({"_id": doc["_id"]}, doc)
-    
-    client.close()
+from qdrant_client import QdrantClient
 
-if __name__ == "__main__":
-    migrate_add_source_hash()
+def migrate_add_source_hash():
+    """Add computed hash to payload for deduplication."""
+    client = QdrantClient(url="http://localhost:6333")
+
+    # Scroll points and rewrite payloads with the new field
+    points, _ = client.scroll(collection_name="embeddings", limit=100)
+    for point in points:
+        point.payload["content_hash"] = compute_hash(point.payload["chunk_text"])
+        client.set_payload(
+            collection_name="embeddings",
+            payload=point.payload,
+            points=[point.id],
+        )
+
+    client.close()
 ```
 
 ## Rollback Procedures
 
-### Index Removal
+### Restoring Payload Fields
 
-```javascript
-// Non-essential index only
-db.embeddings.dropIndex("temporary_idx")
-```
+When payload fields were only added (not removed), rollback just means stopping the write of the new field. For data
+loss scenarios, restore from backup before re-ingesting.
 
-### Field Restoration
-
-Cannot automatically restore renamed/deleted fields from MongoDB. Ensure backups exist before irreversible operations.
+Cannot automatically restore deleted payload fields. Ensure backups exist before irreversible operations.
 
 ## Pre-Migration Checklist
 
 Before applying migrations:
 
-- [ ] Backup database: `mongodump --archive=backup.archive`
-- [ ] Review migration scripts in staging environment
+- [ ] Back up vector data (Qdrant snapshot or point export)
+- [ ] Back up the SQLite database (`cp ~/.secondbrain/secondbrain.db backup.db`)
+- [ ] Review migration steps in staging environment
 - [ ] Schedule maintenance window for large datasets
 - [ ] Notify users of potential downtime
 - [ ] Have rollback plan ready
@@ -167,12 +146,15 @@ secondbrain search "test query"
 
 3. Monitor error tracking for new migration-related bugs
 
-## Version Compatibility Matrix
+## Historical Note: MongoDB → Qdrant + SQLite
 
-| Version | Schema Version | Compatible |
-| --------- | --------------- | ------------ |
-| 0.3.x | v1 | Read/write |
-| 0.4.0 | v2 | Read/write |
-| Future | v3 | Write only |
+MongoDB has been fully removed from SecondBrain. The app previously stored vectors and documents in MongoDB (using
+`$vectorSearch`) and later migrated to **Qdrant for vector storage** and **SQLite for conversation sessions**. The
+Mongo backends, `config/mongo.py` (MongoMixin), and the `pymongo`/`motor`/`bson` dependencies were deleted.
 
-Schemas are additive (fields added) in minor versions. Major versions may introduce breaking changes.
+At the time of the migration, development setup used an `init-mongo` script; that is no longer needed. Development now
+starts the Qdrant service:
+
+```bash
+secondbrain start --wait   # starts the secondbrain-qdrant container
+```

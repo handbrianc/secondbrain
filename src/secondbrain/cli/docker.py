@@ -49,8 +49,8 @@ def start(
 ) -> None:
     """Start the production Docker Compose stack.
 
-    Starts MongoDB and other services defined in docker-compose.yml.
-    By default, starts only MongoDB service.
+    Starts Qdrant and other services defined in docker-compose.yml.
+    By default, starts only the Qdrant service.
 
     Examples:
     --------
@@ -97,12 +97,12 @@ def start(
                 "  - https://docs.docker.com/compose/install/"
             )
 
-        console.print("[cyan]Starting MongoDB...[/cyan]")
-        manager.start_mongo()
+        console.print("[cyan]Starting Qdrant...[/cyan]")
+        manager.start_qdrant()
 
         if wait:
             console.print("[cyan]Waiting for services to be ready...[/cyan]")
-            manager.wait_for_mongo_ready()
+            manager.wait_for_qdrant_ready()
             console.print("[green]✓ Docker Compose stack is fully ready[/green]")
         else:
             console.print("[green]✓ Docker Compose stack started successfully[/green]")

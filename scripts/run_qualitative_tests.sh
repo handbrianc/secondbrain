@@ -16,14 +16,14 @@ echo ""
 echo "Running hallucination detection tests..."
 pytest tests/test_qualitative/test_hallucination_detection.py -v
 
-# Integration tests (require MongoDB)
+# Integration tests (require Qdrant)
 echo ""
-echo "Running integration tests (requires MongoDB)..."
-if pgrep -x "mongo" > /dev/null; then
+echo "Running integration tests (requires Qdrant)..."
+if curl -s -o /dev/null http://localhost:6333/healthz; then
     pytest tests/test_qualitative/ -m "integration" -v
 else
-    echo "Skipping integration tests (MongoDB not running)"
-    echo "Start services with: docker-compose up -d"
+    echo "Skipping integration tests (Qdrant not running)"
+    echo "Start services with: docker compose up qdrant -d"
 fi
 
 echo ""

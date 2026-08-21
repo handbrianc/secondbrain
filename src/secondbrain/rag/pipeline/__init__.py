@@ -604,40 +604,26 @@ class RAGPipeline(
                 appendix_entries = []
 
             if chapters_to_cover:
-                from pymongo import MongoClient
-                from pymongo import errors as mongo_errors
-
-                from secondbrain.config import config
-
-                cfg_ = config()
+                storage = self._searcher.storage
                 try:
-                    client_ = MongoClient(
-                        cfg_.mongo_uri,
-                        directConnection=True,
-                        serverSelectionTimeoutMS=2000,
+                    # Use explicit source_filter if provided (from DocumentRouter),
+                    # otherwise pick the source with the most body chunks.
+                    if source_filter:
+                        src = source_filter
+                    else:
+                        sources_set = {entry[1] for entry in chapters_to_cover}
+                        src = max(
+                            (s for s in sources_set),
+                            key=lambda s: storage.count_chunks(s, "body"),
+                        )
+                except Exception:
+                    logger.warning(
+                        "Storage unavailable for chapter enumeration, "
+                        "falling back to generic search",
+                        exc_info=True,
                     )
-                    client_.admin.command("ping")
-                except (
-                    mongo_errors.ConnectionFailure,
-                    mongo_errors.ServerSelectionTimeoutError,
-                    Exception,
-                ):
                     return self._generic_one_shot(
                         query, top_k, show_sources, source_filter=source_filter
-                    )
-                coll_ = client_[cfg_.mongo_db][cfg_.mongo_collection]
-
-                # Use explicit source_filter if provided (from DocumentRouter),
-                # otherwise pick the source with the most body chunks.
-                if source_filter:
-                    src = source_filter
-                else:
-                    sources_set = {entry[1] for entry in chapters_to_cover}
-                    src = max(
-                        (s for s in sources_set),
-                        key=lambda s: coll_.count_documents(
-                            {"source_file": s, "chunk_role": "body"}
-                        ),
                     )
 
                 import re
@@ -661,12 +647,10 @@ class RAGPipeline(
                 # pre-populate, so the noisy scans cannot override it.
                 dot_leader_ = re.compile(r"\.{2,}")
                 body_all_ = list(
-                    coll_.find(
-                        {"source_file": src, "chunk_role": "body"},
-                        {"_id": 0, "chunk_text": 1, "page_number": 1},
+                    storage.get_body_chunks(
+                        src,
+                        limit=3500,
                     )
-                    .sort("page_number", 1)
-                    .limit(3500)
                 )
                 for tn_ in full_chapters:
                     tn, ts_, tt_ = tn_
@@ -694,7 +678,7 @@ class RAGPipeline(
                             r"^\s*\d{1,3}\s*$", brest_
                         ):
                             continue
-                        chapter_first_pg[tn] = bc_.get("page_number", 0)
+                        chapter_first_pg[tn] = int(bc_.get("page_number") or 0)
                         break
                 ch_n = re.compile(
                     r"(?:Chapter\s+(\d+)\s*[:\-]?\s*|(?:Module|Lesson)\s+(\d+)"
@@ -754,16 +738,9 @@ class RAGPipeline(
                 # most universal approach — works for any document regardless of TOC format.
                 appendix_sec_re = re.compile(r"\b([A-Za-z])\.\d+\s")
                 appendix_labels_found: set[str] = set()
-                for c in (
-                    coll_.find(
-                        {"source_file": src, "chunk_role": "body"},
-                        {"_id": 0, "chunk_text": 1, "page_number": 1},
-                    )
-                    .sort("page_number", 1)
-                    .limit(3500)
-                ):
+                for c in storage.get_body_chunks(src, limit=3500):
                     txt = c.get("chunk_text", "")[:150]
-                    page = c.get("page_number", 0)
+                    page = c.get("page_number") or 0
 
                     # Detect appendix labels from body section numbering
                     am = appendix_sec_re.search(txt)
@@ -795,19 +772,14 @@ class RAGPipeline(
                     if n not in chapter_first_pg
                 ]
                 if missing:
-                    for c in (
-                        coll_.find(
-                            {"source_file": src, "chunk_role": "body"},
-                            {"_id": 0, "chunk_text": 1, "page_number": 1},
-                        )
-                        .sort("page_number", 1)
-                        .limit(3500)
-                    ):
+                    for c in storage.get_body_chunks(src, limit=3500):
                         txt = c.get("chunk_text", "")[:150]
                         for ch_num in list(missing):
                             pat = re.compile(rf"\b{ch_num}\D")
                             if pat.search(txt):
-                                chapter_first_pg[ch_num] = c.get("page_number", 0)
+                                chapter_first_pg[ch_num] = int(
+                                    c.get("page_number") or 0
+                                )
                                 missing.remove(ch_num)
                         if not missing:
                             break
@@ -952,19 +924,8 @@ class RAGPipeline(
                 chapter_buckets: dict[int, list[dict[str, Any]]] = {
                     ch: [] for ch in chapter_keys
                 }
-                for c in (
-                    coll_.find(
-                        {"source_file": src, "chunk_role": "body"},
-                        {
-                            "_id": 0,
-                            "chunk_text": 1,
-                            "page_number": 1,
-                            "source_file": 1,
-                            "chunk_id": 1,
-                        },
-                    )
-                    .sort("page_number", 1)
-                    .limit(6000)
+                for c in cast(
+                    list[dict[str, Any]], storage.get_body_chunks(src, limit=6000)
                 ):
                     pg = c.get("page_number", 0)
                     for ch_num in chapter_keys:
@@ -1098,24 +1059,15 @@ class RAGPipeline(
                     )
                     _max_appendix = 200
                     appendix_body_chunks = list(
-                        coll_.find(
-                            {
-                                "source_file": src,
-                                "chunk_role": "body",
-                                "page_number": {"$gte": appendix_start_pg},
-                            },
-                            {
-                                "_id": 0,
-                                "chunk_text": 1,
-                                "page_number": 1,
-                                "source_file": 1,
-                                "chunk_id": 1,
-                            },
+                        storage.get_body_chunks(
+                            src,
+                            page_gte=appendix_start_pg,
+                            limit=_max_appendix,
                         )
-                        .sort("page_number", 1)
-                        .limit(_max_appendix)
                     )
-                    final_chunks.extend(appendix_body_chunks)
+                    final_chunks.extend(
+                        cast(list[dict[str, Any]], appendix_body_chunks)
+                    )
                     # Re-deduplicate to remove any overlap between appendix
                     # chunks and already-selected body chunks.
                     _seen_ids: set[str] = set()
