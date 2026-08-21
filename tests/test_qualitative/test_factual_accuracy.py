@@ -16,7 +16,7 @@ class TestFactVerification:
         "claim",
         [
             pytest.param("fv_config_python_version", id="python_version"),
-            pytest.param("fv_config_mongodb_version", id="mongodb_version"),
+            pytest.param("fv_config_qdrant_version", id="qdrant_version"),
         ],
     )
     def test_configuration_facts(self, factual_claims: dict, claim: str) -> None:

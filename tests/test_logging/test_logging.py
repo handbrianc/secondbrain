@@ -2,6 +2,7 @@ import io
 import json
 import logging
 import os
+from collections.abc import Iterator
 from pathlib import Path
 from unittest.mock import patch
 
@@ -261,6 +262,14 @@ class TestCheckServices:
 
 
 class TestFileLogging:
+    @pytest.fixture(autouse=True)
+    def _restore_root_logger_handlers(self) -> Iterator[None]:
+        """Restore root handlers so deleted tmp-path file handlers don't survive."""
+        root_logger = logging.getLogger()
+        snapshot = list(root_logger.handlers)
+        yield
+        root_logger.handlers = snapshot
+
     def test_setup_logging_with_log_file_creates_file_handler(
         self, tmp_path: Path
     ) -> None:

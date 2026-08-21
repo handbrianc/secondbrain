@@ -4,7 +4,7 @@ This module provides comprehensive error handling tests for the RAGPipeline clas
 covering fallback logic, error recovery, provider failures, and edge cases.
 """
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from openai import APIError as OpenAI_APIError
@@ -283,7 +283,8 @@ class TestRAGPipelineErrorHandling:
             top_k=5,
         )
 
-        result = pipeline.chat("Test query", session)
+        with patch("time.sleep", return_value=None):
+            result = pipeline.chat("Test query", session)
 
         # Should have retried and eventually succeeded
         assert mock_llm_provider.generate.call_count == 3
@@ -324,7 +325,8 @@ class TestRAGPipelineErrorHandling:
             top_k=5,
         )
 
-        result = pipeline.chat("Test query", session)
+        with patch("time.sleep", return_value=None):
+            result = pipeline.chat("Test query", session)
 
         # Should have retried max times and returned fallback
         assert mock_llm_provider.generate.call_count == 3
@@ -363,7 +365,8 @@ class TestRAGPipelineErrorHandling:
             top_k=5,
         )
 
-        result = pipeline.chat("Test query", session)
+        with patch("time.sleep", return_value=None):
+            result = pipeline.chat("Test query", session)
 
         # Should have retried 3 times (whitespace counts as empty)
         assert mock_llm_provider.generate.call_count == 3

@@ -84,12 +84,14 @@ class TestResolveCoreCount:
         ingestor._cpu_count_fn = lambda: 8
         with patch("secondbrain.document.ingestor._sync.config") as mock_config:
             mock_config.return_value.max_workers = None
+            mock_config.return_value.max_ingest_processes = 0
             assert ingestor._resolve_core_count(None) == 8
 
         ingestor = DocumentIngestor()
         ingestor._cpu_count_fn = lambda: None
         with patch("secondbrain.document.ingestor._sync.config") as mock_config:
             mock_config.return_value.max_workers = None
+            mock_config.return_value.max_ingest_processes = 0
             assert ingestor._resolve_core_count(None) == 1
 
     def test_resolve_core_count_explicit(self) -> None:

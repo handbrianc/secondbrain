@@ -1,3 +1,4 @@
+import itertools
 import subprocess
 from unittest.mock import MagicMock, patch
 
@@ -210,8 +211,10 @@ class TestWaitForQdrantReady:
                 mock_storage_class.return_value = mock_storage
 
                 manager = DockerManager()
-                with pytest.raises(QdrantStartupError):
-                    manager.wait_for_qdrant_ready(max_wait_seconds=1, check_interval=0.1)
+                clock = itertools.count()
+                with patch("time.time", side_effect=lambda: next(clock) * 100.0), patch("time.sleep"):
+                    with pytest.raises(QdrantStartupError):
+                        manager.wait_for_qdrant_ready(max_wait_seconds=1, check_interval=0.1)
 
 
 class TestEnsureQdrantRunning:
@@ -360,8 +363,10 @@ class TestDockerManagerCoverage:
             mock_storage_class.return_value = mock_storage
 
             manager = DockerManager()
-            with pytest.raises(QdrantStartupError):
-                manager.wait_for_qdrant_ready(max_wait_seconds=1, check_interval=0.1)
+            clock = itertools.count()
+            with patch("time.time", side_effect=lambda: next(clock) * 100.0), patch("time.sleep"):
+                with pytest.raises(QdrantStartupError):
+                    manager.wait_for_qdrant_ready(max_wait_seconds=1, check_interval=0.1)
 
     @patch("secondbrain.utils.docker_manager.config")
     def test_wait_for_qdrant_ready_handles_generic_exception(self, mock_config):
@@ -377,8 +382,10 @@ class TestDockerManagerCoverage:
             mock_storage_class.return_value = mock_storage
 
             manager = DockerManager()
-            with pytest.raises(QdrantStartupError):
-                manager.wait_for_qdrant_ready(max_wait_seconds=1, check_interval=0.1)
+            clock = itertools.count()
+            with patch("time.time", side_effect=lambda: next(clock) * 100.0), patch("time.sleep"):
+                with pytest.raises(QdrantStartupError):
+                    manager.wait_for_qdrant_ready(max_wait_seconds=1, check_interval=0.1)
 
     @patch("secondbrain.utils.docker_manager.config")
     def test_ensure_qdrant_running_verbose_remote(self, mock_config, capsys):

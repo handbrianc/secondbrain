@@ -28,12 +28,16 @@ def setup_otel_module():
     """Setup OpenTelemetry at module level for all integration tests."""
     global _memory_exporter, _metric_reader, _tracer_provider, _meter_provider
 
+    # set_tracer_provider installs only once; a sibling tracing file may have set
+    # it first, so force the module global and restore the prior provider after.
+    _prev_provider = trace.get_tracer_provider()
+
     # Setup tracing
     _memory_exporter = InMemorySpanExporter()
     _tracer_provider = TracerProvider()
     processor = SimpleSpanProcessor(_memory_exporter)
     _tracer_provider.add_span_processor(processor)
-    trace.set_tracer_provider(_tracer_provider)
+    trace._TRACER_PROVIDER = _tracer_provider
 
     # Setup metrics
     _metric_reader = InMemoryMetricReader()
@@ -47,6 +51,7 @@ def setup_otel_module():
         _memory_exporter.shutdown()
     if _metric_reader:
         _metric_reader.shutdown()
+    trace._TRACER_PROVIDER = _prev_provider
 
 
 @pytest.fixture(autouse=True)
