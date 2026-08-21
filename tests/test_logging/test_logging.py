@@ -235,7 +235,7 @@ class TestGetHealthStatus:
             "secondbrain.storage.StorageFactory.create_from_config",
             return_value=MockVectorStorage(),
         ):
-            assert "mongodb" in get_health_status()["services"]
+            assert "qdrant" in get_health_status()["services"]
 
 
 class TestCheckServices:
@@ -251,14 +251,14 @@ class TestCheckServices:
             "secondbrain.storage.StorageFactory.create_from_config",
             return_value=MockVectorStorage(),
         ):
-            assert "mongodb" in check_services()
+            assert "qdrant" in check_services()
 
     def test_check_services_values_are_booleans(self) -> None:
         with patch(
             "secondbrain.storage.StorageFactory.create_from_config",
             return_value=MockVectorStorage(),
         ):
-            assert isinstance(check_services()["mongodb"], bool)
+            assert isinstance(check_services()["qdrant"], bool)
 
 
 class TestFileLogging:
