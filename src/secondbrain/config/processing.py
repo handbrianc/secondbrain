@@ -43,9 +43,9 @@ class ProcessingStorageMixin:
     @classmethod
     def validate_ingest_pool(cls, v: str) -> str:
         """Validate ingest pool is one of 'process' or 'thread'."""
-        if v not in {"process", "thread"}:
+        if v.lower() not in {"process", "thread"}:
             raise ValueError("ingest_pool must be one of {'process', 'thread'}")
-        return v
+        return v.lower()
 
     skip_existing_on_reingest: bool = Field(
         default=True,
@@ -175,11 +175,11 @@ class ProcessingStorageMixin:
     @classmethod
     def validate_pdf_accelerator_device(cls, v: str) -> str:
         """Validate the accelerator device is one of the supported values."""
-        if v not in {"auto", "cpu", "mps", "cuda"}:
+        if v.lower() not in {"auto", "cpu", "mps", "cuda"}:
             raise ValueError(
                 "pdf_accelerator_device must be one of {'auto', 'cpu', 'mps', 'cuda'}"
             )
-        return v
+        return v.lower()
 
     @field_validator("pdf_num_threads")
     @classmethod

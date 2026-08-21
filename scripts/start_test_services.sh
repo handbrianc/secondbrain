@@ -49,7 +49,7 @@ ELAPSED=0
 
 # Function to check Qdrant health via its HTTP readiness endpoint
 check_qdrant() {
-    curl -s -o /dev/null --max-time 2 "$QDRANT_HEALTH_URL"
+    curl -s -o /dev/null --fail --max-time 2 "$QDRANT_HEALTH_URL"
 }
 
 # Wait for Qdrant

@@ -35,13 +35,13 @@ class BaseManager:
         self.storage = StorageFactory.create_from_config()
 
     def _ensure_storage_available(self) -> None:
-        """Ensure MongoDB is available, raise if not.
+        """Ensure vector storage is available, raise if not.
 
         Raises
         ------
-            ServiceUnavailableError: If MongoDB connection cannot be established.
+            ServiceUnavailableError: If storage connection cannot be established.
         """
-        ensure_service_available("MongoDB", self.storage.validate_connection)
+        ensure_service_available("vector storage", self.storage.validate_connection)
 
     def __enter__(self) -> Self:
         """Enter runtime context manager."""

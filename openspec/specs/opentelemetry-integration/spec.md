@@ -68,12 +68,12 @@ Search operations SHALL be instrumented with OpenTelemetry spans.
 
 ### Requirement: Qdrant operation instrumentation
 
-Qdrant operations SHALL be automatically instrumented.
+Qdrant operations SHALL be instrumented via explicit spans.
 
 #### Scenario: Database queries are traced
 
 - **WHEN** Qdrant operations occur
-- **THEN** "db.qdrant.query" span SHALL be created
+- **THEN** a span SHALL be created using `trace_operation` (e.g. `trace_operation("search_storage")`)
 - **AND** it SHALL include collection name
 - **AND** it SHALL include operation type
 

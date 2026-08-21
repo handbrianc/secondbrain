@@ -211,7 +211,7 @@ def check_services() -> dict[str, bool]:
     storage = StorageFactory.create_from_config()
 
     return {
-        "mongodb": storage.validate_connection(),
+        "qdrant": storage.validate_connection(),
     }
 
 

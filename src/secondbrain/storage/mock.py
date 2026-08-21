@@ -413,7 +413,7 @@ class MockVectorStorage:
             and (chunk_role is None or c.get("chunk_role") == chunk_role)
         )
 
-    def validate_connection(self) -> bool:
+    def validate_connection(self, force: bool = False) -> bool:
         """Validate storage connection (always True for mock).
 
         Returns:
@@ -421,7 +421,7 @@ class MockVectorStorage:
         """
         return True
 
-    async def validate_connection_async(self) -> bool:
+    async def validate_connection_async(self, force: bool = False) -> bool:
         """Async validation (always True for mock).
 
         Returns:
