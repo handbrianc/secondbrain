@@ -47,8 +47,8 @@ Runtime dependencies only:
 ```toml
 dependencies = [
     "click>=8.4.1",
-    "pymongo>=4.17.0",
-    "motor>=3.0.0",
+    "qdrant-client>=1.9.0",
+    "aiosqlite>=0.20.0",
     ...
 ]
 ```

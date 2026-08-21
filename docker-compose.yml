@@ -1,31 +1,17 @@
 services:
-  mongodb:
-    image: mongo:7.0.34
-    container_name: secondbrain-mongodb
-    hostname: mongodb
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: secondbrain-qdrant
+    hostname: qdrant
     ports:
-      - "27017:27017"
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:-admin}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:?REQUIRED}
-    command: mongod --auth --bind_ip_all
+      - "6333:6333"
     volumes:
-      - mongodb-data:/data/db
-      - mongodb-configdb:/data/configdb
-      - mongot-data:/data/mongot
-    healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
+      - qdrant-data:/qdrant/storage
     networks:
       - secondbrain-network
 
 volumes:
-  mongodb-data:
-  mongodb-configdb:
-  mongot-data:
+  qdrant-data:
 
 networks:
   secondbrain-network:

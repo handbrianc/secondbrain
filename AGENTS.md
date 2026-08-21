@@ -3,8 +3,8 @@
 **Last Updated:** 2026-05-03  
 **Commit:** 80fd894
 
-SecondBrain is a local document intelligence CLI for semantic search using MongoDB vector search and OpenAI-compatible
-embedding APIs.
+SecondBrain is a local document intelligence CLI for semantic search using Qdrant vector search (with SQLite for
+conversation storage) and OpenAI-compatible embedding APIs.
 
 **Stack:** Python 3.14+, Click, Pydantic 2, Motor, OpenAI-compatible API, Docker
 
@@ -19,7 +19,7 @@ secondbrain/
 ├── scripts/               # Build/deployment utilities (9 scripts)
 ├── docs/                  # MkDocs documentation
 ├── docker-compose.yml     # Production services
-└── docker-compose.test.yml # Test services (MongoDB + Ollama)
+└── docker-compose.test.yml # Test services (Qdrant + Ollama)
 ```
 
 **Note**: Dual package structure - `src/secondbrain/` (core) + `src/secondbrain_cli/` (CLI, orphaned)
@@ -48,7 +48,7 @@ secondbrain/
 
 **Core Modules**:
 
-- `storage/` - MongoDB vector storage (5 files)
+- `storage/` - Qdrant vector storage + SQLite conversation storage (5 files)
 - `utils/` - Circuit breaker, connections, tracing (8 files)
 - `rag/` - LLM providers, pipeline (5 files)
 - `document/` - Ingestion, chunking (4 files)
@@ -67,7 +67,7 @@ secondbrain/
 3. **No `__main__.py`**: Cannot run via `python -m secondbrain`
 4. **Inline Python in shell scripts**: `scripts/generate-sbom.sh` contains 60+ lines of embedded Python
 5. **Pre-commit runs full test suite**: `pytest` with `always_run: true` (slow)
-6. **Hard-coded credentials**: ✅ RESOLVED: `scripts/init-mongo.js` now uses `MONGO_ADMIN_PASSWORD` env var (May 2026)
+6. **Hard-coded credentials**: ✅ RESOLVED: `scripts/init-mongo.js` used `MONGO_ADMIN_PASSWORD` env var (May 2026); the script is now obsolete — MongoDB was removed in the Aug 2026 Qdrant migration and `scripts/init-mongo.js` should be deleted.
 
 **Standard patterns followed:**
 
@@ -145,7 +145,7 @@ pytest
 
 **High Priority:**
 
-- **Hard-coded password** in `scripts/init-mongo.js` - ✅ RESOLVED: now uses `MONGO_ADMIN_PASSWORD` env var
+- **Orphaned MongoDB script** `scripts/init-mongo.js` - obsolete since MongoDB was removed in the Aug 2026 Qdrant migration; safe to remove
 - **Inline Python** in `scripts/generate-sbom.sh` - extract to `.py` module
 - **Duplicate tests** - ✅ RESOLVED: Removed `tests/test_integration/` directory (consolidated into `tests/integration/mocked/`)
 - **Orphaned package** `src/secondbrain_cli/` - safe to remove

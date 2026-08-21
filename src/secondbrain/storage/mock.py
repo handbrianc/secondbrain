@@ -326,7 +326,94 @@ class MockVectorStorage:
             "initialized": self._initialized,
         }
 
-    def validate_connection(self) -> bool:
+    def list_source_files(self) -> list[str]:
+        """Return the distinct source_file values across stored chunks."""
+        sources: list[str] = []
+        seen: set[str] = set()
+        for chunk in self._chunks.values():
+            src = chunk.get("source_file")
+            if isinstance(src, str) and src not in seen:
+                seen.add(src)
+                sources.append(src)
+        return sources
+
+    def find_structural_chunks(
+        self,
+        element_types: list[str] | None = None,
+        chunk_roles: list[str] | None = None,
+        source_prefix: str | None = None,
+        limit: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return structural chunks (element_type OR chunk_role) ordered by page.
+
+        Matches chunks whose ``element_type`` is in *element_types* OR whose
+        ``chunk_role`` is in *chunk_roles*; when both are empty every chunk
+        matches (all-chunks fallback). Optionally scopes to ``source_file``
+        values starting with *source_prefix*, ordered by ascending
+        ``page_number`` and truncated to *limit*.
+        """
+        el_types = set(element_types or [])
+        roles = set(chunk_roles or [])
+
+        def _matches(c: dict[str, Any]) -> bool:
+            if el_types and c.get("element_type") in el_types:
+                return True
+            if roles and c.get("chunk_role") in roles:
+                return True
+            return not el_types and not roles
+
+        chunks = [
+            c
+            for c in self._chunks.values()
+            if (source_prefix is None or str(c.get("source_file", "")).startswith(source_prefix))
+            and _matches(c)
+        ]
+        chunks.sort(key=lambda c: c.get("page_number") or 0)
+        if limit is not None:
+            chunks = chunks[:limit]
+        return [dict(c) for c in chunks]
+
+    def get_body_chunks(
+        self,
+        source_file: str,
+        *,
+        limit: int | None = None,
+        page_gte: int | None = None,
+        with_text: bool = True,
+    ) -> list[dict[str, Any]]:
+        """Return a source's body chunks ordered by page, optionally page/limit."""
+        chunks = [
+            c
+            for c in self._chunks.values()
+            if c.get("source_file") == source_file and c.get("chunk_role") == "body"
+        ]
+        if page_gte is not None:
+            chunks = [c for c in chunks if (c.get("page_number") or 0) >= page_gte]
+        chunks.sort(key=lambda c: c.get("page_number") or 0)
+        if limit is not None:
+            chunks = chunks[:limit]
+        result: list[dict[str, Any]] = []
+        for c in chunks:
+            c = dict(c)
+            if not with_text:
+                c.pop("chunk_text", None)
+            result.append(c)
+        return result
+
+    def count_chunks(
+        self,
+        source_file: str | None = None,
+        chunk_role: str | None = None,
+    ) -> int:
+        """Count chunks matching optional source_file / chunk_role filters."""
+        return sum(
+            1
+            for c in self._chunks.values()
+            if (source_file is None or c.get("source_file") == source_file)
+            and (chunk_role is None or c.get("chunk_role") == chunk_role)
+        )
+
+    def validate_connection(self, force: bool = False) -> bool:
         """Validate storage connection (always True for mock).
 
         Returns:
@@ -334,7 +421,7 @@ class MockVectorStorage:
         """
         return True
 
-    async def validate_connection_async(self) -> bool:
+    async def validate_connection_async(self, force: bool = False) -> bool:
         """Async validation (always True for mock).
 
         Returns:

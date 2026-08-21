@@ -1,7 +1,8 @@
 # SecondBrain - Local Document Intelligence CLI
 
 A privacy-first document intelligence CLI that ingests documents, generates embeddings, and provides semantic search
-over your documents using MongoDB and OpenAI-compatible embedding services.
+over your documents using Qdrant vector search and OpenAI-compatible embedding services. Conversation sessions are
+persisted to SQLite.
 
 ![Python Version](https://img.shields.io/badge/python-3.14+-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
@@ -17,7 +18,7 @@ over your documents using MongoDB and OpenAI-compatible embedding services.
 ## Prerequisites
 
 - Python 3.14+
-- MongoDB (local or Docker)
+- Qdrant (via Docker)
 - Docker (optional, for containerized setup)
 
 ## Quick Start
@@ -26,7 +27,7 @@ over your documents using MongoDB and OpenAI-compatible embedding services.
 # 1. Install SecondBrain
 pip install -e .
 
-# 2. Start MongoDB
+# 2. Start Qdrant (vector database)
 secondbrain start --wait
 
 # 3. Ingest your first documents
@@ -44,6 +45,7 @@ secondbrain ingest ./documents/                  # single file
 secondbrain ingest ./documents/ --recursive      # entire directory tree
 secondbrain ingest ./documents/ --cores 4        # parallel with 4 CPU cores
 secondbrain ingest ./documents/ --batch-size 20  # batch size for sequential processing
+secondbrain ingest ./documents/ --cores 4 --pool process  # use process/thread pool for extraction
 
 # Search the vector database (positional arg is QUERY)
 secondbrain search "machine learning best practices"
@@ -81,7 +83,7 @@ secondbrain chat --history --session my-chat      # show session history
 secondbrain chat --delete-session my-chat         # delete a session
 
 # Manage the Docker stack
-secondbrain start                   # start MongoDB via docker-compose
+secondbrain start                   # start Qdrant via docker compose
 secondbrain start --wait            # wait for services to be fully ready
 secondbrain start -f custom.yml     # use specific compose file
 
@@ -96,10 +98,16 @@ Run `secondbrain --help` for the full command reference.
 SecondBrain uses environment variables prefixed with `SECONDBRAIN_`:
 
 ```bash
-# Required: MongoDB connection
-SECONDBRAIN_MONGO_URI=mongodb://localhost:27017
-SECONDBRAIN_MONGO_DB=secondbrain
-SECONDBRAIN_MONGO_COLLECTION=embeddings
+# Storage backend (qdrant or mock)
+SECONDBRAIN_STORAGE_BACKEND=qdrant
+
+# Vector database: Qdrant
+SECONDBRAIN_QDRANT_URL=http://localhost:6333
+SECONDBRAIN_QDRANT_API_KEY=
+SECONDBRAIN_QDRANT_COLLECTION=embeddings
+
+# Conversations/sessions: SQLite
+SECONDBRAIN_SQLITE_PATH=~/.secondbrain/secondbrain.db
 
 # Embedding provider
 SECONDBRAIN_EMBEDDING_MODEL=text-embedding-3-small
@@ -112,6 +120,21 @@ SECONDBRAIN_CHUNK_OVERLAP=200
 
 # Performance
 SECONDBRAIN_MAX_WORKERS=4
+SECONDBRAIN_MAX_INGEST_PROCESSES=0
+SECONDBRAIN_INGEST_POOL=process
+SECONDBRAIN_SKIP_EXISTING_ON_REINGEST=true
+SECONDBRAIN_PDF_OCR_ENABLED=false
+SECONDBRAIN_PDF_FAST_TEXT_ENABLED=true  # skip docling layout/OCR for PDFs with a native text layer; falls back to full docling when the PDF has no/insufficient native text; ignored when SECONDBRAIN_PDF_OCR_ENABLED=true
+SECONDBRAIN_PDF_TABLE_STRUCTURE_ENABLED=false
+SECONDBRAIN_PDF_TABLE_FAST_MODE=true
+SECONDBRAIN_PDF_TABLE_CELL_MATCHING=false
+SECONDBRAIN_PDF_ACCELERATOR_DEVICE=auto
+SECONDBRAIN_PDF_NUM_THREADS=4
+SECONDBRAIN_PDF_THREADED_PIPELINE=false
+SECONDBRAIN_PDF_LAYOUT_BATCH_SIZE=4
+SECONDBRAIN_PDF_GENERATE_PAGE_IMAGES=false
+SECONDBRAIN_PDF_GENERATE_PICTURE_IMAGES=false
+SECONDBRAIN_PDF_IMAGES_SCALE=1.0
 SECONDBRAIN_RATE_LIMIT_ENABLED=true
 SECONDBRAIN_CIRCUIT_BREAKER_ENABLED=true
 
@@ -139,7 +162,7 @@ See `docs/getting-started/configuration.md` for the full configuration reference
 ## Architecture
 
 ```
-Documents → Ingestor → Chunker → Embedder → MongoDB Vector Store
+Documents → Ingestor → Chunker → Embedder → Qdrant Vector Store
                               ↓
 Search Query ← Searcher ← Embedder ← Query
 ```
@@ -148,7 +171,7 @@ Key components:
 
 - **Document Ingestor** (`secondbrain ingest`) - parses and chunks supported file types
 - **Embedding Engine** - OpenAI-compatible API for vector generation
-- **Vector Storage** - MongoDB vector search with `$vectorSearch` for similarity retrieval
+- **Vector Storage** - Qdrant vector search for similarity retrieval; chunk metadata stored in the Qdrant payload
 - **Chat** (`secondbrain chat`) - RAG pipeline for conversational Q&A
 
 ## Documentation

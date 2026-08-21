@@ -2,6 +2,11 @@
 
 Instructions for migrating between SecondBrain versions or updating configurations.
 
+> **2026-08 / MongoDB → Qdrant + SQLite migration**: vector storage moved to Qdrant (`QdrantVectorStorage` +
+> `StorageFactory`; chunk metadata in the Qdrant payload), conversation sessions moved to SQLite
+> (`ConversationStorage`), and MongoDB/pymongo were removed entirely. If you previously pointed at MongoDB, re-ingest
+> your documents after setting `SECONDBRAIN_STORAGE_BACKEND=qdrant`.
+
 ## Upgrading SecondBrain
 
 ### Standard Upgrade
@@ -63,26 +68,19 @@ When adding new environment variables:
 
 New variables have sensible defaults. Existing deployments continue working without changes.
 
-## MongoDB Migration
+## Storage Migration (Qdrant + SQLite)
 
-### Collection Upgrades
+SecondBrain now uses Qdrant for vector storage and SQLite for conversations/sessions. The `StorageFactory` selects
+the backend; `QdrantVectorStorage` is the production backend and `MockVectorStorage` is used for tests.
 
-SecondBrain creates indexes automatically on first run. MongoDB migrations may be needed for:
+### Vector Collection Verification
 
-- Index type changes (e.g., `2dsphere` → `cosineSimilarity`)
-- New fields added to schema
+If vector search stops working after upgrade, verify Qdrant is running and reachable:
 
-### Vector Index Recreation
-
-If vector search stops working after upgrade:
-
-```javascript
-// Check current index
-db.embeddings.getIndexes()
-
-// If outdated, recreate
-db.embeddings.dropIndex("vector_index")
-// SecondBrain recreates on next ingest/search
+```bash
+secondbrain start --wait
+secondbrain health
+# Qdrant recreates the collection on next ingest/search
 ```
 
 ### Data Export/Import
@@ -90,24 +88,21 @@ db.embeddings.dropIndex("vector_index")
 Backup before migration:
 
 ```bash
-mongodump \
-  --uri="$SECONDBRAIN_MONGO_URI" \
-  --db=secondbrain \
-  --collection=embeddings \
-  --archive=embeddings_backup.archive
+# Export current inventory
+secondbrain ls --all > embeddings_backup.csv
 ```
 
-Restore if needed:
-
-```bash
-mongorestore \
-  --uri="$SECONDBRAIN_MONGO_URI" \
-  --db=secondbrain \
-  --collection=embeddings \
-  --archive=embeddings_backup.archive
-```
+Conversation sessions live in the SQLite database at `~/.secondbrain/secondbrain.db`. Back that file up if you need
+to preserve chat history.
 
 ## Environment Variable Changes
+
+### Removed Variables
+
+The legacy MongoDB variables (`SECONDBRAIN_MONGO_URI`, `SECONDBRAIN_MONGO_DB`, `SECONDBRAIN_MONGO_COLLECTION`, and
+any `MONGO_INITDB_*` variables) no longer exist. Replace them with the Qdrant/SQLite variables listed in the
+configuration guide (`SECONDBRAIN_QDRANT_URL`, `SECONDBRAIN_QDRANT_COLLECTION`, `SECONDBRAIN_SQLITE_PATH`, and
+`SECONDBRAIN_STORAGE_BACKEND`).
 
 ### Renamed Variables
 
@@ -144,7 +139,7 @@ For custom compose files, compare against provided template for new service defi
 For production environments:
 
 1. **Stage in testing**: Deploy new version to staging
-2. **Backup data**: `mongodump` current state
+2. **Backup data**: export inventory (`secondbrain ls --all`) and back up the SQLite database
 3. **Switch traffic**: Route to new version
 4. **Monitor**: Watch for errors or regressions
 5. **Rollback if needed**: Restore backup, redeploy old version
@@ -169,23 +164,19 @@ rm -rf __pycache__ .pytest_cache
 pip install -e . --force-reinstall
 ```
 
-### MongoDB Schema Conflicts
+### Qdrant Connection Issues
 
 ```bash
-# Check MongoDB server version
-mongosh --eval "db.version()"
+# Verify Qdrant is running and check its logs
+docker ps
+docker logs secondbrain-qdrant
 
-# Ensure MongoDB 4.4+ for vector search
-# If using Atlas, verify tier supports vector search
+# Restart the stack
+secondbrain stop
+secondbrain start --wait
 ```
 
-### Index Creation Failures
+### Collection Creation Failures
 
-Vector index creation requires MongoDB 5.0+ with specific index types.
-
-```javascript
-// Check server version for $vectorSearch support
-db.adminCommand({getCmdLineOpts: ()}).parsed.version
-```
-
-Upgrade MongoDB if below 5.0, or disable automatic index creation and manage manually.
+Qdrant requires the collection to be reachable. Ensure the Qdrant service is running (`secondbrain start --wait`) and
+that `SECONDBRAIN_QDRANT_URL` points at the correct endpoint. The collection is created automatically on first ingest.

@@ -1,18 +1,18 @@
-"""Docker Compose management utilities for automatic MongoDB startup.
+"""Docker Compose management utilities for automatic Qdrant startup.
 
 This module provides utilities for:
-- Checking if MongoDB container is running via Docker
-- Starting MongoDB via docker compose up -d
-- Waiting for MongoDB to be fully ready (connection + vector index)
+- Checking if Qdrant container is running via Docker
+- Starting Qdrant via docker compose up -d
+- Waiting for Qdrant to be fully ready (connection + vector index)
 - Graceful error handling for Docker not installed, compose failures, etc.
 
 Usage:
     from secondbrain.utils.docker_manager import DockerManager
 
     manager = DockerManager()
-    if not manager.check_mongo_running():
-        manager.start_mongo()
-        manager.wait_for_mongo_ready()
+    if not manager.check_qdrant_running():
+        manager.start_qdrant()
+        manager.wait_for_qdrant_ready()
 """
 
 import logging
@@ -40,24 +40,24 @@ class DockerComposeError(Exception):
     pass
 
 
-class MongoDBStartupError(Exception):
-    """Raised when MongoDB fails to start or become ready."""
+class QdrantStartupError(Exception):
+    """Raised when Qdrant fails to start or become ready."""
 
     pass
 
 
 class DockerManager:
-    """Manages Docker Compose operations for MongoDB.
+    """Manages Docker Compose operations for Qdrant.
 
     This class provides methods to:
-    - Check if MongoDB container is running
-    - Start MongoDB via docker compose
-    - Wait for MongoDB to be fully ready
+    - Check if Qdrant container is running
+    - Start Qdrant via docker compose
+    - Wait for Qdrant to be fully ready
     - Handle errors gracefully
 
     Attributes:
         compose_file: Path to docker-compose.yml file
-        container_name: Name of MongoDB container
+        container_name: Name of Qdrant container
         project_name: Docker Compose project name
     """
 
@@ -73,34 +73,34 @@ class DockerManager:
             project_name: Docker Compose project name (default: "secondbrain").
         """
         cfg = config()
-        self.mongo_uri: str = cfg.mongo_uri
+        self.qdrant_url: str = cfg.qdrant_url
         self.compose_file: Path = (
             Path(compose_file)
             if compose_file
             else Path(__file__).parent.parent.parent.parent / "docker-compose.yml"
         )
         self.project_name: str = project_name
-        self.container_name: str = "secondbrain-mongodb"
+        self.container_name: str = "secondbrain-qdrant"
 
-    def _is_local_mongodb(self) -> bool:
-        """Check if MongoDB URI is for local MongoDB (not Atlas).
+    def _is_local_qdrant(self) -> bool:
+        """Check if Qdrant URL is for a local server (not remote).
 
         Returns
         -------
-            True if URI points to localhost or local IP, False otherwise.
+            True if URL points to localhost or local IP, False otherwise.
 
         Examples:
             >>> manager = DockerManager()
-            >>> manager.mongo_uri = os.getenv("SECONDBRAIN_MONGO_URI", "")
-            >>> manager._is_local_mongodb()
+            >>> manager.qdrant_url = os.getenv("SECONDBRAIN_QDRANT_URL", "")
+            >>> manager._is_local_qdrant()
             True
-            >>> manager.mongo_uri = "mongodb+srv://cluster0.mongodb.net"
-            >>> manager._is_local_mongodb()
+            >>> manager.qdrant_url = "https://cluster.qdrant.io"
+            >>> manager._is_local_qdrant()
             False
         """
         # Check for localhost variations
         local_hosts = ["localhost", "127.0.0.1", "::1"]
-        return any(host in self.mongo_uri for host in local_hosts)
+        return any(host in self.qdrant_url for host in local_hosts)
 
     def _docker_command_available(self, command: str = "docker") -> bool:
         """Check if a Docker command is available.
@@ -161,20 +161,20 @@ class DockerManager:
         ):
             return False
 
-    def check_mongo_running(self) -> bool:
-        """Check if MongoDB container is running via docker ps.
+    def check_qdrant_running(self) -> bool:
+        """Check if Qdrant container is running via docker ps.
 
         Returns
         -------
-            True if MongoDB container is running, False otherwise.
+            True if Qdrant container is running, False otherwise.
 
         Examples:
             >>> manager = DockerManager()
-            >>> manager.check_mongo_running()
+            >>> manager.check_qdrant_running()
             True
         """
         if not self.check_docker_installed():
-            logger.debug("Docker not installed, MongoDB cannot be running via Docker")
+            logger.debug("Docker not installed, Qdrant cannot be running via Docker")
             return False
 
         try:
@@ -199,29 +199,29 @@ class DockerManager:
             subprocess.TimeoutExpired,
         ) as e:
             logger.debug(
-                "Error checking MongoDB container status: %s: %s", type(e).__name__, e
+                "Error checking Qdrant container status: %s: %s", type(e).__name__, e
             )
             return False
 
-    def start_mongo(self) -> None:
-        """Start MongoDB via docker compose up -d.
+    def start_qdrant(self) -> None:
+        """Start Qdrant via docker compose up -d.
 
-        Runs docker compose up -d to start the MongoDB container in detached mode.
+        Runs docker compose up -d to start the Qdrant container in detached mode.
 
         Raises:
             DockerNotInstalledError: If Docker is not installed.
             DockerComposeError: If docker compose command fails.
-            MongoDBStartupError: If MongoDB fails to start.
+            QdrantStartupError: If Qdrant fails to start.
 
         Examples:
             >>> manager = DockerManager()
-            >>> manager.start_mongo()
-            # MongoDB container started in background
+            >>> manager.start_qdrant()
+            # Qdrant container started in background
         """
         if not self.check_docker_installed():
             raise DockerNotInstalledError(
                 "Docker is not installed or not in PATH. "
-                "Please install Docker Desktop or Docker Engine to use local MongoDB. "
+                "Please install Docker Desktop or Docker Engine to use local Qdrant. "
                 "See: https://docs.docker.com/get-docker/"
             )
 
@@ -238,7 +238,7 @@ class DockerManager:
                 "Please ensure docker-compose.yml exists in your project root."
             )
 
-        logger.info("Starting MongoDB via docker compose...")
+        logger.info("Starting Qdrant via docker compose...")
 
         try:
             result = subprocess.run(  # nosec B603
@@ -251,7 +251,7 @@ class DockerManager:
                     self.project_name,
                     "up",
                     "-d",
-                    "mongodb",
+                    "qdrant",
                 ],
                 capture_output=True,
                 text=True,
@@ -260,66 +260,69 @@ class DockerManager:
 
             if result.returncode != 0:
                 error_msg = result.stderr or result.stdout or "Unknown error"
-                raise DockerComposeError(f"Failed to start MongoDB: {error_msg}")
+                raise DockerComposeError(f"Failed to start Qdrant: {error_msg}")
 
-            logger.info("MongoDB container started successfully")
+            logger.info("Qdrant container started successfully")
 
-            if not self.check_mongo_running():
-                raise MongoDBStartupError(
-                    "MongoDB container started but is not running. "
-                    "Check logs with: docker logs secondbrain-mongodb"
+            if not self.check_qdrant_running():
+                raise QdrantStartupError(
+                    "Qdrant container started but is not running. "
+                    "Check logs with: docker logs secondbrain-qdrant"
                 )
 
         except subprocess.TimeoutExpired as e:
-            raise MongoDBStartupError(
-                "Timeout waiting for docker compose to start MongoDB. "
+            raise QdrantStartupError(
+                "Timeout waiting for docker compose to start Qdrant. "
                 "Please check Docker is running and try again."
             ) from e
 
-    def wait_for_mongo_ready(
+    def wait_for_qdrant_ready(
         self,
         max_wait_seconds: int = 60,
         check_interval: float = 2.0,
     ) -> None:
-        """Wait for MongoDB to be fully ready (connection + vector index).
+        """Wait for Qdrant to be fully ready (connection + vector index).
 
-        This method blocks until MongoDB accepts connections and the vector
+        This method blocks until Qdrant accepts connections and the vector
         search index is ready. Uses the storage layer's index readiness check.
 
         Args:
-            max_wait_seconds: Maximum time to wait for MongoDB to be ready.
+            max_wait_seconds: Maximum time to wait for Qdrant to be ready.
             check_interval: Time between connection checks in seconds.
 
         Raises:
-            MongoDBStartupError: If MongoDB doesn't become ready within timeout.
+            QdrantStartupError: If Qdrant doesn't become ready within timeout.
 
         Examples:
             >>> manager = DockerManager()
-            >>> manager.wait_for_mongo_ready()
-            # MongoDB is now ready for use
+            >>> manager.wait_for_qdrant_ready()
+            # Qdrant is now ready for use
         """
-        if not self._is_local_mongodb():
-            logger.debug("Not waiting for local MongoDB (Atlas or remote URI)")
+        if not self._is_local_qdrant():
+            logger.debug("Not waiting for local Qdrant (remote URL)")
             return
 
-        logger.info("Waiting for MongoDB to be ready...")
+        logger.info("Waiting for Qdrant to be ready...")
 
         start_time = time.time()
         last_error: str | None = None
 
         # Import here to avoid circular dependency
-        from secondbrain.storage import VectorStorage
+        from secondbrain.storage import StorageFactory
 
-        storage = VectorStorage()
+        storage = StorageFactory.create_from_config()
 
         while time.time() - start_time < max_wait_seconds:
             try:
                 # First check if we can connect
                 if storage.validate_connection():
-                    # Connection works, now wait for index
                     try:
-                        storage._wait_for_index_ready()
-                        logger.info("MongoDB is ready for use")
+                        wait_index = getattr(
+                            storage, "_wait_for_index_ready", None
+                        )
+                        if callable(wait_index):
+                            wait_index()
+                        logger.info("Qdrant is ready for use")
                         return
                     except Exception as index_err:
                         # Index not ready yet, continue waiting
@@ -330,109 +333,109 @@ class DockerManager:
 
             except Exception as e:
                 last_error = str(e)
-                logger.debug("MongoDB not ready yet: %s", e)
+                logger.debug("Qdrant not ready yet: %s", e)
 
             time.sleep(check_interval)
 
         # Timeout reached
-        raise MongoDBStartupError(
-            f"MongoDB failed to become ready within {max_wait_seconds} seconds. "
+        raise QdrantStartupError(
+            f"Qdrant failed to become ready within {max_wait_seconds} seconds. "
             f"Last error: {last_error}. "
-            "Check Docker logs: docker logs secondbrain-mongodb"
+            "Check Docker logs: docker logs secondbrain-qdrant"
         )
 
-    def ensure_mongo_running(
+    def ensure_qdrant_running(
         self,
         verbose: bool = False,
     ) -> None:
-        """Ensure MongoDB is running, start it if necessary.
+        """Ensure Qdrant is running, start it if necessary.
 
-        This is the main entry point for auto-starting MongoDB. It checks if
-        MongoDB is running, and if not, starts it automatically via Docker.
+        This is the main entry point for auto-starting Qdrant. It checks if
+        Qdrant is running, and if not, starts it automatically via Docker.
 
         Args:
             verbose: If True, print status messages to user.
 
         Raises:
-            DockerNotInstalledError: If Docker is not installed and MongoDB not running.
+            DockerNotInstalledError: If Docker is not installed and Qdrant not running.
             DockerComposeError: If docker compose fails.
-            MongoDBStartupError: If MongoDB fails to start or become ready.
+            QdrantStartupError: If Qdrant fails to start or become ready.
 
         Examples:
             >>> manager = DockerManager()
-            >>> manager.ensure_mongo_running()
-            # MongoDB is now running and ready
+            >>> manager.ensure_qdrant_running()
+            # Qdrant is now running and ready
         """
-        if not self._is_local_mongodb():
+        if not self._is_local_qdrant():
             if verbose:
                 print(
-                    "[yellow]Note: Using remote MongoDB (Atlas or other). "
+                    "[yellow]Note: Using remote Qdrant server. "
                     "Auto-start disabled.[/yellow]"
                 )
             return
 
-        if self.check_mongo_running():
+        if self.check_qdrant_running():
             if verbose:
-                console.print("[green]✓ MongoDB is already running[/green]")
+                console.print("[green]✓ Qdrant is already running[/green]")
             return
 
         if not self.check_docker_installed():
             raise DockerNotInstalledError(
                 "[red]✗ Docker is not installed or not in PATH[/red]\n\n"
-                "To use local MongoDB, please install Docker:\n"
+                "To use local Qdrant, please install Docker:\n"
                 "  - macOS: https://docs.docker.com/docker-for-mac/install/\n"
                 "  - Windows: https://docs.docker.com/docker-for-windows/install/\n"
                 "  - Linux: https://docs.docker.com/engine/install/\n\n"
-                "Alternatively, configure SECONDBRAIN_MONGO_URI to use "
-                "a remote MongoDB instance."
+                "Alternatively, configure SECONDBRAIN_QDRANT_URL to use "
+                "a remote Qdrant server."
             )
 
         if verbose:
-            console.print("[cyan]Starting MongoDB via Docker...[/cyan]")
+            console.print("[cyan]Starting Qdrant via Docker...[/cyan]")
 
         try:
-            self.start_mongo()
+            self.start_qdrant()
         except DockerComposeError as e:
             raise DockerComposeError(
-                f"[red]✗ Failed to start MongoDB[/red]\n\n"
+                f"[red]✗ Failed to start Qdrant[/red]\n\n"
                 f"Error: {e}\n\n"
                 "Please ensure:\n"
                 "  1. Docker is running\n"
                 "  2. docker-compose.yml exists in project root\n"
-                "  3. MongoDB port (from SECONDBRAIN_MONGO_URI) is not in use\n"
+                "  3. Qdrant port (from SECONDBRAIN_QDRANT_URL) is not in use\n"
                 "  4. You have permission to run Docker commands"
             ) from e
 
         if verbose:
-            console.print("[cyan]Waiting for MongoDB to be ready...[/cyan]")
+            console.print("[cyan]Waiting for Qdrant to be ready...[/cyan]")
 
         try:
-            self.wait_for_mongo_ready()
+            self.wait_for_qdrant_ready()
             if verbose:
-                console.print("[green]✓ MongoDB is ready[/green]")
-        except MongoDBStartupError as e:
-            raise MongoDBStartupError(
-                f"[red]✗ MongoDB failed to become ready[/red]\n\n"
+                console.print("[green]✓ Qdrant is ready[/green]")
+        except QdrantStartupError as e:
+            raise QdrantStartupError(
+                f"[red]✗ Qdrant failed to become ready[/red]\n\n"
                 f"Error: {e}\n\n"
                 "Please check Docker logs:\n"
-                "  docker logs secondbrain-mongodb"
+                "  docker logs secondbrain-qdrant"
             ) from e
 
     @staticmethod
-    def is_local_mongodb_uri(uri: str) -> bool:
-        """Check if MongoDB URI is local."""
+    def is_local_qdrant_url(uri: str) -> bool:
+        """Check if Qdrant URL is local."""
         local_hosts = ["localhost", "127.0.0.1", "::1"]
         return any(host in uri for host in local_hosts)
 
 
 # Convenience functions for simple use cases
-def ensure_mongo_running(
+def ensure_qdrant_running(
     verbose: bool = True,
     compose_file: str | None = None,
 ) -> None:
-    """Ensure MongoDB is running, start it if necessary.
+    """Ensure Qdrant is running, start it if necessary.
 
-    Convenience wrapper around DockerManager.ensure_mongo_running().
+    Convenience wrapper around DockerManager.ensure_qdrant_running().
 
     Args:
         verbose: If True, print status messages.
@@ -440,18 +443,18 @@ def ensure_mongo_running(
 
     Raises:
         DockerNotInstalledError: If Docker not installed.
-        MongoDBStartupError: If MongoDB fails to start.
+        QdrantStartupError: If Qdrant fails to start.
     """
     manager = DockerManager(compose_file=compose_file)
-    manager.ensure_mongo_running(verbose=verbose)
+    manager.ensure_qdrant_running(verbose=verbose)
 
 
-def check_mongo_running() -> bool:
-    """Check if MongoDB container is running.
+def check_qdrant_running() -> bool:
+    """Check if Qdrant container is running.
 
     Returns
     -------
-        True if MongoDB is running, False otherwise.
+        True if Qdrant is running, False otherwise.
     """
     manager = DockerManager()
-    return manager.check_mongo_running()
+    return manager.check_qdrant_running()

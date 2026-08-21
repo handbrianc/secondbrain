@@ -1,7 +1,8 @@
 # SecondBrain Documentation
 
 Welcome to SecondBrain, a privacy-first local document intelligence CLI that enables semantic search over your
-documents using MongoDB and OpenAI-compatible embedding services.
+documents using Qdrant vector search and OpenAI-compatible embedding services. Conversation sessions are persisted
+to SQLite.
 
 ## Overview
 
@@ -33,7 +34,7 @@ machine.
 ## System Requirements
 
 - **Python**: 3.14 or higher
-- **MongoDB**: Local installation or Docker container
+- **Qdrant**: Containerized vector database (Docker)
 - **Docker**: Optional, for containerized setup and service management
 
 ## Supported File Types

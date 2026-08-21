@@ -73,7 +73,7 @@ class AsyncDocumentIngestor(DocumentIngestor):
         self,
         path: str,
         recursive: bool = False,
-        batch_size: int = 10,
+        batch_size: int = 30,
         max_concurrent: int = 5,
     ) -> dict[str, int]:
         """Ingest documents asynchronously from a file or directory.
@@ -89,11 +89,11 @@ class AsyncDocumentIngestor(DocumentIngestor):
             dict with 'success' and 'failed' counts.
         """
         from secondbrain.embedding import EmbeddingProviderFactory
-        from secondbrain.storage import AsyncVectorStorage
+        from secondbrain.storage import StorageFactory
 
         cfg = config()
         embedding_gen = EmbeddingProviderFactory.create_from_config(cfg)
-        storage = AsyncVectorStorage()
+        storage = StorageFactory.create_from_config(cfg)
 
         try:
             files = await asyncio.to_thread(

@@ -15,7 +15,7 @@ This guide covers development setup, contribution guidelines, and technical docu
 | [Testing Guide](testing.md) | Writing and running tests |
 | [CLI Best Practices](python-cli-best-practices-checklist.md) | CLI design patterns |
 | [Contributing](contributing.md) | Contribution guidelines |
-| [Migrations](migrations.md) | Database migration procedures |
+| [Migrations](migrations.md) | Schema migration procedures |
 | [Security](security.md) | Security considerations |
 
 ## Repository Structure
@@ -28,7 +28,7 @@ secondbrain/
 │   ├── document/              # Document processing
 │   ├── embedding/             # Embedding generation
 │   ├── search/                # Vector search
-│   ├── storage/               # MongoDB storage
+│   ├── storage/               # Qdrant vector storage
 │   ├── management/            # Document list/delete/status
 │   ├── utils/                 # Circuit breaker, tracing, caching, Docker helpers, performance monitoring
 │   └── rag/                   # RAG pipeline

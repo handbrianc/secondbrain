@@ -59,7 +59,7 @@ class TestEmbeddingFailureScenarios:
     @patch(
         "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
     )
-    @patch("secondbrain.storage.VectorStorage")
+    @patch("secondbrain.storage.StorageFactory.create_from_config")
     def test_ingest_continues_on_single_embedding_error(
         self,
         mock_vs: MagicMock,
@@ -163,7 +163,7 @@ class TestEmbeddingFailureScenarios:
         mock_storage = MagicMock()
 
         with patch(
-            "secondbrain.storage.storage.VectorStorage",
+            "secondbrain.storage.StorageFactory.create_from_config",
             return_value=mock_storage,
         ):
             ingestor = DocumentIngestor(verbose=False)
@@ -305,9 +305,11 @@ class TestMemoryExhaustion:
         test_file = tmp_path / "test.pdf"
         test_file.write_bytes(b"fake pdf content")
 
+        mock_storage = MagicMock()
+        mock_storage.store_batch.side_effect = MemoryError("Out of memory")
         with patch(
-            "secondbrain.storage.storage.VectorStorage.store_batch",
-            side_effect=MemoryError("Out of memory"),
+            "secondbrain.storage.StorageFactory.create_from_config",
+            return_value=mock_storage,
         ):
             result = ingestor.ingest(str(tmp_path), recursive=False)
 
@@ -340,17 +342,18 @@ class TestMemoryExhaustion:
             if call_count == 1:
                 raise MemoryError("Batch too large")
 
+        mock_storage = MagicMock()
+        mock_storage.store_batch.side_effect = storage_side_effect
         with patch(
-            "secondbrain.storage.storage.VectorStorage.store_batch",
-            side_effect=storage_side_effect,
+            "secondbrain.storage.StorageFactory.create_from_config",
+            return_value=mock_storage,
         ):
             result = ingestor.ingest(str(tmp_path), recursive=False)
 
         assert isinstance(result, dict)
 
-    @patch("secondbrain.storage.VectorStorage")
     def test_progress_callback_handles_memory_pressure(
-        self, mock_vs: MagicMock, tmp_path: Path, mocked_pdf_extraction: MagicMock
+        self, tmp_path: Path, mocked_pdf_extraction: MagicMock
     ) -> None:
         """Test progress callback handling under memory pressure."""
         callback_errors = []
@@ -371,6 +374,9 @@ class TestMemoryExhaustion:
         mock_embedding.generate_batch = MagicMock(return_value=[[0.1] * 384])
         mock_embedding.generate = MagicMock(return_value=[0.1] * 384)
 
+        mock_storage = MagicMock()
+        mock_storage.store_batch.return_value = None
+
         with (
             patch("time.sleep", return_value=None),
             patch("gc.collect", return_value=None),
@@ -378,7 +384,10 @@ class TestMemoryExhaustion:
                 "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config",
                 return_value=mock_embedding,
             ),
-            patch("secondbrain.storage.VectorStorage.store_batch", return_value=None),
+            patch(
+                "secondbrain.storage.StorageFactory.create_from_config",
+                return_value=mock_storage,
+            ),
         ):
             result = ingestor.ingest(str(tmp_path), recursive=False, cores=1)
 
@@ -407,9 +416,13 @@ class TestDatabaseConnectionFailures:
         test_file = tmp_path / "test.pdf"
         test_file.write_bytes(b"fake pdf content")
 
+        mock_storage = MagicMock()
+        mock_storage.store_batch.side_effect = StorageConnectionError(
+            "MongoDB connection failed"
+        )
         with patch(
-            "secondbrain.storage.storage.VectorStorage.store_batch",
-            side_effect=StorageConnectionError("MongoDB connection failed"),
+            "secondbrain.storage.StorageFactory.create_from_config",
+            return_value=mock_storage,
         ):
             result = ingestor.ingest(str(tmp_path), recursive=False)
 
@@ -434,9 +447,11 @@ class TestDatabaseConnectionFailures:
         test_file = tmp_path / "test.txt"
         test_file.write_text("sample content")
 
+        mock_storage = MagicMock()
+        mock_storage.store_batch.side_effect = TimeoutError("MongoDB timeout")
         with patch(
-            "secondbrain.storage.storage.VectorStorage.store_batch",
-            side_effect=TimeoutError("MongoDB timeout"),
+            "secondbrain.storage.StorageFactory.create_from_config",
+            return_value=mock_storage,
         ):
             result = ingestor.ingest(str(tmp_path), recursive=False)
 
@@ -462,9 +477,13 @@ class TestDatabaseConnectionFailures:
         test_file = tmp_path / "test.pdf"
         test_file.write_bytes(b"fake pdf content")
 
+        mock_storage = MagicMock()
+        mock_storage.store_batch.side_effect = StorageConnectionError(
+            "Database unavailable"
+        )
         with patch(
-            "secondbrain.storage.storage.VectorStorage.store_batch",
-            side_effect=StorageConnectionError("Database unavailable"),
+            "secondbrain.storage.StorageFactory.create_from_config",
+            return_value=mock_storage,
         ):
             result = ingestor.ingest(str(tmp_path), recursive=False)
 

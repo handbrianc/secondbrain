@@ -7,48 +7,44 @@ from collections.abc import AsyncGenerator, Generator
 from typing import TYPE_CHECKING, Any
 
 import pytest
-from pymongo import MongoClient
+from qdrant_client import QdrantClient
 
 from secondbrain.config import Config
 from secondbrain.embedding.mock import MockEmbeddingGenerator
-from secondbrain.storage import MockVectorStorage, VectorStorage
+from secondbrain.storage import MockVectorStorage, QdrantVectorStorage
 
 if TYPE_CHECKING:
     pass
 
 # Get test service URLs from Config (automatically uses test defaults when PYTEST_CURRENT_TEST is set)
 _config = Config()
-TEST_MONGO_URI = _config.mongo_uri
+TEST_QDRANT_URL = "http://localhost:6333"
 TEST_EMBEDDING_URL = "http://localhost:11434"  # Default LLM endpoint for tests
 
 # Test database/collection names
-TEST_DB_NAME = _config.mongo_db
-TEST_COLLECTION_NAME = "test_embeddings"
+TEST_QDRANT_COLLECTION = "test_embeddings"
 
 # Health check timeout
 SERVICE_HEALTH_TIMEOUT = 10  # seconds - reduced for faster test feedback
 
 
-def _check_mongodb_healthy() -> bool:
-    """Check if MongoDB test service is healthy."""
+def _check_qdrant_healthy() -> bool:
+    """Check if the Qdrant test service is healthy."""
     try:
-        client = MongoClient(
-            TEST_MONGO_URI, serverSelectionTimeoutMS=10000, maxPoolSize=50
-        )
-        client.admin.command("ping")
-        client.close()
+        client = QdrantClient(url=TEST_QDRANT_URL)
+        client.get_collections()
         return True
     except Exception:
         return False
 
 
 @pytest.fixture(scope="session")
-def mongo_test_uri() -> str:
-    """MongoDB test URI fixture.
+def qdrant_test_url() -> str:
+    """Qdrant test URL fixture.
 
-    Returns the test MongoDB URI configured for docker-compose test services.
+    Returns the Qdrant URL configured for the test services.
     """
-    return TEST_MONGO_URI
+    return TEST_QDRANT_URL
 
 
 @pytest.fixture(scope="session")
@@ -64,7 +60,7 @@ def embedding_service_url() -> str:
 def wait_for_services() -> Generator[None]:
     """Wait for test services to be healthy before running tests.
 
-    This session-scoped fixture ensures MongoDB is healthy before tests run.
+    This session-scoped fixture ensures Qdrant is healthy before tests run.
     It waits up to SERVICE_HEALTH_TIMEOUT seconds for services to become available.
 
     Raises
@@ -73,17 +69,17 @@ def wait_for_services() -> Generator[None]:
     """
     print("\nWaiting for test services to be healthy...")
 
-    # Wait for MongoDB
+    # Wait for Qdrant
     start_time = time.time()
     while time.time() - start_time < SERVICE_HEALTH_TIMEOUT:
-        if _check_mongodb_healthy():
-            print("MongoDB is healthy")
+        if _check_qdrant_healthy():
+            print("Qdrant is healthy")
             break
         print(".", end="", flush=True)
         time.sleep(0.5)  # Reduced from 1s for faster feedback
     else:
         pytest.skip(
-            f"MongoDB not available after {SERVICE_HEALTH_TIMEOUT}s - integration tests skipped. "
+            f"Qdrant not available after {SERVICE_HEALTH_TIMEOUT}s - integration tests skipped. "
             f"Start services with appropriate docker-compose setup."
         )
 
@@ -92,27 +88,26 @@ def wait_for_services() -> Generator[None]:
 
 
 @pytest.fixture(scope="session")
-def real_storage(wait_for_services: None) -> Generator[VectorStorage]:
-    """VectorStorage with real MongoDB connection.
+def real_storage(wait_for_services: None) -> Generator[QdrantVectorStorage]:
+    """VectorStorage with a real Qdrant connection.
 
-    Creates a VectorStorage instance connected to the test MongoDB database.
-    Ensures the vector search index is created and waits for it to be ready.
+    Creates a QdrantVectorStorage instance connected to the test Qdrant server.
+    Qdrant provisions the collection lazily on first write, so we force
+    provisioning up front via ``delete_all()`` (which triggers ``_ensure_collection``).
 
     Yields
     ------
-        VectorStorage: Connected storage instance.
+        QdrantVectorStorage: Connected storage instance.
     """
-    storage = VectorStorage(
-        mongo_uri=TEST_MONGO_URI,
-        db_name=TEST_DB_NAME,
-        collection_name=TEST_COLLECTION_NAME,
+    storage = QdrantVectorStorage(
+        url=TEST_QDRANT_URL,
+        collection_name=TEST_QDRANT_COLLECTION,
     )
 
     try:
-        # Ensure index exists
-        storage.ensure_index()
-        storage._wait_for_index_ready()
-        print(f"VectorStorage initialized: {TEST_DB_NAME}/{TEST_COLLECTION_NAME}")
+        # Force collection provisioning so operations work immediately.
+        storage.delete_all()
+        print(f"QdrantVectorStorage initialized: {TEST_QDRANT_COLLECTION}")
         yield storage
     finally:
         # Cleanup: delete all test data
@@ -126,10 +121,10 @@ def real_storage(wait_for_services: None) -> Generator[VectorStorage]:
 
 @pytest.fixture(scope="session")
 def mock_storage() -> Generator[MockVectorStorage]:
-    """Mock VectorStorage for integration tests without MongoDB.
+    """Mock VectorStorage for integration tests without a real service.
 
     Provides an in-memory storage implementation for testing integration
-    logic without requiring actual MongoDB connections.
+    logic without requiring an actual Qdrant connection.
 
     Yields
     ------
@@ -193,7 +188,7 @@ def mock_embedding_generator() -> Generator[MockEmbeddingGenerator]:
 
 @pytest.fixture
 async def clean_test_database(
-    real_storage: VectorStorage,
+    real_storage: QdrantVectorStorage,
 ) -> AsyncGenerator[None]:
     """Clean test database before and after each test.
 
@@ -247,5 +242,5 @@ def health_check_utils() -> dict[str, Any]:
         dict: Dictionary with health check functions.
     """
     return {
-        "mongodb_healthy": _check_mongodb_healthy,
+        "qdrant_healthy": _check_qdrant_healthy,
     }

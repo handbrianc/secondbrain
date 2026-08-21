@@ -80,28 +80,28 @@ Chunks[]
 Vectors[] (parallel)
 ```
 
-#### 5. MongoDB Storage
+#### 5. Qdrant Storage
 
-Persist chunk and vector:
+Persist chunk vector and metadata to the Qdrant payload:
 
 ```
-MongoDB.insert({
-    chunk_id: uuid4(),
-    chunk_index: i,
-    text: chunk_text,
-    text_compressed: gzip(text) if enabled,
+Qdrant.upsert({
+    id: chunk_id,
     vector: embedding_array,
-    vector_dtype: "float32",
-    metadata: {
-        source: original_file_path,
-        page: page_number,
-        file_type: extension,
-        created_at: datetime.utcnow(),
-        size: original_file_size
+    payload: {
+        chunk_id: uuid4(),
+        source_file: original_file_path,
+        page_number: page_number,
+        chunk_text: chunk_text,
+        element_type: ...,
+        chunk_role: ...,
+        section_label: ...,
+        vector_dtype: "float32",
+        created_at: datetime.utcnow()
     }
 })
     │
-    └─► Create/update vector search index
+    └─► Vector and metadata stored together; search needs one round trip
 ```
 
 ## Search Flow
@@ -126,23 +126,20 @@ User Query String
          └─► Returns fixed-dimension vector
 ```
 
-#### 2. Vector Search (MongoDB $vectorSearch)
+#### 2. Vector Search (Qdrant)
 
 ```
 Embedded Query Vector
     │
-    └─► MongoDB Query:
+    └─► Qdrant Query:
          {
-           $vectorSearch: {
-             index: "vector_index",
-             path: "vector",
-             queryVector: query_vector,
-             numCandidates: 100,
-             limit: TOP_K
-           }
+           collection: "embeddings",
+           query_vector: query_vector,
+           limit: TOP_K,
+           with_payload: true
          }
 
-Result: Matching documents ordered by score
+Result: Matching points ordered by cosine similarity score
 ```
 
 #### 3. Optional Filtering
@@ -195,7 +192,7 @@ Identical to search flow:
 ```
 Query String
     │
-    └─► Same embedding + $vectorSearch pipeline
+    └─► Same embedding + Qdrant query pipeline
          │
          └─► Retrieves TOP_K chunks (default 20)
 ```
@@ -239,7 +236,10 @@ Assembled Prompt
 Conversation context persisted:
 
 ```
-Interaction stored in MongoDB sessions collection:
+Conversation context persisted to SQLite (via `ConversationStorage`):
+
+```
+Interaction stored in the SQLite conversations table:
 {
     session_id: "user-specified or uuid",
     messages: [

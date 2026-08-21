@@ -33,13 +33,13 @@ if command -v docker-compose &> /dev/null; then
     if [ -f "$COMPOSE_FILE" ]; then
         docker-compose -f "$COMPOSE_FILE" down
     else
-        docker stop secondbrain-mongodb-test 2>/dev/null || true
+        docker stop secondbrain-qdrant-test 2>/dev/null || true
     fi
 else
     if [ -f "$COMPOSE_FILE" ]; then
         docker compose -f "$COMPOSE_FILE" down
     else
-        docker stop secondbrain-mongodb-test 2>/dev/null || true
+        docker stop secondbrain-qdrant-test 2>/dev/null || true
     fi
 fi
 
@@ -47,7 +47,7 @@ fi
 if [ "$CLEAN_VOLUMES" = true ]; then
     echo ""
     echo "Cleaning up volumes..."
-    
+
     if command -v docker-compose &> /dev/null; then
         if [ -f "$COMPOSE_FILE" ]; then
             docker-compose -f "$COMPOSE_FILE" down -v
@@ -57,10 +57,10 @@ if [ "$CLEAN_VOLUMES" = true ]; then
             docker compose -f "$COMPOSE_FILE" down -v
         fi
     fi
-    
-    # Also try to remove volumes by name directly
-    docker volume rm secondbrain-test-mongo_test_data 2>/dev/null || true
-    
+
+    # Also try to remove the Qdrant data volume by name directly
+    docker volume rm secondbrain-test_qdrant_test_data 2>/dev/null || true
+
     echo "Volumes cleaned"
 fi
 
@@ -73,7 +73,7 @@ echo "Current service status:"
 if command -v docker-compose &> /dev/null && [ -f "$COMPOSE_FILE" ]; then
     docker-compose -f "$COMPOSE_FILE" ps 2>/dev/null || echo "No running services"
 else
-    docker ps --filter "name=secondbrain-mongodb-test" 2>/dev/null || echo "No running services"
+    docker ps --filter "name=secondbrain-qdrant-test" 2>/dev/null || echo "No running services"
 fi
 
 echo ""

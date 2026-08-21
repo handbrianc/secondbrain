@@ -23,7 +23,7 @@ class TestSearchE2E:
     @patch(
         "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
     )
-    @patch("secondbrain.search.VectorStorage")
+    @patch("secondbrain.search.StorageFactory.create_from_config")
     def test_search_e2e(
         self, mock_storage_class: MagicMock, mock_create_from_config: MagicMock
     ) -> None:
@@ -80,7 +80,7 @@ class TestSearchE2E:
     @patch(
         "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
     )
-    @patch("secondbrain.search.VectorStorage")
+    @patch("secondbrain.search.StorageFactory.create_from_config")
     def test_search_with_filters(
         self, mock_storage_class: MagicMock, mock_create_from_config: MagicMock
     ) -> None:
@@ -129,7 +129,7 @@ class TestSearchIntegration:
     @patch(
         "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
     )
-    @patch("secondbrain.search.VectorStorage")
+    @patch("secondbrain.search.StorageFactory.create_from_config")
     def test_search_with_custom_top_k(
         self, mock_storage_class: MagicMock, mock_create_from_config: MagicMock
     ) -> None:
@@ -154,7 +154,7 @@ class TestSearchIntegration:
     @patch(
         "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
     )
-    @patch("secondbrain.search.VectorStorage")
+    @patch("secondbrain.search.StorageFactory.create_from_config")
     def test_search_no_results(
         self, mock_storage_class: MagicMock, mock_create_from_config: MagicMock
     ) -> None:
@@ -178,7 +178,7 @@ class TestSearchIntegration:
     @patch(
         "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
     )
-    @patch("secondbrain.search.VectorStorage")
+    @patch("secondbrain.search.StorageFactory.create_from_config")
     def test_search_empty_embed_result(
         self, mock_storage_class: MagicMock, mock_create_from_config: MagicMock
     ) -> None:

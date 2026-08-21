@@ -202,7 +202,7 @@ class MockLLMProviderWithContext(MockLLMProvider):
             "embedding": "The default embedding model is all-MiniLM-L6-v2 from sentence-transformers. It provides good balance of speed and accuracy for semantic search tasks.",
             # Logging and configuration
             "logging": "Logging is configured via SECONDBRAIN_LOG_LEVEL (INFO, DEBUG, WARNING, ERROR) and SECONDBRAIN_LOG_FORMAT (pretty, json). These are configuration environment variables.",
-            "configuration": "Configuration uses SECONDBRAIN_* environment variables. Key settings include chunk_size, mongo_uri, log_level, and top_k. All configuration is done through environment variables.",
+            "configuration": "Configuration uses SECONDBRAIN_* environment variables. Key settings include chunk_size, qdrant_url, log_level, and top_k. All configuration is done through environment variables.",
             # Default values
             "default": "Default values: chunk_size=4096, chunk_overlap=256, top_k=5, embedding_model=all-MiniLM-L6-v2. These are standard configuration defaults.",
             "default chunk size": "The default chunk size in SecondBrain is 4096 tokens. This is a configuration parameter.",

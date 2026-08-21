@@ -13,7 +13,7 @@ from uuid import uuid4
 import pytest
 
 from secondbrain.document import DocumentIngestor
-from secondbrain.storage import VectorStorage
+from secondbrain.storage.mock import MockVectorStorage
 from secondbrain.utils.circuit_breaker import (
     CircuitBreaker,
     CircuitBreakerConfig,
@@ -64,7 +64,7 @@ class TestMongoDBFailureDuringIngestion:
         """
         # Setup: Create ingestor and storage with circuit breaker
         ingestor = DocumentIngestor(chunk_size=100, chunk_overlap=10)
-        storage = VectorStorage()
+        storage = MockVectorStorage()
 
         # Inject connection errors during ingestion
         with failure_injector.inject_connection_error(duration=2.0):
@@ -107,7 +107,7 @@ class TestMongoDBFailureDuringIngestion:
         - No data corruption in saved documents
         """
         ingestor = DocumentIngestor(chunk_size=50, chunk_overlap=5)
-        storage = VectorStorage()
+        storage = MockVectorStorage()
 
         # Simulate partial ingestion scenario
         saved_count = 0

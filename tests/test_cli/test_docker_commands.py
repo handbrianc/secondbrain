@@ -28,7 +28,7 @@ from click.testing import CliRunner
 from secondbrain.cli import cli
 from secondbrain.utils.docker_manager import (
     DockerComposeError,
-    MongoDBStartupError,
+    QdrantStartupError,
 )
 
 
@@ -63,7 +63,7 @@ class TestStartCommandBasic:
 
             assert result.exit_code == 0
             assert "Starting Docker Compose stack" in result.output
-            mock_manager.start_mongo.assert_called_once()
+            mock_manager.start_qdrant.assert_called_once()
 
     def test_start_command_auto_detects_compose_file(self):
         """Test start command auto-detects docker-compose.yml."""
@@ -92,7 +92,7 @@ class TestStartCommandBasic:
         # Create a test compose file
         compose_file = tmp_path / "docker-compose.test.yml"
         compose_file.write_text(
-            "services:\n  mongodb:\n    image: mongodb/mongodb-community-server:7.0\n"
+            "services:\n  qdrant:\n    image: qdrant/qdrant:latest\n"
         )
 
         with patch(
@@ -128,8 +128,8 @@ class TestStartCommandBasic:
             result = runner.invoke(cli, ["start", "--wait"])
 
             assert result.exit_code == 0
-            mock_manager.start_mongo.assert_called_once()
-            mock_manager.wait_for_mongo_ready.assert_called_once()
+            mock_manager.start_qdrant.assert_called_once()
+            mock_manager.wait_for_qdrant_ready.assert_called_once()
 
 
 @pytest.mark.order(0)
@@ -181,8 +181,8 @@ class TestStartCommandErrorHandling:
             assert result.exit_code == 2  # Click validation error
             assert "does not exist" in result.output
 
-    def test_start_mongo_startup_failure(self):
-        """Test start command when MongoDB fails to start."""
+    def test_start_qdrant_startup_failure(self):
+        """Test start command when Qdrant fails to start."""
         runner = CliRunner()
 
         with patch(
@@ -191,8 +191,8 @@ class TestStartCommandErrorHandling:
             mock_manager = MagicMock()
             mock_manager.check_docker_installed.return_value = True
             mock_manager.check_docker_compose_installed.return_value = True
-            mock_manager.start_mongo.side_effect = DockerComposeError(
-                "Failed to start MongoDB"
+            mock_manager.start_qdrant.side_effect = DockerComposeError(
+                "Failed to start Qdrant"
             )
             mock_manager_class.return_value = mock_manager
 
@@ -211,8 +211,8 @@ class TestStartCommandErrorHandling:
             mock_manager = MagicMock()
             mock_manager.check_docker_installed.return_value = True
             mock_manager.check_docker_compose_installed.return_value = True
-            mock_manager.wait_for_mongo_ready.side_effect = MongoDBStartupError(
-                "Timeout waiting for MongoDB"
+            mock_manager.wait_for_qdrant_ready.side_effect = QdrantStartupError(
+                "Timeout waiting for Qdrant"
             )
             mock_manager_class.return_value = mock_manager
 
@@ -535,9 +535,9 @@ class TestTestComposeStack:
         compose_file.write_text(
             """name: secondbrain-test
 services:
-  mongodb:
-    image: mongodb/mongodb-community-server:7.0
-    container_name: secondbrain-mongodb-test
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: secondbrain-qdrant-test
 """
         )
 
@@ -554,7 +554,7 @@ services:
             )
 
             assert result.exit_code == 0
-            mock_manager.start_mongo.assert_called_once()
+            mock_manager.start_qdrant.assert_called_once()
 
     def test_stop_test_stack_with_test_compose(self, tmp_path):
         """Test stopping the test docker-compose stack."""
@@ -564,8 +564,8 @@ services:
         compose_file.write_text(
             """name: secondbrain-test
 services:
-  mongodb:
-    image: mongodb/mongodb-community-server:7.0
+  qdrant:
+    image: qdrant/qdrant:latest
 """
         )
 

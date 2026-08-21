@@ -11,7 +11,7 @@ All document processing happens locally:
 - **Parsing**: Done on-host with Docling
 - **Chunking**: Performed locally before storage
 - **Embedding**: Sent to external API if using hosted models
-- **Storage**: Vectors stored in your MongoDB instance
+- **Storage**: Vectors stored in your Qdrant instance; conversations in a local SQLite file
 
 Understand which operations contact external services:
 
@@ -58,16 +58,21 @@ export SECONDBRAIN_OPENAI_API_KEY=sk-...
 chmod 600 .env
 ```
 
-### MongoDB Credentials
+### Qdrant API Key
 
-Use strong authentication:
+If your Qdrant instance requires authentication, configure the optional API key:
 
 ```bash
-# Connection string with credentials
-mongodb://user:strong-password@host:27017/secondbrain
+# Optional API key for Qdrant
+export SECONDBRAIN_QDRANT_API_KEY=your-qdrant-api-key
+```
 
-# TLS encryption
-mongodb+srv://user:pass@cluster.mongodb.net/?tls=true
+### SQLite File Permissions
+
+Conversation data is stored in a local SQLite file (default `~/.secondbrain/secondbrain.db`). Restrict access to the data directory:
+
+```bash
+chmod 700 ~/.secondbrain/
 ```
 
 ### Secret Rotation
@@ -86,8 +91,8 @@ Rotate API keys periodically:
 ```yaml
 # docker-compose.prod.yml - production hardening
 services:
-  mongodb:
-    image: mongo:7.0
+  qdrant:
+    image: qdrant/qdrant
     security_opt:
       - no-new-privileges:true
     read_only: false  # Needs writable volume for data
@@ -103,13 +108,15 @@ docker run --cap-drop=ALL --security-opt=no-new-privileges secondbrain
 
 ### Network Isolation
 
-Bind MongoDB to localhost in development:
+Keep Qdrant bound to localhost in development:
 
 ```bash
-mongod --bind_ip localhost
+# Qdrant with an API key and localhost binding
+SECONDBRAIN_QDRANT_API_KEY=...
+SECONDBRAIN_QDRANT_URL=http://localhost:6333
 ```
 
-For network-accessible MongoDB, use firewall rules and TLS.
+For network-accessible Qdrant, use firewall rules and TLS.
 
 ### File Permissions
 
@@ -207,19 +214,24 @@ if not resolved_path.is_relative_to(allowed_base):
 Search queries are treated as opaque strings:
 
 ```python
-# Safe: query passed as literal value
-filter = {"source": {"$eq": user_provided_source}}
+# Safe: query vector is opaque; metadata filters use typed payload conditions
+filter_ = {
+    "must": [
+        {"key": "source_file", "match": {"value": user_provided_source}},
+    ]
+}
 
-# MongoDB handles escaping automatically
-cursor = collection.find(filter)
+# Qdrant handles the payload filter as structured data, not raw query strings
+points = qdrant_client.query_points(collection_name="embeddings", query_filter=filter_, ...)
 ```
 
 ## Security Checklist
 
 Before production deployment:
 
-- [ ] MongoDB bound to internal network
-- [ ] Strong MongoDB credentials
+- [ ] Qdrant bound to internal network / localhost
+- [ ] Optional Qdrant API key configured (`SECONDBRAIN_QDRANT_API_KEY`)
+- [ ] SQLite data directory (`~/.secondbrain/`) permissions restricted to owner
 - [ ] API keys secured in environment or vault
 - [ ] Log format set to `json` for audit trails
 - [ ] Rate limiting enabled
@@ -240,4 +252,4 @@ If you suspect a security issue:
 
 - **No access control**: Currently no per-user authentication
 - **Local LLM bypass**: Traffic stays on-premises if using Ollama/local models
-- **No encryption at rest**: MongoDB storage encryption depends on your MongoDB configuration
+- **Encryption at rest**: Qdrant and SQLite storage encryption depends on your deployment configuration

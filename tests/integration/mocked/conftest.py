@@ -2,44 +2,16 @@
 
 from __future__ import annotations
 
-import os
 from collections.abc import Generator
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import pytest
-from pymongo import MongoClient
+from qdrant_client import QdrantClient
 
 from secondbrain.embedding.mock import MockEmbeddingGenerator
-from secondbrain.storage import VectorStorage
-
-if TYPE_CHECKING:
-    pass  # type: ignore[unused-ignore]
+from secondbrain.storage.qdrant import QdrantVectorStorage
 
 EMBEDDING_DIMENSIONS = 384
-
-
-@pytest.fixture
-def mock_mongo_client() -> Generator[MongoClient[Any]]:
-    """Provide mock MongoDB client for integration tests."""
-    import mongomock  # type: ignore[unused-ignore]
-
-    client = mongomock.MongoClient()
-    try:
-        yield client
-    finally:
-        client.close()
-
-
-@pytest.fixture
-def test_db(mock_mongo_client: MongoClient[Any]) -> Any:
-    """Get test database from mocked MongoDB client."""
-    return mock_mongo_client["test_secondbrain"]
-
-
-@pytest.fixture
-def test_collection(test_db: Any) -> Any:
-    """Get test embeddings collection."""
-    return test_db["test_embeddings"]
 
 
 @pytest.fixture
@@ -49,6 +21,16 @@ def sample_embedding() -> list[float]:
 
     random.seed(42)
     return [random.random() for _ in range(EMBEDDING_DIMENSIONS)]
+
+
+@pytest.fixture
+def qdrant_storage() -> Generator[QdrantVectorStorage]:
+    """Local-mode (in-memory) Qdrant-backed storage for mocked integration tests."""
+    storage = QdrantVectorStorage(collection_name="test_embeddings")
+    storage._client = QdrantClient(":memory:")
+    storage._dimensions = EMBEDDING_DIMENSIONS
+    yield storage
+    storage.close()
 
 
 @pytest.fixture
@@ -72,8 +54,10 @@ def mock_embedder(sample_embedding: list[float]) -> Any:
 
 
 @pytest.fixture
-def stored_chunks(test_collection: Any, sample_embedding: list[float]) -> list[str]:
-    """Store sample chunks in the test collection for testing list/search operations."""
+def stored_chunks(
+    qdrant_storage: QdrantVectorStorage, sample_embedding: list[float]
+) -> list[str]:
+    """Store sample chunks in the Qdrant storage for testing list/search operations."""
     import random
     from uuid import uuid4
 
@@ -93,7 +77,7 @@ def stored_chunks(test_collection: Any, sample_embedding: list[float]) -> list[s
                 "chunk_index": i,
             },
         }
-        test_collection.insert_one(chunk)
+        qdrant_storage.store(chunk)
         chunks.append(chunk["chunk_id"])
 
     return chunks
@@ -115,93 +99,5 @@ def ingestor_with_mock_embedder(sample_embedding: list[float]) -> Any:
 
     try:
         yield ingestor
-    finally:
-        MockEmbeddingGenerator.generate = original_generate  # type: ignore[method-assign]
-
-
-@pytest.fixture
-def storage_with_index(test_collection: Any) -> Any:
-    """Create a VectorStorage instance for integration testing."""
-    from secondbrain.config import Config, get_config
-
-    # Save original environment variables
-    original_mongo_uri = os.environ.get("SECONDBRAIN_MONGO_URI")
-    original_mongo_db = os.environ.get("SECONDBRAIN_MONGO_DB")
-    original_mongo_collection = os.environ.get("SECONDBRAIN_MONGO_COLLECTION")
-    original_llm_host = os.environ.get("SECONDBRAIN_OPENAI_BASE_URL")
-
-    # Use Config to get test defaults
-    get_config.cache_clear()
-    cfg = Config()
-
-    os.environ["SECONDBRAIN_MONGO_URI"] = cfg.mongo_uri
-    os.environ["SECONDBRAIN_MONGO_DB"] = cfg.mongo_db
-    os.environ["SECONDBRAIN_MONGO_COLLECTION"] = "test_embeddings"
-
-    get_config.cache_clear()
-
-    storage = VectorStorage(
-        mongo_uri=cfg.mongo_uri,
-        db_name=cfg.mongo_db,
-        collection_name="test_embeddings",
-    )
-
-    test_collection.create_index("source_file")
-
-    try:
-        yield storage
-    finally:
-        storage._client = None
-        storage._db = None
-        storage._collection = None
-        # Restore original environment variables
-        if original_mongo_uri is not None:
-            os.environ["SECONDBRAIN_MONGO_URI"] = original_mongo_uri
-        elif "SECONDBRAIN_MONGO_URI" in os.environ:
-            del os.environ["SECONDBRAIN_MONGO_URI"]
-
-        if original_mongo_db is not None:
-            os.environ["SECONDBRAIN_MONGO_DB"] = original_mongo_db
-        elif "SECONDBRAIN_MONGO_DB" in os.environ:
-            del os.environ["SECONDBRAIN_MONGO_DB"]
-
-        if original_mongo_collection is not None:
-            os.environ["SECONDBRAIN_MONGO_COLLECTION"] = original_mongo_collection
-        elif "SECONDBRAIN_MONGO_COLLECTION" in os.environ:
-            del os.environ["SECONDBRAIN_MONGO_COLLECTION"]
-
-        if original_llm_host is not None:
-            os.environ["SECONDBRAIN_OPENAI_BASE_URL"] = original_llm_host
-        elif "SECONDBRAIN_OPENAI_BASE_URL" in os.environ:
-            del os.environ["SECONDBRAIN_OPENAI_BASE_URL"]
-
-        # Clear and re-cache config to pick up restored env vars
-        get_config.cache_clear()
-
-
-@pytest.fixture
-def search_workflow(storage_with_index: Any, sample_embedding: list[float]) -> Any:
-    """Create a Searcher-like workflow for testing search operations."""
-    from secondbrain.search import Searcher
-
-    mock_gen = MockEmbeddingGenerator(
-        model_name="mock-384", dimension=EMBEDDING_DIMENSIONS
-    )
-
-    original_generate = MockEmbeddingGenerator.generate
-
-    def mock_generate(self: Any, text: str) -> list[float]:
-        return sample_embedding
-
-    MockEmbeddingGenerator.generate = mock_generate  # type: ignore[method-assign]
-
-    storage_with_index.ensure_index()
-
-    try:
-        yield {
-            "searcher": Searcher(verbose=False),
-            "storage": storage_with_index,
-            "embedding_gen": mock_gen,
-        }
     finally:
         MockEmbeddingGenerator.generate = original_generate  # type: ignore[method-assign]

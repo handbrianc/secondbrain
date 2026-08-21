@@ -31,7 +31,7 @@ from secondbrain.config import config, Config
 cfg = config()
 
 # Access settings
-uri = cfg.mongo_uri
+url = cfg.qdrant_url
 chunk_size = cfg.chunk_size
 ```
 
@@ -53,7 +53,7 @@ ingestor = DocumentIngestor(
 results = ingestor.ingest(
     path="./documents/",
     recursive=True,
-    batch_size=10,
+    batch_size=30,
     cores=None  # Auto-detect
 )
 ```
@@ -76,7 +76,7 @@ with Searcher() as searcher:
     )
 ```
 
-**Searcher** — Performs vector similarity search via MongoDB $vectorSearch.
+**Searcher** — Performs vector similarity search against the Qdrant vector store.
 
 ### Storage
 

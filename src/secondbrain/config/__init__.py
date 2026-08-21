@@ -1,8 +1,8 @@
 """Configuration management for secondbrain CLI using Pydantic Settings.
 
 This module provides a Config class that loads configuration from environment
-variables following 12-factor app principles, with validation for MongoDB
-connection strings, LLM/RAG settings, embedding, chunking, and storage options.
+variables following 12-factor app principles, with validation for Qdrant
+connection, LLM/RAG settings, embedding, chunking, and storage options.
 """
 
 import os
@@ -17,9 +17,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from secondbrain.config.chunking import ChunkingSummarizerMixin
 from secondbrain.config.embedding import SearchEmbeddingMixin
 from secondbrain.config.llm import LLMMixin
-from secondbrain.config.mongo import MongoMixin
 from secondbrain.config.processing import ProcessingStorageMixin
+from secondbrain.config.qdrant import QdrantMixin
 from secondbrain.config.rag import RagMixin
+from secondbrain.config.sqlite import SqliteMixin
 
 __all__ = ["Config", "config", "get_config"]
 
@@ -30,7 +31,8 @@ class Config(
     ChunkingSummarizerMixin,
     SearchEmbeddingMixin,
     ProcessingStorageMixin,
-    MongoMixin,
+    QdrantMixin,
+    SqliteMixin,
     BaseSettings,
 ):
     """Configuration for secondbrain CLI.
@@ -83,10 +85,6 @@ class Config(
 
         # Set test-specific defaults if running in test environment
         if is_test_env:
-            if "mongo_db" not in values:
-                values["mongo_db"] = "secondbrain_test"
-            if "mongo_collection" not in values:
-                values["mongo_collection"] = "test_embeddings"
             if "circuit_breaker_enabled" not in values:
                 values["circuit_breaker_enabled"] = False
             if "rate_limit_enabled" not in values:

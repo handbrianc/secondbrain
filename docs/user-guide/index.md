@@ -13,8 +13,8 @@ The SecondBrain User Guide covers all aspects of operating SecondBrain in produc
 
 ### Vector Search Fundamentals
 
-SecondBrain stores document chunks as embedded vectors in MongoDB. When you search, your query is converted to a vector
-and compared against stored vectors using similarity metrics.
+SecondBrain stores document chunks as embedded vectors in Qdrant. When you search, your query is converted to a vector
+and compared against stored vectors using similarity metrics. Conversation sessions and messages are persisted to SQLite.
 
 ### Chunking Strategy
 

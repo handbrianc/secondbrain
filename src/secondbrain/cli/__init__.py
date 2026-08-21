@@ -7,11 +7,17 @@ Commands are now, in separate modules:
 - commands.py: All CLI command implementations
 """
 
+import os
+
 import click
 from rich.console import Console
 
 from secondbrain.logging import setup_logging
 from secondbrain.utils.mps_patch import patch_transformers_for_mps
+
+# Suppress HF-hub progress bars before any docling/transformers import.
+os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+os.environ.setdefault("HF_HUB_VERBOSITY", "error")
 
 # Apply RT-DETR float32 patch at the earliest possible point — before any
 # docling/transformers import that might trigger the RT-DETR layout model.

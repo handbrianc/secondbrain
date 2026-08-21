@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any
 
 from secondbrain.logging import get_logger
 
@@ -250,40 +250,32 @@ class Summarizer:
         When *source_file* is provided, results are restricted to chunks
         from that specific source document.
         """
-        query: dict[str, Any] = {"metadata.chapter_id": chapter_id}
-        if source_file is not None:
-            query["metadata.source_file"] = source_file
         raw: list[dict[str, Any]] = []
-
         try:
-            raw = self._storage.find_chunks_by_metadata(query)
-        except Exception:
-            self._logger.debug("find_chunks_by_metadata not available, trying find()")
-
-        # Fallback: use synchronous find() on the underlying collection
-        if not raw:
-            try:
-                cursor = self._storage.collection.find(query)
-                raw = list(cursor)
-            except Exception as exc:
-                self._logger.error(
-                    "Failed to fetch chapter %s chunks: %s", chapter_id, exc
+            raw = list(
+                self._storage.find_chunks(
+                    source_file=source_file,
+                    chapter_id=str(chapter_id),
                 )
-                return []
+            )
+        except Exception as exc:
+            self._logger.error(
+                "Failed to fetch chapter %s chunks: %s", chapter_id, exc
+            )
+            return []
 
         if not include_subsections:
             return raw
 
         # Gather subsections (e.g. chapter_id==3 → section_prefix=="3.")
         section_prefix = f"{chapter_id}."
-        subsection_query: dict[str, Any] = {
-            "metadata.section_id": {"$regex": rf"^{section_prefix}"}
-        }
-        if source_file is not None:
-            subsection_query["metadata.source_file"] = source_file
         try:
-            cursor = self._storage.collection.find(subsection_query)
-            subsections = list(cursor)
+            subsections = list(
+                self._storage.find_chunks(
+                    source_file=source_file,
+                    section_id_pattern=rf"^{section_prefix}",
+                )
+            )
         except Exception as exc:
             self._logger.error(
                 "Failed to fetch subsections for chapter %s: %s", chapter_id, exc
@@ -309,21 +301,13 @@ class Summarizer:
         When *source_file* is provided, results are restricted to chunks
         from that specific source document.
         """
-        query: dict[str, Any] = {"metadata.section_id": section_id}
-        if source_file is not None:
-            query["metadata.source_file"] = source_file
-        raw: Any = []
         try:
-            raw = self._storage.find_chunks_by_metadata(query)
-        except Exception:
-            self._logger.debug("find_chunks_by_metadata not available, trying find()")
-
-        if raw:
-            return cast("list[dict[str, Any]]", raw)
-
-        try:
-            cursor = self._storage.collection.find(query)
-            return cast("list[dict[str, Any]]", list(cursor))
+            return list(
+                self._storage.find_chunks(
+                    source_file=source_file,
+                    section_id=section_id,
+                )
+            )
         except Exception as exc:
             self._logger.error("Failed to fetch section %s chunks: %s", section_id, exc)
             return []

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Start test services (MongoDB)
+# Start test services (Qdrant)
 # Usage: ./scripts/start_test_services.sh
 
 set -e
@@ -7,14 +7,16 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 COMPOSE_FILE="$PROJECT_ROOT/docker-compose.test.yml"
+# Test Qdrant publishes on port 6334 (host) -> 6333 (container)
+QDRANT_HEALTH_URL="${QDRANT_HEALTH_URL:-http://localhost:6334/healthz}"
 
 echo "=========================================="
 echo "Starting Test Services"
 echo "=========================================="
 
-# Check if docker-compose is available
+# Check if docker compose is available
 if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null; then
-    echo "ERROR: docker-compose is not installed"
+    echo "ERROR: docker compose is not installed"
     echo "Install it with: sudo apt-get install docker-compose (Ubuntu) or via Docker Desktop"
     exit 1
 fi
@@ -27,7 +29,7 @@ fi
 
 # Start services
 echo ""
-echo "Starting services with: docker-compose -f $COMPOSE_FILE up -d"
+echo "Starting services with: docker compose -f $COMPOSE_FILE up -d"
 echo ""
 
 if command -v docker-compose &> /dev/null; then
@@ -41,20 +43,20 @@ echo ""
 echo "Waiting for services to be healthy..."
 echo ""
 
-MAX_WAIT=120  # seconds
-WAIT_INTERVAL=5
+MAX_WAIT=60  # seconds
+WAIT_INTERVAL=2
 ELAPSED=0
 
-# Function to check MongoDB health
-check_mongodb() {
-    docker exec secondbrain-mongodb-test mongosh --quiet --eval "db.adminCommand('ping')" > /dev/null 2>&1
+# Function to check Qdrant health via its HTTP readiness endpoint
+check_qdrant() {
+    curl -s -o /dev/null --fail --max-time 2 "$QDRANT_HEALTH_URL"
 }
 
-# Wait for MongoDB
-echo "Checking MongoDB (localhost:27018)..."
+# Wait for Qdrant
+echo "Checking Qdrant (http://localhost:6334)..."
 while [ $ELAPSED -lt $MAX_WAIT ]; do
-    if check_mongodb; then
-        echo "✓ MongoDB is healthy"
+    if check_qdrant; then
+        echo "✓ Qdrant is healthy"
         break
     fi
     echo -n "."
@@ -64,10 +66,10 @@ done
 
 if [ $ELAPSED -ge $MAX_WAIT ]; then
     echo ""
-    echo "ERROR: MongoDB failed to become healthy within ${MAX_WAIT}s"
+    echo "ERROR: Qdrant failed to become healthy within ${MAX_WAIT}s"
     echo ""
     echo "Service logs:"
-    docker logs secondbrain-mongodb-test --tail 20
+    docker logs secondbrain-qdrant-test --tail 20
     ./scripts/stop_test_services.sh
     exit 1
 fi
@@ -78,10 +80,10 @@ echo "All Services Started Successfully"
 echo "=========================================="
 echo ""
 echo "Connection Info:"
-echo "  MongoDB:      mongodb://${MONGO_INITDB_ROOT_USERNAME:-testuser}:${MONGO_INITDB_ROOT_PASSWORD:-testpass}@localhost:27018/secondbrain_test"
+echo "  Qdrant:      http://localhost:6334"
 echo ""
 echo "Run integration tests with:"
-echo "  pytest tests/integration/ -v"
+echo "  SECONDBRAIN_QDRANT_URL=http://localhost:6334 pytest tests/integration/ -v"
 echo ""
 echo "Stop services with:"
 echo "  ./scripts/stop_test_services.sh"

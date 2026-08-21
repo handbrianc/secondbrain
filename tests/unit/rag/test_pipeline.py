@@ -715,6 +715,131 @@ class TestCodeContentGate:
         assert "DOCUMENT STRUCTURE INDEX" in roster
 
 
+class TestDeriveChapterRosterUnion:
+    """Regression: a detected chapter must never vanish from the roster.
+
+    The chapter index was previously built only from recognised subsections, so a
+    chapter whose heading was detected (present in ``ch_good``) but whose section
+    headers were not seen in the probe chunks was dropped while its neighbours
+    survived — e.g. chapters 13 and 17 disappearing from a cookbook index.  It
+    must appear regardless, and truncation must never remove a chapter heading.
+    """
+
+    def _make_test_pipeline(self) -> RAGPipeline:
+        mock_searcher = MagicMock(spec=Searcher)
+        mock_searcher.search.return_value = []
+        mock_searcher.search_async = AsyncMock(return_value=[])
+        return RAGPipeline(
+            searcher=mock_searcher,
+            llm_provider=MagicMock(),
+            top_k=5,
+            context_window=5,
+        )
+
+    def test_chapter_without_detected_section_still_in_roster(self) -> None:
+        # Chapter 13 has a detected heading but no "13.x" section header in the
+        # probe chunks; chapters 12 and 14 have both.  Only 13 may not vanish.
+        pipeline = self._make_test_pipeline()
+        chunks = [
+            {
+                "chunk_text": (
+                    "Chapter 12 Selection and Assignment\n"
+                    "12.1 Basic selection.\n"
+                    "Chapter 13 Advanced Selection\n"
+                    "Chapter 14 Selection and Assignment\n"
+                    "14.1 Label-based selection.\n"
+                ),
+                "source_file": "cookbook.pdf",
+            }
+        ]
+        roster = pipeline._derive_chapter_roster(chunks)
+        assert "[Chapter 12]" in roster
+        assert "[Chapter 13]" in roster, f"chapter 13 dropped:\n{roster}"
+        assert "[Chapter 14]" in roster
+
+    def test_truncation_never_drops_chapter_headings(self) -> None:
+        # Chapters 11-25 have headings but no subsections; chapters 1-10 have
+        # enough subsections that a flat 50-line cap would cut the tail.  Every
+        # chapter heading (including 25) must survive.
+        pipeline = self._make_test_pipeline()
+        parts: list[str] = []
+        for n in range(1, 11):
+            parts.append(f"Chapter {n} Topic {n}")
+            parts.append(f"{n}.1 first subsection of {n}.")
+            parts.append(f"{n}.2 second subsection of {n}.")
+        for n in range(11, 26):
+            parts.append(f"Chapter {n} Topic {n}")
+        chunks = [{"chunk_text": "\n".join(parts), "source_file": "book.pdf"}]
+        roster = pipeline._derive_chapter_roster(chunks)
+        assert "[Chapter 25]" in roster, f"tail chapter dropped:\n{roster}"
+        assert "[Chapter 11]" in roster
+
+
+class TestAuthoritativeChapterSpan:
+    """Regression: bare-number noise must not fabricate chapters.
+
+    When a document labels its chapters explicitly ("Chapter N"),
+    those headings define the authoritative chapter span.  Looser
+    heuristics (bare_chapter_re / ft_catch / section_re) must not invent
+    chapters beyond that span from body text or dataframe output —
+    e.g. a book with 11 real chapters must never gain fabricated
+    "Chapter 12…30" entries (and thus appear to "miss" 13 and 17).
+    """
+
+    def _make_test_pipeline(self) -> RAGPipeline:
+        mock_searcher = MagicMock(spec=Searcher)
+        mock_searcher.search.return_value = []
+        mock_searcher.search_async = AsyncMock(return_value=[])
+        return RAGPipeline(
+            searcher=mock_searcher,
+            llm_provider=MagicMock(),
+            top_k=5,
+            context_window=5,
+        )
+
+    def test_no_fabricated_chapters_beyond_authoritative_span(self) -> None:
+        pipeline = self._make_test_pipeline()
+        chunks = [
+            {
+                "chunk_text": (
+                    "Chapter 1 Foundations\n1.1 Intro.\n"
+                    "Chapter 2 Selection\n2.1 Basics.\n"
+                    "Chapter 3 Data Types\n"
+                    "12 Selection and Assignment\n"
+                    "14.167143 0.0 0.0\n"
+                    "17.952 we see in the first bin\n"
+                    "25 Jack 24\n"
+                ),
+                "source_file": "cookbook.pdf",
+            }
+        ]
+        entries, good, _ = pipeline._derive_chapter_numbers(chunks)
+        majors = sorted(e[0] for e in entries)
+        assert majors == [1, 2, 3], f"fabricated chapters detected: {majors}"
+        assert good == {1, 2, 3}
+        roster = pipeline._derive_chapter_roster(chunks)
+        assert "[Chapter 1]" in roster and "[Chapter 3]" in roster
+        for ghost in (12, 14, 17, 25):
+            assert f"[Chapter {ghost}]" not in roster, (
+                f"fabricated chapter {ghost} in roster:\n{roster}"
+            )
+
+    def test_bare_numbered_document_still_enumerates_via_sections(self) -> None:
+        # No explicit "Chapter N" headings anywhere: ch_good is empty, so the
+        # roster falls back to section-derived enumeration (must not disappear).
+        pipeline = self._make_test_pipeline()
+        chunks = [
+            {
+                "chunk_text": "1.1 Introduction.\n2.1 Setup.\n3.1 Configuration.",
+                "source_file": "manual.pdf",
+            }
+        ]
+        roster = pipeline._derive_chapter_roster(chunks)
+        assert "[Chapter 1]" in roster, roster
+        assert "[Chapter 2]" in roster, roster
+        assert "[Chapter 3]" in roster, roster
+
+
 class TestFilterChaptersByTarget:
     """Tests for filter_chapters_by_target() — a pure function, no mocking needed.
 

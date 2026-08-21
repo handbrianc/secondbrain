@@ -40,7 +40,7 @@ Dependency version bounds SHALL be documented with rationale.
 
 #### Scenario: Version ranges are documented
 
-- **WHEN** dependency is pinned (e.g., pymongo>=4.6.0)
+- **WHEN** dependency is pinned (e.g., qdrant-client>=1.9.0)
 - **THEN** rationale SHALL be in requirements.txt comments
 - **AND** minimum version reason SHALL be explained
 

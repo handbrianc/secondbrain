@@ -44,7 +44,7 @@ class SearchEmbeddingMixin:
         return v
 
     embedding_batch_size: int = Field(
-        default=20,
+        default=100,
         description="Batch size for embedding generation (1-100)",
     )
 

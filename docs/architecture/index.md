@@ -12,7 +12,7 @@ SecondBrain consists of layered components that work together to provide documen
 | Configuration | `config/` | Environment variable management via Pydantic |
 | Document Processing | `document/` | Parsing and chunking of supported file types |
 | Embedding | `embedding/` | Vector generation via OpenAI-compatible API |
-| Storage | `storage/` | MongoDB vector storage and retrieval |
+| Storage | `storage/` | Qdrant vector storage and retrieval |
 | Search | `search/` | Similarity search and ranking |
 | RAG | `rag/` | Retrieval-augmented generation for chat |
 | Utils | `utils/` | Circuit breaker, tracing, caching, Docker management, performance monitoring |
@@ -24,7 +24,7 @@ See [Data Flow](DATA_FLOW.md) for detailed processing pipeline.
 
 ## Schema
 
-See [Schema Reference](SCHEMA.md) for MongoDB document structure.
+See [Schema Reference](SCHEMA.md) for Qdrant payload and SQLite schema.
 
 ## Technology Stack
 
@@ -32,8 +32,9 @@ See [Schema Reference](SCHEMA.md) for MongoDB document structure.
 | ----------- | ------------ |
 | CLI Framework | Click 8.x |
 | Document Parsing | Docling 2.x |
-| Database | MongoDB with $vectorSearch |
-| Drivers | PyMongo (sync), Motor (async) |
+| Vector Database | Qdrant with cosine similarity |
+| Conversations | SQLite (sessions/messages) |
+| Drivers | qdrant-client, sqlite3 |
 | HTTP Client | httpx |
 | Data Validation | Pydantic 2.x |
 | Async | asyncio native |
@@ -76,11 +77,11 @@ Core processing always happens on-host:
 
 ### 5. Vector Search Foundation
 
-Using MongoDB's native `$vectorSearch` for similarity retrieval:
+Using Qdrant for vector similarity retrieval:
 
-- No separate vector database required
-- Leverages existing MongoDB infrastructure
-- Server-side similarity computation
+- All chunk metadata stored in the Qdrant payload, so search needs one round trip
+- Cosine similarity for ranking
+- Chosen backend selected via `SECONDBRAIN_STORAGE_BACKEND` (`qdrant` or `mock`)
 
 ## System Diagram
 
@@ -104,7 +105,7 @@ Using MongoDB's native `$vectorSearch` for similarity retrieval:
          │                      │                      │
     ┌────▼────┐           ┌─────▼─────┐          ┌─────▼─────┐
     │ Embedder│           │  Storage  │          │   RAG     │
-    │ (HTTP)  │           │ (MongoDB) │          │ (LLM API) │
+    │ (HTTP)  │           │ (Qdrant)  │          │ (LLM API) │
     └────┬────┘           └─────┬─────┘          └─────┬─────┘
          │                      │                      │
          └──────────────────────▼──────────────────────┘

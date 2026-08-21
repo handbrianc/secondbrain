@@ -27,7 +27,7 @@ source .venv/bin/activate  # Linux/macOS
 pip install -e .
 ```
 
-## MongoDB Connection Issues
+## Qdrant Connection Issues
 
 ### Connection Refused
 
@@ -35,42 +35,42 @@ pip install -e .
 
 **Solution**:
 
-1. Verify MongoDB is running:
+1. Verify Qdrant is running:
 
 ```bash
-docker ps  # For Docker MongoDB
-mongod --version  # For local MongoDB
+docker ps  # Look for the secondbrain-qdrant container
+docker logs secondbrain-qdrant
 ```
 
-1. Start MongoDB if not running:
+1. Start Qdrant if not running:
 
 ```bash
 secondbrain start --wait
 ```
 
-1. Check the connection URI is correct:
+1. Check the Qdrant URL is correct:
 
 ```bash
-echo $SECONDBRAIN_MONGO_URI
+echo $SECONDBRAIN_QDRANT_URL
 ```
 
 ### Authentication Failed
 
 **Symptom**: `AuthenticationFailed: Auth failed`
 
-**Solution**: Verify credentials in your connection string:
+**Solution**: Verify the API key in your configuration matches your Qdrant server:
 
 ```
-mongodb://username:password@host:27017/database
+SECONDBRAIN_QDRANT_API_KEY=your-api-key
 ```
 
-Ensure the user has appropriate roles on the database.
+Ensure the key has the appropriate permissions on the collection.
 
 ### Database Not Ready
 
-**Symptom**: `ServerSelectionTimeoutError: Unable to connect to MongoDB`
+**Symptom**: `ConnectionError: Unable to connect to Qdrant` / collection not found
 
-**Solution**: Wait for MongoDB to fully initialize:
+**Solution**: Wait for Qdrant to fully initialize:
 
 ```bash
 secondbrain start --wait
@@ -134,11 +134,11 @@ secondbrain ingest ./documents/ --recursive
 secondbrain search "query" --min-score 0.3
 ```
 
-1. Wrong collection or database queried:
+1. Wrong collection or Qdrant URL queried:
 
 ```bash
-echo $SECONDBRAIN_MONGO_DB
-echo $SECONDBRAIN_MONGO_COLLECTION
+echo $SECONDBRAIN_QDRANT_URL
+echo $SECONDBRAIN_QDRANT_COLLECTION
 ```
 
 ### Poor Search Relevance
@@ -196,7 +196,7 @@ secondbrain search --help
 
 **Solution**:
 
-1. Check MongoDB connectivity:
+1. Check Qdrant connectivity:
 
 ```bash
 secondbrain health

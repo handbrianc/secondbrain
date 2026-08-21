@@ -206,7 +206,7 @@ secondbrain chat --delete-session old-session
 ### Start/Stop Docker Stack
 
 ```bash
-# Start MongoDB
+# Start Qdrant
 secondbrain start
 secondbrain start --wait  # Block until ready
 
