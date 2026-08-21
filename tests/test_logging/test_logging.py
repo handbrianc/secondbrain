@@ -220,9 +220,8 @@ class TestSetupJsonLogging:
 class TestGetHealthStatus:
     def test_get_health_status_structure(self) -> None:
         with patch(
-            "secondbrain.storage.VectorStorage",
+            "secondbrain.storage.StorageFactory.create_from_config",
             return_value=MockVectorStorage(),
-            create=True,
         ):
             status = get_health_status()
             assert "status" in status
@@ -232,9 +231,8 @@ class TestGetHealthStatus:
 
     def test_get_health_status_services_keys(self) -> None:
         with patch(
-            "secondbrain.storage.VectorStorage",
+            "secondbrain.storage.StorageFactory.create_from_config",
             return_value=MockVectorStorage(),
-            create=True,
         ):
             assert "mongodb" in get_health_status()["services"]
 
@@ -242,25 +240,22 @@ class TestGetHealthStatus:
 class TestCheckServices:
     def test_check_services_returns_dict(self) -> None:
         with patch(
-            "secondbrain.storage.VectorStorage",
+            "secondbrain.storage.StorageFactory.create_from_config",
             return_value=MockVectorStorage(),
-            create=True,
         ):
             assert isinstance(check_services(), dict)
 
     def test_check_services_has_required_keys(self) -> None:
         with patch(
-            "secondbrain.storage.VectorStorage",
+            "secondbrain.storage.StorageFactory.create_from_config",
             return_value=MockVectorStorage(),
-            create=True,
         ):
             assert "mongodb" in check_services()
 
     def test_check_services_values_are_booleans(self) -> None:
         with patch(
-            "secondbrain.storage.VectorStorage",
+            "secondbrain.storage.StorageFactory.create_from_config",
             return_value=MockVectorStorage(),
-            create=True,
         ):
             assert isinstance(check_services()["mongodb"], bool)
 

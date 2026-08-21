@@ -31,42 +31,28 @@ SecondBrain depends on several key packages:
 | Package | Purpose | Required |
 | --------- | --------- | ---------- |
 | click | CLI framework | Yes |
-| pymongo, motor | MongoDB drivers | Yes |
+| qdrant-client | Qdrant vector database client | Yes |
+| aiosqlite / sqlite | SQLite conversation storage | Yes |
 | docling | Document parsing | Yes |
 | httpx | HTTP client | Yes |
 | pydantic, pydantic-settings | Configuration | Yes |
 | rich | Terminal output | Yes |
 | openai | Embedding provider | Yes |
 
-## MongoDB Setup
+## Qdrant Setup
 
-SecondBrain requires MongoDB for vector storage. Choose one approach:
-
-### Option A: Docker (Recommended)
-
-Start MongoDB using the built-in Docker management:
+SecondBrain uses Qdrant for vector storage and SQLite for conversations/sessions. To get started, run the built-in
+Docker management to start the Qdrant service:
 
 ```bash
 secondbrain start --wait
 ```
 
-This starts a MongoDB container with default settings.
+This starts the `secondbrain-qdrant` container with default settings (collection `embeddings`).
 
-### Option B: Local MongoDB
-
-If you have MongoDB installed locally, ensure it's running:
-
-```bash
-mongod --dbpath /data/db
-```
-
-### Option C: MongoDB Atlas (Cloud)
-
-For cloud deployments, configure the connection via environment variable:
-
-```bash
-export SECONDBRAIN_MONGO_URI="mongodb+srv://username:password@cluster.mongodb.net"
-```
+If you have Qdrant running elsewhere, point to it via the `SECONDBRAIN_QDRANT_URL` environment variable (for
+example `http://localhost:6333`). Conversations and sessions are stored locally in the SQLite database at
+`~/.secondbrain/secondbrain.db` — no additional setup is required.
 
 ## API Key Configuration
 
@@ -91,7 +77,7 @@ Run the health check to verify all services are operational:
 secondbrain health
 ```
 
-Expected output confirms MongoDB connectivity and service status.
+Expected output confirms Qdrant connectivity and service status.
 
 ## Uninstalling
 

@@ -58,7 +58,7 @@ def summarize(
     from secondbrain.document.summarizer import Summarizer
     from secondbrain.embedding import EmbeddingProviderFactory
     from secondbrain.rag.providers import LLMProviderFactory
-    from secondbrain.storage import VectorStorage
+    from secondbrain.storage import StorageFactory
 
     if by_section and chapter is None:
         console.print(
@@ -80,7 +80,7 @@ def summarize(
 
     llm_provider = LLMProviderFactory.create_from_config(cfg)
     embedder = EmbeddingProviderFactory.create_from_config(cfg)
-    storage = VectorStorage()
+    storage = StorageFactory.create_from_config()
 
     max_tokens = getattr(cfg, "llm_max_tokens", 512)
     summary_model = getattr(cfg, "llm_model", None)

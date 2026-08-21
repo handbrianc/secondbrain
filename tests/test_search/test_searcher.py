@@ -13,7 +13,7 @@ class TestSearcher:
     @patch(
         "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
     )
-    @patch("secondbrain.search.VectorStorage")
+    @patch("secondbrain.search.StorageFactory.create_from_config")
     def test_init_default(
         self, mock_storage_class: MagicMock, mock_create_from_config: MagicMock
     ) -> None:
@@ -24,7 +24,7 @@ class TestSearcher:
     @patch(
         "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
     )
-    @patch("secondbrain.search.VectorStorage")
+    @patch("secondbrain.search.StorageFactory.create_from_config")
     def test_search_basic(
         self, mock_storage_class: MagicMock, mock_create_from_config: MagicMock
     ) -> None:
@@ -51,7 +51,7 @@ class TestSearcher:
     @patch(
         "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
     )
-    @patch("secondbrain.search.VectorStorage")
+    @patch("secondbrain.search.StorageFactory.create_from_config")
     def test_search_with_top_k(
         self, mock_storage_class: MagicMock, mock_create_from_config: MagicMock
     ) -> None:
@@ -75,7 +75,7 @@ class TestSearcher:
     @patch(
         "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
     )
-    @patch("secondbrain.search.VectorStorage")
+    @patch("secondbrain.search.StorageFactory.create_from_config")
     def test_search_with_source_filter(
         self, mock_storage_class: MagicMock, mock_create_from_config: MagicMock
     ) -> None:
@@ -98,7 +98,7 @@ class TestSearcher:
     @patch(
         "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
     )
-    @patch("secondbrain.search.VectorStorage")
+    @patch("secondbrain.search.StorageFactory.create_from_config")
     def test_search_with_file_type_filter(
         self, mock_storage_class: MagicMock, mock_create_from_config: MagicMock
     ) -> None:
@@ -121,7 +121,7 @@ class TestSearcher:
     @patch(
         "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
     )
-    @patch("secondbrain.search.VectorStorage")
+    @patch("secondbrain.search.StorageFactory.create_from_config")
     def test_search_mongodb_unavailable(
         self, mock_storage_class: MagicMock, mock_create_from_config: MagicMock
     ) -> None:
@@ -148,7 +148,7 @@ class TestSemanticSearchSpecRequirements:
     @patch(
         "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
     )
-    @patch("secondbrain.search.VectorStorage")
+    @patch("secondbrain.search.StorageFactory.create_from_config")
     def test_search_uses_cosine_similarity(
         self, mock_storage_class: MagicMock, mock_create_from_config: MagicMock
     ) -> None:
@@ -172,7 +172,7 @@ class TestSemanticSearchSpecRequirements:
     @patch(
         "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
     )
-    @patch("secondbrain.search.VectorStorage")
+    @patch("secondbrain.search.StorageFactory.create_from_config")
     def test_search_default_top_k(
         self, mock_storage_class: MagicMock, mock_create_from_config: MagicMock
     ) -> None:
@@ -200,7 +200,7 @@ class TestSemanticSearchSpecRequirements:
     @patch(
         "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
     )
-    @patch("secondbrain.search.VectorStorage")
+    @patch("secondbrain.search.StorageFactory.create_from_config")
     def test_search_results_include_score(
         self, mock_storage_class: MagicMock, mock_create_from_config: MagicMock
     ) -> None:
@@ -233,7 +233,7 @@ class TestSemanticSearchSpecRequirements:
     @patch(
         "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
     )
-    @patch("secondbrain.search.VectorStorage")
+    @patch("secondbrain.search.StorageFactory.create_from_config")
     def test_search_results_include_chunk_text(
         self, mock_storage_class: MagicMock, mock_create_from_config: MagicMock
     ) -> None:
@@ -264,7 +264,7 @@ class TestSemanticSearchSpecRequirements:
     @patch(
         "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
     )
-    @patch("secondbrain.search.VectorStorage")
+    @patch("secondbrain.search.StorageFactory.create_from_config")
     def test_search_results_include_source_file(
         self, mock_storage_class: MagicMock, mock_create_from_config: MagicMock
     ) -> None:
@@ -295,7 +295,7 @@ class TestSemanticSearchSpecRequirements:
     @patch(
         "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
     )
-    @patch("secondbrain.search.VectorStorage")
+    @patch("secondbrain.search.StorageFactory.create_from_config")
     def test_search_results_include_page_number(
         self, mock_storage_class: MagicMock, mock_create_from_config: MagicMock
     ) -> None:
@@ -327,7 +327,7 @@ class TestSemanticSearchSpecRequirements:
     @patch(
         "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
     )
-    @patch("secondbrain.search.VectorStorage")
+    @patch("secondbrain.search.StorageFactory.create_from_config")
     def test_search_empty_results(
         self, mock_storage_class: MagicMock, mock_create_from_config: MagicMock
     ) -> None:
@@ -350,7 +350,7 @@ class TestSemanticSearchSpecRequirements:
     @patch(
         "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
     )
-    @patch("secondbrain.search.VectorStorage")
+    @patch("secondbrain.search.StorageFactory.create_from_config")
     def test_search_uses_vector_index(
         self, mock_storage_class: MagicMock, mock_create_from_config: MagicMock
     ) -> None:
@@ -374,7 +374,7 @@ class TestSemanticSearchSpecRequirements:
     @patch(
         "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
     )
-    @patch("secondbrain.search.VectorStorage")
+    @patch("secondbrain.search.StorageFactory.create_from_config")
     def test_search_with_span_attributes_source_filter(
         self, mock_storage_class: MagicMock, mock_create_from_config: MagicMock
     ) -> None:
@@ -408,7 +408,7 @@ class TestSemanticSearchSpecRequirements:
     @patch(
         "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
     )
-    @patch("secondbrain.search.VectorStorage")
+    @patch("secondbrain.search.StorageFactory.create_from_config")
     def test_search_with_span_attributes_file_type_filter(
         self, mock_storage_class: MagicMock, mock_create_from_config: MagicMock
     ) -> None:
@@ -444,7 +444,7 @@ class TestSemanticSearchSpecRequirements:
     @patch(
         "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
     )
-    @patch("secondbrain.search.VectorStorage")
+    @patch("secondbrain.search.StorageFactory.create_from_config")
     def test_search_with_span_attributes_embedding_dim(
         self, mock_storage_class: MagicMock, mock_create_from_config: MagicMock
     ) -> None:
@@ -482,7 +482,7 @@ class TestSemanticSearchSpecRequirements:
     @patch(
         "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
     )
-    @patch("secondbrain.search.VectorStorage")
+    @patch("secondbrain.search.StorageFactory.create_from_config")
     @pytest.mark.asyncio
     async def test_search_async_basic(
         self, mock_storage_class: MagicMock, mock_create_from_config: MagicMock
@@ -513,7 +513,7 @@ class TestSemanticSearchSpecRequirements:
     @patch(
         "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
     )
-    @patch("secondbrain.search.VectorStorage")
+    @patch("secondbrain.search.StorageFactory.create_from_config")
     @pytest.mark.asyncio
     async def test_search_async_with_top_k(
         self, mock_storage_class: MagicMock, mock_create_from_config: MagicMock
@@ -539,7 +539,7 @@ class TestSemanticSearchSpecRequirements:
     @patch(
         "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
     )
-    @patch("secondbrain.search.VectorStorage")
+    @patch("secondbrain.search.StorageFactory.create_from_config")
     @pytest.mark.asyncio
     async def test_search_async_with_source_filter(
         self, mock_storage_class: MagicMock, mock_create_from_config: MagicMock
@@ -565,7 +565,7 @@ class TestSemanticSearchSpecRequirements:
     @patch(
         "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
     )
-    @patch("secondbrain.search.VectorStorage")
+    @patch("secondbrain.search.StorageFactory.create_from_config")
     @pytest.mark.asyncio
     async def test_search_async_with_file_type_filter(
         self, mock_storage_class: MagicMock, mock_create_from_config: MagicMock
@@ -591,7 +591,7 @@ class TestSemanticSearchSpecRequirements:
     @patch(
         "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
     )
-    @patch("secondbrain.search.VectorStorage")
+    @patch("secondbrain.search.StorageFactory.create_from_config")
     @pytest.mark.asyncio
     async def test_search_async_span_attributes(
         self, mock_storage_class: MagicMock, mock_create_from_config: MagicMock
@@ -635,7 +635,7 @@ class TestSemanticSearchSpecRequirements:
     @patch(
         "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
     )
-    @patch("secondbrain.search.VectorStorage")
+    @patch("secondbrain.search.StorageFactory.create_from_config")
     @pytest.mark.asyncio
     async def test_search_async_empty_results(
         self, mock_storage_class: MagicMock, mock_create_from_config: MagicMock
@@ -660,7 +660,7 @@ class TestSemanticSearchSpecRequirements:
     @patch(
         "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
     )
-    @patch("secondbrain.search.VectorStorage")
+    @patch("secondbrain.search.StorageFactory.create_from_config")
     @pytest.mark.asyncio
     async def test_search_async_connection_error(
         self, mock_storage_class: MagicMock, mock_create_from_config: MagicMock

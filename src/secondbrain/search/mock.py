@@ -189,6 +189,16 @@ class MockSearcher:
         """Close resources (no-op for mock)."""
         pass
 
+    def list_source_files(self) -> list[str]:
+        """Return the distinct source files across the mock chunks."""
+        return list(
+            dict.fromkeys(
+                c.get("source_file")
+                for c in self._test_chunks
+                if c.get("source_file")
+            )
+        )
+
     def __enter__(self) -> "MockSearcher":
         """Context manager entry."""
         return self

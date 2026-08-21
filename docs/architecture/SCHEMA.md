@@ -1,73 +1,45 @@
 # Schema Reference
 
-MongoDB document schemas and index definitions for SecondBrain.
+Qdrant payload and SQLite schemas for SecondBrain.
 
-## Primary Collection: `embeddings`
+## Vector Collection: `embeddings`
 
-Stores all ingested document chunks with their vector representations.
+Stores all ingested document chunks with their vector representations as Qdrant points. The default collection name is `embeddings`, configured via `SECONDBRAIN_QDRANT_COLLECTION`.
 
-### Document Schema
+### Point Schema
 
-```javascript
+Each chunk is a Qdrant point: a vector plus a payload. All chunk metadata lives in the payload so search needs one round trip.
+
+```json
 {
-  "_id": ObjectId,           // MongoDB auto-assigned ID
-
-  // Primary identifiers
-  "chunk_id": "uuid-string", // Stable UUID for deduplication
-
-  // Position within source
-  "chunk_index": 0,          // Sequence number in source document
-
-  // Content (compressed if text_compression_enabled)
-  "text": "Extracted chunk text content...",
-  "text_compressed": false,  // Boolean flag
-  "compression_algo": null,  // "gzip" | "brotli" | "zstd" if compressed
-
-  // Vector representation (always stored as array, not Binary)
-  "vector": [0.123, -0.456, 0.789, ...],  // float32[]
-  "vector_dtype": "float32",               // "float32" or "float64"
-
-  // Timestamp
-  "created_at": ISODate("2024-01-15T10:30:00Z"),
-
-  // Structural classification (v2.x)
-  // element_type replaces chunk_role for new documents
-  "element_type": "body",                  // See element_type field below
-
-  // Deprecated: Use element_type instead. Will be removed in v3.0.
-  // "chunk_role": "paragraph",             // Legacy field
-
-  // Metadata
-  "metadata": {
-    "source": "/path/to/document.pdf",  // Absolute file path
-    "page": 3,                           // 1-based page number
-    "file_type": "pdf",                  // Extension without dot
-    "size": 1048576,                     // Original file size in bytes
-
-    // Optional fields
-    "checksum": "sha256:abc123...",     // If computed
-    "language": "en"                      // Detected language
+  "id": 18446744073709551616,
+  "vector": [0.123, -0.456, 0.789, ...],
+  "payload": {
+    "chunk_id": "46ec0cd0-9a3e-4c5a-9c4a-0a5a0f43b7a2",
+    "source_file": "/path/to/document.pdf",
+    "page_number": 3,
+    "chunk_text": "Extracted chunk text content...",
+    "element_type": "body",
+    "chunk_role": "body",
+    "section_label": "Introduction",
+    "created_at": "2024-01-15T10:30:00Z"
   }
 }
 ```
 
 ### Field Types Summary
 
-| Field | Type | Constraints |
-| ------- | ------ | ------------- |
-| `_id` | ObjectId | Auto-generated, unique |
-| `chunk_id` | String | UUID v4 format |
-| `chunk_index` | Integer | Non-negative |
-| `text` | String | UTF-8 |
-| `text_compressed` | Boolean | Default false |
-| `vector` | Array | Length equals EMBEDDING_DIMENSIONS |
-| `vector_dtype` | String | "float32" or "float64" |
-| `created_at` | Date | UTC |
-| `metadata.source` | String | Valid file path |
-| `metadata.page` | Integer | Positive |
-| `metadata.file_type` | String | Normalized extension |
-| `metadata.size` | Integer | Bytes |
-| `element_type` | String \| null | Enum values (see below) |
+| Field | Stored In | Type | Constraints |
+| ------- | ---------- | ------ | ------------- |
+| `id` | Point ID | Unsigned int | Qdrant auto-assigned |
+| `vector` | Point vector | float32[] | Length equals EMBEDDING_DIMENSIONS |
+| `chunk_id` | Payload | String | UUID v4 format |
+| `source_file` | Payload | String | Valid file path |
+| `page_number` | Payload | Integer | Positive |
+| `chunk_text` | Payload | String | UTF-8 |
+| `element_type` | Payload | String \| null | Enum values (see below) |
+| `chunk_role` | Payload | String \| null | Legacy role |
+| `section_label` | Payload | String \| null | Section heading/context |
 
 ## element_type
 
@@ -87,126 +59,39 @@ Structural role of a chunk within its parent document. Introduced in v2.x (struc
 | `"table_row"` | Table cell content |
 | `"table_caption"` | Caption within or beneath a table |
 
-**Note**: Preferred over `chunk_role` for new documents.
-Historical documents retain `chunk_role`; dual-read query ensures backwards compatibility.
+**Note**: `chunk_role` is retained in the payload for backwards compatibility with documents ingested prior to v2.x. New documents set `element_type`.
 
-### chunk_role (deprecated)
+## Conversations: SQLite
 
-**Deprecated**: Use `element_type` instead. Will be removed in v3.0.
+Conversation history for the chat command is persisted to SQLite (`ConversationStorage` at `src/secondbrain/conversation/storage_sqlite.py`). The default database path is `~/.secondbrain/secondbrain.db`, configured via `SECONDBRAIN_SQLITE_PATH`.
 
-Previously used to classify chunk roles. Retained for backwards compatibility with documents ingested prior to v2.x.
+### `sessions` Table
 
-## Sessions Collection: `sessions`
+| Column | Type | Constraints |
+| ------- | ------- | ------------- |
+| `session_id` | TEXT | Primary key |
+| `created_at` | DATETIME | UTC |
+| `updated_at` | DATETIME | UTC |
 
-Stores conversation history for the chat command.
+### `messages` Table
 
-### Session Document Schema
+| Column | Type | Constraints |
+| ------- | ------- | ------------- |
+| `id` | INTEGER | Primary key, auto-increment |
+| `session_id` | TEXT | Foreign key to `sessions` |
+| `role` | TEXT | `user` or `assistant` |
+| `content` | TEXT | Message text |
+| `timestamp` | DATETIME | UTC |
+| `sources` | TEXT | JSON-serialized source citations (chunk_id, source, page, score) |
 
-```javascript
-{
-  "_id": ObjectId,
+## Vector Index
 
-  "session_id": "user-specified-id or uuid",
-  "messages": [
-    {
-      "role": "user",
-      "content": "What is the capital of France?",
-      "timestamp": ISODate("2024-01-15T10:30:00Z")
-    },
-    {
-      "role": "assistant",
-      "content": "The capital of France is Paris.",
-      "timestamp": ISODate("2024-01-15T10:30:05Z"),
-      "sources": [
-        {
-          "chunk_id": "...",
-          "source": "/path/to/doc.pdf",
-          "page": 42,
-          "score": 0.89
-        }
-      ]
-    }
-  ],
+Qdrant builds a vector index on the `embeddings` collection automatically from the point vector dimension and distance metric:
 
-  "created_at": ISODate("2024-01-15T10:30:00Z"),
-  "updated_at": ISODate("2024-01-15T10:30:05Z")
-}
-```
+- **Distance metric**: Cosine similarity
+- **Dimensions**: Match EMBEDDING_DIMENSIONS (default 1536)
 
-## Index Definitions
-
-### Primary Vector Index
-
-Optimizes similarity search operations:
-
-```javascript
-db.embeddings.createIndex(
-  { "vector": "cosineSimilarity" },  // or "euclidean" or "dotProduct"
-  {
-    name: "vector_index",
-    numDimensions: 1536,        // Must match EMBEDDING_DIMENSIONS
-    replace: false              // Fail if exists with different specs
-  }
-)
-```
-
-Alternative for older MongoDB versions:
-
-```javascript
-db.embeddings.createIndex(
-  { "vector": "2dsphere" },
-  {
-    name: "vector_index_legacy",
-    numSubTrees: 100
-  }
-)
-```
-
-### Secondary Indexes
-
-Speed up metadata filtering:
-
-```javascript
-// Source file lookup (common filter)
-db.embeddings.createIndex(
-  { "metadata.source": 1 },
-  { name: "idx_source", background: true }
-)
-
-// Compound index for document-ordered retrieval
-db.embeddings.createIndex(
-  { "metadata.source": 1, "chunk_index": 1 },
-  { name: "idx_source_chunk", unique: true, background: true }
-)
-
-// File type filtering
-db.embeddings.createIndex(
-  { "metadata.file_type": 1 },
-  { name: "idx_file_type", background: true }
-)
-
-// Creation time for retention policies
-db.embeddings.createIndex(
-  { "created_at": 1 },
-  { name: "idx_created", expireAfterSeconds: null, background: true }
-)
-```
-
-### Session Indexes
-
-```javascript
-// Session lookup by ID
-db.sessions.createIndex(
-  { "session_id": 1 },
-  { name: "idx_session_id", unique: true }
-)
-
-// Recent sessions for listing
-db.sessions.createIndex(
-  { "updated_at": -1 },
-  { name: "idx_recent" }
-)
-```
+Payload fields are indexed for metadata filtering (for example, `source_file`, `page_number`, `element_type`, `section_label`).
 
 ## Storage Calculations
 
@@ -218,9 +103,9 @@ Given default EMBEDDING_DIMENSIONS=1536 and float32 (4 bytes):
 Bytes per vector = 1536 × 4 = 6,144 bytes (~6 KB)
 
 Plus overhead:
-- text field: varies by chunk size (4096 chars = ~4 KB)
-- metadata: ~200 bytes
-- MongoDB document overhead: ~200 bytes
+- chunk_text: varies by chunk size (4096 chars = ~4 KB)
+- payload metadata: ~200 bytes
+- Qdrant per-point overhead
 
 Total estimate per chunk: ~11-12 KB
 ```
@@ -238,20 +123,9 @@ With STORAGE_COMPRESSION_ENABLED=true (zstd):
 
 ## Migration Notes
 
-### Adding text_compressed Field
-
-```javascript
-// Version 0.4.0 adds compression capability
-db.embeddings.updateMany(
-  { "text_compressed": { "$exists": false } },
-  { "$set": { "text_compressed": false } }
-)
-```
-
 ### Vector Format Change (v0.3 → v0.4)
 
-Previously vectors were stored as BSON Binary.
-Now stored as JSON arrays for compatibility with newer MongoDB versions and vector search.
+Previously vectors were stored as BSON Binary in MongoDB. Now stored as plain float arrays in Qdrant points during the MongoDB→Qdrant migration.
 
 Migration is manual: re-ingest affected documents.
 
@@ -259,10 +133,7 @@ Migration is manual: re-ingest affected documents.
 
 Some index changes require recreation:
 
-```javascript
-// Drop old index
-db.embeddings.dropIndex("old_index_name")
-
-// Create new with corrected specification
-db.embeddings.createIndex(...)
+```bash
+# Drop and recreate a collection after a schema change
+qdrant_client.recreate_collection(...)
 ```

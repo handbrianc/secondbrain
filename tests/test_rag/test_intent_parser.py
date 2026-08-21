@@ -65,3 +65,43 @@ class TestIntentClassification:
             assert decision.intent is QueryIntent.BROAD_COVERAGE, (
                 f"{q!r} -> {decision.intent}"
             )
+
+
+class TestListSourcesIntent:
+    """StructuralIntentParser source-enumeration classification."""
+
+    def parse(self, query: str):
+        return StructuralIntentParser().parse(query)
+
+    def test_list_sources_phrases_classify(self) -> None:
+        """Queries that ask to enumerate stored sources classify as LIST_SOURCES."""
+        for q in [
+            "list all unique sources that you have stored",
+            "list all sources",
+            "list sources",
+            "what sources do you have",
+            "list unique sources",
+            "which documents are stored",
+            "list all documents",
+            "what documents do you have",
+            "list your sources",
+        ]:
+            decision = self.parse(q)
+            assert decision.intent is QueryIntent.LIST_SOURCES, (
+                f"{q!r} -> {decision.intent}"
+            )
+            assert decision.suggested_pipeline == "structural", (
+                f"{q!r} -> {decision.suggested_pipeline}"
+            )
+
+    def test_list_sources_does_not_collide_with_coverage(self) -> None:
+        """Coverage/summary queries are not hijacked by LIST_SOURCES."""
+        for q in [
+            "summarize the book",
+            "tell me everything about proxmox",
+            "give me an overview of the guide",
+        ]:
+            decision = self.parse(q)
+            assert decision.intent is not QueryIntent.LIST_SOURCES, (
+                f"{q!r} -> {decision.intent}"
+            )

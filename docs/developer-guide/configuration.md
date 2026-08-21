@@ -15,7 +15,7 @@ export SECONDBRAIN_<SETTING_NAME>=<value>
 Configuration options are organized by functional area:
 
 - [Core](#core-settings)
-- [MongoDB](#mongodb-settings)
+- [Storage Backend](#storage-backend)
 - [Embedding](#embedding-settings)
 - [LLM](#llm-settings)
 - [RAG](#rag-settings)
@@ -50,48 +50,61 @@ Output format for log messages.
 
 ---
 
-## MongoDB Settings
+## Storage Backend
 
-### MONGO_URI
+### STORAGE_BACKEND
 
-MongoDB connection URI.
+Selects the vector storage backend.
 
-| Detail     | Value                                            |
-| ---------- | ------------------------------------------------ |
-| Env Var    | `SECONDBRAIN_MONGO_URI`                          |
-| Default    | `mongodb://localhost:27017`                      |
-| Validation | Must start with `mongodb://` or `mongodb+srv://` |
+| Detail  | Value                              |
+| ------- | ---------------------------------- |
+| Env Var | `SECONDBRAIN_STORAGE_BACKEND`      |
+| Default | `qdrant`                           |
+| Options | `qdrant`, `mock`                   |
 
-Examples:
+`storage_backend` selects the backend via `StorageFactory.create_from_config()`. `qdrant` uses `QdrantVectorStorage` (production); `mock` uses `MockVectorStorage` (in-memory, for tests).
 
-```bash
-# Local
-SECONDBRAIN_MONGO_URI=mongodb://localhost:27017
+### QDRANT_URL
 
-# With authentication
-SECONDBRAIN_MONGO_URI=mongodb://user:password@localhost:27017
+Qdrant service URL.
 
-# Atlas cluster
-SECONDBRAIN_MONGO_URI=mongodb+srv://user:password@cluster.mongodb.net
-```
+| Detail  | Value                      |
+| ------- | -------------------------- |
+| Env Var | `SECONDBRAIN_QDRANT_URL`   |
+| Default | `http://localhost:6333`    |
 
-### MONGO_DB
+### QDRANT_API_KEY
 
-Database name.
+Optional API key for Qdrant authentication.
 
-| Detail  | Value                  |
-| ------- | ---------------------- |
-| Env Var | `SECONDBRAIN_MONGO_DB` |
-| Default | `secondbrain`          |
+| Detail  | Value                         |
+| ------- | ----------------------------- |
+| Env Var | `SECONDBRAIN_QDRANT_API_KEY`  |
+| Default | `None` (optional)             |
 
-### MONGO_COLLECTION
+### QDRANT_COLLECTION
 
-Collection name for embeddings.
+Qdrant collection name for embedded chunks.
 
-| Detail  | Value                          |
-| ------- | ------------------------------ |
-| Env Var | `SECONDBRAIN_MONGO_COLLECTION` |
-| Default | `embeddings`                   |
+| Detail  | Value                           |
+| ------- | ------------------------------- |
+| Env Var | `SECONDBRAIN_QDRANT_COLLECTION` |
+| Default | `embeddings`                    |
+
+All chunk metadata (chunk_id, source_file, page_number, chunk_text, element_type, chunk_role, section_label) is stored in the Qdrant payload, so search needs one round trip.
+
+### SQLITE_PATH
+
+SQLite database path for conversations/sessions/messages.
+
+| Detail  | Value                           |
+| ------- | ------------------------------- |
+| Env Var | `SECONDBRAIN_SQLITE_PATH`       |
+| Default | `~/.secondbrain/secondbrain.db` |
+
+Conversations, sessions, and messages are persisted to SQLite via `ConversationStorage`.
+
+> **Note**: The legacy `SECONDBRAIN_MONGO_URI`, `SECONDBRAIN_MONGO_DB`, `SECONDBRAIN_MONGO_COLLECTION`, and `MONGO_INITDB_*` variables no longer exist. MongoDB has been fully removed.
 
 ---
 
@@ -187,7 +200,7 @@ Batch size for embedding generation.
 | Detail  | Value                              |
 | ------- | ---------------------------------- |
 | Env Var | `SECONDBRAIN_EMBEDDING_BATCH_SIZE` |
-| Default | `20`                               |
+| Default | `100`                               |
 | Range   | 1-100                              |
 
 ---
@@ -406,7 +419,7 @@ Chunk batch size for streaming.
 | Detail  | Value                                    |
 | ------- | ---------------------------------------- |
 | Env Var | `SECONDBRAIN_STREAMING_CHUNK_BATCH_SIZE` |
-| Default | `100`                                    |
+| Default | `150`                                    |
 | Range   | 1-200                                    |
 
 ### RATE_LIMIT_ENABLED
@@ -460,7 +473,7 @@ Enable circuit breaker pattern.
 
 ### STORAGE_COMPRESSION_ENABLED
 
-Enable MongoDB collection compression.
+Enable vector storage compression.
 
 | Detail  | Value                                     |
 | ------- | ----------------------------------------- |

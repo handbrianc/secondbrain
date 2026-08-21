@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from secondbrain.conversation.session import ConversationSession
-from secondbrain.conversation.storage import ConversationStorage
+from secondbrain.conversation.storage_sqlite import ConversationStorage
 
 
 @pytest.fixture

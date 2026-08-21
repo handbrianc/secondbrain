@@ -5,7 +5,8 @@ Comprehensive guide to ingesting documents into SecondBrain's vector database.
 ## Overview
 
 The `ingest` command parses supported file types, splits content into chunks, generates embeddings, and stores vectors
-in MongoDB.
+in Qdrant. Chunk metadata (chunk_id, source_file, page_number, chunk_text, element_type, chunk_role, section_label) is
+stored in the Qdrant payload.
 
 ## Supported File Types
 

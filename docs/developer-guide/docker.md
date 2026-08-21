@@ -4,7 +4,7 @@ Running SecondBrain and its services with Docker.
 
 ## Docker Architecture
 
-SecondBrain uses Docker primarily for MongoDB deployment. The application itself runs natively on your host Python installation.
+SecondBrain uses Docker primarily for Qdrant deployment. The application itself runs natively on your host Python installation.
 
 ## Prerequisites
 
@@ -30,7 +30,7 @@ secondbrain start
 
 This launches:
 
-- MongoDB container on port 27017
+- The `secondbrain-qdrant` Qdrant vector database container on port 6333
 - Networking configured for localhost access
 
 ### Wait for Readiness
@@ -41,7 +41,7 @@ Block until services are ready:
 secondbrain start --wait
 ```
 
-Displays progress and confirms when MongoDB accepts connections.
+Displays progress and confirms when Qdrant accepts connections.
 
 ### Custom Compose File
 
@@ -86,7 +86,7 @@ secondbrain stop --remove-volumes
 ```
 
 !!! Warning
-    This permanently deletes all ingested documents and configuration stored in MongoDB volumes.
+    This permanently deletes all ingested vector data stored in the Qdrant volume.
 
 ## Checking Service Status
 
@@ -109,7 +109,7 @@ secondbrain health
 Sample healthy output:
 
 ```
-MongoDB: ✓ Connected
+Qdrant: ✓ Connected
 Embedding API: ✓ Responding
 ```
 
@@ -142,16 +142,16 @@ CMD ["--help"]
 ```yaml
 # docker-compose.dev.yml
 services:
-  mongodb:
-    image: mongo:7.0
+  qdrant:
+    image: qdrant/qdrant
     ports:
-      - "27017:27017"
+      - "6333:6333"
     volumes:
-      - mongodb_data:/data/db
+      - qdrant_data:/qdrant/storage
     restart: unless-stopped
 
 volumes:
-  mongodb_data:
+  qdrant_data:
 ```
 
 ### Production Stack
@@ -159,33 +159,33 @@ volumes:
 ```yaml
 # docker-compose.prod.yml
 services:
-  mongodb:
-    image: mongo:7.0
+  qdrant:
+    image: qdrant/qdrant
     ports:
-      - "27017:27017"
+      - "6333:6333"
     volumes:
-      - mongodb_data:/data/db
+      - qdrant_data:/qdrant/storage
     deploy:
       resources:
         limits:
           memory: 2G
     restart: unless-stopped
     healthcheck:
-      test: ["cmd", "mongosh", "--eval", "db.adminCommand('ping')"]
+      test: ["CMD-SHELL", "curl -f http://localhost:6333/ || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
 
 volumes:
-  mongodb_data:
+  qdrant_data:
 ```
 
-## Connecting to Remote MongoDB
+## Connecting to a Remote Qdrant
 
-For cloud MongoDB deployments, configure without Docker:
+For a remote Qdrant deployment, configure without Docker:
 
 ```bash
-export SECONDBRAIN_MONGO_URI="mongodb+srv://user:pass@cluster.mongodb.net/?retryWrites=true&w=majority"
+export SECONDBRAIN_QDRANT_URL="https://qdrant.example.com:6333"
 ```
 
 No `secondbrain start` needed — connects remotely.
@@ -202,15 +202,15 @@ Install Docker Desktop or Engine:
 ### Port Already in Use
 
 ```bash
-# Find process on port 27017
-lsof -ti:27017
+# Find process on port 6333
+lsof -ti:6333
 
 # Kill it
-kill -9 $(lsof -ti:27017)
+kill -9 $(lsof -ti:6333)
 
 # Or use a different port mapping in docker-compose.yml
 ports:
-  - "27018:27017"
+  - "6334:6333"
 ```
 
 ### Permission Denied (Linux)
@@ -227,15 +227,13 @@ sudo usermod -aG docker $USER
 Debug startup failures:
 
 ```bash
-docker logs secondbrain-mongodb --tail 100
+docker logs secondbrain-qdrant --tail 100
 ```
 
 ### Volume Permissions
 
-Fix MongoDB data directory ownership:
+Fix Qdrant data directory ownership:
 
 ```bash
-docker exec -it secondbrain-mongo mongosh
-# Then in mongosh:
-db.adminCommand({getLog: "global"})
+docker exec -it secondbrain-qdrant sh
 ```

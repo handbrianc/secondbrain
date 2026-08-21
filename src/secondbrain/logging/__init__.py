@@ -84,10 +84,6 @@ def setup_logging(
     """
     level = logging.DEBUG if verbose else logging.WARNING
 
-    # Suppress verbose third-party library logs
-    logging.getLogger("pymongo").setLevel(logging.WARNING)
-    logging.getLogger("motor").setLevel(logging.WARNING)
-
     # If handlers are already configured, just update the level
     if logging.root.handlers:
         for handler in logging.root.handlers:
@@ -210,12 +206,12 @@ def check_services() -> dict[str, bool]:
     -------
         Dictionary with service names as keys and boolean availability status.
     """
-    from secondbrain.storage import VectorStorage
+    from secondbrain.storage import StorageFactory
 
-    storage = VectorStorage()
+    storage = StorageFactory.create_from_config()
 
     return {
-        "mongodb": storage.validate_connection(),
+        "qdrant": storage.validate_connection(),
     }
 
 

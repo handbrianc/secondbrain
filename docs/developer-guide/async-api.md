@@ -6,53 +6,52 @@ Patterns and usage for SecondBrain's asynchronous programming interfaces.
 
 SecondBrain uses Python's `asyncio` for concurrent operations throughout the stack:
 
-- MongoDB access via Motor (async driver)
+- Qdrant vector access via `QdrantVectorStorage` async methods
 - HTTP clients via httpx (async)
 - Embedding generation with async batching
 - RAG pipeline with async LLM calls
 
 ## Async Storage Operations
 
+The vector storage backend `QdrantVectorStorage` exposes async methods (`search_async`,
+`store_batch_async`, `validate_connection_async`) that run against Qdrant.
+
 ### Async Search
 
 ```python
-from secondbrain.storage.async_client import AsyncStorageClient
+from secondbrain.storage.qdrant import QdrantVectorStorage
 
-async with AsyncStorageClient() as client:
-    results = await client.search(
+async with QdrantVectorStorage() as storage:
+    results = await storage.search_async(
         query_vector=embedding,
         top_k=20,
-        filter={"source": {"$regex": "^./docs/"}}
     )
 ```
 
 ### Async Batch Store
 
 ```python
-async with AsyncStorageClient() as client:
-    await client.store_batch(chunks=[chunk1, chunk2, chunk3])
+async with QdrantVectorStorage() as storage:
+    await storage.store_batch_async(chunks=[chunk1, chunk2, chunk3])
 ```
 
 ### Async Document Operations
 
 ```python
-from secondbrain.storage.async_client import AsyncStorageClient
+from secondbrain.storage.qdrant import QdrantVectorStorage
 
-client = AsyncStorageClient()
+storage = QdrantVectorStorage()
 
 # Search
-results = await client.search(query_vector=embedding, top_k=10)
+results = await storage.search_async(query_vector=embedding, top_k=10)
 
 # Store
-await client.store(chunk_data)
+await storage.store_batch_async(chunks=[chunk_data])
 
-# Delete
-deleted = await client.delete(filter={"source": "./old.pdf"})
+# Connection check
+ok = await storage.validate_connection_async()
 
-# Stats
-stats = await client.get_stats()
-
-await client.close()
+await storage.close()
 ```
 
 ## Async Embedding Generation
@@ -98,7 +97,7 @@ The recommended async client initialization:
 from secondbrain.clients import get_async_storage, get_async_embedder
 
 async with get_async_storage() as storage:
-    results = await storage.search(query, top_k=20)
+    results = await storage.search_async(query_vector, top_k=20)
 
 async with get_async_embedder() as embedder:
     emb = await embedder.generate_async("text")
@@ -204,15 +203,15 @@ Use context managers for proper cleanup:
 
 ```python
 # Preferred
-async with AsyncStorageClient() as client:
-    await client.search(...)
+async with QdrantVectorStorage() as storage:
+    await storage.search_async(...)
 
 # Manual close required otherwise
-client = AsyncStorageClient()
+storage = QdrantVectorStorage()
 try:
-    await client.search(...)
+    await storage.search_async(...)
 finally:
-    await client.close()
+    await storage.close()
 ```
 
 ## Performance Considerations
@@ -223,14 +222,14 @@ Async clients maintain connection pools internally. Reuse clients across operati
 
 ```python
 # Good: reuse client
-client = AsyncStorageClient()
+storage = QdrantVectorStorage()
 for query in queries:
-    results = await client.search(query)
+    results = await storage.search_async(query)
 
 # Bad: new client per request
 for query in queries:
-    async with AsyncStorageClient() as client:
-        results = await client.search(query)
+    async with QdrantVectorStorage() as storage:
+        results = await storage.search_async(query)
 ```
 
 ### Batching Efficiency

@@ -110,31 +110,41 @@ def temp_file(tmp_path):
 
 ## Mocking
 
-Use `mongomock` for MongoDB simulation:
+Use `MockVectorStorage` for an in-memory vector store, or an in-process `QdrantClient(":memory:")` for Qdrant-backed tests:
 
 ```python
-from mongomock import MongoClient
+from secondbrain.storage.mock import MockVectorStorage
 
 @pytest.fixture
-def mock_mongo():
-    client = MongoClient()
+def mock_storage():
+    storage = MockVectorStorage()
+    yield storage
+```
+
+Qdrant-backed tests use an in-process client:
+
+```python
+from qdrant_client import QdrantClient
+
+@pytest.fixture
+def qdrant_memory():
+    client = QdrantClient(":memory:")
     yield client
     client.close()
 ```
 
-Example test with mocking:
+Example test with the mock backend:
 
 ```python
-def test_delete_removes_document(mock_mongo, sample_chunk):
+def test_delete_removes_chunk(mock_storage, sample_chunk):
     """Test that delete removes the chunk from storage."""
-    db = mock_mongo.secondbrain
-    db.embeddings.insert_one(sample_chunk)
-    
-    deleter = Deleter(db)
+    mock_storage.store(sample_chunk)
+
+    deleter = Deleter(mock_storage)
     count = deleter.delete(chunk_id=sample_chunk["chunk_id"])
-    
+
     assert count == 1
-    assert db.embeddings.count_documents({}) == 0
+    assert mock_storage.count() == 0
 ```
 
 ## Async Testing
@@ -181,16 +191,16 @@ Standard fixture locations:
 ## Integration Tests Require Live Services
 
 The integration test suite (`tests/integration/`, marked `@pytest.mark.integration`, 16 tests)
-exercises real MongoDB vector search and a live local LLM (Ollama). These tests are **deselected
+exercises real Qdrant vector search and a live local LLM (Ollama). These tests are **deselected
 by default** and only run when their external services are available:
 
 ```bash
-# Start Mongo + Ollama, then run with integration included
+# Start Qdrant + Ollama, then run with integration included
 docker compose -f docker-compose.test.yml up -d
 pytest -m "integration"
 ```
 
-Because they depend on Dockerized MongoDB plus an Ollama server (and its installed embedding/LLM
+Because they depend on Dockerized Qdrant (at localhost:6333) plus an Ollama server (and its installed embedding/LLM
 models), they are **environment-constrained**: they cannot pass in an offline build environment or
 on CI hosts without those services. In such environments this is a known, accepted gap rather than
 a test failure — the suites below (`tests/integration/mocked/`) are intended to run without live
@@ -210,9 +220,9 @@ Integration tests requiring live services use markers:
 ```python
 @pytest.mark.integration
 @pytest.mark.skipif(not os.getenv("RUN_INTEGRATION_TESTS"), reason="External services required")
-def test_real_mongo_connection():
-    """Test against live MongoDB instance."""
-    client = MongoClient(os.getenv("SECONDBRAIN_MONGO_URI"))
+def test_real_qdrant_connection():
+    """Test against a live Qdrant instance."""
+    client = QdrantClient(os.getenv("SECONDBRAIN_QDRANT_URL"))
     ...
 ```
 

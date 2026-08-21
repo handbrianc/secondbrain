@@ -136,6 +136,8 @@ class RAGPipeline(
 
             # --- B4: Iterative RAG for broad-coverage and chapter/section-enumeration queries ---
             intent_result = self._intent_parser.parse(query)
+            if intent_result.intent is QueryIntent.LIST_SOURCES:
+                return self._list_sources_result(query)
             if intent_result.intent in (
                 QueryIntent.BROAD_COVERAGE,
                 QueryIntent.CHAPTER_ENUMERATE,
@@ -284,6 +286,8 @@ class RAGPipeline(
 
             # --- B4: Iterative RAG for broad-coverage and chapter/section-enumeration queries ---
             intent_result = self._intent_parser.parse(query)
+            if intent_result.intent is QueryIntent.LIST_SOURCES:
+                return self._list_sources_result(query)
             if intent_result.intent in (
                 QueryIntent.BROAD_COVERAGE,
                 QueryIntent.CHAPTER_ENUMERATE,
@@ -584,6 +588,11 @@ class RAGPipeline(
             chapters_to_cover, good_title_nums, appendix_entries = (
                 self._derive_chapter_numbers(structure_chunks)
             )
+            # Keep the full (un-filtered) chapter set for boundary anchoring: a
+            # target chapter's end page is bounded by the NEXT chapter's start, so
+            # the next chapter's start must also be title-anchored (not left to
+            # the noisy section-number scan that sets spurious early boundaries).
+            full_chapters = list(chapters_to_cover)
 
             # Scope to specific target chapter when one is specified (e.g. "chapter 11")
             chapters_to_cover, good_title_nums = filter_chapters_by_target(
@@ -595,40 +604,26 @@ class RAGPipeline(
                 appendix_entries = []
 
             if chapters_to_cover:
-                from pymongo import MongoClient
-                from pymongo import errors as mongo_errors
-
-                from secondbrain.config import config
-
-                cfg_ = config()
+                storage = self._searcher.storage
                 try:
-                    client_ = MongoClient(
-                        cfg_.mongo_uri,
-                        directConnection=True,
-                        serverSelectionTimeoutMS=2000,
+                    # Use explicit source_filter if provided (from DocumentRouter),
+                    # otherwise pick the source with the most body chunks.
+                    if source_filter:
+                        src = source_filter
+                    else:
+                        sources_set = {entry[1] for entry in chapters_to_cover}
+                        src = max(
+                            (s for s in sources_set),
+                            key=lambda s: storage.count_chunks(s, "body"),
+                        )
+                except Exception:
+                    logger.warning(
+                        "Storage unavailable for chapter enumeration, "
+                        "falling back to generic search",
+                        exc_info=True,
                     )
-                    client_.admin.command("ping")
-                except (
-                    mongo_errors.ConnectionFailure,
-                    mongo_errors.ServerSelectionTimeoutError,
-                    Exception,
-                ):
                     return self._generic_one_shot(
                         query, top_k, show_sources, source_filter=source_filter
-                    )
-                coll_ = client_[cfg_.mongo_db][cfg_.mongo_collection]
-
-                # Use explicit source_filter if provided (from DocumentRouter),
-                # otherwise pick the source with the most body chunks.
-                if source_filter:
-                    src = source_filter
-                else:
-                    sources_set = {entry[1] for entry in chapters_to_cover}
-                    src = max(
-                        (s for s in sources_set),
-                        key=lambda s: coll_.count_documents(
-                            {"source_file": s, "chunk_role": "body"}
-                        ),
                     )
 
                 import re
@@ -640,6 +635,51 @@ class RAGPipeline(
                 # BARE_CHAPTER_RE titles (e.g. "5 Working with VMs") are NOT included
                 # here — they're less reliable and may conflict with other chapters.
                 chapter_first_pg: dict[int, int] = {}
+                # Title-anchored detection: the numbered chapter-title heading
+                # (e.g. "13 Troubleshooting", "12 Customizing Oracle VirtualBox") is
+                # the single most reliable chapter-start signal.  Section-number
+                # scanning below (SEC_HEADER_RE / BARE_CHAPTER_RE) mistakes TOC
+                # dot-leader entries and in-body cross-references (e.g. "see 15.16")
+                # for chapter starts, pinning chapters to the wrong page — especially
+                # for books whose chapters are numbered without the word "Chapter"
+                # (so they are invisible to CHAPTER_N_RE).  Find each chapter's
+                # title heading on a body page (skipping TOC dot-leader lines) and
+                # pre-populate, so the noisy scans cannot override it.
+                dot_leader_ = re.compile(r"\.{2,}")
+                body_all_ = list(
+                    storage.get_body_chunks(
+                        src,
+                        limit=3500,
+                    )
+                )
+                for tn_ in full_chapters:
+                    tn, ts_, tt_ = tn_
+                    # Detected titles often carry a trailing printed-page artifact
+                    # (e.g. "The pandas I/O System 79"); strip it so the anchor
+                    # matches the real heading ("The pandas I/O System").
+                    tt_ = re.sub(r"\s+\d{1,4}\s*$", "", tt_).rstrip(" .:;-")
+                    if ts_ != src or not tt_ or len(tt_) < 4:
+                        continue
+                    # Join title tokens with \s+ so wrapped headings (e.g. the title
+                    # split across lines with a trailing space) still match.
+                    toks_ = [re.escape(t) for t in tt_.split()]
+                    anchor_ = re.compile(
+                        rf"(?:^|\n)\s*{tn}\.?\s+" + r"\s+".join(toks_),
+                        re.IGNORECASE,
+                    )
+                    for bc_ in body_all_:
+                        btext_ = bc_.get("chunk_text", "")
+                        bm_ = anchor_.search(btext_)
+                        if not bm_:
+                            continue
+                        ble_ = btext_.find("\n", bm_.end())
+                        brest_ = btext_[bm_.end() : ble_ if ble_ != -1 else len(btext_)]
+                        if dot_leader_.search(brest_) or re.match(
+                            r"^\s*\d{1,3}\s*$", brest_
+                        ):
+                            continue
+                        chapter_first_pg[tn] = int(bc_.get("page_number") or 0)
+                        break
                 ch_n = re.compile(
                     r"(?:Chapter\s+(\d+)\s*[:\-]?\s*|(?:Module|Lesson)\s+(\d+)"
                     r"\s*[:\-]\s*)(.{2,60})",
@@ -656,15 +696,34 @@ class RAGPipeline(
                 for sc in structure_chunks:
                     txt = sc.get("chunk_text", "")
                     pg = sc.get("page_number", 0)
+                    role = sc.get("chunk_role", "")
                     # Reject TOC page numbers (typically < 10) — a chapter_n_re
                     # match on page 3 is almost certainly a TOC entry, not the
                     # actual chapter start page. Without this guard, Phase 1's
                     # sec_header_re body-chunk scan would find the wrong start.
                     if pg < 10 and not is_deck:
                         continue
+                    # TOC / front-structure chunks list every chapter on one
+                    # page (dot-leader "Chapter N" captions) and are never the
+                    # real opening of a chapter.  Some books carry no heading /
+                    # toc_entry roles (front matter is tagged "caption" or
+                    # "navigation"), so is_deck becomes True and the pg<10 guard
+                    # above is skipped — rejecting these roles keeps that
+                    # protection.
+                    if role in ("toc_entry", "caption", "navigation"):
+                        continue
                     for nm in ch_n.finditer(txt):
                         ch = int(nm.group(1) or nm.group(2))
                         if ch in good_title_nums and ch not in chapter_first_pg:
+                            # "Chapter N," (comma right after the number) is a
+                            # preface / cross-reference summary sentence
+                            # (e.g. "Chapter 4, The pandas I/O System, shows …"),
+                            # NOT a chapter-opening heading.  Matching those pins
+                            # every chapter to a front-matter page and starves the
+                            # real chapter of its page range.  Real headings use a
+                            # colon, period, or plain space after the number.
+                            if re.match(r"Chapter\s+\d+,", nm.group(0), re.IGNORECASE):
+                                continue
                             chapter_first_pg[ch] = pg
 
                 # Phase 1: find chapter start pages from body chunk subsection headers like "1.1 " or "11.1.1 "
@@ -679,16 +738,9 @@ class RAGPipeline(
                 # most universal approach — works for any document regardless of TOC format.
                 appendix_sec_re = re.compile(r"\b([A-Za-z])\.\d+\s")
                 appendix_labels_found: set[str] = set()
-                for c in (
-                    coll_.find(
-                        {"source_file": src, "chunk_role": "body"},
-                        {"_id": 0, "chunk_text": 1, "page_number": 1},
-                    )
-                    .sort("page_number", 1)
-                    .limit(3500)
-                ):
+                for c in storage.get_body_chunks(src, limit=3500):
                     txt = c.get("chunk_text", "")[:150]
-                    page = c.get("page_number", 0)
+                    page = c.get("page_number") or 0
 
                     # Detect appendix labels from body section numbering
                     am = appendix_sec_re.search(txt)
@@ -720,19 +772,14 @@ class RAGPipeline(
                     if n not in chapter_first_pg
                 ]
                 if missing:
-                    for c in (
-                        coll_.find(
-                            {"source_file": src, "chunk_role": "body"},
-                            {"_id": 0, "chunk_text": 1, "page_number": 1},
-                        )
-                        .sort("page_number", 1)
-                        .limit(3500)
-                    ):
+                    for c in storage.get_body_chunks(src, limit=3500):
                         txt = c.get("chunk_text", "")[:150]
                         for ch_num in list(missing):
                             pat = re.compile(rf"\b{ch_num}\D")
                             if pat.search(txt):
-                                chapter_first_pg[ch_num] = c.get("page_number", 0)
+                                chapter_first_pg[ch_num] = int(
+                                    c.get("page_number") or 0
+                                )
                                 missing.remove(ch_num)
                         if not missing:
                             break
@@ -862,31 +909,23 @@ class RAGPipeline(
                 # at the first few chunks (all from the same starting page).
                 # For multi-chapter, keep the original 4-chunk cap to prevent
                 # any single chapter from dominating the round-robin merge.
-                per_chapter_limit = 150 if len(chapter_keys) <= 2 else 4
-                # Per-chapter page cap: 2 chunks per page for single-chapter mode.
-                # Pages with 3+ section headers (common with docling's fine-grained
-                # extraction) get the 3rd via fallback below. For multi-chapter,
-                # keep the same cap so each chapter gets fair round-robin slots.
-                page_cap = 2
+                single_section_mode = len(chapter_keys) <= 2
+                per_chapter_limit = 150 if single_section_mode else 4
+                # Per-chapter page cap.  A small cap (2) kept only ~1/3 of the
+                # chunks on a dense page (troubleshooting chapters have many
+                # short sections per page), silently dropping whole sections from
+                # a single-chapter summary.  Raised for single-chapter mode so
+                # every section on a page is captured, bounded overall by
+                # per_chapter_limit; multi-chapter keeps 2 for fair round-robin.
+                page_cap = 12 if single_section_mode else 2
                 page_count_per_ch: dict[int, dict[int, int]] = {
                     ch: {} for ch in chapter_keys
                 }
                 chapter_buckets: dict[int, list[dict[str, Any]]] = {
                     ch: [] for ch in chapter_keys
                 }
-                for c in (
-                    coll_.find(
-                        {"source_file": src, "chunk_role": "body"},
-                        {
-                            "_id": 0,
-                            "chunk_text": 1,
-                            "page_number": 1,
-                            "source_file": 1,
-                            "chunk_id": 1,
-                        },
-                    )
-                    .sort("page_number", 1)
-                    .limit(6000)
+                for c in cast(
+                    list[dict[str, Any]], storage.get_body_chunks(src, limit=6000)
                 ):
                     pg = c.get("page_number", 0)
                     for ch_num in chapter_keys:
@@ -1020,24 +1059,15 @@ class RAGPipeline(
                     )
                     _max_appendix = 200
                     appendix_body_chunks = list(
-                        coll_.find(
-                            {
-                                "source_file": src,
-                                "chunk_role": "body",
-                                "page_number": {"$gte": appendix_start_pg},
-                            },
-                            {
-                                "_id": 0,
-                                "chunk_text": 1,
-                                "page_number": 1,
-                                "source_file": 1,
-                                "chunk_id": 1,
-                            },
+                        storage.get_body_chunks(
+                            src,
+                            page_gte=appendix_start_pg,
+                            limit=_max_appendix,
                         )
-                        .sort("page_number", 1)
-                        .limit(_max_appendix)
                     )
-                    final_chunks.extend(appendix_body_chunks)
+                    final_chunks.extend(
+                        cast(list[dict[str, Any]], appendix_body_chunks)
+                    )
                     # Re-deduplicate to remove any overlap between appendix
                     # chunks and already-selected body chunks.
                     _seen_ids: set[str] = set()

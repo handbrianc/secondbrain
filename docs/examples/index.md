@@ -18,7 +18,7 @@ Practical examples demonstrating SecondBrain usage patterns.
 pip install -e .
 export SECONDBRAIN_OPENAI_API_KEY="..."
 
-# Start MongoDB
+# Start Qdrant
 secondbrain start --wait
 
 # Ingest documents

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import uuid4
 
-from secondbrain.conversation.storage import ConversationStorage
+from secondbrain.conversation.storage_sqlite import ConversationStorage
 
 
 class ConversationSession:

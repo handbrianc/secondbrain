@@ -109,9 +109,12 @@ def pytest_terminal_summary(
     Fires at the end of the test session only when at least one @pytest.mark.chaos
     test was executed.
     """
-    # Locate the chaos_metrics dict from the session fixtures
+    # Locate the chaos_metrics dict from the session fixtures. ``config.cache``
+    # is only available when the cacheprovider plugin is active (e.g. it is
+    # missing when running with ``-p no:cacheprovider``), so access it
+    # defensively.
     chaos_metrics_dict: dict[str, Any] | None = getattr(
-        config.cache, "_chaos_metrics", None
+        getattr(config, "cache", None), "_chaos_metrics", None
     )
     if chaos_metrics_dict is None:
         # Try accessing via request.node if cache not set

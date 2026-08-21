@@ -15,25 +15,24 @@ from typing import Any
 
 import pytest
 
-_MONGO_CACHE: dict[str, bool] = {"available": False, "checked": False}
+_QDRANT_CACHE: dict[str, bool] = {"available": False, "checked": False}
 
 
-def _is_mongo_available() -> bool:
-    """Check MongoDB availability with caching to avoid repeated timeouts."""
-    if _MONGO_CACHE["checked"]:
-        return _MONGO_CACHE["available"]
+def _is_qdrant_available() -> bool:
+    """Check Qdrant availability with caching to avoid repeated timeouts."""
+    if _QDRANT_CACHE["checked"]:
+        return _QDRANT_CACHE["available"]
     try:
-        from pymongo import MongoClient
+        from qdrant_client import QdrantClient
 
-        client = MongoClient("localhost", 27018, serverSelectionTimeoutMS=2000)
-        client.admin.command("ping")
-        client.close()
-        _MONGO_CACHE["available"] = True
-        _MONGO_CACHE["checked"] = True
+        client = QdrantClient(url="http://localhost:6333", timeout=2)
+        client.get_collections()
+        _QDRANT_CACHE["available"] = True
+        _QDRANT_CACHE["checked"] = True
         return True
     except Exception:
-        _MONGO_CACHE["available"] = False
-        _MONGO_CACHE["checked"] = True
+        _QDRANT_CACHE["available"] = False
+        _QDRANT_CACHE["checked"] = True
         return False
 
 

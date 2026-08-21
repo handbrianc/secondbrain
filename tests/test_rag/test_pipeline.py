@@ -54,9 +54,9 @@ def mock_rewriter() -> MagicMock:
 def mock_config(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
     """Mock configuration for pipeline tests."""
     config: dict[str, str] = {
-        "SECONDBRAIN_MONGO_URI": _test_config.mongo_uri,
-        "SECONDBRAIN_MONGO_DB": "test_secondbrain",
-        "SECONDBRAIN_MONGO_COLLECTION": "test_embeddings",
+        "SECONDBRAIN_QDRANT_URL": _test_config.qdrant_url,
+        "SECONDBRAIN_STORAGE_BACKEND": "qdrant",
+        "SECONDBRAIN_QDRANT_COLLECTION": "test_embeddings",
         "SECONDBRAIN_LOCALHOST": TEST_LLM_HOST,
         "SECONDBRAIN_LOCAL_EMBEDDING_MODEL": "all-MiniLM-L6-v2",
         "SECONDBRAIN_CHUNK_SIZE": "512",
@@ -1399,3 +1399,51 @@ class TestRAGPipelineTracing:
 
         assert result["answer"] == "Async chat answer"
         assert "rewritten_query" in result
+
+
+class TestRAGPipelineListSources:
+    """LIST_SOURCES queries bypass vector search and enumerate all sources."""
+
+    def test_query_lists_all_sources_without_search(
+        self,
+        pipeline_with_mocks: RAGPipeline,
+        mock_searcher: MagicMock,
+    ) -> None:
+        mock_searcher.list_source_files.return_value = [
+            "a.md",
+            "b.md",
+            "c.md",
+        ]
+        result = pipeline_with_mocks.query("list all unique sources")
+        assert result["list_sources"] is True
+        answer = result["answer"]
+        assert "3 unique sources" in answer
+        for src in ("a.md", "b.md", "c.md"):
+            assert src in answer
+        # Vector search and the LLM must not be used for a pure listing.
+        mock_searcher.search.assert_not_called()
+
+    def test_query_lists_single_source(self, pipeline_with_mocks, mock_searcher) -> None:
+        mock_searcher.list_source_files.return_value = ["only.md"]
+        result = pipeline_with_mocks.query("list sources")
+        assert "1 unique source" in result["answer"]
+        assert "only.md" in result["answer"]
+
+    def test_query_empty_store(self, pipeline_with_mocks, mock_searcher) -> None:
+        mock_searcher.list_source_files.return_value = []
+        result = pipeline_with_mocks.query("what sources do you have")
+        assert result["list_sources"] is True
+        assert "don't have any documents" in result["answer"].lower()
+
+    def test_chat_lists_all_sources_without_search(
+        self,
+        pipeline_with_mocks: RAGPipeline,
+        mock_searcher: MagicMock,
+    ) -> None:
+        mock_searcher.list_source_files.return_value = ["a.md", "b.md"]
+        result = pipeline_with_mocks.chat(
+            "list all sources", MagicMock()
+        )
+        assert result["list_sources"] is True
+        assert "2 unique sources" in result["answer"]
+        mock_searcher.search.assert_not_called()

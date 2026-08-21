@@ -267,17 +267,42 @@ class _StructureMixin(_RAGPipelineState):
                     sec_entries.append((major, sec_num, raw_title))
 
         sec_entries.sort(key=lambda x: (x[0], *[int(p) for p in x[1].split(".") if p]))
-        lines: list[str] = []
-        prev_major: int | None = None
+
+        # When authoritative "Chapter N" headings were detected, section numbers
+        # from any other major are body-text noise (dataframe dumps, page stubs),
+        # not real chapters — they must not spawn fabricated `[Chapter N]` lines.
+        if ch_good:
+            sec_entries = [s for s in sec_entries if s[0] in ch_good]
+
+        # Group detected subsections by their parent chapter.
+        sec_by_major: dict[int, list[tuple[str, str]]] = {}
         for major, sn, title in sec_entries:
-            if prev_major != major:
-                ch_title = ch_titles.get(major)
-                if ch_title:
-                    lines.append(f"[Chapter {major}] {sn} — {ch_title}")
-                else:
-                    lines.append(f"[Chapter {major}] {sn} — {title}")
-                prev_major = major
+            sec_by_major.setdefault(major, []).append((sn, title))
+
+        # Build the index from the UNION of reliably-detected chapter headings
+        # (ch_good) and chapters that have recognised subsections, so a chapter
+        # whose heading was detected but whose section headers were not seen in
+        # the probe chunks still appears instead of silently vanishing.
+        chapter_nums = sorted(set(ch_good) | set(sec_by_major))
+
+        lines: list[str] = []
+        # Cap subsection detail per chapter so one long chapter cannot starve
+        # the rest of the index, but never drop a chapter heading itself.
+        max_subsections_per_chapter = 30
+        for major in chapter_nums:
+            sections = sec_by_major.get(major, [])
+            ch_title = ch_titles.get(major)
+            if ch_title and sections:
+                first, _t = sections[0]
+                lines.append(f"[Chapter {major}] {first} — {ch_title}")
+            elif ch_title:
+                lines.append(f"[Chapter {major}] — {ch_title}")
+            elif sections:
+                sn, title = sections[0]
+                lines.append(f"[Chapter {major}] {sn} — {title}")
             else:
+                continue
+            for sn, title in sections[1 : max_subsections_per_chapter]:
                 lines.append(f"  {sn} — {title}")
 
         if appendix_entries:
@@ -287,7 +312,7 @@ class _StructureMixin(_RAGPipelineState):
 
         header = (
             "DOCUMENT STRUCTURE INDEX (enumerate ALL of the following in your answer):\n"
-            + "\n".join(lines[:50])
+            + "\n".join(lines)
             + "\n\n"
         )
         return header
@@ -484,6 +509,14 @@ class _StructureMixin(_RAGPipelineState):
                 seen_appendix.add((label, source))
                 appendix_entries.append((label, source, title))
 
+        # Authoritative "Chapter N" headings (from chapter_n_re in pass 1) define
+        # the true chapter span.  When present, bare-number and section matches
+        # may corroborate within that span but must not invent chapters beyond
+        # it — otherwise noisy body text (e.g. "12 Selection and Assignment" or
+        # dataframe dumps) fabricates chapters for books whose chapters are all
+        # explicitly labeled "Chapter N".
+        auth_max = max((e[0] for e in entries), default=0)
+
         # Pass 2: bare_chapter_re + bare_appendix_re
         ft_catch = re.compile(
             r"\d+\s+(\d{1,2})\s+([A-Za-z][A-Za-z0-9\s\-\(\),'/:.\u2013\u2014]{4,80})"
@@ -532,7 +565,12 @@ class _StructureMixin(_RAGPipelineState):
 
             for bm in bare_chapter_re.finditer(raw):
                 major = int(bm.group(1))
-                if major < 1 or major > 30 or (major, source) in seen:
+                if (
+                    major < 1
+                    or major > 30
+                    or (auth_max > 0 and major > auth_max)
+                    or (major, source) in seen
+                ):
                     continue
                 title = bm.group(2).strip().rstrip(".")
                 if len(title) < 4:
@@ -559,7 +597,12 @@ class _StructureMixin(_RAGPipelineState):
 
             for fm in ft_catch.finditer(raw):
                 major_ft = int(fm.group(1))
-                if major_ft < 1 or major_ft > 30 or (major_ft, source) in seen:
+                if (
+                    major_ft < 1
+                    or major_ft > 30
+                    or (auth_max > 0 and major_ft > auth_max)
+                    or (major_ft, source) in seen
+                ):
                     continue
                 title_ft = fm.group(2).strip().rstrip(".")
                 if len(title_ft) < 6:
@@ -739,82 +782,55 @@ class _StructureMixin(_RAGPipelineState):
             source_filter: Optional source_file filter to scope to one document.
 
         Returns:
-            List of chunk dicts with '_id', 'chunk_text', 'page_number',
+            List of chunk dicts with 'chunk_text', 'page_number',
             'source_file', 'chunk_id'.
         """
-        from pymongo import MongoClient
-        from pymongo import errors as mongo_errors
-
-        from secondbrain.config import config
-
-        cfg = config()
+        # Structural roles that signal TOC/section/heading content.  The Qdrant
+        # OR-filter matches a chunk when its element_type OR chunk_role is one of
+        # these — identical to the former Mongo "$or" query.
+        element_types = [
+            "heading",
+            "toc_entry",
+            "body",
+            "paragraph",
+            "title",
+            "section",
+            "header",
+        ]
+        chunk_roles = [
+            "body",
+            "caption",
+            "navigation",
+            "heading",
+            "toc_entry",
+            "title",
+            "section",
+            "header",
+        ]
+        storage = self._searcher.storage
         try:
-            client = MongoClient(
-                cfg.mongo_uri, directConnection=True, serverSelectionTimeoutMS=2000
-            )
-            # Validate connection quickly
-            client.admin.command("ping")
-        except (
-            mongo_errors.ConnectionFailure,
-            mongo_errors.ServerSelectionTimeoutError,
-            Exception,
-        ):
-            return []
-        coll = client[cfg.mongo_db][cfg.mongo_collection]
-
-        query_filter: dict[str, object] = {
-            "$or": [
-                {
-                    "element_type": {
-                        "$in": ["heading", "toc_entry", "body", "paragraph"]
-                    }
-                },
-                {
-                    "chunk_role": {
-                        "$in": ["body", "caption", "navigation", "heading", "toc_entry"]
-                    }
-                },
-            ]
-        }
-        if source_filter:
-            query_filter["source_file"] = {"$regex": f"^{re.escape(source_filter)}"}
-
-        cursor = (
-            coll.find(
-                query_filter,
-                {
-                    "_id": 0,
-                    "chunk_text": 1,
-                    "chunk_role": 1,
-                    "page_number": 1,
-                    "source_file": 1,
-                    "chunk_id": 1,
-                },
-            )
-            .sort("page_number", 1)
-            .limit(10000)
-        )
-        result = list(cursor)
-        if len(result) < 5:
-            fallback_filter: dict[str, object] = {}
-            if source_filter:
-                fallback_filter["source_file"] = {
-                    "$regex": f"^{re.escape(source_filter)}"
-                }
             result = list(
-                coll.find(
-                    fallback_filter,
-                    {
-                        "_id": 0,
-                        "chunk_text": 1,
-                        "chunk_role": 1,
-                        "page_number": 1,
-                        "source_file": 1,
-                        "chunk_id": 1,
-                    },
-                ).limit(top_k)
+                storage.find_structural_chunks(
+                    element_types=element_types,
+                    chunk_roles=chunk_roles,
+                    source_prefix=source_filter,
+                    limit=10000,
+                )
             )
-        return result
+            if len(result) < 5:
+                # Fall back to ALL chunks for the source (or all chunks when no
+                # source_filter given), ordered by page and limited to top_k —
+                # preserves the former Mongo fallback query.
+                result = list(
+                    storage.find_structural_chunks(
+                        source_prefix=source_filter,
+                        limit=top_k,
+                    )
+                )
+        except Exception:  # storage unavailable → no structure to probe
+            logger.debug("Structure probing failed", exc_info=True)
+            return []
+        return [dict(c) for c in result]
 
     def _generic_one_shot(
         self,
@@ -1354,6 +1370,48 @@ class _RoutingMixin(_RAGPipelineState):
         if doc_name is not None:
             return router.resolve_source_file(doc_name)
         return None
+
+    def _list_sources_result(self, query: str) -> dict[str, Any]:
+        """Build a deterministic answer enumerating ALL distinct sources.
+
+        Routes around vector search on purpose: semantic search is bounded by
+        ``top_k`` and relevance, so it would silently drop sources as the
+        corpus grows. A native ``distinct`` aggregation returns every unique
+        source regardless of database size.
+
+        Returns a result dict whose "answer" is a numbered enumeration of the
+        source files (no LLM call, no embedding generation).
+        """
+        try:
+            source_files: list[str] = list(self._searcher.list_source_files())
+        except Exception as e:
+            logger.warning("list_source_files failed: %s: %s", type(e).__name__, e)
+            return {
+                "answer": "I couldn't list the stored sources right now. Please try again.",
+                "query": query,
+                "list_sources": True,
+            }
+
+        source_files = sorted({s for s in source_files if s}, key=str.lower)
+
+        if not source_files:
+            return {
+                "answer": (
+                    "I don't have any documents stored yet. "
+                    "Ingest some with `secondbrain ingest <path>` first."
+                ),
+                "query": query,
+                "list_sources": True,
+            }
+
+        plural = "source" if len(source_files) == 1 else "sources"
+        lines = [f"I found {len(source_files)} unique {plural}:"]
+        lines.extend(f"  {i}. {s}" for i, s in enumerate(source_files, 1))
+        return {
+            "answer": "\n".join(lines),
+            "query": query,
+            "list_sources": True,
+        }
 
     def _rewrite_query_with_history(
         self,

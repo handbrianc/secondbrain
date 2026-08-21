@@ -9,7 +9,7 @@ Security considerations for deploying and using SecondBrain.
 | Threat | Mitigation |
 | -------- | ------------ |
 | API key exposure | Environment variables, no hardcoding |
-| Unauthorized MongoDB access | Authentication, network isolation |
+| Unauthorized Qdrant access | Authentication (optional `SECONDBRAIN_QDRANT_API_KEY`), network isolation |
 | Malicious file ingestion | Input validation, path traversal prevention |
 | Service denial | Rate limiting, resource bounds |
 | Supply chain attacks | Dependency auditing, SBOM |
@@ -18,7 +18,7 @@ Security considerations for deploying and using SecondBrain.
 
 - Physical security of hosting infrastructure
 - Social engineering attacks
-- MongoDB本身的未加密传输 (unencrypted transit) |
+- Qdrant本身的未加密传输 (unencrypted transit)
 
 ## Data Sensitivity
 
@@ -64,37 +64,34 @@ chmod 600 .env  # User read/write only
 *.log
 ```
 
-### MongoDB Authentication
+### Qdrant Authentication
 
 Require authentication for production:
 
 ```bash
-mongodb://user:password@host:27017/?authSource=admin
+export SECONDBRAIN_QDRANT_URL="http://localhost:6333"
+export SECONDBRAIN_QDRANT_API_KEY="strong-random-api-key"  # optional
 ```
 
-Use TLS for remote connections:
+The Qdrant API key is passed as a bearer token on every request. If Qdrant is only reachable on
+`localhost`, an API key is optional, but enabling one is recommended when the service is exposed on
+a network.
+
+### Conversations (SQLite)
+
+Chat sessions and messages are stored in a local SQLite database file
+(`~/.secondbrain/secondbrain.db` by default, configurable via `SECONDBRAIN_SQLITE_PATH`). The file
+is embedded and local-only, so it is not exposed over the network. Protect it with filesystem
+permissions:
 
 ```bash
-mongodb+srv://user:password@cluster.mongodb.net/?tls=true
+chmod 600 ~/.secondbrain/secondbrain.db
 ```
 
 ### Least Privilege Principle
 
-Create dedicated MongoDB users:
-
-```javascript
-// Read-write user for application
-db.createUser({
-  user: "secondbrain_app",
-  pwd: "strong-random-password",
-  roles: [
-    { role: "readWrite", db: "secondbrain" },
-    { role: "dbAdmin", db: "secondbrain" }
-  ]
-})
-```
-
-Avoid using MongoDB's `root` account.
+Use a dedicated Qdrant API key with the minimum permissions needed for the application. Avoid
+sharing root credentials or the same key across unrelated services.
 
 ## Input Validation
 
@@ -130,14 +127,14 @@ if not is_safe_path(resolved_path, allowed_base):
 
 ### Query Sanitization
 
-Search queries are passed as literals to MongoDB:
+Search queries are passed as literals to Qdrant:
 
 ```python
 # Filter constructed safely - query is opaque string
 filter_doc = {"metadata.source": {"$eq": user_provided_filter}}
 ```
 
-No SQL-like injection risk since MongoDB wire protocol handles escaping.
+No SQL-like injection risk since Qdrant's HTTP/query protocol handles escaping.
 
 ## Rate Limiting
 
