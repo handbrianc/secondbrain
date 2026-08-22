@@ -30,13 +30,13 @@
          "difficulty": "easy"
       },
       {
-         "id": "fv_config_mongodb_version",
-         "description": "Verify MongoDB version requirement",
-         "input": "What MongoDB version is required?",
+         "id": "fv_config_qdrant_version",
+         "description": "Verify Qdrant client version requirement",
+         "input": "What Qdrant client version is required?",
          "context": "Database dependency",
          "expected": {
             "verifiable": true,
-             "fact": "pymongo>=4.17.0 (requires MongoDB 7.0+ for vector search)",
+             "fact": "qdrant-client>=1.9.0 (Qdrant vector database client)",
             "source": "pyproject.toml dependencies",
             "source_required": true,
             "hallucination_risk": "low"
@@ -84,7 +84,7 @@
          "context": "Search functionality",
          "expected": {
             "verifiable": true,
-            "fact": "MongoDB vector search",
+            "fact": "Qdrant vector search",
             "source": "README.md Features section",
             "source_required": true,
             "hallucination_risk": "low"

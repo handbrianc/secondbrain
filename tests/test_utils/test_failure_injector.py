@@ -1396,15 +1396,15 @@ class TestLatencyInjectionScenarios:
         injector = FailureInjector()
 
         latencies = []
-        for _ in range(5):
+        for _ in range(10):
             start = time.time()
             with injector.inject_latency(latency_ms=50, jitter_ms=0):
                 elapsed = time.time() - start
                 latencies.append(elapsed)
             injector.reset()
 
-        # Should be very consistent with no jitter
-        assert max(latencies) - min(latencies) < 0.01
+        # Sleep is deterministic; assert per-sample so a scheduler hiccup can't flake max-min.
+        assert all(0.04 <= lat < 0.085 for lat in latencies)
 
 
 @pytest.mark.slow

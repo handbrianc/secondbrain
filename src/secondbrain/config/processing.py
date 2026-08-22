@@ -60,7 +60,7 @@ class ProcessingStorageMixin:
     )
     streaming_chunk_batch_size: int = Field(
         default=150,
-        description="Number of chunks to process per streaming batch (1-200, default: 100)",
+        description="Number of chunks to process per streaming batch (1-200, default: 150)",
     )
 
     @field_validator("streaming_chunk_batch_size")

@@ -16,6 +16,8 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from secondbrain.document import (
     AsyncDocumentIngestor,
     DocumentIngestor,
@@ -25,6 +27,19 @@ from secondbrain.exceptions import (
     EmbeddingGenerationError,
     StorageConnectionError,
 )
+
+
+@pytest.fixture(autouse=True)
+def _use_thread_pool(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Run error-handling tests in-process via the thread pool.
+
+    These tests exercise error handling, not real multiprocessing. The default
+    'process' pool spawns a fresh OS process (re-importing torch/transformers)
+    per ``ingest()`` call, costing ~4s each. The thread pool avoids that spawn.
+    """
+    from secondbrain.config import config
+
+    monkeypatch.setattr(config(), "ingest_pool", "thread")
 
 
 class TestEmbeddingFailureScenarios:

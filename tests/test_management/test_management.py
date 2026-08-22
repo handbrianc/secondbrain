@@ -71,7 +71,7 @@ class TestBaseManager:
         with pytest.raises(ServiceUnavailableError) as exc_info:
             manager._ensure_storage_available()
 
-        assert "MongoDB" in str(exc_info.value)
+        assert "vector storage" in str(exc_info.value)
 
 
 class TestLister:

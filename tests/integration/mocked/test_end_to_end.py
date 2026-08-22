@@ -184,7 +184,10 @@ class TestFullWorkflow:
                 ingestor = DocumentIngestor(
                     chunk_size=500, chunk_overlap=50, verbose=False
                 )
-                result = ingestor.ingest(str(pdf_path))
+                from secondbrain.config import config
+
+                with patch.object(config(), "ingest_pool", "thread"):
+                    result = ingestor.ingest(str(pdf_path))
                 success_count = result["success"]
                 assert isinstance(success_count, int)
                 assert success_count >= 0
