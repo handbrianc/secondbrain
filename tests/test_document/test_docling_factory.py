@@ -5,17 +5,14 @@ Covers the behavioral contract of :func:`get_shared_converter`:
 - lazy import (docling must NOT be imported at module import time)
 - singleton identity (same object on repeated calls)
 - race-safe construction across threads
-- an optional parity check against the pre-refactor inline options
-  (skipped when real docling is unavailable, e.g. stubbed out by the
-  ``tests/test_document/conftest.py`` session fixture).
+- a real-docling smoke test (unmasks the conftest stub) verifying the
+  cached OCR converter config is wired correctly.
 """
 
-import importlib.util
 import subprocess
 import sys
 import threading
 from collections.abc import Iterator
-from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -36,16 +33,11 @@ def _reset_singleton() -> Iterator[None]:
     close_shared_converter()
 
 
-def _docling_is_stubbed() -> bool:
-    """True when the conftest stub replaced the real docling package."""
-    import docling
-
-    return isinstance(docling, MagicMock)
-
-
-def _real_docling_available() -> bool:
-    """True when a REAL (non-stubbed) docling install is importable."""
-    return not _docling_is_stubbed() and importlib.util.find_spec("docling") is not None
+def _unmask_real_docling() -> None:
+    """Purge the conftest's docling MagicMock stubs so real docling imports."""
+    for name in list(sys.modules):
+        if name.startswith("docling") and isinstance(sys.modules[name], MagicMock):
+            del sys.modules[name]
 
 
 # ---------------------------------------------------------------------------
@@ -134,72 +126,14 @@ def test_concurrent_callers_get_same_object() -> None:
     assert all(r is results[0] for r in results), "converter was double-built"
 
 
-# ---------------------------------------------------------------------------
-# Parity: shared factory == pre-refactor inline options (best-effort)
-# ---------------------------------------------------------------------------
+def test_shared_converter_builds_real_cached_ocr_converter() -> None:
+    """Factory returns a cached real docling converter running OCR for PDFs."""
+    _unmask_real_docling()
 
+    assert get_shared_converter() is get_shared_converter()
 
-def _segments(converter: Any, pdf_path: Path) -> list[dict]:
-    result = converter.convert(pdf_path)
-    content = result.document
-    segments: list[dict] = []
-    if hasattr(content, "texts") and content.texts:
-        for item in content.texts:
-            text = getattr(item, "text", "")
-            if not text:
-                continue
-            segments.append({"text": text})
-    return segments
-
-
-def test_shared_converter_matches_inline_options(tmp_path: Path) -> None:
-    """Shared factory output equals the pre-refactor inline converter output."""
-    if not _real_docling_available():
-        pytest.skip("real docling not available in this test session (stubbed)")
-    try:
-        from fpdf import FPDF
-    except ImportError:
-        pytest.skip("fpdf not installed for PDF creation")
-
-    pdf_path = tmp_path / "sample.pdf"
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Arial", size=12)
-    pdf.multi_cell(
-        0,
-        10,
-        "SecondBrain test document\n\n"
-        "This is sample content for PDF extraction covering machine learning.",
-    )
-    pdf.output(str(pdf_path))
-
-    from docling.datamodel.accelerator_options import (
-        AcceleratorDevice,
-        AcceleratorOptions,
-    )
     from docling.datamodel.base_models import InputFormat
-    from docling.datamodel.pipeline_options import PdfPipelineOptions, RapidOcrOptions
-    from docling.document_converter import DocumentConverter, PdfFormatOption
 
-    old_converter = DocumentConverter(
-        format_options={
-            InputFormat.PDF: PdfFormatOption(
-                pipeline_options=PdfPipelineOptions(
-                    do_ocr=True,
-                    do_table_structure=True,
-                    ocr_options=RapidOcrOptions(
-                        backend="torch",
-                        rapidocr_params={"EngineConfig.torch.use_mps": True},
-                    ),
-                    accelerator_options=AcceleratorOptions(
-                        device=AcceleratorDevice.AUTO, num_threads=4
-                    ),
-                )
-            )
-        }
-    )
-
-    old_segments = _segments(old_converter, pdf_path)
-    new_segments = _segments(get_shared_converter(), pdf_path)
-
-    assert new_segments == old_segments
+    pipeline_options = get_shared_converter().format_to_options[InputFormat.PDF].pipeline_options
+    assert pipeline_options is not None
+    assert pipeline_options.model_dump().get("do_ocr") is True

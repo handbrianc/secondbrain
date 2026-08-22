@@ -2,6 +2,7 @@ import io
 import json
 import logging
 import os
+from collections.abc import Iterator
 from pathlib import Path
 from unittest.mock import patch
 
@@ -234,7 +235,7 @@ class TestGetHealthStatus:
             "secondbrain.storage.StorageFactory.create_from_config",
             return_value=MockVectorStorage(),
         ):
-            assert "mongodb" in get_health_status()["services"]
+            assert "qdrant" in get_health_status()["services"]
 
 
 class TestCheckServices:
@@ -250,17 +251,25 @@ class TestCheckServices:
             "secondbrain.storage.StorageFactory.create_from_config",
             return_value=MockVectorStorage(),
         ):
-            assert "mongodb" in check_services()
+            assert "qdrant" in check_services()
 
     def test_check_services_values_are_booleans(self) -> None:
         with patch(
             "secondbrain.storage.StorageFactory.create_from_config",
             return_value=MockVectorStorage(),
         ):
-            assert isinstance(check_services()["mongodb"], bool)
+            assert isinstance(check_services()["qdrant"], bool)
 
 
 class TestFileLogging:
+    @pytest.fixture(autouse=True)
+    def _restore_root_logger_handlers(self) -> Iterator[None]:
+        """Restore root handlers so deleted tmp-path file handlers don't survive."""
+        root_logger = logging.getLogger()
+        snapshot = list(root_logger.handlers)
+        yield
+        root_logger.handlers = snapshot
+
     def test_setup_logging_with_log_file_creates_file_handler(
         self, tmp_path: Path
     ) -> None:

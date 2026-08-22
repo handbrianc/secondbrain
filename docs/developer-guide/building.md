@@ -48,7 +48,7 @@ Runtime dependencies only:
 dependencies = [
     "click>=8.4.1",
     "qdrant-client>=1.9.0",
-    "aiosqlite>=0.20.0",
+    "httpx>=0.28.1",
     ...
 ]
 ```

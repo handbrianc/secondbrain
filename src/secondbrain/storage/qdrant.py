@@ -87,7 +87,9 @@ class QdrantVectorStorage:
 
     def _get_client(self) -> QdrantClient:
         if self._client is None:
-            self._client = QdrantClient(url=self.url, api_key=self.api_key)
+            self._client = QdrantClient(
+                url=self.url, api_key=self.api_key, check_compatibility=False
+            )
         return self._client
 
     def _ensure_collection(self) -> None:

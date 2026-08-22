@@ -1,12 +1,23 @@
 """Tests for structured logging ERROR and WARNING levels."""
 
 import logging
+from collections.abc import Iterator
+
+import pytest
 
 from secondbrain.logging import get_logger, setup_logging
 
 
 class TestStructuredLoggingLevels:
     """Test ERROR and WARNING log levels work correctly."""
+
+    @pytest.fixture(autouse=True)
+    def _restore_root_handlers(self) -> Iterator[None]:
+        """Restore root handlers so deleted tmp-path file handlers don't survive."""
+        root_logger = logging.getLogger()
+        snapshot = list(root_logger.handlers)
+        yield
+        root_logger.handlers = snapshot
 
     def test_error_level_exists(self):
         """ERROR level constant exists in logging module."""
