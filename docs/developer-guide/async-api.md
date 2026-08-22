@@ -21,7 +21,7 @@ The vector storage backend `QdrantVectorStorage` exposes async methods (`search_
 ```python
 from secondbrain.storage.qdrant import QdrantVectorStorage
 
-with QdrantVectorStorage() as storage:
+async with QdrantVectorStorage() as storage:
     results = await storage.search_async(
         query_vector=embedding,
         top_k=20,
@@ -31,7 +31,7 @@ with QdrantVectorStorage() as storage:
 ### Async Batch Store
 
 ```python
-with QdrantVectorStorage() as storage:
+async with QdrantVectorStorage() as storage:
     await storage.store_batch_async(chunks=[chunk1, chunk2, chunk3])
 ```
 
@@ -51,7 +51,7 @@ await storage.store_batch_async(chunks=[chunk_data])
 # Connection check
 ok = await storage.validate_connection_async()
 
-storage.close()
+await storage.close()
 ```
 
 ## Async Embedding Generation
@@ -203,7 +203,7 @@ Use context managers for proper cleanup:
 
 ```python
 # Preferred
-with QdrantVectorStorage() as storage:
+async with QdrantVectorStorage() as storage:
     await storage.search_async(...)
 
 # Manual close required otherwise
@@ -211,7 +211,7 @@ storage = QdrantVectorStorage()
 try:
     await storage.search_async(...)
 finally:
-    storage.close()
+    await storage.close()
 ```
 
 ## Performance Considerations
@@ -228,7 +228,7 @@ for query in queries:
 
 # Bad: new client per request
 for query in queries:
-    with QdrantVectorStorage() as storage:
+    async with QdrantVectorStorage() as storage:
         results = await storage.search_async(query)
 ```
 
