@@ -51,7 +51,7 @@ await storage.store_batch_async(chunks=[chunk_data])
 # Connection check
 ok = await storage.validate_connection_async()
 
-await storage.close()
+storage.close()
 ```
 
 ## Async Embedding Generation
@@ -211,7 +211,7 @@ storage = QdrantVectorStorage()
 try:
     await storage.search_async(...)
 finally:
-    await storage.close()
+    storage.close()
 ```
 
 ## Performance Considerations
