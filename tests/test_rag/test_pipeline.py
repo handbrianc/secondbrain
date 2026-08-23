@@ -327,6 +327,34 @@ class TestRAGPipelineChat:
         assert "sources" in result
         assert result["sources"] == []
 
+    def test_chat_persists_fallback_turn_to_session(
+        self,
+        pipeline_with_rewriter: RAGPipeline,
+        mock_searcher: MagicMock,
+    ) -> None:
+        """A no-result (knowledge-fallback) turn must be recorded so a later
+        follow-up can reference the most recent response."""
+        session = ConversationSession("test-session", MagicMock(), context_window=10)
+        mock_searcher.search.return_value = []
+
+        pipeline_with_rewriter.chat("first question", session)
+        first = session.get_history()
+        assert [m["role"] for m in first] == ["user", "assistant"]
+        assert first[0]["content"] == "first question"
+        assert "Generated answer" in first[1]["content"]
+
+        pipeline_with_rewriter.chat("follow-up referencing it", session)
+        second = session.get_history()
+        assert [m["role"] for m in second] == [
+            "user",
+            "assistant",
+            "user",
+            "assistant",
+        ]
+        recent = session.get_context_messages()
+        assert "first question" in recent[0]["content"]
+        assert "Generated answer" in recent[1]["content"]
+
     def test_chat_handles_exception_gracefully(
         self,
         pipeline_with_rewriter: RAGPipeline,

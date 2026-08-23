@@ -7,6 +7,7 @@ import logging
 import time
 from collections.abc import Callable
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from contextlib import nullcontext
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -42,6 +43,7 @@ class DocumentIngestor:
         chunk_overlap: int = 50,
         verbose: bool = False,
         progress_callback: Callable[[Path, bool], None] | None = None,
+        on_chunk_progress: Callable[[Path, int, int], None] | None = None,
     ) -> None:
         """Initialize document ingestor.
 
@@ -50,6 +52,8 @@ class DocumentIngestor:
             chunk_overlap: Overlap between chunks in tokens.
             verbose: Enable verbose logging.
             progress_callback: Optional callback(file_path: Path, success: bool) called after each file.
+            on_chunk_progress: Optional callback(file_path, done, total) called
+                with within-file chunk progress for the CLI progress bar.
         """
         import secondbrain.document
 
@@ -67,6 +71,7 @@ class DocumentIngestor:
         self.verbose = verbose
         self.max_file_size_bytes: int = cfg.max_file_size_bytes
         self.progress_callback = progress_callback
+        self.on_chunk_progress = on_chunk_progress
         self._cpu_count_fn = _detect_cpu_count
 
         self.embedding_cache = EmbeddingCache(max_size=cfg.embedding_cache_size)
@@ -689,7 +694,6 @@ class DocumentIngestor:
         -------
             Tuple of (successful_files, failed_files, failure_reasons) counts and reasons.
         """
-        import queue
         from concurrent.futures import as_completed
 
         from secondbrain.config import config
@@ -709,7 +713,25 @@ class DocumentIngestor:
         failed_files = 0
         failure_reasons: list[tuple[str, str]] = []
 
-        progress_queue: queue.Queue[tuple[str, bool]] | None = None
+        # Within-file progress channel, used only when a consumer exists. A plain
+        # thread queue is perfect for the thread pool, but process-pool children are
+        # spawned so they cannot receive a raw multiprocessing.Queue by argument --
+        # a Manager.Queue proxy (reachable over a socket) is the supported way to
+        # share a queue with spawned workers. When there is no on_chunk_progress
+        # callback we create no channel at all (matches the original behavior).
+        import queue as _queue
+
+        manager: Any = None
+        progress_queue: Any = None
+        if self.on_chunk_progress is not None:
+            if use_process:
+                import multiprocessing as mp
+
+                manager = mp.Manager()
+                progress_queue = manager.Queue()
+            else:
+                progress_queue = _queue.Queue()
+
         embedding_model_name = cfg.embedding_model
 
         # Import worker from processor (not extractor) to avoid cyclic import
@@ -718,9 +740,6 @@ class DocumentIngestor:
         executor_cls: type[ThreadPoolExecutor] | type[ProcessPoolExecutor] = (
             ProcessPoolExecutor if use_process else ThreadPoolExecutor
         )
-
-        if not use_process:
-            progress_queue = queue.Queue()
 
         # CPU/GPU guard: force-OCR runs OCR (often GPU/MPS-backed) inside every PDF, and
         # many processes contending on one GPU thrash each other. Cap the process pool
@@ -733,42 +752,30 @@ class DocumentIngestor:
             )
             max_workers = 1
 
+        manager_cm = manager if manager is not None else nullcontext()
         with (
             trace_operation("ingest_thread_progress") as span,
             executor_cls(max_workers=max_workers) as executor,
+            manager_cm,
         ):
             if span:
                 span.set_attribute("ingestion.files_total", len(files))
                 span.set_attribute("ingestion.max_workers", max_workers)
                 span.set_attribute("ingestion.pool", pool)
 
-            if use_process:
-                # Workers run in child processes. The threading Queue and the
-                # thread-local embedding cache (Todo 3) cannot be pickled across the
-                # process boundary, so pass None for both. Each child re-initializes
-                # its own empty embedding cache inside the worker and batching still
-                # applies; progress is aggregated here from returned results.
-                def worker_args(f: Path) -> tuple[Any, Any, Any, Any, Any, Any]:
-                    return (
-                        str(f),
-                        self.chunk_size,
-                        self.chunk_overlap,
-                        None,
-                        embedding_model_name,
-                        None,
-                    )
-
-            else:
-
-                def worker_args(f: Path) -> tuple[Any, Any, Any, Any, Any, Any]:
-                    return (
-                        str(f),
-                        self.chunk_size,
-                        self.chunk_overlap,
-                        progress_queue,
-                        embedding_model_name,
-                        self.embedding_cache,
-                    )
+            # Workers run in child processes for the process pool, so the embedded
+            # thread-local embedding cache (Todo 3) cannot cross the boundary and is
+            # passed as None (each child re-initializes its own empty cache). The
+            # progress queue IS picklable and is shared across both pools.
+            def worker_args(f: Path) -> tuple[Any, Any, Any, Any, Any, Any]:
+                return (
+                    str(f),
+                    self.chunk_size,
+                    self.chunk_overlap,
+                    progress_queue,
+                    embedding_model_name,
+                    self.embedding_cache if not use_process else None,
+                )
 
             futures = {
                 executor.submit(
@@ -783,23 +790,78 @@ class DocumentIngestor:
             pending_futures = dict(futures)
 
             while pending_futures:
-                if progress_queue is not None:
-                    while not progress_queue.empty():
-                        try:
-                            progress_queue.get_nowait()
-                        except queue.Empty:
-                            break
+                self._drain_progress_queue(progress_queue)
 
                 done_futures = []
-                for future in as_completed(pending_futures, timeout=3600):
-                    file_path = futures[future]
-                    try:
-                        result = future.result(timeout=300)
+                try:
+                    for future in as_completed(pending_futures, timeout=0.2):
+                        file_path = futures[future]
+                        try:
+                            result = future.result(timeout=300)
 
-                        if not result["success"]:
-                            error_msg = result.get("error", "Unknown error")
+                            if not result["success"]:
+                                error_msg = result.get("error", "Unknown error")
+                                logger.error(
+                                    "Failed to process %s: %s",
+                                    file_path,
+                                    error_msg,
+                                )
+                                failed_files += 1
+                                failure_reasons.append((str(file_path), error_msg))
+                                completed += 1
+                                if self.progress_callback:
+                                    self.progress_callback(file_path, False)
+                                done_futures.append(future)
+                                continue
+
+                            documents = result.get("documents", [])
+                            skipped = result.get("skipped", False)
+                            if skipped and not documents:
+                                successful_files += 1
+                                completed += 1
+                                if self.progress_callback:
+                                    self.progress_callback(file_path, True)
+                                done_futures.append(future)
+                                continue
+
+                            if not documents:
+                                reason = "No documents produced (file may be empty, image-only, or extraction failed)"
+                                logger.warning(
+                                    "No documents produced from %s", file_path
+                                )
+                                failed_files += 1
+                                failure_reasons.append((str(file_path), reason))
+                                completed += 1
+                                if self.progress_callback:
+                                    self.progress_callback(file_path, False)
+                                done_futures.append(future)
+                                continue
+
+                            for i in range(0, len(documents), MAX_MEMORY_BATCH_SIZE):
+                                batch = documents[i : i + MAX_MEMORY_BATCH_SIZE]
+                                with trace_operation("storage.store") as span:
+                                    if span is not None:
+                                        span.set_attribute(
+                                            "storage.documents_stored", len(batch)
+                                        )
+                                    start = time.time()
+                                    storage.store_batch(batch)
+                                    elapsed_ms = (time.time() - start) * 1000
+                                    if span is not None:
+                                        span.set_attribute(
+                                            "storage.duration_ms", elapsed_ms
+                                        )
+
+                            successful_files += 1
+                            completed += 1
+                            if self.progress_callback:
+                                self.progress_callback(file_path, True)
+                            done_futures.append(future)
+
+                        except Exception as e:
+                            error_msg = f"{type(e).__name__}: {e}"
                             logger.error(
-                                "Failed to process %s: %s",
+                                "Unexpected error processing file %s: %s",
                                 file_path,
                                 error_msg,
                             )
@@ -809,71 +871,48 @@ class DocumentIngestor:
                             if self.progress_callback:
                                 self.progress_callback(file_path, False)
                             done_futures.append(future)
-                            continue
-
-                        documents = result.get("documents", [])
-                        skipped = result.get("skipped", False)
-                        if skipped and not documents:
-                            successful_files += 1
-                            completed += 1
-                            if self.progress_callback:
-                                self.progress_callback(file_path, True)
-                            done_futures.append(future)
-                            continue
-
-                        if not documents:
-                            reason = "No documents produced (file may be empty, image-only, or extraction failed)"
-                            logger.warning("No documents produced from %s", file_path)
-                            failed_files += 1
-                            failure_reasons.append((str(file_path), reason))
-                            completed += 1
-                            if self.progress_callback:
-                                self.progress_callback(file_path, False)
-                            done_futures.append(future)
-                            continue
-
-                        for i in range(0, len(documents), MAX_MEMORY_BATCH_SIZE):
-                            batch = documents[i : i + MAX_MEMORY_BATCH_SIZE]
-                            with trace_operation("storage.store") as span:
-                                if span is not None:
-                                    span.set_attribute(
-                                        "storage.documents_stored", len(batch)
-                                    )
-                                start = time.time()
-                                storage.store_batch(batch)
-                                elapsed_ms = (time.time() - start) * 1000
-                                if span is not None:
-                                    span.set_attribute(
-                                        "storage.duration_ms", elapsed_ms
-                                    )
-
-                        successful_files += 1
-                        completed += 1
-                        if self.progress_callback:
-                            self.progress_callback(file_path, True)
-                        done_futures.append(future)
-
-                    except Exception as e:
-                        error_msg = f"{type(e).__name__}: {e}"
-                        logger.error(
-                            "Unexpected error processing file %s: %s",
-                            file_path,
-                            error_msg,
-                        )
-                        failed_files += 1
-                        failure_reasons.append((str(file_path), error_msg))
-                        completed += 1
-                        if self.progress_callback:
-                            self.progress_callback(file_path, False)
-                        done_futures.append(future)
+                except TimeoutError:
+                    pass
 
                 for future in done_futures:
                     del pending_futures[future]
 
-                if pending_futures:
+                if pending_futures and not done_futures:
                     time.sleep(0.01)
 
         return successful_files, failed_files, failure_reasons
+
+    def _drain_progress_queue(self, progress_queue: Any) -> None:
+        """Drain queued within-file progress events to ``on_chunk_progress``."""
+        if progress_queue is None:
+            return
+        import queue as _queue
+
+        while True:
+            try:
+                event = progress_queue.get_nowait()
+            except _queue.Empty:
+                break
+            self._handle_progress_event(event)
+
+    def _handle_progress_event(self, event: tuple[Any, ...]) -> None:
+        if not self.on_chunk_progress:
+            return
+        kind = event[0]
+        if kind == "started":
+            _, path_str, total = event[:3]
+            self._safe_chunk_progress(Path(path_str), 0, total)
+        elif kind == "progress":
+            _, path_str, done, total = event[:4]
+            self._safe_chunk_progress(Path(path_str), done, total)
+
+    def _safe_chunk_progress(self, path: Path, done: int, total: int) -> None:
+        if not self.on_chunk_progress:
+            return
+        try:
+            self.on_chunk_progress(path, done, total)
+        except Exception:
+            logger.debug("chunk progress callback failed", exc_info=True)
 
     def ingest(
         self,

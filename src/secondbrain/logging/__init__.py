@@ -70,19 +70,28 @@ def setup_logging(
     log_file: str | None = None,
     max_bytes: int | None = None,
     backup_count: int = 5,
+    level_name: str | None = None,
 ) -> None:
     """Configure logging with the specified options.
 
     Args:
-        verbose: Enable DEBUG level if True, WARNING (no logs) otherwise.
+        verbose: Enable DEBUG level if True.
         json_format: Use JSON format if True, rich text otherwise.
         log_file: Path to log file. If None, reads from SECONDBRAIN_LOG_FILE env var.
         max_bytes: Max log file size before rotation. If None, reads from
             SECONDBRAIN_LOG_MAX_BYTES env var (default 10MB).
         backup_count: Number of backup files to keep. If None, reads from
             SECONDBRAIN_LOG_BACKUP_COUNT env var (default 5).
+        level_name: Log level name to use when verbose is False (e.g. "ERROR",
+            "WARNING", "INFO", "DEBUG"). Controls the minimum severity shown on
+            the console. If omitted, defaults to WARNING (warnings and above).
     """
-    level = logging.DEBUG if verbose else logging.WARNING
+    if verbose:
+        level = logging.DEBUG
+    elif level_name is not None:
+        level = getattr(logging, level_name.upper(), logging.WARNING)
+    else:
+        level = logging.WARNING
 
     # If handlers are already configured, just update the level
     if logging.root.handlers:

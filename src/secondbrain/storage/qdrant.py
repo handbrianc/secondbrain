@@ -25,6 +25,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.http import models
 
 from secondbrain.config import config
+from secondbrain.constants import MAX_LIST_LIMIT
 from secondbrain.types import (
     ChunkInfo,
     SearchResult,
@@ -344,6 +345,7 @@ class QdrantVectorStorage:
             resp = self._get_client().facet(
                 collection_name=self.collection_name,
                 key="source_file",
+                limit=MAX_LIST_LIMIT,
             )
             seen: set[str] = set()
             for bucket in resp.hits:

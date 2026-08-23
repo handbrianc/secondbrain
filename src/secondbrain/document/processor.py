@@ -21,6 +21,7 @@ import hashlib
 import logging
 import os
 import warnings
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -245,6 +246,7 @@ def _embed_unique_chunks(
     unique_chunks: list[dict[str, Any]],
     embedding_cache: EmbeddingCache | None = None,
     batch_size: int | None = None,
+    progress_callback: Callable[[int, int], None] | None = None,
 ) -> list[list[float]]:
     """Embed a list of unique chunk dicts in batches, optionally reusing a cache.
 
@@ -261,6 +263,9 @@ def _embed_unique_chunks(
         embedding_cache: Optional thread-safe embedding cache to reuse hits.
         batch_size: Size of each embedder batch. Defaults to the configured
             ``embedding_batch_size``.
+        progress_callback: Optional callback ``(done, total)`` invoked after each
+            batch completes so callers can report within-file ingestion progress.
+            ``total`` is always ``len(unique_chunks)``.
 
     Returns
     -------
@@ -273,37 +278,42 @@ def _embed_unique_chunks(
 
     texts = [c["text"] for c in unique_chunks]
     embeddings: list[list[float]] = []
+    processed = 0
+    total = len(texts)
 
     for start in range(0, len(texts), batch_size):
         slice_texts = texts[start : start + batch_size]
 
         if embedding_cache is None:
             embeddings.extend(embedding_model.generate_batch(slice_texts))
-            continue
+        else:
+            batch_results: list[list[float] | None] = [None] * len(slice_texts)
+            missing_texts: list[str] = []
+            missing_slots: list[int] = []
 
-        batch_results: list[list[float] | None] = [None] * len(slice_texts)
-        missing_texts: list[str] = []
-        missing_slots: list[int] = []
+            for index, text in enumerate(slice_texts):
+                cached = embedding_cache.get(text)
+                if cached is not None:
+                    batch_results[index] = cached
+                else:
+                    missing_slots.append(index)
+                    missing_texts.append(text)
 
-        for index, text in enumerate(slice_texts):
-            cached = embedding_cache.get(text)
-            if cached is not None:
-                batch_results[index] = cached
-            else:
-                missing_slots.append(index)
-                missing_texts.append(text)
+            if missing_texts:
+                missing_embeddings = embedding_model.generate_batch(missing_texts)
+                for slot, text, emb in zip(
+                    missing_slots, missing_texts, missing_embeddings, strict=True
+                ):
+                    batch_results[slot] = emb
+                    embedding_cache.set(text, emb)
 
-        if missing_texts:
-            missing_embeddings = embedding_model.generate_batch(missing_texts)
-            for slot, text, emb in zip(
-                missing_slots, missing_texts, missing_embeddings, strict=True
-            ):
-                batch_results[slot] = emb
-                embedding_cache.set(text, emb)
+            for result in batch_results:
+                assert result is not None
+                embeddings.append(result)
 
-        for result in batch_results:
-            assert result is not None
-            embeddings.append(result)
+        processed += len(slice_texts)
+        if progress_callback is not None:
+            progress_callback(processed, total)
 
     return embeddings
 
@@ -567,11 +577,28 @@ def _extract_chunk_and_embed_file(
                 "skipped": True,
             }
 
+        # Signal ingestion of this file has begun (with its total chunk count) so
+        # the CLI can render a determinate per-file progress bar.
+        if progress_queue is not None:
+            with contextlib.suppress(Exception):
+                progress_queue.put_nowait(
+                    ("started", str(file_path), len(unique_chunks))
+                )
+
+        def _report_chunk_progress(done: int, total: int) -> None:
+            if progress_queue is None:
+                return
+            with contextlib.suppress(Exception):
+                progress_queue.put_nowait(("progress", str(file_path), done, total))
+
         with trace_operation("ingest_worker_embed") as span:
             if span is not None:
                 span.set_attribute("ingest.chunks_count", len(unique_chunks))
             embeddings = _embed_unique_chunks(
-                embedding_model, unique_chunks, embedding_cache=embedding_cache
+                embedding_model,
+                unique_chunks,
+                embedding_cache=embedding_cache,
+                progress_callback=_report_chunk_progress,
             )
 
         documents = []

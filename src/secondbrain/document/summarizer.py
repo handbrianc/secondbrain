@@ -13,17 +13,29 @@ Summarizer
 
 from __future__ import annotations
 
+import re
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any
 
 from secondbrain.logging import get_logger
 
+# Real chapter starts are chunks whose text begins with "Chapter <N>"; TOC
+# listings and prose cross-references place the phrase mid-text instead.
+_CHAPTER_START_RE = re.compile(r"^\s*chapter\s+(\d+)\b", re.IGNORECASE)
+
 SUMMARIZE_PROMPT = """\
 You are a knowledgeable research assistant.
-Read the following excerpts from a document and produce a concise summary.
+Read the following excerpts from a document and produce a detailed, well-structured summary that expounds on the content rather than condensing it.
 
-Target length: {max_tokens} tokens. Respond in the same language as the excerpts.
+Write a thorough summary that:
+- Covers the main ideas, key arguments, methods, and findings in depth.
+- Includes significant names, numbers, definitions, and concrete examples from the material.
+- Explains what the document actually says, not just what topics it mentions.
+- Is organised into several clear paragraphs: an overview, the key points, and a short conclusion.
+- Does NOT simply restate the title or write a one-sentence description.
+
+Aim for roughly {target_tokens} tokens. Write enough to fully convey the substance of the excerpts. Respond in the same language as the excerpts.
 
 ## Excerpts
 {excerpts}
@@ -90,6 +102,7 @@ class Summarizer:
         self._max_tokens = max_summary_tokens
         self._model = summary_model
         self._logger = get_logger(__name__)
+        self._chapter_map_cache: dict[str, dict[int, int]] = {}
 
     # ------------------------------------------------------------------
     # Public API
@@ -291,7 +304,74 @@ class Summarizer:
                 seen.add(cid)
                 combined.append(chunk)
 
+        # When the document carries no chapter_id/section_id metadata, fall back
+        # to detecting chapter boundaries by page so chapter summaries still work.
+        if not combined and source_file:
+            combined = self._collect_chapters_by_page(chapter_id, source_file)
+
         return combined
+
+    def _collect_chapters_by_page(
+        self, chapter_id: int, source_file: str
+    ) -> list[dict[str, Any]]:
+        """Gather a chapter's chunks by page range when no chapter metadata exists.
+
+        Builds a ``chapter_number -> start_pdf_page`` map from body chunks whose
+        text begins with a "Chapter N" heading (excludes the TOC and prose
+        cross-references, which place the phrase mid-text). The chapter's body is
+        then every relevant chunk on pages ``[start_N, start_{N+1})`` of the given
+        *source_file*.
+        """
+        page_map = self._chapter_page_map(source_file)
+        if chapter_id not in page_map:
+            return []
+        start = page_map[chapter_id]
+        end = page_map.get(chapter_id + 1, 10**9)
+        try:
+            chunks = list(self._storage.find_chunks(source_file=source_file))
+        except Exception as exc:
+            self._logger.error(
+                "Failed to fetch chunks for chapter %s page range: %s",
+                chapter_id,
+                exc,
+            )
+            return []
+        return [
+            c
+            for c in chunks
+            if (c.get("page_number") or 0) >= start
+            and (c.get("page_number") or 0) < end
+            and c.get("chunk_role") in ("body", "caption")
+        ]
+
+    def _chapter_page_map(self, source_file: str) -> dict[int, int]:
+        """Return a cached ``chapter_number -> start_pdf_page`` map for a source."""
+        cached = self._chapter_map_cache.get(source_file)
+        if cached is not None:
+            return cached
+        try:
+            chunks = list(self._storage.find_chunks(source_file=source_file))
+        except Exception as exc:
+            self._logger.error(
+                "Failed to fetch chunks for chapter map of %s: %s", source_file, exc
+            )
+            self._chapter_map_cache[source_file] = {}
+            return {}
+        page_map: dict[int, int] = {}
+        ordered = sorted(
+            chunks, key=lambda c: c.get("page_number") or 0
+        )
+        for c in ordered:
+            if c.get("chunk_role") not in ("body", "caption"):
+                continue
+            m = _CHAPTER_START_RE.match((c.get("chunk_text") or "").lstrip())
+            if not m:
+                continue
+            chapter_num = int(m.group(1))
+            if chapter_num not in page_map:
+                page_map[chapter_num] = c.get("page_number") or 0
+        self._chapter_map_cache[source_file] = page_map
+        return page_map
 
     def _collect_section_chunks(
         self, section_id: str, *, source_file: str | None = None
@@ -335,8 +415,11 @@ class Summarizer:
                 excerpts.append(text)
 
         joined = "\n---\n".join(excerpts)
+        # Desired summary length: meaningful detail, upper-bounded so a huge
+        # llm_max_tokens cap doesn't make the "target length" line absurd.
+        target_tokens = max(300, min(self._max_tokens, 900))
         return SUMMARIZE_PROMPT.format(
-            max_tokens=self._max_tokens,
+            target_tokens=target_tokens,
             excerpts=f"{context}\n\n{joined}" if context else joined,
         )
 

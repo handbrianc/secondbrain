@@ -849,11 +849,9 @@ class _StructureMixin(_RAGPipelineState):
             return {"answer": self._handle_no_results(query), "query": query}
         context = self._format_context(chunks)
         prompt = self._build_prompt(query, context)
-        answer = self._llm_provider.generate(
-            prompt=prompt,
-            temperature=self._config.llm_temperature,
-            max_tokens=self._config.llm_max_tokens,
-        )
+        answer, streamed = self._stream_generate(prompt)
+        if not streamed and self._on_chunk and answer:
+            self._on_chunk(answer, None)
         result: dict[str, Any] = {"answer": answer, "query": query}
         if show_sources:
             result["sources"] = chunks
@@ -949,6 +947,45 @@ class _FallbackMixin(_RAGPipelineState):
             max_tokens=self._config.llm_max_tokens,
         )
 
+    def _stream_generate(self, prompt: str, prefix: str = "") -> tuple[str, bool]:
+        """Generate a response, streaming through ``_on_chunk`` when possible.
+
+        When streaming is enabled, the provider supports ``stream_chat`` and an
+        ``_on_chunk`` callback is registered, ``prefix`` (if any) is emitted
+        first and the answer is forwarded token by token. Otherwise falls back
+        to the synchronous ``_generate``.
+
+        Returns:
+            Tuple of ``(answer, streamed)`` where ``streamed`` indicates the
+            output was already pushed through ``_on_chunk`` and the caller must
+            not re-emit it.
+        """
+        can_stream = (
+            self._config.streaming_enabled
+            and self._on_chunk is not None
+            and hasattr(self._llm_provider, "stream_chat")
+        )
+        if not can_stream:
+            return self._generate(prompt), False
+        if prefix and self._on_chunk:
+            self._on_chunk(prefix, None)
+        messages = [{"role": "user", "content": prompt}]
+        accumulated: list[str] = []
+
+        def on_chunk(content: str, _reasoning: str | None) -> None:
+            if content:
+                accumulated.append(content)
+            if self._on_chunk and (content or _reasoning):
+                self._on_chunk(content, _reasoning)
+
+        self._llm_provider.stream_chat(
+            messages=messages,
+            on_chunk=on_chunk,
+            temperature=self._config.llm_temperature,
+            max_tokens=self._config.llm_max_tokens,
+        )
+        return "".join(accumulated), True
+
     @staticmethod
     def _no_result_notice(query: str) -> str:
         """Return the static notice when no relevant documents are found."""
@@ -1003,11 +1040,12 @@ class _FallbackMixin(_RAGPipelineState):
             "There are no matching documents for this question in the local "
             "knowledge base, so no retrieved context is available.\n"
             "Using ONLY the conversation context above and your own general "
-            "knowledge, answer the user's question if you have enough information "
-            "to do so accurately. If you do NOT have enough information, reply "
-            "with a short, honest statement that you do not have information on "
-            "it. Do not fabricate facts or present guesswork as established "
-            "knowledge."
+            "knowledge, answer THE user's CURRENT question stated at the top - "
+            "not earlier questions in the conversation context, and not the "
+            "prior topic if the user has changed subjects. If you do NOT have "
+            "enough information, reply with a short, honest statement that you "
+            "do not have information on it. Do not fabricate facts or present "
+            "guesswork as established knowledge."
         )
 
     def _build_contextual_search_query(
@@ -1143,6 +1181,23 @@ class _FallbackMixin(_RAGPipelineState):
                     return True
         return False
 
+    def _save_turn(
+        self,
+        session: ConversationSession,
+        query: str,
+        answer: str,
+    ) -> None:
+        """Persist one chat turn (user message + assistant answer) to a session.
+
+        All ``chat()`` exit paths call this so that follow-up turns always see
+        the most recent exchange, even when the answer came from a no-source
+        fallback path (which otherwise would not be recorded).
+        """
+        if not answer or not answer.strip():
+            return
+        session.add_message("user", query)
+        session.add_message("assistant", answer)
+
     def _grounded_context_retry(
         self,
         query: str,
@@ -1164,7 +1219,7 @@ class _FallbackMixin(_RAGPipelineState):
         context_text = self._format_context(chunks)
         prompt = self._build_prompt(query, context_text, conversation_history or [])
         try:
-            answer = self._generate(prompt)
+            answer, streamed = self._stream_generate(prompt)
         except Exception as exc:
             logger.warning(
                 "Grounded generation failed: %s: %s", type(exc).__name__, exc
@@ -1172,6 +1227,8 @@ class _FallbackMixin(_RAGPipelineState):
             return None
         if not answer or not answer.strip():
             return None
+        if not streamed and self._on_chunk and answer:
+            self._on_chunk(answer, None)
         result: dict[str, Any] = {
             "answer": answer,
             "query": query,
@@ -1287,7 +1344,7 @@ class _FallbackMixin(_RAGPipelineState):
             query, conversation_history=conversation_history
         )
         try:
-            llm_answer = self._generate(prompt)
+            llm_answer, streamed = self._stream_generate(prompt, prefix=f"{notice}\n\n")
         except Exception as exc:
             logger.warning(
                 "LLM knowledge fallback failed for query %r: %s: %s",
@@ -1297,7 +1354,10 @@ class _FallbackMixin(_RAGPipelineState):
             )
             return notice
 
-        return self._apply_llm_fallback(notice, llm_answer)
+        result = self._apply_llm_fallback(notice, llm_answer)
+        if not streamed and self._on_chunk and result:
+            self._on_chunk(result, None)
+        return result
 
     async def _handle_no_results_async(
         self,

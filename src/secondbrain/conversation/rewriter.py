@@ -46,7 +46,12 @@ class QueryRewriter:
         "Conversation Context:\n{context}\n\n"
         "Current Question: {query}\n\n"
         "Rewrite the current question as a standalone question that "
-        "preserves context from the conversation. Be concise."
+        "preserves context from the conversation. Only rewrite when the "
+        "current question needs context from the conversation to be understood "
+        "(for example, it uses a pronoun like 'it', 'that', 'this', or an "
+        "ambiguous reference). If the current question is already clear and "
+        "self-contained on its own, return it EXACTLY unchanged - do not add, "
+        "remove, or change its meaning. Be concise."
     )
 
     # Pronouns and ambiguous references that indicate need for context

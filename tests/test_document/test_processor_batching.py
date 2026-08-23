@@ -165,3 +165,39 @@ class TestEmbedUniqueChunksCaching:
         assert first_call_count == 1
         assert len(embedder.batch_calls) == 1
         assert second == first
+
+
+class TestEmbedUniqueChunksProgress:
+    """Within-file progress reporting from ``_embed_unique_chunks``."""
+
+    def test_progress_callback_reports_done_total_after_each_batch(self) -> None:
+        texts = [f"progress chunk {i}" for i in range(23)]
+        chunks = _chunks(texts)
+        embedder = CountingEmbedder()
+
+        updates: list[tuple[int, int]] = []
+        _embed_unique_chunks(
+            embedder,
+            chunks,
+            embedding_cache=None,
+            batch_size=5,
+            progress_callback=lambda done, total: updates.append((done, total)),
+        )
+
+        assert updates == [(5, 23), (10, 23), (15, 23), (20, 23), (23, 23)]
+
+    def test_progress_callback_single_batch_reaches_total(self) -> None:
+        texts = [f"single {i}" for i in range(3)]
+        chunks = _chunks(texts)
+        embedder = CountingEmbedder()
+
+        updates: list[tuple[int, int]] = []
+        _embed_unique_chunks(
+            embedder,
+            chunks,
+            embedding_cache=None,
+            batch_size=10,
+            progress_callback=lambda done, total: updates.append((done, total)),
+        )
+
+        assert updates == [(3, 3)]

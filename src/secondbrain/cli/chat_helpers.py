@@ -30,17 +30,16 @@ def _run_chat_with_spinner(
     ``queue.Queue`` to avoid interleaving with Rich's Live display.
     The spinner is written to stderr so it never pollutes stdout.
     """
+    import contextlib
     import queue
     import threading
 
-    chunk_queue: queue.Queue[str] = queue.Queue()
+    chunk_queue: queue.Queue[tuple[str, str]] = queue.Queue()
     done_event = threading.Event()
-    has_streamed: list[bool] = [False]
 
-    def on_chunk(content: str, _reasoning: str | None) -> None:
-        if content:
-            has_streamed[0] = True
-            chunk_queue.put(content)
+    def on_chunk(content: str, reasoning: str | None) -> None:
+        if content or reasoning:
+            chunk_queue.put((content or "", reasoning or ""))
 
     pipeline._on_chunk = on_chunk
 
@@ -61,31 +60,47 @@ def _run_chat_with_spinner(
 
     import sys as _sys
 
-    first_chunk: str | None = None
+    first: tuple[str, str] | None = None
     with console.status("[bold cyan]Thinking...", spinner="dots"):
         while True:
             try:
-                first_chunk = chunk_queue.get(timeout=0.1)
+                first = chunk_queue.get(timeout=0.1)
                 break
             except queue.Empty:
                 if done_event.is_set():
                     break
 
-    # Continuously drain the queue until the thread has finished
-    # *and* the queue is empty.  This handles streaming responses
-    # where chunks arrive after the first one broke the spinner.
-    wrote_first = False
-    if first_chunk is not None:
-        _sys.stdout.write(first_chunk)
-        wrote_first = True
+    # Reasoning tokens stream dimmed (they arrive first for reasoning models),
+    # then the final answer streams normally. Both stop the spinner immediately
+    # so the user sees output the moment the LLM starts responding.
+    dim_code = "\x1b[2m"
+    reset_code = "\x1b[0m"
+    in_reasoning: list[bool] = [False]
+    wrote_content: list[bool] = [False]
+
+    def _emit(content: str, reasoning: str) -> None:
+        if reasoning:
+            if not in_reasoning[0]:
+                _sys.stdout.write(dim_code)
+                in_reasoning[0] = True
+            _sys.stdout.write(reasoning)
+            _sys.stdout.flush()
+        if content:
+            if in_reasoning[0]:
+                _sys.stdout.write(reset_code)
+                in_reasoning[0] = False
+            _sys.stdout.write(content)
+            _sys.stdout.flush()
+            wrote_content[0] = True
+
+    if first is not None:
+        _emit(*first)
     while not done_event.is_set() or not chunk_queue.empty():
-        try:
-            chunk = chunk_queue.get(timeout=0.1)
-            _sys.stdout.write(chunk)
-            wrote_first = True
-        except queue.Empty:
-            pass
-    if wrote_first:
+        with contextlib.suppress(queue.Empty):
+            _emit(*chunk_queue.get(timeout=0.1))
+    if in_reasoning[0]:
+        _sys.stdout.write(reset_code)
+    if wrote_content[0]:
         _sys.stdout.flush()
 
     t.join()
@@ -96,9 +111,9 @@ def _run_chat_with_spinner(
 
     result: dict[str, Any] = result_container.get("result", {})
 
-    # Non-streaming path: no chunks came through the streaming
-    # callback, but the answer is in result["answer"].
-    if not has_streamed[0] and result.get("answer"):
+    # Non-streaming path: no content streamed through the callback, but the
+    # answer is in result["answer"].
+    if not wrote_content[0] and result.get("answer"):
         _sys.stdout.write(result["answer"])
         _sys.stdout.flush()
 
@@ -120,6 +135,7 @@ def _single_turn_chat(
     """
     from secondbrain.conversation import ConversationSession, ConversationStorage
     from secondbrain.rag import RAGPipeline
+    from secondbrain.rag.factory import create_query_rewriter
     from secondbrain.rag.intent_parser import StructuralIntentParser
     from secondbrain.rag.providers import LLMProviderFactory
     from secondbrain.search import Searcher
@@ -150,6 +166,7 @@ def _single_turn_chat(
     pipeline = RAGPipeline(
         searcher=searcher,
         llm_provider=llm_provider,
+        rewriter=create_query_rewriter(llm_provider),
         top_k=top_k,
         context_window=cfg.rag_context_window,
     )
@@ -187,6 +204,7 @@ def _interactive_chat(
     """Handle interactive REPL mode for chat."""
     from secondbrain.conversation import ConversationSession, ConversationStorage
     from secondbrain.rag import RAGPipeline
+    from secondbrain.rag.factory import create_query_rewriter
     from secondbrain.rag.intent_parser import StructuralIntentParser
     from secondbrain.rag.providers import LLMProviderFactory
     from secondbrain.search import Searcher
@@ -267,6 +285,7 @@ def _interactive_chat(
             streaming_pipeline = RAGPipeline(
                 searcher=searcher,
                 llm_provider=llm_provider,
+                rewriter=create_query_rewriter(llm_provider),
                 top_k=top_k,
                 context_window=cfg.rag_context_window,
             )

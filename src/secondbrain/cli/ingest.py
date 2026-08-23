@@ -1,6 +1,7 @@
 """Ingest command."""
 
 import os
+import time
 from pathlib import Path
 
 import click
@@ -105,45 +106,7 @@ def ingest(
 
     total_files = len(files)
 
-    if total_files > 10:  # Only show progress for larger batches
-        from rich.progress import Progress, SpinnerColumn, TextColumn
-
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            TextColumn("[progress.completed]{task.completed}/{task.total}"),
-            console=console,
-        ) as progress:
-            task = progress.add_task("[cyan]Ingesting...", total=total_files)
-
-            # Create progress callback that updates the progress bar
-            def progress_callback(file_path: Path, success: bool) -> None:
-                status = "[green]✓[/green]" if success else "[red]✗[/red]"
-                progress.update(
-                    task, description=f"[cyan]Ingesting... {status} {file_path.name}"
-                )
-                progress.advance(task)
-                progress.refresh()  # Force immediate refresh
-
-            ingestor = DocumentIngestor(
-                chunk_size=chunk_size,
-                chunk_overlap=chunk_overlap,
-                verbose=verbose,
-                progress_callback=progress_callback,
-            )
-
-            # Use ThreadPoolExecutor when progress tracking is enabled
-            # Threads share memory so callbacks can update the progress bar
-            # For I/O-bound work, threads perform nearly as well as processes
-            results = ingestor.ingest(
-                path,
-                recursive=recursive,
-                batch_size=batch_size,
-                cores=cores,
-                pool=pool,
-                skip_existing=skip_existing,
-            )
-    else:
+    if total_files == 0:
         ingestor = DocumentIngestor(
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
@@ -157,6 +120,97 @@ def ingest(
             pool=pool,
             skip_existing=skip_existing,
         )
+    else:
+        from rich.progress import (
+            BarColumn,
+            Progress,
+            SpinnerColumn,
+            TaskID,
+            TextColumn,
+        )
+
+        is_single = total_files == 1
+        with Progress(
+            BarColumn(),
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+        ) as progress:
+            last_refresh = [0.0]
+            refresh_interval = (
+                0.05  # cap repaints ~20/s so the terminal doesn't flicker
+            )
+
+            def _refresh(force: bool = False) -> None:
+                now = time.monotonic()
+                if force or now - last_refresh[0] >= refresh_interval:
+                    progress.refresh()
+                    last_refresh[0] = now
+
+            final_status: dict[str, bool] = {}
+            task_ids: dict[str, TaskID] = {}
+
+            def _init_task(path_key: str, name: str, total: int | None) -> TaskID:
+                tid = task_ids.get(path_key)
+                if tid is None:
+                    tid = progress.add_task(name, total=total)
+                    task_ids[path_key] = tid
+                return tid
+
+            def on_chunk_progress(file_path: Path, done: int, total: int) -> None:
+                key = str(file_path)
+                if key in final_status:
+                    return
+                tid = _init_task(key, file_path.name, total)
+                progress.update(
+                    tid,
+                    description=f"{file_path.name} [cyan]{done}/{total}[/cyan]",
+                    completed=done,
+                    total=total,
+                )
+                _refresh()
+
+            def progress_callback(file_path: Path, success: bool) -> None:
+                key = str(file_path)
+                final_status[key] = success
+                status = "[green]✓[/green]" if success else "[red]✗[/red]"
+                tid = task_ids.get(key)
+                if tid is None:
+                    tid = progress.add_task(file_path.name, total=1)
+                    task_ids[key] = tid
+                progress.update(
+                    tid,
+                    description=f"{status} {file_path.name}",
+                    completed=1,
+                    total=1,
+                )
+                _refresh(force=True)
+
+            ingestor = DocumentIngestor(
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+                verbose=verbose,
+                progress_callback=progress_callback,
+                on_chunk_progress=on_chunk_progress,
+            )
+
+            # Seed a single-file task so the spinner + indeterminate bar show
+            # immediately while the file is extracted (before its chunk count is
+            # known); on_chunk_progress later makes it determinate.
+            if is_single:
+                key = str(files[0])
+                task_ids[key] = progress.add_task(
+                    f"Ingesting {files[0].name}...", total=None
+                )
+
+            results = ingestor.ingest(
+                path,
+                recursive=recursive,
+                batch_size=batch_size,
+                cores=cores,
+                pool=pool,
+                skip_existing=skip_existing,
+            )
 
     num_success = results["success"]
     num_failed = results["failed"]

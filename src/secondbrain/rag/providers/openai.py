@@ -40,6 +40,7 @@ class OpenAILLMProvider(LocalLLMProvider):
         timeout: int = 120,
         base_url: str | None = None,
         api_key: str | None = None,
+        repetition_penalty: float = 1.0,
     ) -> None:
         """Initialize OpenAI provider with configuration.
 
@@ -50,6 +51,10 @@ class OpenAILLMProvider(LocalLLMProvider):
             timeout: Request timeout in seconds (default: 120).
             base_url: OpenAI-compatible API base URL (optional, defaults to OpenAI).
             api_key: OpenAI API key (defaults to SECONDBRAIN_OPENAI_API_KEY env var).
+            repetition_penalty: Repetition penalty (>= 1.0). Values above 1.0 are
+                forwarded as ``repetition_penalty`` to OpenAI-compatible servers
+                that support it (DeepSeek, vLLM, TGI) to discourage the model from
+                repeating itself (default: 1.0, disabled).
 
         Raises:
             ValueError: If API key is not provided.
@@ -59,6 +64,7 @@ class OpenAILLMProvider(LocalLLMProvider):
         self._max_tokens = max_tokens
         self._timeout = timeout
         self._base_url = base_url
+        self._repetition_penalty = repetition_penalty
 
         # Get API key from parameter or environment
         self._api_key = api_key or os.getenv("SECONDBRAIN_OPENAI_API_KEY")
@@ -86,6 +92,18 @@ class OpenAILLMProvider(LocalLLMProvider):
             base_url=base_url,  # Optional - None means use OpenAI default
             timeout=ttft_timeout,
         )
+
+    def _extra_body(self) -> dict[str, object] | None:
+        """Extra request-body sampling params for OpenAI-compatible endpoints.
+
+        Includes ``repetition_penalty`` (DeepSeek/vLLM/TGI style) only when enabled
+        (``!= 1.0``), so the default request payload is unchanged. Sent via the
+        SDK's ``extra_body`` because there is no native repetition_penalty argument;
+        servers that don't support it ignore unknown fields.
+        """
+        if self._repetition_penalty == 1.0:
+            return None
+        return {"repetition_penalty": self._repetition_penalty}
 
     def generate(
         self,
@@ -118,6 +136,7 @@ class OpenAILLMProvider(LocalLLMProvider):
                 messages=messages,
                 temperature=temp,
                 max_tokens=tokens,
+                extra_body=self._extra_body(),
             )
 
             return response.choices[0].message.content or ""
@@ -160,6 +179,7 @@ class OpenAILLMProvider(LocalLLMProvider):
                 messages=messages,
                 temperature=temp,
                 max_tokens=tokens,
+                extra_body=self._extra_body(),
             )
 
             return response.choices[0].message.content or ""
@@ -250,15 +270,21 @@ class OpenAILLMProvider(LocalLLMProvider):
                 temperature=temp,
                 max_tokens=tokens,
                 stream=True,
+                extra_body=self._extra_body(),
             )
 
             accumulated: list[str] = []
             for chunk in response:
                 if chunk.choices and len(chunk.choices) > 0:
                     delta = chunk.choices[0].delta
-                    if delta and delta.content:
-                        on_chunk(delta.content, None)
-                        accumulated.append(delta.content)
+                    reasoning = getattr(delta, "reasoning_content", None)
+                    if reasoning is None:
+                        reasoning = getattr(delta, "reasoning", None)
+                    content = delta.content or ""
+                    if content or reasoning:
+                        on_chunk(content, reasoning)
+                    if content:
+                        accumulated.append(content)
 
             return "".join(accumulated)
 

@@ -32,6 +32,15 @@ class LLMMixin:
         default=0.1,
         description="LLM generation temperature (0.0-2.0)",
     )
+    llm_repetition_penalty: float = Field(
+        default=1.0,
+        description=(
+            "Repetition penalty for generation (>= 1.0). Values above 1.0 discourage "
+            "the model from repeating itself (e.g. 1.1-1.3). 1.0 disables it. Sent as "
+            "`repetition_penalty` for OpenAI-compatible servers that support it "
+            "(DeepSeek, vLLM, TGI); ignored by servers that don't."
+        ),
+    )
     llm_max_tokens: int = Field(
         default=2048,
         description="Maximum tokens for LLM responses",
@@ -47,6 +56,14 @@ class LLMMixin:
         """Validate LLM temperature is between 0.0 and 2.0."""
         if v < 0.0 or v > 2.0:
             raise ValueError("llm_temperature must be between 0.0 and 2.0")
+        return v
+
+    @field_validator("llm_repetition_penalty")
+    @classmethod
+    def validate_llm_repetition_penalty(cls, v: float) -> float:
+        """Validate LLM repetition penalty is >= 1.0."""
+        if v < 1.0:
+            raise ValueError("llm_repetition_penalty must be >= 1.0")
         return v
 
     @field_validator("llm_max_tokens")

@@ -33,12 +33,19 @@ console = Console(markup=True)
     type=str,
     help="Section ID (dot-separated, e.g. '3.9'). Used with --by-section.",
 )
+@click.option(
+    "--source",
+    "-src",
+    type=str,
+    help="Path of the ingested document to summarize. Restricts results to chunks from that specific source (useful when multiple documents have the same chapter/section numbers).",
+)
 @click.pass_context
 def summarize(
     ctx: click.Context,
     chapter: int | None,
     by_section: bool,
     section_id: str | None,
+    source: str | None,
 ) -> None:
     """Summarize document content by chapter or section.
 
@@ -51,6 +58,7 @@ def summarize(
         secondbrain summarize --chapter 3          # Summarize chapter 3
         secondbrain summarize -c 2 --by-section    # Summarize a section within chapter 2
         secondbrain summarize -c 2 --by-section -s 2.9   # Summarize section 2.9 of chapter 2
+        secondbrain summarize -c 3 --source "AI Books/pytorch.pdf"   # Chapter 3 of one document
     --------
     """
     import asyncio
@@ -98,7 +106,9 @@ def summarize(
         try:
             if by_section:
                 section_id_value: str = section_id  # type: ignore[assignment]
-                section_result = await summarizer.summarize_by_section(section_id_value)
+                section_result = await summarizer.summarize_by_section(
+                    section_id_value, source_file=source
+                )
                 if not section_result.summary:
                     return (False, "")
                 tokens_used = (
@@ -110,7 +120,9 @@ def summarize(
                 )
             else:
                 chapter_num: int = chapter  # type: ignore[assignment]
-                chapter_result = await summarizer.summarize_by_chapter(chapter_num)
+                chapter_result = await summarizer.summarize_by_chapter(
+                    chapter_num, source_file=source
+                )
                 if not chapter_result.summary:
                     return (False, "")
                 tokens_used = (
@@ -140,9 +152,13 @@ def summarize(
 
 def _format_chapter_summary(result: Any, tokens_used: int) -> str:
     """Format chapter summary for display."""
+    if result.chapter_title == f"Chapter {result.chapter_id}":
+        heading = f"Chapter {result.chapter_id}"
+    else:
+        heading = f"Chapter {result.chapter_id}: {result.chapter_title}"
     lines = [
         "",
-        f"[bold cyan]Chapter {result.chapter_id}: {result.chapter_title}[/bold cyan]",
+        f"[bold cyan]{heading}[/bold cyan]",
         "─" * 60,
         "",
         result.summary,

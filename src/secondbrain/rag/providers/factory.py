@@ -39,6 +39,7 @@ class LLMProviderFactory:
                 timeout=config.llm_timeout,
                 api_key=config.openai_api_key,
                 base_url=config.openai_base_url,
+                repetition_penalty=config.llm_repetition_penalty,
             )
         elif provider_type == "anthropic":
             from secondbrain.rag.providers.anthropic import AnthropicLLMProvider

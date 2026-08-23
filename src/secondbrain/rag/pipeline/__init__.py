@@ -208,7 +208,7 @@ class RAGPipeline(
                             def on_chunk(content: str, _reasoning: str | None) -> None:
                                 if content:
                                     accumulated.append(content)
-                                if self._on_chunk and content:
+                                if self._on_chunk and (content or _reasoning):
                                     self._on_chunk(content, _reasoning)
 
                             self._llm_provider.stream_chat(
@@ -287,18 +287,22 @@ class RAGPipeline(
             # --- B4: Iterative RAG for broad-coverage and chapter/section-enumeration queries ---
             intent_result = self._intent_parser.parse(query)
             if intent_result.intent is QueryIntent.LIST_SOURCES:
-                return self._list_sources_result(query)
+                listing = self._list_sources_result(query)
+                self._save_turn(session, query, listing.get("answer", ""))
+                return listing
             if intent_result.intent in (
                 QueryIntent.BROAD_COVERAGE,
                 QueryIntent.CHAPTER_ENUMERATE,
                 QueryIntent.SECTION_ENUMERATE,
             ):
-                return self._iterative_query(
+                iterative = self._iterative_query(
                     query,
                     top_k=effective_top_k,
                     show_sources=show_sources,
                     source_filter=source_filter,
                 )
+                self._save_turn(session, query, iterative.get("answer", ""))
+                return iterative
 
             # Step 1: Rewrite query using conversation history (if rewriter available)
             rewritten_query = self._rewrite_query_with_history(query, session)
@@ -359,19 +363,21 @@ class RAGPipeline(
                 grounded: dict[str, Any] | None = None
                 if self._config.rag_llm_fallback_enabled:
                     grounded = self._grounded_context_retry(
-                        rewritten_query,
+                        query,
                         conversation_history=history,
                         top_k=effective_top_k,
                         show_sources=show_sources,
                     )
                 if grounded is not None:
+                    self._save_turn(session, query, grounded.get("answer", ""))
                     return grounded
                 # Thread conversation history so the LLM knowledge fallback can
                 # leverage prior turns for this multi-turn chat follow-up.
                 fallback_answer = self._handle_no_results(
-                    rewritten_query,
+                    query,
                     conversation_history=history,
                 )
+                self._save_turn(session, query, fallback_answer)
                 result: dict[str, Any] = {
                     "answer": fallback_answer,
                     "rewritten_query": rewritten_query,
@@ -385,7 +391,7 @@ class RAGPipeline(
             history = session.get_history(limit=self._context_window)
 
             # Step 5: Build prompt with system instruction + context + query
-            prompt = self._build_prompt(rewritten_query, context_text, history)
+            prompt = self._build_prompt(query, context_text, history)
 
             # Step 6: Generate answer via llm_provider.generate() OR stream_chat() with retry logic
             generation_start = time.perf_counter()
@@ -418,7 +424,7 @@ class RAGPipeline(
                                 ) -> None:
                                     if content:
                                         accumulated.append(content)  # noqa: B023
-                                    if self._on_chunk and content:
+                                    if self._on_chunk and (content or _reasoning):
                                         self._on_chunk(content, _reasoning)
 
                                 self._llm_provider.stream_chat(
@@ -475,6 +481,7 @@ class RAGPipeline(
                     fallback_answer = self._handle_no_results(
                         query, allow_llm_fallback=False
                     )
+                    self._save_turn(session, query, fallback_answer)
                     result = {
                         "answer": fallback_answer,
                         "rewritten_query": rewritten_query,
@@ -492,8 +499,7 @@ class RAGPipeline(
                     metrics.record("generation_retries", retry_count)
 
             # Step 7: Add answer to session via session.add_message()
-            session.add_message("user", query)
-            session.add_message("assistant", answer)
+            self._save_turn(session, query, answer)
 
             # Step 8: Build result dict
             result = {"answer": answer, "rewritten_query": rewritten_query}
@@ -1242,7 +1248,7 @@ class RAGPipeline(
                                 ) -> None:
                                     if content:
                                         accumulated_resp.append(content)
-                                    if self._on_chunk and content:
+                                    if self._on_chunk and (content or _reasoning):
                                         self._on_chunk(content, _reasoning)
 
                                 enum_max_tokens = self._config.llm_max_tokens
@@ -1340,7 +1346,7 @@ class RAGPipeline(
                         def on_chunk(content: str, _reasoning: str | None) -> None:
                             if content:
                                 accumulated_resp.append(content)
-                            if self._on_chunk and content:
+                            if self._on_chunk and (content or _reasoning):
                                 self._on_chunk(content, _reasoning)
 
                         self._llm_provider.stream_chat(
@@ -1459,7 +1465,7 @@ class RAGPipeline(
                             def on_chunk(content: str, _reasoning: str | None) -> None:
                                 if content:
                                     accumulated.append(content)
-                                if self._on_chunk and content:
+                                if self._on_chunk and (content or _reasoning):
                                     self._on_chunk(content, _reasoning)
 
                             await self._llm_provider.stream_chat_async(
@@ -1610,7 +1616,7 @@ class RAGPipeline(
                             def on_chunk(content: str, _reasoning: str | None) -> None:
                                 if content:
                                     accumulated.append(content)
-                                if self._on_chunk and content:
+                                if self._on_chunk and (content or _reasoning):
                                     self._on_chunk(content, _reasoning)
 
                             await self._llm_provider.stream_chat_async(

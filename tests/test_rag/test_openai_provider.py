@@ -137,6 +137,42 @@ class TestOpenAILLMProviderGenerate:
                 call_kwargs = mock_client.chat.completions.create.call_args[1]
                 assert call_kwargs["max_tokens"] == 512
 
+    def test_generate_forwards_repetition_penalty_when_enabled(self):
+        """Test that repetition_penalty is forwarded via extra_body when > 1.0."""
+        with patch.dict(os.environ, {"SECONDBRAIN_OPENAI_API_KEY": "test-key"}):
+            with patch("secondbrain.rag.providers.openai.OpenAI") as mock_client_class:
+                mock_response = MagicMock()
+                mock_response.choices = [
+                    MagicMock(message=MagicMock(content="Response"))
+                ]
+                mock_client = MagicMock()
+                mock_client.chat.completions.create.return_value = mock_response
+                mock_client_class.return_value = mock_client
+
+                provider = OpenAILLMProvider(repetition_penalty=1.2)
+                provider.generate("Test")
+
+                call_kwargs = mock_client.chat.completions.create.call_args[1]
+                assert call_kwargs["extra_body"] == {"repetition_penalty": 1.2}
+
+    def test_generate_omits_repetition_penalty_by_default(self):
+        """Test that no extra_body is sent when repetition_penalty is disabled (1.0)."""
+        with patch.dict(os.environ, {"SECONDBRAIN_OPENAI_API_KEY": "test-key"}):
+            with patch("secondbrain.rag.providers.openai.OpenAI") as mock_client_class:
+                mock_response = MagicMock()
+                mock_response.choices = [
+                    MagicMock(message=MagicMock(content="Response"))
+                ]
+                mock_client = MagicMock()
+                mock_client.chat.completions.create.return_value = mock_response
+                mock_client_class.return_value = mock_client
+
+                provider = OpenAILLMProvider()
+                provider.generate("Test")
+
+                call_kwargs = mock_client.chat.completions.create.call_args[1]
+                assert call_kwargs["extra_body"] is None
+
     def test_generate_uses_default_temperature_when_not_specified(self):
         """Test that default temperature is used when not specified."""
         with patch.dict(os.environ, {"SECONDBRAIN_OPENAI_API_KEY": "test-key"}):
