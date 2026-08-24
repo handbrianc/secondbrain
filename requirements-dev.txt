@@ -38,7 +38,7 @@ mkdocstrings-python==2.0.3
 mkdocs-material==9.7.6
 
 # Build and packaging
-pyinstaller==6.20.0
+pyinstaller==6.22.2
 
 # Testing utilities
 mongomock==4.3.0
