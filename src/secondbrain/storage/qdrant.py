@@ -95,8 +95,6 @@ class QdrantVectorStorage:
 
     def _ensure_collection(self) -> None:
         """Provision collection + payload indexes once per instance (locked)."""
-        if self._collection_ready:
-            return
         with self._collection_lock:
             if self._collection_ready:
                 return

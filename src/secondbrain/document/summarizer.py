@@ -14,9 +14,10 @@ Summarizer
 from __future__ import annotations
 
 import re
+from collections import Counter
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 from secondbrain.logging import get_logger
 
@@ -41,6 +42,30 @@ Aim for roughly {target_tokens} tokens. Write enough to fully convey the substan
 {excerpts}
 
 ## Summary:
+"""
+
+
+# Used to fold the per-window partial summaries produced by map-reduce back into
+# a single coherent cover-all summary when a chapter/section exceeds the input
+# budget (see ``Summarizer._summarize_windowed``).
+MERGE_SUMMARIES_PROMPT = """\
+You are a knowledgeable research assistant.
+You are given several partial summaries, each describing a different part of the
+same document. Combine them into ONE coherent, well-structured summary that covers
+the combined substance without repeating the same points multiple times.
+
+Write a thorough combined summary that:
+- Covers the main ideas, key arguments, methods, and findings across ALL partials in depth.
+- Includes significant names, numbers, definitions, and concrete examples from across the parts.
+- Organises the result into several clear paragraphs: an overview, the key points, and a short conclusion.
+- Does NOT simply restate the partial headings or repeat each partial verbatim.
+
+Aim for roughly {target_tokens} tokens. Respond in the same language as the partial summaries.
+
+## Partial Summaries
+{partials}
+
+## Combined Summary:
 """
 
 
@@ -85,6 +110,16 @@ class Summarizer:
         summary (default 512).
     summary_model
         Optional model override passed to the LLM provider.
+    max_input_chars
+        Hard cap on the total number of characters of document text sent to
+        the LLM in a single request (default 16000). When the collected
+        excerpts exceed this, map-reduce summarisation is used instead of a
+        single call, preventing context-window overflow and the degenerate
+        "token soup" output that follows it.
+    max_windows
+        Upper bound on map-reduce partial windows (default 8) so that an
+        arbitrarily large chapter cannot spawn an unbounded number of LLM
+        calls. When exceeded the excerpts are truncated to the budget.
     """
 
     def __init__(
@@ -95,12 +130,16 @@ class Summarizer:
         *,
         max_summary_tokens: int = 512,
         summary_model: str | None = None,
+        max_input_chars: int = 16000,
+        max_windows: int = 8,
     ) -> None:
         self._llm = llm_provider
         self._embedder = embedder
         self._storage = storage
         self._max_tokens = max_summary_tokens
         self._model = summary_model
+        self._max_input_chars = max(1, max_input_chars)
+        self._max_windows = max(1, max_windows)
         self._logger = get_logger(__name__)
         self._chapter_map_cache: dict[str, dict[int, int]] = {}
 
@@ -155,11 +194,7 @@ class Summarizer:
             f"The following excerpts belong to {chapter_title}. "
             "Please summarise the main ideas across all of them."
         )
-        summary_text = await self._llm.agenerate(
-            prompt=self._build_summary_prompt(chunks, context),
-            temperature=0.5,
-            max_tokens=self._max_tokens,
-        )
+        summary_text = await self._summarize(chunks, context)
 
         return ChapterSummary(
             chapter_id=chapter_id,
@@ -211,11 +246,7 @@ class Summarizer:
             f"The following excerpts belong specifically to {section_title} "
             "of the document."
         )
-        summary_text = await self._llm.agenerate(
-            prompt=self._build_summary_prompt(chunks, context),
-            temperature=0.5,
-            max_tokens=self._max_tokens,
-        )
+        summary_text = await self._summarize(chunks, context)
 
         return SectionSummary(
             section_id=section_id,
@@ -272,9 +303,7 @@ class Summarizer:
                 )
             )
         except Exception as exc:
-            self._logger.error(
-                "Failed to fetch chapter %s chunks: %s", chapter_id, exc
-            )
+            self._logger.error("Failed to fetch chapter %s chunks: %s", chapter_id, exc)
             return []
 
         if not include_subsections:
@@ -358,9 +387,7 @@ class Summarizer:
             self._chapter_map_cache[source_file] = {}
             return {}
         page_map: dict[int, int] = {}
-        ordered = sorted(
-            chunks, key=lambda c: c.get("page_number") or 0
-        )
+        ordered = sorted(chunks, key=lambda c: c.get("page_number") or 0)
         for c in ordered:
             if c.get("chunk_role") not in ("body", "caption"):
                 continue
@@ -392,14 +419,14 @@ class Summarizer:
             self._logger.error("Failed to fetch section %s chunks: %s", section_id, exc)
             return []
 
-    def _build_summary_prompt(self, chunks: list[dict[str, Any]], context: str) -> str:
+    def _build_summary_prompt(self, excerpts: list[str], context: str) -> str:
         """Assemble a prompt string for the LLM summariser.
 
         Parameters
         ----------
-        chunks
-            List of chunk dictionaries; each must contain a ``chunk_text``
-            key with the textual content.
+        excerpts
+            Textual excerpts already extracted from chunks, ordered by
+            document position.
         context
             Additional free-form context prepended to the prompt.
 
@@ -408,12 +435,6 @@ class Summarizer:
         str
             Assembled prompt string ready to send to the LLM.
         """
-        excerpts: list[str] = []
-        for chunk in chunks:
-            text = chunk.get("chunk_text", chunk.get("text", ""))
-            if text:
-                excerpts.append(text)
-
         joined = "\n---\n".join(excerpts)
         # Desired summary length: meaningful detail, upper-bounded so a huge
         # llm_max_tokens cap doesn't make the "target length" line absurd.
@@ -422,6 +443,138 @@ class Summarizer:
             target_tokens=target_tokens,
             excerpts=f"{context}\n\n{joined}" if context else joined,
         )
+
+    def _extract_excerpts(self, chunks: list[dict[str, Any]]) -> list[str]:
+        """Return the ordered non-empty text excerpts from *chunks*."""
+        excerpts: list[str] = []
+        for chunk in chunks:
+            text = chunk.get("chunk_text", chunk.get("text", ""))
+            if text:
+                excerpts.append(text)
+        return excerpts
+
+    async def _summarize(self, chunks: list[dict[str, Any]], context: str) -> str:
+        """Summarize *chunks*, using map-reduce when input exceeds the budget.
+
+        Single LLM call when the combined excerpts fit within
+        ``self._max_input_chars``; otherwise the excerpts are split into
+        bounded windows, each summarised separately, and the partials are
+        folded back together via ``MERGE_SUMMARIES_PROMPT``. This prevents a
+        chapter/section larger than the model's context window from being
+        sent whole, which previously produced truncated, degenerate output.
+        """
+        excerpts = self._extract_excerpts(chunks)
+        if not excerpts:
+            return ""
+        if self._fits_in_budget(excerpts):
+            prompt = self._build_summary_prompt(excerpts, context)
+            return await self._generate_with_guard(prompt)
+
+        partials: list[str] = []
+        for window in self._window_excerpts(excerpts):
+            prompt = self._build_summary_prompt(window, context)
+            partial = await self._generate_with_guard(prompt)
+            if partial:
+                partials.append(partial)
+
+        if not partials:
+            return ""
+        if len(partials) == 1:
+            return partials[0]
+        return await self._generate_with_guard(self._build_merge_prompt(partials))
+
+    def _fits_in_budget(self, excerpts: list[str]) -> bool:
+        """Return True when the combined excerpts fit the single-call budget."""
+        return sum(len(e) for e in excerpts) <= self._max_input_chars
+
+    def _window_excerpts(self, excerpts: list[str]) -> list[list[str]]:
+        """Greedily group *excerpts* into windows within the char budget.
+
+        The number of windows is capped by ``self._max_windows``; when the
+        source is so large that the windows would exceed that cap, trailing
+        excerpts are dropped so the summariser never issues an unbounded
+        number of LLM calls.
+        """
+        kept = excerpts
+        hard_budget = self._max_input_chars * self._max_windows
+        total = sum(len(e) for e in kept)
+        if total > hard_budget:
+            acc = 0
+            kept = []
+            for text in excerpts:
+                if acc + len(text) > hard_budget:
+                    break
+                kept.append(text)
+                acc += len(text)
+
+        windows: list[list[str]] = []
+        current: list[str] = []
+        current_size = 0
+        for text in kept:
+            if current and current_size + len(text) > self._max_input_chars:
+                windows.append(current)
+                current = []
+                current_size = 0
+            current.append(text)
+            current_size += len(text)
+        if current:
+            windows.append(current)
+        return windows
+
+    def _build_merge_prompt(self, partials: list[str]) -> str:
+        """Build the fold prompt combining per-window partial summaries."""
+        target_tokens = max(300, min(self._max_tokens, 900))
+        numbered = "\n\n".join(
+            f"--- Partial summary {i + 1} ---\n{p}" for i, p in enumerate(partials)
+        )
+        return MERGE_SUMMARIES_PROMPT.format(
+            target_tokens=target_tokens,
+            partials=numbered,
+        )
+
+    async def _generate_with_guard(self, prompt: str) -> str:
+        """Generate a summary, rerunning once if the output looks degenerate.
+
+        Option C (fail-closed + gibberish guard): if the first response fails
+        the plausibility check, retry at a low temperature. If the retry is
+        still implausible, return an empty string rather than surfacing
+        token-soup to the caller.
+        """
+        text = cast(str, await self._llm.agenerate(
+            prompt=prompt, temperature=0.5, max_tokens=self._max_tokens
+        ))
+        if self._is_plausible_summary(text):
+            return text
+        self._logger.warning(
+            "Summariser output failed plausibility check; retrying at low temperature"
+        )
+        text = cast(str, await self._llm.agenerate(
+            prompt=prompt, temperature=0.1, max_tokens=self._max_tokens
+        ))
+        if self._is_plausible_summary(text):
+            return text
+        self._logger.error("Summariser output still implausible; returning empty summary")
+        return ""
+
+    @staticmethod
+    def _is_plausible_summary(text: str) -> bool:
+        """Detect degenerate/token-soup output (repetitive or low-diversity text).
+
+        A genuinely useful summary is non-trivial in length and lexically
+        varied; repetitive or single-token-dominated output signals the kind
+        of context-overflow degeneration the windowing is meant to prevent.
+        """
+        if not text or len(text.strip()) < 40:
+            return False
+        tokens = re.findall(r"[A-Za-z0-9']+", text.lower())
+        if not tokens:
+            return False
+        counts = Counter(tokens)
+        most_common_frac = counts.most_common(1)[0][1] / len(tokens)
+        if most_common_frac > 0.4:
+            return False
+        unique_frac = len(counts) / len(tokens)
+        return unique_frac >= 0.2
 
     @staticmethod
     def _token_budget_for(n_chunks: int, total_budget: int) -> int:

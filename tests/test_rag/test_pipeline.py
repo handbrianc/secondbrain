@@ -332,8 +332,7 @@ class TestRAGPipelineChat:
         pipeline_with_rewriter: RAGPipeline,
         mock_searcher: MagicMock,
     ) -> None:
-        """A no-result (knowledge-fallback) turn must be recorded so a later
-        follow-up can reference the most recent response."""
+        """Record a knowledge-fallback turn so a later follow-up can reference it."""
         session = ConversationSession("test-session", MagicMock(), context_window=10)
         mock_searcher.search.return_value = []
 

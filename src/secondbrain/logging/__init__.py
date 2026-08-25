@@ -64,6 +64,25 @@ def set_request_id(request_id: str | None = None) -> str:
     return request_id
 
 
+def _quiet_noisy_loggers() -> None:
+    # Third-party HTTP/telemetry loggers log one INFO line per request (httpx
+    # emits "HTTP Request: GET ... 200 OK" for qdrant and the LLM/embedding
+    # providers), which floods the console during normal use. Raise them to
+    # WARNING so only real warnings/errors surface.
+    for name in (
+        "httpx",
+        "httpcore",
+        "httpcore.http11",
+        "httpcore.http12",
+        "urllib3",
+        "openai",
+        "qdrant_client",
+        "qpylib",
+        "opentelemetry",
+    ):
+        logging.getLogger(name).setLevel(logging.WARNING)
+
+
 def setup_logging(
     verbose: bool = False,
     json_format: bool = False,
@@ -92,6 +111,8 @@ def setup_logging(
         level = getattr(logging, level_name.upper(), logging.WARNING)
     else:
         level = logging.WARNING
+
+    _quiet_noisy_loggers()
 
     # If handlers are already configured, just update the level
     if logging.root.handlers:

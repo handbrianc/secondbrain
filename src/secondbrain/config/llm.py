@@ -32,6 +32,16 @@ class LLMMixin:
         default=0.1,
         description="LLM generation temperature (0.0-2.0)",
     )
+    llm_summary_temperature: float = Field(
+        default=0.7,
+        description=(
+            "Temperature for chapter/section summary window generation (0.0-2.0). "
+            "Independent of ``llm_temperature``: long comprehensive summaries are "
+            "more prone to degenerate into word-salad at high temperature, so a "
+            "lower value here keeps them stable while leaving general chat sampling "
+            "untouched."
+        ),
+    )
     llm_repetition_penalty: float = Field(
         default=1.0,
         description=(
@@ -56,6 +66,14 @@ class LLMMixin:
         """Validate LLM temperature is between 0.0 and 2.0."""
         if v < 0.0 or v > 2.0:
             raise ValueError("llm_temperature must be between 0.0 and 2.0")
+        return v
+
+    @field_validator("llm_summary_temperature")
+    @classmethod
+    def validate_llm_summary_temperature(cls, v: float) -> float:
+        """Validate the summary temperature is between 0.0 and 2.0."""
+        if v < 0.0 or v > 2.0:
+            raise ValueError("llm_summary_temperature must be between 0.0 and 2.0")
         return v
 
     @field_validator("llm_repetition_penalty")

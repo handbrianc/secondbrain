@@ -56,6 +56,26 @@ class RagMixin:
             raise ValueError("rag_max_context_chars must be between 1000 and 500000")
         return v
 
+    rag_summary_context_chars: int = Field(
+        default=16000,
+        ge=1000,
+        le=500000,
+        description=(
+            "Maximum context (in characters) for the single-chapter summary window. "
+            "Independent of ``rag_max_context_chars``: a whole chapter squeezed into a "
+            "very large window makes a small model confabulate specific figures, so "
+            "the summary window is capped to a size it can summarize faithfully."
+        ),
+    )
+
+    @field_validator("rag_summary_context_chars")
+    @classmethod
+    def validate_rag_summary_context_chars(cls, v: int) -> int:
+        """Validate rag_summary_context_chars is between 1000 and 500000."""
+        if v < 1000 or v > 500000:
+            raise ValueError("rag_summary_context_chars must be between 1000 and 500000")
+        return v
+
     rag_chunk_preview_chars: int = Field(
         default=1200,
         ge=100,
@@ -102,7 +122,7 @@ class RagMixin:
             "    different documents without attribution. If the user asked about a\n"
             "    specific document, prioritize information from that document and note\n"
             "    if other documents also contain relevant information.\n"
-            "14. Always answer the CURRENT question that appears last in the prompt. Any \"Conversation History\" is background from earlier in the session only: use it only to resolve an ambiguous reference in the current question. If the user has changed the subject, answer the new subject - never repeat your previous answers or keep answering an earlier topic.\n"
+            '14. Always answer the CURRENT question that appears last in the prompt. Any "Conversation History" is background from earlier in the session only: use it only to resolve an ambiguous reference in the current question. If the user has changed the subject, answer the new subject - never repeat your previous answers or keep answering an earlier topic.\n'
             "\n"
             "When the answer is in the context:\n"
             "- Answer the question completely and at length: develop the point in several sentences to a full paragraph, not a sentence or two.\n"

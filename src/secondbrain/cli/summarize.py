@@ -92,6 +92,7 @@ def summarize(
 
     max_tokens = getattr(cfg, "llm_max_tokens", 512)
     summary_model = getattr(cfg, "llm_model", None)
+    max_input_chars = getattr(cfg, "rag_max_context_chars", 16000)
 
     summarizer = Summarizer(
         llm_provider=llm_provider,
@@ -99,6 +100,7 @@ def summarize(
         storage=storage,
         max_summary_tokens=max_tokens,
         summary_model=summary_model,
+        max_input_chars=max_input_chars,
     )
 
     async def _run() -> tuple[bool, str]:

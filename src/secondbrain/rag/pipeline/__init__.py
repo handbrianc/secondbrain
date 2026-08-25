@@ -744,9 +744,9 @@ class RAGPipeline(
                 # most universal approach — works for any document regardless of TOC format.
                 appendix_sec_re = re.compile(r"\b([A-Za-z])\.\d+\s")
                 appendix_labels_found: set[str] = set()
-                for c in storage.get_body_chunks(src, limit=3500):
-                    txt = c.get("chunk_text", "")[:150]
-                    page = c.get("page_number") or 0
+                for chunk in storage.get_body_chunks(src, limit=3500):
+                    txt = chunk.get("chunk_text", "")[:150]
+                    page = chunk.get("page_number") or 0
 
                     # Detect appendix labels from body section numbering
                     am = appendix_sec_re.search(txt)
@@ -760,8 +760,8 @@ class RAGPipeline(
                             # Skip cross-references like "9.2 Virtual
                             # Networking Hardware on page 144" which
                             # appear on pages belonging to OTHER chapters.
-                            after = txt[m.end() : m.end() + 60]
-                            has_on_page = bool(re.search(r"\bon\s+page\s+\d+", after))
+                            after_txt = txt[m.end() : m.end() + 60]
+                            has_on_page = bool(re.search(r"\bon\s+page\s+\d+", after_txt))
                             if has_on_page:
                                 continue
                             chapter_first_pg[ch] = page
@@ -778,13 +778,13 @@ class RAGPipeline(
                     if n not in chapter_first_pg
                 ]
                 if missing:
-                    for c in storage.get_body_chunks(src, limit=3500):
-                        txt = c.get("chunk_text", "")[:150]
+                    for chunk in storage.get_body_chunks(src, limit=3500):
+                        txt = chunk.get("chunk_text", "")[:150]
                         for ch_num in list(missing):
                             pat = re.compile(rf"\b{ch_num}\D")
                             if pat.search(txt):
                                 chapter_first_pg[ch_num] = int(
-                                    c.get("page_number") or 0
+                                    chunk.get("page_number") or 0
                                 )
                                 missing.remove(ch_num)
                         if not missing:
@@ -1225,52 +1225,86 @@ class RAGPipeline(
                     )
                 llm_fallback_roster += "\n"
 
-                prompt = self._build_prompt(query, context_text)
-
                 generation_start = time.perf_counter()
                 answer = ""
                 try:
-                    with trace_operation("rag_generation_iterative") as span:
-                        if span:
-                            span.set_attribute("rag.iterative_mode", True)
-                            span.set_attribute("rag.enumeration_mode", True)
-                            span.set_attribute("rag.top_k", top_k)
+                    if is_multi_chapter and chapter_buckets:
+                        # Map-reduce the chapter-by-chapter overview: one bounded
+                        # LLM call per chapter, then concatenate.  A single call
+                        # covering every chapter overflows the output token budget
+                        # and degenerates into token-soup after a few chapters.
+                        with trace_operation("rag_generation_iterative") as span:
+                            if span:
+                                span.set_attribute("rag.iterative_mode", True)
+                                span.set_attribute("rag.enumeration_mode", True)
+                                span.set_attribute("rag.top_k", top_k)
+                            answer = self._generate_multi_chapter_summary(
+                                chapter_keys, chapter_buckets, ch_titles
+                            )
+                    elif has_section_target and not raw_section_target and final_chunks:
+                        # Single-chapter detailed breakdown (e.g. "tell me about
+                        # chapter 18").  Map-reduce by section: summarizing the
+                        # whole chapter in one call overflows the output token
+                        # budget and degenerates into token-soup part-way through.
+                        with trace_operation("rag_generation_iterative") as span:
+                            if span:
+                                span.set_attribute("rag.iterative_mode", True)
+                                span.set_attribute("rag.enumeration_mode", True)
+                                span.set_attribute("rag.top_k", top_k)
+                            chapter_title = next(
+                                (
+                                    t
+                                    for ct, _s, t in chapters_to_cover
+                                    if str(ct) == str(enum_target)
+                                ),
+                                "",
+                            )
+                            answer = self._generate_single_chapter_summary(
+                                final_chunks, str(enum_target), chapter_title
+                            )
+                    else:
+                        prompt = self._build_prompt(query, context_text)
+                        with trace_operation("rag_generation_iterative") as span:
+                            if span:
+                                span.set_attribute("rag.iterative_mode", True)
+                                span.set_attribute("rag.enumeration_mode", True)
+                                span.set_attribute("rag.top_k", top_k)
 
-                        if self._config.streaming_enabled and hasattr(
-                            self._llm_provider, "stream_chat"
-                        ):
-                            try:
-                                messages = [{"role": "user", "content": prompt}]
-                                accumulated_resp: list[str] = []
+                            if self._config.streaming_enabled and hasattr(
+                                self._llm_provider, "stream_chat"
+                            ):
+                                try:
+                                    messages = [{"role": "user", "content": prompt}]
+                                    accumulated_resp: list[str] = []
 
-                                def on_chunk(
-                                    content: str, _reasoning: str | None
-                                ) -> None:
-                                    if content:
-                                        accumulated_resp.append(content)
-                                    if self._on_chunk and (content or _reasoning):
-                                        self._on_chunk(content, _reasoning)
+                                    def on_chunk(
+                                        content: str, _reasoning: str | None
+                                    ) -> None:
+                                        if content:
+                                            accumulated_resp.append(content)
+                                        if self._on_chunk and (content or _reasoning):
+                                            self._on_chunk(content, _reasoning)
 
+                                    enum_max_tokens = self._config.llm_max_tokens
+                                    self._llm_provider.stream_chat(
+                                        messages=messages,
+                                        on_chunk=on_chunk,
+                                        temperature=self._config.llm_temperature,
+                                        max_tokens=enum_max_tokens,
+                                    )
+                                    answer = "".join(accumulated_resp)
+                                except Exception:
+                                    answer = ""
+
+                            if not answer or not answer.strip():
                                 enum_max_tokens = self._config.llm_max_tokens
-                                self._llm_provider.stream_chat(
-                                    messages=messages,
-                                    on_chunk=on_chunk,
+                                answer = self._llm_provider.generate(
+                                    prompt=prompt,
                                     temperature=self._config.llm_temperature,
                                     max_tokens=enum_max_tokens,
                                 )
-                                answer = "".join(accumulated_resp)
-                            except Exception:
-                                answer = ""
-
-                        if not answer or not answer.strip():
-                            enum_max_tokens = self._config.llm_max_tokens
-                            answer = self._llm_provider.generate(
-                                prompt=prompt,
-                                temperature=self._config.llm_temperature,
-                                max_tokens=enum_max_tokens,
-                            )
-                            if self._on_chunk and answer:
-                                self._on_chunk(answer, None)
+                                if self._on_chunk and answer:
+                                    self._on_chunk(answer, None)
                 except Exception as e:
                     logger.error(
                         "Iterative query generation failed: %s: %s", type(e).__name__, e

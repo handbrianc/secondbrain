@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from secondbrain.document.summarizer import Summarizer
 
 

@@ -150,7 +150,7 @@ class TestChatCommands:
             )
             assert result.exit_code == 0
             mock_session.clear_history.assert_called_once()
-            assert "History cleared" in result.output
+            assert "Conversation history cleared" in result.output
             assert "Goodbye!" in result.output
 
     def test_interactive_chat_error_handling(self) -> None:

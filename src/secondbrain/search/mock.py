@@ -193,9 +193,7 @@ class MockSearcher:
         """Return the distinct source files across the mock chunks."""
         return list(
             dict.fromkeys(
-                c.get("source_file")
-                for c in self._test_chunks
-                if c.get("source_file")
+                c.get("source_file") for c in self._test_chunks if c.get("source_file")
             )
         )
 

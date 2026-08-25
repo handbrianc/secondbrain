@@ -5,6 +5,7 @@ against the stored embeddings using vector similarity matching.
 """
 
 import asyncio
+import inspect
 import logging
 import re
 from collections.abc import Sequence
@@ -216,11 +217,15 @@ class Searcher:
 
             async def _generate_embedding(embed_text: str) -> list[float]:
                 generate_async = getattr(self.embedding_gen, "generate_async", None)
-                if callable(generate_async) and asyncio.iscoroutinefunction(
+                if callable(generate_async) and inspect.iscoroutinefunction(
                     generate_async
                 ):
-                    return await generate_async(embed_text)
-                return await asyncio.to_thread(self.embedding_gen.generate, embed_text)
+                    embedding = await generate_async(embed_text)
+                    return [float(v) for v in embedding]
+                embedding = await asyncio.to_thread(
+                    self.embedding_gen.generate, embed_text
+                )
+                return [float(v) for v in embedding]
 
             query_embedding = await self.embedding_cache.get_or_create_async(
                 sanitized_query, _generate_embedding

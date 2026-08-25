@@ -200,11 +200,14 @@ class ConversationSession:
         return self.get_history(limit=self._context_window)
 
     def trim_context(self) -> None:
-        """Trim history to context window size.
+        """Trim the in-memory context buffer to the context window size.
 
-        Removes oldest messages from the in-memory cache if the total
-        message count exceeds the context_window. Updates storage with
-        the trimmed message array.
+        Bounds the in-memory recent-messages buffer used for LLM context so a
+        long session does not grow unboundedly in memory. Persisted history in
+        storage is intentionally left intact -- sessions must keep their full
+        conversation (viewable with ``secondbrain chat --history``), and the
+        window is applied at read time via :meth:`get_context_messages` /
+        :meth:`get_history`.
 
         Example:
         --------
@@ -218,7 +221,6 @@ class ConversationSession:
             return
 
         self._history = self._history[-self._context_window :]
-        self._storage.update_messages(self._session_id, self._history)
 
     def clear_history(self) -> None:
         """Clear all messages from session.

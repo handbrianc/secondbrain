@@ -1,6 +1,7 @@
 """Search, list, and delete commands."""
 
 import sys
+from collections.abc import Sequence
 from typing import Any
 
 import click
@@ -122,7 +123,7 @@ def ls(
     ):
         if all:
             limit = MAX_LIST_LIMIT
-        results: list[ChunkInfo] = lister.list_chunks(
+        results: Sequence[ChunkInfo] = lister.list_chunks(
             source_filter=source,
             chunk_id=chunk_id,
             limit=limit,

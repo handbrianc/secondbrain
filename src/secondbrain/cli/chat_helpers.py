@@ -1,6 +1,7 @@
 """Chat support helpers: spinner, single-turn, and interactive chat."""
 
 import logging
+import os
 import readline
 import sys
 from pathlib import Path
@@ -60,47 +61,113 @@ def _run_chat_with_spinner(
 
     import sys as _sys
 
-    first: tuple[str, str] | None = None
-    with console.status("[bold cyan]Thinking...", spinner="dots"):
-        while True:
-            try:
-                first = chunk_queue.get(timeout=0.1)
-                break
-            except queue.Empty:
-                if done_event.is_set():
-                    break
-
-    # Reasoning tokens stream dimmed (they arrive first for reasoning models),
-    # then the final answer streams normally. Both stop the spinner immediately
-    # so the user sees output the moment the LLM starts responding.
-    dim_code = "\x1b[2m"
-    reset_code = "\x1b[0m"
-    in_reasoning: list[bool] = [False]
+    # Thinking/reasoning renders differently per terminal because there is no
+    # universal terminal fold escape:
+    #   - Fold-capable terminals (iTerm2 OSC-1337, Windows Terminal OSC-133 C/D):
+    #     reasoning is buffered and emitted once as a foldable block.
+    #   - SECONDBRAIN_SHOW_THINKING=1 on other terminals (Ghostty, Linux, ...):
+    #     reasoning streams live in dark gray, then a blank line, then the answer.
+    #   - Default on other terminals: reasoning buffers and collapses to a single
+    #     dark-gray summary line.
+    is_tty = _sys.stdout.isatty()
+    is_iterm = os.environ.get("TERM_PROGRAM") == "iTerm.app" and is_tty
+    is_wt = bool(os.environ.get("WT_SESSION")) and is_tty
+    show_thinking = (
+        os.environ.get("SECONDBRAIN_SHOW_THINKING", "").strip().lower()
+        in ("1", "true", "yes")
+    )
+    fold_thinking = is_iterm or is_wt
+    live_thinking = show_thinking and not fold_thinking
+    osc1337 = "\x1b]1337;"
+    osc133 = "\x1b]133;"
+    bel = "\x07"
+    gray_on = "\x1b[38;2;128;128;128m"
+    reset = "\x1b[0m"
+    reasoning_buffer: list[str] = []
+    live_started: list[bool] = [False]
     wrote_content: list[bool] = [False]
+
+    def _flush_buffered_thinking() -> None:
+        if not reasoning_buffer:
+            return
+        text = "".join(reasoning_buffer)
+        if is_iterm:
+            _sys.stdout.write(
+                f"{osc1337}Block=id=thinking;attr=start{bel}{text}"
+                f"{osc1337}UpdateBlock=id=thinking;action=fold{bel}"
+                f"{osc1337}Block=id=thinking;attr=end{bel}\n"
+            )
+            _sys.stdout.flush()
+        elif is_wt:
+            _sys.stdout.write(f"{osc133}C{bel}{text}{osc133}D{bel}\n")
+            _sys.stdout.flush()
+        else:
+            console.print(
+                f"\n\u25b8 Thinking: {len(text)} chars (collapsed)", style="#808080"
+            )
+        reasoning_buffer.clear()
+
+    def _stream_thinking_live(reasoning: str) -> None:
+        if not live_started[0]:
+            console.print("\u25b8 Thinking:", style="#808080")
+            live_started[0] = True
+        _sys.stdout.write(f"{gray_on}{reasoning}{reset}")
+        _sys.stdout.flush()
+
+    def _separate_before_answer() -> None:
+        if live_started[0]:
+            _sys.stdout.write("\n")
+            _sys.stdout.flush()
+            live_started[0] = False
 
     def _emit(content: str, reasoning: str) -> None:
         if reasoning:
-            if not in_reasoning[0]:
-                _sys.stdout.write(dim_code)
-                in_reasoning[0] = True
-            _sys.stdout.write(reasoning)
-            _sys.stdout.flush()
+            if live_thinking:
+                _stream_thinking_live(reasoning)
+            else:
+                reasoning_buffer.append(reasoning)
+            return
+        _flush_buffered_thinking()
+        _separate_before_answer()
         if content:
-            if in_reasoning[0]:
-                _sys.stdout.write(reset_code)
-                in_reasoning[0] = False
             _sys.stdout.write(content)
             _sys.stdout.flush()
             wrote_content[0] = True
 
-    if first is not None:
-        _emit(*first)
+    first_token: tuple[str, str] | None = None
+    with console.status("[bold cyan]Thinking...", spinner="dots"):
+        while first_token is None:
+            try:
+                token = chunk_queue.get(timeout=0.1)
+            except queue.Empty:
+                if done_event.is_set():
+                    break
+                continue
+            content, reasoning = token
+            if reasoning and not content:
+                if live_thinking:
+                    first_token = token
+                else:
+                    reasoning_buffer.append(reasoning)
+                # Lift the spinner as soon as any token (incl. reasoning) arrives
+                # so a thinking-model chat is never stuck on "Thinking..." while
+                # it reasons in the background.
+                if first_token is None:
+                    first_token = ("", reasoning)
+                continue
+            first_token = token
+
+    if first_token is not None:
+        _emit(*first_token)
+
     while not done_event.is_set() or not chunk_queue.empty():
         with contextlib.suppress(queue.Empty):
             _emit(*chunk_queue.get(timeout=0.1))
-    if in_reasoning[0]:
-        _sys.stdout.write(reset_code)
+
+    _flush_buffered_thinking()
+    _separate_before_answer()
     if wrote_content[0]:
+        _sys.stdout.write("\n")
         _sys.stdout.flush()
 
     t.join()
@@ -151,12 +218,18 @@ def _single_turn_chat(
 
     with ConversationStorage() as storage:
         if session is None:
-            session_obj = ConversationSession.create(storage=storage)
+            session_obj = ConversationSession.create(
+                storage=storage, context_window=cfg.rag_context_window
+            )
             console.print(f"[dim]Created new session: {session_obj.session_id}[/dim]")
         else:
-            loaded = ConversationSession.load(session, storage)
+            loaded = ConversationSession.load(
+                session, storage, context_window=cfg.rag_context_window
+            )
             if loaded is None:
-                session_obj = ConversationSession.create(session, storage)
+                session_obj = ConversationSession.create(
+                    session, storage, context_window=cfg.rag_context_window
+                )
             else:
                 session_obj = loaded
 
@@ -219,12 +292,18 @@ def _interactive_chat(
 
     with ConversationStorage() as storage:
         if session is None:
-            session_obj = ConversationSession.create(storage=storage)
+            session_obj = ConversationSession.create(
+                storage=storage, context_window=cfg.rag_context_window
+            )
             console.print(f"[dim]Created new session: {session_obj.session_id}[/dim]")
         else:
-            loaded = ConversationSession.load(session, storage)
+            loaded = ConversationSession.load(
+                session, storage, context_window=cfg.rag_context_window
+            )
             if loaded is None:
-                session_obj = ConversationSession.create(session, storage)
+                session_obj = ConversationSession.create(
+                    session, storage, context_window=cfg.rag_context_window
+                )
                 console.print(
                     f"[dim]Created new session: {session_obj.session_id}[/dim]"
                 )
@@ -245,7 +324,7 @@ def _interactive_chat(
 
     readline.set_history_length(1000)
 
-    chat_history = []
+    chat_history: list[str] = []
     while True:
         try:
             try:
@@ -264,7 +343,17 @@ def _interactive_chat(
                     break
                 elif command == "/clear":
                     session_obj.clear_history()
-                    console.print("[green]History cleared[/green]")
+                    chat_history.clear()
+                    try:
+                        readline.clear_history()
+                        readline.write_history_file(history_file)
+                    except OSError as exc:
+                        logger.debug(
+                            "Failed to reset persisted chat history: %s", exc
+                        )
+                    console.print(
+                        "[green]Conversation history cleared (input history reset)[/green]"
+                    )
                     continue
                 elif command == "/help":
                     console.print("[bold]Commands:[/bold]")

@@ -268,9 +268,7 @@ class DocumentRouter:
         # Normalize each token so an in-sentence filename like "index.html"
         # (not at end-of-string, so _normalize_name leaves the extension)
         # still matches its bare-name registry key "index".
-        query_tokens = {
-            t for word in q.split() for t in _normalize_name(word).split()
-        }
+        query_tokens = {t for word in q.split() for t in _normalize_name(word).split()}
 
         # Phase 1: Jaccard similarity on token sets
         best_name: str | None = None

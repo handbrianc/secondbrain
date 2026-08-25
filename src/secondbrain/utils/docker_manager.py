@@ -16,9 +16,10 @@ Usage:
 """
 
 import logging
-import subprocess
+import subprocess  # nosec B404
 import time
 from pathlib import Path
+from typing import Any
 
 from rich.console import Console
 
@@ -113,7 +114,7 @@ class DockerManager:
             True if command is available, False otherwise.
         """
         try:
-            subprocess.run(  # nosec B603
+            subprocess.run(  # nosec B603, B607
                 [command, "--version"],
                 capture_output=True,
                 check=True,
@@ -147,7 +148,7 @@ class DockerManager:
             return False
 
         try:
-            subprocess.run(  # nosec B603
+            subprocess.run(  # nosec B603, B607
                 ["docker", "compose", "version"],
                 capture_output=True,
                 check=True,
@@ -178,7 +179,7 @@ class DockerManager:
             return False
 
         try:
-            result = subprocess.run(  # nosec B603
+            result = subprocess.run(  # nosec B603, B607
                 [
                     "docker",
                     "ps",
@@ -241,7 +242,7 @@ class DockerManager:
         logger.info("Starting Qdrant via docker compose...")
 
         try:
-            result = subprocess.run(  # nosec B603
+            result = subprocess.run(  # nosec B603, B607
                 [
                     "docker",
                     "compose",
@@ -313,27 +314,11 @@ class DockerManager:
         storage = StorageFactory.create_from_config()
 
         while time.time() - start_time < max_wait_seconds:
-            try:
-                # First check if we can connect
-                if storage.validate_connection():
-                    try:
-                        wait_index = getattr(
-                            storage, "_wait_for_index_ready", None
-                        )
-                        if callable(wait_index):
-                            wait_index()
-                        logger.info("Qdrant is ready for use")
-                        return
-                    except Exception as index_err:
-                        # Index not ready yet, continue waiting
-                        last_error = f"Index not ready: {index_err}"
-                        logger.debug("Waiting for index: %s", index_err)
-                else:
-                    last_error = "Connection failed"
-
-            except Exception as e:
-                last_error = str(e)
-                logger.debug("Qdrant not ready yet: %s", e)
+            ready, last_error = DockerManager._probe_qdrant_readiness(
+                storage, last_error
+            )
+            if ready:
+                return
 
             time.sleep(check_interval)
 
@@ -343,6 +328,24 @@ class DockerManager:
             f"Last error: {last_error}. "
             "Check Docker logs: docker logs secondbrain-qdrant"
         )
+
+    @staticmethod
+    def _probe_qdrant_readiness(
+        storage: Any, last_error: str | None
+    ) -> tuple[bool, str | None]:
+        """Attempt one Qdrant readiness probe; report whether Qdrant is ready."""
+        try:
+            ready = storage.validate_connection()
+            if not ready:
+                return False, "Connection failed"
+            wait_index = getattr(storage, "_wait_for_index_ready", None)
+            if callable(wait_index):
+                wait_index()
+        except Exception as index_err:
+            logger.debug("Qdrant not ready yet: %s", index_err)
+            return False, f"Index not ready: {index_err}"
+        logger.info("Qdrant is ready for use")
+        return True, last_error
 
     def ensure_qdrant_running(
         self,
@@ -393,6 +396,10 @@ class DockerManager:
         if verbose:
             console.print("[cyan]Starting Qdrant via Docker...[/cyan]")
 
+        self._start_qdrant_checked(verbose)
+
+    def _start_qdrant_checked(self, verbose: bool) -> None:
+        """Start Qdrant via Docker and wait for readiness, wrapping errors."""
         try:
             self.start_qdrant()
         except DockerComposeError as e:

@@ -211,9 +211,7 @@ class StructuralIntentParser:
 
         if list_score >= _MIN_CONFIDENCE_THRESHOLD:
             reason = _build_reason("source listing", list_score, normalized)
-            candidates.append(
-                (list_score, QueryIntent.LIST_SOURCES, None, reason)
-            )
+            candidates.append((list_score, QueryIntent.LIST_SOURCES, None, reason))
 
         if chapter_score >= _MIN_CONFIDENCE_THRESHOLD:
             target = _extract_chapter_target(normalized)

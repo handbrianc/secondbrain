@@ -308,7 +308,7 @@ def _embed_unique_chunks(
                     embedding_cache.set(text, emb)
 
             for result in batch_results:
-                assert result is not None
+                assert result is not None  # nosec B101
                 embeddings.append(result)
 
         processed += len(slice_texts)

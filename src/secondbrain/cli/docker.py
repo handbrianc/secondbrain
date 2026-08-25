@@ -169,7 +169,7 @@ def stop(
         secondbrain stop --force               # Skip confirmation
     --------
     """
-    import subprocess
+    import subprocess  # nosec B404
 
     if compose_file is None:
         possible_paths = [
@@ -199,7 +199,7 @@ def stop(
     console.print(f"[cyan]Stopping Docker Compose stack from: {compose_file}[/cyan]")
 
     if (
-        subprocess.run(  # nosec B603
+        subprocess.run(  # nosec B603, B607
             ["docker", "--version"], capture_output=True, check=False
         ).returncode
         != 0
@@ -224,7 +224,7 @@ def stop(
         if remove_volumes:
             cmd.append("-v")
 
-        result = subprocess.run(  # nosec B603
+        result = subprocess.run(  # nosec B603, B607
             cmd,
             capture_output=True,
             text=True,

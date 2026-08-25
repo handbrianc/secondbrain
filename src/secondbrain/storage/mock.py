@@ -365,7 +365,10 @@ class MockVectorStorage:
         chunks = [
             c
             for c in self._chunks.values()
-            if (source_prefix is None or str(c.get("source_file", "")).startswith(source_prefix))
+            if (
+                source_prefix is None
+                or str(c.get("source_file", "")).startswith(source_prefix)
+            )
             and _matches(c)
         ]
         chunks.sort(key=lambda c: c.get("page_number") or 0)
