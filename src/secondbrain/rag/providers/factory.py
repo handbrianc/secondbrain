@@ -35,11 +35,15 @@ class LLMProviderFactory:
             return OpenAILLMProvider(
                 model=config.llm_model,
                 temperature=config.llm_temperature,
+                top_p=config.llm_top_p,
                 max_tokens=config.llm_max_tokens,
                 timeout=config.llm_timeout,
                 api_key=config.openai_api_key,
                 base_url=config.openai_base_url,
                 repetition_penalty=config.llm_repetition_penalty,
+                max_reasoning_chars=config.llm_max_reasoning_chars,
+                stream_idle_timeout_seconds=config.llm_stream_idle_timeout_seconds,
+                max_answer_chars=config.llm_max_answer_chars,
             )
         elif provider_type == "anthropic":
             from secondbrain.rag.providers.anthropic import AnthropicLLMProvider
@@ -47,6 +51,7 @@ class LLMProviderFactory:
             return AnthropicLLMProvider(
                 model=config.llm_model,
                 temperature=config.llm_temperature,
+                top_p=config.llm_top_p,
                 max_tokens=config.llm_max_tokens,
                 timeout=config.llm_timeout,
             )

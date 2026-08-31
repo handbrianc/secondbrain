@@ -12,7 +12,7 @@ class ConversationSession:
     """Manages conversation state and history in memory with persistence.
 
     Provides an in-memory cache of conversation messages with automatic
-    persistence to MongoDB via ConversationStorage. Supports context window
+    persistence to SQLite via ConversationStorage. Supports context window
     management to limit the number of messages retained for LLM context.
 
     Attributes:

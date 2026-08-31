@@ -1,7 +1,7 @@
-"""Mock VectorStorage for testing without MongoDB.
+"""Mock VectorStorage for testing without a live vector store.
 
 This provides an in-memory implementation of VectorStorage that mimics
-the behavior of the real MongoDB-based storage for testing purposes.
+the behavior of the real Qdrant-based storage for testing purposes.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from typing import Any
 class MockVectorStorage:
     """In-memory mock vector storage for testing.
 
-    Provides a MongoDB-like interface without requiring actual database connections.
+    Provides a vector-store-like interface without requiring actual database connections.
     Uses cosine similarity for semantic search simulation.
     """
 
@@ -463,7 +463,7 @@ class MockVectorStorage:
 
     @property
     def collection(self) -> Any:
-        """Stub for MongoDB collection attribute (returns stable mock across accesses)."""
+        """Stub for collection attribute (returns stable mock across accesses)."""
         if self._collection_stub is None:
             from unittest.mock import MagicMock
 
@@ -472,7 +472,7 @@ class MockVectorStorage:
 
     @property
     def db(self) -> Any:
-        """Stub for MongoDB db attribute (returns stable mock across accesses)."""
+        """Stub for db attribute (returns stable mock across accesses)."""
         if self._db_stub is None:
             from unittest.mock import MagicMock
 
@@ -481,7 +481,7 @@ class MockVectorStorage:
 
     @property
     def client(self) -> Any:
-        """Stub for MongoDB client attribute (returns stable mock across accesses)."""
+        """Stub for client attribute (returns stable mock across accesses)."""
         if self._client_stub is None:
             from unittest.mock import MagicMock
 

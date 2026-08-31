@@ -14,7 +14,7 @@ The contract under test:
   -> fast segments with correct page numbers, docling NOT invoked;
 - native text insufficient -> ``None`` (fall through to docling).
 
-No real docling / pypdfium2 inference and no real MongoDB are used. Docling is
+No real docling / pypdfium2 inference and no live vector store is used. Docling is
 stubbed by the ``tests/test_document/conftest.py`` session fixture, the native
 text source is monkeypatched, and config is driven via a fake ``config()``
 (matching the ``test_ocr_on_demand.py`` idiom).
@@ -29,7 +29,10 @@ import pytest
 
 from secondbrain.document import docling_factory, fast_text
 from secondbrain.document.fast_text import (
+    PDF_FAST_TEXT_CORRUPTION_RATIO,
     PDF_FAST_TEXT_MIN_CHARS,
+    _looks_corrupted,
+    extract_printed_page,
     try_fast_pdf_extraction,
 )
 from secondbrain.document.ingestor._sync import DocumentIngestor
@@ -83,6 +86,16 @@ def _pdf(tmp_path: Path) -> Path:
 # ---------------------------------------------------------------------------
 # try_fast_pdf_extraction routing
 # ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+@pytest.mark.fast
+def test_extract_printed_page() -> None:
+    """Prints the bracketed printed-page marker, or None when absent."""
+    assert extract_printed_page("[ 500 ]\r\nSome page content") == 500
+    assert extract_printed_page("Chapter 15\r\n[ 471 ]\r\nFigure 15.6") == 471
+    assert extract_printed_page("plain text with no marker") is None
+    assert extract_printed_page("") is None
 
 
 @pytest.mark.unit
@@ -161,6 +174,78 @@ def test_insufficient_text_returns_none(
     short = "x" * (PDF_FAST_TEXT_MIN_CHARS - 1)
     monkeypatch.setattr(
         fast_text, "extract_native_pdf_text", lambda p: [{"text": short, "page": 1}]
+    )
+    assert try_fast_pdf_extraction(_pdf(tmp_path)) is None
+
+
+# ---------------------------------------------------------------------------
+# Corruption detector (_looks_corrupted) + routing
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+@pytest.mark.fast
+def test_looks_corrupted_clean_ascii_is_false() -> None:
+    """Plain ASCII prose is never flagged as corrupted."""
+    assert _looks_corrupted("The quick brown fox jumps over the lazy dog. " * 10) is False
+
+
+@pytest.mark.unit
+@pytest.mark.fast
+def test_looks_corrupted_empty_is_false() -> None:
+    """Empty/whitespace-only input is not corrupted."""
+    assert _looks_corrupted("") is False
+    assert _looks_corrupted("   \n\t  ") is False
+
+
+@pytest.mark.unit
+@pytest.mark.fast
+def test_looks_corrupted_legit_unicode_is_false() -> None:
+    """Legit math/typographic glyphs are not flagged (no false positives)."""
+    legit = ("régime naïve überstraße " * 20) + (
+        "a \u00d7 b \u00b1 c \u00b2 \u00b3 \u00b9 " * 20
+    )
+    assert _looks_corrupted(legit) is False
+
+
+@pytest.mark.unit
+@pytest.mark.fast
+def test_looks_corrupted_fffd_is_true() -> None:
+    """A page riddled with the Unicode replacement char is corrupted."""
+    text = ("good prose " * 20) + ("\ufffd" * 30)
+    assert _looks_corrupted(text) is True
+
+
+@pytest.mark.unit
+@pytest.mark.fast
+def test_looks_corrupted_c1_controls_is_true() -> None:
+    """C1 control chars (the mojibake fingerprint) flag the text as corrupted."""
+    text = "clean text " * 20 + "\x80\x93\x94".join("mojibake" for _ in range(30))
+    assert _looks_corrupted(text) is True
+
+
+@pytest.mark.unit
+@pytest.mark.fast
+def test_looks_corrupted_below_threshold_is_false() -> None:
+    """A spurious single suspicious char stays below the ratio threshold."""
+    total_needed = int(1 / PDF_FAST_TEXT_CORRUPTION_RATIO) + 1
+    text = ("clean " * total_needed) + "\ufffd"
+    assert _looks_corrupted(text) is False
+
+
+@pytest.mark.unit
+@pytest.mark.fast
+def test_corrupted_native_text_returns_none(
+    fake_config, monkeypatch, tmp_path: Path
+) -> None:
+    """Fast text that trips _looks_corrupted -> None (route to docling/OCR)."""
+    fake_config(fast_text=True, ocr=False)
+    corrupted_segments = [
+        {"text": "clean page one " * 40, "page": 1},
+        {"text": ("garbled " * 10) + ("\ufffd" * 40), "page": 2},
+    ]
+    monkeypatch.setattr(
+        fast_text, "extract_native_pdf_text", lambda p: corrupted_segments
     )
     assert try_fast_pdf_extraction(_pdf(tmp_path)) is None
 

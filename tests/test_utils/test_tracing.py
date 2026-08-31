@@ -540,7 +540,7 @@ class TestIsMetricsEnabled:
 
 
 class TestSetupTracingWithMetrics:
-    """Tests for setup_tracing with metrics and pymongo."""
+    """Tests for setup_tracing with metrics."""
 
     def test_sets_up_metrics_when_enabled(self, caplog):
         """Should setup metrics when OTEL_METRICS_ENABLED is true."""
@@ -606,37 +606,6 @@ class TestSetupTracingWithMetrics:
             # When OTel is not available, setup_tracing is a no-op
             setup_tracing(service_name="test", service_version="1.0")
             # Test passes if no exception is raised
-
-    def test_enables_pymongo_instrumentation_when_available(self):
-        """Should attempt pymongo instrumentation when available."""
-        os.environ["SECONDBRAIN_TRACING_ENABLED"] = "true"
-
-        from secondbrain.utils import tracing
-
-        tracing._tracer = None
-        tracing._tracing_enabled = False
-
-        # Just verify the code path exists - detailed testing requires OTel
-        with patch("secondbrain.utils.tracing.OTTEL_AVAILABLE", False):
-            # When OTel is not available, pymongo instrumentation is skipped
-            setup_tracing(service_name="test", service_version="1.0")
-            # Test passes if no exception is raised
-
-    def test_handles_pymongo_instrumentation_failure(self):
-        """Should handle pymongo instrumentation failure gracefully."""
-        os.environ["SECONDBRAIN_TRACING_ENABLED"] = "true"
-
-        from secondbrain.utils import tracing
-
-        tracing._tracer = None
-        tracing._tracing_enabled = False
-
-        # Just verify the code path exists - detailed testing requires OTel
-        with patch("secondbrain.utils.tracing.OTTEL_AVAILABLE", False):
-            # When OTel is not available, pymongo instrumentation is skipped
-            setup_tracing(service_name="test", service_version="1.0")
-            # Test passes if no exception is raised
-
 
 class TestGetMeter:
     """Tests for get_meter function."""

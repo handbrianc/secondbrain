@@ -76,6 +76,14 @@ class _RAGPipelineState:
 
         async def _agenerate(self, prompt: str) -> str: ...
 
+        def _generate_guarded(
+            self,
+            prompt: str,
+            *,
+            temperature: float | None = None,
+            max_tokens: int | None = None,
+        ) -> str: ...
+
         def _stream_generate(
             self, prompt: str, prefix: str = ""
         ) -> tuple[str, bool]: ...

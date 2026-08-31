@@ -71,10 +71,6 @@ class ProcessingStorageMixin:
             raise ValueError("streaming_chunk_batch_size must be between 1 and 200")
         return v
 
-    storage_compression_enabled: bool = Field(
-        default=True,
-        description="Enable MongoDB collection-level compression (zstd)",
-    )
     embedding_dtype: str = Field(
         default="float32",
         description="Embedding data type: 'float32' (50% smaller) or 'float64'",

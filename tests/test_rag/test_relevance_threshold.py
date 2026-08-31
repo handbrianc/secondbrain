@@ -465,7 +465,7 @@ class TestGroundedContextRetry:
         pipeline: RAGPipeline,
     ) -> None:
         mock_llm_provider.generate.return_value = "Brian Hand ADOS-2 autism report"
-        mock_searcher.search.side_effect = RuntimeError("mongo down")
+        mock_searcher.search.side_effect = RuntimeError("vector store down")
         result = pipeline._grounded_context_retry(
             "what challenges will brian face as a vice president?",
             self._history(),

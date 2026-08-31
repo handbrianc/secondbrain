@@ -11,7 +11,7 @@ SbomFixture = {
     "bomFormat": "CycloneDX",
     "specVersion": "1.4",
     "components": [
-        {"name": "pymongo", "version": "4.6.0"},
+        {"name": "httpx", "version": "0.28.1"},
         {"name": "click", "version": "8.1.7"},
     ],
 }
@@ -66,7 +66,7 @@ class TestSBOMGeneration:
 
     @patch("subprocess.run", side_effect=_mock_subprocess_run_for_cyclonedx)
     def test_sbom_includes_project_dependencies(self, _mock_run):
-        """SBOM includes key project dependencies like pymongo, click."""
+        """SBOM includes key project dependencies like httpx, click."""
         with tempfile.TemporaryDirectory() as tmpdir:
             output_path = Path(tmpdir) / "sbom.json"
             result = subprocess.run(
@@ -87,8 +87,8 @@ class TestSBOMGeneration:
             component_names = [c.get("name", "").lower() for c in components]
 
             # Check for key dependencies
-            assert any("pymongo" in name for name in component_names), (
-                "pymongo should be in SBOM"
+            assert any("httpx" in name for name in component_names), (
+                "httpx should be in SBOM"
             )
             assert any("click" in name for name in component_names), (
                 "click should be in SBOM"

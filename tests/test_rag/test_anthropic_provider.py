@@ -23,8 +23,9 @@ class TestAnthropicLLMProviderInit:
             provider = AnthropicLLMProvider()
 
             assert provider._model == "claude-3-sonnet-20240229"
-            assert provider._temperature == 0.1
-            assert provider._max_tokens == 2048
+            assert provider._temperature == 1.0
+            assert provider._top_p == 0.95
+            assert provider._max_tokens == 384000
             assert provider._timeout == 120
             assert provider._api_key == "test-key"
 

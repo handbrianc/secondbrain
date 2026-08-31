@@ -1,4 +1,4 @@
-"""Integration tests for semantic search with MongoDB."""
+"""Integration tests for semantic search with the Qdrant vector store."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ pytestmark = [
     pytest.mark.integration,
     pytest.mark.xdist_group(
         "mocked_integration"
-    ),  # Group on same worker to share mongomock client
+    ),  # Group on same worker to share the mocked storage
 ]
 
 

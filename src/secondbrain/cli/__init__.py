@@ -37,7 +37,7 @@ def cli(ctx: click.Context, verbose: bool) -> None:
     """SecondBrain - A local document intelligence CLI tool.
 
     Ingests documents, generates embeddings using sentence-transformers, and stores
-    vectors in MongoDB for semantic search.
+    vectors in the Qdrant vector store for semantic search.
     """
     ctx.ensure_object(dict)
     ctx.obj["verbose"] = verbose

@@ -261,7 +261,7 @@ class TestDisplayHealthStatus:
             "status": "healthy",
             "timestamp": "2024-01-01T00:00:00+00:00",
             "uptime": 1000.0,
-            "services": {"mongodb": True},
+            "services": {"qdrant": True},
             "check_duration_seconds": 0.123456,
         }
 
@@ -272,7 +272,7 @@ class TestDisplayHealthStatus:
             output_str = str(console_mock.print.call_args_list)
             assert "HEALTHY" in output_str
             assert "Services" in output_str
-            assert "mongodb" in output_str
+            assert "qdrant" in output_str
 
     def test_display_health_status_all_healthy(self, console_mock: MagicMock) -> None:
         """Test health status display with all services healthy."""
@@ -280,7 +280,7 @@ class TestDisplayHealthStatus:
             "status": "healthy",
             "timestamp": "2024-01-01T00:00:00+00:00",
             "uptime": 5000.0,
-            "services": {"mongodb": True, "cache": True},
+            "services": {"qdrant": True, "cache": True},
             "check_duration_seconds": 0.05,
         }
 
@@ -300,7 +300,7 @@ class TestDisplayHealthStatus:
             "timestamp": "2024-01-01T00:00:00+00:00",
             "uptime": 5000.0,
             "services": {
-                "mongodb": True,
+                "qdrant": True,
                 "cache": False,
             },
             "check_duration_seconds": 0.2,
@@ -322,7 +322,7 @@ class TestDisplayHealthStatus:
             "status": "healthy",
             "timestamp": "2024-01-01T00:00:00+00:00",
             "uptime": None,
-            "services": {"mongodb": True},
+            "services": {"qdrant": True},
             "check_duration_seconds": 0.1,
         }
 

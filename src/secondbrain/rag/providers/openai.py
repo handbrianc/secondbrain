@@ -6,10 +6,15 @@ for using OpenAI API as an LLM backend.
 
 # mypy: disable-error-code=attr-defined
 # mypy: disable-error-code=arg-type
+# mypy: disable-error-code=union-attr
 # (openai package stubs don't explicitly export APIError/AsyncOpenAI/OpenAI;
-#  arg-type suppressed for list[dict[str,str]] vs ChatCompletionMessageParam unions)
+#  arg-type suppressed for list[dict[str,str]] vs ChatCompletionMessageParam unions;
+#  union-attr from the create() overload return union when streaming with top_p)
 
+import logging
 import os
+import re
+from difflib import SequenceMatcher
 
 import httpx
 from openai import APIError, AsyncOpenAI, OpenAI
@@ -17,6 +22,33 @@ from openai import APIError, AsyncOpenAI, OpenAI
 from secondbrain.exceptions import ServiceUnavailableError
 
 from ..interfaces import LocalLLMProvider, StreamingCallback
+
+logger = logging.getLogger(__name__)
+
+# Degenerate-loop guard: a trailing window that nearly exactly repeats an earlier
+# one means the model is re-uttering itself, not progressing. Applied to both the
+# reasoning channel and the answer-content channel (a model can spiral while
+# drafting prose too). MIN_CHARS defers judging until the stream is substantial.
+_REASON_LOOP_WINDOW = 500
+_REASON_LOOP_INTERVAL = 1200
+_REASON_LOOP_RATIO = 0.9
+_REASON_LOOP_MIN_CHARS = 4000
+_CONTENT_LOOP_WINDOW = 500
+_CONTENT_LOOP_INTERVAL = 1500
+_CONTENT_LOOP_RATIO = 0.9
+_CONTENT_LOOP_MIN_CHARS = 4000
+
+
+def _normalize_reasoning(text: str) -> str:
+    """Lowercase and keep only alphanumerics for repetition comparison."""
+    return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
+
+
+def _is_repeat_window(window: str, seen: list[str], ratio: float) -> bool:
+    """Return whether a trailing window nearly exactly duplicates an earlier one."""
+    return bool(window) and any(
+        SequenceMatcher(None, w, window).ratio() > ratio for w in seen
+    )
 
 
 class OpenAILLMProvider(LocalLLMProvider):
@@ -35,19 +67,23 @@ class OpenAILLMProvider(LocalLLMProvider):
     def __init__(
         self,
         model: str = "gpt-4o-mini",
-        temperature: float = 0.1,
-        max_tokens: int = 2048,
+        temperature: float = 1.0,
+        max_tokens: int = 384000,
         timeout: int = 120,
         base_url: str | None = None,
         api_key: str | None = None,
         repetition_penalty: float = 1.0,
+        top_p: float = 0.95,
+        max_reasoning_chars: int = 0,
+        stream_idle_timeout_seconds: int = 0,
+        max_answer_chars: int = 0,
     ) -> None:
         """Initialize OpenAI provider with configuration.
 
         Args:
             model: Model name to use (default: "gpt-4o-mini").
-            temperature: Default temperature for generation (default: 0.1).
-            max_tokens: Default max tokens for generation (default: 2048).
+            temperature: Default temperature for generation (default: 1.0).
+            max_tokens: Default max tokens for generation (default: 384000).
             timeout: Request timeout in seconds (default: 120).
             base_url: OpenAI-compatible API base URL (optional, defaults to OpenAI).
             api_key: OpenAI API key (defaults to SECONDBRAIN_OPENAI_API_KEY env var).
@@ -55,16 +91,31 @@ class OpenAILLMProvider(LocalLLMProvider):
                 forwarded as ``repetition_penalty`` to OpenAI-compatible servers
                 that support it (DeepSeek, vLLM, TGI) to discourage the model from
                 repeating itself (default: 1.0, disabled).
+            top_p: Nucleus-sampling top_p (0.0-1.0, default: 0.95).
+            max_reasoning_chars: Client-side cap on accumulated reasoning
+                (chain-of-thought) characters streamed per response. A model that
+                loops in repetitive self-verification without producing an answer
+                is halted once this budget is exhausted (0 disables the cap).
+            stream_idle_timeout_seconds: Maximum seconds with no token arriving
+                before the stream is aborted, bounding a server that goes idle
+                mid-output instead of hanging forever. 0 disables the bound.
+            max_answer_chars: Bounded maximum length of the answer (content) text;
+                a runaway generator is cut here and a clean prefix returned
+                (0 disables the bound).
 
         Raises:
             ValueError: If API key is not provided.
         """
         self._model = model
         self._temperature = temperature
+        self._top_p = top_p
         self._max_tokens = max_tokens
         self._timeout = timeout
         self._base_url = base_url
         self._repetition_penalty = repetition_penalty
+        self._max_reasoning_chars = max_reasoning_chars
+        self._stream_idle_timeout_seconds = stream_idle_timeout_seconds
+        self._max_answer_chars = max_answer_chars
 
         # Get API key from parameter or environment
         self._api_key = api_key or os.getenv("SECONDBRAIN_OPENAI_API_KEY")
@@ -76,11 +127,17 @@ class OpenAILLMProvider(LocalLLMProvider):
 
         # Initialize clients with TTFT-based timeout.
         # connect=timeout: connection must establish within `timeout` seconds.
-        # read=None:       no read timeout — streaming can take arbitrarily long.
+        # read=idle:       seconds with no token before aborting an idle stream
+        #                  (None = unlimited, i.e. the server cannot hang us forever).
         # write=timeout:   request body must be sent within `timeout` seconds.
         # pool=timeout:    connection pool acquisition timeout.
+        read_timeout = (
+            stream_idle_timeout_seconds
+            if stream_idle_timeout_seconds > 0
+            else None
+        )
         ttft_timeout = httpx.Timeout(
-            connect=timeout, read=None, write=timeout, pool=timeout
+            connect=timeout, read=read_timeout, write=timeout, pool=timeout
         )
         self._client = OpenAI(
             api_key=self._api_key,
@@ -135,6 +192,7 @@ class OpenAILLMProvider(LocalLLMProvider):
                 model=self._model,
                 messages=messages,
                 temperature=temp,
+                top_p=self._top_p,
                 max_tokens=tokens,
                 extra_body=self._extra_body(),
             )
@@ -178,6 +236,7 @@ class OpenAILLMProvider(LocalLLMProvider):
                 model=self._model,
                 messages=messages,
                 temperature=temp,
+                top_p=self._top_p,
                 max_tokens=tokens,
                 extra_body=self._extra_body(),
             )
@@ -268,12 +327,24 @@ class OpenAILLMProvider(LocalLLMProvider):
                 model=self._model,
                 messages=messages,
                 temperature=temp,
+                top_p=self._top_p,
                 max_tokens=tokens,
                 stream=True,
                 extra_body=self._extra_body(),
             )
 
             accumulated: list[str] = []
+            reasoning_chars = 0
+            reasoning_log: list[str] = []
+            seen_windows: list[str] = []
+            last_loop_check = 0
+            content_chars = 0
+            content_log: list[str] = []
+            content_seen_windows: list[str] = []
+            last_content_check = 0
+            good_content = ""
+            capped = False
+            capped_reason = ""
             for chunk in response:
                 if chunk.choices and len(chunk.choices) > 0:
                     delta = chunk.choices[0].delta
@@ -281,12 +352,101 @@ class OpenAILLMProvider(LocalLLMProvider):
                     if reasoning is None:
                         reasoning = getattr(delta, "reasoning", None)
                     content = delta.content or ""
+                    if reasoning:
+                        reasoning_chars += len(reasoning)
+                        reasoning_log.append(reasoning)
+                        # Halt a genuine reasoning loop (near-exact repeated window).
+                        if (
+                            reasoning_chars >= _REASON_LOOP_MIN_CHARS
+                            and reasoning_chars - last_loop_check
+                            >= _REASON_LOOP_INTERVAL
+                        ):
+                            last_loop_check = reasoning_chars
+                            window = _normalize_reasoning(
+                                "".join(reasoning_log)[-_REASON_LOOP_WINDOW:]
+                            )
+                            if _is_repeat_window(
+                                window, seen_windows, _REASON_LOOP_RATIO
+                            ):
+                                capped = True
+                                capped_reason = "degenerate loop"
+                                break
+                            seen_windows.append(window)
+                        # Backstop ceiling bounds the worst case if the detector misses.
+                        if (
+                            self._max_reasoning_chars
+                            and reasoning_chars > self._max_reasoning_chars
+                        ):
+                            capped = True
+                            capped_reason = "budget"
+                            break
+                    if content:
+                        content_chars += len(content)
+                        content_log.append(content)
+                        # Bound answer length regardless of repetition pattern: a
+                        # runaway generator emitting varied output is cut here too.
+                        if (
+                            self._max_answer_chars
+                            and content_chars > self._max_answer_chars
+                        ):
+                            capped = True
+                            capped_reason = "answer limit"
+                            break
+                        # Halt a content-phase spiral (the model re-drafting and
+                        # self-correcting its prose in a loop), keeping the clean
+                        # summary accumulated before the spiral began.
+                        if (
+                            content_chars >= _CONTENT_LOOP_MIN_CHARS
+                            and content_chars - last_content_check
+                            >= _CONTENT_LOOP_INTERVAL
+                        ):
+                            last_content_check = content_chars
+                            window = _normalize_reasoning(
+                                "".join(content_log)[-_CONTENT_LOOP_WINDOW:]
+                            )
+                            if _is_repeat_window(
+                                window, content_seen_windows, _CONTENT_LOOP_RATIO
+                            ):
+                                capped = True
+                                capped_reason = "content loop"
+                                break
+                            content_seen_windows.append(window)
+                            good_content = "".join(content_log)
                     if content or reasoning:
                         on_chunk(content, reasoning)
                     if content:
                         accumulated.append(content)
 
-            return "".join(accumulated)
+            if capped and capped_reason == "content loop":
+                answer = good_content
+            elif capped and capped_reason == "answer limit":
+                full = "".join(accumulated)
+                prefix = full[: self._max_answer_chars]
+                # Cut at the last sentence/line end so a capped answer never stops
+                # mid-word; fall back to the last space, then to the raw prefix.
+                term = list(re.finditer(r"[.!?]\s|\n", prefix))
+                cut = term[-1].end() if term else -1
+                if cut <= 0:
+                    sp = prefix.rfind(" ")
+                    cut = sp if sp > 0 else -1
+                answer = (prefix[:cut] if cut > 0 else prefix).rstrip()
+            else:
+                answer = "".join(accumulated)
+            if capped:
+                logger.warning(
+                    "Stream halted (%s) reasoning=%s content=%s",
+                    capped_reason,
+                    reasoning_chars,
+                    content_chars,
+                )
+                if not answer.strip():
+                    answer = (
+                        "I got stuck in repetitive reasoning and could not produce "
+                        "an answer within the reasoning budget. Please rephrase or "
+                        "narrow your question."
+                    )
+                    on_chunk(answer, None)
+            return answer
 
         except httpx.ConnectError as e:
             raise ServiceUnavailableError(f"OpenAI API unreachable: {e}") from e

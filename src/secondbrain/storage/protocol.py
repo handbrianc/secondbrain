@@ -6,7 +6,7 @@ in-memory fake implement it, so a backend swap never reaches a consumer.
 
 The document structure (for structure-based summarization) is queried via the
 two chunk-scan methods ``get_source_chunks`` and ``find_chunks`` rather than a
-Mongo ``collection`` handle.
+raw ``collection`` handle.
 """
 
 from collections.abc import Sequence
@@ -91,6 +91,8 @@ class VectorStorageProtocol(Protocol):
         chapter_id: str | None = None,
         section_id: str | None = None,
         section_id_pattern: str | None = None,
+        printed_page: int | str | None = None,
+        page_number: int | list[int] | None = None,
         with_text: bool = True,
     ) -> Sequence[ChunkInfo]:
         """Return chunks matching metadata filters (optional section regex)."""

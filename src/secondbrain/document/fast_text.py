@@ -21,6 +21,7 @@ avoid pulling anything heavy in at module import time.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +29,82 @@ from typing import Any
 # considered a faithful substitute for the full docling pipeline. Scanned or
 # near-empty PDFs fall below this and still route through docling/OCR.
 PDF_FAST_TEXT_MIN_CHARS = 200
+
+# Fraction of non-whitespace characters in the fast-extracted native text that
+# must be "corruption fingerprints" for the layer to be judged unusable. C1
+# control characters (U+0080-U+009F), the Unicode replacement char (U+FFFD),
+# private-use glyphs (U+E000-U+F8FF), and box-drawing glyphs (U+2500-U+257F)
+# never legitimately appear in document prose. Their presence is the signature
+# of a broken font/ToUnicode map or text mis-decoded by the extraction engine
+# (which surfaces as wrong digits, e.g. "2012" rendered as "2132", and garbled
+# glyphs). When the fast path's output trips this, the caller routes the whole
+# file through the full docling pipeline (or OCR) instead of indexing garbage.
+PDF_FAST_TEXT_CORRUPTION_RATIO = 0.02
+
+# The book's printed page number appears as a "[ N ]" marker, typically at the
+# top of each page.  The stored ``page_number`` is the PDF's *physical* page
+# index, which differs from it (front matter / blank pages shift them), so the
+# printed marker is the ground truth for "what is on page N" lookups.
+_PRINTED_PAGE_RE = re.compile(r"\[\s*(\d{1,4})\s*\]")
+
+
+def extract_printed_page(text: str) -> int | None:
+    """Return the printed-page marker in *text*, or None.
+
+    Scans for a bracketed ``[ N ]`` marker (the book's printed page number) and
+    returns ``N``. Returns ``None`` when no marker is present.
+    """
+    match = _PRINTED_PAGE_RE.search(text)
+    if not match:
+        return None
+    try:
+        return int(match.group(1))
+    except ValueError:
+        return None
+
+
+
+def _looks_corrupted(text: str) -> bool:
+    """Return True if *text* carries a broken-glyph / mis-decoding fingerprint.
+
+    Detects characters that have no legitimate use in extracted document prose:
+    C1 control chars (U+0080-U+009F), the Unicode replacement char (U+FFFD),
+    private-use glyphs (U+E000-U+F8FF), and box-drawing glyphs (U+2500-U+257F).
+    These arise when a PDF's font/ToUnicode map is broken (the usual cause of the
+    garbled numeric/glyph output described in the module docstring) or when bytes
+    were decoded with the wrong codec.
+
+    Parameters
+    ----------
+    text:
+        The extracted text to inspect (a page segment).
+
+    Returns
+    -------
+    bool
+        True when the ratio of suspicious characters to non-whitespace
+        characters exceeds ``PDF_FAST_TEXT_CORRUPTION_RATIO``.
+    """
+    if not text:
+        return False
+
+    total = 0
+    corrupt = 0
+    for ch in text:
+        if ch.isspace():
+            continue
+        total += 1
+        o = ord(ch)
+        if (
+            0x80 <= o <= 0x9F
+            or o == 0xFFFD
+            or 0xE000 <= o <= 0xF8FF
+            or 0x2500 <= o <= 0x257F
+        ):
+            corrupt += 1
+    if total == 0:
+        return False
+    return corrupt / total > PDF_FAST_TEXT_CORRUPTION_RATIO
 
 
 def extract_native_pdf_text(path: Path) -> list[dict[str, Any]]:
@@ -89,7 +166,10 @@ def try_fast_pdf_extraction(file_path: Path) -> list[dict[str, Any]] | None:
       the full docling pipeline);
     - ``pdf_ocr_enabled`` is True (user explicitly wants OCR — do not bypass);
     - the total non-whitespace native text is below ``PDF_FAST_TEXT_MIN_CHARS``
-      (scanned/empty PDFs cannot be faithfully represented by the text layer).
+      (scanned/empty PDFs cannot be faithfully represented by the text layer);
+    - any page's native text trips :func:`_looks_corrupted` (a broken
+      font/ToUnicode decode would feed garbage downstream, so the file is routed
+      to the full docling pipeline instead).
 
     Otherwise returns the extracted, non-empty segments.
 
@@ -116,6 +196,11 @@ def try_fast_pdf_extraction(file_path: Path) -> list[dict[str, Any]] | None:
 
     segments = extract_native_pdf_text(file_path)
     if not segments:
+        return None
+
+    if any(_looks_corrupted(seg["text"]) for seg in segments):
+        # The native text layer carries a broken font/ToUnicode decode (garbled
+        # digits/glyphs). Treat it as unusable and route through docling/OCR.
         return None
 
     total_non_whitespace = sum(

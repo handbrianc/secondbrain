@@ -4,7 +4,7 @@ Consolidated tests covering:
 - Tracing enable/disable via environment variables
 - Metrics enable/disable via environment variables
 - Exporter endpoint and sampling rate configuration
-- Span creation for ingestion, search, and MongoDB operations
+- Span creation for ingestion, search, and vector store operations
 - Context propagation helpers
 """
 
@@ -95,19 +95,19 @@ class TestOTELSpans:
         operation_name = "search.query"
         assert "query" in operation_name
 
-    def test_trace_operation_for_mongodb(self):
+    def test_trace_operation_for_vector_store(self):
         from secondbrain.utils.tracing import trace_operation
 
-        with trace_operation("db.mongodb.find") as span:
+        with trace_operation("db.vector.find") as span:
             if span:
                 span.set_attribute("database", "secondbrain")
 
-    def test_mongodb_span_operation_name_format(self):
+    def test_vector_store_span_operation_name_format(self):
         from secondbrain.utils.tracing import trace_operation
 
-        with trace_operation("db.mongodb.find") as span:
+        with trace_operation("db.vector.find") as span:
             if span:
-                assert span.name == "db.mongodb.find"
+                assert span.name == "db.vector.find"
 
 
 class TestContextHelpers:

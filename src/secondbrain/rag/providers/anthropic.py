@@ -34,25 +34,28 @@ class AnthropicLLMProvider(LocalLLMProvider):
     def __init__(
         self,
         model: str = "claude-3-sonnet-20240229",
-        temperature: float = 0.1,
-        max_tokens: int = 2048,
+        temperature: float = 1.0,
+        max_tokens: int = 384000,
         timeout: int = 120,
         api_key: str | None = None,
+        top_p: float = 0.95,
     ) -> None:
         """Initialize Anthropic provider with configuration.
 
         Args:
             model: Model name to use (default: "claude-3-sonnet-20240229").
-            temperature: Default temperature for generation (default: 0.1).
-            max_tokens: Default max tokens for generation (default: 2048).
+            temperature: Default temperature for generation (default: 1.0).
+            max_tokens: Default max tokens for generation (default: 384000).
             timeout: Request timeout in seconds (default: 120).
             api_key: Anthropic API key (defaults to SECONDBRAIN_ANTHROPIC_API_KEY env var).
+            top_p: Nucleus-sampling top_p (0.0-1.0, default: 0.95).
 
         Raises:
             ValueError: If API key is not provided.
         """
         self._model = model
         self._temperature = temperature
+        self._top_p = top_p
         self._max_tokens = max_tokens
         self._timeout = timeout
 
@@ -104,6 +107,7 @@ class AnthropicLLMProvider(LocalLLMProvider):
                 model=self._model,
                 messages=messages,  # type: ignore
                 temperature=temp,
+                top_p=self._top_p,
                 max_tokens=tokens,
             )
 
@@ -146,6 +150,7 @@ class AnthropicLLMProvider(LocalLLMProvider):
                 model=self._model,
                 messages=messages,  # type: ignore
                 temperature=temp,
+                top_p=self._top_p,
                 max_tokens=tokens,
             )
 
@@ -206,6 +211,7 @@ class AnthropicLLMProvider(LocalLLMProvider):
                 model=self._model,
                 messages=messages,  # type: ignore
                 temperature=temp,
+                top_p=self._top_p,
                 max_tokens=tokens,
                 stream=True,
             )
@@ -248,6 +254,7 @@ class AnthropicLLMProvider(LocalLLMProvider):
                 model=self._model,
                 messages=messages,  # type: ignore
                 temperature=temp,
+                top_p=self._top_p,
                 max_tokens=tokens,
                 stream=True,
             )

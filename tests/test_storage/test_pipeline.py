@@ -1,6 +1,6 @@
 """Tests for ``secondbrain.storage.pipeline.build_search_pipeline``.
 
-Covers the MongoDB aggregation-pipeline builder: filter handling, cosine
+Covers the aggregation-pipeline builder: filter handling, cosine
 similarity projection, sort/limit stages, and regex-injection escaping.
 """
 

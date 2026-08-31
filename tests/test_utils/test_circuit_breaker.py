@@ -327,8 +327,8 @@ class TestCircuitBreakerError:
 
     def test_error_with_service_name(self):
         """Test error message with service name."""
-        error = CircuitBreakerError(service_name="mongo")
-        assert "mongo" in error.message
+        error = CircuitBreakerError(service_name="qdrant")
+        assert "qdrant" in error.message
 
     def test_error_attributes(self):
         """Test error attributes."""

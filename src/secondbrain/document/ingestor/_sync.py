@@ -15,6 +15,7 @@ from uuid import uuid4
 
 from secondbrain.config import config
 from secondbrain.document.chunker import classify_chunk_role
+from secondbrain.document.fast_text import extract_printed_page
 from secondbrain.document.ingestor._constants import (
     MAX_MEMORY_BATCH_SIZE,
     _detect_cpu_count,
@@ -171,7 +172,7 @@ class DocumentIngestor:
         2. Chunk segments into manageable pieces (chunk_size characters with overlap)
         3. Deduplicate chunks using SHA256 hash of normalized text
         4. Generate embeddings in small batches (streaming_chunk_batch_size)
-        5. Store each batch immediately to MongoDB, then discard from memory
+        5. Store each batch immediately to the vector store, then discard from memory
         6. Repeat until all chunks processed
 
         Why Streaming?
@@ -357,6 +358,8 @@ class DocumentIngestor:
         """
         docs_to_store: list[dict[str, Any]] = []
         seen_doc_keys = set()
+        page_pos = 0
+        last_page: int | None = None
 
         for chunk_item in chunks:
             text_hash = chunk_item["text_hash"]
@@ -372,6 +375,9 @@ class DocumentIngestor:
             if doc_key in seen_doc_keys:
                 continue
             seen_doc_keys.add(doc_key)
+            if chunk_item["page"] != last_page:
+                page_pos = 0
+                last_page = chunk_item["page"]
 
             embedding = chunk_to_embedding[text_hash]
             file_type = get_file_type(chunk_item["file_path"])
@@ -381,6 +387,8 @@ class DocumentIngestor:
                 "chunk_id": str(uuid4()),
                 "source_file": str(chunk_item["file_path"]),
                 "page_number": chunk_item["page"],
+                "printed_page": extract_printed_page(chunk_item["text"]),
+                "page_pos": page_pos,
                 "chunk_role": chunk_item.get("chunk_role", "body"),
                 "chunk_text": chunk_item["text"],
                 "embedding": embedding,
@@ -388,6 +396,7 @@ class DocumentIngestor:
                 "ingested_at": ingested_at,
             }
             docs_to_store.append(doc)
+            page_pos += 1
 
         return docs_to_store
 
@@ -432,7 +441,7 @@ class DocumentIngestor:
         Streaming processes in small batches:
         1. Collect chunks until batch is full (streaming_chunk_batch_size)
         2. Generate embeddings for batch only
-        3. Store batch immediately to MongoDB
+        3. Store batch immediately to the vector store
         4. Discard batch from memory, repeat
 
         Memory Impact:
@@ -446,7 +455,7 @@ class DocumentIngestor:
         Trade-offs:
         - Pros: Constant memory usage regardless of document size
         - Pros: Early persistence (data saved incrementally)
-        - Cons: More MongoDB write operations (mitigated by batching)
+        - Cons: More vector store write operations (mitigated by batching)
         - Cons: Slightly more complex code
 
         When to Enable:
@@ -587,6 +596,8 @@ class DocumentIngestor:
 
         docs_to_store: list[dict[str, Any]] = []
         seen_doc_keys = set()
+        page_pos = 0
+        last_page: int | None = None
 
         for chunk_item in chunks:
             text_hash = chunk_item["text_hash"]
@@ -597,6 +608,9 @@ class DocumentIngestor:
             if doc_key in seen_doc_keys:
                 continue
             seen_doc_keys.add(doc_key)
+            if chunk_item["page"] != last_page:
+                page_pos = 0
+                last_page = chunk_item["page"]
 
             embedding = chunk_to_embedding[text_hash]
             file_type = get_file_type(chunk_item["file_path"])
@@ -606,6 +620,8 @@ class DocumentIngestor:
                 "chunk_id": str(uuid4()),
                 "source_file": str(chunk_item["file_path"]),
                 "page_number": chunk_item["page"],
+                "printed_page": extract_printed_page(chunk_item["text"]),
+                "page_pos": page_pos,
                 "chunk_role": chunk_item.get("chunk_role", "body"),
                 "chunk_text": chunk_item["text"],
                 "embedding": embedding,
@@ -613,6 +629,7 @@ class DocumentIngestor:
                 "ingested_at": ingested_at,
             }
             docs_to_store.append(doc)
+            page_pos += 1
 
         if docs_to_store:
             with trace_operation("storage.store") as span:

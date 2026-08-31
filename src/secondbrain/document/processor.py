@@ -32,6 +32,7 @@ if TYPE_CHECKING:
 
 # Apply MPS patch before any docling import
 from secondbrain.document.chunker import classify_chunk_role
+from secondbrain.document.fast_text import extract_printed_page
 from secondbrain.utils.mps_patch import patch_transformers_for_mps
 from secondbrain.utils.tracing import trace_operation
 
@@ -635,11 +636,19 @@ def _extract_chunk_and_embed_file(
 
         ingested_at = datetime.now(UTC).isoformat()
 
+        page_pos = 0
+        last_page: int | None = None
         for chunk_item, embedding in zip(unique_chunks, embeddings, strict=True):
+            page = chunk_item["page"]
+            if page != last_page:
+                page_pos = 0
+                last_page = page
             doc = {
                 "chunk_id": str(uuid4()),
                 "source_file": str(file_path),
-                "page_number": chunk_item["page"],
+                "page_number": page,
+                "printed_page": extract_printed_page(chunk_item["text"]),
+                "page_pos": page_pos,
                 "chunk_text": chunk_item["text"],
                 "text_hash": chunk_item["text_hash"],
                 "embedding": embedding,
@@ -648,6 +657,7 @@ def _extract_chunk_and_embed_file(
                 "chunk_role": chunk_item.get("chunk_role", "body"),
             }
             documents.append(doc)
+            page_pos += 1
 
         if progress_queue is not None:
             with contextlib.suppress(Exception):

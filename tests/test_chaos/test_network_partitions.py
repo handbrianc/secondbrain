@@ -57,13 +57,13 @@ class TestNetworkPartitionScenarios:
 
     def test_partial_partition_handling(self):
         """Test handling of partial network partitions."""
-        mongo_cb = CircuitBreaker(CircuitBreakerConfig(failure_threshold=3))
+        vector_cb = CircuitBreaker(CircuitBreakerConfig(failure_threshold=3))
         embedding_cb = CircuitBreaker(CircuitBreakerConfig(failure_threshold=3))
 
         for _ in range(3):
-            mongo_cb.record_failure()
+            vector_cb.record_failure()
 
-        assert mongo_cb.state == CircuitState.OPEN
+        assert vector_cb.state == CircuitState.OPEN
         assert embedding_cb.state == CircuitState.CLOSED
 
     def test_circuit_breaker_response_to_partition(self):

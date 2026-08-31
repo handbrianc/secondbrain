@@ -29,9 +29,12 @@ SUMMARIZE_PROMPT = """\
 You are a knowledgeable research assistant.
 Read the following excerpts from a document and produce a detailed, well-structured summary that expounds on the content rather than condensing it.
 
-Write a thorough summary that:
+Write ONE coherent, well-structured summary — a single pass, never a set of loosely-joined drafts. Ensure that:
+
 - Covers the main ideas, key arguments, methods, and findings in depth.
-- Includes significant names, numbers, definitions, and concrete examples from the material.
+- Includes significant names, definitions, and concrete examples from the material.
+- Cites numbers, statistics, and figures ONLY if they literally appear in the excerpts below. Never invent, estimate, extrapolate, or "round up" a value the source does not state. When you do cite a number, quote it exactly as written in the material.
+- If a figure mentioned in the excerpts is ambiguous or incomplete, say that rather than guessing at a value.
 - Explains what the document actually says, not just what topics it mentions.
 - Is organised into several clear paragraphs: an overview, the key points, and a short conclusion.
 - Does NOT simply restate the title or write a one-sentence description.
@@ -54,9 +57,13 @@ You are given several partial summaries, each describing a different part of the
 same document. Combine them into ONE coherent, well-structured summary that covers
 the combined substance without repeating the same points multiple times.
 
-Write a thorough combined summary that:
+Write ONE coherent, well-structured final summary — a single pass over the combined substance, never a set of loosely-joined drafts. Ensure that:
+
 - Covers the main ideas, key arguments, methods, and findings across ALL partials in depth.
-- Includes significant names, numbers, definitions, and concrete examples from across the parts.
+- Merges overlapping content so no idea or figure is repeated twice.
+- Reconciles any conflicting numbers that appear across the partials: state the value(s) exactly as they appear in the source material. Never invent, estimate, or pick a "corrected" figure that none of the partials actually states.
+- Cites numbers, statistics, and figures ONLY if they appear in the partials below; never introduces a figure absent from them. When you do cite a number, quote it exactly as written.
+- If the partials conflict on a figure and you cannot verify the true value, present the discrepancy as stated (or note it) rather than inventing a single number.
 - Organises the result into several clear paragraphs: an overview, the key points, and a short conclusion.
 - Does NOT simply restate the partial headings or repeat each partial verbatim.
 
@@ -103,7 +110,7 @@ class Summarizer:
         Embedding backend (unused in this class but kept for future
         chunk prioritisation). The object must have an ``embed()`` method.
     storage
-        MongoDB-backed vector store. Must expose
+        Vector store. Must expose
         ``find_chunks_by_metadata()`` returning a list of chunk dicts.
     max_summary_tokens
         Hard cap on the number of tokens the LLM may emit in a single

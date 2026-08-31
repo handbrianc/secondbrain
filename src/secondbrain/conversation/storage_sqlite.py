@@ -1,10 +1,10 @@
 """SQLite storage implementation for conversation sessions.
 
-Replaces the MongoDB-backed :class:`ConversationStorage` with an embedded
+Replaces the legacy :class:`ConversationStorage` backend with an embedded
 SQLite backend while preserving the exact public API so ``ConversationSession``
 and all CLI/RAG callers work unchanged.
 
-Storage layout mirrors the previous Mongo envelope: a ``sessions`` row plus one
+Storage layout mirrors the previous document envelope: a ``sessions`` row plus one
 row per message in ``messages``. Ordering is pure array position (append +
 most-recent-N slice + whole-array replace for context trim), matching the old
 document semantics exactly.

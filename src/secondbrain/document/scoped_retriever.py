@@ -49,7 +49,7 @@ _WILDCARD_CHAPTER_PATTERN = re.compile(r"^(?P<prefix>\d+)\.\*$")
 
 
 def _build_section_filter(scope: str) -> dict[str, Any] | None:
-    """Translate a scope string to a MongoDB filter clause.
+    """Translate a scope string to a filter clause.
 
     Parameters
     ----------
@@ -61,7 +61,7 @@ def _build_section_filter(scope: str) -> dict[str, Any] | None:
 
     Returns
     -------
-    A MongoDB query fragment, or ``None`` when no meaningful filter applies.
+    A query filter fragment, or ``None`` when no meaningful filter applies.
     """
     if scope == "heading":
         return {"element_type": {"$in": ["heading", "toc_entry"]}}
@@ -92,8 +92,8 @@ def _apply_scope_filter(
     if not scope:
         return results
 
-    mongo_filter = _build_section_filter(scope)
-    if mongo_filter is None:
+    filter_clause = _build_section_filter(scope)
+    if filter_clause is None:
         return results
 
     filtered: list[dict[str, Any]] = []
@@ -108,7 +108,7 @@ def _apply_scope_filter(
                 filtered.append(chunk)
             continue
 
-        if _matches_filter(str(section_id), mongo_filter):
+        if _matches_filter(str(section_id), filter_clause):
             filtered.append(chunk)
 
     return filtered

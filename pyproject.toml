@@ -8,7 +8,7 @@ authors = [
 ]
 license = {text = "MIT"}
 readme = "README.md"
-keywords = ["cli", "document", "embedding", "mongodb", "vector-search", "openai-compatible"]
+keywords = ["cli", "document", "embedding", "vector-search", "openai-compatible"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -57,7 +57,6 @@ test = [
     "pytest-rerunfailures>=16.5",  # Retry flaky tests - concurrent test stability
     "hypothesis>=6.0.0",  # Property-based testing - edge case discovery
     "factory-boy>=3.3.3",  # Test factories - factory_boy for test data
-    "mongomock>=4.0.0",  # Test mocking - MongoDB without server
 ]
 
 # Security scanning tools
@@ -108,7 +107,6 @@ bundled = [
     "pytest-rerunfailures>=16.5",
     "hypothesis>=6.0.0",
     "factory-boy>=3.3.3",
-    "mongomock>=4.0.0",
     # All security deps
     "bandit>=1.7.0",
     "safety>=3.0.0",

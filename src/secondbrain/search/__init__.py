@@ -79,8 +79,9 @@ def sanitize_query(query: str) -> str:
 class Searcher:
     """Performs semantic search against stored embeddings.
 
-    Uses sentence-transformers to generate query embeddings and MongoDB for
-    vector similarity search against the stored document embeddings.
+    Uses sentence-transformers to generate query embeddings and the Qdrant
+    vector store for vector similarity search against the stored document
+    embeddings.
     """
 
     def __init__(self, verbose: bool = False) -> None:
@@ -167,7 +168,7 @@ class Searcher:
         top_k = top_k or self._config.default_top_k
 
         if not self.storage.validate_connection():
-            raise RuntimeError("Cannot connect to MongoDB")
+            raise RuntimeError("Cannot connect to the vector store")
 
         with trace_operation("search_generate_embedding") as span:
             if span:
@@ -208,7 +209,7 @@ class Searcher:
         top_k = top_k or self._config.default_top_k
 
         if not self.storage.validate_connection():
-            raise RuntimeError("Cannot connect to MongoDB")
+            raise RuntimeError("Cannot connect to the vector store")
 
         with trace_operation("search_generate_embedding_async") as span:
             if span:

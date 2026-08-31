@@ -8,14 +8,18 @@ always present on the composed ``RAGPipeline`` instance.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
+import time
 from collections import Counter
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from secondbrain.config import config
 from secondbrain.conversation import ConversationSession
+from secondbrain.exceptions import ServiceUnavailableError
 from secondbrain.rag.document_router import DocumentRouter
+from secondbrain.rag.intent_parser import QueryIntent
 from secondbrain.rag.pipeline._attributes import _RAGPipelineState
 from secondbrain.rag.pipeline._constants import (
     BROAD_COVERAGE_TRIGGERS,
@@ -31,6 +35,36 @@ logger = logging.getLogger(__name__)
 # sections would fan out into dozens of sequential, thinking-mode LLM calls,
 # making the chat appear frozen on "Thinking..." for minutes.
 _MAX_MAP_REDUCE_WINDOWS = 50
+
+# Temperature for deterministic map-reduce *summary* generation (chapter and
+# section overviews). Summaries must faithfully reproduce the source figures, so
+# they are generated near-deterministically instead of at the default creative
+# temperature (which makes the model regenerate numbers rather than copy them).
+# This matches the low temperature the degenerate-window retry already uses.
+SUMMARY_TEMPERATURE = 0.1
+
+# Max wall-clock seconds a single summary window may run before it is aborted as
+# unresolvable.  A model can spend its whole budget re-verifying figures in its
+# (suppressed) reasoning, emitting only sporadic content and never stabilizing;
+# the cap guarantees the overall summary always terminates and returns to the
+# prompt.  On abort the window's partial content is retained (trimmed to a clean
+# sentence), so a slow final window still contributes its ending instead of the
+# chapter overview dropping it.
+_WINDOW_MAX_SECONDS = 150
+
+# Source characters per summary window.  Splitting the body into bounded windows
+# like this is what keeps every generation small -- fast, under the request
+# timeout, and too short to drive the model into a figure-verification loop --
+# which is what makes the summary path robust for any source size.  Windows are
+# small enough that each window's summary completes well within the output token
+# cap, so the last window is not truncated mid-sentence.
+_SUMMARY_WINDOW_CHARS = 3500
+
+# Max output tokens per bounded summary window.  DeepSeek otherwise streams a
+# long, heavily-structured wall of prose per window; the cap (paired with a
+# conciseness directive in the prompt) keeps the cumulative chapter overview
+# from ballooning across many windows.
+_SUMMARY_WINDOW_MAX_TOKENS = 1200
 
 # Mid-stream guard for a live-streaming map-reduce window: once this many
 # characters have accumulated, if the buffered text is already degenerate
@@ -149,6 +183,256 @@ def _prune_implausible_metric_figures(text: str) -> str:
         return text
     parts.append(text[last:])
     return "".join(parts)
+
+
+# Figure-grounding verification.  The chapter/section summary path can still
+# confabulate a specific figure that the source never states (e.g. inventing a
+# backtest year like "2023-2027").  These helpers drop any high-specificity
+# numeric figure in the generated summary that the source context does not
+# contain, so a fabricated number never reaches the final answer — the same
+# fail-closed philosophy as :func:`_prune_implausible_metric_figures`.
+_GROUNDING_FIGURE_RE = re.compile(
+    r"\b(\d+(?:[.,]\d+)?)\s*(%|percent|million|billion|thousand)?(?!\d)",
+    re.IGNORECASE,
+)
+_GROUNDING_MAGNITUDE = {
+    "million": 10**6,
+    "billion": 10**9,
+    "thousand": 10**3,
+}
+
+
+def _trim_to_sentence_end(text: str) -> str:
+    """Cut *text* back to the last complete sentence if it ends mid-sentence.
+
+    A bounded window whose stream hit the token/time cap stops mid-generation;
+    cutting back to the last sentence terminal keeps the chapter overview from
+    ending on a dangling fragment (e.g. "...the convolution").
+    """
+    s = text.rstrip()
+    if not s or re.search(r"[.!?][\"'\u201d\u2019]?\s*$", s):
+        return s
+    cut = -1
+    for m in re.finditer(r"[.!?][\"'\u201d\u2019]?\s", s):
+        cut = m.end()
+    if cut <= 0:
+        return s
+    return s[:cut].rstrip()
+
+
+def _grounding_figure_key(
+    match: re.Match[str],
+) -> tuple[str | None, float | None, bool]:
+    """Normalise a figure match to ``(canonical key, numeric value, is_decimal)``.
+
+    The *key* identifies the figure in a unit-and-percent aware way so that
+    "60 million", "60,000,000", and "60m" collide.  Small whole counts (< 1000,
+    e.g. "15 indicators") return ``key=None`` and are never pruned, so a
+    paraphrased count in the summary is not destroyed just because the source
+    phrases it differently.
+    """
+    raw = match.group(1)
+    unit = (match.group(2) or "").lower()
+    try:
+        num = float(raw.replace(",", ""))
+    except ValueError:
+        return None, None, False
+    if unit in ("%", "percent"):
+        val = num if num % 1 else int(num)
+        return f"{val}%", num, False
+    if unit in _GROUNDING_MAGNITUDE:
+        scaled = num * _GROUNDING_MAGNITUDE[unit]
+        return f"{int(scaled)}", scaled, False
+    if num.is_integer():
+        n = int(num)
+        if n >= 1000:
+            return f"Y{n}", float(n), False
+        return None, None, False
+    return str(num), num, True
+
+
+def _ground_figures(summary: str, context: str) -> str:
+    """Remove high-specificity numeric figures in *summary* absent from *context*.
+
+    A chapter/section summary must state figures from the source document.  If
+    the model produced a specific figure (a year, a percentage, a decimal, or a
+    large magnitude count) that does not appear — even against a small rounding
+    tolerance for decimals — it is treated as a fabrication and dropped.
+
+    Parameters
+    ----------
+    summary:
+        The generated summary text to vet.
+    context:
+        The source document context the summary was derived from.
+
+    Returns
+    -------
+    str
+        The summary with ungrounded figures removed; unchanged when every figure
+        checks out.
+    """
+    grounded: set[str] = set()
+    context_values: list[float] = []
+    for m in _GROUNDING_FIGURE_RE.finditer(context):
+        key, value, _is_decimal = _grounding_figure_key(m)
+        if key is not None:
+            grounded.add(key)
+        if value is not None and not (key and key.startswith("Y")):
+            context_values.append(value)
+
+    drops: list[tuple[int, int]] = []
+    for m in _GROUNDING_FIGURE_RE.finditer(summary):
+        key, value, _is_decimal = _grounding_figure_key(m)
+        if key is None or key in grounded:
+            continue
+        # Years must match exactly (2023 is not "close to" 2013).  Every other
+        # class of figure tolerates a small rounding margin so a correctly
+        # rounded value (3.7 vs 3.57) is not destroyed.
+        if key.startswith("Y"):
+            drops.append(m.span())
+            continue
+        if value is not None and any(
+            abs(value - c) <= max(abs(c), abs(value)) * 0.05
+            for c in context_values
+        ):
+            continue
+        drops.append(m.span())
+
+    if not drops:
+        return summary
+    out: list[str] = []
+    last = 0
+    for start, end in drops:
+        out.append(summary[last:start])
+        last = end
+    out.append(summary[last:])
+    return "".join(out)
+
+
+# Reasoning-leakage markers.  When the model cannot faithfully reproduce dense
+# source content it can emit its own chain-of-thought self-talk as the "answer"
+# (e.g. "... 22,631 filings? Actually '16,758'? No, ... I'm misreading ... I'll
+# just say ...").  Such output is lexically diverse enough to pass the repetition
+# guard, so these first-person recall/guessing phrases are checked explicitly.
+# A healthy summary never narrates its own reading or uncertainty; detecting one
+# marks the window implausible and routes it through the low-temperature retry.
+_REASONING_LEAK_MARKERS = (
+    "i'm misreading",
+    "i am misreading",
+    "i misread",
+    "i'm struggling",
+    "i am struggling",
+    "i'm not sure",
+    "i am not sure",
+    "i'm overthinking",
+    "i'm going to stop",
+    "i'm going to guess",
+    "i give up",
+    "i can't recall",
+    "i cannot recall",
+    "i can't remember",
+    "i cannot remember",
+    "i don't remember",
+    "i'm wasting time",
+    "i'm reading",
+    "i am reading",
+    "i'll just say",
+    "i will just say",
+    "i'll trust",
+    "i'll quote",
+    "let me re-read",
+    "let me reread",
+    "let me re-check",
+    "let me recheck",
+    "let me reconsider",
+    "let me scroll up",
+    "let me scroll",
+    "let me search",
+    "let me quote",
+    "let me guess",
+    "actually, no",
+    "actually no",
+    "no, wait",
+    "no wait",
+    "wait, actually",
+    "actually, wait",
+    "i meant",
+    "wait no",
+    "or rather",
+    "? actually,",
+    "? actually ",
+    "i'll just copy",
+    "let me trace",
+    "let me look",
+    "let me check",
+    "let me re-read the snippet",
+    "let me look at the exact",
+)
+
+# Message the OpenAI provider emits when a reasoning spiral exhausts the
+# reasoning budget before any content is produced. Treated as a dead end in the
+# one-shot path and regenerated at low temperature instead of being surfaced.
+_REASONING_BUDGET_FALLBACK_PREFIX = "I got stuck in repetitive reasoning"
+
+
+def _contains_reasoning_leak(text_lower: str) -> bool:
+    """Return True when *text_lower* reveals leaked chain-of-thought self-talk."""
+    return any(marker in text_lower for marker in _REASONING_LEAK_MARKERS)
+
+
+# Self-correction the model sometimes emits DIRECTLY into the content stream
+# while re-verifying a figure it is unsure of (e.g. "77.?? (wait, the text says
+# 78.29 percent)") -- just before it stalls.  Reasoning suppression cannot catch
+# these because they arrive as content tokens, not reasoning.  Detect them early
+# and recover with a clean low-temperature retry rather than streaming the leak.
+_CONTENT_SELF_CORRECTION_MARKERS = (
+    "??",
+    "(wait,",
+    "(wait ",
+    ", wait -",
+    " wait - ",
+    "- wait,",
+    "(the text says",
+    "(text says",
+    "the text says",
+    "(the text specifies",
+    "(text specifies",
+    "text specifies",
+    "(text gives",
+    "the text gives",
+    "text gives",
+    "(the text states",
+    "(text states",
+    "the text states",
+    "(the source states",
+)
+
+
+def _is_content_self_correction(text_lower: str) -> bool:
+    """Return True when streamed content begins correcting an earlier figure."""
+    return any(marker in text_lower for marker in _CONTENT_SELF_CORRECTION_MARKERS)
+
+
+_PAGE_REF_RE = re.compile(r"\bpage\s+(\d{1,4})\b", re.IGNORECASE)
+
+# Leading "[ N ]" stub inserted by the fast-PDF extractor for the printed page
+# number; it is extraction noise, not page content, so it is stripped from
+# verbatim page output.
+_PAGE_MARKER_RE = re.compile(r"^\[\s*\d{1,4}\s*\]\s*")
+
+# A whole line that is just "[ N ]" — the printed-page-number stub may appear on
+# its own line (e.g. under a section heading) rather than at the chunk start.
+_PAGE_STUB_LINE_RE = re.compile(r"^\s*\[\s*\d{1,4}\s*\]\s*$", re.MULTILINE)
+
+
+def _boundary_overlap(prev: str, nxt: str) -> int:
+    """Longest k such that ``prev[-k:] == nxt[:k]`` (collapse chunk overlap)."""
+    max_k = min(len(prev), len(nxt))
+    for k in range(max_k, 0, -1):
+        if prev[-k:] == nxt[:k]:
+            return k
+    return 0
 
 
 class _StreamAbortError(Exception):
@@ -550,6 +834,43 @@ class _StructureMixin(_RAGPipelineState):
         title = re.sub(r"[\s.\u2026:\-\u2013\u2014]*\d+\s*$", "", title)
         return title.strip(" \t\r\n.:;-\u2013\u2014")
 
+    @staticmethod
+    def _detect_chapter_openings(body_chunks: list[Any]) -> dict[int, int]:
+        """Map chapter numbers to their start page from body-opening headers.
+
+        Some books (e.g. ML4T) tag chapter openings as *body* chunks in a
+        magazine style -- a ``[ 591 ]`` printed-page marker, then a bare chapter
+        number line, then a capitalized title -- so they are invisible to the
+        heading/TOC structure probe.  This scans body chunks for those openings
+        to fill in every real chapter boundary, so each chapter's page range is
+        bounded by the next chapter's start and the next chapter's content
+        cannot leak into the previous chapter's bucket.
+        """
+        marker = re.compile(r"^\[\s*\d{1,4}\s*\]\s*\r?\n?")
+        dot_leader = re.compile(r"\.{2,}")
+        page_suffix = re.compile(r"\d+\s*$")
+        starts: dict[int, int] = {}
+        for c in body_chunks:
+            page = int(c.get("page_number", 0) or 0)
+            if page < 20:  # front matter / TOC
+                continue
+            text = (c.get("chunk_text") or "").lstrip()
+            m = marker.match(text)
+            if m:
+                text = text[m.end():].lstrip()
+            head = text.split("\n")[0].strip()
+            if not (head.isdigit() and 1 <= int(head) <= 30):
+                continue
+            for ln in text.split("\n")[1:3]:
+                t = ln.strip()
+                if len(t) < 4 or not re.match(r"^[A-Z]", t):
+                    continue
+                if dot_leader.search(t) or page_suffix.search(t.rstrip()):
+                    break
+                starts.setdefault(int(head), page)
+                break
+        return starts
+
     def _derive_chapter_numbers(
         self, structure_chunks: list[dict[str, Any]]
     ) -> tuple[list[tuple[int, str, str]], set[int], list[tuple[str, str, str]]]:
@@ -931,7 +1252,7 @@ class _StructureMixin(_RAGPipelineState):
         """
         # Structural roles that signal TOC/section/heading content.  The Qdrant
         # OR-filter matches a chunk when its element_type OR chunk_role is one of
-        # these — identical to the former Mongo "$or" query.
+        # these — identical to the former legacy "$or" filter query.
         element_types = [
             "heading",
             "toc_entry",
@@ -964,7 +1285,7 @@ class _StructureMixin(_RAGPipelineState):
             if len(result) < 5:
                 # Fall back to ALL chunks for the source (or all chunks when no
                 # source_filter given), ordered by page and limited to top_k —
-                # preserves the former Mongo fallback query.
+                # preserves the former legacy fallback query.
                 result = list(
                     storage.find_structural_chunks(
                         source_prefix=source_filter,
@@ -993,13 +1314,71 @@ class _StructureMixin(_RAGPipelineState):
             return {"answer": self._handle_no_results(query), "query": query}
         context = self._format_context(chunks)
         prompt = self._build_prompt(query, context)
-        answer, streamed = self._stream_generate(prompt)
-        if not streamed and self._on_chunk and answer:
-            self._on_chunk(answer, None)
+
+        # Summary overviews reproduce figures exactly: reinforce it calmly (one
+        # figure, then move on -- the anti-spiral phrasing), then vet below.
+        intent = self._intent_parser.parse(query).intent
+        is_summary = intent in (
+            QueryIntent.CHAPTER_ENUMERATE,
+            QueryIntent.SECTION_ENUMERATE,
+            QueryIntent.BROAD_COVERAGE,
+        )
+        if is_summary:
+            prompt += (
+                "\n\nYou are summarizing source material. Quote figures (percentages, "
+                "counts, years, metrics, returns) EXACTLY as stated in the retrieved "
+                "context; never invent, estimate, round, or 'correct' a value the "
+                "source does not state. This rule applies to prose statistics only -- "
+                "do not fixate on reproducing code details or function arguments "
+                "(e.g. list(range(...))) verbatim. State each figure once, "
+                "confidently, and move on."
+            )
+
+        # Summary queries generate non-streaming, are vetted (grounded, and a
+        # spiral/fallback/leak regenerated deterministically), then emitted once --
+        # so raw drafting is never shown and a reasoning spiral can never surface
+        # in the terminal. Other queries keep live streaming.
+        if is_summary:
+            answer = self._vet_answer(self._generate(prompt), prompt, context)
+            if self._on_chunk and answer:
+                self._on_chunk(answer, None)
+        else:
+            answer, streamed = self._stream_generate(prompt)
+            if not streamed and self._on_chunk and answer:
+                self._on_chunk(answer, None)
+            answer = self._vet_answer(answer, prompt, context)
+
         result: dict[str, Any] = {"answer": answer, "query": query}
         if show_sources:
             result["sources"] = chunks
         return result
+
+    def _vet_answer(self, text: str, prompt: str, context: str) -> str:
+        """Ground figures to the source and regenerate deterministically if broken.
+
+        Drops figures the source never stated, and when the text is empty, is the
+        reasoning-budget fallback (the model spiraled before writing content), or
+        leaks chain-of-thought self-talk, re-generates at low temperature for a
+        clean, deterministic result instead of shipping a dead end.
+        """
+        answer = _prune_implausible_metric_figures(text)
+        answer = _ground_figures(answer, context)
+        if (
+            not answer.strip()
+            or answer.strip().startswith(_REASONING_BUDGET_FALLBACK_PREFIX)
+            or _contains_reasoning_leak(answer.lower())
+        ):
+            clean = self._generate_guarded(prompt, temperature=0.1)
+            if clean:
+                answer = _ground_figures(
+                    _prune_implausible_metric_figures(clean), context
+                )
+        # A spiral that even the low-temperature retry could not recover is a dead
+        # end -- return empty so callers fall back to a useful default (e.g. the
+        # chapter roster) instead of surfacing the "I got stuck" fallback.
+        if answer.strip().startswith(_REASONING_BUDGET_FALLBACK_PREFIX):
+            return ""
+        return answer
 
 
 class _FallbackMixin(_RAGPipelineState):
@@ -1141,6 +1520,8 @@ class _FallbackMixin(_RAGPipelineState):
         """
         if not text or len(text.strip()) < 40:
             return False
+        if _contains_reasoning_leak(text.lower()):
+            return False
         tokens = re.findall(r"[A-Za-z0-9']+", text.lower())
         if not tokens:
             return False
@@ -1263,181 +1644,194 @@ class _FallbackMixin(_RAGPipelineState):
         chapter_buckets: dict[int, list[dict[str, Any]]],
         ch_titles: dict[int, str],
     ) -> str:
-        """Produce a chapter-by-chapter overview via one bounded call per chapter.
-
-        Map-reduce for broad-coverage "summarize by chapter" queries. Instead of
-        sending every chapter's content to the LLM in a single prompt (which
-        overflows the output token budget and degenerates into token-soup after a
-        few chapters), each chapter is summarised independently from just its own
-        bucket, then the results are concatenated under chapter headings.  The
-        number of windows is guarded by ``_MAX_MAP_REDUCE_WINDOWS`` — a generous
-        safety ceiling there to bound pathological fan-out, not a normal limit —
-        so a full book summarized by chapter is processed in full.
-        """
-        items: list[tuple[str, str]] = []
+        """Produce a chapter-by-chapter overview via bounded windows per chapter."""
+        all_parts: list[str] = []
         for ch_num in chapter_keys:
             bucket = chapter_buckets.get(ch_num)
             if not bucket:
                 continue
-            ctx = self._format_context(
-                bucket, max_chars=self._config.rag_summary_context_chars
-            )
-            if not ctx.strip():
-                continue
             title = ch_titles.get(ch_num, "")
             heading = f"Chapter {ch_num}" + (f" — {title}" if title else "")
-            prompt = self._build_prompt(
-                (
-                    f"Provide a brief, focused summary of {heading} using ONLY "
-                    "the document content below. 2-4 sentences. Never add "
-                    "information from outside this document or from prior "
-                    "knowledge."
-                ),
-                ctx,
+            instruction = (
+                f"Provide a brief, focused summary of {heading} using ONLY the "
+                "document content below. 2-4 sentences. Never add information from "
+                "outside this document or from prior knowledge. Quote any numbers, "
+                "years, statistics, and metrics EXACTLY as they appear in the "
+                "content below; never invent, estimate, round, or 'correct' a "
+                "figure the source does not state -- if a specific number is not "
+                "clearly present, omit it rather than guessing. Do not hedge, "
+                "second-guess, or correct figures, and do not reproduce code "
+                "details or function arguments (e.g. list(range(...))) verbatim."
             )
-            items.append((heading, prompt))
-
-        return _prune_implausible_metric_figures(self._map_reduce_stream(items))
+            summary = self._summarize_bounded(
+                heading=heading,
+                windows=self._split_bounded(bucket),
+                instruction=instruction,
+            )
+            if summary.strip():
+                all_parts.append(f"{heading}\n\n{summary}")
+        return "\n\n".join(all_parts)
 
     def _generate_single_chapter_summary(
         self,
         chunks: list[dict[str, Any]],
         chapter_num: int | str,
         chapter_title: str,
+        *,
+        foreign_titles: list[str] | None = None,
     ) -> str:
-        """Produce a detailed, section-by-section summary of one chapter.
+        """Produce a comprehensive chapter overview via bounded windows.
 
-        Map-reduce within a single chapter.  Feeding a whole chapter in one call
-        makes the model enumerate every section in a single long response, which
-        degrades; instead the chapter's chunks are grouped by their section and
-        each section is summarised independently, then concatenated under
-        ``Section 18.N`` headings.  Unlabeled chunks are folded into the section
-        they follow, and the sections are ordered numerically so the output reads
-        top-to-bottom regardless of the order the chunks arrived in.  Groups are
-        guarded by ``_MAX_MAP_REDUCE_WINDOWS`` — a generous safety ceiling against
-        pathological fan-out, not a normal limit.
+        The chapter is split into small, character-bounded windows and each is
+        summarised independently, deterministically, and grounded to its own
+        source.  A window is never large enough to hit a request timeout or drive
+        the model into a figure-verification loop, so this is robust for any
+        chapter size, and each completed section is emitted as it finishes so the
+        chat builds the overview progressively.
         """
-        by_label: dict[str, list[dict[str, Any]]] = {}
-        current_label: str | None = None
+        chunks = self._filter_chunks_to_chapter(
+            chunks, chapter_num, foreign_titles=foreign_titles
+        )
+        windows = self._split_bounded(chunks)
+        if not windows:
+            return ""
+        heading = f"Chapter {chapter_num} (overview)"
+        instruction = (
+            f"Summarize the following portion of chapter {chapter_num} "
+            f"({chapter_title}). Use ONLY the document content below. Write a "
+            "flowing prose summary of 3-4 paragraphs, about 250-300 words total, "
+            "then STOP -- do not fill extra space or restate. Cover the "
+            "main topics, key concepts, and supporting details. Do "
+            "NOT use headings, sub-headers, or bullet lists. Do NOT open with "
+            "meta-framing such as 'This portion covers...' -- begin directly "
+            "with the substance. Quote any numbers, years, statistics, and "
+            "metrics EXACTLY as they appear in the content below; never invent, "
+            "estimate, round, or 'correct' a figure the source does not state "
+            "-- if a specific number is not clearly present, omit it rather "
+            "than guessing. State each figure once and move on; do not hedge, "
+            "second-guess, or correct figures. Do not reproduce code details or "
+            "function arguments (e.g. list(range(...))) verbatim. Do not print "
+            "any notes, disclaimers, or headings such as 'Note', 'Important', or "
+            "'Not in this chapter'. If some content below does not belong to "
+            "this chapter, summarize only the content that does and never add "
+            "general knowledge or commentary about other chapters."
+        )
+        if self._on_chunk:
+            self._on_chunk(f"{heading}:\n\n", None)
+        body = self._summarize_bounded(
+            heading=heading, windows=windows, instruction=instruction
+        )
+        if not body.strip():
+            return ""
+        return f"{heading}:\n\n{body}"
+
+    def _split_bounded(
+        self,
+        chunks: list[dict[str, Any]],
+        *,
+        max_chars: int | None = None,
+    ) -> list[list[dict[str, Any]]]:
+        """Split *chunks* into contiguous windows of bounded source characters."""
+        budget = max_chars or _SUMMARY_WINDOW_CHARS
+        windows: list[list[dict[str, Any]]] = []
+        current: list[dict[str, Any]] = []
+        current_chars = 0
         for chunk in chunks:
             text = chunk.get("chunk_text", chunk.get("text", ""))
-            label = self._detect_section_label(text, chapter_num)
-            if label is not None:
-                current_label = label
-            key = current_label if current_label is not None else "__overview__"
-            by_label.setdefault(key, []).append(chunk)
+            if text and current and current_chars + len(text) > budget:
+                windows.append(current)
+                current = []
+                current_chars = 0
+            current.append(chunk)
+            current_chars += len(text)
+        if current:
+            windows.append(current)
+        return windows
 
-        # Order numerically: the unlabeled overview block first, then sections in
-        # ascending section number (18.1, 18.2, ... 18.15), independent of the
-        # order the chunks were retrieved in.
-        def _order_key(key: str) -> tuple[int, int]:
-            if key == "__overview__":
-                return (0, 0)
-            return (1, int(key.split(".")[1]))
+    def _summarize_bounded(
+        self,
+        *,
+        heading: str,
+        windows: list[list[dict[str, Any]]],
+        instruction: str,
+    ) -> str:
+        """Summarize *windows*, streaming + grounding each completed part.
 
-        logger.info(
-            "single-chapter summary: %d chunk(s) -> %d section group(s): %s",
-            len(chunks),
-            len(by_label),
-            sorted(by_label, key=_order_key),
+        Each bounded window is streamed live (so DeepSeek's reasoning-heavy
+        response never trips a request wall-clock timeout) with reasoning
+        suppressed, then grounded against its own source.  A window that produces
+        nothing usable is skipped, never surfaced.
+        """
+        parts: list[str] = []
+        total = len(windows)
+        emit = self._on_chunk
+        can_stream = (
+            self._config.streaming_enabled
+            and emit is not None
+            and hasattr(self._llm_provider, "stream_chat")
         )
-
-        items: list[tuple[str, str]] = []
-        for key in sorted(by_label, key=_order_key):
-            heading = (
-                f"Chapter {chapter_num} (overview)"
-                if key == "__overview__"
-                else f"Section {key}"
-            )
+        for i, window in enumerate(windows, 1):
             ctx = self._format_context(
-                by_label[key],
-                max_chars=self._config.rag_summary_context_chars,
+                window, max_chars=self._config.rag_max_context_chars
             )
             if not ctx.strip():
                 continue
             prompt = self._build_prompt(
-                (
-                    f"Summarize {heading} of chapter {chapter_num} "
-                    f"({chapter_title}) comprehensively, using ONLY the document "
-                    "content below. Cover the main topics, key concepts, and "
-                    "important details in a clear, well-organized overview. Be "
-                    "thorough but focused; do not pad. Write the ENTIRE summary "
-                    "once, in a single response: do not produce multiple drafts "
-                    "and do not re-summarize or restate the chapter a second "
-                    "time. Never add information from outside this document or "
-                    "from prior knowledge. Do not invent specific figures such "
-                    "as accuracy percentages, parameter counts, epoch counts, "
-                    "years, number of classes, or dataset sizes: only cite a "
-                    "number if you can read it directly in the provided content, "
-                    "otherwise describe the point qualitatively. Do not try to "
-                    "recall, verify, or second-guess exact figures: if a number "
-                    "is not clearly written in the provided content, move on "
-                    "without guessing. Do not repeat points you have already "
-                    "covered. Present the overview as one confident, flowing "
-                    "response."
-                ),
+                instruction + f"\n\n(Part {i} of {total} of {heading})",
                 ctx,
             )
-            items.append((heading, prompt))
+            if can_stream:
+                pieces: list[str] = []
+                win_start = time.monotonic()
 
-        # Figure re-grounding targets the whole-chapter-in-one-window case (no
-        # sections detected), where a small model can misstate numbers.  Sectioned
-        # output is already summarized per-section from a small context, so it is
-        # more grounded and needs no extra pass.
-        result = self._map_reduce_stream(items)
-        if set(by_label) == {"__overview__"}:
-            result = self._refine_figures(result, chunks)
-        return _prune_implausible_metric_figures(result)
+                def _fwd(chunk: str, reasoning: str | None) -> None:
+                    if time.monotonic() - win_start > _WINDOW_MAX_SECONDS:  # noqa: B023
+                        raise TimeoutError("bounded summary window exceeded time budget")
+                    if chunk:
+                        pieces.append(chunk)  # noqa: B023
+                        if emit:
+                            emit(chunk, None)
 
-    def _refine_figures(
-        self,
-        text: str,
-        chunks: list[dict[str, Any]],
-    ) -> str:
-        """Re-ground the figures in a draft summary against the source content.
-
-        A summary window sees only a bounded slice of a chapter, so a small model can
-        misstate a number (e.g. write "2021 ILSVRC, top-5 42%" for AlexNet when the
-        source says 2012 / 16%). This focused, low-temperature pass re-reads the draft
-        alongside the same source content and corrects ONLY the figures (years,
-        percentages, parameter counts, epoch counts, dataset sizes, class counts),
-        leaving all other wording and structure intact. It is guarded to fall back to
-        the draft unchanged whenever the correction is unusable or collapses, so it can
-        never make the summary worse.
-        """
-        if not text or not text.strip():
-            return text
-        ctx = self._format_context(
-            chunks, max_chars=self._config.rag_summary_context_chars
-        )
-        if not ctx.strip():
-            return text
-        draft = text if len(text) <= 6000 else text[:6000]
-        query = (
-            "Correct the factual figures in the draft chapter summary below so they "
-            "exactly match the provided source content. Fix ONLY numbers: years, "
-            "percentages, parameter counts, epoch counts, dataset sizes, and class "
-            "counts. Where a figure in the draft differs from the source, write the "
-            "source's value; where the draft gives a figure the source does not "
-            "contain, rephrase that point qualitatively without a number. Change "
-            "nothing else — keep the same wording, structure, heading, and overall "
-            "length. Output only the corrected summary, with no preamble or notes."
-            f"\n\nDRAFT SUMMARY:\n{draft}"
-        )
-        prompt = self._build_prompt(query, ctx)
-        corrected = self._llm_provider.generate(
-            prompt=prompt,
-            temperature=0.2,
-            max_tokens=_RETRY_MAX_TOKENS,
-        )
-        if (
-            corrected
-            and self._is_acceptable(corrected)
-            and len(corrected) >= len(text) * 0.5
-        ):
-            return corrected.strip()
-        logger.warning("figure-refinement pass unusable; keeping draft unchanged")
-        return text
+                try:
+                    returned = self._llm_provider.stream_chat(
+                        messages=[{"role": "user", "content": prompt}],
+                        on_chunk=_fwd,
+                        temperature=SUMMARY_TEMPERATURE,
+                        max_tokens=_SUMMARY_WINDOW_MAX_TOKENS,
+                    )
+                    text = "".join(pieces) or (returned or "")
+                except Exception as e:  # keep the partial on an abort/timeout
+                    logger.warning(
+                        "bounded summary window aborted (%s: %s); keeping partial",
+                        type(e).__name__,
+                        e,
+                    )
+                    text = "".join(pieces)
+                    if not text.strip():
+                        continue
+            else:
+                try:
+                    text = self._generate_guarded(
+                        prompt,
+                        temperature=SUMMARY_TEMPERATURE,
+                        max_tokens=_SUMMARY_WINDOW_MAX_TOKENS,
+                    )
+                except Exception as e:  # skip a failed window
+                    logger.warning(
+                        "bounded summary window failed (%s: %s); skipping",
+                        type(e).__name__,
+                        e,
+                    )
+                    continue
+            text = _prune_implausible_metric_figures(text)
+            text = _ground_figures(text, ctx)
+            text = _trim_to_sentence_end(text)
+            if not text.strip() or not self._is_plausible_summary(text):
+                continue
+            if not can_stream and emit:
+                emit(f"\n\n{text}\n\n", None)
+            parts.append(text)
+        return "\n\n".join(parts)
 
     @staticmethod
     def _detect_section_label(
@@ -1466,7 +1860,103 @@ class _FallbackMixin(_RAGPipelineState):
             return f"{chapter_s}.{m.group(1)}"
         return None
 
-    def _map_reduce_stream(self, items: list[tuple[str, str]]) -> str:
+    @staticmethod
+    def _leading_section_chapter(text: str) -> str | None:
+        """Return the chapter number of the first real numbered heading in *text*.
+
+        Mirrors ``_detect_section_label``'s heading-position guard: only a section
+        number at the start of the chunk or start of a line counts, and a
+        line-start number that directly follows a figure/table/equation/listing
+        reference (e.g. a wrapped "Figure [newline] 18.2") is ignored as a
+        caption.  Unlike ``_detect_section_label`` this is chapter-agnostic, which
+        lets us attribute a chunk to *whatever* chapter its section heading names.
+        """
+        heading_re = re.compile(r"(?:^|\n)\s*(\d+)\.\d+(?:\.\d+)?\b")
+        ref_indicator = re.compile(
+            r"(figure|table|equation|listing|eq\.?|page|p\.)\s*$",
+            re.IGNORECASE,
+        )
+        for m in heading_re.finditer(text):
+            if ref_indicator.search(text[: m.start()]):
+                continue
+            return m.group(1)
+        return None
+
+    @staticmethod
+    def _filter_chunks_to_chapter(
+        chunks: list[dict[str, Any]],
+        chapter_num: int | str,
+        foreign_titles: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Drop retrieved chunks that belong to a *later* chapter.
+
+        ``final_chunks`` for a single-chapter target is collected by page range,
+        and page-range boundaries are imperfect, so the next chapter's content
+        can leak into the target chapter's bucket.  This filter removes each
+        chunk whose numbered section heading belongs to another chapter or whose
+        opening line names another chapter's title, and also drops every chunk
+        on or after the first page that opens with an explicitly later "Chapter
+        N" heading -- which clears the next chapter's body paragraphs that carry
+        no section prefix of their own.
+        """
+        chapter_s = str(chapter_num)
+        target_n = int(chapter_s) if str(chapter_s).isdigit() else None
+        seen_foreign = {f.strip().lower() for f in (foreign_titles or []) if f.strip()}
+        title_starts = [" ".join(t.split()[:4]) for t in seen_foreign]
+        ch_open_re = re.compile(r"^(?:Chapter|Module|Lesson)\s+(\d+)\b", re.IGNORECASE)
+        printed_page_re = re.compile(r"^\[\s*\d{1,4}\s*\]\s*")
+
+        def _opens_heading_after(text: str) -> bool:
+            if target_n is None:
+                return False
+            s = printed_page_re.sub("", text.lstrip(), count=1).lstrip()
+            hm = ch_open_re.match(s)
+            if hm and int(hm.group(1)) > target_n:
+                return True
+            first_line = (s.splitlines()[0] if s else "").strip()
+            return (
+                first_line.isdigit()
+                and 1 <= int(first_line) <= 30
+                and int(first_line) > target_n
+            )
+
+        def _opens_foreign_title(text: str) -> bool:
+            if not title_starts:
+                return False
+            low = text.lstrip().lower()
+            return any(low.startswith(t) for t in title_starts)
+
+        def _page(c: dict[str, Any]) -> int:
+            return int(c.get("page_number", c.get("page", 0)) or 0)
+
+        anchor = min(
+            (
+                _page(c)
+                for c in chunks
+                if _opens_heading_after(c.get("chunk_text", c.get("text", "")))
+            ),
+            default=None,
+        )
+        cutoff = anchor if (anchor is not None and anchor > 1) else None
+        kept: list[dict[str, Any]] = []
+        for c in chunks:
+            text = c.get("chunk_text", c.get("text", ""))
+            lead = _FallbackMixin._leading_section_chapter(text)
+            if lead is not None and lead != chapter_s:
+                continue
+            if _opens_foreign_title(text):
+                continue
+            if cutoff is not None and _page(c) >= cutoff:
+                continue
+            kept.append(c)
+        return kept
+
+    def _map_reduce_stream(
+        self,
+        items: list[tuple[str, str]],
+        *,
+        temperature: float | None = None,
+    ) -> str:
         """Stream map-reduce window generations in order and concatenate.
 
         *items* is a list of ``(heading, prompt)`` pairs.  Fan-out is guarded to
@@ -1481,6 +1971,9 @@ class _FallbackMixin(_RAGPipelineState):
         on completion — a degenerate window is retried at a low temperature or
         skipped, never surfaced in the final answer.
 
+        ``temperature`` optionally overrides the sampling temperature for every
+        window (used by the summary path to keep figure-heavy output faithful).
+
         Returns the concatenated answer (falling back to it when no content was
         streamed at all).
         """
@@ -1490,7 +1983,9 @@ class _FallbackMixin(_RAGPipelineState):
         parts: list[tuple[str, str]] = []
         for heading, prompt in capped:
             summary = self._trim_rehashed_tail(
-                self._generate_window_guarded(prompt, heading)
+                self._generate_window_guarded(
+                    prompt, heading, temperature=temperature
+                )
             )
             if summary:
                 parts.append((heading, summary))
@@ -1509,9 +2004,7 @@ class _FallbackMixin(_RAGPipelineState):
         In a streaming-enabled session, the heading is emitted first and then
         reasoning + content tokens are forwarded to ``_on_chunk`` as they arrive,
         so the chat streams in real time instead of buffering a whole window.
-        Sampling uses the summary-specific ``llm_summary_temperature`` /
-        ``llm_max_tokens`` (unless overridden) — summary windows run at a lower
-        temperature than general chat to avoid mid-summary degeneration.
+        Sampling uses ``llm_temperature`` / ``llm_max_tokens`` (unless overridden).
 
         A mid-stream flood guard detects derailment as it accumulates and
         **aborts the stream immediately**, so a runaway window cannot stream an
@@ -1525,7 +2018,7 @@ class _FallbackMixin(_RAGPipelineState):
         Returns the validated answer text (or an empty string when skipped), and
         streams the ``heading`` + answer through ``_on_chunk`` on success.
         """
-        temp = temperature if temperature is not None else self._config.llm_summary_temperature
+        temp = temperature if temperature is not None else self._config.llm_temperature
         tokens = max_tokens if max_tokens is not None else self._config.llm_max_tokens
 
         can_stream = (
@@ -1541,18 +2034,33 @@ class _FallbackMixin(_RAGPipelineState):
 
         buffered: list[str] = []  # everything streamed (incl. any derailed tail)
         clean: list[str] = []  # longest prefix that stayed acceptable as it streamed
+        reason_log: list[str] = []  # accumulated chain-of-thought for spiral detection
         heading_shown = False
         derailed = False
 
         def on_chunk(content: str, reasoning: str | None) -> None:
             nonlocal heading_shown
-            if reasoning and self._on_chunk:
-                self._on_chunk("", reasoning)
+            if reasoning:
+                reason_log.append(reasoning)
+                if self._is_reasoning_spiral("".join(reason_log)):
+                    raise _StreamAbortError()
+                # Reasoning is consumed only for spiral detection -- it is never
+                # forwarded to the terminal, so a chain-of-thought spiral or the
+                # raw thinking block is not shown to the user.
             if content:
                 buffered.append(content)
+                joined = "".join(buffered)
                 # Flush before streaming a chunk that would trip the flood guard,
                 # so a derailed tail is never surfaced, and never reaches `clean`.
-                if self._is_flooding("".join(buffered)):
+                if self._is_flooding(joined):
+                    raise _StreamAbortError()
+                # A figure-verification leak arriving as content (e.g. "?? (wait,
+                # the text says ...)") precedes a stall -- abort and clean-retry.
+                if _is_content_self_correction(joined.lower()):
+                    raise _StreamAbortError()
+                # Never surface the provider's "I got stuck in repetitive
+                # reasoning" dead-end; treat it as a derail and relax-retry.
+                if joined.lstrip().startswith(_REASONING_BUDGET_FALLBACK_PREFIX):
                     raise _StreamAbortError()
                 if self._on_chunk:
                     if not heading_shown:
@@ -1571,9 +2079,15 @@ class _FallbackMixin(_RAGPipelineState):
             )
         except _StreamAbortError:
             derailed = True
-        except RuntimeError as e:
-            if not isinstance(e.__cause__, _StreamAbortError):
-                raise
+        except (ServiceUnavailableError, RuntimeError) as e:
+            # A stalled or errored stream (provider idle-timeout, API error, read
+            # failure) must not surface as a hard failure after a long silence;
+            # treat it like a derail so the window is regenerated deterministically.
+            logger.warning(
+                "RAG window stream degraded (%s: %s); regenerating at low temperature",
+                type(e).__name__,
+                e,
+            )
             derailed = True
 
         # A window that derailed mid-stream is incomplete: the clean prefix ends
@@ -1619,11 +2133,29 @@ class _FallbackMixin(_RAGPipelineState):
         a truncated or degenerate one.  Returns ``None`` when the retry is also
         unacceptable, so the caller decides the fallback.
         """
-        retry = self._llm_provider.generate(
-            prompt=prompt,
-            temperature=0.1,
-            max_tokens=max_tokens,
+        # Attempt 1 asks for exact source figures, which the model can obsess over
+        # and burn its reasoning budget on; relax that pressure on the retry so it
+        # can actually complete a summary instead of looping again.
+        retry_prompt = (
+            prompt
+            + "\n\nYour previous attempt became stuck re-verifying exact figures. "
+            "Write a complete, confident overview now: state key numbers once, "
+            "approximate values are acceptable. Do not try to confirm, re-derive, "
+            "or second-guess any value -- present a flowing summary and finish."
         )
+        try:
+            retry = self._llm_provider.generate(
+                prompt=retry_prompt,
+                temperature=0.1,
+                max_tokens=max_tokens,
+            )
+        except (ServiceUnavailableError, RuntimeError) as e:
+            logger.warning(
+                "RAG window retry failed (%s: %s); skipping window",
+                type(e).__name__,
+                e,
+            )
+            return None
         if not self._is_acceptable(retry):
             return None
         if self._on_chunk:
@@ -1659,27 +2191,37 @@ class _FallbackMixin(_RAGPipelineState):
         """
         if len(text.strip()) < _STREAM_FLOOD_MIN_CHARS:
             return False
-        if not self._is_plausible_summary(text):
-            return True
-        return self._is_extreme_salad(text)
+        return not self._is_plausible_summary(text)
 
-    def _is_extreme_salad(self, text: str) -> bool:
-        """Return True when recent text is agrammatic word-salad.
+    def _is_reasoning_spiral(self, reasoning: str) -> bool:
+        """Return True when chain-of-thought reasoning has degenerated.
 
-        The mid-stream guard is repetition-agnostic, so high-diversity salad can
-        pass the plausibility check and stream unbounded.  This catches the
-        low-function-word signal on its own.  The threshold is deliberately
-        extreme (< 8% function words) so a legitimate dense technical summary,
-        which always retains a normal share of determiners/prepositions, is never
-        truncated.
+        Reasoning that derails (the "thinking spiral" that can also leak into the
+        final answer) reveals itself by dense, repeated first-person
+        self-verification: a stream of "No... wait... actually... let me re-read...
+        misread" hedges, and/or an unbounded string of implausible metric guesses
+        ("above 98%? No, above 103%?").  A short, normal planning block is never
+        treated as a spiral — this requires a long, hedge-dense, or
+        impossible-figure reasoning run.
         """
-        if len(text.strip()) < _STREAM_FLOOD_MIN_CHARS:
+        if not reasoning or len(reasoning) < 400:
             return False
-        tokens = re.findall(r"[A-Za-z0-9']+", text.lower())[-150:]
-        if len(tokens) < 60:
+        low = reasoning.lower()
+        words = re.findall(r"[a-z']+", low)
+        if not words:
             return False
-        function_count = sum(1 for t in tokens if t in _FUNCTION_WORDS)
-        return function_count / len(tokens) < _DERAIL_FUNCTION_WORD_RATIO
+        hedges = len(
+            re.findall(
+                r"\b(no\b|wait\b|actually\b|hmm\b|hold on\b|correction\b|"
+                r"misread\b|re-?read\b|re-?check\b|check again\b|let me look\b|"
+                r"let me trace\b|i mis\b)",
+                low,
+            )
+        )
+        if hedges >= 10 and hedges / len(words) >= 0.12:
+            return True
+        above = [int(n) for n in re.findall(r"above\s+(\d+)\s*(?:percent|%)", low)]
+        return bool(len(above) >= 4 and max(above) > 100)
 
     def _looks_derailed(self, text: str) -> bool:
         """Return True when a trailing span of text is rambling word-salad.
@@ -2154,6 +2696,169 @@ class _RoutingMixin(_RAGPipelineState):
         if doc_name is not None:
             return router.resolve_source_file(doc_name)
         return None
+
+    # ------------------------------------------------------------------
+    # Page-number lookup ("what is on page N")
+    # ------------------------------------------------------------------
+
+    def _answer_page_query(self, query: str) -> dict[str, Any] | None:
+        """Return the verbatim text of the requested printed page, else ``None``.
+
+        A page-number query is an exact lookup: resolve the printed page to its
+        chunks and return the page text as-is. No LLM is invoked, so the output
+        is the raw, complete page text with no commentary, excerpts, or truncation.
+        Returns ``None`` for any query without a page reference, so the caller
+        falls back to the normal semantic path and non-page queries are unaffected.
+        """
+        chunks = self._page_query_chunks(query)
+        if chunks is None:
+            return None
+        if not chunks:
+            return self._page_not_found(query)
+        return {
+            "answer": self._stitch_page_text(chunks),
+            "query": query,
+            "sources": chunks,
+        }
+
+    @staticmethod
+    def _stitch_page_text(chunks: list[dict[str, Any]]) -> str:
+        """Return the page's verbatim text by stitching *chunks* in order.
+
+        Removes each chunk's leading ``[ N ]`` extraction stub and collapses the
+        small boundary overlap between consecutive chunks so the result reads as
+        a single, clean page rather than overlapping slices.
+        """
+        parts: list[str] = []
+        for c in chunks:
+            text = (c.get("chunk_text") or c.get("text") or "").strip()
+            if not text:
+                continue
+            marker = _PAGE_MARKER_RE.match(text)
+            if marker:
+                text = text[marker.end() :].strip()
+            if _PAGE_STUB_LINE_RE.search(text):
+                text = "\n".join(
+                    line for line in text.splitlines() if not _PAGE_STUB_LINE_RE.match(line)
+                ).strip()
+            parts.append(text)
+        if not parts:
+            return ""
+        result = parts[0]
+        for nxt in parts[1:]:
+            k = _boundary_overlap(result, nxt)
+            result += nxt[k:] if k else "\n" + nxt
+        return result
+
+    def _page_query_chunks(
+        self, query: str
+    ) -> list[dict[str, Any]] | None:
+        """Resolve a page-reference query to its chunks, or ``None`` to skip.
+
+        Returns ``None`` when the query has no page reference (or the backend
+        cannot do a page lookup) so the caller falls back to semantic search;
+        returns ``[]`` when a referenced page has no matching chunks.
+        """
+        printed = self._printed_page_from_query(query)
+        if printed is None:
+            return None
+        storage = getattr(self._searcher, "storage", None)
+        if storage is None or not hasattr(storage, "find_chunks"):
+            return None
+        source = self._resolve_source_filter(query)
+        try:
+            found = storage.find_chunks(source_file=source, printed_page=printed)
+            found = self._expand_page_chunks(storage, source, list(found))
+        except Exception as exc:  # pragma: no cover - backend-dependent
+            logger.warning("Page lookup failed; falling back to semantic search: %s", exc)
+            return None
+        return [dict(c) for c in found]
+
+    @staticmethod
+    def _printed_page_from_query(query: str) -> int | None:
+        """Return the printed page number referenced in *query*, or ``None``."""
+        match = _PAGE_REF_RE.search(query)
+        if match is None:
+            return None
+        try:
+            return int(match.group(1))
+        except ValueError:
+            return None
+
+
+    def _expand_page_chunks(
+        self,
+        storage: Any,
+        source: str | None,
+        primary: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Broaden a page lookup to the whole physical page(s).
+
+        ``printed_page`` is derived per-chunk from a ``[ N ]`` marker, so only the
+        first chunk of a page carries it while the page's continuation chunks
+        (same physical ``page_number``, no marker) are omitted. Expand to every
+        chunk sharing the marker chunk's physical page so the full printed page
+        is returned instead of the marker-bearing slice.
+        """
+        if not primary:
+            return primary
+        page_nums = {
+            int(c["page_number"])
+            for c in primary
+            if c.get("page_number") is not None
+        }
+        if not page_nums or not hasattr(storage, "find_chunks"):
+            return primary
+        try:
+            full = storage.find_chunks(source_file=source, page_number=sorted(page_nums))
+        except Exception:  # pragma: no cover - backend-dependent
+            return primary
+        by_id: dict[str, Any] = {}
+        for c in primary:
+            by_id[c.get("chunk_id", id(c))] = c
+        for c in full:
+            by_id.setdefault(c.get("chunk_id", id(c)), c)
+        merged = list(by_id.values())
+        # Order within a page by the ingest ``page_pos``. Chunks lacking it
+        # (pre-reingest legacy data) sort last, in their returned order.
+        return sorted(
+            merged,
+            key=lambda c: (
+                int(c.get("page_number") or -1),
+                int(c["page_pos"]) if c.get("page_pos") is not None else 10**9,
+            ),
+        )
+
+    def _page_not_found(self, query: str) -> dict[str, Any]:
+        """Graceful answer when a referenced printed page has no chunks."""
+        return {
+            "answer": (
+                "The available documents do not contain a page matching that "
+                "number in their printed page index."
+            ),
+            "query": query,
+            "sources": [],
+        }
+
+    async def _answer_page_query_async(self, query: str) -> dict[str, Any] | None:
+        """Async twin of :meth:`_answer_page_query`.
+
+        Resolves a "what is on page N" query to its printed-page chunks and
+        returns the page text verbatim (no LLM). ``find_chunks`` is a synchronous
+        storage call, so it runs via ``asyncio.to_thread`` to keep the event loop
+        responsive.
+        """
+        chunks = await asyncio.to_thread(self._page_query_chunks, query)
+        if chunks is None:
+            return None
+        if not chunks:
+            return self._page_not_found(query)
+        return {
+            "answer": self._stitch_page_text(chunks),
+            "query": query,
+            "sources": chunks,
+        }
+
 
     def _list_sources_result(self, query: str) -> dict[str, Any]:
         """Build a deterministic answer enumerating ALL distinct sources.

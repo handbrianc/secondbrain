@@ -207,13 +207,13 @@ class TestQualityMetrics:
         "query,response,expected_score",
         [
             pytest.param(
-                "What is MongoDB vector search?",
-                "MongoDB vector search enables semantic search through embeddings.",
+                "What is Qdrant vector search?",
+                "Qdrant vector search enables semantic search through embeddings.",
                 4,
                 id="relevant_response",
             ),
             pytest.param(
-                "What is MongoDB vector search?",
+                "What is Qdrant vector search?",
                 "The sky is blue and grass is green.",
                 1,
                 id="irrelevant_response",
@@ -322,10 +322,10 @@ JSON output:"""
     def test_groundedness(self, llm_judge_prompts: dict[str, Any]) -> None:
         """Test groundedness evaluation (response based on provided context)."""
         context = (
-            "MongoDB Atlas Vector Search enables semantic search using embeddings."
+            "Qdrant Vector Search enables semantic search using embeddings."
         )
         grounded_response = (
-            "MongoDB Atlas Vector Search enables semantic search using embeddings."
+            "Qdrant Vector Search enables semantic search using embeddings."
         )
         hallucinated_response = "PostgreSQL is the best vector database."
 

@@ -1,6 +1,6 @@
-"""MongoDB search pipeline builder for local vector search.
+"""Search pipeline builder for local vector search.
 
-This module provides functions to build MongoDB aggregation pipelines
+This module provides functions to build aggregation pipelines
 for vector similarity search using manual cosine similarity calculation.
 """
 
@@ -16,11 +16,11 @@ def build_search_pipeline(
     file_type_filter: str | None = None,
     use_prefix_match: bool = True,
 ) -> list[dict[str, Any]]:
-    """Build MongoDB aggregation pipeline for vector search.
+    """Build aggregation pipeline for vector search.
 
-    Uses manual cosine similarity calculation via MongoDB aggregation
-    operators. This approach works with MongoDB Community Edition without
-    requiring Atlas Search.
+    Uses manual cosine similarity calculation via aggregation
+    operators. This approach works with a local vector store without
+    requiring a managed search service.
 
     The pipeline:
     1. Filters documents by source/file type (optional)
@@ -31,7 +31,7 @@ def build_search_pipeline(
     Note: This is O(n·d) complexity where n = number of documents and
     d = embedding dimensions, as it computes cosine similarity over all
     document vectors. Suitable for small to medium datasets (<100k documents).
-    For larger datasets, consider MongoDB Atlas Search (paid tier) or an
+    For larger datasets, consider a managed search index or an
     external vector database (Qdrant, Weaviate, Pinecone).
 
     Args:
@@ -56,7 +56,7 @@ def build_search_pipeline(
     if file_type_filter:
         query_filter["file_type"] = file_type_filter
 
-    # Calculate query vector magnitude in Python (not in MongoDB)
+    # Calculate query vector magnitude in Python (not in the database)
     query_magnitude = math.sqrt(sum(x * x for x in embedding))
     embedding_dim = len(embedding)
 
@@ -179,7 +179,7 @@ def build_search_pipeline(
     pipeline.append(
         {
             "$project": {
-                "_id": 0,  # Exclude MongoDB's _id field
+                "_id": 0,  # Exclude the internal _id field
                 "chunk_id": 1,
                 "source_file": 1,
                 "page_number": 1,

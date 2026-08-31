@@ -37,8 +37,6 @@ certifi==2026.2.25
 charset-normalizer==3.4.5
     # via requests
 click==8.4.2
-    # via
-    #   -r requirements.in
     #   python-oxmsg
     #   typer
 colorlog==6.10.1
@@ -58,14 +56,11 @@ distro==1.9.0
     #   anthropic
     #   openai
 dnspython==2.8.0
-    # via pymongo
 doclang==0.7.2
     # via docling-core
 docling==2.119.0
     # via -r requirements.in
 docling-core[chunking]==2.91.0
-    # via
-    #   -r requirements.in
     #   docling-ibm-models
     #   docling-parse
     #   docling-slim
@@ -99,8 +94,6 @@ hf-xet==1.4.2
 httpcore==1.0.9
     # via httpx
 httpx==0.28.1
-    # via
-    #   -r requirements.in
     #   anthropic
     #   docling-slim
     #   openai
@@ -158,8 +151,6 @@ multiprocess==0.70.19
 networkx==3.6.1
     # via torch
 numpy==2.5.1
-    # via
-    #   -r requirements.in
     #   accelerate
     #   docling-ibm-models
     #   docling-slim
@@ -221,8 +212,6 @@ opencv-python==4.13.0.92
 openpyxl==3.1.5
     # via docling-slim
 opentelemetry-api==1.44.0
-    # via
-    #   -r requirements.in
     #   opentelemetry-sdk
     #   opentelemetry-semantic-conventions
 opentelemetry-sdk==1.44.0
@@ -255,8 +244,6 @@ psutil==7.2.2
 pyclipper==1.4.0
     # via rapidocr
 pydantic==2.13.4
-    # via
-    #   -r requirements.in
     #   anthropic
     #   docling-core
     #   docling-ibm-models
@@ -267,8 +254,6 @@ pydantic==2.13.4
 pydantic-core==2.46.4
     # via pydantic
 pydantic-settings==2.15.0
-    # via
-    #   -r requirements.in
     #   docling-core
     #   docling-slim
 pygments==2.19.2
@@ -277,9 +262,6 @@ pygments==2.19.2
     #   rich
 pylatexenc==2.10
     # via docling-slim
-pymongo==4.17.0
-    # via
-    #   -r requirements.in
     #   motor
 pypdfium2==5.6.0
     # via docling-slim
@@ -288,8 +270,6 @@ python-dateutil==2.9.0.post0
 python-docx==1.2.0
     # via docling-slim
 python-dotenv==1.2.2
-    # via
-    #   -r requirements.in
     #   docling-slim
     #   pydantic-settings
 python-oxmsg==0.0.2
@@ -319,8 +299,6 @@ requests==2.32.5
     #   rapidocr
     #   transformers
 rich==15.0.0
-    # via
-    #   -r requirements.in
     #   docling-slim
     #   typer
 rpds-py==0.30.0
@@ -403,8 +381,6 @@ typer==0.21.2
     #   docling-core
     #   docling-slim
 typing-extensions==4.15.0
-    # via
-    #   -r requirements.in
     #   anthropic
     #   beautifulsoup4
     #   docling-core

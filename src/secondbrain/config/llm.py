@@ -29,18 +29,12 @@ class LLMMixin:
         description="Default LLM model for RAG",
     )
     llm_temperature: float = Field(
-        default=0.1,
+        default=0.3,
         description="LLM generation temperature (0.0-2.0)",
     )
-    llm_summary_temperature: float = Field(
-        default=0.7,
-        description=(
-            "Temperature for chapter/section summary window generation (0.0-2.0). "
-            "Independent of ``llm_temperature``: long comprehensive summaries are "
-            "more prone to degenerate into word-salad at high temperature, so a "
-            "lower value here keeps them stable while leaving general chat sampling "
-            "untouched."
-        ),
+    llm_top_p: float = Field(
+        default=0.95,
+        description="LLM nucleus-sampling top_p (0.0-1.0).",
     )
     llm_repetition_penalty: float = Field(
         default=1.0,
@@ -52,12 +46,42 @@ class LLMMixin:
         ),
     )
     llm_max_tokens: int = Field(
-        default=2048,
+        default=384000,
         description="Maximum tokens for LLM responses",
+    )
+    llm_max_reasoning_chars: int = Field(
+        default=120000,
+        description=(
+            "Hard backstop on accumulated chain-of-thought (reasoning) characters "
+            "streamed per response. Degenerate reasoning loops are also halted early "
+            "by repetition detection; this ceiling bounds the worst case if that "
+            "detector misses. 0 disables the ceiling."
+        ),
+    )
+    llm_max_answer_chars: int = Field(
+        default=24000,
+        description=(
+            "Bounded maximum length of the answer (content) text streamed per "
+            "response. Healthily accommodates long multi-paragraph overviews "
+            "(e.g. a full chapter summary quoting every source figure); a runaway "
+            "generator (e.g. a model endlessly re-verifying exact figures in its "
+            "own prose) is cut here and a clean sentence-ending prefix returned. "
+            "0 disables the bound."
+        ),
     )
     llm_timeout: int = Field(
         default=120,
         description="Request timeout in seconds for LLM",
+    )
+    llm_stream_idle_timeout_seconds: int = Field(
+        default=120,
+        description=(
+            "Bounded wait (seconds) for the next streamed token before aborting the "
+            "response, preventing an indefinite hang when the server stops sending "
+            "mid-output. Counts only wall-clock silence (no content or reasoning "
+            "token arriving), so normal slow reasoning is unaffected. 0 disables the "
+            "bound (legacy unlimited behavior)."
+        ),
     )
 
     @field_validator("llm_temperature")
@@ -68,12 +92,12 @@ class LLMMixin:
             raise ValueError("llm_temperature must be between 0.0 and 2.0")
         return v
 
-    @field_validator("llm_summary_temperature")
+    @field_validator("llm_top_p")
     @classmethod
-    def validate_llm_summary_temperature(cls, v: float) -> float:
-        """Validate the summary temperature is between 0.0 and 2.0."""
-        if v < 0.0 or v > 2.0:
-            raise ValueError("llm_summary_temperature must be between 0.0 and 2.0")
+    def validate_llm_top_p(cls, v: float) -> float:
+        """Validate top_p is between 0.0 and 1.0."""
+        if v < 0.0 or v > 1.0:
+            raise ValueError("llm_top_p must be between 0.0 and 1.0")
         return v
 
     @field_validator("llm_repetition_penalty")
@@ -92,10 +116,34 @@ class LLMMixin:
             raise ValueError("llm_max_tokens must be positive")
         return v
 
+    @field_validator("llm_max_reasoning_chars")
+    @classmethod
+    def validate_llm_max_reasoning_chars(cls, v: int) -> int:
+        """Validate LLM max reasoning chars is non-negative (0 disables)."""
+        if v < 0:
+            raise ValueError("llm_max_reasoning_chars must be >= 0")
+        return v
+
+    @field_validator("llm_max_answer_chars")
+    @classmethod
+    def validate_llm_max_answer_chars(cls, v: int) -> int:
+        """Validate LLM max answer chars is non-negative (0 disables)."""
+        if v < 0:
+            raise ValueError("llm_max_answer_chars must be >= 0")
+        return v
+
     @field_validator("llm_timeout")
     @classmethod
     def validate_llm_timeout(cls, v: int) -> int:
         """Validate LLM timeout is positive."""
         if v <= 0:
             raise ValueError("llm_timeout must be positive")
+        return v
+
+    @field_validator("llm_stream_idle_timeout_seconds")
+    @classmethod
+    def validate_llm_stream_idle_timeout_seconds(cls, v: int) -> int:
+        """Validate LLM stream idle timeout is non-negative (0 disables)."""
+        if v < 0:
+            raise ValueError("llm_stream_idle_timeout_seconds must be >= 0")
         return v

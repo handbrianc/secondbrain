@@ -72,8 +72,9 @@ All chunk metadata (`chunk_id`, `source_file`, `page_number`, `chunk_text`, `ele
 | ----------------------------- | ------------- | --------------------------------- |
 | `SECONDBRAIN_LLM_PROVIDER`    | `openai`      | Provider type (openai, anthropic) |
 | `SECONDBRAIN_LLM_MODEL`       | `gpt-4o-mini` | Model name                        |
-| `SECONDBRAIN_LLM_TEMPERATURE` | `0.1`         | Generation temperature (0.0-2.0)  |
-| `SECONDBRAIN_LLM_MAX_TOKENS`  | `2048`        | Maximum response tokens           |
+| `SECONDBRAIN_LLM_TEMPERATURE` | `1.0`         | Generation temperature (0.0-2.0)  |
+| `SECONDBRAIN_LLM_TOP_P`       | `0.95`        | Nucleus-sampling top_p (0.0-1.0)  |
+| `SECONDBRAIN_LLM_MAX_TOKENS`  | `384000`      | Maximum response tokens           |
 | `SECONDBRAIN_LLM_TIMEOUT`     | `120`         | Request timeout in seconds        |
 | `SECONDBRAIN_OPENAI_BASE_URL` | `None`        | OpenAI-compatible API base URL    |
 

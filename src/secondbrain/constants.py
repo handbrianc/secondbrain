@@ -46,8 +46,6 @@ DEFAULT_FILE_PROCESSING_TIMEOUT = 3600  # Default file processing timeout (1 hou
 DEFAULT_RESULT_RETRIEVAL_TIMEOUT = 300  # Default result retrieval timeout (5 minutes)
 
 # Pooling Constants
-DEFAULT_MAX_POOL_SIZE = 50  # Default MongoDB max pool size
-DEFAULT_MIN_POOL_SIZE = 10  # Default MongoDB min pool size
 DEFAULT_MAX_IDLE_TIME_MS = 300000  # Default max idle time (5 minutes)
 DEFAULT_WAIT_QUEUE_TIMEOUT_MS = 5000  # Default wait queue timeout (5 seconds)
 DEFAULT_SERVER_SELECTION_TIMEOUT_MS = (

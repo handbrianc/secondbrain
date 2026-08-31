@@ -1,6 +1,6 @@
 """Qdrant vector storage settings fragment for :class:`secondbrain.config.Config`.
 
-Replaces the MongoDB-backed vector store with Qdrant. The vector backend is a
+Replaces the legacy vector store. The vector backend is a
 pure cosine-similarity database; all chunk metadata (including ``chunk_text``)
 travels in the Qdrant payload so ``search`` returns everything the Searcher
 needs in a single round trip.

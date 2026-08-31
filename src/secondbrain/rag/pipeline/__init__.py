@@ -80,7 +80,7 @@ class RAGPipeline(
         self._on_chunk = on_chunk
         # Lazily-initialized DocumentRouter for document-scoped retrieval.
         # Created on first use so that the pipeline can be constructed without
-        # a running MongoDB connection (e.g. during CLI help / --version).
+        # a running vector store connection (e.g. during CLI help / --version).
         self._document_router: DocumentRouter | None = None
 
     def query(
@@ -133,6 +133,11 @@ class RAGPipeline(
 
             # --- Resolve document-scoped source_filter from query ---
             source_filter = self._resolve_source_filter(query)
+
+            # --- Page-number lookup: "what is on page 500" ---
+            page_result = self._answer_page_query(query)
+            if page_result is not None:
+                return page_result
 
             # --- B4: Iterative RAG for broad-coverage and chapter/section-enumeration queries ---
             intent_result = self._intent_parser.parse(query)
@@ -283,6 +288,11 @@ class RAGPipeline(
 
             # --- Resolve document-scoped source_filter from query ---
             source_filter = self._resolve_source_filter(query)
+
+            # --- Page-number lookup: "what is on page 500" ---
+            page_result = self._answer_page_query(query)
+            if page_result is not None:
+                return page_result
 
             # --- B4: Iterative RAG for broad-coverage and chapter/section-enumeration queries ---
             intent_result = self._intent_parser.parse(query)
@@ -731,6 +741,17 @@ class RAGPipeline(
                             if re.match(r"Chapter\s+\d+,", nm.group(0), re.IGNORECASE):
                                 continue
                             chapter_first_pg[ch] = pg
+
+                # Scan body chunks for magazine-style chapter openings (bare
+                # number + title, e.g. ML4T).  These are body-role, invisible to
+                # the heading/TOC structure probe, so without them a chapter that
+                # never gets a reliable start page is unbounded and the next
+                # chapter's content leaks into its bucket.
+                for open_n, open_pg in self._detect_chapter_openings(
+                    body_all_
+                ).items():
+                    if open_n not in chapter_first_pg:
+                        chapter_first_pg[open_n] = open_pg
 
                 # Phase 1: find chapter start pages from body chunk subsection headers like "1.1 " or "11.1.1 "
                 # Use \b (word boundary) + search() instead of ^ + match() because docling
@@ -1259,52 +1280,45 @@ class RAGPipeline(
                                 ),
                                 "",
                             )
+                            foreign_titles = [
+                                t
+                                for ct, _s, t in full_chapters
+                                if str(ct) != str(enum_target) and t
+                            ]
                             answer = self._generate_single_chapter_summary(
-                                final_chunks, str(enum_target), chapter_title
+                                final_chunks,
+                                str(enum_target),
+                                chapter_title,
+                                foreign_titles=foreign_titles,
                             )
                     else:
+                        # Single-chapter overview (this query's path): generate
+                        # non-streaming, vet (ground figures to the source and
+                        # regenerate deterministically if the draft leaked reasoning,
+                        # was empty, or burned the reasoning budget), then emit once
+                        # -- so a spiral or "I got stuck" is never shown and figures
+                        # are quoted from the source.
                         prompt = self._build_prompt(query, context_text)
+                        prompt += (
+                            "\n\nYou are summarizing source material. Quote figures "
+                            "(percentages, counts, years, metrics, returns) EXACTLY as "
+                            "stated in the retrieved context; never invent, estimate, "
+                            "round, or 'correct' a value the source does not state. "
+                            "This rule applies to prose statistics only -- do not "
+                            "fixate on reproducing code details or function arguments "
+                            "(e.g. list(range(...))) verbatim. State each figure once, "
+                            "confidently, and move on."
+                        )
                         with trace_operation("rag_generation_iterative") as span:
                             if span:
                                 span.set_attribute("rag.iterative_mode", True)
                                 span.set_attribute("rag.enumeration_mode", True)
                                 span.set_attribute("rag.top_k", top_k)
-
-                            if self._config.streaming_enabled and hasattr(
-                                self._llm_provider, "stream_chat"
-                            ):
-                                try:
-                                    messages = [{"role": "user", "content": prompt}]
-                                    accumulated_resp: list[str] = []
-
-                                    def on_chunk(
-                                        content: str, _reasoning: str | None
-                                    ) -> None:
-                                        if content:
-                                            accumulated_resp.append(content)
-                                        if self._on_chunk and (content or _reasoning):
-                                            self._on_chunk(content, _reasoning)
-
-                                    enum_max_tokens = self._config.llm_max_tokens
-                                    self._llm_provider.stream_chat(
-                                        messages=messages,
-                                        on_chunk=on_chunk,
-                                        temperature=self._config.llm_temperature,
-                                        max_tokens=enum_max_tokens,
-                                    )
-                                    answer = "".join(accumulated_resp)
-                                except Exception:
-                                    answer = ""
-
-                            if not answer or not answer.strip():
-                                enum_max_tokens = self._config.llm_max_tokens
-                                answer = self._llm_provider.generate(
-                                    prompt=prompt,
-                                    temperature=self._config.llm_temperature,
-                                    max_tokens=enum_max_tokens,
-                                )
-                                if self._on_chunk and answer:
-                                    self._on_chunk(answer, None)
+                            answer = self._vet_answer(
+                                self._generate(prompt), prompt, context_text
+                            )
+                            if self._on_chunk and answer:
+                                self._on_chunk(answer, None)
                 except Exception as e:
                     logger.error(
                         "Iterative query generation failed: %s: %s", type(e).__name__, e
@@ -1361,7 +1375,11 @@ class RAGPipeline(
         context_text = chapter_roster + self._format_context(final_chunks)
         prompt = self._build_prompt(query, context_text)
 
-        # 6. Generate answer (same LLM call as query() uses)
+        # 6. Generate answer. Every query that reaches _iterative_query is a
+        #    chapter/section/coverage summary, so generate non-streaming and vet
+        #    (ground figures to the source; a leak/empty/budget-fallback
+        #    regenerated deterministically) then emit once -- a reasoning spiral or
+        #    "I got stuck" can never surface in the terminal.
         generation_start = time.perf_counter()
         answer = ""
         try:
@@ -1370,37 +1388,23 @@ class RAGPipeline(
                     span.set_attribute("rag.iterative_mode", True)
                     span.set_attribute("rag.top_k", top_k)
 
-                if self._config.streaming_enabled and hasattr(
-                    self._llm_provider, "stream_chat"
-                ):
-                    try:
-                        messages = [{"role": "user", "content": prompt}]
-                        accumulated_resp = []
-
-                        def on_chunk(content: str, _reasoning: str | None) -> None:
-                            if content:
-                                accumulated_resp.append(content)
-                            if self._on_chunk and (content or _reasoning):
-                                self._on_chunk(content, _reasoning)
-
-                        self._llm_provider.stream_chat(
-                            messages=messages,
-                            on_chunk=on_chunk,
-                            temperature=self._config.llm_temperature,
-                            max_tokens=self._config.llm_max_tokens,
-                        )
-                        answer = "".join(accumulated_resp)
-                    except Exception:
-                        answer = ""
-
+                prompt += (
+                    "\n\nYou are summarizing source material. Quote figures "
+                    "(percentages, counts, years, metrics, returns) EXACTLY as stated "
+                    "in the retrieved context; never invent, estimate, round, or "
+                    "'correct' a value the source does not state. This rule applies to "
+                    "prose statistics only -- do not fixate on reproducing code "
+                    "details or function arguments (e.g. list(range(...))) verbatim. "
+                    "State each figure once, confidently, and move on."
+                )
+                answer = self._vet_answer(self._generate(prompt), prompt, context_text)
                 if not answer or not answer.strip():
-                    answer = self._llm_provider.generate(
-                        prompt=prompt,
-                        temperature=self._config.llm_temperature,
-                        max_tokens=self._config.llm_max_tokens,
+                    answer = (
+                        "I couldn't produce a complete summary. Please try again or "
+                        "narrow the scope of your request."
                     )
-                    if self._on_chunk and answer:
-                        self._on_chunk(answer, None)
+                if self._on_chunk and answer:
+                    self._on_chunk(answer, None)
         except Exception as e:
             logger.error(
                 "Iterative query generation failed: %s: %s", type(e).__name__, e
@@ -1445,6 +1449,11 @@ class RAGPipeline(
 
             # --- Resolve document-scoped source_filter from query ---
             source_filter = self._resolve_source_filter(query)
+
+            # --- Page-number lookup: "what is on page 500" ---
+            page_result = await self._answer_page_query_async(query)
+            if page_result is not None:
+                return page_result
 
             retrieval_start = time.perf_counter()
             try:
@@ -1566,6 +1575,11 @@ class RAGPipeline(
 
             # --- Resolve document-scoped source_filter from query ---
             source_filter = self._resolve_source_filter(query)
+
+            # --- Page-number lookup: "what is on page 500" ---
+            page_result = await self._answer_page_query_async(query)
+            if page_result is not None:
+                return page_result
 
             rewritten_query = self._rewrite_query_with_history(query, session)
 
