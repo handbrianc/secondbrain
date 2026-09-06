@@ -35,14 +35,10 @@ Defaults should work for 80% of use cases. Users who need customization should b
 
 ```python
 if not any([source, chunk_id, all]):
-    raise CLIValidationError(
-        "Must specify --source, --chunk-id, or --all"
-    )
+    raise CLIValidationError("Must specify --source, --chunk-id, or --all")
 
 if sum([bool(source), bool(chunk_id), all]) > 1:
-    raise CLIValidationError(
-        "Specify only one of --source, --chunk-id, or --all"
-    )
+    raise CLIValidationError("Specify only one of --source, --chunk-id, or --all")
 ```
 
 ## Error Handling Patterns
@@ -51,6 +47,7 @@ if sum([bool(source), bool(chunk_id), all]) > 1:
 
 ```python
 from functools import wraps
+
 
 def handle_cli_errors(func):
     @wraps(func)
@@ -66,6 +63,7 @@ def handle_cli_errors(func):
         except Exception as e:
             console.print(f"[red]Unexpected error: {e}[/red]")
             raise
+
     return wrapper
 ```
 
@@ -74,14 +72,19 @@ def handle_cli_errors(func):
 ```python
 class CLIBaseError(Exception):
     """Base exception for CLI errors."""
+
     pass
+
 
 class CLIValidationError(CLIBaseError):
     """Invalid user input."""
+
     pass
+
 
 class ServiceUnavailableError(CLIBaseError):
     """Required service not available."""
+
     pass
 ```
 
@@ -92,10 +95,9 @@ class ServiceUnavailableError(CLIBaseError):
 Support multiple formats for scripting:
 
 ```python
-@click.option('--format', type=click.Choice(['table', 'json']),
-              default='table')
+@click.option("--format", type=click.Choice(["table", "json"]), default="table")
 def display_results(format: str):
-    if format == 'json':
+    if format == "json":
         console.print_json(data)
     else:
         # Render table
@@ -182,7 +184,7 @@ Make operations safe to re-run:
 
 ```python
 # --yes flag bypasses confirmation for scripted use
-@click.option('--yes', '-y', is_flag=True)
+@click.option("--yes", "-y", is_flag=True)
 def delete(all: bool, yes: bool):
     if not yes:
         if not click.confirm("Proceed?"):
@@ -196,14 +198,15 @@ def delete(all: bool, yes: bool):
 ```python
 from click.testing import CliRunner
 
+
 def test_ingest_command():
     runner = CliRunner()
     with runner.isolated_filesystem():
         # Setup test file
         Path("test.pdf").touch()
-        
-        result = runner.invoke(cli.main, ['ingest', 'test.pdf'])
-        
+
+        result = runner.invoke(cli.main, ["ingest", "test.pdf"])
+
         assert result.exit_code == 0
         assert "Successfully ingested" in result.output
 ```
@@ -211,7 +214,7 @@ def test_ingest_command():
 ### Verify Output Format
 
 ```python
-result = runner.invoke(cli.main, ['search', 'query', '--format', 'json'])
+result = runner.invoke(cli.main, ["search", "query", "--format", "json"])
 
 assert result.exit_code == 0
 data = json.loads(result.output)
@@ -228,6 +231,7 @@ Keep startup time fast:
 # Defer expensive imports until command execution
 def ingest(path: str):
     from secondbrain.document import DocumentIngestor  # Local import
+
     ...
 ```
 
@@ -254,7 +258,7 @@ def get_config() -> Config:
 
 ```python
 @click.command()
-@click.argument('query')
+@click.argument("query")
 def search(query):
     """Search documents with semantic query.
 
@@ -275,7 +279,7 @@ if old_option_used:
     warnings.warn(
         "'--old-flag' is deprecated, use '--new-flag' instead",
         DeprecationWarning,
-        stacklevel=2
+        stacklevel=2,
     )
 ```
 
@@ -284,8 +288,10 @@ if old_option_used:
 ### Structured Logging
 
 ```python
-logger.info("Operation completed",
-            extra={"operation": "ingest", "files": len(files), "duration": elapsed})
+logger.info(
+    "Operation completed",
+    extra={"operation": "ingest", "files": len(files), "duration": elapsed},
+)
 ```
 
 ### Sensitive Data Filtering

@@ -69,7 +69,8 @@ export SECONDBRAIN_QDRANT_API_KEY=your-qdrant-api-key
 
 ### SQLite File Permissions
 
-Conversation data is stored in a local SQLite file (default `~/.secondbrain/secondbrain.db`). Restrict access to the data directory:
+Conversation data is stored in a local SQLite file (default `~/.secondbrain/secondbrain.db`). Restrict access to
+the data directory:
 
 ```bash
 chmod 700 ~/.secondbrain/
@@ -185,10 +186,7 @@ Monitor rate limit violations in logs.
 SecondBrain validates file extensions before processing:
 
 ```python
-SUPPORTED_EXTENSIONS = {
-    ".pdf", ".docx", ".pptx", ".xlsx",
-    ".html", ".md", ".txt", ...
-}
+SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".pptx", ".xlsx", ".html", ".md", ".txt", ...}
 
 # Reject unsupported types early
 if path.suffix.lower() not in SUPPORTED_EXTENSIONS:

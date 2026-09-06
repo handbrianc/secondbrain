@@ -102,6 +102,7 @@ def db_connection():
     """Session-scoped: created once per test session."""
     return connect_to_db()
 
+
 @pytest.fixture(scope="function")
 def temp_file(tmp_path):
     """Function-scoped: created per test."""
@@ -115,6 +116,7 @@ Use `MockVectorStorage` for an in-memory vector store, or an in-process `QdrantC
 ```python
 from secondbrain.storage.mock import MockVectorStorage
 
+
 @pytest.fixture
 def mock_storage():
     storage = MockVectorStorage()
@@ -125,6 +127,7 @@ Qdrant-backed tests use an in-process client:
 
 ```python
 from qdrant_client import QdrantClient
+
 
 @pytest.fixture
 def qdrant_memory():
@@ -166,15 +169,18 @@ For generative testing of invariants:
 ```python
 from hypothesis import given, strategies as st
 
+
 @given(
-    chunk_sizes=st.lists(st.integers(min_value=1, max_value=10000), min_size=1, max_size=100),
-    overlap=st.integers(min_value=0, max_value=500)
+    chunk_sizes=st.lists(
+        st.integers(min_value=1, max_value=10000), min_size=1, max_size=100
+    ),
+    overlap=st.integers(min_value=0, max_value=500),
 )
 def test_chunk_overlap_always_smaller_than_size(chunk_sizes, overlap):
     """Overlap must always be less than chunk size for valid configs."""
     # Filter to valid combinations
     assume(max(chunk_sizes) > overlap)
-    
+
     # Test invariant holds
     for size in chunk_sizes:
         assert size > overlap
@@ -219,7 +225,9 @@ Integration tests requiring live services use markers:
 
 ```python
 @pytest.mark.integration
-@pytest.mark.skipif(not os.getenv("RUN_INTEGRATION_TESTS"), reason="External services required")
+@pytest.mark.skipif(
+    not os.getenv("RUN_INTEGRATION_TESTS"), reason="External services required"
+)
 def test_real_qdrant_connection():
     """Test against a live Qdrant instance."""
     client = QdrantClient(os.getenv("SECONDBRAIN_QDRANT_URL"))
@@ -237,6 +245,7 @@ def sample_pdf_path(tmp_path):
     pdf_path = tmp_path / "test.pdf"
     pdf_path.write_bytes(b"%PDF-1.4 sample content")
     return pdf_path
+
 
 @pytest.fixture
 def sample_chunks():
@@ -280,7 +289,9 @@ Insert breakpoint:
 
 ```python
 def test_failing():
-    import pdb; pdb.set_trace()
+    import pdb
+
+    pdb.set_trace()
     ...
 ```
 
