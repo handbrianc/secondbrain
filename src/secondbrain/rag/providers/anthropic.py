@@ -10,8 +10,13 @@ for using Anthropic Claude as an LLM backend.
 import contextlib
 import os
 
-import httpx
-from anthropic import Anthropic, APIError, AsyncAnthropic
+from anthropic import (
+    Anthropic,
+    APIConnectionError,
+    APIError,
+    AsyncAnthropic,
+    Timeout,
+)
 
 from secondbrain.exceptions import ServiceUnavailableError
 
@@ -68,13 +73,13 @@ class AnthropicLLMProvider(LocalLLMProvider):
             )
 
         # Initialize clients
-        self._client = Anthropic(
+        self._client: Anthropic | None = Anthropic(
             api_key=self._api_key,
-            timeout=httpx.Timeout(timeout),
+            timeout=Timeout(timeout),
         )
-        self._async_client = AsyncAnthropic(
+        self._async_client: AsyncAnthropic | None = AsyncAnthropic(
             api_key=self._api_key,
-            timeout=httpx.Timeout(timeout),
+            timeout=Timeout(timeout),
         )
 
     def generate(
@@ -97,6 +102,8 @@ class AnthropicLLMProvider(LocalLLMProvider):
             ServiceUnavailableError: If Anthropic API is unreachable.
             RuntimeError: If generation fails.
         """
+        if self._client is None:
+            raise RuntimeError("Anthropic provider has been closed")
         try:
             messages = [{"role": "user", "content": prompt}]
 
@@ -113,7 +120,7 @@ class AnthropicLLMProvider(LocalLLMProvider):
 
             return response.content[0].text if response.content else ""
 
-        except httpx.ConnectError as e:
+        except APIConnectionError as e:
             raise ServiceUnavailableError(f"Anthropic API unreachable: {e}") from e
         except APIError as e:
             raise RuntimeError(f"Anthropic API error: {e}") from e
@@ -140,6 +147,8 @@ class AnthropicLLMProvider(LocalLLMProvider):
             ServiceUnavailableError: If Anthropic API is unreachable.
             RuntimeError: If generation fails.
         """
+        if self._async_client is None:
+            raise RuntimeError("Anthropic provider has been closed")
         try:
             messages = [{"role": "user", "content": prompt}]
 
@@ -156,7 +165,7 @@ class AnthropicLLMProvider(LocalLLMProvider):
 
             return response.content[0].text if response.content else ""
 
-        except httpx.ConnectError as e:
+        except APIConnectionError as e:
             raise ServiceUnavailableError(f"Anthropic API unreachable: {e}") from e
         except APIError as e:
             raise RuntimeError(f"Anthropic API error: {e}") from e
@@ -169,6 +178,8 @@ class AnthropicLLMProvider(LocalLLMProvider):
         Returns:
             True if API is accessible, False otherwise.
         """
+        if self._client is None:
+            return False
         try:
             self._client.models.list()
             return True
@@ -203,6 +214,8 @@ class AnthropicLLMProvider(LocalLLMProvider):
         max_tokens: int | None = None,
     ) -> str:
         """Stream chat response with thinking content support."""
+        if self._client is None:
+            raise RuntimeError("Anthropic provider has been closed")
         try:
             temp = temperature if temperature is not None else self._temperature
             tokens = max_tokens if max_tokens is not None else self._max_tokens
@@ -231,7 +244,7 @@ class AnthropicLLMProvider(LocalLLMProvider):
 
             return full_content
 
-        except httpx.ConnectError as e:
+        except APIConnectionError as e:
             raise ServiceUnavailableError(f"Anthropic API unreachable: {e}") from e
         except APIError as e:
             raise ServiceUnavailableError(f"Anthropic API error: {e}") from e
@@ -246,6 +259,8 @@ class AnthropicLLMProvider(LocalLLMProvider):
         max_tokens: int | None = None,
     ) -> str:
         """Async streaming chat response with thinking content support."""
+        if self._async_client is None:
+            raise RuntimeError("Anthropic provider has been closed")
         try:
             temp = temperature if temperature is not None else self._temperature
             tokens = max_tokens if max_tokens is not None else self._max_tokens
@@ -272,7 +287,7 @@ class AnthropicLLMProvider(LocalLLMProvider):
 
             return full_content
 
-        except httpx.ConnectError as e:
+        except APIConnectionError as e:
             raise ServiceUnavailableError(f"Async streaming failed: {e}") from e
         except APIError as e:
             raise ServiceUnavailableError(f"Async streaming error: {e}") from e
@@ -283,14 +298,14 @@ class AnthropicLLMProvider(LocalLLMProvider):
         """Close clients and release resources.
 
         Note: For proper async cleanup in async context, use aclose() instead.
-        This method closes the sync httpx client but does not close the async
+        This method closes the sync HTTP client but does not close the async
         client — the async client must be closed with aclose() to avoid
         RuntimeWarnings from unawaited coroutines.
         """
         if self._client is not None:
             with contextlib.suppress(Exception):
                 self._client.close()
-            self._client = None  # type: ignore[assignment]
+            self._client = None
 
     async def aclose(self) -> None:
         """Asynchronously close both sync and async HTTP clients.
@@ -301,8 +316,8 @@ class AnthropicLLMProvider(LocalLLMProvider):
         if self._client is not None:
             with contextlib.suppress(Exception):
                 self._client.close()
-            self._client = None  # type: ignore[assignment]
+            self._client = None
         if self._async_client is not None:
             await self._async_client.close()
-            self._async_client = None  # type: ignore[assignment]
+            self._async_client = None
         self._api_key = None
