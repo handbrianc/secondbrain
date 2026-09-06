@@ -6,16 +6,16 @@
 
 The system SHALL support chaos engineering tests that simulate service failures.
 
-#### Scenario: MongoDB failure during ingestion
+#### Scenario: Vector store failure during ingestion
 
-- **WHEN** MongoDB becomes unavailable mid-ingestion
+- **WHEN** the vector store becomes unavailable mid-ingestion
 - **THEN** error SHALL be handled gracefully
 - **AND** partial results SHALL be saved
 - **AND** user SHALL receive clear error message
 
-#### Scenario: MongoDB failure during search
+#### Scenario: Vector store failure during search
 
-- **WHEN** MongoDB becomes unavailable during search
+- **WHEN** the vector store becomes unavailable during search
 - **THEN** search SHALL fail gracefully
 - **AND** cached results MAY be returned (if available)
 - **AND** error SHALL indicate service unavailable

@@ -44,17 +44,13 @@ chunk_size = cfg.chunk_size
 ```python
 from secondbrain.document import DocumentIngestor
 
-ingestor = DocumentIngestor(
-    chunk_size=4096,
-    chunk_overlap=50,
-    verbose=True
-)
+ingestor = DocumentIngestor(chunk_size=4096, chunk_overlap=50, verbose=True)
 
 results = ingestor.ingest(
     path="./documents/",
     recursive=True,
     batch_size=30,
-    cores=None  # Auto-detect
+    cores=None,  # Auto-detect
 )
 ```
 
@@ -72,7 +68,7 @@ with Searcher() as searcher:
         query="semantic search query",
         top_k=20,
         source_filter=None,
-        file_type_filter=None
+        file_type_filter=None,
     )
 ```
 
@@ -150,16 +146,11 @@ from secondbrain.rag import RAGPipeline
 from secondbrain.rag.providers import LLMProviderFactory
 
 pipeline = RAGPipeline(
-    searcher=searcher,
-    llm_provider=llm_provider,
-    top_k=10,
-    context_window=5
+    searcher=searcher, llm_provider=llm_provider, top_k=10, context_window=5
 )
 
 result = pipeline.chat(
-    query="What is the topic?",
-    session=conversation_session,
-    show_sources=True
+    query="What is the topic?", session=conversation_session, show_sources=True
 )
 ```
 
@@ -181,6 +172,7 @@ main()
 ```python
 from secondbrain.storage import ChunkInfo
 
+
 @dataclass
 class ChunkInfo:
     chunk_id: str
@@ -197,6 +189,7 @@ class ChunkInfo:
 
 ```python
 from secondbrain.document import Document
+
 
 @dataclass
 class Document:
@@ -244,6 +237,7 @@ from secondbrain.document import DocumentIngestor
 from secondbrain.embed.generator import EmbeddingGenerator
 from secondbrain.storage.client import StorageClient
 
+
 def ingest_and_index(path: str):
     # Ingest
     ingestor = DocumentIngestor(chunk_size=4096)
@@ -258,6 +252,7 @@ def ingest_and_index(path: str):
     for chunk, vec in zip(doc.chunks, vectors):
         client.store({**asdict(chunk), "vector": vec})
 
+
 if __name__ == "__main__":
     ingest_and_index("./report.pdf")
 ```
@@ -267,6 +262,7 @@ if __name__ == "__main__":
 ```python
 from secondbrain.search import Searcher
 from secondbrain.embed.generator import EmbeddingGenerator
+
 
 def search_multiple(queries: list[str], top_k: int = 5):
     gen = EmbeddingGenerator()
@@ -279,11 +275,9 @@ def search_multiple(queries: list[str], top_k: int = 5):
 
     return results
 
+
 if __name__ == "__main__":
-    answers = search_multiple([
-        "What is machine learning?",
-        "Explain neural networks"
-    ])
+    answers = search_multiple(["What is machine learning?", "Explain neural networks"])
 ```
 
 ### Interactive Chat
@@ -291,11 +285,7 @@ if __name__ == "__main__":
 ```python
 from secondbrain.chat import InteractiveChat
 
-chat = InteractiveChat(
-    session_name="research",
-    model="gpt-4o-mini",
-    show_sources=True
-)
+chat = InteractiveChat(session_name="research", model="gpt-4o-mini", show_sources=True)
 
 while True:
     query = input("You: ")
