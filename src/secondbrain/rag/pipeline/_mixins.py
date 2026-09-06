@@ -10,9 +10,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import re
 import time
 from collections import Counter
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from secondbrain.config import config
@@ -45,12 +47,26 @@ SUMMARY_TEMPERATURE = 0.1
 
 # Max wall-clock seconds a single summary window may run before it is aborted as
 # unresolvable.  A model can spend its whole budget re-verifying figures in its
-# (suppressed) reasoning, emitting only sporadic content and never stabilizing;
-# the cap guarantees the overall summary always terminates and returns to the
-# prompt.  On abort the window's partial content is retained (trimmed to a clean
+# reasoning, emitting only sporadic content and never stabilizing; the cap
+# guarantees the overall summary always terminates and returns to the prompt.
+# On abort the window's partial content is retained (trimmed to a clean
 # sentence), so a slow final window still contributes its ending instead of the
 # chapter overview dropping it.
-_WINDOW_MAX_SECONDS = 150
+#
+# Heavy-reasoning models can legitimately think for minutes before any content
+# streams, so the default is generous and overridable via
+# SECONDBRAIN_SUMMARY_WINDOW_MAX_SECONDS.  The previous 150s (tuned for
+# DeepSeek) silently dropped GLM windows whose thinking alone approached the
+# budget: the collapsed-thinking counter printed, then the timeout fired before
+# the first content token and the window vanished from the overview.  600s was
+# sized for the 8000-token budget; with _SUMMARY_REDUCE_MAX_TOKENS at 32768 a
+# healthy dense-chapter stream can legitimately run past 600s, and aborting it
+# here discards minutes of completed reasoning and restarts the whole
+# generation, so the wall must exceed the budget's realistic drain time.
+_WINDOW_MAX_SECONDS = max(
+    60,
+    int(os.environ.get("SECONDBRAIN_SUMMARY_WINDOW_MAX_SECONDS", "1200")),
+)
 
 # Source characters per summary window.  Splitting the body into bounded windows
 # like this is what keeps every generation small -- fast, under the request
@@ -60,11 +76,47 @@ _WINDOW_MAX_SECONDS = 150
 # cap, so the last window is not truncated mid-sentence.
 _SUMMARY_WINDOW_CHARS = 3500
 
-# Max output tokens per bounded summary window.  DeepSeek otherwise streams a
-# long, heavily-structured wall of prose per window; the cap (paired with a
-# conciseness directive in the prompt) keeps the cumulative chapter overview
-# from ballooning across many windows.
-_SUMMARY_WINDOW_MAX_TOKENS = 1200
+# Output token caps for the summary paths (single-pass overview, and the
+# two-pass map-reduce fallback: map digest -> reduce overview).  These are
+# ceilings, NOT length targets: the prompts bound the visible length (terse
+# digests, overview per the caller's instruction), and the final overview's
+# length is enforced deterministically by _OVERVIEW_MAX_WORDS below -- never
+# by a numeric constraint in a prompt, which only triggers word-counting
+# loops in the model's reasoning.  The generous ceilings exist because
+# GLM-class servers spend the SAME max_tokens budget on hidden reasoning and
+# visible content -- a tight cap amputates the content mid-sentence at
+# finish_reason=length, which is exactly what silently cut off summary
+# windows under the previous 1200-token per-window cap.  8000 was itself
+# amputated on the densest chapters (GLM burned it on reasoning alone while
+# drafting and re-verifying every figure), leaving nothing for the overview;
+# 32768 leaves ~4x the observed worst-case reasoning spend for the answer.
+_MAP_DIGEST_MAX_TOKENS = 4000
+_SUMMARY_REDUCE_MAX_TOKENS = 32768
+
+# A chapter whose formatted source fits within this budget is summarized in
+# ONE streamed call over the complete text (~80k tokens at ~4 chars/token --
+# comfortably inside a 128k+ context window).  The two-pass map-reduce path
+# below is only the fallback for genuinely oversized sources.
+_SINGLE_PASS_MAX_CHARS = 320_000
+
+# Reduce-prompt hierarchy: when the map-reduce fallback produces more than
+# _HIERARCHY_THRESHOLD digests, they are first condensed into balanced groups
+# of at most _HIERARCHY_GROUP_SIZE (one non-streamed call per group) so the
+# final reduce reads a handful of merged digests instead of dozens of "Part N"
+# fragments.  Group calls may fail; the raw digests are then passed through,
+# so condensation is a size optimization that never regresses coverage.
+_HIERARCHY_GROUP_SIZE = 8
+_HIERARCHY_THRESHOLD = 12
+
+# Deterministic word ceiling for the final overview, enforced by trimming at
+# a sentence boundary after generation (in _finalize_overview).  The prompt
+# asks for a short overview in prose terms; the bound itself lives here so
+# the model never burns reasoning counting words.  It is a runaway guard, NOT
+# a length target: the reduce call streams its draft live, so any normal
+# draft must survive finalization unchanged -- observed three-paragraph
+# overviews run 500-900 words, and a tighter ceiling silently amputated the
+# stored/history answer well short of the text the user had just read.
+_OVERVIEW_MAX_WORDS = 1200
 
 # Mid-stream guard for a live-streaming map-reduce window: once this many
 # characters have accumulated, if the buffered text is already degenerate
@@ -85,20 +137,117 @@ _RETRY_MAX_TOKENS = 4096
 # with almost none, and — unlike repetitive token-soup — stays high-diversity, so
 # the repetition-based plausibility check alone misses it.  A trailing window low
 # in function words is a strong signal that the stream has derailed.
-_FUNCTION_WORDS = frozenset({
-    "a", "an", "the", "this", "that", "these", "those", "some", "any", "no",
-    "not", "none", "of", "in", "on", "at", "to", "for", "from", "by", "with",
-    "without", "about", "into", "through", "over", "under", "between", "among",
-    "across", "against", "during", "before", "after", "above", "below", "up",
-    "down", "off", "out", "via", "per", "and", "or", "but", "nor", "so", "yet",
-    "because", "while", "though", "although", "if", "than", "then", "when",
-    "where", "which", "who", "whom", "whose", "what", "how", "why", "as", "is",
-    "are", "was", "were", "be", "been", "being", "am", "do", "does", "did",
-    "done", "have", "has", "had", "having", "will", "would", "can", "could",
-    "shall", "should", "may", "might", "must", "it", "its", "he", "she", "they",
-    "them", "their", "we", "us", "our", "you", "your", "i", "me", "my", "him",
-    "her",
-})
+_FUNCTION_WORDS = frozenset(
+    {
+        "a",
+        "an",
+        "the",
+        "this",
+        "that",
+        "these",
+        "those",
+        "some",
+        "any",
+        "no",
+        "not",
+        "none",
+        "of",
+        "in",
+        "on",
+        "at",
+        "to",
+        "for",
+        "from",
+        "by",
+        "with",
+        "without",
+        "about",
+        "into",
+        "through",
+        "over",
+        "under",
+        "between",
+        "among",
+        "across",
+        "against",
+        "during",
+        "before",
+        "after",
+        "above",
+        "below",
+        "up",
+        "down",
+        "off",
+        "out",
+        "via",
+        "per",
+        "and",
+        "or",
+        "but",
+        "nor",
+        "so",
+        "yet",
+        "because",
+        "while",
+        "though",
+        "although",
+        "if",
+        "than",
+        "then",
+        "when",
+        "where",
+        "which",
+        "who",
+        "whom",
+        "whose",
+        "what",
+        "how",
+        "why",
+        "as",
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "being",
+        "am",
+        "do",
+        "does",
+        "did",
+        "done",
+        "have",
+        "has",
+        "had",
+        "having",
+        "will",
+        "would",
+        "can",
+        "could",
+        "shall",
+        "should",
+        "may",
+        "might",
+        "must",
+        "it",
+        "its",
+        "he",
+        "she",
+        "they",
+        "them",
+        "their",
+        "we",
+        "us",
+        "our",
+        "you",
+        "your",
+        "i",
+        "me",
+        "my",
+        "him",
+        "her",
+    }
+)
 
 # A derailed trailing window is one whose function-word share falls below this
 # fraction; normal prose (even dense technical writing) stays well above 0.1.
@@ -125,14 +274,18 @@ _DERAIL_TTR_FN_GATE = 0.25
 # absolute value.  A small model under long or truncated context can emit a
 # provably impossible value (e.g. "an average weekly IC of 3.32 and 6.68").  These
 # patterns identify a value-bearing metric so the deterministic prune can strip
-# anything outside the bound, with no reliance on the model.
+# anything outside the bound, with no reliance on the model.  The value-start
+# pattern tolerates a hedge word ("an IC of around 4") between connector and
+# value, since generated prose routinely hedges the impossible numbers it emits.
 _METRIC_BOUNDED_RE = re.compile(
     r"(?:information\s+coefficient|rank[\s-]?ic|\bic\b|correlation(?:\s+coefficient)?|"
     r"\br\s*squared\b|r\s*[²2]\b|coefficient\s+of\s+determination)",
     re.IGNORECASE,
 )
 _METRIC_VALUE_START_RE = re.compile(
-    r"\s*(?:of|:|=|is)\s*-?\d+(?:[.,]\d+)?", re.IGNORECASE
+    r"\s*(?:of|:|=|is)\s*(?:approximately|approx\.?|around|about)?\s*"
+    r"-?\d+(?:[.,]\d+)?",
+    re.IGNORECASE,
 )
 _METRIC_VALUE_CONT_RE = re.compile(
     r"\s*(?:and|&|[,;/\u2013-]|\s)+\s*-?\d+(?:[.,]\d+)?", re.IGNORECASE
@@ -220,6 +373,41 @@ def _trim_to_sentence_end(text: str) -> str:
     return s[:cut].rstrip()
 
 
+def _trim_to_word_budget(text: str, max_words: int) -> str:
+    """Cap *text* at *max_words*, cutting back to the last complete sentence.
+
+    The overview's length bound is enforced here -- deterministically, after
+    generation -- instead of via a numeric prompt constraint.  Asking the
+    model for "at most N words" is counterproductive: it cannot count words
+    reliably, so it burns its reasoning budget counting and re-drafting.
+    When no sentence terminal exists inside the budget (one runaway sentence),
+    the raw word cut is kept rather than returning an empty overview.
+    """
+    words = re.finditer(r"\S+", text)
+    cut = -1
+    for i, m in enumerate(words):
+        if i == max_words:
+            cut = m.start()
+            break
+    if cut < 0:
+        return text
+    prefix = text[:cut].rstrip()
+    trimmed = _trim_to_sentence_end(prefix)
+    if trimmed:
+        return trimmed
+    return prefix
+
+
+def _ends_on_sentence(text: str) -> bool:
+    """Return True when *text* already ends on a completed sentence terminal.
+
+    Detects the GLM failure mode where the server output cap amputates content
+    mid-sentence but the stream returns normally -- no exception reaches the
+    dead-stream recovery path, so the mid-sentence tail must be found here.
+    """
+    return bool(re.search(r"[.!?][\"'\u201d\u2019]?\s*$", text.rstrip()))
+
+
 def _grounding_figure_key(
     match: re.Match[str],
 ) -> tuple[str | None, float | None, bool]:
@@ -293,8 +481,7 @@ def _ground_figures(summary: str, context: str) -> str:
             drops.append(m.span())
             continue
         if value is not None and any(
-            abs(value - c) <= max(abs(c), abs(value)) * 0.05
-            for c in context_values
+            abs(value - c) <= max(abs(c), abs(value)) * 0.05 for c in context_values
         ):
             continue
         drops.append(m.span())
@@ -378,7 +565,12 @@ _REASONING_BUDGET_FALLBACK_PREFIX = "I got stuck in repetitive reasoning"
 
 def _contains_reasoning_leak(text_lower: str) -> bool:
     """Return True when *text_lower* reveals leaked chain-of-thought self-talk."""
-    return any(marker in text_lower for marker in _REASONING_LEAK_MARKERS)
+    if any(marker in text_lower for marker in _REASONING_LEAK_MARKERS):
+        return True
+    return bool(
+        _NUMERIC_SELF_CORRECT_RE.search(text_lower)
+        or _NUMERIC_HEDGE_RE.search(text_lower)
+    )
 
 
 # Self-correction the model sometimes emits DIRECTLY into the content stream
@@ -386,6 +578,13 @@ def _contains_reasoning_leak(text_lower: str) -> bool:
 # 78.29 percent)") -- just before it stalls.  Reasoning suppression cannot catch
 # these because they arrive as content tokens, not reasoning.  Detect them early
 # and recover with a clean low-temperature retry rather than streaming the leak.
+#
+# Only high-signal markers qualify: a mid-stream abort costs the whole window,
+# so bare phrases such as "the text says" are excluded -- verbose models use
+# them as ordinary citations, and a false trip here regenerates (or, if the
+# retry trips too, silently drops) a perfectly good window.  Compound
+# corrections like "77.29? Actually the text says 78.29" remain caught by the
+# figure-then-hedge regex below.
 _CONTENT_SELF_CORRECTION_MARKERS = (
     "??",
     "(wait,",
@@ -395,16 +594,12 @@ _CONTENT_SELF_CORRECTION_MARKERS = (
     "- wait,",
     "(the text says",
     "(text says",
-    "the text says",
     "(the text specifies",
     "(text specifies",
-    "text specifies",
     "(text gives",
-    "the text gives",
-    "text gives",
+    "(the text gives",
     "(the text states",
     "(text states",
-    "the text states",
     "(the source states",
 )
 
@@ -412,6 +607,90 @@ _CONTENT_SELF_CORRECTION_MARKERS = (
 def _is_content_self_correction(text_lower: str) -> bool:
     """Return True when streamed content begins correcting an earlier figure."""
     return any(marker in text_lower for marker in _CONTENT_SELF_CORRECTION_MARKERS)
+
+
+# The model sometimes leaks an inline numeric self-correction directly into the
+# summary prose while unsure of a figure: it writes a candidate value, then
+# immediately rejects it with "? No" and writes the corrected value, e.g.
+# "a test accuracy of 48? No--45.78 percent".  None of the token-level markers
+# above match a bare "<digit>? No", so catch it explicitly and drop only the
+# rejected candidate ("48? No--") while keeping the corrected figure, which
+# grounding then verifies against the source.
+_NUMERIC_SELF_CORRECT_RE = re.compile(
+    r"\b(\d+(?:[.,]\d+)?)\s*\?\s*(?:no|nope)\b[\s,;:\u2014\u2013-]*",
+    re.IGNORECASE,
+)
+
+# Broader figure-then-hedge detector for compound self-corrections the "? No"
+# strip regex cannot express, e.g. "77.29? Actually the text says 78.29
+# percent".  Detection only: stripping stays conservative so grounding still
+# sees the corrected value.
+_NUMERIC_HEDGE_RE = re.compile(
+    r"\b\d+(?:[.,]\d+)?\s*\?\s*(?:no|nope|actually|wait|oops|correction)\b",
+    re.IGNORECASE,
+)
+
+# Scrub patterns for leaks the detector caught, ordered specific -> general,
+# paired with the replacement each leaves behind.  The first two consume the
+# rejected candidate plus its hedging machinery entirely; the parenthetical
+# form keeps the captured correction because it lives inside "(wait, the text
+# says X)".  Grounding then verifies the surviving value against the source.
+_LEAK_SCRUB_RES: tuple[tuple[re.Pattern[str], str], ...] = (
+    (_NUMERIC_SELF_CORRECT_RE, ""),
+    (
+        re.compile(
+            r"\b\d+(?:[.,]\d+)?\s*\?\s*(?:no|nope|actually|wait|oops|correction)\b"
+            r"[\s,;:\u2014\u2013-]*(?:(?:the )?text (?:says|states|gives|specifies)\s*)?",
+            re.IGNORECASE,
+        ),
+        "",
+    ),
+    (
+        re.compile(
+            # The candidate may be truncated ("77.??"), so allow a decimal
+            # point without trailing digits before the question marks.
+            r"\b\d+(?:[.,]\d*)?\s*\?{0,2}\s*\(wait,?\s*(?:the )?text "
+            r"(?:says|states|gives|specifies)\s*([^)]*)\)",
+            re.IGNORECASE,
+        ),
+        r"\1",
+    ),
+)
+
+
+def _scrub_self_correction(text: str) -> str:
+    """Remove self-correction artifacts from *text*, keeping corrected values.
+
+    Applied repeatedly so stacked corrections ("48? No--45.78? Actually 43.05")
+    collapse to the final value.  Only meaningful on text the detector flagged;
+    the patterns require a figure followed by a hedge, which clean prose does
+    not contain.
+    """
+    for _ in range(3):
+        scrubbed = text
+        for pattern, repl in _LEAK_SCRUB_RES:
+            scrubbed = pattern.sub(repl, scrubbed)
+        if scrubbed == text:
+            return scrubbed
+        text = scrubbed
+    return text
+
+
+def _strip_numeric_self_correction(text: str) -> str:
+    """Remove leaked "<candidate>? No--" self-correction artifacts from *text*."""
+    if not text:
+        return text
+    return _scrub_self_correction(text)
+
+
+def _is_stream_leak(text_lower: str) -> bool:
+    """Return True when streamed content reveals an inline self-correction."""
+    if _is_content_self_correction(text_lower):
+        return True
+    return bool(
+        _NUMERIC_SELF_CORRECT_RE.search(text_lower)
+        or _NUMERIC_HEDGE_RE.search(text_lower)
+    )
 
 
 _PAGE_REF_RE = re.compile(r"\bpage\s+(\d{1,4})\b", re.IGNORECASE)
@@ -437,6 +716,15 @@ def _boundary_overlap(prev: str, nxt: str) -> int:
 
 class _StreamAbortError(Exception):
     """Internal control-flow signal to stop a streaming window early."""
+
+
+class _StreamLeakError(Exception):
+    """Internal signal: a window leaked reasoning/self-correction into content."""
+
+
+# Characters withheld from the live stream before flushing, so a self-correction
+# leak is caught on the buffered tail and the window aborted before it streams.
+_STREAM_LEAK_HOLD = 120
 
 
 if TYPE_CHECKING:  # pragma: no cover - import cycle avoided at runtime
@@ -716,7 +1004,7 @@ class _StructureMixin(_RAGPipelineState):
                 lines.append(f"[Chapter {major}] {sn} — {title}")
             else:
                 continue
-            for sn, title in sections[1 : max_subsections_per_chapter]:
+            for sn, title in sections[1:max_subsections_per_chapter]:
                 lines.append(f"  {sn} — {title}")
 
         if appendix_entries:
@@ -857,7 +1145,7 @@ class _StructureMixin(_RAGPipelineState):
             text = (c.get("chunk_text") or "").lstrip()
             m = marker.match(text)
             if m:
-                text = text[m.end():].lstrip()
+                text = text[m.end() :].lstrip()
             head = text.split("\n")[0].strip()
             if not (head.isdigit() and 1 <= int(head) <= 30):
                 continue
@@ -1564,7 +1852,9 @@ class _FallbackMixin(_RAGPipelineState):
             for m in re.finditer(r"\b[A-Z][A-Za-z0-9]*\b", piece):
                 prefix = piece[: m.start()].rstrip()
                 at_sentence_start = (
-                    prefix == "" or prefix.endswith((".", "!", "?")) or prefix.endswith("\n")
+                    prefix == ""
+                    or prefix.endswith((".", "!", "?"))
+                    or prefix.endswith("\n")
                 )
                 token = m.group(0)
                 if (not at_sentence_start) or any(c.isdigit() for c in token):
@@ -1610,14 +1900,8 @@ class _FallbackMixin(_RAGPipelineState):
         *temperature* / *max_tokens* override the default sampling parameters for
         the first call; the retry always uses temperature 0.1.
         """
-        temp = (
-            temperature
-            if temperature is not None
-            else self._config.llm_temperature
-        )
-        tokens = (
-            max_tokens if max_tokens is not None else self._config.llm_max_tokens
-        )
+        temp = temperature if temperature is not None else self._config.llm_temperature
+        tokens = max_tokens if max_tokens is not None else self._config.llm_max_tokens
         text = self._llm_provider.generate(
             prompt=prompt,
             temperature=temp,
@@ -1652,6 +1936,13 @@ class _FallbackMixin(_RAGPipelineState):
                 continue
             title = ch_titles.get(ch_num, "")
             heading = f"Chapter {ch_num}" + (f" — {title}" if title else "")
+            if self._on_chunk:
+                # The returned text joins blocks with "\n\n"; the live stream
+                # needs its own separators or consecutive chapters glue together.
+                self._on_chunk(
+                    f"{heading}\n\n" if not all_parts else f"\n\n{heading}\n\n",
+                    None,
+                )
             instruction = (
                 f"Provide a brief, focused summary of {heading} using ONLY the "
                 "document content below. 2-4 sentences. Never add information from "
@@ -1682,12 +1973,14 @@ class _FallbackMixin(_RAGPipelineState):
     ) -> str:
         """Produce a comprehensive chapter overview via bounded windows.
 
-        The chapter is split into small, character-bounded windows and each is
-        summarised independently, deterministically, and grounded to its own
-        source.  A window is never large enough to hit a request timeout or drive
-        the model into a figure-verification loop, so this is robust for any
-        chapter size, and each completed section is emitted as it finishes so the
-        chat builds the overview progressively.
+        The chapter is split into small, character-bounded windows, each is
+        condensed into a terse internally-held digest grounded to its own
+        source (map), and one final streamed call writes the whole overview
+        from the digests in a single voice (reduce) -- so the instruction's
+        length bound applies once to the chapter, not once per window. The
+        streaming guards (leak scrubbing, dead-stream continuation,
+        low-temperature retry) apply to the reduce call; a window whose digest
+        is unusable is skipped, never surfaced.
         """
         chunks = self._filter_chunks_to_chapter(
             chunks, chapter_num, foreign_titles=foreign_titles
@@ -1699,8 +1992,9 @@ class _FallbackMixin(_RAGPipelineState):
         instruction = (
             f"Summarize the following portion of chapter {chapter_num} "
             f"({chapter_title}). Use ONLY the document content below. Write a "
-            "flowing prose summary of 3-4 paragraphs, about 250-300 words total, "
-            "then STOP -- do not fill extra space or restate. Cover the "
+            "flowing prose overview in six to ten short paragraphs, one "
+            "topic per paragraph, then STOP -- do "
+            "not fill extra space or restate. Cover the "
             "main topics, key concepts, and supporting details. Do "
             "NOT use headings, sub-headers, or bullet lists. Do NOT open with "
             "meta-framing such as 'This portion covers...' -- begin directly "
@@ -1709,10 +2003,27 @@ class _FallbackMixin(_RAGPipelineState):
             "estimate, round, or 'correct' a figure the source does not state "
             "-- if a specific number is not clearly present, omit it rather "
             "than guessing. State each figure once and move on; do not hedge, "
-            "second-guess, or correct figures. Do not reproduce code details or "
+            "second-guess, or correct figures. Cover each study's experimental "
+            "setup -- data universe, feature construction and selection, and "
+            "training or evaluation windows -- and any benchmark comparison "
+            "the content draws, not only its headline results. When the "
+            "content states conflicting values for the same fact (for example "
+            "different years in narrative and citations), report the "
+            "narrative value without editorializing about the discrepancy. "
+            "When the content reports values from separate experiments or "
+            "evaluation settings, give each value its own sentence tied to "
+            "its own setup rather than combining different runs into one "
+            "sentence that reads as self-contradiction. "
+            "Do not reproduce code details or "
             "function arguments (e.g. list(range(...))) verbatim. Do not print "
             "any notes, disclaimers, or headings such as 'Note', 'Important', or "
-            "'Not in this chapter'. If some content below does not belong to "
+            "'Not in this chapter'. Write the overview exactly once: treat "
+            "your first complete draft as final -- do not produce a "
+            "preliminary draft and then a second, tightened version of the "
+            "same overview, and do not re-verify the quoted figures after "
+            "drafting. Keep internal planning to brief selection and "
+            "structure decisions only. If some "
+            "content below does not belong to "
             "this chapter, summarize only the content that does and never add "
             "general knowledge or commentary about other chapters."
         )
@@ -1731,12 +2042,23 @@ class _FallbackMixin(_RAGPipelineState):
         *,
         max_chars: int | None = None,
     ) -> list[list[dict[str, Any]]]:
-        """Split *chunks* into contiguous windows of bounded source characters."""
+        """Split *chunks* into contiguous windows of bounded source characters.
+
+        Input is sorted into numerical page order (stable, so within-page reading
+        order is preserved) before windowing so the emitted summary windows follow
+        the document's page sequence rather than retrieval/interleaving order.
+        Boundaries are then aligned to sentence ends via
+        :meth:`_align_window_boundaries` so no window's source stops mid-sentence.
+        """
+        ordered = sorted(
+            chunks,
+            key=lambda c: c.get("page_number", c.get("page", 0)) or 0,
+        )
         budget = max_chars or _SUMMARY_WINDOW_CHARS
         windows: list[list[dict[str, Any]]] = []
         current: list[dict[str, Any]] = []
         current_chars = 0
-        for chunk in chunks:
+        for chunk in ordered:
             text = chunk.get("chunk_text", chunk.get("text", ""))
             if text and current and current_chars + len(text) > budget:
                 windows.append(current)
@@ -1746,6 +2068,48 @@ class _FallbackMixin(_RAGPipelineState):
             current_chars += len(text)
         if current:
             windows.append(current)
+        return self._align_window_boundaries(windows)
+
+    @staticmethod
+    def _align_window_boundaries(
+        windows: list[list[dict[str, Any]]],
+    ) -> list[list[dict[str, Any]]]:
+        """Move the mid-sentence tail of each window to the next window's front.
+
+        Ingest chunking cuts mid-sentence, and a window whose source ends
+        mid-sentence makes the summary mirror the truncation: the live stream
+        ends mid-word and :func:`_trim_to_sentence_end` later discards the
+        tail as wasted generation.  The fragment after the last sentence
+        terminal of a window is therefore prepended to the next window.  A
+        terminal-free trailing chunk is left alone: carrying whole chunks
+        forward could chain-merge every window into one.  Payload dicts are
+        copied on modification so the caller's chunks are never mutated.
+        """
+        for idx in range(len(windows) - 1):
+            window = windows[idx]
+            if not window:
+                continue
+            tail = window[-1]
+            key = "chunk_text" if "chunk_text" in tail else "text"
+            if key not in tail:
+                continue
+            text = str(tail[key])
+            ends = [m.end() for m in re.finditer(r"[.!?][\"'\u201d\u2019]?\s", text)]
+            if not ends:
+                continue
+            remainder = text[ends[-1] :].strip()
+            if not remainder:
+                continue
+            nxt = windows[idx + 1][0]
+            nkey = "chunk_text" if "chunk_text" in nxt else "text"
+            if nkey not in nxt:
+                continue
+            trimmed = dict(tail)
+            trimmed[key] = text[: ends[-1]].rstrip()
+            windows[idx] = [*window[:-1], trimmed]
+            merged = dict(nxt)
+            merged[nkey] = f"{remainder} {str(nxt[nkey]).lstrip()}"
+            windows[idx + 1][0] = merged
         return windows
 
     def _summarize_bounded(
@@ -1755,88 +2119,488 @@ class _FallbackMixin(_RAGPipelineState):
         windows: list[list[dict[str, Any]]],
         instruction: str,
     ) -> str:
-        """Summarize *windows*, streaming + grounding each completed part.
+        """Summarize *windows* in one streamed call over the complete source.
 
-        Each bounded window is streamed live (so DeepSeek's reasoning-heavy
-        response never trips a request wall-clock timeout) with reasoning
-        suppressed, then grounded against its own source.  A window that produces
-        nothing usable is skipped, never surfaced.
+        PRIMARY (single pass): when the formatted source fits within
+        ``_SINGLE_PASS_MAX_CHARS``, one LLM call receives the whole chapter and
+        writes the overview.  This is both cheaper and more faithful than any
+        staged pipeline: the per-call reasoning/planning overhead is paid once
+        instead of once per window, no intermediate digest can drop detail, and
+        there are no per-window seams to recover from.
+
+        FALLBACK (map-reduce, oversized sources only): each window is condensed
+        into a terse internal digest (map -- digest content never streams), and
+        one final streamed call writes the overview from the digests (reduce).
+        A window whose digest is unusable is skipped, never surfaced.
         """
-        parts: list[str] = []
-        total = len(windows)
+        contexts: list[str] = []
+        for window in windows:
+            ctx = self._format_context(
+                window, max_chars=self._config.rag_max_context_chars
+            )
+            if ctx.strip():
+                contexts.append(ctx)
+        if not contexts:
+            return ""
+        if sum(len(ctx) for ctx in contexts) <= _SINGLE_PASS_MAX_CHARS:
+            return self._reduce_digest_overview(
+                heading,
+                contexts,
+                instruction,
+                parts_are_digests=False,
+                numbered_parts=False,
+            )
+        if len(windows) > _MAX_MAP_REDUCE_WINDOWS:
+            logger.warning(
+                "summary source exceeds the single-pass budget and has %d "
+                "windows; capping map pass at %d",
+                len(windows),
+                _MAX_MAP_REDUCE_WINDOWS,
+            )
+            windows = windows[:_MAX_MAP_REDUCE_WINDOWS]
+            contexts = contexts[:_MAX_MAP_REDUCE_WINDOWS]
+        digests: list[str] = []
+        total = len(contexts)
+        for index, ctx in enumerate(contexts, 1):
+            digest = self._map_window_digest(heading, ctx, index, total)
+            if digest:
+                digests.append(digest)
+        if not digests:
+            return ""
+        return self._reduce_digest_overview(
+            heading, digests, instruction, parts_are_digests=True
+        )
+
+    def _map_window_digest(
+        self,
+        heading: str,
+        ctx: str,
+        index: int,
+        total: int,
+    ) -> str:
+        """Condense one source window into an internal, grounded digest.
+
+        The digest is deliberately small so the reduce pass sees a compact,
+        faithful skeleton of the chapter instead of a stack of full-window
+        essays -- that is what finally makes the overview's deterministic
+        length ceiling effective.  Its size is shaped by "terse digest
+        paragraph" phrasing rather than a numeric word bound, which would
+        only trigger word-counting loops in the model's reasoning.
+        Reasoning streams (visible activity) but content stays
+        internal. On a stream failure the digest is regenerated once via
+        :meth:`_generate_guarded`; an unusable digest is skipped with a warning
+        so one bad window cannot stall the whole overview.
+        """
+        prompt = self._build_prompt(
+            (
+                f"You are preparing an internal digest of Part {index} of "
+                f"{total} of {heading}.\n\nWrite a terse digest paragraph that "
+                "records, in source order: the topics the part "
+                "covers; every figure or table it presents, quoted with its "
+                'exact label (e.g. "Figure 18.5", "Table 18.2") and subject; '
+                "and the key numeric results, copied exactly from the source. "
+                "Plain prose only -- no headers, bullets, transitions, or "
+                "commentary. Never mention page numbers. State each figure "
+                "once. Never add anything the source does not contain."
+            ),
+            ctx,
+        )
+        can_stream = self._config.streaming_enabled and hasattr(
+            self._llm_provider, "stream_chat"
+        )
+        digest = ""
+        if can_stream:
+            pieces: list[str] = []
+            digest_start = time.monotonic()
+
+            def _fwd_map(chunk: str, reasoning: str | None) -> None:
+                if time.monotonic() - digest_start > _WINDOW_MAX_SECONDS:
+                    raise TimeoutError("map digest exceeded time budget")
+                # Reasoning streams so the user sees live activity; the digest
+                # content itself must never reach the screen.
+                if reasoning and self._on_chunk:
+                    self._on_chunk("", reasoning)
+                if chunk:
+                    pieces.append(chunk)
+
+            try:
+                returned = self._llm_provider.stream_chat(
+                    messages=[{"role": "user", "content": prompt}],
+                    on_chunk=_fwd_map,
+                    temperature=SUMMARY_TEMPERATURE,
+                    max_tokens=_MAP_DIGEST_MAX_TOKENS,
+                )
+                digest = "".join(pieces) or (returned or "")
+            except Exception as e:
+                logger.warning(
+                    "map digest stream failed (%s: %s); regenerating",
+                    type(e).__name__,
+                    e,
+                )
+        if not digest.strip():
+            try:
+                digest = self._generate_guarded(
+                    prompt,
+                    temperature=SUMMARY_TEMPERATURE,
+                    max_tokens=_MAP_DIGEST_MAX_TOKENS,
+                )
+            except Exception as e:
+                logger.warning(
+                    "map digest generation failed (%s: %s); skipping part %d/%d",
+                    type(e).__name__,
+                    e,
+                    index,
+                    total,
+                )
+                return ""
+        if not digest.strip():
+            return ""
+        digest = _strip_numeric_self_correction(_scrub_self_correction(digest))
+        digest = _prune_implausible_metric_figures(digest)
+        digest = _ground_figures(digest, ctx)
+        digest = _trim_to_sentence_end(digest)
+        if not digest.strip() or not self._is_plausible_summary(digest):
+            logger.warning("map digest %d/%d unusable; skipping", index, total)
+            return ""
+        return digest
+
+    def _reduce_digest_overview(
+        self,
+        heading: str,
+        parts: list[str],
+        instruction: str,
+        *,
+        parts_are_digests: bool,
+        numbered_parts: bool = True,
+    ) -> str:
+        """Write the final overview from *parts* in one streamed LLM call.
+
+        Serves both summary paths: the single-pass primary (raw source parts,
+        ``numbered_parts=False``) and the map-reduce reduce stage (terse
+        digests, numbered in reading order).  When the digest count exceeds
+        ``_HIERARCHY_THRESHOLD``, the digests are first condensed into balanced
+        groups so the reduce prompt stays readable.
+
+        A single call is what gives the overview one voice, an effective
+        length bound, and no per-window seams. All streaming guards apply here:
+        withheld-tail leak scrubbing, dead-stream continuation, and the
+        low-temperature retry. Two GLM failure modes that raise no exception
+        are handled explicitly below: a normal return whose content was
+        amputated mid-sentence by the server output cap, and a normal return
+        with no content at all.
+        """
         emit = self._on_chunk
         can_stream = (
             self._config.streaming_enabled
             and emit is not None
             and hasattr(self._llm_provider, "stream_chat")
         )
-        for i, window in enumerate(windows, 1):
-            ctx = self._format_context(
-                window, max_chars=self._config.rag_max_context_chars
+        grounding_context = "\n\n".join(parts)
+        if parts_are_digests and len(parts) > _HIERARCHY_THRESHOLD:
+            # Grounding keeps the raw digests (best figure fidelity); only the
+            # reduce prompt switches to the condensed groups.
+            parts = self._condense_digest_groups(heading, parts)
+        if numbered_parts:
+            joined = "\n\n".join(
+                f"--- Part {i} ---\n{p}" for i, p in enumerate(parts, 1)
             )
-            if not ctx.strip():
-                continue
-            prompt = self._build_prompt(
-                instruction + f"\n\n(Part {i} of {total} of {heading})",
-                ctx,
+        else:
+            joined = "\n\n".join(parts)
+        if parts_are_digests:
+            framing = (
+                "The document content below consists of terse digests of the "
+                f"consecutive parts of {heading}, in reading order. Write the "
+                "final overview as ONE coherent piece of prose that weaves the "
+                "digests into a single narrative: cover every part in order "
+                "with one consistent voice; never use per-part headers or "
+                "'Part N' labels; never name a figure or table the digests do "
+                "not contain, and when you do cite one, quote its label "
+                "exactly as the digests give it; never mention page numbers; "
+                "end on a complete statement."
             )
-            if can_stream:
-                pieces: list[str] = []
-                win_start = time.monotonic()
+        else:
+            framing = (
+                f"The document content below covers {heading}. Write the final "
+                "overview as ONE coherent piece of prose with one consistent "
+                "voice: never name a figure or table the content does not "
+                "contain, and when you do cite one, quote its label exactly "
+                "as the content gives it; never mention page numbers; end on "
+                "a complete statement."
+            )
+        prompt = instruction + "\n\n" + framing + "\n\n" + joined
 
-                def _fwd(chunk: str, reasoning: str | None) -> None:
-                    if time.monotonic() - win_start > _WINDOW_MAX_SECONDS:  # noqa: B023
-                        raise TimeoutError("bounded summary window exceeded time budget")
-                    if chunk:
-                        pieces.append(chunk)  # noqa: B023
-                        if emit:
-                            emit(chunk, None)
+        if not can_stream:
+            try:
+                text = self._generate_guarded(
+                    prompt,
+                    temperature=SUMMARY_TEMPERATURE,
+                    max_tokens=_SUMMARY_REDUCE_MAX_TOKENS,
+                )
+            except Exception as e:
+                logger.warning("summary reduce failed (%s: %s)", type(e).__name__, e)
+                return ""
+            final = self._finalize_overview(text, grounding_context)
+            if not final.strip() or not self._is_plausible_summary(final):
+                return ""
+            if emit:
+                # Non-streaming mode still surfaces the completed overview through
+                # the callback so the chat shows progressive output.
+                emit(f"\n\n{final}\n\n", None)
+            return final
 
-                try:
-                    returned = self._llm_provider.stream_chat(
-                        messages=[{"role": "user", "content": prompt}],
-                        on_chunk=_fwd,
-                        temperature=SUMMARY_TEMPERATURE,
-                        max_tokens=_SUMMARY_WINDOW_MAX_TOKENS,
-                    )
-                    text = "".join(pieces) or (returned or "")
-                except Exception as e:  # keep the partial on an abort/timeout
-                    logger.warning(
-                        "bounded summary window aborted (%s: %s); keeping partial",
-                        type(e).__name__,
-                        e,
-                    )
-                    text = "".join(pieces)
-                    if not text.strip():
-                        continue
-            else:
-                try:
-                    text = self._generate_guarded(
-                        prompt,
-                        temperature=SUMMARY_TEMPERATURE,
-                        max_tokens=_SUMMARY_WINDOW_MAX_TOKENS,
-                    )
-                except Exception as e:  # skip a failed window
-                    logger.warning(
-                        "bounded summary window failed (%s: %s); skipping",
-                        type(e).__name__,
-                        e,
-                    )
-                    continue
-            text = _prune_implausible_metric_figures(text)
-            text = _ground_figures(text, ctx)
-            text = _trim_to_sentence_end(text)
-            if not text.strip() or not self._is_plausible_summary(text):
-                continue
-            if not can_stream and emit:
-                emit(f"\n\n{text}\n\n", None)
-            parts.append(text)
-        return "\n\n".join(parts)
+        pieces: list[str] = []
+        reduce_start = time.monotonic()
+        # Withhold a short tail of streamed content so a self-correction leak
+        # is caught on the buffered text before it reaches the screen.
+        hold: list[str] = [""]
+        flushed = [0]
+
+        def _emit_streamed(text: str) -> None:
+            if text and emit:
+                emit(text, None)
+
+        def _flush_hold() -> None:
+            # `flushed` must advance with the emission: the leak scrubber's
+            # already-emitted-prefix comparison depends on it staying exact.
+            if hold[0]:
+                flushed[0] += len(hold[0])
+                _emit_streamed(hold[0])
+                hold[0] = ""
+
+        def _fwd(chunk: str, reasoning: str | None) -> None:
+            if time.monotonic() - reduce_start > _WINDOW_MAX_SECONDS:
+                raise TimeoutError("summary reduce exceeded time budget")
+            if reasoning and emit:
+                emit("", reasoning)
+            if not chunk:
+                return
+            pieces.append(chunk)
+            hold[0] += chunk
+            joined = "".join(pieces)
+            if _is_stream_leak(joined.lower()):
+                # A scrubbable leak confined to the withheld tail is cut out
+                # and streaming continues; only a leak that would alter
+                # already-emitted text (or resists scrubbing) aborts the
+                # overview to the retry path.
+                scrubbed = _scrub_self_correction(joined)
+                if (
+                    scrubbed != joined
+                    and scrubbed[: flushed[0]] == joined[: flushed[0]]
+                    and not _is_stream_leak(scrubbed.lower())
+                ):
+                    pieces.clear()
+                    pieces.append(scrubbed)
+                    hold[0] = scrubbed[flushed[0] :]
+                    return
+                raise _StreamLeakError()
+            if len(hold[0]) > _STREAM_LEAK_HOLD:
+                committed = hold[0][:-_STREAM_LEAK_HOLD]
+                hold[0] = hold[0][-_STREAM_LEAK_HOLD:]
+                _emit_streamed(committed)
+                flushed[0] += len(committed)
+
+        text = ""
+        try:
+            returned = self._llm_provider.stream_chat(
+                messages=[{"role": "user", "content": prompt}],
+                on_chunk=_fwd,
+                temperature=SUMMARY_TEMPERATURE,
+                max_tokens=_SUMMARY_REDUCE_MAX_TOKENS,
+            )
+            _flush_hold()
+            text = "".join(pieces) or (returned or "")
+            if text and not pieces:
+                # A provider that returned the whole text without streaming
+                # chunks: seed the buffer so a follow-up continuation extends
+                # this draft instead of dropping it.
+                pieces.append(text)
+        except _StreamLeakError:
+            # The overview leaked an inline self-correction into content:
+            # regenerate rather than ship it. Pre-leak chunks may already be
+            # on screen; the retry replaces the draft.
+            text = ""
+        except Exception as e:  # the stream died mid-flight; recover it
+            logger.warning(
+                "summary reduce stream aborted (%s: %s)", type(e).__name__, e
+            )
+            text = "".join(pieces)
+            _flush_hold()
+            if text.strip():
+                # Idle-timeout stalls and provider drops kill long
+                # reasoning-heavy generations mid-sentence; one streamed
+                # continuation completes the draft so the overview is not
+                # silently truncated.
+                self._resume_summary(prompt, text, _fwd)
+                _flush_hold()
+                text = "".join(pieces)
+
+        if not text.strip():
+            # Covers both a stream that died before any content and the GLM
+            # "normal" empty return (reasoning consumed the whole output
+            # budget): one clean regeneration before the overview is abandoned.
+            retry = self._low_temp_retry(
+                prompt, True, heading, max_tokens=_SUMMARY_REDUCE_MAX_TOKENS
+            )
+            if retry is None:
+                return ""
+            # _fwd must operate on the adopted draft so a follow-up
+            # continuation extends it instead of resurrecting dead pieces.
+            pieces.clear()
+            pieces.append(retry)
+            hold[0] = ""
+            flushed[0] = len(retry)
+            text = retry
+
+        if not _ends_on_sentence(text):
+            # GLM-class servers cap thinking+content with one output budget and
+            # can return "normally" with the content amputated mid-sentence --
+            # no exception reaches the handler above. A streamed continuation
+            # completes the draft so the overview does not end mid-word.
+            self._resume_summary(prompt, text, _fwd)
+            _flush_hold()
+            text = "".join(pieces)
+
+        return self._finalize_or_retry_overview(
+            text,
+            prompt=prompt,
+            heading=heading,
+            grounding_context=grounding_context,
+        )
+
+    def _condense_digest_groups(self, heading: str, digests: list[str]) -> list[str]:
+        """Condense a large digest set into balanced groups for the reduce prompt.
+
+        ``len(digests)`` is split into the fewest groups whose size stays within
+        ``_HIERARCHY_GROUP_SIZE`` (balanced sizes, no singleton trailing group),
+        and each group is merged into one terser digest by a non-streamed call.
+        A group whose condensation fails or reads as garbage falls back to its
+        raw digests, so a failed optimization call cannot lose coverage.
+        """
+        n = len(digests)
+        n_groups = -(-n // _HIERARCHY_GROUP_SIZE)
+        size = -(-n // n_groups)
+        merged: list[str] = []
+        for start in range(0, n, size):
+            group = digests[start : start + size]
+            condensed = self._condense_digest_group(heading, group)
+            merged.append(condensed if condensed.strip() else "\n\n".join(group))
+        return merged
+
+    def _condense_digest_group(self, heading: str, group: list[str]) -> str:
+        """Merge one group of digests into a single terser digest, or '' on failure."""
+        prompt = self._build_prompt(
+            (
+                f"You are condensing intermediate digests of {heading}.\n\nThe "
+                "digests below cover consecutive parts in reading order. Merge "
+                "them into ONE terser digest that preserves, in source order: "
+                "every topic; every figure or table label, quoted exactly as "
+                "the digests give it; and every numeric result, copied exactly "
+                "from the digests. Plain prose only -- no headers, bullets, or "
+                "commentary. Never mention page numbers. Never add anything "
+                "the digests do not contain."
+            ),
+            "\n\n".join(f"--- Digest {i} ---\n{d}" for i, d in enumerate(group, 1)),
+        )
+        try:
+            condensed = self._generate_guarded(
+                prompt,
+                temperature=SUMMARY_TEMPERATURE,
+                max_tokens=_SUMMARY_REDUCE_MAX_TOKENS,
+            )
+        except Exception as e:
+            logger.warning(
+                "digest group condensation failed (%s: %s); passing raw digests",
+                type(e).__name__,
+                e,
+            )
+            return ""
+        condensed = _strip_numeric_self_correction(_scrub_self_correction(condensed))
+        condensed = _prune_implausible_metric_figures(condensed)
+        condensed = _ground_figures(condensed, "\n\n".join(group))
+        condensed = _trim_to_sentence_end(condensed)
+        if not condensed.strip() or not self._is_plausible_summary(condensed):
+            return ""
+        return condensed
+
+    def _finalize_or_retry_overview(
+        self,
+        text: str,
+        *,
+        prompt: str,
+        heading: str,
+        grounding_context: str,
+    ) -> str:
+        """Ground and trim the reduced overview, regenerating once if degenerate."""
+        final = self._finalize_overview(text, grounding_context)
+        if not final.strip():
+            return ""
+        if not self._is_plausible_summary(final):
+            retry = self._low_temp_retry(
+                prompt, True, heading, max_tokens=_SUMMARY_REDUCE_MAX_TOKENS
+            )
+            if retry is not None:
+                final = self._finalize_overview(retry, grounding_context)
+        return final
 
     @staticmethod
-    def _detect_section_label(
-        text: str, chapter_num: int | str
-    ) -> str | None:
+    def _finalize_overview(text: str, grounding_context: str) -> str:
+        """Apply the deterministic post-passes to a reduced overview.
+
+        Scrubbing, metric pruning, figure grounding against *grounding_context*
+        (the digests, or the raw source for a single-pass overview), the
+        deterministic word ceiling, and sentence-end trimming mean a leaked or
+        fabricated figure still cannot ship and an overlong draft is cut at a
+        sentence boundary rather than trusted to the model's own counting.
+        """
+        text = _strip_numeric_self_correction(_scrub_self_correction(text))
+        text = _prune_implausible_metric_figures(text)
+        text = _ground_figures(text, grounding_context)
+        text = _trim_to_word_budget(text, _OVERVIEW_MAX_WORDS)
+        return _trim_to_sentence_end(text)
+
+    def _resume_summary(
+        self,
+        prompt: str,
+        partial: str,
+        on_chunk: Callable[[str, str | None], None],
+    ) -> None:
+        """Stream a continuation that completes an overview cut off mid-sentence.
+
+        Provider drops, idle-timeout stalls, and the server-side output cap of
+        reasoning models (thinking and content share one token budget, so
+        content can be amputated with a normal, exception-free return) all
+        truncate long generations mid-sentence; regenerating from scratch would
+        repeat minutes of thinking, so the model is shown its own draft and
+        asked to continue seamlessly. Chunks flow through the caller's
+        ``on_chunk`` guard, so leak scrubbing, hold buffering, and the time
+        budget keep applying. Failures are logged and swallowed: the caller
+        keeps the partial draft.
+        """
+        resume_prompt = (
+            prompt + "\n\nYour draft was cut off mid-sentence before it could "
+            "finish. Draft so far:\n<draft>\n"
+            + partial
+            + "\n</draft>\nContinue seamlessly from that exact point: first "
+            "complete the unfinished sentence, then finish the overview, "
+            "ending on a complete statement. Output ONLY the continuation -- "
+            "never repeat text already present in the draft."
+        )
+        try:
+            self._llm_provider.stream_chat(
+                messages=[{"role": "user", "content": resume_prompt}],
+                on_chunk=on_chunk,
+                temperature=SUMMARY_TEMPERATURE,
+                max_tokens=_SUMMARY_REDUCE_MAX_TOKENS,
+            )
+        except Exception as e:
+            logger.warning(
+                "summary continuation failed (%s: %s); keeping partial",
+                type(e).__name__,
+                e,
+            )
+
+    @staticmethod
+    def _detect_section_label(text: str, chapter_num: int | str) -> str | None:
         """Return the section key (e.g. ``"18.2"``) a chunk belongs to, if any.
 
         Only honours a section number that appears at a *heading* position (start
@@ -1847,9 +2611,7 @@ class _FallbackMixin(_RAGPipelineState):
         such content folds into the chapter overview.
         """
         chapter_s = str(chapter_num)
-        heading_re = re.compile(
-            rf"(?:^|\n)\s*{re.escape(chapter_s)}\.(\d+)\b"
-        )
+        heading_re = re.compile(rf"(?:^|\n)\s*{re.escape(chapter_s)}\.(\d+)\b")
         ref_indicator = re.compile(
             r"(figure|table|equation|listing|eq\.?|page|p\.)\s*$",
             re.IGNORECASE,
@@ -1983,9 +2745,7 @@ class _FallbackMixin(_RAGPipelineState):
         parts: list[tuple[str, str]] = []
         for heading, prompt in capped:
             summary = self._trim_rehashed_tail(
-                self._generate_window_guarded(
-                    prompt, heading, temperature=temperature
-                )
+                self._generate_window_guarded(prompt, heading, temperature=temperature)
             )
             if summary:
                 parts.append((heading, summary))
@@ -2099,7 +2859,9 @@ class _FallbackMixin(_RAGPipelineState):
             logger.warning(
                 "RAG window degraded mid-stream; retrying at low temperature for a complete summary"
             )
-            retry = self._low_temp_retry(prompt, heading_shown, heading, max_tokens=tokens)
+            retry = self._low_temp_retry(
+                prompt, heading_shown, heading, max_tokens=tokens
+            )
             if retry is not None:
                 return retry
 
@@ -2112,7 +2874,9 @@ class _FallbackMixin(_RAGPipelineState):
         logger.warning(
             "RAG window derailed before producing usable content; retrying at low temperature"
         )
-        retry = self._low_temp_retry(prompt, heading_shown, heading, max_tokens=_RETRY_MAX_TOKENS)
+        retry = self._low_temp_retry(
+            prompt, heading_shown, heading, max_tokens=_RETRY_MAX_TOKENS
+        )
         if retry is not None:
             return retry
         logger.warning("RAG window output still implausible; skipping section")
@@ -2149,14 +2913,22 @@ class _FallbackMixin(_RAGPipelineState):
                 temperature=0.1,
                 max_tokens=max_tokens,
             )
-        except (ServiceUnavailableError, RuntimeError) as e:
+        except Exception as e:
+            # Best-effort by contract: a provider timeout or transport error
+            # here must never crash the surrounding summary loop.
             logger.warning(
                 "RAG window retry failed (%s: %s); skipping window",
                 type(e).__name__,
                 e,
             )
             return None
+        if _is_stream_leak(retry.lower()):
+            logger.warning(
+                "RAG window retry still leaked a self-correction; skipping window"
+            )
+            return None
         if not self._is_acceptable(retry):
+            logger.warning("RAG window retry unacceptable; skipping window")
             return None
         if self._on_chunk:
             if heading_shown:
@@ -2739,7 +3511,9 @@ class _RoutingMixin(_RAGPipelineState):
                 text = text[marker.end() :].strip()
             if _PAGE_STUB_LINE_RE.search(text):
                 text = "\n".join(
-                    line for line in text.splitlines() if not _PAGE_STUB_LINE_RE.match(line)
+                    line
+                    for line in text.splitlines()
+                    if not _PAGE_STUB_LINE_RE.match(line)
                 ).strip()
             parts.append(text)
         if not parts:
@@ -2750,9 +3524,7 @@ class _RoutingMixin(_RAGPipelineState):
             result += nxt[k:] if k else "\n" + nxt
         return result
 
-    def _page_query_chunks(
-        self, query: str
-    ) -> list[dict[str, Any]] | None:
+    def _page_query_chunks(self, query: str) -> list[dict[str, Any]] | None:
         """Resolve a page-reference query to its chunks, or ``None`` to skip.
 
         Returns ``None`` when the query has no page reference (or the backend
@@ -2770,7 +3542,9 @@ class _RoutingMixin(_RAGPipelineState):
             found = storage.find_chunks(source_file=source, printed_page=printed)
             found = self._expand_page_chunks(storage, source, list(found))
         except Exception as exc:  # pragma: no cover - backend-dependent
-            logger.warning("Page lookup failed; falling back to semantic search: %s", exc)
+            logger.warning(
+                "Page lookup failed; falling back to semantic search: %s", exc
+            )
             return None
         return [dict(c) for c in found]
 
@@ -2784,7 +3558,6 @@ class _RoutingMixin(_RAGPipelineState):
             return int(match.group(1))
         except ValueError:
             return None
-
 
     def _expand_page_chunks(
         self,
@@ -2803,14 +3576,14 @@ class _RoutingMixin(_RAGPipelineState):
         if not primary:
             return primary
         page_nums = {
-            int(c["page_number"])
-            for c in primary
-            if c.get("page_number") is not None
+            int(c["page_number"]) for c in primary if c.get("page_number") is not None
         }
         if not page_nums or not hasattr(storage, "find_chunks"):
             return primary
         try:
-            full = storage.find_chunks(source_file=source, page_number=sorted(page_nums))
+            full = storage.find_chunks(
+                source_file=source, page_number=sorted(page_nums)
+            )
         except Exception:  # pragma: no cover - backend-dependent
             return primary
         by_id: dict[str, Any] = {}
@@ -2858,7 +3631,6 @@ class _RoutingMixin(_RAGPipelineState):
             "query": query,
             "sources": chunks,
         }
-
 
     def _list_sources_result(self, query: str) -> dict[str, Any]:
         """Build a deterministic answer enumerating ALL distinct sources.

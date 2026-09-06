@@ -747,9 +747,7 @@ class RAGPipeline(
                 # the heading/TOC structure probe, so without them a chapter that
                 # never gets a reliable start page is unbounded and the next
                 # chapter's content leaks into its bucket.
-                for open_n, open_pg in self._detect_chapter_openings(
-                    body_all_
-                ).items():
+                for open_n, open_pg in self._detect_chapter_openings(body_all_).items():
                     if open_n not in chapter_first_pg:
                         chapter_first_pg[open_n] = open_pg
 
@@ -782,7 +780,9 @@ class RAGPipeline(
                             # Networking Hardware on page 144" which
                             # appear on pages belonging to OTHER chapters.
                             after_txt = txt[m.end() : m.end() + 60]
-                            has_on_page = bool(re.search(r"\bon\s+page\s+\d+", after_txt))
+                            has_on_page = bool(
+                                re.search(r"\bon\s+page\s+\d+", after_txt)
+                            )
                             if has_on_page:
                                 continue
                             chapter_first_pg[ch] = page
@@ -931,86 +931,117 @@ class RAGPipeline(
                     chapter_ranges_[ch_] = (start_pg_, end_pg_)
 
                 chapter_keys = sorted(chapter_ranges_.keys())
-                # Per-chapter bucket limit: when targeting a single chapter, scale
-                # up so content spans more of the page range instead of saturating
-                # at the first few chunks (all from the same starting page).
-                # For multi-chapter, keep the original 4-chunk cap to prevent
-                # any single chapter from dominating the round-robin merge.
+                if not chapter_keys:
+                    logger.warning(
+                        "No chapter page ranges derived for %s; "
+                        "falling back to generic search",
+                        src,
+                    )
+                    return self._generic_one_shot(
+                        query, top_k, show_sources, source_filter=source_filter
+                    )
                 single_section_mode = len(chapter_keys) <= 2
-                per_chapter_limit = 150 if single_section_mode else 4
-                # Per-chapter page cap.  A small cap (2) kept only ~1/3 of the
-                # chunks on a dense page (troubleshooting chapters have many
-                # short sections per page), silently dropping whole sections from
-                # a single-chapter summary.  Raised for single-chapter mode so
-                # every section on a page is captured, bounded overall by
-                # per_chapter_limit; multi-chapter keeps 2 for fair round-robin.
-                page_cap = 12 if single_section_mode else 2
-                page_count_per_ch: dict[int, dict[int, int]] = {
-                    ch: {} for ch in chapter_keys
-                }
+                # Multi-chapter round-robin cap, pre-bound because the final
+                # trim below reads it in both modes.
+                per_chapter_limit = 4
                 chapter_buckets: dict[int, list[dict[str, Any]]] = {
                     ch: [] for ch in chapter_keys
                 }
-                for c in cast(
-                    list[dict[str, Any]], storage.get_body_chunks(src, limit=6000)
-                ):
-                    pg = c.get("page_number", 0)
+                if single_section_mode:
+                    # Deterministic full-chapter fetch: every body chunk inside
+                    # the chapter's page range, in document order, with no
+                    # per-chapter or per-page caps.  The previous capped
+                    # sampling silently dropped dense pages from single-chapter
+                    # overviews; the summarizer bounds its own context
+                    # downstream, so fetching everything here is lossless.
                     for ch_num in chapter_keys:
-                        rng = chapter_ranges_[ch_num]
-                        if rng[0] <= pg <= rng[1]:
-                            if len(chapter_buckets[ch_num]) < per_chapter_limit:
-                                per_page = page_count_per_ch[ch_num]
-                                if per_page.get(pg, 0) < page_cap:
-                                    per_page[pg] = per_page.get(pg, 0) + 1
-                                    c["score"] = 0.5
-                                    chapter_buckets[ch_num].append(c)
-                                else:
-                                    # Page at cap — promote header chunks over
-                                    # footers/captions that were collected first.
-                                    # Use a broader match: docling often embeds
-                                    # section headers (e.g. "11.2 CPU Hot-Plugging")
-                                    # in the middle of paragraph text rather than
-                                    # at the start of a segment.
-                                    txt = c.get("chunk_text", "")
-                                    sec_pat = re.compile(
-                                        rf"\b{ch_num}\.\d+(?:\.\d+)?\s"
-                                    )
-                                    if sec_pat.search(txt):
-                                        replaced = False
-                                        for i, existing in enumerate(
-                                            chapter_buckets[ch_num]
-                                        ):
-                                            if existing.get(
-                                                "page_number"
-                                            ) == pg and not sec_pat.search(
-                                                existing.get("chunk_text", "")
+                        start_pg_, end_pg_ = chapter_ranges_[ch_num]
+                        in_range = [
+                            c
+                            for c in cast(
+                                list[dict[str, Any]],
+                                storage.get_body_chunks(src, page_gte=start_pg_),
+                            )
+                            if (c.get("page_number") or 0) <= end_pg_
+                        ]
+                        in_range.sort(
+                            key=lambda c: (
+                                c.get("page_number") or 0,
+                                c.get("page_pos") or 0,
+                            )
+                        )
+                        for c in in_range:
+                            c["score"] = 0.5
+                        chapter_buckets[ch_num] = in_range
+                else:
+                    # Multi-chapter round-robin keeps tight per-chapter caps so
+                    # no single chapter dominates the merged context.
+                    page_cap = 2
+                    page_count_per_ch: dict[int, dict[int, int]] = {
+                        ch: {} for ch in chapter_keys
+                    }
+                    for c in cast(
+                        list[dict[str, Any]], storage.get_body_chunks(src, limit=6000)
+                    ):
+                        pg = c.get("page_number", 0)
+                        for ch_num in chapter_keys:
+                            rng = chapter_ranges_[ch_num]
+                            if rng[0] <= pg <= rng[1]:
+                                if len(chapter_buckets[ch_num]) < per_chapter_limit:
+                                    per_page = page_count_per_ch[ch_num]
+                                    if per_page.get(pg, 0) < page_cap:
+                                        per_page[pg] = per_page.get(pg, 0) + 1
+                                        c["score"] = 0.5
+                                        chapter_buckets[ch_num].append(c)
+                                    else:
+                                        # Page at cap — promote header chunks over
+                                        # footers/captions that were collected first.
+                                        # Use a broader match: docling often embeds
+                                        # section headers (e.g. "11.2 CPU Hot-Plugging")
+                                        # in the middle of paragraph text rather than
+                                        # at the start of a segment.
+                                        txt = c.get("chunk_text", "")
+                                        sec_pat = re.compile(
+                                            rf"\b{ch_num}\.\d+(?:\.\d+)?\s"
+                                        )
+                                        if sec_pat.search(txt):
+                                            replaced = False
+                                            for i, existing in enumerate(
+                                                chapter_buckets[ch_num]
                                             ):
-                                                c["score"] = 0.5
-                                                chapter_buckets[ch_num][i] = c
-                                                replaced = True
-                                                break
-                                        # All existing page entries are also section
-                                        # headers — grant extra slots to avoid losing
-                                        # genuine section content. Allow up to 4 per
-                                        # page for pages with dense section headers
-                                        # (e.g. VirtualBox ch11 p186 has 4: 11.6.3,
-                                        # 11.6.4, 11.6.4.1, 11.6.5).
-                                        if not replaced:
-                                            if per_page.get(pg, 0) < page_cap + 2:
-                                                per_page[pg] = per_page.get(pg, 0) + 1
-                                                c["score"] = 0.5
-                                                chapter_buckets[ch_num].append(c)
-                                            else:
-                                                logger.debug(
-                                                    "Page %s at cap (%s slots), section header "
-                                                    "'%s...' dropped (all %s existing entries "
-                                                    "also have section numbers)",
-                                                    pg,
-                                                    per_page.get(pg, 0),
-                                                    txt[:60],
-                                                    len(chapter_buckets[ch_num]),
-                                                )
-                            break
+                                                if existing.get(
+                                                    "page_number"
+                                                ) == pg and not sec_pat.search(
+                                                    existing.get("chunk_text", "")
+                                                ):
+                                                    c["score"] = 0.5
+                                                    chapter_buckets[ch_num][i] = c
+                                                    replaced = True
+                                                    break
+                                            # All existing page entries are also section
+                                            # headers — grant extra slots to avoid losing
+                                            # genuine section content. Allow up to 4 per
+                                            # page for pages with dense section headers
+                                            # (e.g. VirtualBox ch11 p186 has 4: 11.6.3,
+                                            # 11.6.4, 11.6.4.1, 11.6.5).
+                                            if not replaced:
+                                                if per_page.get(pg, 0) < page_cap + 2:
+                                                    per_page[pg] = (
+                                                        per_page.get(pg, 0) + 1
+                                                    )
+                                                    c["score"] = 0.5
+                                                    chapter_buckets[ch_num].append(c)
+                                                else:
+                                                    logger.debug(
+                                                        "Page %s at cap (%s slots), section header "
+                                                        "'%s...' dropped (all %s existing entries "
+                                                        "also have section numbers)",
+                                                        pg,
+                                                        per_page.get(pg, 0),
+                                                        txt[:60],
+                                                        len(chapter_buckets[ch_num]),
+                                                    )
+                                break
 
                 # Post-processing: inject missing section headers.
                 # Docling sometimes drops section numbers from body chunks
@@ -1049,9 +1080,16 @@ class RAGPipeline(
 
                 accumulated = list(unique_by_hash.values())
                 accumulated.sort(key=lambda c: c.get("score", 0.0), reverse=True)
-                # Use the larger of top_k and per_chapter_limit for the final
-                # trim so single-chapter targets don't lose their spread.
-                final_chunks = accumulated[: max(top_k, per_chapter_limit)]
+                if single_section_mode:
+                    # The deterministic fetch returned the complete chapter;
+                    # trimming here would drop real content.  The summarizer
+                    # bounds its own context downstream.
+                    final_chunks = accumulated
+                else:
+                    # Use the larger of top_k and per_chapter_limit for the
+                    # final trim so the merged multi-chapter context stays
+                    # bounded while single chapters keep their spread.
+                    final_chunks = accumulated[: max(top_k, per_chapter_limit)]
 
                 # Reorder chunks interleaving pages (round-robin by page) so the
                 # LLM sees content from diverse pages early rather than sequential
