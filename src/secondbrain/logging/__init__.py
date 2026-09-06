@@ -1,4 +1,12 @@
-"""Logging utilities for SecondBrain application."""
+"""Logging utilities for SecondBrain application.
+
+Log transport follows 12-Factor Factor XI (treat logs as event streams):
+the default transport is stdout/stderr only, and the consuming terminal or
+process manager owns routing and storage. Writing to a log file is strictly
+opt-in for local CLI debugging via the SECONDBRAIN_LOG_FILE environment
+variable (or an explicit log_file argument); no file handler is attached
+unless that opt-in is present.
+"""
 
 import json
 import logging
@@ -93,10 +101,14 @@ def setup_logging(
 ) -> None:
     """Configure logging with the specified options.
 
+    stdout/stderr is the default transport; a log file is attached only when
+    explicitly requested (see the module docstring for the 12-factor contract).
+
     Args:
         verbose: Enable DEBUG level if True.
         json_format: Use JSON format if True, rich text otherwise.
         log_file: Path to log file. If None, reads from SECONDBRAIN_LOG_FILE env var.
+            When neither is set, no file handler is attached.
         max_bytes: Max log file size before rotation. If None, reads from
             SECONDBRAIN_LOG_MAX_BYTES env var (default 10MB).
         backup_count: Number of backup files to keep. If None, reads from
