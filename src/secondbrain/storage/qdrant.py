@@ -156,7 +156,7 @@ class QdrantVectorStorage:
                         )
                     )
             except ValueError:
-                pass
+                logger.debug("Keyword %r is not a plain integer; no int match", value)
         return conditions
 
     def _build_search_filter(
@@ -432,9 +432,7 @@ class QdrantVectorStorage:
             )
         if printed_page is not None:
             must_conds.append(
-                models.Filter(
-                    should=self._key_conditions("printed_page", printed_page)
-                )
+                models.Filter(should=self._key_conditions("printed_page", printed_page))
             )
         if page_number is not None:
             if isinstance(page_number, list):

@@ -889,7 +889,10 @@ class DocumentIngestor:
                                 self.progress_callback(file_path, False)
                             done_futures.append(future)
                 except TimeoutError:
-                    pass
+                    logger.debug(
+                        "as_completed poll timeout; %d futures still pending",
+                        len(pending_futures) - len(done_futures),
+                    )
 
                 for future in done_futures:
                     del pending_futures[future]
