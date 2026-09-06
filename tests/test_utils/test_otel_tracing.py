@@ -11,6 +11,7 @@ Consolidated tests covering:
 from __future__ import annotations
 
 import importlib
+import logging
 
 import pytest
 
@@ -61,7 +62,16 @@ class TestOTELConfig:
     def test_sampling_rate_invalid_uses_default(self, monkeypatch, caplog):
         monkeypatch.setenv("SECONDBRAIN_TRACING_ENABLED", "true")
         monkeypatch.setenv("SECONDBRAIN_OTEL_SAMPLING_RATE", "invalid")
-        tracing_module.setup_tracing(service_name="test-service")
+        # Full-suite runs mask this warning via cross-test logging
+        # reconfiguration; force level + propagation so caplog always sees it.
+        tracing_logger = logging.getLogger(tracing_module.__name__)
+        with caplog.at_level(logging.WARNING, logger=tracing_logger.name):
+            original_propagate = tracing_logger.propagate
+            tracing_logger.propagate = True
+            try:
+                tracing_module.setup_tracing(service_name="test-service")
+            finally:
+                tracing_logger.propagate = original_propagate
         assert "Invalid SECONDBRAIN_OTEL_SAMPLING_RATE" in str(caplog.text)
 
 
