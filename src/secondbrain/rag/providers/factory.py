@@ -41,7 +41,7 @@ class LLMProviderFactory:
                 api_key=config.openai_api_key,
                 base_url=config.openai_base_url,
                 repetition_penalty=config.llm_repetition_penalty,
-                max_reasoning_chars=config.llm_max_reasoning_chars,
+                reasoning_effort=config.llm_reasoning_effort,
                 stream_idle_timeout_seconds=config.llm_stream_idle_timeout_seconds,
                 max_answer_chars=config.llm_max_answer_chars,
             )

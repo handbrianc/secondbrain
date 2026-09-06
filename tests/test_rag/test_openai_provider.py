@@ -177,6 +177,49 @@ class TestOpenAILLMProviderGenerate:
                 call_kwargs = mock_client.chat.completions.create.call_args[1]
                 assert call_kwargs["extra_body"] is None
 
+    def test_generate_forwards_reasoning_effort_when_set(self):
+        """Test that reasoning_effort is forwarded via extra_body when configured."""
+        with patch.dict(os.environ, {"SECONDBRAIN_OPENAI_API_KEY": "test-key"}):
+            with patch("secondbrain.rag.providers.openai.OpenAI") as mock_client_class:
+                mock_response = MagicMock()
+                mock_response.choices = [
+                    MagicMock(message=MagicMock(content="Response"))
+                ]
+                mock_client = MagicMock()
+                mock_client.chat.completions.create.return_value = mock_response
+                mock_client_class.return_value = mock_client
+
+                provider = OpenAILLMProvider(reasoning_effort="low")
+                provider.generate("Test")
+
+                call_kwargs = mock_client.chat.completions.create.call_args[1]
+                assert call_kwargs["extra_body"] == {"reasoning_effort": "low"}
+
+    def test_generate_combines_reasoning_effort_with_repetition_penalty(self):
+        """Test that reasoning_effort and repetition_penalty share one extra_body."""
+        with patch.dict(os.environ, {"SECONDBRAIN_OPENAI_API_KEY": "test-key"}):
+            with patch("secondbrain.rag.providers.openai.OpenAI") as mock_client_class:
+                mock_response = MagicMock()
+                mock_response.choices = [
+                    MagicMock(message=MagicMock(content="Response"))
+                ]
+                mock_client = MagicMock()
+                mock_client.chat.completions.create.return_value = mock_response
+                mock_client_class.return_value = mock_client
+
+                provider = OpenAILLMProvider(
+                    repetition_penalty=1.2, reasoning_effort="minimal"
+                )
+                provider.stream_chat(
+                    [{"role": "user", "content": "Test"}], on_chunk=lambda c, r: None
+                )
+
+                call_kwargs = mock_client.chat.completions.create.call_args[1]
+                assert call_kwargs["extra_body"] == {
+                    "repetition_penalty": 1.2,
+                    "reasoning_effort": "minimal",
+                }
+
     def test_generate_uses_default_temperature_when_not_specified(self):
         """Test that default temperature is used when not specified."""
         with patch.dict(os.environ, {"SECONDBRAIN_OPENAI_API_KEY": "test-key"}):
@@ -358,71 +401,8 @@ def _distinct_reasoning(target_chars: int) -> str:
     return "".join(parts)
 
 
-class TestOpenAILLMProviderStreamReasoningCap:
-    """Tests for the client-side reasoning budget in stream_chat."""
-
-    def test_stream_chat_halts_runaway_reasoning_with_fallback(self):
-        """When reasoning exceeds the budget with no answer, halt and emit fallback."""
-        with patch.dict(os.environ, {"SECONDBRAIN_OPENAI_API_KEY": "test-key"}):
-            with patch("secondbrain.rag.providers.openai.OpenAI") as mock_client_class:
-                mock_client = MagicMock()
-                chunks = [
-                    _stream_chunk(reasoning="let me re-read the table again ")
-                    for _ in range(50)
-                ]
-                mock_client.chat.completions.create.return_value = chunks
-                mock_client_class.return_value = mock_client
-
-                provider = OpenAILLMProvider(max_reasoning_chars=50)
-                emitted: list[tuple[str, str | None]] = []
-                result = provider.stream_chat(
-                    messages=[{"role": "user", "content": "hi"}],
-                    on_chunk=lambda c, r: emitted.append((c, r)),
-                )
-
-                assert "reasoning budget" in result
-                assert result == emitted[-1][0]
-
-    def test_stream_chat_preserves_content_when_reasoning_capped(self):
-        """When reasoning is capped after content started, keep the produced content."""
-        with patch.dict(os.environ, {"SECONDBRAIN_OPENAI_API_KEY": "test-key"}):
-            with patch("secondbrain.rag.providers.openai.OpenAI") as mock_client_class:
-                mock_client = MagicMock()
-                chunks = [
-                    _stream_chunk(content="Here is the answer. "),
-                    _stream_chunk(reasoning="x" * 100),
-                ]
-                mock_client.chat.completions.create.return_value = chunks
-                mock_client_class.return_value = mock_client
-
-                provider = OpenAILLMProvider(max_reasoning_chars=50)
-                result = provider.stream_chat(
-                    messages=[{"role": "user", "content": "hi"}],
-                    on_chunk=lambda c, r: None,
-                )
-
-                assert result == "Here is the answer. "
-                assert "reasoning budget" not in result
-
-    def test_stream_chat_within_reasoning_budget_returns_normally(self):
-        """Reasoning under the budget does not halt the stream."""
-        with patch.dict(os.environ, {"SECONDBRAIN_OPENAI_API_KEY": "test-key"}):
-            with patch("secondbrain.rag.providers.openai.OpenAI") as mock_client_class:
-                mock_client = MagicMock()
-                chunks = [
-                    _stream_chunk(reasoning="brief thought "),
-                    _stream_chunk(content="final answer"),
-                ]
-                mock_client.chat.completions.create.return_value = chunks
-                mock_client_class.return_value = mock_client
-
-                provider = OpenAILLMProvider(max_reasoning_chars=8000)
-                result = provider.stream_chat(
-                    messages=[{"role": "user", "content": "hi"}],
-                    on_chunk=lambda c, r: None,
-                )
-
-                assert result == "final answer"
+class TestOpenAILLMProviderStreamGuards:
+    """Tests for stream guard rails: reasoning/content loop detection and answer caps."""
 
     def test_stream_chat_detects_near_exact_repetition_loop_early(self):
         """A repeating-reasoning loop is halted by the detector, well below the ceiling."""
@@ -430,7 +410,9 @@ class TestOpenAILLMProviderStreamReasoningCap:
             with patch("secondbrain.rag.providers.openai.OpenAI") as mock_client_class:
                 mock_client = MagicMock()
                 phrase = "let me re-read the exact line from the prompt again "
-                reasoning = phrase * 400  # ~20k chars of periodic (degenerate) reasoning
+                reasoning = (
+                    phrase * 400
+                )  # ~20k chars of periodic (degenerate) reasoning
                 chunks = [
                     _stream_chunk(reasoning=reasoning[i : i + 40])
                     for i in range(0, len(reasoning), 40)
@@ -439,7 +421,7 @@ class TestOpenAILLMProviderStreamReasoningCap:
                 mock_client.chat.completions.create.return_value = iter(chunks)
                 mock_client_class.return_value = mock_client
 
-                provider = OpenAILLMProvider(max_reasoning_chars=24000)
+                provider = OpenAILLMProvider()
                 emitted: list[tuple[str, str | None]] = []
                 result = provider.stream_chat(
                     messages=[{"role": "user", "content": "hi"}],
@@ -447,14 +429,12 @@ class TestOpenAILLMProviderStreamReasoningCap:
                 )
 
                 reasoning_forwarded = sum(len(r) for _, r in emitted if r)
-                assert "reasoning budget" in result
+                assert "got stuck in repetitive reasoning" in result
                 assert reasoning_forwarded < 24000
-                assert "never reached" not in "".join(
-                    c for c, _ in emitted if c
-                )
+                assert "never reached" not in "".join(c for c, _ in emitted if c)
 
     def test_stream_chat_allows_long_distinct_reasoning(self):
-        """Legitimate long reasoning (> the old 8k cap) must complete, not be cut."""
+        """Legitimate long reasoning must complete, not be cut."""
         with patch.dict(os.environ, {"SECONDBRAIN_OPENAI_API_KEY": "test-key"}):
             with patch("secondbrain.rag.providers.openai.OpenAI") as mock_client_class:
                 mock_client = MagicMock()
@@ -467,13 +447,12 @@ class TestOpenAILLMProviderStreamReasoningCap:
                 mock_client.chat.completions.create.return_value = iter(chunks)
                 mock_client_class.return_value = mock_client
 
-                provider = OpenAILLMProvider(max_reasoning_chars=24000)
+                provider = OpenAILLMProvider()
                 result = provider.stream_chat(
                     messages=[{"role": "user", "content": "hi"}],
                     on_chunk=lambda c, r: None,
                 )
 
-                assert "reasoning budget" not in result
                 assert result == "FULL SUMMARY"
 
     def test_stream_chat_halts_content_phase_spiral_early(self):
@@ -493,7 +472,7 @@ class TestOpenAILLMProviderStreamReasoningCap:
                 mock_client.chat.completions.create.return_value = iter(chunks)
                 mock_client_class.return_value = mock_client
 
-                provider = OpenAILLMProvider(max_reasoning_chars=24000)
+                provider = OpenAILLMProvider()
                 emitted: list[tuple[str, str | None]] = []
                 result = provider.stream_chat(
                     messages=[{"role": "user", "content": "hi"}],
@@ -501,7 +480,6 @@ class TestOpenAILLMProviderStreamReasoningCap:
                 )
 
                 content_forwarded = sum(len(c) for c, _ in emitted if c)
-                assert "reasoning budget" not in result
                 # The stream was terminated well before the ~13k chars of spiral.
                 assert content_forwarded < len(full)
 
@@ -511,7 +489,9 @@ class TestOpenAILLMProviderStreamReasoningCap:
             with patch("secondbrain.rag.providers.openai.OpenAI") as mock_client_class:
                 mock_client = MagicMock()
                 clean = _distinct_reasoning(2000)
-                full = clean + ("rechecking the exact figure over and over again no " * 200)
+                full = clean + (
+                    "rechecking the exact figure over and over again no " * 200
+                )
                 chunks = [
                     _stream_chunk(content=full[i : i + 40])
                     for i in range(0, len(full), 40)
@@ -519,13 +499,12 @@ class TestOpenAILLMProviderStreamReasoningCap:
                 mock_client.chat.completions.create.return_value = iter(chunks)
                 mock_client_class.return_value = mock_client
 
-                provider = OpenAILLMProvider(max_reasoning_chars=24000)
+                provider = OpenAILLMProvider()
                 result = provider.stream_chat(
                     messages=[{"role": "user", "content": "hi"}],
                     on_chunk=lambda c, r: None,
                 )
 
-                assert "reasoning budget" not in result
                 assert len(result) < len(full)
 
     def test_stream_chat_answer_length_cap_stops_runaway(self):
@@ -543,9 +522,7 @@ class TestOpenAILLMProviderStreamReasoningCap:
                 mock_client.chat.completions.create.return_value = iter(chunks)
                 mock_client_class.return_value = mock_client
 
-                provider = OpenAILLMProvider(
-                    max_reasoning_chars=24000, max_answer_chars=8000
-                )
+                provider = OpenAILLMProvider(max_answer_chars=8000)
                 emitted: list[tuple[str, str | None]] = []
                 result = provider.stream_chat(
                     messages=[{"role": "user", "content": "hi"}],
@@ -553,7 +530,6 @@ class TestOpenAILLMProviderStreamReasoningCap:
                 )
 
                 content_forwarded = sum(len(c) for c, _ in emitted if c)
-                assert "reasoning budget" not in result
                 # It ran past the window-detector cutoff (~4-5k) up to the 8k cap,
                 # proving the length cap (not repetition detection) bounded it.
                 assert 7000 <= content_forwarded <= 9000
@@ -575,28 +551,24 @@ class TestOpenAILLMProviderStreamReasoningCap:
                 mock_client.chat.completions.create.return_value = iter(chunks)
                 mock_client_class.return_value = mock_client
 
-                provider = OpenAILLMProvider(
-                    max_reasoning_chars=24000, max_answer_chars=120
-                )
+                provider = OpenAILLMProvider(max_answer_chars=120)
                 result = provider.stream_chat(
                     messages=[{"role": "user", "content": "hi"}],
                     on_chunk=lambda c, r: None,
                 )
 
-                assert "Q" not in result, "capped answer must drop the unpunctuated tail"
-                assert result.rstrip().endswith("."), "capped answer must end at a sentence"
-
-    def test_stream_chat_cap_disabled_by_default(self):
-        """max_reasoning_chars defaults to 0 (disabled) so reasoning is never capped."""
-        with patch.dict(os.environ, {"SECONDBRAIN_OPENAI_API_KEY": "test-key"}):
-            provider = OpenAILLMProvider()
-            assert provider._max_reasoning_chars == 0
+                assert "Q" not in result, (
+                    "capped answer must drop the unpunctuated tail"
+                )
+                assert result.rstrip().endswith("."), (
+                    "capped answer must end at a sentence"
+                )
 
 
-class TestLLMProviderFactoryReasoningCap:
-    """Tests that the factory forwards llm_max_reasoning_chars to the provider."""
+class TestLLMProviderFactoryCaps:
+    """Tests that the factory forwards cap settings to the provider."""
 
-    def test_create_from_config_forwards_max_reasoning_chars(self):
+    def test_create_from_config_forwards_cap_settings(self):
         mock_config = MagicMock()
         mock_config.llm_provider = "openai"
         mock_config.llm_model = "deepseek-chat"
@@ -607,16 +579,16 @@ class TestLLMProviderFactoryReasoningCap:
         mock_config.openai_api_key = "k"
         mock_config.openai_base_url = None
         mock_config.llm_repetition_penalty = 1.0
-        mock_config.llm_max_reasoning_chars = 9999
+        mock_config.llm_reasoning_effort = "low"
         mock_config.llm_stream_idle_timeout_seconds = 120
         mock_config.llm_max_answer_chars = 8000
 
         with patch("secondbrain.rag.providers.openai.OpenAILLMProvider") as mock_cls:
             LLMProviderFactory.create_from_config(mock_config)
             mock_cls.assert_called_once()
-            assert mock_cls.call_args.kwargs["max_reasoning_chars"] == 9999
             assert mock_cls.call_args.kwargs["stream_idle_timeout_seconds"] == 120
             assert mock_cls.call_args.kwargs["max_answer_chars"] == 8000
+            assert mock_cls.call_args.kwargs["reasoning_effort"] == "low"
 
 
 class TestOpenAILLMProviderStreamIdleTimeout:
@@ -632,9 +604,7 @@ class TestOpenAILLMProviderStreamIdleTimeout:
                     mock_sync.return_value = MagicMock()
                     mock_async.return_value = MagicMock()
                     OpenAILLMProvider()
-                    assert (
-                        mock_sync.call_args.kwargs["timeout"].read is None
-                    )
+                    assert mock_sync.call_args.kwargs["timeout"].read is None
 
     def test_init_applies_idle_timeout_to_read(self):
         """A configured idle timeout is applied as the httpx read timeout."""
@@ -646,6 +616,4 @@ class TestOpenAILLMProviderStreamIdleTimeout:
                     mock_sync.return_value = MagicMock()
                     mock_async.return_value = MagicMock()
                     OpenAILLMProvider(stream_idle_timeout_seconds=120)
-                    assert (
-                        mock_sync.call_args.kwargs["timeout"].read == 120
-                    )
+                    assert mock_sync.call_args.kwargs["timeout"].read == 120

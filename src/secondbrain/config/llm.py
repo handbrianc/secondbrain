@@ -45,18 +45,21 @@ class LLMMixin:
             "(DeepSeek, vLLM, TGI); ignored by servers that don't."
         ),
     )
+    llm_reasoning_effort: str | None = Field(
+        default=None,
+        description=(
+            "Optional reasoning-effort hint for reasoning models, sent as "
+            "`reasoning_effort` in the request body to OpenAI-compatible "
+            "endpoints. Proxies like LiteLLM map it to the model's thinking "
+            "controls; endpoints that do not support it ignore or reject it "
+            "(unset the variable in that case). One of minimal, low, medium, "
+            "high. Unset omits the parameter entirely, leaving the model's "
+            "default reasoning behavior."
+        ),
+    )
     llm_max_tokens: int = Field(
         default=384000,
         description="Maximum tokens for LLM responses",
-    )
-    llm_max_reasoning_chars: int = Field(
-        default=120000,
-        description=(
-            "Hard backstop on accumulated chain-of-thought (reasoning) characters "
-            "streamed per response. Degenerate reasoning loops are also halted early "
-            "by repetition detection; this ceiling bounds the worst case if that "
-            "detector misses. 0 disables the ceiling."
-        ),
     )
     llm_max_answer_chars: int = Field(
         default=24000,
@@ -74,12 +77,16 @@ class LLMMixin:
         description="Request timeout in seconds for LLM",
     )
     llm_stream_idle_timeout_seconds: int = Field(
-        default=120,
+        default=600,
         description=(
-            "Bounded wait (seconds) for the next streamed token before aborting the "
-            "response, preventing an indefinite hang when the server stops sending "
-            "mid-output. Counts only wall-clock silence (no content or reasoning "
-            "token arriving), so normal slow reasoning is unaffected. 0 disables the "
+            "Bounded wait (seconds) for the next streamed token before aborting "
+            "the response, preventing an indefinite hang when the server stops "
+            "sending mid-output. Counts only wall-clock silence (no content or "
+            "reasoning token arriving), so normal slow reasoning is unaffected. "
+            "Heavy-reasoning models can fall silent for minutes mid-answer while "
+            "deliberating server-side (those pauses emit no tokens at all), so "
+            "keep this generous: a 120s bound silently truncated GLM chapter "
+            "summaries mid-sentence and dropped whole windows. 0 disables the "
             "bound (legacy unlimited behavior)."
         ),
     )
@@ -108,20 +115,32 @@ class LLMMixin:
             raise ValueError("llm_repetition_penalty must be >= 1.0")
         return v
 
+    @field_validator("llm_reasoning_effort")
+    @classmethod
+    def validate_llm_reasoning_effort(cls, v: str | None) -> str | None:
+        """Validate reasoning effort is one of the supported levels.
+
+        An empty value (e.g. a blank `SECONDBRAIN_LLM_REASONING_EFFORT=` line)
+        is treated as unset so the parameter is simply omitted.
+        """
+        if v is None:
+            return v
+        normalized = v.strip().lower()
+        if not normalized:
+            return None
+        allowed = {"minimal", "low", "medium", "high"}
+        if normalized not in allowed:
+            raise ValueError(
+                "llm_reasoning_effort must be one of: minimal, low, medium, high"
+            )
+        return normalized
+
     @field_validator("llm_max_tokens")
     @classmethod
     def validate_llm_max_tokens(cls, v: int) -> int:
         """Validate LLM max tokens is positive."""
         if v <= 0:
             raise ValueError("llm_max_tokens must be positive")
-        return v
-
-    @field_validator("llm_max_reasoning_chars")
-    @classmethod
-    def validate_llm_max_reasoning_chars(cls, v: int) -> int:
-        """Validate LLM max reasoning chars is non-negative (0 disables)."""
-        if v < 0:
-            raise ValueError("llm_max_reasoning_chars must be >= 0")
         return v
 
     @field_validator("llm_max_answer_chars")

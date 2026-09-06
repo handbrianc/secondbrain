@@ -73,8 +73,8 @@ class OpenAILLMProvider(LocalLLMProvider):
         base_url: str | None = None,
         api_key: str | None = None,
         repetition_penalty: float = 1.0,
+        reasoning_effort: str | None = None,
         top_p: float = 0.95,
-        max_reasoning_chars: int = 0,
         stream_idle_timeout_seconds: int = 0,
         max_answer_chars: int = 0,
     ) -> None:
@@ -89,13 +89,13 @@ class OpenAILLMProvider(LocalLLMProvider):
             api_key: OpenAI API key (defaults to SECONDBRAIN_OPENAI_API_KEY env var).
             repetition_penalty: Repetition penalty (>= 1.0). Values above 1.0 are
                 forwarded as ``repetition_penalty`` to OpenAI-compatible servers
-                that support it (DeepSeek, vLLM, TGI) to discourage the model from
+                that support it                 (DeepSeek, vLLM, TGI) to discourage the model from
                 repeating itself (default: 1.0, disabled).
+            reasoning_effort: Optional reasoning-effort hint for reasoning models,
+                sent as ``reasoning_effort`` in the request body (LiteLLM maps it
+                to the model's thinking controls; unsupported endpoints ignore or
+                reject it). None omits the parameter (default).
             top_p: Nucleus-sampling top_p (0.0-1.0, default: 0.95).
-            max_reasoning_chars: Client-side cap on accumulated reasoning
-                (chain-of-thought) characters streamed per response. A model that
-                loops in repetitive self-verification without producing an answer
-                is halted once this budget is exhausted (0 disables the cap).
             stream_idle_timeout_seconds: Maximum seconds with no token arriving
                 before the stream is aborted, bounding a server that goes idle
                 mid-output instead of hanging forever. 0 disables the bound.
@@ -113,7 +113,7 @@ class OpenAILLMProvider(LocalLLMProvider):
         self._timeout = timeout
         self._base_url = base_url
         self._repetition_penalty = repetition_penalty
-        self._max_reasoning_chars = max_reasoning_chars
+        self._reasoning_effort = reasoning_effort
         self._stream_idle_timeout_seconds = stream_idle_timeout_seconds
         self._max_answer_chars = max_answer_chars
 
@@ -132,9 +132,7 @@ class OpenAILLMProvider(LocalLLMProvider):
         # write=timeout:   request body must be sent within `timeout` seconds.
         # pool=timeout:    connection pool acquisition timeout.
         read_timeout = (
-            stream_idle_timeout_seconds
-            if stream_idle_timeout_seconds > 0
-            else None
+            stream_idle_timeout_seconds if stream_idle_timeout_seconds > 0 else None
         )
         ttft_timeout = httpx.Timeout(
             connect=timeout, read=read_timeout, write=timeout, pool=timeout
@@ -151,16 +149,21 @@ class OpenAILLMProvider(LocalLLMProvider):
         )
 
     def _extra_body(self) -> dict[str, object] | None:
-        """Extra request-body sampling params for OpenAI-compatible endpoints.
+        """Extra request-body params for OpenAI-compatible endpoints.
 
-        Includes ``repetition_penalty`` (DeepSeek/vLLM/TGI style) only when enabled
-        (``!= 1.0``), so the default request payload is unchanged. Sent via the
-        SDK's ``extra_body`` because there is no native repetition_penalty argument;
-        servers that don't support it ignore unknown fields.
+        Includes ``repetition_penalty`` (DeepSeek/vLLM/TGI style) only when
+        enabled (``!= 1.0``) and ``reasoning_effort`` only when configured,
+        so the default request payload is unchanged. Sent via the SDK's
+        ``extra_body`` because these are not native SDK arguments; proxies
+        such as LiteLLM map them to per-model equivalents and servers that
+        support neither ignore unknown fields.
         """
-        if self._repetition_penalty == 1.0:
-            return None
-        return {"repetition_penalty": self._repetition_penalty}
+        extra: dict[str, object] = {}
+        if self._repetition_penalty != 1.0:
+            extra["repetition_penalty"] = self._repetition_penalty
+        if self._reasoning_effort is not None:
+            extra["reasoning_effort"] = self._reasoning_effort
+        return extra or None
 
     def generate(
         self,
@@ -372,14 +375,6 @@ class OpenAILLMProvider(LocalLLMProvider):
                                 capped_reason = "degenerate loop"
                                 break
                             seen_windows.append(window)
-                        # Backstop ceiling bounds the worst case if the detector misses.
-                        if (
-                            self._max_reasoning_chars
-                            and reasoning_chars > self._max_reasoning_chars
-                        ):
-                            capped = True
-                            capped_reason = "budget"
-                            break
                     if content:
                         content_chars += len(content)
                         content_log.append(content)
@@ -441,9 +436,9 @@ class OpenAILLMProvider(LocalLLMProvider):
                 )
                 if not answer.strip():
                     answer = (
-                        "I got stuck in repetitive reasoning and could not produce "
-                        "an answer within the reasoning budget. Please rephrase or "
-                        "narrow your question."
+                        "I got stuck in repetitive reasoning and could not "
+                        "produce an answer. Please rephrase or narrow your "
+                        "question."
                     )
                     on_chunk(answer, None)
             return answer
