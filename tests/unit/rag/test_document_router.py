@@ -193,7 +193,9 @@ class TestDocumentRouter:
         router = DocumentRouter(known_names=known)
 
         assert (
-            router.extract_document_name("summarize the virtualbox user guide by chapter")
+            router.extract_document_name(
+                "summarize the virtualbox user guide by chapter"
+            )
             == "virtualbox"
         )
 
@@ -338,9 +340,9 @@ class TestContainmentResolution:
         sources = ["/d/Claude for Daily Work - Instructor Training.pptx"]
         reg = _build_known_names(sources)
         router = DocumentRouter(known_names=reg)
-        name = router.extract_document_name("Claude for Daily Work - Instructor Training")
+        name = router.extract_document_name(
+            "Claude for Daily Work - Instructor Training"
+        )
         assert router.resolve_source_file(name) == (
             "/d/Claude for Daily Work - Instructor Training.pptx"
         )
-
-

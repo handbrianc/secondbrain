@@ -164,9 +164,7 @@ class ConversationStorage(ValidatableService):
             )
             conn.commit()
 
-    def update_messages(
-        self, session_id: str, messages: list[dict[str, Any]]
-    ) -> None:
+    def update_messages(self, session_id: str, messages: list[dict[str, Any]]) -> None:
         """Replace all messages in a session.
 
         Deletes all messages for the session and inserts the provided array at
@@ -180,9 +178,7 @@ class ConversationStorage(ValidatableService):
         now = datetime.now(UTC).isoformat()
         with self._lock:
             conn = self.conn
-            conn.execute(
-                "DELETE FROM messages WHERE session_id = ?", (session_id,)
-            )
+            conn.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
             conn.executemany(
                 "INSERT INTO messages (session_id, position, role, content, timestamp) "
                 "VALUES (?, ?, ?, ?, ?)",
@@ -235,7 +231,11 @@ class ConversationStorage(ValidatableService):
             ).fetchall()
 
         return [
-            {"role": row["role"], "content": row["content"], "timestamp": row["timestamp"]}
+            {
+                "role": row["role"],
+                "content": row["content"],
+                "timestamp": row["timestamp"],
+            }
             for row in rows
         ]
 

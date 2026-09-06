@@ -607,6 +607,7 @@ class TestSetupTracingWithMetrics:
             setup_tracing(service_name="test", service_version="1.0")
             # Test passes if no exception is raised
 
+
 class TestGetMeter:
     """Tests for get_meter function."""
 

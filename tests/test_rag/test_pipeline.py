@@ -1450,7 +1450,9 @@ class TestRAGPipelineListSources:
         # Vector search and the LLM must not be used for a pure listing.
         mock_searcher.search.assert_not_called()
 
-    def test_query_lists_single_source(self, pipeline_with_mocks, mock_searcher) -> None:
+    def test_query_lists_single_source(
+        self, pipeline_with_mocks, mock_searcher
+    ) -> None:
         mock_searcher.list_source_files.return_value = ["only.md"]
         result = pipeline_with_mocks.query("list sources")
         assert "1 unique source" in result["answer"]
@@ -1468,9 +1470,7 @@ class TestRAGPipelineListSources:
         mock_searcher: MagicMock,
     ) -> None:
         mock_searcher.list_source_files.return_value = ["a.md", "b.md"]
-        result = pipeline_with_mocks.chat(
-            "list all sources", MagicMock()
-        )
+        result = pipeline_with_mocks.chat("list all sources", MagicMock())
         assert result["list_sources"] is True
         assert "2 unique sources" in result["answer"]
         mock_searcher.search.assert_not_called()

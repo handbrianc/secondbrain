@@ -547,20 +547,28 @@ class Summarizer:
         still implausible, return an empty string rather than surfacing
         token-soup to the caller.
         """
-        text = cast(str, await self._llm.agenerate(
-            prompt=prompt, temperature=0.5, max_tokens=self._max_tokens
-        ))
+        text = cast(
+            str,
+            await self._llm.agenerate(
+                prompt=prompt, temperature=0.5, max_tokens=self._max_tokens
+            ),
+        )
         if self._is_plausible_summary(text):
             return text
         self._logger.warning(
             "Summariser output failed plausibility check; retrying at low temperature"
         )
-        text = cast(str, await self._llm.agenerate(
-            prompt=prompt, temperature=0.1, max_tokens=self._max_tokens
-        ))
+        text = cast(
+            str,
+            await self._llm.agenerate(
+                prompt=prompt, temperature=0.1, max_tokens=self._max_tokens
+            ),
+        )
         if self._is_plausible_summary(text):
             return text
-        self._logger.error("Summariser output still implausible; returning empty summary")
+        self._logger.error(
+            "Summariser output still implausible; returning empty summary"
+        )
         return ""
 
     @staticmethod

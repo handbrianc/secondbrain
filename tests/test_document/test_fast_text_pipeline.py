@@ -187,7 +187,9 @@ def test_insufficient_text_returns_none(
 @pytest.mark.fast
 def test_looks_corrupted_clean_ascii_is_false() -> None:
     """Plain ASCII prose is never flagged as corrupted."""
-    assert _looks_corrupted("The quick brown fox jumps over the lazy dog. " * 10) is False
+    assert (
+        _looks_corrupted("The quick brown fox jumps over the lazy dog. " * 10) is False
+    )
 
 
 @pytest.mark.unit

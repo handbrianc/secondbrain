@@ -108,7 +108,9 @@ class TestCircuitBreakerResponse:
 
         with pytest.raises(CircuitBreakerError):
             if not cb.is_allowed():
-                raise CircuitBreakerError("vector store circuit is open", "vector_store")
+                raise CircuitBreakerError(
+                    "vector store circuit is open", "vector_store"
+                )
 
     def test_circuit_half_open_after_timeout(self):
         """Test circuit transitions to half-open after timeout."""

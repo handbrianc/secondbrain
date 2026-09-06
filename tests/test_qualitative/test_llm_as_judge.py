@@ -321,9 +321,7 @@ JSON output:"""
 
     def test_groundedness(self, llm_judge_prompts: dict[str, Any]) -> None:
         """Test groundedness evaluation (response based on provided context)."""
-        context = (
-            "Qdrant Vector Search enables semantic search using embeddings."
-        )
+        context = "Qdrant Vector Search enables semantic search using embeddings."
         grounded_response = (
             "Qdrant Vector Search enables semantic search using embeddings."
         )

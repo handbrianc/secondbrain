@@ -31,7 +31,12 @@ class _MockStorage:
 
 
 def _chunk(text: str) -> dict:
-    return {"chunk_id": "c1", "chunk_role": "body", "chunk_text": text, "source_file": "b.pdf"}
+    return {
+        "chunk_id": "c1",
+        "chunk_role": "body",
+        "chunk_text": text,
+        "source_file": "b.pdf",
+    }
 
 
 def _summarizer(provider: _RecordingProvider, **kwargs) -> Summarizer:
@@ -73,11 +78,13 @@ async def test_single_call_when_input_fits_budget() -> None:
 
 
 async def test_map_reduce_when_input_exceeds_budget() -> None:
-    provider = _RecordingProvider([
-        "First partial summary of the first window covering its main ideas.",
-        "Second partial summary of the second window covering its main ideas.",
-        "Combined summary folding both partials into one coherent overview.",
-    ])
+    provider = _RecordingProvider(
+        [
+            "First partial summary of the first window covering its main ideas.",
+            "Second partial summary of the second window covering its main ideas.",
+            "Combined summary folding both partials into one coherent overview.",
+        ]
+    )
     s = _summarizer(provider, max_input_chars=30, max_windows=8)
     chunks = [_chunk("a" * 40), _chunk("b" * 40)]
     result = await s._summarize(chunks, "context")
@@ -104,10 +111,12 @@ async def test_window_excerpts_caps_number_of_windows() -> None:
 
 async def test_guard_retries_once_on_implausible_first_response() -> None:
     # First response is repetitive token-soup; retry is plausible.
-    provider = _RecordingProvider([
-        "la la la la la la la la la la la la la la la la la la la la",
-        PLAUSIBLE,
-    ])
+    provider = _RecordingProvider(
+        [
+            "la la la la la la la la la la la la la la la la la la la la",
+            PLAUSIBLE,
+        ]
+    )
     s = _summarizer(provider, max_input_chars=1000)
     result = await s._summarize([_chunk("text")], "context")
     assert result == PLAUSIBLE
@@ -116,10 +125,12 @@ async def test_guard_retries_once_on_implausible_first_response() -> None:
 
 
 async def test_guard_returns_empty_when_retry_still_implausible() -> None:
-    provider = _RecordingProvider([
-        "garbage garbage garbage garbage garbage garbage garbage",
-        "more garbage more garbage more garbage more garbage more garbage",
-    ])
+    provider = _RecordingProvider(
+        [
+            "garbage garbage garbage garbage garbage garbage garbage",
+            "more garbage more garbage more garbage more garbage more garbage",
+        ]
+    )
     s = _summarizer(provider, max_input_chars=1000)
     result = await s._summarize([_chunk("text")], "context")
     assert result == ""
@@ -128,7 +139,9 @@ async def test_guard_returns_empty_when_retry_still_implausible() -> None:
 
 def test_is_plausible_summary_rejects_short_and_repetitive() -> None:
     s = _summarizer(_RecordingProvider([]))
-    assert s._is_plausible_summary("This is a normal detailed summary with varied words.")
+    assert s._is_plausible_summary(
+        "This is a normal detailed summary with varied words."
+    )
     assert not s._is_plausible_summary("hi")
     assert not s._is_plausible_summary("aaaa aaaa aaaa aaaa aaaa aaaa aaaa")
 

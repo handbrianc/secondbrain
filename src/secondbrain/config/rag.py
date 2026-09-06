@@ -102,7 +102,7 @@ class RagMixin:
             "    different documents without attribution. If the user asked about a\n"
             "    specific document, prioritize information from that document and note\n"
             "    if other documents also contain relevant information.\n"
-             '14. Always answer the CURRENT question that appears last in the prompt. Any "Conversation History" is background from earlier in the session only: use it only to resolve an ambiguous reference in the current question. If the user has changed the subject, answer the new subject - never repeat your previous answers or keep answering an earlier topic.\n'
+            '14. Always answer the CURRENT question that appears last in the prompt. Any "Conversation History" is background from earlier in the session only: use it only to resolve an ambiguous reference in the current question. If the user has changed the subject, answer the new subject - never repeat your previous answers or keep answering an earlier topic.\n'
             "15. Use the numbers, years, statistics, and metrics found in the "
             "context; do not invent, guess, or round ones the context lacks (if a "
             "needed value is absent, say so rather than guessing). Quote figures "

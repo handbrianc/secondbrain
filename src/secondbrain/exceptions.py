@@ -52,7 +52,8 @@ class StorageConnectionError(SecondBrainError):
 
     def __init__(self, message: str | None = None) -> None:
         super().__init__(
-            message or "Session storage unavailable. Check the persistence configuration."
+            message
+            or "Session storage unavailable. Check the persistence configuration."
         )
 
 

@@ -63,7 +63,6 @@ def extract_printed_page(text: str) -> int | None:
         return None
 
 
-
 def _looks_corrupted(text: str) -> bool:
     """Return True if *text* carries a broken-glyph / mis-decoding fingerprint.
 

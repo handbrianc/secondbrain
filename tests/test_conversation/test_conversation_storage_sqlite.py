@@ -125,8 +125,16 @@ class TestUpdateMessages:
         storage.update_messages(
             "s",
             [
-                {"role": "user", "content": "new-a", "timestamp": "2024-01-01T00:00:00+00:00"},
-                {"role": "assistant", "content": "new-b", "timestamp": "2024-01-01T00:00:01+00:00"},
+                {
+                    "role": "user",
+                    "content": "new-a",
+                    "timestamp": "2024-01-01T00:00:00+00:00",
+                },
+                {
+                    "role": "assistant",
+                    "content": "new-b",
+                    "timestamp": "2024-01-01T00:00:01+00:00",
+                },
             ],
         )
 
@@ -220,9 +228,7 @@ class TestValidateAndLifecycle:
 
     def test_do_validate_false_for_bad_path(self, tmp_path):
         """_do_validate returns False when the DB cannot be opened."""
-        s = ConversationStorage(
-            db_path=str(tmp_path / "nonexistent" / "cd" / "x.db")
-        )
+        s = ConversationStorage(db_path=str(tmp_path / "nonexistent" / "cd" / "x.db"))
         # Force a broken state by replacing the connection with a closed one.
         s._conn = sqlite3.connect(":memory:")
         s._conn.close()
