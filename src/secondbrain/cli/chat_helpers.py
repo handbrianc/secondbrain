@@ -61,23 +61,20 @@ def _run_chat_with_spinner(
 
     import sys as _sys
 
-    # Thinking/reasoning renders differently per terminal because there is no
-    # universal terminal fold escape:
+    # Thinking/reasoning streams live in dark gray by default, so generation is
+    # visibly streaming for the whole thinking phase (which dominates wall-clock
+    # time for long-context overviews) instead of hiding behind the spinner.
+    # SECONDBRAIN_SHOW_THINKING=0 opts out:
     #   - Fold-capable terminals (iTerm2 OSC-1337, Windows Terminal OSC-133 C/D):
     #     reasoning is buffered and emitted once as a foldable block.
-    #   - SECONDBRAIN_SHOW_THINKING=1 on other terminals (Ghostty, Linux, ...):
-    #     reasoning streams live in dark gray, then a blank line, then the answer.
-    #   - Default on other terminals: reasoning buffers and collapses to a single
-    #     dark-gray summary line.
+    #   - Other terminals (Ghostty, Linux, ...): reasoning buffers and collapses
+    #     to a single dark-gray summary line.
+    raw_thinking = os.environ.get("SECONDBRAIN_SHOW_THINKING", "1").strip().lower()
+    show_thinking = raw_thinking not in ("0", "false", "no", "off")
     is_tty = _sys.stdout.isatty()
     is_iterm = os.environ.get("TERM_PROGRAM") == "iTerm.app" and is_tty
     is_wt = bool(os.environ.get("WT_SESSION")) and is_tty
-    show_thinking = (
-        os.environ.get("SECONDBRAIN_SHOW_THINKING", "").strip().lower()
-        in ("1", "true", "yes")
-    )
-    fold_thinking = is_iterm or is_wt
-    live_thinking = show_thinking and not fold_thinking
+    live_thinking = show_thinking
     osc1337 = "\x1b]1337;"
     osc133 = "\x1b]133;"
     bel = "\x07"
@@ -111,6 +108,11 @@ def _run_chat_with_spinner(
         if not live_started[0]:
             console.print("\u25b8 Thinking:", style="#808080")
             live_started[0] = True
+        # stdout is block-buffered on pipes and line-buffered (not delta-
+        # buffered) on TTYs; reasoning arrives as many tiny deltas with no
+        # newlines, so without an explicit flush it sits in the buffer until
+        # the answer phase flushes -- i.e. the entire thinking phase renders
+        # as one burst at the end instead of streaming live.
         _sys.stdout.write(f"{gray_on}{reasoning}{reset}")
         _sys.stdout.flush()
 
@@ -348,9 +350,7 @@ def _interactive_chat(
                         readline.clear_history()
                         readline.write_history_file(history_file)
                     except OSError as exc:
-                        logger.debug(
-                            "Failed to reset persisted chat history: %s", exc
-                        )
+                        logger.debug("Failed to reset persisted chat history: %s", exc)
                     console.print(
                         "[green]Conversation history cleared (input history reset)[/green]"
                     )
