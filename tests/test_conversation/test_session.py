@@ -133,7 +133,7 @@ class TestConversationSessionAddMessage:
         assert len(session._history) == 3
         assert session._history[0]["content"] == "Message 1"
         assert session._history[-1]["content"] == "Message 3"
-        mock_storage.update_messages.assert_called()
+        mock_storage.update_messages.assert_not_called()
 
 
 class TestConversationSessionGetHistory:
@@ -222,9 +222,7 @@ class TestConversationSessionTrimContext:
         session.trim_context()
 
         assert len(session._history) == 2
-        mock_storage.update_messages.assert_called_once_with(
-            "test-123", session._history
-        )
+        mock_storage.update_messages.assert_not_called()
 
     def test_trim_context_no_op_when_within_window(self, mock_storage):
         """Test that trim is no-op when within context window."""

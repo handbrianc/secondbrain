@@ -122,10 +122,10 @@ class TestSearcher:
         "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
     )
     @patch("secondbrain.search.StorageFactory.create_from_config")
-    def test_search_mongodb_unavailable(
+    def test_search_vector_store_unavailable(
         self, mock_storage_class: MagicMock, mock_create_from_config: MagicMock
     ) -> None:
-        """Test search raises when MongoDB is unavailable."""
+        """Test search raises when the vector store is unavailable."""
         mock_embed = MagicMock()
         mock_embed.validate_connection.return_value = True
         mock_embed.generate.return_value = [0.1] * 384
@@ -139,7 +139,7 @@ class TestSearcher:
         try:
             searcher.search("test query")
         except RuntimeError as e:
-            assert "Cannot connect to MongoDB" in str(e)
+            assert "Cannot connect to the vector store" in str(e)
 
 
 class TestSemanticSearchSpecRequirements:
@@ -354,7 +354,7 @@ class TestSemanticSearchSpecRequirements:
     def test_search_uses_vector_index(
         self, mock_storage_class: MagicMock, mock_create_from_config: MagicMock
     ) -> None:
-        """Test search uses vector index (spec: MongoDB vector search index)."""
+        """Test search uses vector index (spec: Qdrant vector search index)."""
         mock_embed = MagicMock()
         mock_embed.validate_connection.return_value = True
         mock_embed.generate.return_value = [0.1] * 384
@@ -676,5 +676,5 @@ class TestSemanticSearchSpecRequirements:
 
         searcher = Searcher()
 
-        with pytest.raises(RuntimeError, match="Cannot connect to MongoDB"):
+        with pytest.raises(RuntimeError, match="Cannot connect to the vector store"):
             await searcher.search_async("test query")

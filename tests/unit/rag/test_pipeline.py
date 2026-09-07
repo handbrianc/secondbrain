@@ -4,13 +4,26 @@ These tests verify that the RAG pipeline correctly routes requests to either
 stream_chat or generate based on config.streaming_enabled and provider capabilities.
 """
 
+import logging
 from collections.abc import Callable, Sequence
-from typing import Any
+from typing import Any, ClassVar, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from secondbrain.rag.pipeline import RAGPipeline
+from secondbrain.rag.pipeline._mixins import (
+    _OVERVIEW_MAX_WORDS,
+    _SUMMARY_REDUCE_MAX_TOKENS,
+    SUMMARY_TEMPERATURE,
+    _contains_reasoning_leak,
+    _ground_figures,
+    _is_stream_leak,
+    _prune_implausible_metric_figures,
+    _scrub_self_correction,
+    _strip_numeric_self_correction,
+    _trim_to_sentence_end,
+)
 from secondbrain.search import Searcher
 
 
@@ -363,6 +376,245 @@ class TestDeriveChapterNumbers:
             sections, NOT chapter headers.
     """
 
+    def test_clean_chapter_title(self) -> None:
+        """TOC chapter titles lose their dot leader and trailing page number."""
+        p = self._make_test_pipeline()
+        assert (
+            p._clean_chapter_title("The ML4T Workflow ....... 223")
+            == "The ML4T Workflow"
+        )
+        assert (
+            p._clean_chapter_title(
+                "Machine Learning for Trading - From Idea to Execution 1"
+            )
+            == "Machine Learning for Trading - From Idea to Execution"
+        )
+        # A long title is no longer truncated, and its page number is dropped.
+        long_title = (
+            "Time-Series Models for Volatility Forecasts and Statistical "
+            "Arbitrage ....... 289"
+        )
+        assert (
+            p._clean_chapter_title(long_title)
+            == "Time-Series Models for Volatility Forecasts and Statistical Arbitrage"
+        )
+        # Docling-flattened ToCs run entries together with bare page numbers
+        # and no dot leaders; the cut at the first page-number boundary keeps
+        # only the real chapter heading.
+        assert (
+            p._clean_chapter_title(
+                "Machine Learning for Trading - From Idea to Execution 1 "
+                "The rise of ML in the investment industry 2 From electronic to h"
+            )
+            == "Machine Learning for Trading - From Idea to Execution"
+        )
+        assert (
+            p._clean_chapter_title(
+                "Portfolio Optimization and Performance Evaluation 121 "
+                "How to measure portfolio performance"
+            )
+            == "Portfolio Optimization and Performance Evaluation"
+        )
+
+    def test_clean_chapter_title_trims_description_sentence(self) -> None:
+        """Front-matter description sentences are cut at the description verb.
+
+        Books without TOC entries expose only prose descriptions ("Chapter 1 ,
+        Principles and Foundations of IoT and AI , introduces the core
+        concepts..."); the captured title must not run on into the sentence
+        body, and the leading punctuation left by the comma form is stripped.
+        """
+        p = self._make_test_pipeline()
+        assert (
+            p._clean_chapter_title(
+                "—, Principles and Foundations of IoT and AI , "
+                "introduces the core concepts of IoT, AI, data science"
+            )
+            == "Principles and Foundations of IoT and AI"
+        )
+        assert (
+            p._clean_chapter_title(
+                ", Data Access and Distributed Processing for IoT , "
+                "is where you will learn how to access and process data"
+            )
+            == "Data Access and Distributed Processing for IoT"
+        )
+        # Verbs WITHOUT a leading comma are part of ordinary titles: untouched.
+        assert (
+            p._clean_chapter_title("How Regularization Introduces Robustness 12")
+            == "How Regularization Introduces Robustness"
+        )
+        # Extended verb list covers the "What this book covers" prose shapes
+        # (", emphasizes ...", ", contains ...", ", is an important chapter").
+        assert (
+            p._clean_chapter_title(
+                "Automation in Cybersecurity , emphasizes the importance of "
+                "automation as a driver for efficiency"
+            )
+            == "Automation in Cybersecurity"
+        )
+        assert (
+            p._clean_chapter_title(
+                "Fraud, Spam, and Phishing Detection , contains a description "
+                "of typical methods"
+            )
+            == "Fraud, Spam, and Phishing Detection"
+        )
+        assert (
+            p._clean_chapter_title(
+                "Data Quality and its Usage in the AI and LLM Era , is an "
+                "important chapter, as contemporary methods are data-driven"
+            )
+            == "Data Quality and its Usage in the AI and LLM Era"
+        )
+        assert (
+            p._clean_chapter_title(
+                "Implementing Knowledge Mining, Document Intelligence, and "
+                "Content Understanding , teaches you how to use Azure AI Search"
+            )
+            == "Implementing Knowledge Mining, Document Intelligence, and "
+            "Content Understanding"
+        )
+        assert (
+            p._clean_chapter_title(
+                "Preparing for the AI-102: Azure AI Engineer Associate "
+                "Certification Exam , prepares you for the AI-102 certification"
+            )
+            == "Preparing for the AI-102: Azure AI Engineer Associate "
+            "Certification Exam"
+        )
+        assert (
+            p._clean_chapter_title(
+                "Graphical Models , starts with a refresher on graphs and "
+                "basic graph theory"
+            )
+            == "Graphical Models"
+        )
+        assert (
+            p._clean_chapter_title(
+                "The Four-Step Process of Causal Inference , takes us to the "
+                "practical side of causality"
+            )
+            == "The Four-Step Process of Causal Inference"
+        )
+        assert (
+            p._clean_chapter_title(
+                "Causal Models - Assumptions and Challenges , brings our "
+                "attention back to the topic of assumptions"
+            )
+            == "Causal Models - Assumptions and Challenges"
+        )
+        assert (
+            p._clean_chapter_title(
+                "Causal Inference and Machine Learning - from Matching to "
+                "Meta-learners , opens the door to practical causal inference"
+            )
+            == "Causal Inference and Machine Learning - from Matching to "
+            "Meta-learners"
+        )
+        assert (
+            p._clean_chapter_title(
+                "Epilogue , closes Part 3 of the book with a summary"
+            )
+            == "Epilogue"
+        )
+        assert (
+            p._clean_chapter_title(
+                "Recommender Systems , gives you familiarity with recommender "
+                "system concepts"
+            )
+            == "Recommender Systems"
+        )
+        assert (
+            p._clean_chapter_title(
+                "Deploying Models on a Mobile Platform , guides you through "
+                "the development of applications"
+            )
+            == "Deploying Models on a Mobile Platform"
+        )
+        assert (
+            p._clean_chapter_title(
+                "Dimensionality Reduction Techniques , includes updated "
+                "approaches for dimensionality reduction"
+            )
+            == "Dimensionality Reduction Techniques"
+        )
+
+    def test_front_matter_desc_pages_maps_description_pages(self) -> None:
+        """Description sentences map each chapter to its front-matter page.
+
+        Cross-reference prose ("As discussed in Chapter 9, the platform
+        services...") must not match: the description verb is missing, so no
+        page is recorded and the real chapter anchor is never suppressed.
+        """
+        p = self._make_test_pipeline()
+        chunks = [
+            {
+                "page_number": 18,
+                "chunk_role": "body",
+                "chunk_text": (
+                    "Chapter 9 , AI Cloud Platforms for IoT , introduces major "
+                    "cloud platforms and their AI services tailored for IoT "
+                    "applications. You will gain hands-on experience."
+                ),
+            },
+            {
+                "page_number": 19,
+                "chunk_role": "navigation",
+                "chunk_text": (
+                    "Chapter 15, AI for Smart Cities IoT , explores how AI and "
+                    "IoT are transforming urban living. You will build models."
+                ),
+            },
+            {
+                "page_number": 40,
+                "chunk_role": "body",
+                "chunk_text": (
+                    "As discussed in Chapter 9, the platform services scale to "
+                    "millions of connected devices in production settings."
+                ),
+            },
+        ]
+        assert p._front_matter_desc_pages(chunks) == {9: 18, 15: 19}
+
+    def test_crlf_toc_title_stops_at_page_number(self) -> None:
+        """A CRLF-wrapped TOC row yields the full title, stopped at the page number."""
+        # Real shape: "Chapter 9: <title> 255" + CRLF, followed by sub-entries.
+        self._assert_joined_chapter9_title(
+            text=(
+                "Table of Contents\r\n"
+                "Chapter 9: Time-Series Models for Volatility Forecasts and \r\n"
+                "Statistical Arbitrage 255\r\n"
+                "Tools for diagnostics and feature extraction 256\r\n"
+            )
+        )
+
+    def test_wrapped_toc_title_joins_continuation_line(self) -> None:
+        """A line-wrapped TOC chapter title is joined, not truncated at the newline.
+
+        Long TOC entries wrap onto a second line (e.g. a dot-leader page column).
+        The title regex must cross that single newline and stop at the dot leader,
+        so the returned title is the full "...Forecasts and Statistical Arbitrage"
+        instead of being cut at "...Forecasts and".
+        """
+        self._assert_joined_chapter9_title(
+            text=(
+                "Chapter 9 Time-Series Models for Volatility Forecasts and\n"
+                "Statistical Arbitrage ....... 289"
+            )
+        )
+
+    def _assert_joined_chapter9_title(self, text: str) -> None:
+        pipeline_ = self._make_test_pipeline()
+        structure_chunks = [{"chunk_text": text, "source_file": "ch9.pdf"}]
+        entries, _, _ = pipeline_._derive_chapter_numbers(structure_chunks)
+        assert any(
+            n == 9
+            and t
+            == ("Time-Series Models for Volatility Forecasts and Statistical Arbitrage")
+            for n, _s, t in entries
+        ), f"wrapped title not joined: {entries!r}"
+
     def _make_test_pipeline(self) -> RAGPipeline:
         mock_searcher = MagicMock(spec=Searcher)
         mock_searcher.search.return_value = []
@@ -373,6 +625,93 @@ class TestDeriveChapterNumbers:
             top_k=5,
             context_window=5,
         )
+
+    def test_cross_reference_preposition_title_yields_no_phantom_chapter(
+        self,
+    ) -> None:
+        """A mid-sentence cross-reference must not invent a phantom chapter.
+
+        "...discussed in Chapter 12 of Doing Bayesian Data Analysis by
+        Kruschke..." captures the preposition-led run-on as the title; a
+        lowercase-initial title is body prose, not a heading, so chapter 12
+        must not appear in the roster.
+        """
+        pipeline = self._make_test_pipeline()
+        structure_chunks = [
+            {
+                "chunk_text": (
+                    "Generalized linear models are discussed in Chapter 12 of "
+                    "Doing Bayesian Data Analysis by Kruschke, which covers "
+                    "hierarchical models in depth."
+                ),
+                "source_file": "bayesian.pdf",
+            },
+        ]
+        entries, _, _ = pipeline._derive_chapter_numbers(structure_chunks)
+        majors = [e[0] for e in entries]
+        assert 12 not in majors, f"phantom chapter 12 invented: {entries!r}"
+        assert entries == [], f"cross-reference fabricated a roster: {entries!r}"
+
+    def test_cpp_title_captured_in_full(self) -> None:
+        """'C++' inside a chapter title is captured whole, not cut at 'C'."""
+        pipeline = self._make_test_pipeline()
+        structure_chunks = [
+            {
+                "chunk_text": ("Chapter 1 , Introduction to Machine Learning with C++"),
+                "source_file": "cppml.pdf",
+            },
+        ]
+        entries, _, _ = pipeline._derive_chapter_numbers(structure_chunks)
+        assert entries == [
+            (1, "cppml.pdf", "Introduction to Machine Learning with C++")
+        ], f"C++ title truncated: {entries!r}"
+
+    def test_clean_chapter_title_unicode_naive_survives_both_spellings(self) -> None:
+        """Precomposed and decomposed spellings clean to the same full title.
+
+        Docling variants emit "Naïve" either precomposed (U+00EF) or
+        decomposed (i + U+0308); NFKD + combining-mark stripping canonicalizes
+        both, so the accented word survives as one complete token instead of
+        being amputated mid-word at the non-ASCII mark.  The decomposed result
+        must equal the precomposed result (round-trip), and cleaning is
+        idempotent.
+        """
+        p = self._make_test_pipeline()
+        precomposed = p._clean_chapter_title("Engine with Na\u00efve Bayes")
+        decomposed = p._clean_chapter_title("Engine with Nai\u0308ve Bayes")
+        assert precomposed == "Engine with Naive Bayes", (
+            f"accented word amputated: {precomposed!r}"
+        )
+        assert decomposed == precomposed, (
+            f"decomposed spelling diverged: {decomposed!r} != {precomposed!r}"
+        )
+        assert p._clean_chapter_title(precomposed) == precomposed
+
+    def test_blocklist_keeps_legitimate_titles(self) -> None:
+        """Uppercase-initial and 'Data...' titles survive the new guards.
+
+        Titles starting with uppercase "The"/"A" are real headings, and words
+        merely containing the blocked tokens ("Data Access and ... for IoT")
+        must not be dropped — the blocklist matches whole first words only.
+        """
+        pipeline = self._make_test_pipeline()
+        structure_chunks = [
+            {
+                "chunk_text": (
+                    "Chapter 2 The Transformer Architecture\n"
+                    "Chapter 3 A Unified View of Generative Models\n"
+                    "Chapter 5 Data Access and Distributed Processing for IoT"
+                ),
+                "source_file": "legit.pdf",
+            },
+        ]
+        entries, _, _ = pipeline._derive_chapter_numbers(structure_chunks)
+        titles = {e[0]: e[2] for e in entries}
+        assert titles == {
+            2: "The Transformer Architecture",
+            3: "A Unified View of Generative Models",
+            5: "Data Access and Distributed Processing for IoT",
+        }, f"legitimate titles rejected: {entries!r}"
 
     def test_break_instead_of_continue_allows_later_chunks_when_early_chunk_has_out_of_range(
         self,
@@ -625,11 +964,10 @@ class TestDeriveChapterNumbers:
             f"expected only ch19, ch21 (CHAPTER_N_RE), got {majors}"
         )
 
-
     def test_module_with_colon_detected(self) -> None:
         """'Module N: Title' is a real structural heading, like 'Chapter N'."""
         pipeline = self._make_test_pipeline()
-        text = "Module 7: Completion & Best Practices Transition: \"Final module\""
+        text = 'Module 7: Completion & Best Practices Transition: "Final module"'
         entries, good, _ = pipeline._derive_chapter_numbers(
             [{"chunk_text": text, "source_file": "deck.pptx"}]
         )
@@ -641,10 +979,10 @@ class TestDeriveChapterNumbers:
         pipeline = self._make_test_pipeline()
         text = "\n".join(
             [
-                "Module 1: Meet Your AI Assistant Transition: \"Let's start\"",
-                "Module 2: The 3-Part Prompt Formula Transition: \"Now the single\"",
+                'Module 1: Meet Your AI Assistant Transition: "Let\'s start"',
+                'Module 2: The 3-Part Prompt Formula Transition: "Now the single"',
                 "Module 7 Circulate and check that students verify (step 3) —",
-                "Module 3: Working with Everyday Files Transition: \"Now let's\"",
+                'Module 3: Working with Everyday Files Transition: "Now let\'s"',
             ]
         )
         entries, _, _ = pipeline._derive_chapter_numbers(
@@ -652,7 +990,9 @@ class TestDeriveChapterNumbers:
         )
         nums = sorted(e[0] for e in entries)
         assert nums == [1, 2, 3], f"got {nums}"
-        assert 7 not in nums, "bare 'Module 7 Circulate' reference must not add chapter 7"
+        assert 7 not in nums, (
+            "bare 'Module 7 Circulate' reference must not add chapter 7"
+        )
 
 
 class TestCodeContentGate:
@@ -968,3 +1308,3199 @@ class TestIterativeQueryNoChaptersFallThrough:
 
         assert "I couldn't find" not in result["answer"]
         assert result["answer"] == "Generated (no streaming available)"
+
+
+class _SequenceProvider:
+    """Provider returning scripted generate() responses in order.
+
+    For deterministic behaviour under parallel map-reduce threads, ``by_key`` maps
+    a heading/section key (matched against the prompt) to the response for that
+    window, so results do not depend on thread scheduling order.
+    """
+
+    def __init__(
+        self,
+        responses: list[str] | None = None,
+        by_key: dict[str, str] | None = None,
+    ) -> None:
+        self.responses = list(responses or [])
+        self.by_key = by_key or {}
+        self.calls: list[dict[str, Any]] = []
+
+    def generate(
+        self, prompt: str, temperature: float = 0.7, max_tokens: int = 4096
+    ) -> str:
+        self.calls.append({"prompt": prompt, "temperature": temperature})
+        # Deterministic per-window response (thread-safe, order-independent).
+        for key, response in self.by_key.items():
+            if key in prompt:
+                return response
+        if self.responses:
+            return self.responses.pop(0)
+        return f"answer {len(self.calls)}"
+
+
+class TestMultiChapterMapReduce:
+    """Tests for the per-chapter map-reduce guard on broad-coverage queries."""
+
+    # Distinct, rare, content-only words (none are function words) used to build a
+    # high-diversity "word-salad" that the repetition-based guard alone would let
+    # through.
+    _SALAD_WORDS = (
+        "zebra",
+        "giraffe",
+        "trampoline",
+        "sapphire",
+        "bakelite",
+        "vertebra",
+        "compass",
+        "harbor",
+        "syringe",
+        "enamel",
+        "abacus",
+        "scaffold",
+        "pilgrim",
+        "turbine",
+        "torrent",
+        "sampler",
+        "beetle",
+        "carnival",
+        "monograph",
+        "espresso",
+        "necklace",
+        "paradigm",
+        "kettle",
+        "octopus",
+        "verdict",
+        "meadow",
+        "glacier",
+        "bundle",
+        "flask",
+        "compartment",
+        "lantern",
+        "gyroscope",
+        "basketball",
+        "garrison",
+        "numeral",
+        "meridian",
+        "splinter",
+        "reassembly",
+        "soil",
+        "oracle",
+        "basin",
+        "quiver",
+        "anvil",
+        "badger",
+        "cilantro",
+        "donkey",
+        "eclipse",
+        "falcon",
+        "granite",
+        "hedgehog",
+        "iguana",
+        "jasmine",
+        "kayak",
+        "lagoon",
+        "magnolia",
+        "narwhal",
+        "obsidian",
+        "panther",
+        "quagga",
+        "rhinoceros",
+        "satchel",
+        "tapestry",
+        "umbrella",
+        "vulture",
+        "walnut",
+        "xylophone",
+        "yak",
+        "zinnia",
+        "amaranth",
+        "bramble",
+        "cinder",
+        "deluge",
+        "esker",
+        "fjord",
+        "goblet",
+        "hummock",
+        "isthmus",
+        "juniper",
+        "katydid",
+        "lichen",
+        "monsoon",
+        "nectar",
+        "opossum",
+        "paddock",
+        "quarry",
+        "runnel",
+        "silt",
+        "tundra",
+        "urchin",
+        "verdant",
+        "wattle",
+        "yonder",
+        "zephyr",
+    )
+
+    def _make_pipeline(self, provider: _SequenceProvider) -> RAGPipeline:
+        return RAGPipeline(
+            searcher=_make_mock_searcher(),
+            llm_provider=provider,  # type: ignore
+            top_k=5,
+            context_window=5,
+        )
+
+    def _chunk(self, text: str) -> dict[str, Any]:
+        return {"chunk_text": text, "source_file": "a.pdf", "page": 1}
+
+    def test_is_plausible_summary_rejects_repetitive(self) -> None:
+        p = self._make_pipeline(_SequenceProvider([]))
+        assert p._is_plausible_summary(
+            "This is a well structured and varied answer about the topic."
+        )
+        assert not p._is_plausible_summary("la la la la la la la la")
+        assert not p._is_plausible_summary("short")
+
+    def test_generate_guarded_retries_on_implausible(self) -> None:
+        provider = _SequenceProvider(
+            [
+                "garbage garbage garbage garbage garbage garbage",
+                "A coherent final answer about convolutional networks.",
+            ]
+        )
+        p = self._make_pipeline(provider)
+        result = p._generate_guarded("prompt")
+        assert result == "A coherent final answer about convolutional networks."
+        assert len(provider.calls) == 2
+        assert provider.calls[1]["temperature"] == 0.1
+
+    def test_generate_guarded_returns_empty_when_both_bad(self) -> None:
+        provider = _SequenceProvider(
+            [
+                "garg garbage garbage garbage garbage garbage garbage",
+                "more garbage more garbage more garbage more garbage",
+            ]
+        )
+        p = self._make_pipeline(provider)
+        assert p._generate_guarded("prompt") == ""
+        assert len(provider.calls) == 2
+
+    def test_generate_guarded_single_call_when_plausible(self) -> None:
+        provider = _SequenceProvider(["A good plausible answer that is long enough."])
+        p = self._make_pipeline(provider)
+        result = p._generate_guarded("prompt")
+        assert result == "A good plausible answer that is long enough."
+        assert len(provider.calls) == 1
+
+    def test_multi_chapter_summary_generates_per_chapter(self) -> None:
+        provider = _SequenceProvider(
+            [
+                "Chapter one introduces the core concepts with clear examples.",
+                "Chapter two covers the methods and their practical application.",
+            ]
+        )
+        p = self._make_pipeline(provider)
+        buckets = {
+            1: [self._chunk("chapter one body text here")],
+            2: [self._chunk("chapter two body text here")],
+        }
+        result = p._generate_multi_chapter_summary(
+            [1, 2], buckets, {1: "Intro", 2: "Methods"}
+        )
+        assert "Chapter 1 — Intro" in result
+        assert "Chapter 2 — Methods" in result
+        assert "Chapter one introduces the core concepts" in result
+        assert len(provider.calls) == 2
+
+    def test_multi_chapter_summary_skips_bad_per_chapter(self) -> None:
+        # Keyed responses make the parallel threads deterministic: chapter 1 sees
+        # garbage (both its first try and the retry are dropped), chapter 2 gets
+        # a clean summary.
+        provider = _SequenceProvider(
+            by_key={
+                "Chapter 1": "garbage garbage garbage garbage garbage garbage",
+                "Chapter 2": "A clean summary of chapter two with enough detail to pass.",
+            }
+        )
+        p = self._make_pipeline(provider)
+        buckets = {
+            1: [self._chunk("chapter one body")],
+            2: [self._chunk("chapter two body")],
+        }
+        result = p._generate_multi_chapter_summary(
+            [1, 2], buckets, {1: "One", 2: "Two"}
+        )
+        # Chapter 1's output is garbage and is dropped (incl. its retry).
+        assert "Chapter 1" not in result
+        assert "Chapter 2 — Two" in result
+        assert "A clean summary of chapter two" in result
+        assert len(provider.calls) == 3
+
+    def test_multi_chapter_empty_bucket_gets_explicit_placeholder(self) -> None:
+        """An empty bucket is announced, never silently skipped.
+
+        A chapter-by-chapter overview that quietly omits chapters (page-range
+        detection found no body text) reads as complete to the reader.  The
+        placeholder keeps the omission visible in the answer.
+        """
+        provider = _SequenceProvider(
+            by_key={"Chapter 2": "Summary for chapter two with enough detail here."}
+        )
+        p = self._make_pipeline(provider)
+        buckets = {1: [], 2: [self._chunk("chapter two body")]}
+        result = p._generate_multi_chapter_summary(
+            [1, 2], buckets, {1: "One", 2: "Two"}
+        )
+        assert "Chapter 1 — One" in result
+        assert "No document content was retrieved" in result
+        assert "Chapter 2 — Two" in result
+        assert "Summary for chapter two" in result
+        # The placeholder costs no LLM call.
+        assert len(provider.calls) == 1
+
+    def test_multi_chapter_empty_bucket_streams_placeholder(self) -> None:
+        """The placeholder is streamed live and the next chapter stays separated."""
+        streamed: list[str] = []
+        provider = _SequenceProvider(
+            by_key={"Chapter 2": "Chapter two summary with enough detail to pass."}
+        )
+        p = self._make_pipeline(provider)
+        p._on_chunk = lambda content, _reasoning: streamed.append(content or "")
+        buckets = {1: [], 2: [self._chunk("chapter two body")]}
+        result = p._generate_multi_chapter_summary(
+            [1, 2], buckets, {1: "One", 2: "Two"}
+        )
+        live = "".join(streamed)
+        assert "Chapter 1 — One" in live
+        assert "No document content was retrieved" in live
+        assert "\n\nChapter 2" in live
+        assert "Chapter 2 — Two" in result
+
+    def test_single_chapter_splits_into_bounded_windows(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Forces the map-reduce fallback: the default single-pass path would
+        # summarize this small source in one call (see test_single_pass_*).
+        monkeypatch.setattr(
+            "secondbrain.rag.pipeline._mixins._SINGLE_PASS_MAX_CHARS", 10
+        )
+        provider = _SequenceProvider(
+            by_key={
+                "Part 1 of": (
+                    "The first window covers convolutional layers, weight sharing, "
+                    "and pooling in clear detail, long enough to pass the check."
+                ),
+                "Part 2 of": (
+                    "The second window covers transfer learning and satellite "
+                    "imagery, also written clearly and long enough to pass."
+                ),
+                "terse digests": (
+                    "The chapter overview weaves both window digests into one "
+                    "coherent narrative with adequate length to pass checks."
+                ),
+            }
+        )
+        p = self._make_pipeline(provider)
+        # Two ~4000-char chunks exceed the ~6000-char window budget -> two windows.
+        chunks = [self._chunk("A" * 4000), self._chunk("B" * 4000)]
+        result = p._generate_single_chapter_summary(chunks, 18, "CNNs for Trading")
+        # Two map digests feed one reduce call that writes the final overview.
+        assert len(provider.calls) == 3
+        assert "Part 1 of 2" in provider.calls[0]["prompt"]
+        assert "Part 2 of 2" in provider.calls[1]["prompt"]
+        assert "The chapter overview weaves" in result
+
+    def test_single_chapter_drops_garbage_window(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Forces the map-reduce fallback: the default single-pass path would
+        # summarize this small source in one call (see test_single_pass_*).
+        monkeypatch.setattr(
+            "secondbrain.rag.pipeline._mixins._SINGLE_PASS_MAX_CHARS", 10
+        )
+        provider = _SequenceProvider(
+            by_key={
+                "Part 1 of": "garbage garbage garbage garbage garbage garbage",
+                "Part 2 of": "A clean detailed summary of the second window with enough length.",
+                "terse digests": (
+                    "The overview covers the surviving digest content coherently "
+                    "with adequate length to pass the plausibility check."
+                ),
+            }
+        )
+        p = self._make_pipeline(provider)
+        chunks = [self._chunk("A" * 4000), self._chunk("B" * 4000)]
+        result = p._generate_single_chapter_summary(chunks, 18, "CNNs")
+        # Window 1's garbage digest is dropped; only window 2 reaches the reduce call.
+        assert "garbage" not in result
+        reduce_prompt = provider.calls[-1]["prompt"]
+        assert "A clean detailed summary" in reduce_prompt
+        assert reduce_prompt.count("--- Part") == 1
+        assert "The overview covers the surviving" in result
+
+    def test_multi_chapter_emits_completed_sections(self) -> None:
+        """Each chapter's summary is emitted as it completes (progressive output)."""
+        streamed: list[str] = []
+        by_key = {
+            "Chapter 1": "Chapter one summary sentence with enough detail to pass here.",
+            "Chapter 2": "Chapter two summary sentence with enough detail to pass here.",
+        }
+        provider = _SequenceProvider(by_key=by_key)
+        p = self._make_pipeline(provider)
+        p._on_chunk = lambda content, _reasoning: streamed.append(content or "")
+
+        buckets = {
+            1: [self._chunk("chapter one body text")],
+            2: [self._chunk("chapter two body text")],
+        }
+        result = p._generate_multi_chapter_summary(
+            [1, 2], buckets, {1: "Intro", 2: "Methods"}
+        )
+        # Both chapters' summaries were surfaced via the callback as they finished.
+        assert "Chapter one summary sentence" in "".join(streamed)
+        assert "Chapter two summary sentence" in "".join(streamed)
+        # Concatenated result still contains both chapters.
+        assert "Chapter 2 — Methods" in result
+
+    def test_multi_chapter_stream_separates_chapters(self) -> None:
+        """Streamed output carries each heading and blank-line chapter breaks."""
+        streamed: list[str] = []
+        provider = _SequenceProvider(
+            by_key={
+                "Chapter 1": "Chapter one summary sentence with enough detail to pass here.",
+                "Chapter 2": "Chapter two summary sentence with enough detail to pass here.",
+            }
+        )
+        p = self._make_pipeline(provider)
+        p._on_chunk = lambda content, _reasoning: streamed.append(content or "")
+
+        buckets = {
+            1: [self._chunk("chapter one body text")],
+            2: [self._chunk("chapter two body text")],
+        }
+        p._generate_multi_chapter_summary([1, 2], buckets, {1: "Intro", 2: "Methods"})
+        live = "".join(streamed)
+        # Each chapter heading appears in the live stream ...
+        assert "Chapter 1 — Intro" in live
+        assert "Chapter 2 — Methods" in live
+        # ... and consecutive chapters are separated by a blank line, so the
+        # second heading never glues onto the first chapter's last sentence.
+        assert "\n\nChapter 2 — Methods" in live
+
+    def test_degenerate_bounded_window_is_dropped(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A degenerate (garbage) bounded window is dropped while clean ones survive."""
+        # Forces the map-reduce fallback: the default single-pass path would
+        # summarize this small source in one call (see test_single_pass_*).
+        monkeypatch.setattr(
+            "secondbrain.rag.pipeline._mixins._SINGLE_PASS_MAX_CHARS", 10
+        )
+
+        class _MixStreamProvider(_SequenceProvider):
+            def stream_chat(
+                self, messages, on_chunk, temperature=0.7, max_tokens=4096
+            ) -> str:
+                prompt = messages[0]["content"]
+                if "Part 1 of" in prompt:
+                    return "garbage garbage garbage garbage garbage garbage"
+                return "A clean second window summary with enough length to pass."
+
+        provider = _MixStreamProvider()
+        p = self._make_pipeline(provider)
+        p._config.streaming_enabled = True
+        p._on_chunk = lambda content, _reasoning: None
+        chunks = [self._chunk("A" * 4000), self._chunk("B" * 4000)]
+        result = p._generate_single_chapter_summary(chunks, 18, "CNNs")
+        # The degenerate first window is dropped; the clean second window survives.
+        assert "garbage" not in result
+        assert "A clean second window summary" in result
+
+    def test_chapter_summary_emits_grounded_content_only(self) -> None:
+        """Chapter summaries emit grounded content only; reasoning never appears."""
+        reasoning_seen: list[str] = []
+        content_emitted: list[str] = []
+        provider = _SequenceProvider(
+            by_key={
+                "document content below covers": (
+                    "A final plausible summary with enough length to pass."
+                ),
+            }
+        )
+        p = self._make_pipeline(provider)
+
+        def on_chunk(content: str, reasoning: str | None) -> None:
+            if reasoning:
+                reasoning_seen.append(reasoning)
+            if content:
+                content_emitted.append(content)
+
+        p._on_chunk = on_chunk
+        chunks = [self._chunk("Detailed chapter content " * 60)]
+        result = p._generate_single_chapter_summary(chunks, 18, "CNNs")
+        # No reasoning is ever surfaced to the terminal.
+        assert reasoning_seen == []
+        # The heading is surfaced first, then the completed summary streams after.
+        assert content_emitted and content_emitted[0].lstrip().startswith(
+            "Chapter 18 (overview):"
+        )
+        # The completed summary is emitted (progressive output).
+        assert "A final plausible summary" in "".join(content_emitted)
+        assert "A final plausible summary with enough length to pass." in result
+
+    def test_summary_streams_one_reduce_call_over_window_digests(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Window digests feed one streamed reduce call that writes the overview."""
+        # Forces the map-reduce fallback: the default single-pass path would
+        # summarize this small source in one call (see test_single_pass_*).
+        monkeypatch.setattr(
+            "secondbrain.rag.pipeline._mixins._SINGLE_PASS_MAX_CHARS", 10
+        )
+        emitted: list[str] = []
+        prompts: list[str] = []
+
+        class _StreamReduceProvider(_SequenceProvider):
+            def stream_chat(self, messages, on_chunk, temperature=0.7, max_tokens=4096):
+                prompt = messages[0]["content"]
+                prompts.append(prompt)
+                if "internal digest" in prompt:
+                    if "Part 1 of" in prompt:
+                        text = "The first section covers CNN convolutions in detail."
+                    else:
+                        text = "The second section continues with pooling."
+                else:
+                    text = (
+                        "The overview covers convolution layers first and then "
+                        "pooling, written as one coherent piece of prose here."
+                    )
+                for i in range(0, len(text), 8):
+                    on_chunk(text[i : i + 8], None)
+                return text
+
+        provider = _StreamReduceProvider()
+        p = self._make_pipeline(provider)
+        p._config.streaming_enabled = True
+        p._on_chunk = lambda c, _r: emitted.append(c or "")
+        chunks = [self._chunk("A" * 3000), self._chunk("B" * 3000)]
+        result = p._generate_single_chapter_summary(chunks, 18, "CNNs")
+        assert len(prompts) == 3  # two map digests + one reduce call
+        reduce_prompt = prompts[-1]
+        assert reduce_prompt.index(
+            "The first section covers CNN convolutions"
+        ) < reduce_prompt.index("The second section continues with pooling")
+        # The final overview streams as ONE piece: single voice, no per-window seams.
+        assert "The overview covers convolution layers" in "".join(emitted)
+        assert "The overview covers convolution layers" in result
+
+    def test_streaming_suppresses_degenerate_flood_mid_stream(self) -> None:
+        """Once a streamed window degenerates, the tail is not forwarded."""
+        emitted: list[str] = []
+
+        class _FloodProvider(_SequenceProvider):
+            def stream_chat(
+                self, messages, on_chunk, temperature=0.7, max_tokens=4096
+            ) -> str:
+                for _ in range(300):
+                    on_chunk("garbage ", None)
+                return "garbage " * 300
+
+        provider = _FloodProvider()
+        p = self._make_pipeline(provider)
+        p._config.streaming_enabled = True
+        p._on_chunk = lambda content, _reasoning: emitted.append(content or "")
+        result = p._generate_window_guarded(
+            "prompt", "Chapter 1", temperature=0.3, max_tokens=6000
+        )
+        # The degenerate tail is suppressed; the window's returned answer is empty.
+        assert result == ""
+        visible = "".join(emitted)
+        assert "Chapter 1" in visible
+        assert len(visible) < 900  # far below the 300*8 chars it would otherwise flood
+
+    def test_streaming_suppresses_high_diversity_word_salad(self) -> None:
+        """High-diversity word-salad is aborted mid-stream, not streamed unbounded."""
+        emitted: list[str] = []
+        salad = " ".join(self._SALAD_WORDS) * 8
+
+        class _SaladProvider(_SequenceProvider):
+            def stream_chat(
+                self, messages, on_chunk, temperature=0.7, max_tokens=4096
+            ) -> str:
+                for word in salad.split()[:200]:
+                    on_chunk(word + " ", None)
+                return salad
+
+        provider = _SaladProvider()
+        p = self._make_pipeline(provider)
+        p._config.streaming_enabled = True
+        p._on_chunk = lambda content, _reasoning: emitted.append(content or "")
+        result = p._generate_window_guarded("prompt", "Chapter 1")
+        # Salad passes the repetition check but is caught by the low-function-word
+        # signal, so the returned answer is empty and the tail stops streaming.
+        assert len(result) < 200
+        assert len("".join(emitted)) < len(salad)
+
+    def test_mid_stream_degradation_retries_for_complete_summary(self) -> None:
+        """A chapter that degrades mid-stream is retried, not returned truncated."""
+        emitted: list[str] = []
+        salad_words = self._SALAD_WORDS
+
+        class _MidDegradeProvider(_SequenceProvider):
+            def stream_chat(
+                self, messages, on_chunk, temperature=0.7, max_tokens=4096
+            ) -> str:
+                clean_prefix = (
+                    "Chapter 18 introduces CNNs for financial time series and "
+                    "satellite images, covering convolution and pooling stages."
+                )
+                for word in clean_prefix.split():
+                    on_chunk(word + " ", None)
+                # Then the model degenerates into high-diversity word-salad.
+                for word in " ".join(salad_words).split()[:120]:
+                    on_chunk(word + " ", None)
+                return clean_prefix + " " + " ".join(salad_words)
+
+            def generate(self, prompt, temperature=0.7, max_tokens=4096) -> str:
+                self.calls.append({"prompt": prompt, "temperature": temperature})
+                # Low-temperature retry returns the complete, stable chapter.
+                if temperature == 0.1:
+                    return (
+                        "Chapter 18 complete summary covering convolutions, pooling, "
+                        "transfer learning, satellite imaging, and a CNN trading "
+                        "strategy in full, without any degeneration or truncation."
+                    )
+                return "garbage " * 40
+
+        provider = _MidDegradeProvider()
+        p = self._make_pipeline(provider)
+        p._config.streaming_enabled = True
+        p._on_chunk = lambda content, _reasoning: emitted.append(content or "")
+        result = p._generate_window_guarded("prompt", "Chapter 18 (overview)")
+        # The truncated clean prefix is replaced by the low-temperature full retry.
+        assert "complete summary covering" in result
+        assert "satellite imaging" in result
+        # The returned summary is the clean retry: no salad survives into it.
+        assert not any(w in result for w in salad_words[:10])
+        # The live stream is bounded (a short derailed burst only, never a runaway),
+        # then the complete retry is emitted in its place.
+        assert len("".join(emitted)) < 1500
+
+    def test_streaming_aborts_on_content_self_correction(self) -> None:
+        """A content-channel figure-verification leak is aborted and clean-retried."""
+        emitted: list[str] = []
+
+        class _LeakProvider(_SequenceProvider):
+            def stream_chat(
+                self, messages, on_chunk, temperature=0.7, max_tokens=4096
+            ) -> str:
+                leaked = (
+                    "AlexNet hit 77.?? (wait, the text says 79.33 percent) on CIFAR-10."
+                )
+                for word in leaked.split():
+                    on_chunk(word + " ", None)
+                return leaked
+
+            def generate(self, prompt, temperature=0.7, max_tokens=4096) -> str:
+                # Deterministic low-temperature retry returns a clean, stable figure.
+                if temperature == 0.1:
+                    return (
+                        "AlexNet achieved the best test accuracy of 79.33 percent "
+                        "on CIFAR-10, exceeding the feedforward network."
+                    )
+                return ""
+
+        provider = _LeakProvider()
+        p = self._make_pipeline(provider)
+        p._config.streaming_enabled = True
+        p._on_chunk = lambda content, _reasoning: emitted.append(content or "")
+        result = p._generate_window_guarded("prompt", "Chapter 18 (overview)")
+        # The clean low-temperature retry replaces the leaked draft.
+        assert "79.33 percent" in result
+        assert "??" not in result
+        assert "the text says" not in result
+
+    def test_is_acceptable_rejects_word_salad_that_repetition_misses(self) -> None:
+        """High-diversity word-salad is rejected even though nothing repeats."""
+        p = self._make_pipeline(_SequenceProvider([]))
+        salad = " ".join(self._SALAD_WORDS)
+        # Proves the old repetition-only check would have let it through.
+        assert p._is_plausible_summary(salad) is True
+        assert p._looks_derailed(salad) is True
+        assert p._is_acceptable(salad) is False
+
+    def test_looks_derailed_catches_novel_salad_with_function_words(self) -> None:
+        """Salad that sneaks in function words is caught by the novel-word signal."""
+        p = self._make_pipeline(_SequenceProvider([]))
+        fns = ["and", "the", "of", "to", "with", "for", "on", "is", "a", "in"]
+        tokens: list[str] = []
+        for i in range(160):
+            tokens.append(f"term{i}x")
+            if i % 8 == 0:
+                tokens.append(fns[(i // 8) % len(fns)])
+        text = " ".join(tokens)
+        # Function-word share stays above the ratio threshold (so that signal alone
+        # would pass it), but the near-unanimous novelty trips the type-token one.
+        assert p._looks_derailed(text) is True
+        assert p._is_acceptable(text) is False
+
+    def test_dense_technical_summary_not_truncated_by_flood_guard(self) -> None:
+        """A legitimate dense summary streams to completion, not truncated.
+
+        Regression: the streaming flood guard used to also consult the
+        word-salad diversity heuristic on the partial buffer, which
+        false-positives on dense technical text (lists of PCA/ICA/model names
+        spike the type-token ratio) and truncated good summaries mid-sentence.
+        Now the mid-stream guard only aborts on repetition, so a dense summary
+        is returned in full.
+        """
+        dense = (
+            "Chapter 13 focuses on unsupervised learning for trading applications: "
+            "dimensionality reduction and clustering. These techniques learn "
+            "informative representations of data without an outcome variable, "
+            "unlike the supervised learning covered in prior chapters. The "
+            "chapter details how linear methods like principal component analysis "
+            "(PCA) and independent component analysis (ICA) reduce feature spaces, "
+            "and how k-means and hierarchical clustering group similar assets. "
+            "The chapter covers evaluating these models on financial data."
+        )
+        streamed: list[str] = []
+        retried: list[bool] = []
+
+        class _DenseProvider(_SequenceProvider):
+            def stream_chat(
+                self, messages, on_chunk, temperature=0.7, max_tokens=4096
+            ) -> str:
+                for word in dense.split():
+                    on_chunk(word + " ", None)
+                return dense
+
+            def generate(self, prompt, temperature=0.7, max_tokens=4096) -> str:
+                retried.append(True)
+                return dense
+
+        provider = _DenseProvider()
+        p = self._make_pipeline(provider)
+        p._config.streaming_enabled = True
+        p._on_chunk = lambda content, _reasoning: streamed.append(content or "")
+        result = p._generate_window_guarded("prompt", "Section 18.1")
+        # The full dense summary is returned — not a truncated clean prefix.
+        assert not retried
+        assert "dimensionality reduction and clustering" in result
+        assert "hierarchical clustering group similar assets" in result
+        # The whole body streamed to its end across the live `_on_chunk` feed.
+        assert "on financial data." in "".join(streamed)
+
+    def test_trim_rehashed_tail_drops_restated_duplicate(self) -> None:
+        """A re-worded restatement of the same section content is dropped."""
+        p = self._make_pipeline(_SequenceProvider([]))
+        head = (
+            "Section 18.12 builds a one-dimensional CNN to forecast returns. "
+            "It stacks a Conv1D layer with 32 filters, kernel size 4, ReLU and "
+            "causal padding, followed by max pooling and batch normalization. "
+            "The architecture yields 449 trainable parameters. It uses momentum "
+            "and trend indicators WMA, EMA, ROC, CMO, ADOSC and ADX. It computes "
+            "rolling Fama-French five-factor betas via statsmodels RollingOLS."
+        )
+        tail = (
+            "The model stacks a Conv1D layer with 32 filters, kernel size 4, "
+            "ReLU and causal padding, then batch normalization and a dense "
+            "output of 449 trainable parameters. It relies on momentum and "
+            "trend indicators WMA, EMA, ROC, CMO, ADOSC and ADX. It also "
+            "computes rolling Fama-French betas from RollingOLS on French data."
+        )
+        trimmed = p._trim_rehashed_tail(head + " " + tail)
+        assert trimmed == head
+        assert "The model stacks" not in trimmed
+
+    def test_trim_rehashed_tail_keeps_progressive_summary(self) -> None:
+        """A summary whose later sentences add new content is left intact."""
+        p = self._make_pipeline(_SequenceProvider([]))
+        prog = (
+            "Chapter 13 introduces unsupervised learning for trading, covering "
+            "dimensionality reduction and clustering. The main tasks are PCA and "
+            "ICA for linear reduction and t-SNE for manifold learning. It covers "
+            "k-means, hierarchical, and density-based clustering. These identify "
+            "data-driven risk factors and eigenportfolios from asset returns. "
+            "They also build robust portfolios via hierarchical risk parity."
+        )
+        assert p._trim_rehashed_tail(prog) == prog
+
+    def test_trim_rehashed_tail_catches_reworded_restatement(self) -> None:
+        """A fully re-worded second pass over the same entities is still dropped."""
+        p = self._make_pipeline(_SequenceProvider([]))
+        head = (
+            "Chapter 18 profiles LeNet5 on MNIST at 99.2 percent and AlexNet, "
+            "the 2012 ILSVRC winner. Transfer learning reuses ImageNet models "
+            "like VGG16. Applications classify EuroSat satellite images and "
+            "predict daily returns."
+        )
+        tail = (
+            "Here is an overview synthesized from the document. It reviews "
+            "LeNet5 (99.2 percent on MNIST) and AlexNet of ILSVRC 2012. "
+            "Transfer learning uses pretrained ImageNet backbones such as VGG16 "
+            "for features. CNNs are applied to EuroSat satellite classification "
+            "and daily return forecasting."
+        )
+        result = p._trim_rehashed_tail(head + " " + tail)
+        assert "Here is an overview" not in result
+        assert "profiles LeNet5" in result
+
+    def test_summary_path_uses_low_temperature_and_max_tokens(self) -> None:
+        """Summary reduce samples at SUMMARY_TEMPERATURE with the reduce token cap."""
+        captured: list[dict[str, Any]] = []
+
+        class _CaptureProvider(_SequenceProvider):
+            def generate(self, prompt, temperature=1.0, max_tokens=384000) -> str:
+                captured.append({"temperature": temperature, "max_tokens": max_tokens})
+                return "A plausible summary sentence that is long enough here."
+
+        provider = _CaptureProvider()
+        p = self._make_pipeline(provider)
+        p._config.streaming_enabled = False  # force the guarded sync path
+        p._config.llm_temperature = 1.0
+        p._config.llm_max_tokens = 384000
+        chunks = [self._chunk("18.1 Section content here.")]
+        result = p._generate_single_chapter_summary(chunks, 18, "CNNs")
+        assert "A plausible summary sentence" in result
+        # Summary generation uses a dedicated low temperature so figures are
+        # reproduced faithfully rather than regenerated at the creative default,
+        # and its output cap is a ceiling, not a target: GLM-class servers spend
+        # the same budget on hidden reasoning and visible content, so a tight
+        # cap amputates the overview mid-sentence.
+        assert captured[0].get("temperature") == SUMMARY_TEMPERATURE
+        assert captured[0].get("max_tokens") == _SUMMARY_REDUCE_MAX_TOKENS
+
+    def test_trim_to_sentence_end_removes_dangling_fragment(self) -> None:
+        """A window truncated mid-sentence is cut back to the last full sentence."""
+        assert (
+            _trim_to_sentence_end("The model is trained. It uses SGD with Nester")
+            == "The model is trained."
+        )
+        # A complete ending sentence is untouched.
+        assert (
+            _trim_to_sentence_end("The forecasts track the 2019 data well.")
+            == "The forecasts track the 2019 data well."
+        )
+
+    def test_implausible_metric_values_pruned(self) -> None:
+        """Provably impossible metric values are stripped from the final summary."""
+        draft = (
+            "The multivariate experiment reported an average weekly IC of 3.32 and "
+            "6.68, while the S&P forecast showed an information coefficient of "
+            "0.9889. This overview is plausible and has enough distinct words to "
+            "pass validation here."
+        )
+
+        class _BadMetricProvider(_SequenceProvider):
+            def generate(self, prompt, temperature=0.7, max_tokens=4096) -> str:
+                self.calls.append({"temperature": temperature})
+                return draft
+
+        provider = _BadMetricProvider()
+        p = self._make_pipeline(provider)
+        p._config.streaming_enabled = False
+        chunks = [
+            self._chunk(
+                "RNN chapter on multivariate weekly return forecasting reported an "
+                "average weekly IC of 3.32 and 6.68, and an information coefficient "
+                "of 0.9889."
+            )
+        ]
+        result = p._generate_single_chapter_summary(chunks, 19, "RNNs")
+        # Impossible IC values (> 1) are dropped; the metric name is retained.
+        assert "3.32" not in result and "6.68" not in result
+        assert "IC" in result or "coefficient" in result
+        # An in-range value (<= 1) that is grounded in the source context is kept.
+        assert "0.9889" in result
+
+    def test_implausible_hedged_metric_values_pruned(self) -> None:
+        """A hedged impossible value ('an IC of around 4') is stripped as well."""
+        text = (
+            "Early stopping yields a biased, cherry-picked information "
+            "coefficient of around 4, and later sections report a daily "
+            "average IC of approximately 0.009 with adequate detail here."
+        )
+        pruned = _prune_implausible_metric_figures(text)
+        assert "around 4" not in pruned
+        assert "coefficient" in pruned
+        assert "approximately 0.009" in pruned
+
+    def test_grounding_drops_fabricated_year(self) -> None:
+        """A year the source never states is removed from the summary."""
+        summary = (
+            "a backtest over 2023\u20132027 yields a 35.6% cumulative return "
+            "and a Sharpe of 0.53"
+        )
+        context = (
+            "the naive strategy earned four basis points per day over the "
+            "2013-2017 period, a 35.6 percent cumulative return and a Sharpe "
+            "ratio of 0.53."
+        )
+        out = _ground_figures(summary, context)
+        assert "2023" not in out and "2027" not in out
+        assert "35.6%" in out
+        assert "0.53" in out
+
+    def test_grounding_drops_fabricated_percent(self) -> None:
+        """A percentage absent from the source is removed."""
+        summary = "AlexNet hit a top-5 error of 92% versus 16%"
+        context = "AlexNet achieved a top-5 error of 16 percent"
+        out = _ground_figures(summary, context)
+        assert "92%" not in out
+        assert "16%" in out
+
+    def test_grounding_keeps_grounded_magnitude(self) -> None:
+        """A magnitude figure present in the source is retained verbatim."""
+        summary = "AlexNet has roughly 60 million parameters"
+        context = "AlexNet has about 60 million parameters, far more than LeNet5"
+        assert _ground_figures(summary, context) == summary
+
+    def test_grounding_preserves_small_counts(self) -> None:
+        """Small whole counts absent from the source are left alone."""
+        summary = "it uses 15 technical indicators and 10 classes"
+        context = "the chapter builds indicators spanning ten classes"
+        out = _ground_figures(summary, context)
+        assert "15" in out and "10" in out
+
+    def test_grounding_tolerates_rounding(self) -> None:
+        """A correctly rounded decimal is not destroyed (3.7 vs 3.57)."""
+        summary = "ResNet pushed top-5 error to 3.7%"
+        context = "ResNet reached a top-5 error of 3.57%"
+        assert "3.7%" in _ground_figures(summary, context)
+
+    def test_grounding_years_are_exact(self) -> None:
+        """Years must match exactly; a close year is still fabricated."""
+        summary = "the winning year was 2012"
+        context = "the model was developed around 2015"
+        assert _ground_figures(summary, context) == "the winning year was "
+
+    def test_reasoning_leak_detected(self) -> None:
+        """Leaked chain-of-thought self-talk marks a window implausible."""
+        p = self._make_pipeline(_SequenceProvider([]))
+        leaked = (
+            "The dataset has 26,631 filings? Actually '22,631'? No, I misread, "
+            "it's 16,758. I'll just say over two million parameters. This window "
+            "is otherwise written out fully enough and lexically varied."
+        )
+        assert p._is_plausible_summary(leaked) is False
+
+    def test_reasoning_leak_clean_passes(self) -> None:
+        """A clean, diverse summary is not flagged as reasoning leakage."""
+        p = self._make_pipeline(_SequenceProvider([]))
+        clean = (
+            "RNNs apply the same transformation at each time step. The LSTM cell "
+            "combines an input gate, forget gate, and output gate to regulate the "
+            "cell state and mitigate vanishing gradients over long sequences."
+        )
+        assert p._is_plausible_summary(clean) is True
+
+    def test_contains_reasoning_leak_markers(self) -> None:
+        """The marker matcher is case-insensitive and specific."""
+        assert _contains_reasoning_leak("I'm misreading this number".lower()) is True
+        assert _contains_reasoning_leak("Let me re-check the figure".lower()) is True
+        assert _contains_reasoning_leak("a clean factual summary".lower()) is False
+
+    def test_contains_self_correction_leak_markers(self) -> None:
+        """Mid-prose self-correction scaffolding is flagged as a reasoning leak."""
+        assert (
+            _contains_reasoning_leak(
+                "over windows from 15 to 30? Actually, windows ranged from 15 to 90.".lower()
+            )
+            is True
+        )
+        assert (
+            _contains_reasoning_leak(
+                "I meant to say the value is 4 million parameters.".lower()
+            )
+            is True
+        )
+        assert _contains_reasoning_leak("or rather the path diverges".lower()) is True
+        assert (
+            _contains_reasoning_leak(
+                "the model reached 79.33 percent accuracy across twenty epochs.".lower()
+            )
+            is False
+        )
+
+    def test_reasoning_spiral_detected(self) -> None:
+        """Hedge-dense, self-contradicting chain-of-thought is flagged."""
+        p = self._make_pipeline(_SequenceProvider([]))
+        spiral = (
+            "No, wait, actually let me re-read. No, above 102 percent? No, above "
+            "104? No, above 106? I misread. No, hold on, actually let me check "
+            "again. No, wait, actually the value is different. No, above 108 "
+            "percent? No, above 110? This self-verification keeps repeating "
+            "without resolving anything. No, wait, actually I misread again. "
+            "No, above 112 percent? No, above 114? No, above 116 percent? "
+            "No, above 118? I misread yet again. No, wait, actually let me "
+            "re-read the whole passage once more."
+        )
+        assert p._is_reasoning_spiral(spiral) is True
+
+    def test_reasoning_spiral_normal_passes(self) -> None:
+        """A short/ordinary planning block is never treated as a spiral."""
+        p = self._make_pipeline(_SequenceProvider([]))
+        assert (
+            p._is_reasoning_spiral(
+                "Outline the chapter structure, then summarize each section in order."
+            )
+            is False
+        )
+        assert p._is_reasoning_spiral("") is False
+
+    def test_page_query_answers_verbatim(self) -> None:
+        """A 'page N' query returns the page text verbatim, no LLM call."""
+        provider = _SequenceProvider(["should not be used"])
+        p = self._make_pipeline(provider)
+        searcher_mock = cast(Any, p._searcher)
+        storage_mock = MagicMock()
+        storage_mock.find_chunks.return_value = [
+            {
+                "chunk_id": "c1",
+                "chunk_text": "[ 500 ] page content about CNNs\nsecond sentence",
+                "page_number": 529,
+                "printed_page": 500,
+            }
+        ]
+        searcher_mock.attach_mock(storage_mock, "storage")
+
+        res = p._answer_page_query("what is on page 500 of the book")
+
+        assert res is not None
+        assert res["sources"] and res["sources"][0]["printed_page"] == 500
+        assert res["answer"] == "page content about CNNs\nsecond sentence"
+        assert provider.calls == []
+        storage_mock.find_chunks.assert_any_call(source_file=None, printed_page=500)
+
+    def test_page_query_non_page_returns_none(self) -> None:
+        """Queries without a page reference fall back to the semantic path."""
+        p = self._make_pipeline(_SequenceProvider([]))
+        assert p._answer_page_query("how do RNNs work") is None
+
+    def test_page_query_missing_page_returns_not_found(self) -> None:
+        """A referenced page with no stored chunks yields a graceful 'not found'."""
+        p = self._make_pipeline(_SequenceProvider([]))
+        searcher_mock = cast(Any, p._searcher)
+        storage_mock = MagicMock()
+        storage_mock.find_chunks.return_value = []
+        searcher_mock.attach_mock(storage_mock, "storage")
+        res = p._answer_page_query("what is on page 999")
+        assert res is not None
+        assert res["sources"] == []
+
+    def test_page_query_returns_full_page_verbatim(self) -> None:
+        """The full page text is returned verbatim with the marker stripped."""
+        provider = _SequenceProvider(["should not be used"])
+        p = self._make_pipeline(provider)
+        long_text = "[ 500 ] " + "w" * 300
+        searcher_mock = cast(Any, p._searcher)
+        storage_mock = MagicMock()
+        storage_mock.find_chunks.return_value = [
+            {
+                "chunk_id": "c1",
+                "chunk_text": long_text,
+                "page_number": 529,
+                "printed_page": 500,
+            }
+        ]
+        searcher_mock.attach_mock(storage_mock, "storage")
+
+        res = p._answer_page_query("what is on page 500 of the book")
+
+        assert res is not None
+        assert res["answer"] == "w" * 300
+        assert provider.calls == []
+
+    @pytest.mark.asyncio
+    async def test_answer_page_query_async_returns_page_result(self) -> None:
+        """_answer_page_query_async resolves a page query to its printed chunks."""
+        p = self._make_pipeline(_SequenceProvider(["page 42 summary"]))
+        searcher_mock = cast(Any, p._searcher)
+        storage_mock = MagicMock()
+        storage_mock.find_chunks.return_value = [
+            {
+                "chunk_id": "c1",
+                "chunk_text": "[ 42 ] page 42 body",
+                "page_number": 71,
+                "printed_page": 42,
+            }
+        ]
+        searcher_mock.attach_mock(storage_mock, "storage")
+
+        res = await p._answer_page_query_async("what is on page 42 of the book")
+
+        assert res is not None
+        assert res["sources"] and res["sources"][0]["printed_page"] == 42
+        storage_mock.find_chunks.assert_any_call(source_file=None, printed_page=42)
+
+    @pytest.mark.asyncio
+    async def test_query_async_routes_page_before_semantic(self) -> None:
+        """query_async answers page queries without falling through to search."""
+        p = self._make_pipeline(_SequenceProvider(["page 42 summary"]))
+        searcher_mock = cast(Any, p._searcher)
+        storage_mock = MagicMock()
+        storage_mock.find_chunks.return_value = [
+            {
+                "chunk_id": "c1",
+                "chunk_text": "[ 42 ] page 42 body",
+                "page_number": 71,
+                "printed_page": 42,
+            }
+        ]
+        searcher_mock.attach_mock(storage_mock, "storage")
+
+        res = await p.query_async("what is on page 42 of the book")
+
+        assert res is not None
+        assert res["sources"] and res["sources"][0]["printed_page"] == 42
+        searcher_mock.search_async.assert_not_awaited()
+
+    def test_page_query_expands_to_full_physical_page(self) -> None:
+        """A page split across chunks returns the whole page, not just the marker."""
+        p = self._make_pipeline(_SequenceProvider(["page 500 overview"]))
+        searcher_mock = cast(Any, p._searcher)
+        storage_mock = MagicMock()
+
+        def _find(**kwargs: Any) -> list[dict[str, Any]]:
+            if "printed_page" in kwargs:
+                # Only the first chunk carries the printed-page marker.
+                return [
+                    {
+                        "chunk_id": "c1",
+                        "chunk_text": "[ 500 ] first half of the page",
+                        "page_number": 529,
+                        "printed_page": 500,
+                    }
+                ]
+            # page_number expansion: both halves of the physical page.
+            return [
+                {
+                    "chunk_id": "c1",
+                    "chunk_text": "[ 500 ] first half of the page",
+                    "page_number": 529,
+                    "printed_page": 500,
+                },
+                {
+                    "chunk_id": "c2",
+                    "chunk_text": "second half of the same page without a marker",
+                    "page_number": 529,
+                    "printed_page": None,
+                },
+            ]
+
+        storage_mock.find_chunks.side_effect = _find
+        searcher_mock.attach_mock(storage_mock, "storage")
+
+        res = p._answer_page_query("what is on page 500 of the book")
+
+        assert res is not None
+        source_ids = {c["chunk_id"] for c in res["sources"]}
+        assert source_ids == {"c1", "c2"}
+        storage_mock.find_chunks.assert_any_call(source_file=None, printed_page=500)
+        storage_mock.find_chunks.assert_any_call(source_file=None, page_number=[529])
+
+    def test_page_query_orders_chunks_by_page_pos(self) -> None:
+        """Verbatim page text is emitted in page_pos order, not scroll order."""
+        p = self._make_pipeline(_SequenceProvider([]))
+        searcher_mock = cast(Any, p._searcher)
+        storage_mock = MagicMock()
+
+        def _find(**kwargs: Any) -> list[dict[str, Any]]:
+            if "printed_page" in kwargs:
+                return [
+                    {
+                        "chunk_id": "c1",
+                        "chunk_text": "[ 500 ] head",
+                        "page_number": 529,
+                        "printed_page": 500,
+                        "page_pos": 0,
+                    }
+                ]
+            # Scroll order is scrambled; page_pos must restore it.
+            return [
+                {
+                    "chunk_id": "c3",
+                    "chunk_text": "third sentence",
+                    "page_number": 529,
+                    "page_pos": 2,
+                },
+                {
+                    "chunk_id": "c1",
+                    "chunk_text": "[ 500 ] head",
+                    "page_number": 529,
+                    "printed_page": 500,
+                    "page_pos": 0,
+                },
+                {
+                    "chunk_id": "c2",
+                    "chunk_text": "second sentence",
+                    "page_number": 529,
+                    "page_pos": 1,
+                },
+            ]
+
+        storage_mock.find_chunks.side_effect = _find
+        searcher_mock.attach_mock(storage_mock, "storage")
+
+        res = p._answer_page_query("what is on page 500")
+
+        assert res is not None
+        assert res["answer"] == "head\nsecond sentence\nthird sentence"
+        assert [c["chunk_id"] for c in res["sources"]] == ["c1", "c2", "c3"]
+
+    def test_page_query_collapses_chunk_overlap(self) -> None:
+        """Consecutive page_pos chunks have their boundary overlap collapsed."""
+        p = self._make_pipeline(_SequenceProvider([]))
+        searcher_mock = cast(Any, p._searcher)
+        storage_mock = MagicMock()
+
+        def _find(**kwargs: Any) -> list[dict[str, Any]]:
+            if "printed_page" in kwargs:
+                return [
+                    {
+                        "chunk_id": "c1",
+                        "chunk_text": "[ 500 ] The quick brown fox jumps over",
+                        "page_number": 529,
+                        "printed_page": 500,
+                        "page_pos": 0,
+                    }
+                ]
+            return [
+                {
+                    "chunk_id": "c2",
+                    "chunk_text": "over the lazy dog",
+                    "page_number": 529,
+                    "page_pos": 1,
+                },
+                {
+                    "chunk_id": "c1",
+                    "chunk_text": "[ 500 ] The quick brown fox jumps over",
+                    "page_number": 529,
+                    "printed_page": 500,
+                    "page_pos": 0,
+                },
+            ]
+
+        storage_mock.find_chunks.side_effect = _find
+        searcher_mock.attach_mock(storage_mock, "storage")
+
+        res = p._answer_page_query("what is on page 500")
+
+        assert res is not None
+        assert res["answer"] == "The quick brown fox jumps over the lazy dog"
+
+    def test_page_query_strips_page_stub_line(self) -> None:
+        """A standalone '[ N ]' stub line is removed from the page text."""
+        p = self._make_pipeline(_SequenceProvider([]))
+        searcher_mock = cast(Any, p._searcher)
+        storage_mock = MagicMock()
+        storage_mock.find_chunks.return_value = [
+            {
+                "chunk_id": "c1",
+                "chunk_text": (
+                    "Word Embeddings for Earnings Calls and SEC Filings\n"
+                    "[ 500 ]\n"
+                    "Preprocessing body"
+                ),
+                "page_number": 529,
+                "printed_page": 500,
+            }
+        ]
+        searcher_mock.attach_mock(storage_mock, "storage")
+
+        res = p._answer_page_query("what is on page 500")
+
+        assert res is not None
+        assert res["answer"] == (
+            "Word Embeddings for Earnings Calls and SEC Filings\nPreprocessing body"
+        )
+
+    def test_single_chapter_preserves_window_order(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Map digests reach the reduce prompt in source order."""
+        # Forces the map-reduce fallback: the default single-pass path would
+        # summarize this small source in one call (see test_single_pass_*).
+        monkeypatch.setattr(
+            "secondbrain.rag.pipeline._mixins._SINGLE_PASS_MAX_CHARS", 10
+        )
+        provider = _SequenceProvider(
+            by_key={
+                "Part 1 of": "First window summary with plenty length to pass.",
+                "Part 2 of": "Second window summary with plenty length to pass.",
+                "terse digests": (
+                    "The overview weaves the digest material into one "
+                    "coherent narrative with adequate length to pass."
+                ),
+            }
+        )
+        p = self._make_pipeline(provider)
+        chunks = [self._chunk("A" * 4000), self._chunk("B" * 4000)]
+        result = p._generate_single_chapter_summary(chunks, 18, "CNNs")
+        reduce_prompt = provider.calls[-1]["prompt"]
+        assert reduce_prompt.index("First window summary") < reduce_prompt.index(
+            "Second window summary"
+        )
+        assert "The overview weaves" in result
+
+    def test_stream_leak_detects_inline_self_correction(self) -> None:
+        """Inline self-correction ("48? No--45.78") is detected as a stream leak."""
+        assert _is_stream_leak("a test accuracy of 48? no--45.78 percent")
+        assert _is_stream_leak("at 77.29? actually the text says 78.29 percent")
+        assert not _is_stream_leak("Validation accuracy reached 97.96 percent.")
+        assert not _is_stream_leak("The chapter presents clean, confident prose.")
+
+    def test_stream_leak_ignores_benign_text_citations(self) -> None:
+        """Ordinary "the text says/gives" citations never abort a window.
+
+        A false trip costs the whole window: the stream aborts, the low-temp
+        retry tends to repeat the same citation style, and the window is then
+        silently dropped from the overview.
+        """
+        assert not _is_stream_leak("the text gives several examples of this.")
+        assert not _is_stream_leak("the text states the model uses relu.")
+        assert not _is_stream_leak("as the text says, early stopping applies.")
+
+    def test_scrub_self_correction_handles_hedge_forms(self) -> None:
+        """Hedge connectors and "(wait, the text says ...)" forms scrub clean."""
+        assert (
+            _scrub_self_correction(
+                "accuracy of 77.29? Actually the text says 78.29 percent"
+            )
+            == "accuracy of 78.29 percent"
+        )
+        assert (
+            _scrub_self_correction(
+                "output of 77.?? (wait, the text says 78.29 percent)"
+            )
+            == "output of 78.29 percent"
+        )
+        assert _scrub_self_correction("48? No--45.78? Actually 43.05") == "43.05"
+        clean = "Validation accuracy reached 45.78 percent."
+        assert _scrub_self_correction(clean) == clean
+
+    def test_streamed_leak_is_scrubbed_without_aborting_window(self) -> None:
+        """A hedge leak inside the withheld tail is scrubbed; the window lives."""
+        emitted: list[str] = []
+
+        class _HedgeLeakProvider(_SequenceProvider):
+            def stream_chat(
+                self, messages, on_chunk, temperature=0.7, max_tokens=4096
+            ) -> str:
+                text = (
+                    "The model reached 48? No--45.78 percent validation "
+                    "accuracy in the final epoch."
+                )
+                for i in range(0, len(text), 10):
+                    on_chunk(text[i : i + 10], None)
+                return text
+
+            def generate(self, prompt, temperature=0.7, max_tokens=4096) -> str:
+                self.calls.append({"prompt": prompt, "temperature": temperature})
+                return "retry must not run"
+
+        provider = _HedgeLeakProvider()
+        p = self._make_pipeline(provider)
+        p._config.streaming_enabled = True
+        p._on_chunk = lambda c, _r: emitted.append(c or "")
+        result = p._summarize_bounded(
+            heading="Chapter 18 (overview)",
+            windows=[
+                [self._chunk("It reached 45.78 percent validation accuracy. " * 6)]
+            ],
+            instruction="Summarize.",
+        )
+        assert "45.78 percent" in result
+        assert "48? No--" not in result
+        assert "48? No--" not in "".join(emitted)
+        assert "retry must not run" not in result
+
+    def test_mid_stream_death_recovers_with_continuation(self) -> None:
+        """A dropped stream is continued seamlessly instead of losing the tail."""
+        emitted: list[str] = []
+        prompts: list[str] = []
+
+        class _DyingStreamProvider(_SequenceProvider):
+            def stream_chat(
+                self, messages, on_chunk, temperature=0.7, max_tokens=4096
+            ) -> str:
+                prompt = messages[0]["content"]
+                prompts.append(prompt)
+                if "<draft>" not in prompt:
+                    text = "The chapter introduces convolution layers and pooling"
+                    for i in range(0, len(text), 12):
+                        on_chunk(text[i : i + 12], None)
+                    raise RuntimeError("stream dropped mid-output")
+                text = " stages with worked examples from the source text."
+                for i in range(0, len(text), 12):
+                    on_chunk(text[i : i + 12], None)
+                return text
+
+        provider = _DyingStreamProvider()
+        p = self._make_pipeline(provider)
+        p._config.streaming_enabled = True
+        p._on_chunk = lambda c, _r: emitted.append(c or "")
+        result = p._summarize_bounded(
+            heading="Chapter 18 (overview)",
+            windows=[[self._chunk("Convolution and pooling source text. " * 10)]],
+            instruction="Summarize.",
+        )
+        assert "pooling stages with worked examples" in result
+        assert any("<draft>" in pr for pr in prompts)
+        assert "worked examples" in "".join(emitted)
+
+    def test_empty_stream_death_retries_before_skipping(self) -> None:
+        """A window that dies before emitting anything is regenerated once."""
+
+        class _SilentDeathProvider(_SequenceProvider):
+            def stream_chat(
+                self, messages, on_chunk, temperature=0.7, max_tokens=4096
+            ) -> str:
+                if "<draft>" in messages[0]["content"]:
+                    raise AssertionError("resume must not run for empty partials")
+                raise RuntimeError("provider stalled during reasoning")
+
+            def generate(self, prompt, temperature=0.7, max_tokens=4096) -> str:
+                self.calls.append({"prompt": prompt, "temperature": temperature})
+                if temperature == 0.1:
+                    return "A complete regenerated summary of the section."
+                return "garbage"
+
+        provider = _SilentDeathProvider()
+        p = self._make_pipeline(provider)
+        p._config.streaming_enabled = True
+        p._on_chunk = lambda _c, _r: None
+        result = p._summarize_bounded(
+            heading="Chapter 18 (overview)",
+            windows=[[self._chunk("Source text for the section. " * 10)]],
+            instruction="Summarize.",
+        )
+        assert "regenerated summary" in result
+
+    def test_map_digest_content_never_streams(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Map-pass digest text stays internal; only its reasoning streams live."""
+        # Forces the map-reduce fallback: the default single-pass path would
+        # summarize this small source in one call (see test_single_pass_*).
+        monkeypatch.setattr(
+            "secondbrain.rag.pipeline._mixins._SINGLE_PASS_MAX_CHARS", 10
+        )
+        events: list[tuple[str, str | None]] = []
+
+        class _MapStreamProvider(_SequenceProvider):
+            def stream_chat(
+                self, messages, on_chunk, temperature=0.7, max_tokens=4096
+            ) -> str:
+                prompt = messages[0]["content"]
+                if "internal digest" in prompt:
+                    on_chunk("", "thinking about the section")
+                    text = (
+                        "Digest prose about convolutional layers and pooling examples."
+                    )
+                else:
+                    text = "The overview weaves the digest material into one narrative."
+                for i in range(0, len(text), 12):
+                    on_chunk(text[i : i + 12], None)
+                return text
+
+        provider = _MapStreamProvider()
+        p = self._make_pipeline(provider)
+        p._config.streaming_enabled = True
+        p._on_chunk = lambda c, r: events.append((c or "", r))
+        chunks = [self._chunk("A" * 4000), self._chunk("B" * 4000)]
+        result = p._generate_single_chapter_summary(chunks, 18, "CNNs")
+        streamed_content = "".join(c for c, _r in events)
+        assert "Digest prose" not in streamed_content, (
+            "digest content must never reach the screen"
+        )
+        assert any(r for _c, r in events), "map reasoning still streams for liveness"
+        assert "The overview weaves" in result
+
+    def test_reduce_amputated_mid_sentence_gets_continuation(self) -> None:
+        """A normal return cut mid-sentence (GLM output cap) is continued."""
+        prompts: list[str] = []
+
+        class _AmputatingProvider(_SequenceProvider):
+            def stream_chat(
+                self, messages, on_chunk, temperature=0.7, max_tokens=4096
+            ) -> str:
+                prompt = messages[0]["content"]
+                prompts.append(prompt)
+                if "<draft>" in prompt:
+                    text = " stages with worked examples from the source text."
+                else:
+                    text = "The chapter introduces convolution layers and pooling"
+                for i in range(0, len(text), 12):
+                    on_chunk(text[i : i + 12], None)
+                return text
+
+        provider = _AmputatingProvider()
+        p = self._make_pipeline(provider)
+        p._config.streaming_enabled = True
+        p._on_chunk = lambda _c, _r: None
+        chunks = [self._chunk("Convolution and pooling source text. " * 10)]
+        result = p._generate_single_chapter_summary(chunks, 18, "CNNs")
+        assert any("<draft>" in pr for pr in prompts), (
+            "mid-sentence normal return must trigger a continuation"
+        )
+        assert "pooling stages with worked examples" in result
+
+    def test_reduce_empty_normal_return_retries(self) -> None:
+        """A normal return with no content at all gets one clean regeneration."""
+        calls: list[tuple[float, str]] = []
+
+        class _EmptyProvider(_SequenceProvider):
+            def stream_chat(
+                self, messages, on_chunk, temperature=0.7, max_tokens=4096
+            ) -> str:
+                return ""
+
+            def generate(self, prompt, temperature=0.7, max_tokens=4096) -> str:
+                calls.append((temperature, prompt))
+                return "A complete regenerated overview of the chapter section."
+
+        provider = _EmptyProvider()
+        p = self._make_pipeline(provider)
+        p._config.streaming_enabled = True
+        p._on_chunk = lambda _c, _r: None
+        chunks = [self._chunk("Source text for the section. " * 10)]
+        result = p._generate_single_chapter_summary(chunks, 18, "CNNs")
+        assert len(calls) == 1, "empty normal return must fire exactly one retry"
+        assert calls[0][0] == 0.1, "empty-return retry runs at the low temperature"
+        assert "regenerated overview" in result
+
+    def test_map_digest_failure_skips_window(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A window whose digest fails is skipped without killing the overview."""
+        # Forces the map-reduce fallback: the default single-pass path would
+        # summarize this small source in one call (see test_single_pass_*).
+        monkeypatch.setattr(
+            "secondbrain.rag.pipeline._mixins._SINGLE_PASS_MAX_CHARS", 10
+        )
+        stream_prompts: list[str] = []
+
+        class _FlakyDigestProvider(_SequenceProvider):
+            def stream_chat(
+                self, messages, on_chunk, temperature=0.7, max_tokens=4096
+            ) -> str:
+                prompt = messages[0]["content"]
+                stream_prompts.append(prompt)
+                if "internal digest" in prompt:
+                    if "Part 1 of 2" in prompt:
+                        raise RuntimeError("digest stream dropped")
+                    text = (
+                        "Digest prose about convolutional layers and pooling examples."
+                    )
+                else:
+                    text = "The overview weaves the digest material into one narrative."
+                for i in range(0, len(text), 12):
+                    on_chunk(text[i : i + 12], None)
+                return text
+
+            def generate(self, prompt, temperature=0.7, max_tokens=4096) -> str:
+                self.calls.append({"prompt": prompt, "temperature": temperature})
+                return "garbage garbage garbage garbage garbage garbage garbage"
+
+        provider = _FlakyDigestProvider()
+        p = self._make_pipeline(provider)
+        p._config.streaming_enabled = True
+        p._on_chunk = lambda _c, _r: None
+        chunks = [self._chunk("A" * 4000), self._chunk("B" * 4000)]
+        result = p._generate_single_chapter_summary(chunks, 18, "CNNs")
+        assert "The overview weaves" in result
+        reduce_prompts = [pr for pr in stream_prompts if "terse digests" in pr]
+        assert len(reduce_prompts) == 1
+        assert reduce_prompts[0].count("--- Part") == 1, (
+            "failed digest is skipped, not stubbed"
+        )
+        assert "Digest prose" in reduce_prompts[0]
+
+    def test_single_pass_uses_one_call_over_full_source(self) -> None:
+        """A chapter fitting the context budget is summarized in ONE call."""
+        prompts: list[str] = []
+
+        class _SinglePassProvider(_SequenceProvider):
+            def stream_chat(
+                self, messages, on_chunk, temperature=0.7, max_tokens=4096
+            ) -> str:
+                prompt = messages[0]["content"]
+                prompts.append(prompt)
+                text = (
+                    "The overview covers convolution layers first and then "
+                    "pooling, written as one coherent piece of prose here."
+                )
+                for i in range(0, len(text), 8):
+                    on_chunk(text[i : i + 8], None)
+                return text
+
+        provider = _SinglePassProvider()
+        p = self._make_pipeline(provider)
+        p._config.streaming_enabled = True
+        p._on_chunk = lambda _c, _r: None
+        chunks = [self._chunk("A" * 4000), self._chunk("B" * 4000)]
+        result = p._generate_single_chapter_summary(chunks, 18, "CNNs")
+        assert len(prompts) == 1, "single-pass must not stage digest calls"
+        assert "A" * 50 in prompts[0] and "B" * 50 in prompts[0], (
+            "the full source reaches the one call"
+        )
+        assert "--- Part" not in prompts[0]
+        assert "internal digest" not in prompts[0]
+        assert "The overview covers convolution layers" in result
+
+    def test_hierarchically_condenses_large_digest_sets(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Digests over the hierarchy threshold are group-condensed pre-reduce."""
+        # Forces the map-reduce fallback: the default single-pass path would
+        # summarize this small source in one call (see test_single_pass_*).
+        monkeypatch.setattr(
+            "secondbrain.rag.pipeline._mixins._SINGLE_PASS_MAX_CHARS", 10
+        )
+        stream_prompts: list[str] = []
+        group_prompts: list[str] = []
+
+        class _HierarchyProvider(_SequenceProvider):
+            def generate(self, prompt, temperature=0.7, max_tokens=4096) -> str:
+                self.calls.append({"prompt": prompt, "temperature": temperature})
+                if "condensing intermediate digests" in prompt:
+                    group_prompts.append(prompt)
+                    return (
+                        "Merged digest of several parts covering convolution, "
+                        "pooling, and regularization in varied prose form."
+                    )
+                return "garbage garbage garbage garbage garbage garbage garbage"
+
+            def stream_chat(
+                self, messages, on_chunk, temperature=0.7, max_tokens=4096
+            ) -> str:
+                prompt = messages[0]["content"]
+                stream_prompts.append(prompt)
+                if "internal digest" in prompt:
+                    text = (
+                        "Digest prose about convolutional layers and pooling "
+                        "examples from this part of the chapter."
+                    )
+                else:
+                    text = (
+                        "The overview weaves the group digests into one "
+                        "coherent narrative about the chapter's methods."
+                    )
+                for i in range(0, len(text), 12):
+                    on_chunk(text[i : i + 12], None)
+                return text
+
+        provider = _HierarchyProvider()
+        p = self._make_pipeline(provider)
+        p._config.streaming_enabled = True
+        p._on_chunk = lambda _c, _r: None
+        chunks = [self._chunk(f"source part {i} " + "x" * 3200) for i in range(13)]
+        result = p._generate_single_chapter_summary(chunks, 18, "CNNs")
+        # 13 digests -> ceil(13/8)=2 balanced groups (7+6), then one reduce.
+        assert len(group_prompts) == 2
+        reduce_prompt = [pr for pr in stream_prompts if "terse digests" in pr][-1]
+        assert reduce_prompt.count("--- Part") == 2
+        assert reduce_prompt.count("Merged digest of several parts") == 2
+        assert "Part 13 of 13" not in reduce_prompt
+        assert "The overview weaves the group digests" in result
+
+    def test_finalize_overview_enforces_word_budget(self) -> None:
+        """An overlong overview is cut at a sentence boundary; a normal one passes."""
+        p = self._make_pipeline(_SequenceProvider([]))
+        over = "Sentence one stands. " + (
+            "More varied detail follows here. " * (_OVERVIEW_MAX_WORDS // 5 + 10)
+        )
+        result = p._finalize_overview(over, "")
+        assert len(result.split()) <= _OVERVIEW_MAX_WORDS
+        assert result.endswith(".")
+        assert result.startswith("Sentence one stands.")
+        typical = "Sentence one stands. " + ("More varied detail follows here. " * 170)
+        assert p._finalize_overview(typical, "") == typical.rstrip()
+        under = "Short varied overview with adequate length to pass checks."
+        assert p._finalize_overview(under, "") == under
+
+    def test_prompts_have_no_numeric_length_bounds(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Length is bounded deterministically; prompts carry no word counts."""
+        prompts: list[str] = []
+
+        class _RecordingProvider(_SequenceProvider):
+            def stream_chat(
+                self, messages, on_chunk, temperature=0.7, max_tokens=4096
+            ) -> str:
+                prompts.append(messages[0]["content"])
+                text = (
+                    "A final plausible overview with adequate length to pass "
+                    "the plausibility checks of the pipeline."
+                )
+                for i in range(0, len(text), 8):
+                    on_chunk(text[i : i + 8], None)
+                return text
+
+        p = self._make_pipeline(_RecordingProvider())
+        p._config.streaming_enabled = True
+        p._on_chunk = lambda _c, _r: None
+        p._generate_single_chapter_summary(
+            [self._chunk("Chapter body text. " * 30)], 18, "CNNs"
+        )
+        assert "six to ten short paragraphs" in prompts[0]
+        assert "250-300" not in prompts[0]
+        assert "100 words" not in prompts[0]
+
+        # Forces the map-reduce fallback: the default single-pass path would
+        # summarize this small source in one call (see test_single_pass_*).
+        monkeypatch.setattr(
+            "secondbrain.rag.pipeline._mixins._SINGLE_PASS_MAX_CHARS", 10
+        )
+        prompts.clear()
+        p2 = self._make_pipeline(_RecordingProvider())
+        p2._config.streaming_enabled = True
+        p2._on_chunk = lambda _c, _r: None
+        p2._generate_single_chapter_summary(
+            [self._chunk("A" * 4000), self._chunk("B" * 4000)], 18, "CNNs"
+        )
+        digest_prompts = [pr for pr in prompts if "internal digest" in pr]
+        assert digest_prompts, "fallback path still issues digest calls"
+        assert all("100 words" not in pr for pr in digest_prompts)
+
+    def test_split_bounded_aligns_windows_to_sentence_ends(self) -> None:
+        """A window whose source ends mid-sentence carries the fragment forward."""
+        p = self._make_pipeline(_SequenceProvider([]))
+        first = "First sentence here. " * 8 + "Truncated tail with no end"
+        second = " and it continues. Second chunk prose follows. More text."
+        chunks = [
+            {**self._chunk(first), "page": 1},
+            {**self._chunk(second), "page": 1},
+        ]
+        windows = p._split_bounded(chunks, max_chars=len(first) + 10)
+        assert len(windows) == 2
+        assert windows[0][-1]["chunk_text"].endswith("First sentence here.")
+        assert "Truncated tail with no" not in windows[0][-1]["chunk_text"]
+        assert windows[1][0]["chunk_text"].startswith(
+            "Truncated tail with no end and it continues."
+        )
+        # The original chunk payloads are never mutated.
+        assert chunks[0]["chunk_text"] == first
+
+    def test_split_bounded_keeps_terminal_free_chunks(self) -> None:
+        """Terminal-free trailing chunks keep hard boundaries (no merge cascade)."""
+        p = self._make_pipeline(_SequenceProvider([]))
+        chunks = [self._chunk("A" * 900), self._chunk("B" * 900)]
+        windows = p._split_bounded(chunks, max_chars=1000)
+        assert len(windows) == 2
+        assert windows[0][0]["chunk_text"] == "A" * 900
+
+    def test_strip_numeric_self_correction_keeps_corrected_value(self) -> None:
+        """Leaked "<candidate>? No--" artifacts are removed, keeping the figure."""
+        cleaned = _strip_numeric_self_correction(
+            "a test accuracy of 48? No--45.78 percent vs 72? No, 76.71 percent"
+        )
+        assert "48? No--" not in cleaned
+        assert "72? No," not in cleaned
+        assert "45.78 percent" in cleaned
+        assert "76.71 percent" in cleaned
+
+    def test_strip_numeric_self_correction_leaves_clean_prose(self) -> None:
+        """Clean prose with no self-correction artifact is left unchanged."""
+        clean = "Validation accuracy reached 97.96 percent after 10 epochs."
+        assert _strip_numeric_self_correction(clean) == clean
+
+    def test_split_bounded_orders_windows_by_page(self) -> None:
+        """Windows follow numerical page order even when fed scrambled chunks."""
+        p = self._make_pipeline(_SequenceProvider([]))
+        pages = [5, 1, 4, 2, 3]
+        chunks = [
+            {**self._chunk(str(i) * 900), "page": pg} for i, pg in enumerate(pages)
+        ]
+        # Five ~900-char chunks with a 2000-char budget force multiple windows.
+        windows = p._split_bounded(chunks, max_chars=2000)
+        flat_pages = [int(c.get("page") or 0) for win in windows for c in win]
+        assert len(windows) >= 2
+        assert flat_pages == [1, 2, 3, 4, 5]
+
+    def test_section_label_detected_when_header_is_mid_chunk(self) -> None:
+        """A section header deep in a chunk (past the old 120-char window) is found."""
+        p = self._make_pipeline(_SequenceProvider([]))
+        text = (
+            "Sentence padding repeats. " * 30
+            + "\n18.4 Advanced Convolutional Architectures\nContent."
+        )
+        assert p._detect_section_label(text, 18) == "18.4"
+
+    def test_section_label_ignores_figure_and_table_references(self) -> None:
+        """Figure/Table/Equation/Listing "18.N" references do not fabricate sections."""
+        p = self._make_pipeline(_SequenceProvider([]))
+        for text in [
+            "Figure 18.9 shows the accuracy reached 97.89 percent after 22 epochs.",
+            "See Table 18.2 for the parameter counts.",
+            "Equation 18.3 defines the convolution operation.",
+            "Listing 18.7 builds the model.",
+            # A wrapped figure reference lands "18.2" at a line start — still not a header.
+            "In the example depicted in Figure \r\n18.2, the layer receives input.",
+            "Figure\n18.5 presents the results on a new line.",
+        ]:
+            assert p._detect_section_label(text, 18) is None, text
+        # A genuine line-start header is still detected.
+        assert (
+            p._detect_section_label("\n18.4 Advanced Convolutional Architectures\n", 18)
+            == "18.4"
+        )
+
+    def test_leading_section_chapter_detects_heading_owner(self) -> None:
+        """The chapter owning a numbered section heading is detected generically."""
+        p = self._make_pipeline(_SequenceProvider([]))
+        assert p._leading_section_chapter("19.1 Recurrent Networks\ncontent") == "19"
+        assert p._leading_section_chapter("\n18.4 CNN Architectures\ncontent") == "18"
+        # A wrapped figure reference is a caption, not a section heading.
+        assert p._leading_section_chapter("Figure\n18.2 presents the result") is None
+        # A plain body paragraph has no owning section.
+        assert p._leading_section_chapter("Just a paragraph about pooling.") is None
+
+    def test_filter_chunks_to_chapter_drops_foreign_sections(self) -> None:
+        """Chunks with a section heading from another chapter are removed."""
+        p = self._make_pipeline(_SequenceProvider([]))
+        chunks = [
+            self._chunk("18.1 Convolutional layers are weight shared.\ncontent"),
+            self._chunk("A body paragraph with no section heading, still chapter 18."),
+            self._chunk("19.1 Recurrent networks keep hidden state.\nRNN content"),
+        ]
+        kept = p._filter_chunks_to_chapter(chunks, "18", foreign_titles=[])
+        assert len(kept) == 2
+        assert "19.1" not in kept[0]["chunk_text"] + kept[1]["chunk_text"]
+        assert "weight shared" in " ".join(c["chunk_text"] for c in kept)
+
+    def test_filter_chunks_to_chapter_keeps_target_and_body(self) -> None:
+        """Target-chapter sections and chapterless body paragraphs survive."""
+        p = self._make_pipeline(_SequenceProvider([]))
+        chunks = [
+            self._chunk("18.2 Pooling reduces feature map size.\ncontent"),
+            self._chunk("Some prose about transfer learning."),
+        ]
+        kept = p._filter_chunks_to_chapter(chunks, 18, foreign_titles=[])
+        assert [c["chunk_text"] for c in kept] == [c["chunk_text"] for c in chunks]
+
+    def test_filter_chunks_to_chapter_drops_foreign_title_opening(self) -> None:
+        """A chunk opening with another chapter's title is dropped."""
+        p = self._make_pipeline(_SequenceProvider([]))
+        chunks = [
+            self._chunk("RNNs for Multivariate Time Series\ncontent leaked in."),
+            self._chunk("18.1 CNNs are weight shared.\ncontent"),
+        ]
+        kept = p._filter_chunks_to_chapter(
+            chunks, 18, foreign_titles=["RNNs for Multivariate Time Series"]
+        )
+        assert len(kept) == 1
+        assert "CNNs are weight shared" in kept[0]["chunk_text"]
+
+    def test_filter_chunks_to_chapter_keeps_foreign_title_cross_reference(self) -> None:
+        """A mid-text cross-reference to another chapter is not treated as leakage."""
+        p = self._make_pipeline(_SequenceProvider([]))
+        chunks = [
+            self._chunk(
+                "The CNN approach builds on the material in "
+                "RNNs for Multivariate Time Series, discussed later."
+            )
+        ]
+        kept = p._filter_chunks_to_chapter(
+            chunks, 18, foreign_titles=["RNNs for Multivariate Time Series"]
+        )
+        assert len(kept) == 1
+
+    def test_detect_chapter_openings_finds_magazine_style_headers(self) -> None:
+        """Bare-number magazine chapter openings (marker + number + title) are found."""
+        p = self._make_pipeline(_SequenceProvider([]))
+        chunks = [
+            {
+                "page_number": 30,
+                "chunk_text": "[ 2 ]\r\n1\r\nMachine Learning for Trading\r\ncontent",
+            },
+            {
+                "page_number": 620,
+                "chunk_text": "[ 591 ]\r\n19\r\nRNNs for Multivariate Time Series and Sentiment Analysis\r\ncontent",
+            },
+            {
+                "page_number": 50,
+                "chunk_text": "Regular body paragraph with no chapter opening.",
+            },
+        ]
+        starts = p._detect_chapter_openings(chunks)
+        assert starts.get(1) == 30
+        assert starts.get(19) == 620
+        assert 50 not in starts.values()
+
+    def test_detect_chapter_openings_ignores_toc_and_front_matter(self) -> None:
+        """TOC / front-matter entries (low page, dot leader, page suffix) are ignored."""
+        p = self._make_pipeline(_SequenceProvider([]))
+        chunks = [
+            {
+                "page_number": 12,
+                "chunk_text": "3\r\nUnivariate time-series models 265\r\n...",
+            },
+            {
+                "page_number": 30,
+                "chunk_text": "5\r\nPortfolio Optimization ....... 223\r\n...",
+            },
+            {
+                "page_number": 60,
+                "chunk_text": "26\r\nHow a backtesting engine works 227\r\n...",
+            },
+        ]
+        starts = p._detect_chapter_openings(chunks)
+        assert starts == {}
+
+    def test_heading_title_anchors_match_labeled_docling_openers(self) -> None:
+        """Chapter titles carried as heading chunks anchor real opener pages.
+
+        Labeled docling output drops the "Chapter N" banner text, so the
+        title-only heading chunk is the only opener signal.
+        """
+        p = self._make_pipeline(_SequenceProvider([]))
+        src = "/books/ml4t.pdf"
+        chapters = [
+            (6, src, "The Machine Learning Process 147 How ma"),
+            (23, src, "Conclusions and Next Steps"),
+        ]
+        headings = [
+            {"chunk_text": "The Machine Learning Process", "page_number": 176},
+            {"chunk_text": "Conclusions and Next Steps", "page_number": 742},
+        ]
+        assert p._heading_title_anchors(chapters, src, headings) == {
+            6: 176,
+            23: 742,
+        }
+
+    def test_heading_title_anchors_cuts_embedded_toc_page_number(self) -> None:
+        """A ToC-captured title ("Title 21 Next section text") reduces to "Title"."""
+        p = self._make_pipeline(_SequenceProvider([]))
+        src = "/books/x.pdf"
+        chapters = [
+            (
+                2,
+                src,
+                "Market and Fundamental Data - Sources and Techniques 21 Market data reflects",
+            ),
+        ]
+        headings = [
+            {
+                "chunk_text": "Market and Fundamental Data - Sources and Techniques",
+                "page_number": 51,
+            },
+        ]
+        assert p._heading_title_anchors(chapters, src, headings) == {2: 51}
+
+    def test_heading_title_anchors_ignores_front_matter_and_foreign_sources(
+        self,
+    ) -> None:
+        """Pages < 10 never anchor; other sources' chapters are skipped."""
+        p = self._make_pipeline(_SequenceProvider([]))
+        src = "/books/x.pdf"
+        chapters = [
+            (6, src, "The Machine Learning Process"),
+            (1, "/books/other.pdf", "Another Book Title"),
+        ]
+        headings = [
+            {"chunk_text": "The Machine Learning Process", "page_number": 9},
+            {"chunk_text": "The Machine Learning Process", "page_number": 176},
+            {"chunk_text": "Another Book Title", "page_number": 60},
+        ]
+        assert p._heading_title_anchors(chapters, src, headings) == {6: 176}
+
+    def test_heading_title_anchors_no_match_returns_empty(self) -> None:
+        """Chapters without a heading-title match stay absent from the map."""
+        p = self._make_pipeline(_SequenceProvider([]))
+        chapters = [(6, "/books/x.pdf", "No Such Title Here")]
+        headings = [{"chunk_text": "Unrelated Heading", "page_number": 30}]
+        assert p._heading_title_anchors(chapters, "/books/x.pdf", headings) == {}
+
+    def test_heading_title_anchors_refuses_blocked_description_pages(self) -> None:
+        """Listing-page headings never anchor; the real opener does.
+
+        Two listing shapes are refused: a ToC-entry heading carrying a
+        trailing page reference ("Title 295") is skipped outright, and a
+        bare listing title on a blocked front-matter description page is
+        passed over in favor of the real opener heading.
+        """
+        p = self._make_pipeline(_SequenceProvider([]))
+        src = "/books/x.pdf"
+        chapters = [(18, src, "Privacy, Accountability, Explainability")]
+        headings = [
+            {
+                "chunk_text": "Privacy, Accountability, Explainability 295",
+                "page_number": 14,
+            },
+            {
+                "chunk_text": "Privacy, Accountability, Explainability",
+                "page_number": 20,
+            },
+            {
+                "chunk_text": "Privacy, Accountability, Explainability",
+                "page_number": 318,
+            },
+        ]
+        # The trailing page reference ("Title 295") is skipped as a ToC
+        # artifact; the bare listing title at page 20 is a valid earliest
+        # match until its page is blocked, which pushes the anchor to the
+        # real opener.
+        assert p._heading_title_anchors(chapters, src, headings) == {18: 20}
+        assert p._heading_title_anchors(
+            chapters, src, headings, blocked_pages={18: 20}
+        ) == {18: 318}
+
+    def test_heading_title_anchors_refuses_front_matter_below_desc_region(
+        self,
+    ) -> None:
+        """Part-divider ToC pages never anchor when desc pages mark front matter.
+
+        Packt-style part dividers repeat chapter titles as headings inside the
+        ToC (page 10 here); the "What this book covers" region (page 15+) sits
+        after the ToC, so everything below its first page is refused and the
+        anchor lands on the real opener.
+        """
+        p = self._make_pipeline(_SequenceProvider([]))
+        src = "/books/x.pdf"
+        chapters = [(5, src, "Exploring Azure AI Vision Solutions")]
+        headings = [
+            {"chunk_text": "Exploring Azure AI Vision Solutions", "page_number": 10},
+            {"chunk_text": "Exploring Azure AI Vision Solutions", "page_number": 118},
+        ]
+        assert p._heading_title_anchors(chapters, src, headings) == {5: 10}
+        assert p._heading_title_anchors(
+            chapters, src, headings, blocked_pages={5: 15}
+        ) == {5: 118}
+
+    def test_derive_chapter_numbers_rescues_crossref_title_from_desc_sentence(
+        self,
+    ) -> None:
+        """A preface cross-reference capture is replaced by the desc title.
+
+        "(covered in Chapter 10). My goal is …" makes the roster capture
+        "). My goal is …" — punctuation-led garbage.  The verb-gated
+        description sentence carries the real title, which is swapped in.
+        """
+        p = self._make_pipeline(_SequenceProvider([]))
+        src = "/books/x.pdf"
+        chunks = [
+            {
+                "chunk_text": (
+                    "Many readers pick this up after Chapter 10). My goal is "
+                    "for you to walk away with both confidence and practical "
+                    "skills that open doors."
+                ),
+                "source_file": src,
+                "page_number": 14,
+                "chunk_role": "body",
+            },
+            {
+                "chunk_text": (
+                    "Chapter 10 , Practical AI Implementation: Industry Use "
+                    "Cases , walks you through real-world projects and "
+                    "hands-on patterns."
+                ),
+                "source_file": src,
+                "page_number": 16,
+                "chunk_role": "body",
+            },
+        ]
+        entries, good_nums, _appendix = p._derive_chapter_numbers(chunks)
+        ch10 = [t for n, s, t in entries if n == 10 and s == src]
+        assert ch10 == ["Practical AI Implementation: Industry Use Cases"]
+        assert 10 in good_nums
+
+    def test_single_large_chunk_is_not_skipped(self) -> None:
+        """A very long single chunk is still summarized, never dropped."""
+        by_key = {
+            "chapter 18": "A complete summary even for a large chunk, long enough to pass.",
+        }
+        provider = _SequenceProvider(by_key=by_key)
+        p = self._make_pipeline(provider)
+        chunks = [self._chunk("Padding content. " * 400)]
+        result = p._generate_single_chapter_summary(chunks, 18, "CNNs")
+        assert "A complete summary" in result
+
+    def test_multi_chapter_processes_more_than_old_window_cap(self) -> None:
+        """A book with 12 chapters is summarized in full, not truncated at 8."""
+        by_key = {
+            f"Chapter {n} — Title {n}": f"Full summary for chapter number {n} with enough detail to pass."
+            for n in range(1, 13)
+        }
+        provider = _SequenceProvider(by_key=by_key)
+        p = self._make_pipeline(provider)
+        buckets = {n: [self._chunk(f"chapter {n} body text")] for n in range(1, 13)}
+        result = p._generate_multi_chapter_summary(
+            list(range(1, 13)), buckets, {n: f"Title {n}" for n in range(1, 13)}
+        )
+        # Every chapter 1..12 is present (regression: previously capped at 8).
+        for n in range(1, 13):
+            assert f"Chapter {n}" in result
+            assert f"Full summary for chapter number {n}" in result
+        assert len(provider.calls) == 12
+
+
+class _RecordingProvider:
+    """Minimal provider that records the prompt and returns a fixed answer."""
+
+    def __init__(self, answer: str) -> None:
+        self._answer = answer
+        self.last_prompt = ""
+
+    def generate(
+        self, prompt: str, temperature: float = 0.7, max_tokens: int = 4096
+    ) -> str:
+        self.last_prompt = prompt
+        return self._answer
+
+
+class TestGenericOneShotGrounding:
+    """Fail-closed figure vetting in the chat chapter-summary one-shot path."""
+
+    def _make_pipeline(self, provider: _RecordingProvider) -> RAGPipeline:
+        searcher = MagicMock(spec=Searcher)
+        searcher.search.return_value = [
+            {
+                "chunk_text": (
+                    "DenseNet201 achieves 77.29% top-1 accuracy on ImageNet "
+                    "with 700 layers."
+                ),
+                "source_file": "t.pdf",
+                "page": 1,
+            }
+        ]
+        return RAGPipeline(
+            searcher=searcher,
+            llm_provider=provider,  # type: ignore
+            top_k=5,
+            context_window=5,
+        )
+
+    def test_grounds_fabricated_figures(self) -> None:
+        """A figure not present in the retrieved source is dropped from the answer."""
+        provider = _RecordingProvider(
+            "The model reaches 77.29% accuracy and 99.99% on internal tests."
+        )
+        p = self._make_pipeline(provider)
+        result = p._generic_one_shot(
+            "Summarize chapter 18", top_k=5, show_sources=False
+        )
+        assert "77.29" in result["answer"], "source-present figure must survive"
+        assert "99.99" not in result["answer"], "fabricated figure must be removed"
+
+    def test_summary_intent_reinforces_exact_quoting_in_prompt(self) -> None:
+        """Chapter/section summaries get the exact-quote instruction injected."""
+        provider = _RecordingProvider("A grounded answer about the chapter.")
+        p = self._make_pipeline(provider)
+        p._generic_one_shot("Summarize chapter 18", top_k=5, show_sources=False)
+        assert "Quote figures" in provider.last_prompt
+        assert "function arguments" in provider.last_prompt
+
+    def test_regenerates_when_answer_leaks_self_correction(self) -> None:
+        """A mid-prose '...? Actually, ...' leak triggers a clean low-temp retry."""
+        leaky = (
+            "over windows 15 to 30? Actually, the model reaches 77.29 percent. "
+            "This is a confident claim about the source."
+        )
+        clean = (
+            "The DenseNet model reaches 77.29 percent accuracy, well below "
+            "expectations in this regime."
+        )
+        calls: list[tuple[float, str]] = []
+
+        class _Seq(_RecordingProvider):
+            def generate(
+                self, prompt: str, temperature: float = 0.7, max_tokens: int = 4096
+            ) -> str:
+                self.last_prompt = prompt
+                calls.append((temperature, prompt))
+                return leaky if len(calls) == 1 else clean
+
+        p = self._make_pipeline(_Seq(clean))
+        result = p._generic_one_shot(
+            "Summarize chapter 18", top_k=5, show_sources=False
+        )
+
+        assert len(calls) == 2, "leaky first pass should trigger a regeneration"
+        assert calls[1][0] == 0.1, "retry runs at the low guarded temperature"
+        assert "Actually," not in result["answer"], "leak scaffolding must be gone"
+        assert "77.29" in result["answer"], "clean retry figure must survive grounding"
+
+    def test_regenerates_when_stuck_fallback_returns(self) -> None:
+        """A provider stuck-reasoning fallback (no content) gets a clean retry."""
+        fallback = (
+            "I got stuck in repetitive reasoning and could not "
+            "produce an answer. Please rephrase or narrow your question."
+        )
+        clean = "The DenseNet model reaches 77.29 percent accuracy on the benchmark."
+        calls: list[tuple[float, str]] = []
+
+        class _Seq(_RecordingProvider):
+            def generate(
+                self, prompt: str, temperature: float = 0.7, max_tokens: int = 4096
+            ) -> str:
+                self.last_prompt = prompt
+                calls.append((temperature, prompt))
+                return fallback if len(calls) == 1 else clean
+
+        p = self._make_pipeline(_Seq(clean))
+        result = p._generic_one_shot(
+            "Summarize chapter 18", top_k=5, show_sources=False
+        )
+
+        assert len(calls) == 2, "stuck fallback should trigger a regeneration"
+        assert calls[1][0] == 0.1, "retry runs at the low guarded temperature"
+        assert "I got stuck" not in result["answer"], "dead-end fallback must not ship"
+        assert "77.29" in result["answer"], "clean retry figure must survive grounding"
+
+    def test_summary_path_is_non_streaming(self) -> None:
+        """Chapter summaries generate non-streaming and emit the vetted result once."""
+        provider = _DualProvider("A grounded summary with 77.29 percent accuracy.")
+        p = self._make_pipeline(provider)
+        p._config.streaming_enabled = True
+        emitted: list[str] = []
+        p._on_chunk = lambda content, reason: emitted.append(content or "")
+        result = p._generic_one_shot(
+            "Summarize chapter 18", top_k=5, show_sources=False
+        )
+
+        assert provider.stream_chat_called is False, "summary must NOT live-stream raw"
+        assert emitted == [result["answer"]], (
+            "vetted answer emitted once, not the draft"
+        )
+        assert "77.29" in result["answer"]
+
+    def test_non_summary_path_streams(self) -> None:
+        """Non-summary queries keep live streaming."""
+        provider = _DualProvider("a" * 60)
+        p = self._make_pipeline(provider)
+        p._config.streaming_enabled = True
+        p._on_chunk = lambda content, reason: None
+        p._generic_one_shot("What is a hyperparameter?", top_k=5, show_sources=False)
+
+        assert provider.stream_chat_called is True, "non-summary should live-stream"
+
+
+class _DualProvider(_RecordingProvider):
+    """Records whether live streaming (stream_chat) is invoked vs plain generate."""
+
+    def __init__(self, answer: str) -> None:
+        super().__init__(answer)
+        self.stream_chat_called = False
+
+    def stream_chat(
+        self,
+        messages: Sequence[dict[str, str]],
+        on_chunk: Callable[[str, Any | None], None],
+        temperature: float = 0.7,
+        max_tokens: int = 4096,
+    ) -> str:
+        self.stream_chat_called = True
+        return ""
+
+
+class TestPinFitsWindow:
+    """Static checks of the open-interval monotonic-window pin guard."""
+
+    def test_empty_map_accepts_any_page(self) -> None:
+        assert RAGPipeline._pin_fits_window({}, 1, 5) is True
+
+    def test_lower_neighbor_requires_strictly_higher_pin(self) -> None:
+        first_pg = {1: 20}
+        assert RAGPipeline._pin_fits_window(first_pg, 2, 21) is True
+        assert RAGPipeline._pin_fits_window(first_pg, 2, 20) is False
+
+    def test_upper_neighbor_requires_strictly_lower_pin(self) -> None:
+        first_pg = {3: 60}
+        assert RAGPipeline._pin_fits_window(first_pg, 2, 59) is True
+        assert RAGPipeline._pin_fits_window(first_pg, 2, 60) is False
+
+    def test_gap_neighbors_reject_boundary_equality(self) -> None:
+        first_pg = {1: 20, 5: 60}
+        assert RAGPipeline._pin_fits_window(first_pg, 3, 40) is True
+        assert RAGPipeline._pin_fits_window(first_pg, 3, 20) is False
+        assert RAGPipeline._pin_fits_window(first_pg, 3, 60) is False
+        assert RAGPipeline._pin_fits_window(first_pg, 3, 10) is False
+        assert RAGPipeline._pin_fits_window(first_pg, 3, 75) is False
+
+
+class TestChapterPinWindowResolution:
+    """Pin-resolution fixtures for the _iterative_query chapter anchoring.
+
+    Heading-title anchors are applied before the body-title scan and cannot
+    be overridden by it; every pin must then satisfy its open-interval
+    monotonic window (strictly above the prior chapter's pin and strictly
+    below the next one), and the highest-numbered violating pin is popped
+    once per scan until the map reaches a fixed point.  The scripted
+    provider returns no usable chapter summaries, so the answer falls back
+    to the chapter roster, whose "approx pages N+" lines double as pin
+    assertions.
+    """
+
+    SRC = "book.pdf"
+    QUERY = "give an overview of the whole document by chapters"
+
+    @staticmethod
+    def _toc(chapters: list[tuple[int, str]]) -> list[dict[str, Any]]:
+        """Structure-probe chunks: one "Chapter N Title" line per chapter."""
+        return [
+            {
+                "chunk_text": f"Chapter {num} {title}",
+                "chunk_role": "toc_entry",
+                "source_file": TestChapterPinWindowResolution.SRC,
+                "page": 20 + idx,
+            }
+            for idx, (num, title) in enumerate(chapters)
+        ]
+
+    @staticmethod
+    def _body(text: str, page: int) -> dict[str, Any]:
+        return {
+            "chunk_text": text,
+            "page_number": page,
+            "source_file": TestChapterPinWindowResolution.SRC,
+        }
+
+    @staticmethod
+    def _heading(text: str, page: int) -> dict[str, Any]:
+        return {
+            "chunk_text": text,
+            "page_number": page,
+            "chunk_role": "heading",
+            "source_file": TestChapterPinWindowResolution.SRC,
+        }
+
+    class _StubStorage:
+        """Storage double: ordered body chunks plus optional heading chunks."""
+
+        def __init__(
+            self,
+            body: list[dict[str, Any]],
+            headings: list[dict[str, Any]] | None = None,
+        ) -> None:
+            self._body = body
+            self._headings = headings or []
+
+        def get_body_chunks(
+            self,
+            source: str,
+            limit: int | None = None,
+            page_gte: int | None = None,
+        ) -> list[dict[str, Any]]:
+            chunks = [c for c in self._body if c.get("source_file") == source]
+            if page_gte is not None:
+                chunks = [c for c in chunks if (c.get("page_number") or 0) >= page_gte]
+            return chunks[:limit] if limit is not None else chunks
+
+        def find_structural_chunks(
+            self,
+            chunk_roles: list[str] | None = None,
+            source_prefix: str | None = None,
+        ) -> list[dict[str, Any]]:
+            return [
+                c
+                for c in self._headings
+                if (chunk_roles is None or c.get("chunk_role") in chunk_roles)
+                and (
+                    source_prefix is None
+                    or str(c.get("source_file", "")).startswith(source_prefix)
+                )
+            ]
+
+    def _make(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        toc: list[dict[str, Any]],
+        body: list[dict[str, Any]],
+        headings: list[dict[str, Any]] | None = None,
+    ) -> RAGPipeline:
+        from secondbrain.rag.intent_parser import IntentDecision, QueryIntent
+
+        searcher = _make_mock_searcher()
+        searcher.storage = self._StubStorage(body, headings)
+        pipeline = RAGPipeline(
+            searcher=searcher,
+            llm_provider=_SequenceProvider(by_key={"Chapter": ""}),  # type: ignore
+            top_k=5,
+            context_window=5,
+        )
+        pipeline._config.streaming_enabled = False
+        monkeypatch.setattr(
+            pipeline,
+            "_probe_document_structure",
+            lambda top_k, source_filter=None: toc,
+        )
+        monkeypatch.setattr(
+            pipeline._intent_parser,
+            "parse",
+            lambda q: IntentDecision(
+                intent=QueryIntent.BROAD_COVERAGE,
+                confidence=0.5,
+                target=None,
+                reason="test",
+                suggested_pipeline="structural",
+            ),
+        )
+        return pipeline
+
+    def _run(self, pipeline: RAGPipeline) -> str:
+        result = pipeline._iterative_query(
+            self.QUERY,
+            top_k=5,
+            show_sources=False,
+            source_filter=self.SRC,
+        )
+        return result["answer"]
+
+    def test_first_chapter_low_pin_survives(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        toc = self._toc(
+            [
+                (1, "Convolutions Foundational Ideas"),
+                (2, "Optimization Landscapes Explored"),
+            ]
+        )
+        body = [
+            self._body(
+                "1 Convolutions Foundational Ideas\n"
+                "prose tracing spatial kernel decompositions",
+                10,
+            ),
+            self._body(
+                "2 Optimization Landscapes Explored\n"
+                "prose mapping convexity regimes alongside",
+                78,
+            ),
+        ]
+        pipeline = self._make(monkeypatch, toc, body)
+        with caplog.at_level(logging.DEBUG, logger="secondbrain.rag.pipeline"):
+            answer = self._run(pipeline)
+        assert (
+            "Chapter 1 — Convolutions Foundational Ideas (approx pages 10+)" in answer
+        )
+        assert (
+            "Chapter 2 — Optimization Landscapes Explored (approx pages 78+)" in answer
+        )
+        assert "approx pages 20+" not in answer, "TOC pages must never pin"
+        assert "Rejected chapter" not in caplog.text
+
+    def test_heading_anchor_wins_over_earlier_body_title(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        toc = self._toc(
+            [
+                (4, "Fourth Passage Survey"),
+                (5, "Causal Inference Models"),
+                (6, "Gradual Regularization Approaches"),
+            ]
+        )
+        headings = [self._heading("Causal Inference Models", 100)]
+        body = [
+            self._body(
+                "4 Fourth Passage Survey\n"
+                "prose surveying predictable control corrections",
+                60,
+            ),
+            self._body(
+                "5 Causal Inference Models\nprose relating dose response adjustments",
+                12,
+            ),
+            self._body("prose expanding bench instrumentation baselines", 120),
+            self._body(
+                "6 Gradual Regularization Approaches\n"
+                "prose narrowing shrinkage penalties",
+                150,
+            ),
+        ]
+        pipeline = self._make(monkeypatch, toc, body, headings)
+        with caplog.at_level(logging.DEBUG, logger="secondbrain.rag.pipeline"):
+            answer = self._run(pipeline)
+        assert "Chapter 5 — Causal Inference Models (approx pages 100+)" in answer, (
+            "heading anchor at page 100 must win over the body title @12"
+        )
+        assert "approx pages 12+" not in answer, "body title @12 must not pin"
+        assert "Chapter 4 — Fourth Passage Survey (approx pages 60+)" in answer
+        assert (
+            "Chapter 6 — Gradual Regularization Approaches (approx pages 150+)"
+            in answer
+        )
+        assert "Rejected chapter" not in caplog.text
+
+    @pytest.mark.parametrize(
+        ("chapters", "raw_body", "reject_line", "pages", "banned"),
+        [
+            pytest.param(
+                [
+                    (10, "Instrumented Ensemble Suites"),
+                    (11, "Eleventh Model Pipelines"),
+                    (12, "Twelfth Deployment Cases"),
+                ],
+                [
+                    ("see 11 for worked examples and archived notes", 300),
+                    (
+                        "11 Eleventh Model Pipelines\nprose on parallel estimator runs",
+                        6,
+                    ),
+                    (
+                        "10 Instrumented Ensemble Suites\n"
+                        "prose stacking calibrated votes",
+                        276,
+                    ),
+                    (
+                        "12 Twelfth Deployment Cases\nprose streaming model registries",
+                        336,
+                    ),
+                ],
+                "Rejected chapter 11 pin @6",
+                [276, 300, 336],
+                [6],
+                id="sklearn",
+            ),
+            pytest.param(
+                [
+                    (10, "Subsystem Telemetry Suites"),
+                    (11, "Eleventh Compute Pipelines"),
+                    (12, "Twelfth Storage Cases"),
+                ],
+                [
+                    ("see 11 for worked examples and archived notes", 321),
+                    (
+                        "11 Eleventh Compute Pipelines\n"
+                        "prose relaying gateway payloads",
+                        4,
+                    ),
+                    (
+                        "10 Subsystem Telemetry Suites\nprose charting sensor uptimes",
+                        284,
+                    ),
+                    (
+                        "12 Twelfth Storage Cases\nprose archiving ledger snapshots",
+                        362,
+                    ),
+                ],
+                "Rejected chapter 11 pin @4",
+                [284, 321, 362],
+                [4],
+                id="iot",
+            ),
+        ],
+    )
+    def test_front_matter_pin_rejected_and_rescanned(
+        self,
+        chapters: list[tuple[int, str]],
+        raw_body: list[tuple[str, int]],
+        reject_line: str,
+        pages: list[int],
+        banned: list[int],
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        body = [self._body(text, page) for text, page in raw_body]
+        pipeline = self._make(monkeypatch, self._toc(chapters), body)
+        with caplog.at_level(logging.DEBUG, logger="secondbrain.rag.pipeline"):
+            answer = self._run(pipeline)
+        assert reject_line in caplog.text, caplog.text
+        for (num, title), page in zip(chapters, pages, strict=True):
+            assert f"Chapter {num} — {title} (approx pages {page}+)" in answer, answer
+        for bad in banned:
+            assert f"approx pages {bad}+" not in answer, (
+                "front-matter pin must not ship"
+            )
+
+    def test_heading_anchor_below_prior_chapter_rejected(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        toc = self._toc(
+            [
+                (9, "Reinforcement Training Loops"),
+                (10, "Streaming Telemetry Insights"),
+            ]
+        )
+        headings = [self._heading("Streaming Telemetry Insights", 159)]
+        body = [
+            self._body(
+                "9 Reinforcement Training Loops\nprose tuning rollout rewards",
+                248,
+            ),
+            self._body("prose buffering stream windows between phases", 250),
+        ]
+        pipeline = self._make(monkeypatch, toc, body, headings)
+        with caplog.at_level(logging.DEBUG, logger="secondbrain.rag.pipeline"):
+            answer = self._run(pipeline)
+        assert "Rejected chapter 10 pin @159" in caplog.text
+        assert "Chapter 9 — Reinforcement Training Loops (approx pages 248+)" in answer
+        assert (
+            "Chapter 10 — Streaming Telemetry Insights (approx pages 249+)" in answer
+        ), "spacing fallback must repopulate chapter 10 after the rejection"
+        assert "approx pages 159+" not in answer
+
+    def test_cascading_rejection_falls_back_to_spacing(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        toc = self._toc(
+            [
+                (1, "Foundational Signal Concepts"),
+                (2, "Metrics Ordering Systems"),
+            ]
+        )
+        padding = "archival note annealed spectra passage " * 5
+        body = [
+            self._body(
+                "1 Foundational Signal Concepts\nprose deriving wavelet bases",
+                90,
+            ),
+            self._body(
+                padding + "\n2 Metrics Ordering Systems\nprose ranking delayed",
+                40,
+            ),
+            self._body("prose pacing coherence schedules onward", 95),
+        ]
+        pipeline = self._make(monkeypatch, toc, body)
+        with caplog.at_level(logging.DEBUG, logger="secondbrain.rag.pipeline"):
+            answer = self._run(pipeline)
+        assert "Rejected chapter 2 pin @40" in caplog.text
+        assert (
+            "Chapter 1 — Foundational Signal Concepts (approx pages 90+)" in answer
+        ), "first-chapter pin has no lower neighbor and must survive"
+        assert "Chapter 2 — Metrics Ordering Systems (approx pages 91+)" in answer, (
+            "spacing fallback must repopulate chapter 2 after the rejection"
+        )
+        assert "approx pages 40+" not in answer
+
+    def _capture(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        pipeline: RAGPipeline,
+    ) -> dict[str, Any]:
+        """Record the chapter keys and bucket pages handed to the summarizer.
+
+        The spy returns "" so the chapter roster fallback renders the answer,
+        whose "approx pages N+" lines double as pin-page assertions.
+        """
+        captured: dict[str, Any] = {}
+
+        def _spy(
+            chapter_keys: list[int],
+            chapter_buckets: dict[int, list[dict[str, Any]]],
+            _ch_titles: dict[int, str],
+        ) -> str:
+            captured["keys"] = list(chapter_keys)
+            captured["pages"] = {
+                ch: [int(c.get("page_number") or 0) for c in chapter_buckets[ch]]
+                for ch in chapter_keys
+            }
+            return ""
+
+        monkeypatch.setattr(pipeline, "_generate_multi_chapter_summary", _spy)
+        return captured
+
+    def test_late_scan_pin_respects_monotonic_window(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A stray probe "Chapter 2" line below ch1's pin must not pin ch2."""
+        toc = self._toc(
+            [
+                (1, "Foundational Signal Concepts"),
+                (2, "Metrics Ordering Systems"),
+            ]
+        )
+        toc.append(
+            {
+                "chunk_text": "Chapter 2 covers Metrics Ordering Systems across labs",
+                "chunk_role": "heading",
+                "page_number": 15,
+                "source_file": self.SRC,
+            }
+        )
+        body = [
+            self._body(
+                "1 Foundational Signal Concepts\nprose deriving wavelet bases",
+                20,
+            ),
+            self._body("prose buffering stream windows between phases", 26),
+            self._body("prose pacing coherence schedules onward", 32),
+            self._body(
+                "2.1 Capacity Ordering Baselines\nprose recasting basin metrics",
+                45,
+            ),
+            self._body("prose deriving wavelet bases", 50),
+            self._body("prose mapping convexity regimes alongside", 58),
+        ]
+        pipeline = self._make(monkeypatch, toc, body)
+        captured = self._capture(monkeypatch, pipeline)
+        answer = self._run(pipeline)
+        assert "Chapter 2 — Metrics Ordering Systems (approx pages 45+)" in answer, (
+            "sec-header rescan must recover chapter 2 after the probe refusal"
+        )
+        assert "approx pages 15+" not in answer
+        assert captured["keys"] == [1, 2]
+        assert captured["pages"] == {1: [20, 26, 32], 2: [45, 50, 58]}
+
+    def test_loose_digit_refusal_keeps_chapter_rescannable(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A refused phase-2 digit pin must leave the chapter in missing."""
+        toc = self._toc(
+            [
+                (1, "Foundational Signal Concepts"),
+                (2, "Metrics Ordering Systems"),
+            ]
+        )
+        body = [
+            self._body("2 spare drives slotted into caddies", 8),
+            self._body(
+                "1 Foundational Signal Concepts\nprose deriving wavelet bases",
+                20,
+            ),
+            self._body("prose buffering stream windows between phases", 24),
+            self._body("prose pacing coherence schedules onward", 30),
+            self._body(
+                "2 capacity ledgers ordering systems predominate\n"
+                "prose recasting basin metrics",
+                45,
+            ),
+            self._body("prose deriving wavelet bases", 50),
+            self._body("prose mapping convexity regimes alongside", 58),
+        ]
+        pipeline = self._make(monkeypatch, toc, body)
+        captured = self._capture(monkeypatch, pipeline)
+        answer = self._run(pipeline)
+        assert "Chapter 2 — Metrics Ordering Systems (approx pages 45+)" in answer, (
+            "phase-2 rescan must recover chapter 2 after the @8 refusal"
+        )
+        assert "approx pages 8+" not in answer
+        assert captured["keys"] == [1, 2]
+        assert captured["pages"] == {1: [20, 24, 30], 2: [45, 50, 58]}
+
+    def test_degenerate_interp_gap_skips_duplicate_pin(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A one-page gap must not interpolate a duplicate of ch1's pin."""
+        toc = self._toc(
+            [
+                (1, "Foundational Signal Concepts"),
+                (2, "Metrics Ordering Systems"),
+                (3, "Convergence Limits Probed"),
+            ]
+        )
+        body = [
+            self._body(
+                "1 Foundational Signal Concepts\nprose deriving wavelet bases",
+                20,
+            ),
+            self._body(
+                "3 Convergence Limits Probed\nprose mapping convexity regimes",
+                21,
+            ),
+            self._body("prose pacing coherence schedules onward", 24),
+        ]
+        pipeline = self._make(monkeypatch, toc, body)
+        captured = self._capture(monkeypatch, pipeline)
+        answer = self._run(pipeline)
+        assert captured["keys"] == [1]
+        assert captured["pages"] == {1: [20, 21, 24]}
+        assert answer.count("(approx pages 20+)") == 1, (
+            "the degenerate midpoint must not duplicate chapter 1's pin"
+        )
+        assert "Chapter 2 — Metrics Ordering Systems" not in answer
+
+    def test_repinned_real_opener_refused_spans_to_interpolation(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A validated-away opener (sklearn shape) must not re-pin."""
+        toc = self._toc(
+            [
+                (1, "Foundational Signal Concepts"),
+                (2, "Metrics Ordering Systems"),
+                (3, "Convergence Limits Probed"),
+            ]
+        )
+        headings = [self._heading("Metrics Ordering Systems", 36)]
+        body = [
+            self._body(
+                "2 Metrics Ordering Systems\nprose ranking delayed results",
+                36,
+            ),
+            self._body(
+                "1 Foundational Signal Concepts\nprose deriving wavelet bases",
+                55,
+            ),
+            self._body("prose buffering stream windows between phases", 62),
+            self._body("prose pacing coherence schedules onward", 68),
+            self._body("prose narrowing shrinkage penalties", 70),
+            self._body("prose recasting basin metrics", 75),
+            self._body(
+                "3 Convergence Limits Probed\nprose mapping convexity regimes",
+                80,
+            ),
+            self._body("prose expanding bench instrumentation baselines", 90),
+        ]
+        pipeline = self._make(monkeypatch, toc, body, headings)
+        captured = self._capture(monkeypatch, pipeline)
+        with caplog.at_level(logging.DEBUG, logger="secondbrain.rag.pipeline"):
+            answer = self._run(pipeline)
+        assert "Rejected chapter 2 pin @36" in caplog.text
+        assert "approx pages 36+" not in answer
+        assert "Chapter 2 — Metrics Ordering Systems (approx pages 67+)" in answer, (
+            "interpolation must span the refused opener"
+        )
+        assert captured["keys"] == [1, 2, 3]
+        assert captured["pages"] == {1: [55, 62], 2: [68, 70, 75], 3: [80, 90]}
+
+    def test_phase2_rescue_refuses_front_matter_page(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A front-matter "1" line must not rescue unpinned ch1."""
+        toc = self._toc(
+            [
+                (1, "Foundational Signal Concepts"),
+                (2, "Metrics Ordering Systems"),
+                (3, "Convergence Limits Probed"),
+            ]
+        )
+        headings = [self._heading("Metrics Ordering Systems", 36)]
+        # Page-3 digit line carries a non-roster title so the body-title
+        # anchor pass cannot pre-pin ch1; only Phase 2's loose digit pattern
+        # can claim it, exercising the pin floor.
+        body = [
+            self._body(
+                "1 Signal processing preliminaries\nprose deriving wavelet bases",
+                3,
+            ),
+            self._body("prose buffering stream windows between phases", 34),
+            self._body("prose pacing coherence schedules onward", 35),
+            self._body(
+                "2 Metrics Ordering Systems\nprose ranking delayed results",
+                36,
+            ),
+            self._body(
+                "3 Convergence Limits Probed\nprose mapping convexity regimes",
+                80,
+            ),
+            self._body("prose expanding bench instrumentation baselines", 90),
+        ]
+        pipeline = self._make(monkeypatch, toc, body, headings)
+        captured = self._capture(monkeypatch, pipeline)
+        answer = self._run(pipeline)
+        assert "approx pages 3+" not in answer
+        assert (
+            "Chapter 1 — Foundational Signal Concepts (approx pages 35+)" in answer
+        ), (
+            "head-gap interpolation must recover chapter 1 after the front-matter refusal"
+        )
+        assert captured["keys"] == [1, 2, 3]
+        assert captured["pages"] == {1: [35], 2: [36], 3: [80, 90]}
+
+
+class TestToCListingResolution:
+    """Front-matter ToC-listing reconciliation fixtures (pins + phantom kills).
+
+    The tier parses the printed ToC from front-matter chunks below the
+    earliest chapter-description page and requires >=60% roster coverage
+    before acting: chapters the heading/body scans left unpinned are pinned
+    at printed page plus the median print-to-scan offset, and unpinned
+    roster chapters the parse neither lists nor mentions are killed.  A ToC
+    row mentioned without a trailing page number is ambiguous and keeps its
+    chapter.  Derived pins must still fit their open-interval monotonic
+    window, and existing heading anchors are never overridden.
+    """
+
+    SRC = TestChapterPinWindowResolution.SRC
+    QUERY = TestChapterPinWindowResolution.QUERY
+    OFF = 30
+    DESC_PAGE = 24
+    _StubStorage = TestChapterPinWindowResolution._StubStorage
+
+    TITLES: ClassVar[dict[int, str]] = {
+        1: "Alpha Foundational Frameworks",
+        2: "Beta Optimization Landscapes",
+        3: "Gamma Convolution Pipelines",
+        4: "Delta Recurrent Architectures",
+        5: "Epsilon Attention Mechanisms",
+        6: "Zeta Embedding Representations",
+        7: "Eta Generative Adversarial Nets",
+        8: "Theta Transfer Learning Flows",
+        9: "Iota Distributed Training Grids",
+        10: "Kappa Quantization Strategies",
+        11: "Lambda Federated Learning Rings",
+        12: "Bayesian Deep Learning",
+    }
+
+    _toc = staticmethod(TestChapterPinWindowResolution._toc)
+    _body = staticmethod(TestChapterPinWindowResolution._body)
+    _heading = staticmethod(TestChapterPinWindowResolution._heading)
+
+    @classmethod
+    def _printed(cls, num: int) -> int:
+        return 12 + 28 * (num - 1)
+
+    @classmethod
+    def _anchor_page(cls, num: int) -> int:
+        return cls._printed(num) + cls.OFF
+
+    @classmethod
+    def _listing_rows(cls, nums: list[int]) -> list[str]:
+        return [f"{n} {cls.TITLES[n]} {cls._printed(n)}" for n in nums]
+
+    @staticmethod
+    def _listing_chunk(rows: list[str], page: int = 5) -> dict[str, Any]:
+        return {
+            "chunk_text": "\n".join(rows),
+            "chunk_role": "toc_entry",
+            "source_file": TestChapterPinWindowResolution.SRC,
+            "page_number": page,
+        }
+
+    @classmethod
+    def _desc_chunk(cls, num: int = 12) -> dict[str, Any]:
+        return {
+            "chunk_text": (
+                f"Chapter {num} , {cls.TITLES[num]} , presents the closing synthesis"
+            ),
+            "chunk_role": "body",
+            "source_file": TestChapterPinWindowResolution.SRC,
+            "page_number": cls.DESC_PAGE,
+        }
+
+    @staticmethod
+    def _inert_body(pages: list[int] | None = None) -> list[dict[str, Any]]:
+        return [
+            TestChapterPinWindowResolution._body(
+                "prose harvest meadow quiet fields unfold amber skies rising",
+                pg,
+            )
+            for pg in (
+                pages or [45, 73, 101, 129, 157, 185, 213, 241, 269, 297, 325, 353]
+            )
+        ]
+
+    @classmethod
+    def _anchors(cls, nums: list[int]) -> list[dict[str, Any]]:
+        return [cls._heading(cls.TITLES[n], cls._anchor_page(n)) for n in nums]
+
+    def _base_fixtures(self) -> TestChapterPinWindowResolution:
+        """Type-safe adapter so base _make/_run keep their declared receiver."""
+        return TestChapterPinWindowResolution()
+
+    def _make(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        toc: list[dict[str, Any]],
+        body: list[dict[str, Any]] | None = None,
+        headings: list[dict[str, Any]] | None = None,
+    ) -> RAGPipeline:
+        return self._base_fixtures()._make(
+            monkeypatch, toc, body or self._inert_body(), headings
+        )
+
+    def _run(self, pipeline: RAGPipeline) -> str:
+        return self._base_fixtures()._run(pipeline)
+
+    def test_toc_listing_pins_missing_chapter(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        toc = [
+            *self._toc([(n, self.TITLES[n]) for n in range(1, 13)]),
+            self._listing_chunk(self._listing_rows(list(range(1, 13)))),
+            self._desc_chunk(),
+        ]
+        pipeline = self._make(
+            monkeypatch, toc, headings=self._anchors(list(range(1, 12)))
+        )
+        with caplog.at_level(logging.DEBUG, logger="secondbrain.rag.pipeline"):
+            answer = self._run(pipeline)
+        for n in range(1, 12):
+            assert (
+                f"Chapter {n} — {self.TITLES[n]} "
+                f"(approx pages {self._anchor_page(n)}+)" in answer
+            ), answer
+        assert "Chapter 12 — Bayesian Deep Learning (approx pages 350+)" in answer, (
+            answer
+        )
+        assert "approx pages 320+" not in answer, "printed page alone must not pin"
+        assert "median=30" in caplog.text
+        assert "Rejected chapter" not in caplog.text
+        assert "Dropped phantom" not in caplog.text
+
+    def test_toc_low_coverage_disables_tier(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        base = [
+            *self._toc([(n, self.TITLES[n]) for n in range(1, 13)]),
+            self._desc_chunk(),
+        ]
+        sparse = [self._listing_chunk(self._listing_rows(list(range(1, 4))))]
+        headings = self._anchors(list(range(1, 12)))
+        body = self._inert_body(
+            [45, 73, 101, 129, 157, 185, 213, 241, 269, 297, 322, 323]
+        )
+        answer_sparse = self._run(
+            self._make(monkeypatch, base + sparse, body, headings)
+        )
+        answer_pure = self._run(self._make(monkeypatch, base, body, headings))
+        assert answer_sparse == answer_pure
+        assert (
+            "Chapter 12 — Bayesian Deep Learning (approx pages 323+)" in answer_pure
+        ), answer_pure
+
+    def test_toc_high_coverage_kills_phantom_chapter(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        rogue = "Rogue Applications Annex"
+        probe_rows = [(n, self.TITLES[n]) for n in range(1, 13)]
+        killed_toc = [
+            *self._toc(probe_rows),
+            *self._toc([(13, rogue)]),
+            self._listing_chunk(self._listing_rows(list(range(1, 13)))),
+            self._desc_chunk(),
+        ]
+        spared_toc = [
+            *self._toc(probe_rows),
+            *self._toc([(13, rogue)]),
+            self._desc_chunk(),
+        ]
+        pipeline = self._make(
+            monkeypatch,
+            killed_toc,
+            body=self._inert_body(
+                [45, 73, 101, 129, 157, 185, 213, 241, 269, 297, 322, 323, 353]
+            ),
+            headings=self._anchors(list(range(1, 12))),
+        )
+        with caplog.at_level(logging.DEBUG, logger="secondbrain.rag.pipeline"):
+            answer_killed = self._run(pipeline)
+        assert "Chapter 13" not in answer_killed, answer_killed
+        assert "approx pages 324+" not in answer_killed
+        assert (
+            "Chapter 12 — Bayesian Deep Learning (approx pages 350+)" in answer_killed
+        ), answer_killed
+        assert "Dropped phantom roster chapter 13" in caplog.text
+        pipeline = self._make(
+            monkeypatch,
+            spared_toc,
+            body=self._inert_body(
+                [45, 73, 101, 129, 157, 185, 213, 241, 269, 297, 322, 323, 353]
+            ),
+            headings=self._anchors(list(range(1, 12))),
+        )
+        answer_spared = self._run(pipeline)
+        assert (
+            "Chapter 12 — Bayesian Deep Learning (approx pages 323+)" in answer_spared
+        ), answer_spared
+        assert (
+            "Chapter 13 — Rogue Applications Annex (approx pages 324+)" in answer_spared
+        ), answer_spared
+
+    def test_toc_pin_respects_heading_anchor_precedence(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        toc = [
+            *self._toc([(n, self.TITLES[n]) for n in range(1, 13)]),
+            self._listing_chunk(self._listing_rows(list(range(1, 13)))),
+            self._desc_chunk(),
+        ]
+        special_5 = 140
+        headings = [
+            self._heading(self.TITLES[n], special_5 if n == 5 else self._anchor_page(n))
+            for n in range(1, 12)
+        ]
+        pipeline = self._make(monkeypatch, toc, headings=headings)
+        with caplog.at_level(logging.DEBUG, logger="secondbrain.rag.pipeline"):
+            answer = self._run(pipeline)
+        assert (
+            "Chapter 5 — Epsilon Attention Mechanisms (approx pages 140+)" in answer
+        ), answer
+        assert "approx pages 154+" not in answer, "anchor must not be overridden"
+        assert "Chapter 12 — Bayesian Deep Learning (approx pages 350+)" in answer, (
+            answer
+        )
+        assert "median=30" in caplog.text
+
+    def test_toc_fragment_lines_inert(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        probe_rows = [(n, self.TITLES[n]) for n in range(1, 13)]
+        clean_rows = self._listing_rows(list(range(1, 13)))
+        noisy_rows = [
+            *clean_rows,
+            "IX Old Chapters 55",
+            "12 Bayesian Deep Learning",
+            "Deep Learning 320",
+        ]
+        headings = self._anchors(list(range(1, 12)))
+        answer_noise = self._run(
+            self._make(
+                monkeypatch,
+                [
+                    *self._toc(probe_rows),
+                    self._listing_chunk(noisy_rows),
+                    self._desc_chunk(),
+                ],
+                headings=headings,
+            )
+        )
+        answer_clean = self._run(
+            self._make(
+                monkeypatch,
+                [
+                    *self._toc(probe_rows),
+                    self._listing_chunk(clean_rows),
+                    self._desc_chunk(),
+                ],
+                headings=headings,
+            )
+        )
+        assert answer_noise == answer_clean
+        assert (
+            "Chapter 12 — Bayesian Deep Learning (approx pages 350+)" in answer_clean
+        ), answer_clean
+
+    def test_toc_coverage_boundary_exact_floor(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        probe_rows = [(n, self.TITLES[n]) for n in range(1, 11)]
+        desc = self._desc_chunk(10)
+        on_rows = self._listing_rows([1, 2, 3, 4, 5]) + self._listing_rows([10])
+        off_rows = self._listing_rows([1, 2, 3, 4, 5])
+        headings = self._anchors(list(range(1, 10)))
+        pipeline = self._make(
+            monkeypatch,
+            [*self._toc(probe_rows), desc, self._listing_chunk(on_rows)],
+            self._inert_body([45, 73, 101, 129, 157, 185, 213, 241, 266, 297]),
+            headings=headings,
+        )
+        with caplog.at_level(logging.DEBUG, logger="secondbrain.rag.pipeline"):
+            answer_on = self._run(pipeline)
+        assert (
+            "Chapter 10 — Kappa Quantization Strategies (approx pages 294+)"
+            in answer_on
+        ), answer_on
+        assert "median=30" in caplog.text
+        assert "Dropped phantom" not in caplog.text
+        pipeline = self._make(
+            monkeypatch,
+            [*self._toc(probe_rows), desc, self._listing_chunk(off_rows)],
+            self._inert_body([45, 73, 101, 129, 157, 185, 213, 241, 266, 297]),
+            headings=headings,
+        )
+        answer_off = self._run(pipeline)
+        assert (
+            "Chapter 10 — Kappa Quantization Strategies (approx pages 267+)"
+            in answer_off
+        ), answer_off
+        assert "approx pages 294+" not in answer_off
+
+    def test_toc_mention_without_page_is_ambiguous_keep(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        base = [
+            *self._toc([(n, self.TITLES[n]) for n in range(1, 13)]),
+            self._desc_chunk(),
+        ]
+        keep_rows = [
+            *self._listing_rows(list(range(1, 12))),
+            "Chapter 12: Bayesian Deep Learning",
+        ]
+        pipeline = self._make(
+            monkeypatch,
+            [*base, self._listing_chunk(keep_rows)],
+            body=self._inert_body(
+                [45, 73, 101, 129, 157, 185, 213, 241, 269, 297, 322, 323]
+            ),
+            headings=self._anchors(list(range(1, 12))),
+        )
+        with caplog.at_level(logging.DEBUG, logger="secondbrain.rag.pipeline"):
+            answer = self._run(pipeline)
+        assert "Chapter 12 — Bayesian Deep Learning (approx pages 323+)" in answer, (
+            answer
+        )
+        assert "Dropped phantom roster chapter 12" not in caplog.text
+        assert "median=30" in caplog.text
+
+    def test_toc_mention_twin_missing_row_kills_phantom(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        base = [
+            *self._toc([(n, self.TITLES[n]) for n in range(1, 13)]),
+            self._desc_chunk(),
+        ]
+        kill_rows = self._listing_rows(list(range(1, 12)))
+        pipeline = self._make(
+            monkeypatch,
+            [*base, self._listing_chunk(kill_rows)],
+            body=self._inert_body(
+                [45, 73, 101, 129, 157, 185, 213, 241, 269, 297, 322, 323]
+            ),
+            headings=self._anchors(list(range(1, 12))),
+        )
+        with caplog.at_level(logging.DEBUG, logger="secondbrain.rag.pipeline"):
+            answer = self._run(pipeline)
+        assert "Chapter 12" not in answer, answer
+        assert "Dropped phantom roster chapter 12" in caplog.text
+        assert (
+            "Chapter 11 — Lambda Federated Learning Rings (approx pages 322+)" in answer
+        ), answer
+
+    def test_toc_ignores_foreign_source_rows_in_region(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        base = [
+            *self._toc([(n, self.TITLES[n]) for n in range(1, 13)]),
+            self._desc_chunk(),
+        ]
+        foreign_chunk = self._listing_chunk([f"12 {self.TITLES[12]} 55"])
+        foreign_chunk["source_file"] = "other.pdf"
+        original = RAGPipeline._toc_listing_pages
+        tier_sources: set[str] = set()
+
+        def spy(
+            self: RAGPipeline,
+            structure_chunks: list[dict[str, Any]],
+            desc_pages: dict[int, int],
+            roster: set[int],
+        ) -> tuple[dict[int, tuple[str, int]], set[int]]:
+            tier_sources.update(str(c["source_file"]) for c in structure_chunks)
+            return original(structure_chunks, desc_pages, roster)
+
+        monkeypatch.setattr(RAGPipeline, "_toc_listing_pages", spy)
+        pipeline = self._make(
+            monkeypatch,
+            [
+                *base,
+                self._listing_chunk(self._listing_rows(list(range(1, 12)))),
+                foreign_chunk,
+            ],
+            body=self._inert_body(
+                [45, 73, 101, 129, 157, 185, 213, 241, 269, 297, 322, 323]
+            ),
+            headings=self._anchors(list(range(1, 12))),
+        )
+        with caplog.at_level(logging.DEBUG, logger="secondbrain.rag.pipeline"):
+            answer = self._run(pipeline)
+        assert tier_sources == {"book.pdf"}, tier_sources
+        assert "Dropped phantom roster chapter 12" in caplog.text, caplog.text
+        assert "median=30" in caplog.text, caplog.text
+        assert (
+            "Chapter 11 — Lambda Federated Learning Rings (approx pages 322+)" in answer
+        ), answer
+
+    def test_toc_derived_pin_below_floor_refused(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        listing_rows = [
+            "1 Alpha Foundational Frameworks 34",
+            "2 Beta Optimization Landscapes 1",
+        ]
+        toc = [
+            *self._toc([(1, self.TITLES[1]), (2, self.TITLES[2])]),
+            self._listing_chunk(listing_rows),
+            self._desc_chunk(2),
+        ]
+        headings = [self._heading(self.TITLES[1], 42)]
+        pipeline = self._make(monkeypatch, toc, headings=headings)
+        with caplog.at_level(logging.DEBUG, logger="secondbrain.rag.pipeline"):
+            answer = self._run(pipeline)
+        assert (
+            "Rejected chapter 2 ToC pin @9: below the front-matter floor" in caplog.text
+        ), caplog.text
+        assert "approx pages 9+" not in answer, answer
+        assert "median=8" in caplog.text, caplog.text
+        assert "Chapter 1 — Alpha Foundational Frameworks" in answer, answer

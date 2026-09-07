@@ -1,10 +1,10 @@
 """SQLite storage implementation for conversation sessions.
 
-Replaces the MongoDB-backed :class:`ConversationStorage` with an embedded
+Replaces the legacy :class:`ConversationStorage` backend with an embedded
 SQLite backend while preserving the exact public API so ``ConversationSession``
 and all CLI/RAG callers work unchanged.
 
-Storage layout mirrors the previous Mongo envelope: a ``sessions`` row plus one
+Storage layout mirrors the previous document envelope: a ``sessions`` row plus one
 row per message in ``messages``. Ordering is pure array position (append +
 most-recent-N slice + whole-array replace for context trim), matching the old
 document semantics exactly.
@@ -164,9 +164,7 @@ class ConversationStorage(ValidatableService):
             )
             conn.commit()
 
-    def update_messages(
-        self, session_id: str, messages: list[dict[str, Any]]
-    ) -> None:
+    def update_messages(self, session_id: str, messages: list[dict[str, Any]]) -> None:
         """Replace all messages in a session.
 
         Deletes all messages for the session and inserts the provided array at
@@ -180,9 +178,7 @@ class ConversationStorage(ValidatableService):
         now = datetime.now(UTC).isoformat()
         with self._lock:
             conn = self.conn
-            conn.execute(
-                "DELETE FROM messages WHERE session_id = ?", (session_id,)
-            )
+            conn.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
             conn.executemany(
                 "INSERT INTO messages (session_id, position, role, content, timestamp) "
                 "VALUES (?, ?, ?, ?, ?)",
@@ -235,7 +231,11 @@ class ConversationStorage(ValidatableService):
             ).fetchall()
 
         return [
-            {"role": row["role"], "content": row["content"], "timestamp": row["timestamp"]}
+            {
+                "role": row["role"],
+                "content": row["content"],
+                "timestamp": row["timestamp"],
+            }
             for row in rows
         ]
 

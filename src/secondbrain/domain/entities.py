@@ -104,7 +104,7 @@ class DocumentChunk:
         Returns
         -------
         dict[str, Any]
-            Dictionary representation suitable for MongoDB storage
+            Dictionary representation suitable for vector store storage
         """
         return {
             "chunk_id": self.chunk_id,

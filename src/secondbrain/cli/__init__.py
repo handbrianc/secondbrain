@@ -12,6 +12,7 @@ import os
 import click
 from rich.console import Console
 
+from secondbrain.config import config
 from secondbrain.logging import setup_logging
 from secondbrain.utils.mps_patch import patch_transformers_for_mps
 
@@ -36,11 +37,14 @@ def cli(ctx: click.Context, verbose: bool) -> None:
     """SecondBrain - A local document intelligence CLI tool.
 
     Ingests documents, generates embeddings using sentence-transformers, and stores
-    vectors in MongoDB for semantic search.
+    vectors in the Qdrant vector store for semantic search.
     """
     ctx.ensure_object(dict)
     ctx.obj["verbose"] = verbose
-    setup_logging(verbose=verbose)
+    # Load .env into os.environ first so SECONDBRAIN_LOG_LEVEL (from .env) is
+    # honored by setup_logging below.
+    config()
+    setup_logging(verbose=verbose, level_name=os.environ.get("SECONDBRAIN_LOG_LEVEL"))
 
 
 # This ensures commands are properly decorated and registered

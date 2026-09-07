@@ -5,6 +5,7 @@ Retrieval-Augmented Generation workflow for conversational Q&A.
 """
 
 import logging
+import statistics
 import time
 from contextlib import suppress
 from typing import Any, cast
@@ -80,7 +81,7 @@ class RAGPipeline(
         self._on_chunk = on_chunk
         # Lazily-initialized DocumentRouter for document-scoped retrieval.
         # Created on first use so that the pipeline can be constructed without
-        # a running MongoDB connection (e.g. during CLI help / --version).
+        # a running vector store connection (e.g. during CLI help / --version).
         self._document_router: DocumentRouter | None = None
 
     def query(
@@ -133,6 +134,11 @@ class RAGPipeline(
 
             # --- Resolve document-scoped source_filter from query ---
             source_filter = self._resolve_source_filter(query)
+
+            # --- Page-number lookup: "what is on page 500" ---
+            page_result = self._answer_page_query(query)
+            if page_result is not None:
+                return page_result
 
             # --- B4: Iterative RAG for broad-coverage and chapter/section-enumeration queries ---
             intent_result = self._intent_parser.parse(query)
@@ -208,7 +214,7 @@ class RAGPipeline(
                             def on_chunk(content: str, _reasoning: str | None) -> None:
                                 if content:
                                     accumulated.append(content)
-                                if self._on_chunk and content:
+                                if self._on_chunk and (content or _reasoning):
                                     self._on_chunk(content, _reasoning)
 
                             self._llm_provider.stream_chat(
@@ -284,21 +290,30 @@ class RAGPipeline(
             # --- Resolve document-scoped source_filter from query ---
             source_filter = self._resolve_source_filter(query)
 
+            # --- Page-number lookup: "what is on page 500" ---
+            page_result = self._answer_page_query(query)
+            if page_result is not None:
+                return page_result
+
             # --- B4: Iterative RAG for broad-coverage and chapter/section-enumeration queries ---
             intent_result = self._intent_parser.parse(query)
             if intent_result.intent is QueryIntent.LIST_SOURCES:
-                return self._list_sources_result(query)
+                listing = self._list_sources_result(query)
+                self._save_turn(session, query, listing.get("answer", ""))
+                return listing
             if intent_result.intent in (
                 QueryIntent.BROAD_COVERAGE,
                 QueryIntent.CHAPTER_ENUMERATE,
                 QueryIntent.SECTION_ENUMERATE,
             ):
-                return self._iterative_query(
+                iterative = self._iterative_query(
                     query,
                     top_k=effective_top_k,
                     show_sources=show_sources,
                     source_filter=source_filter,
                 )
+                self._save_turn(session, query, iterative.get("answer", ""))
+                return iterative
 
             # Step 1: Rewrite query using conversation history (if rewriter available)
             rewritten_query = self._rewrite_query_with_history(query, session)
@@ -359,19 +374,21 @@ class RAGPipeline(
                 grounded: dict[str, Any] | None = None
                 if self._config.rag_llm_fallback_enabled:
                     grounded = self._grounded_context_retry(
-                        rewritten_query,
+                        query,
                         conversation_history=history,
                         top_k=effective_top_k,
                         show_sources=show_sources,
                     )
                 if grounded is not None:
+                    self._save_turn(session, query, grounded.get("answer", ""))
                     return grounded
                 # Thread conversation history so the LLM knowledge fallback can
                 # leverage prior turns for this multi-turn chat follow-up.
                 fallback_answer = self._handle_no_results(
-                    rewritten_query,
+                    query,
                     conversation_history=history,
                 )
+                self._save_turn(session, query, fallback_answer)
                 result: dict[str, Any] = {
                     "answer": fallback_answer,
                     "rewritten_query": rewritten_query,
@@ -385,7 +402,7 @@ class RAGPipeline(
             history = session.get_history(limit=self._context_window)
 
             # Step 5: Build prompt with system instruction + context + query
-            prompt = self._build_prompt(rewritten_query, context_text, history)
+            prompt = self._build_prompt(query, context_text, history)
 
             # Step 6: Generate answer via llm_provider.generate() OR stream_chat() with retry logic
             generation_start = time.perf_counter()
@@ -418,7 +435,7 @@ class RAGPipeline(
                                 ) -> None:
                                     if content:
                                         accumulated.append(content)  # noqa: B023
-                                    if self._on_chunk and content:
+                                    if self._on_chunk and (content or _reasoning):
                                         self._on_chunk(content, _reasoning)
 
                                 self._llm_provider.stream_chat(
@@ -475,6 +492,7 @@ class RAGPipeline(
                     fallback_answer = self._handle_no_results(
                         query, allow_llm_fallback=False
                     )
+                    self._save_turn(session, query, fallback_answer)
                     result = {
                         "answer": fallback_answer,
                         "rewritten_query": rewritten_query,
@@ -492,8 +510,7 @@ class RAGPipeline(
                     metrics.record("generation_retries", retry_count)
 
             # Step 7: Add answer to session via session.add_message()
-            session.add_message("user", query)
-            session.add_message("assistant", answer)
+            self._save_turn(session, query, answer)
 
             # Step 8: Build result dict
             result = {"answer": answer, "rewritten_query": rewritten_query}
@@ -505,6 +522,92 @@ class RAGPipeline(
         except Exception as e:
             logger.error("Chat failed: %s: %s", type(e).__name__, e)
             return self._create_error_response(str(e), query)
+
+    @staticmethod
+    def _heading_title_anchors(
+        chapters: list[tuple[int, str, str]],
+        src: str,
+        heading_chunks: list[dict[str, Any]],
+        blocked_pages: dict[int, int] | None = None,
+    ) -> dict[int, int]:
+        """Map chapter numbers to opener pages via heading-role title matches.
+
+        Labeled docling output drops the "Chapter N" banner text and strips
+        section numbers from headings, but keeps each chapter's title as a
+        heading chunk on its real opening page — while ToC/covers pages stay
+        body-role. Matching each detected chapter title (cut at embedded ToC
+        page numbers, e.g. "Title 147 How ma") against heading chunks
+        therefore anchors chapters on their true openers even when every
+        "Chapter N"/section-number scan fails. Comparison normalizes the
+        subtitle separators docling is inconsistent about (" - " vs " ") and
+        allows a leading chapter-number prefix on the heading ("5 Title").
+        Heading chunks arrive page-ordered, so the first match per chapter is
+        the earliest page; pages < 10 (front matter) never anchor. Two
+        listing-artifact refusals keep the earliest match honest: headings
+        ending in a standalone page reference ("Title 295") are ToC entries,
+        not openers, and `blocked_pages` (chapter -> front-matter description
+        page) skips "What this book covers" prose pages. When the blocked
+        pages sit in the front matter (min <= 30), everything before them is
+        ToC/part-divider region — part dividers repeat chapter titles as
+        headings on ToC pages — so anchoring also refuses those pages.
+        """
+        import re
+
+        anchors: dict[int, int] = {}
+        blocked_map = blocked_pages or {}
+        floor = min(blocked_map.values()) if blocked_map else None
+        if floor is not None and floor > 30:
+            floor = None
+        for ch_num, ch_src, title in chapters:
+            if ch_src != src:
+                continue
+            tt = re.sub(r"\s+\d{1,4}\s*$", "", title)
+            tt = re.split(r"\s+\d{1,4}\s+", tt)[0]
+            needle = (
+                re.sub(r"\s+", " ", re.sub(r"[-\u2013\u2014:]", " ", tt))
+                .strip()
+                .casefold()
+            )
+            if len(needle) < 4:
+                continue
+            blocked = blocked_map.get(ch_num)
+            for hc in heading_chunks:
+                page = int(hc.get("page_number") or 0)
+                if page < 10 or page == blocked or (floor and page < floor):
+                    continue
+                head_line = re.sub(
+                    r"[-\u2013\u2014:]",
+                    " ",
+                    (hc.get("chunk_text") or "").split("\n")[0],
+                )
+                head_line = re.sub(r"\s+", " ", head_line).strip().casefold()
+                if re.search(r"\s+\d{1,4}$", head_line):
+                    continue
+                head_line = re.sub(
+                    r"^(?:chapter\s+\d+[\s:.\-]*)?(?:\d+[\s.:\-]+)?", "", head_line
+                )
+                if head_line == needle or head_line.startswith(needle):
+                    anchors[ch_num] = page
+                    break
+        return anchors
+
+    @staticmethod
+    def _pin_fits_window(first_pg: dict[int, int], ch: int, pg: int) -> bool:
+        """Open-interval monotonic-window check for a candidate chapter pin.
+
+        Mirrors the fixed-point validation applied to the heading/body-title
+        pins: the pin must sit strictly above the nearest lower-numbered
+        pinned chapter's page and strictly below the nearest higher-numbered
+        pinned chapter's page, so chapter-number order keeps matching page
+        order and the derived page ranges stay disjoint (an out-of-window
+        pin collides with a neighbor's range and the ascending-key bucket
+        assignment starves the numbered-later chapter of every body chunk).
+        Later scan tiers pin after that validation has run and nothing
+        re-checks their pins, so they apply this check at insertion time.
+        """
+        lo_pg = max((p for n, p in first_pg.items() if n < ch), default=None)
+        hi_pg = min((p for n, p in first_pg.items() if n > ch), default=None)
+        return (lo_pg is None or pg > lo_pg) and (hi_pg is None or pg < hi_pg)
 
     def _iterative_query(
         self,
@@ -635,6 +738,48 @@ class RAGPipeline(
                 # BARE_CHAPTER_RE titles (e.g. "5 Working with VMs") are NOT included
                 # here — they're less reliable and may conflict with other chapters.
                 chapter_first_pg: dict[int, int] = {}
+                # Front-matter "about this book" pages describe every chapter
+                # in prose ("Chapter 9 , AI Cloud Platforms for IoT , introduces
+                # ...").  In books extracted without heading/toc_entry chunks
+                # these body-role sentences are the only "Chapter N" matches,
+                # and anchoring on them pinned chapters to the front-matter page
+                # their description sits on — collapsing the chapter's page
+                # range to that single page and starving its content bucket.
+                # Collect (chapter -> description page) once; every scan below
+                # refuses to anchor a chapter on its description page.
+                desc_pages = self._front_matter_desc_pages(structure_chunks)
+                # Labeled-docling books (element_type migration): docling drops
+                # the "Chapter N" banner, strips section numbers from headings,
+                # and leaves ToC/covers pages as body chunks — the scans below
+                # then fail or misfire, and Phase 2's loose digit scan pins
+                # chapters to front-matter pages (empty/wrong chapter buckets).
+                # The chapter titles themselves ARE heading chunks on the real
+                # opening pages, so anchor on them FIRST — before the body-title
+                # scan below — and let that scan only fill chapters the anchors
+                # left unset (a heading anchor can never be overridden by a
+                # spurious body-page match).  Every later scan still skips
+                # chapters already pre-populated here.
+                try:
+                    heading_all_ = list(
+                        cast(
+                            list[dict[str, Any]],
+                            storage.find_structural_chunks(
+                                chunk_roles=["heading"], source_prefix=src
+                            ),
+                        )
+                    )
+                except Exception:
+                    logger.warning(
+                        "Heading-chunk fetch failed for %s; skipping "
+                        "heading-title anchoring",
+                        src,
+                        exc_info=True,
+                    )
+                    heading_all_ = []
+                for an_ch, an_pg in self._heading_title_anchors(
+                    full_chapters, src, heading_all_, blocked_pages=desc_pages
+                ).items():
+                    chapter_first_pg.setdefault(an_ch, an_pg)
                 # Title-anchored detection: the numbered chapter-title heading
                 # (e.g. "13 Troubleshooting", "12 Customizing Oracle VirtualBox") is
                 # the single most reliable chapter-start signal.  Section-number
@@ -649,15 +794,17 @@ class RAGPipeline(
                 body_all_ = list(
                     storage.get_body_chunks(
                         src,
-                        limit=3500,
+                        limit=None,
                     )
                 )
                 for tn_ in full_chapters:
                     tn, ts_, tt_ = tn_
-                    # Detected titles often carry a trailing printed-page artifact
-                    # (e.g. "The pandas I/O System 79"); strip it so the anchor
-                    # matches the real heading ("The pandas I/O System").
-                    tt_ = re.sub(r"\s+\d{1,4}\s*$", "", tt_).rstrip(" .:;-")
+                    # Detected titles often carry a printed-page artifact,
+                    # trailing ("The pandas I/O System 79") or embedded before
+                    # the next ToC line's text ("Title 147 How ma"); strip
+                    # both so the anchor matches the real heading.
+                    tt_ = re.sub(r"\s+\d{1,4}\s*$", "", tt_)
+                    tt_ = re.split(r"\s+\d{1,4}\s+", tt_)[0].rstrip(" .:;-")
                     if ts_ != src or not tt_ or len(tt_) < 4:
                         continue
                     # Join title tokens with \s+ so wrapped headings (e.g. the title
@@ -674,12 +821,194 @@ class RAGPipeline(
                             continue
                         ble_ = btext_.find("\n", bm_.end())
                         brest_ = btext_[bm_.end() : ble_ if ble_ != -1 else len(btext_)]
-                        if dot_leader_.search(brest_) or re.match(
-                            r"^\s*\d{1,3}\s*$", brest_
+                        # Flattened-ToC lines read "Title 43 Next Entry …": after
+                        # the title comes a printed page reference, then the next
+                        # entry's text.  A real opener's line ends with prose, so
+                        # any remainder starting with a number is a ToC artifact.
+                        brest_lead_ = brest_.strip()
+                        if dot_leader_.search(brest_) or (
+                            brest_lead_ and brest_lead_[0].isdigit()
                         ):
                             continue
-                        chapter_first_pg[tn] = int(bc_.get("page_number") or 0)
+                        chapter_first_pg.setdefault(
+                            tn, int(bc_.get("page_number") or 0)
+                        )
                         break
+                # Monotonic-window validation of every pin collected by the
+                # heading-anchor and body-title passes: chapter opening pages
+                # must strictly increase with chapter number (open interval —
+                # a pin must exceed the nearest lower pinned chapter's pin and
+                # fall below the nearest higher pinned chapter's pin; a chapter
+                # with no pinned neighbor on one side validates only against
+                # the side that exists, so a legitimate first-chapter pin is
+                # never pushed to a page floor).  A pin outside its window is
+                # a mis-anchor (front-matter cross-reference, ToC remnant)
+                # that would collapse or invert the chapter's page range, so
+                # it is rejected and its chapter is left to the later scan
+                # tiers and the spacing fallback.  Removing one pin can rescue
+                # a neighbor whose window was only broken by the removed pin,
+                # so scans repeat to a fixed point; each scan rejects at most
+                # one pin — the later-ordered (higher-numbered) violator,
+                # which also resolves duplicate first pages deterministically
+                # — bounding the loop at one pass per pinned chapter.
+                scan_bound_ = len(chapter_first_pg) + 1
+                for _ in range(scan_bound_):
+                    pins_sorted_ = sorted(chapter_first_pg.items())
+                    reject_ch_: int | None = None
+                    reject_lo_: int | None = None
+                    reject_hi_: int | None = None
+                    for idx_, (ch_, pg_) in enumerate(pins_sorted_):
+                        lo_pg_ = pins_sorted_[idx_ - 1][1] if idx_ else None
+                        hi_pg_ = (
+                            pins_sorted_[idx_ + 1][1]
+                            if idx_ + 1 < len(pins_sorted_)
+                            else None
+                        )
+                        if (lo_pg_ is not None and pg_ <= lo_pg_) or (
+                            hi_pg_ is not None and pg_ >= hi_pg_
+                        ):
+                            # Keep overwriting so the highest-numbered
+                            # violating pin is rejected first; earlier
+                            # violators are re-checked against the updated
+                            # map on the next scan.
+                            reject_ch_ = ch_
+                            reject_lo_ = lo_pg_
+                            reject_hi_ = hi_pg_
+                    if reject_ch_ is None:
+                        break
+                    rej_pg_ = chapter_first_pg.pop(reject_ch_)
+                    logger.debug(
+                        "Rejected chapter %d pin @%d violating monotonic "
+                        "window (lower=%s, upper=%s); chapter left to "
+                        "later fallback resolution",
+                        reject_ch_,
+                        rej_pg_,
+                        reject_lo_,
+                        reject_hi_,
+                    )
+
+                # Front-matter ToC-listing reconciliation.  When the printed
+                # ToC parses with enough roster coverage, chapters the heading
+                # and body scans left unpinned are pinned at their printed ToC
+                # page plus a median print-to-scan offset, and unpinned roster
+                # chapters the parse neither lists nor mentions are phantoms
+                # and die.  A row mentioned without a parseable page is
+                # ambiguous and keeps its chapter; pins confirmed by the
+                # earlier passes are never overridden and never killed.
+                toc_killed_: set[int] = set()
+                toc_roster_ = {ct[0] for ct in chapters_to_cover if ct[1] == src}
+                # Multi-source probes return every book's front matter;
+                # without this scope another book's ToC rows would inflate
+                # the coverage gate and feed phantom-kill evidence for the
+                # selected book.
+                src_chunks_ = [
+                    c for c in structure_chunks if c.get("source_file") == src
+                ]
+                toc_listings_, toc_mentions_ = self._toc_listing_pages(
+                    src_chunks_, desc_pages, toc_roster_
+                )
+                if toc_listings_:
+                    for toc_ch_ in sorted(toc_roster_):
+                        if toc_ch_ in chapter_first_pg:
+                            continue
+                        if toc_ch_ in toc_listings_ or toc_ch_ in toc_mentions_:
+                            if toc_ch_ not in toc_listings_:
+                                logger.debug(
+                                    "Kept chapter %d for %s: ambiguous ToC "
+                                    "mention without a parseable page",
+                                    toc_ch_,
+                                    src,
+                                )
+                            continue
+                        toc_killed_.add(toc_ch_)
+                        chapters_to_cover = [
+                            ct
+                            for ct in chapters_to_cover
+                            if ct[0] != toc_ch_ or ct[1] != src
+                        ]
+                        good_title_nums.discard(toc_ch_)
+                        logger.debug(
+                            "Dropped phantom roster chapter %d for %s: absent "
+                            "from the front-matter ToC parse",
+                            toc_ch_,
+                            src,
+                        )
+                    toc_offsets_ = [
+                        chapter_first_pg[anch_ch_] - toc_listings_[anch_ch_][1]
+                        for anch_ch_ in chapter_first_pg
+                        if anch_ch_ in toc_listings_
+                    ]
+                    if toc_offsets_:
+                        toc_offset_ = int(statistics.median(toc_offsets_))
+                        logger.debug(
+                            "ToC listing offset spread for %s: min=%d max=%d "
+                            "median=%d over %d anchored chapters",
+                            src,
+                            min(toc_offsets_),
+                            max(toc_offsets_),
+                            toc_offset_,
+                            len(toc_offsets_),
+                        )
+                        for toc_ch_, (toc_title_, toc_printed_) in sorted(
+                            toc_listings_.items()
+                        ):
+                            if toc_ch_ in chapter_first_pg:
+                                continue
+                            if toc_ch_ not in good_title_nums:
+                                continue
+                            toc_derived_ = toc_printed_ + toc_offset_
+                            # Front matter never anchors: a small or negative
+                            # median offset must not park a pin below the book
+                            # body, violating the floor every other scan
+                            # enforces.
+                            if toc_derived_ < 10:
+                                logger.debug(
+                                    "Rejected chapter %d ToC pin @%d: below "
+                                    "the front-matter floor",
+                                    toc_ch_,
+                                    toc_derived_,
+                                )
+                                continue
+                            toc_lo_pg_ = max(
+                                (
+                                    pg_
+                                    for ch_, pg_ in chapter_first_pg.items()
+                                    if ch_ < toc_ch_
+                                ),
+                                default=None,
+                            )
+                            toc_hi_pg_ = min(
+                                (
+                                    pg_
+                                    for ch_, pg_ in chapter_first_pg.items()
+                                    if ch_ > toc_ch_
+                                ),
+                                default=None,
+                            )
+                            if (
+                                toc_lo_pg_ is not None and toc_lo_pg_ >= toc_derived_
+                            ) or (
+                                toc_hi_pg_ is not None and toc_derived_ >= toc_hi_pg_
+                            ):
+                                logger.debug(
+                                    "Rejected chapter %d ToC pin @%d violating "
+                                    "monotonic window (lower=%s, upper=%s)",
+                                    toc_ch_,
+                                    toc_derived_,
+                                    toc_lo_pg_,
+                                    toc_hi_pg_,
+                                )
+                                continue
+                            chapter_first_pg[toc_ch_] = toc_derived_
+                            logger.debug(
+                                "Pinned chapter %d (%s) at page %d via "
+                                "front-matter ToC listing (printed %d + offset %d)",
+                                toc_ch_,
+                                toc_title_,
+                                toc_derived_,
+                                toc_printed_,
+                                toc_offset_,
+                            )
                 ch_n = re.compile(
                     r"(?:Chapter\s+(\d+)\s*[:\-]?\s*|(?:Module|Lesson)\s+(\d+)"
                     r"\s*[:\-]\s*)(.{2,60})",
@@ -724,7 +1053,27 @@ class RAGPipeline(
                             # colon, period, or plain space after the number.
                             if re.match(r"Chapter\s+\d+,", nm.group(0), re.IGNORECASE):
                                 continue
+                            if desc_pages.get(ch) == pg:
+                                # The description sentence sits on a front-
+                                # matter page and never marks the real chapter
+                                # start (see desc_pages above).
+                                continue
+                            if not self._pin_fits_window(chapter_first_pg, ch, pg):
+                                continue
                             chapter_first_pg[ch] = pg
+
+                # Scan body chunks for magazine-style chapter openings (bare
+                # number + title, e.g. ML4T).  These are body-role, invisible to
+                # the heading/TOC structure probe, so without them a chapter that
+                # never gets a reliable start page is unbounded and the next
+                # chapter's content leaks into its bucket.
+                for open_n, open_pg in self._detect_chapter_openings(body_all_).items():
+                    if (
+                        open_n not in chapter_first_pg
+                        and open_n not in toc_killed_
+                        and self._pin_fits_window(chapter_first_pg, open_n, open_pg)
+                    ):
+                        chapter_first_pg[open_n] = open_pg
 
                 # Phase 1: find chapter start pages from body chunk subsection headers like "1.1 " or "11.1.1 "
                 # Use \b (word boundary) + search() instead of ^ + match() because docling
@@ -738,9 +1087,9 @@ class RAGPipeline(
                 # most universal approach — works for any document regardless of TOC format.
                 appendix_sec_re = re.compile(r"\b([A-Za-z])\.\d+\s")
                 appendix_labels_found: set[str] = set()
-                for c in storage.get_body_chunks(src, limit=3500):
-                    txt = c.get("chunk_text", "")[:150]
-                    page = c.get("page_number") or 0
+                for chunk in storage.get_body_chunks(src, limit=None):
+                    txt = chunk.get("chunk_text", "")[:150]
+                    page = chunk.get("page_number") or 0
 
                     # Detect appendix labels from body section numbering
                     am = appendix_sec_re.search(txt)
@@ -751,12 +1100,20 @@ class RAGPipeline(
                     if m:
                         ch = int(m.group(1))
                         if 1 <= ch <= 30 and ch not in chapter_first_pg:
+                            if ch in toc_killed_:
+                                continue
+                            if desc_pages.get(ch) == page:
+                                continue
                             # Skip cross-references like "9.2 Virtual
                             # Networking Hardware on page 144" which
                             # appear on pages belonging to OTHER chapters.
-                            after = txt[m.end() : m.end() + 60]
-                            has_on_page = bool(re.search(r"\bon\s+page\s+\d+", after))
+                            after_txt = txt[m.end() : m.end() + 60]
+                            has_on_page = bool(
+                                re.search(r"\bon\s+page\s+\d+", after_txt)
+                            )
                             if has_on_page:
+                                continue
+                            if not self._pin_fits_window(chapter_first_pg, ch, page):
                                 continue
                             chapter_first_pg[ch] = page
                             if len(chapter_first_pg) >= 25:
@@ -772,14 +1129,20 @@ class RAGPipeline(
                     if n not in chapter_first_pg
                 ]
                 if missing:
-                    for c in storage.get_body_chunks(src, limit=3500):
-                        txt = c.get("chunk_text", "")[:150]
+                    for chunk in storage.get_body_chunks(src, limit=None):
+                        txt = chunk.get("chunk_text", "")[:150]
+                        pg2 = int(chunk.get("page_number") or 0)
                         for ch_num in list(missing):
+                            if desc_pages.get(ch_num) == pg2:
+                                continue
                             pat = re.compile(rf"\b{ch_num}\D")
-                            if pat.search(txt):
-                                chapter_first_pg[ch_num] = int(
-                                    c.get("page_number") or 0
-                                )
+                            # Front matter never anchors: same floor as the scan above.
+                            if (
+                                pg2 >= 10
+                                and pat.search(txt)
+                                and self._pin_fits_window(chapter_first_pg, ch_num, pg2)
+                            ):
+                                chapter_first_pg[ch_num] = pg2
                                 missing.remove(ch_num)
                         if not missing:
                             break
@@ -803,11 +1166,14 @@ class RAGPipeline(
                     bp = chapter_first_pg[before] if before is not None else None
                     ap = chapter_first_pg[after] if after is not None else None
                     if bp is not None and ap is not None:
-                        chapter_first_pg[n] = (bp + ap) // 2
+                        # A midpoint equal to bp (gap <= 1) duplicates that
+                        # anchor pin instead of splitting the range.
+                        if ap - bp >= 2:
+                            chapter_first_pg[n] = (bp + ap) // 2
                     elif bp is not None:
                         chapter_first_pg[n] = bp + 1
-                    elif ap is not None:
-                        chapter_first_pg[n] = max(1, ap - 1)
+                    elif ap is not None and ap > 1:
+                        chapter_first_pg[n] = ap - 1
 
                 # Drop stragglers (e.g. ch24 after ch18) via long-consecutive-run
                 sorted_chs = sorted(chapter_first_pg)
@@ -896,7 +1262,10 @@ class RAGPipeline(
                     # (e.g. ch5 at p51 with ch1 at p56 in page order → end=55).
                     # Skip any boundary whose page is <= start_pg_ to avoid
                     # false positives producing start>end ranges.
-                    end_pg_ = 700
+                    # The sentinel must exceed any real book length: a fixed
+                    # 700 inverted the last chapter's range for books with
+                    # >700 pages (start>end → empty bucket → placeholder).
+                    end_pg_ = 10**6
                     for nxt in range(ch_ + 1, max_ch_ + 2):
                         if nxt in boundary_pgs and boundary_pgs[nxt] > start_pg_:
                             end_pg_ = boundary_pgs[nxt] - 1
@@ -904,86 +1273,122 @@ class RAGPipeline(
                     chapter_ranges_[ch_] = (start_pg_, end_pg_)
 
                 chapter_keys = sorted(chapter_ranges_.keys())
-                # Per-chapter bucket limit: when targeting a single chapter, scale
-                # up so content spans more of the page range instead of saturating
-                # at the first few chunks (all from the same starting page).
-                # For multi-chapter, keep the original 4-chunk cap to prevent
-                # any single chapter from dominating the round-robin merge.
+                if not chapter_keys:
+                    logger.warning(
+                        "No chapter page ranges derived for %s; "
+                        "falling back to generic search",
+                        src,
+                    )
+                    return self._generic_one_shot(
+                        query, top_k, show_sources, source_filter=source_filter
+                    )
                 single_section_mode = len(chapter_keys) <= 2
-                per_chapter_limit = 150 if single_section_mode else 4
-                # Per-chapter page cap.  A small cap (2) kept only ~1/3 of the
-                # chunks on a dense page (troubleshooting chapters have many
-                # short sections per page), silently dropping whole sections from
-                # a single-chapter summary.  Raised for single-chapter mode so
-                # every section on a page is captured, bounded overall by
-                # per_chapter_limit; multi-chapter keeps 2 for fair round-robin.
-                page_cap = 12 if single_section_mode else 2
-                page_count_per_ch: dict[int, dict[int, int]] = {
-                    ch: {} for ch in chapter_keys
-                }
+                # Per-chapter fetch budget for multi-chapter overviews.  Each
+                # chapter is summarized independently via _summarize_bounded
+                # (single-pass budget 320k chars), so 8 chunks stay within one
+                # LLM call per chapter while tripling per-chapter coverage
+                # versus the old 4-chunk cap, which summarized dense chapters
+                # from one or two pages.
+                per_chapter_limit = 8
                 chapter_buckets: dict[int, list[dict[str, Any]]] = {
                     ch: [] for ch in chapter_keys
                 }
-                for c in cast(
-                    list[dict[str, Any]], storage.get_body_chunks(src, limit=6000)
-                ):
-                    pg = c.get("page_number", 0)
+                if single_section_mode:
+                    # Deterministic full-chapter fetch: every body chunk inside
+                    # the chapter's page range, in document order, with no
+                    # per-chapter or per-page caps.  The previous capped
+                    # sampling silently dropped dense pages from single-chapter
+                    # overviews; the summarizer bounds its own context
+                    # downstream, so fetching everything here is lossless.
                     for ch_num in chapter_keys:
-                        rng = chapter_ranges_[ch_num]
-                        if rng[0] <= pg <= rng[1]:
-                            if len(chapter_buckets[ch_num]) < per_chapter_limit:
-                                per_page = page_count_per_ch[ch_num]
-                                if per_page.get(pg, 0) < page_cap:
-                                    per_page[pg] = per_page.get(pg, 0) + 1
-                                    c["score"] = 0.5
-                                    chapter_buckets[ch_num].append(c)
-                                else:
-                                    # Page at cap — promote header chunks over
-                                    # footers/captions that were collected first.
-                                    # Use a broader match: docling often embeds
-                                    # section headers (e.g. "11.2 CPU Hot-Plugging")
-                                    # in the middle of paragraph text rather than
-                                    # at the start of a segment.
-                                    txt = c.get("chunk_text", "")
-                                    sec_pat = re.compile(
-                                        rf"\b{ch_num}\.\d+(?:\.\d+)?\s"
-                                    )
-                                    if sec_pat.search(txt):
-                                        replaced = False
-                                        for i, existing in enumerate(
-                                            chapter_buckets[ch_num]
-                                        ):
-                                            if existing.get(
-                                                "page_number"
-                                            ) == pg and not sec_pat.search(
-                                                existing.get("chunk_text", "")
+                        start_pg_, end_pg_ = chapter_ranges_[ch_num]
+                        in_range = [
+                            c
+                            for c in cast(
+                                list[dict[str, Any]],
+                                storage.get_body_chunks(src, page_gte=start_pg_),
+                            )
+                            if (c.get("page_number") or 0) <= end_pg_
+                        ]
+                        in_range.sort(
+                            key=lambda c: (
+                                c.get("page_number") or 0,
+                                c.get("page_pos") or 0,
+                            )
+                        )
+                        for c in in_range:
+                            c["score"] = 0.5
+                        chapter_buckets[ch_num] = in_range
+                else:
+                    # Multi-chapter round-robin: per-page caps keep sampling
+                    # spread across the chapter's range instead of clustering
+                    # on its first pages.
+                    page_cap = 3
+                    page_count_per_ch: dict[int, dict[int, int]] = {
+                        ch: {} for ch in chapter_keys
+                    }
+                    for c in cast(
+                        list[dict[str, Any]], storage.get_body_chunks(src, limit=6000)
+                    ):
+                        pg = c.get("page_number", 0)
+                        for ch_num in chapter_keys:
+                            rng = chapter_ranges_[ch_num]
+                            if rng[0] <= pg <= rng[1]:
+                                if len(chapter_buckets[ch_num]) < per_chapter_limit:
+                                    per_page = page_count_per_ch[ch_num]
+                                    if per_page.get(pg, 0) < page_cap:
+                                        per_page[pg] = per_page.get(pg, 0) + 1
+                                        c["score"] = 0.5
+                                        chapter_buckets[ch_num].append(c)
+                                    else:
+                                        # Page at cap — promote header chunks over
+                                        # footers/captions that were collected first.
+                                        # Use a broader match: docling often embeds
+                                        # section headers (e.g. "11.2 CPU Hot-Plugging")
+                                        # in the middle of paragraph text rather than
+                                        # at the start of a segment.
+                                        txt = c.get("chunk_text", "")
+                                        sec_pat = re.compile(
+                                            rf"\b{ch_num}\.\d+(?:\.\d+)?\s"
+                                        )
+                                        if sec_pat.search(txt):
+                                            replaced = False
+                                            for i, existing in enumerate(
+                                                chapter_buckets[ch_num]
                                             ):
-                                                c["score"] = 0.5
-                                                chapter_buckets[ch_num][i] = c
-                                                replaced = True
-                                                break
-                                        # All existing page entries are also section
-                                        # headers — grant extra slots to avoid losing
-                                        # genuine section content. Allow up to 4 per
-                                        # page for pages with dense section headers
-                                        # (e.g. VirtualBox ch11 p186 has 4: 11.6.3,
-                                        # 11.6.4, 11.6.4.1, 11.6.5).
-                                        if not replaced:
-                                            if per_page.get(pg, 0) < page_cap + 2:
-                                                per_page[pg] = per_page.get(pg, 0) + 1
-                                                c["score"] = 0.5
-                                                chapter_buckets[ch_num].append(c)
-                                            else:
-                                                logger.debug(
-                                                    "Page %s at cap (%s slots), section header "
-                                                    "'%s...' dropped (all %s existing entries "
-                                                    "also have section numbers)",
-                                                    pg,
-                                                    per_page.get(pg, 0),
-                                                    txt[:60],
-                                                    len(chapter_buckets[ch_num]),
-                                                )
-                            break
+                                                if existing.get(
+                                                    "page_number"
+                                                ) == pg and not sec_pat.search(
+                                                    existing.get("chunk_text", "")
+                                                ):
+                                                    c["score"] = 0.5
+                                                    chapter_buckets[ch_num][i] = c
+                                                    replaced = True
+                                                    break
+                                            # All existing page entries are also section
+                                            # headers — grant extra slots to avoid losing
+                                            # genuine section content. Allow up to 4 per
+                                            # page for pages with dense section headers
+                                            # (e.g. VirtualBox ch11 p186 has 4: 11.6.3,
+                                            # 11.6.4, 11.6.4.1, 11.6.5).
+                                            if not replaced:
+                                                if per_page.get(pg, 0) < page_cap + 2:
+                                                    per_page[pg] = (
+                                                        per_page.get(pg, 0) + 1
+                                                    )
+                                                    c["score"] = 0.5
+                                                    chapter_buckets[ch_num].append(c)
+                                                else:
+                                                    logger.debug(
+                                                        "Page %s at cap (%s slots), section header "
+                                                        "'%s...' dropped (all %s existing entries "
+                                                        "also have section numbers)",
+                                                        pg,
+                                                        per_page.get(pg, 0),
+                                                        txt[:60],
+                                                        len(chapter_buckets[ch_num]),
+                                                    )
+                                break
 
                 # Post-processing: inject missing section headers.
                 # Docling sometimes drops section numbers from body chunks
@@ -1022,9 +1427,16 @@ class RAGPipeline(
 
                 accumulated = list(unique_by_hash.values())
                 accumulated.sort(key=lambda c: c.get("score", 0.0), reverse=True)
-                # Use the larger of top_k and per_chapter_limit for the final
-                # trim so single-chapter targets don't lose their spread.
-                final_chunks = accumulated[: max(top_k, per_chapter_limit)]
+                if single_section_mode:
+                    # The deterministic fetch returned the complete chapter;
+                    # trimming here would drop real content.  The summarizer
+                    # bounds its own context downstream.
+                    final_chunks = accumulated
+                else:
+                    # Use the larger of top_k and per_chapter_limit for the
+                    # final trim so the merged multi-chapter context stays
+                    # bounded while single chapters keep their spread.
+                    final_chunks = accumulated[: max(top_k, per_chapter_limit)]
 
                 # Reorder chunks interleaving pages (round-robin by page) so the
                 # LLM sees content from diverse pages early rather than sequential
@@ -1219,49 +1631,76 @@ class RAGPipeline(
                     )
                 llm_fallback_roster += "\n"
 
-                prompt = self._build_prompt(query, context_text)
-
                 generation_start = time.perf_counter()
                 answer = ""
                 try:
-                    with trace_operation("rag_generation_iterative") as span:
-                        if span:
-                            span.set_attribute("rag.iterative_mode", True)
-                            span.set_attribute("rag.enumeration_mode", True)
-                            span.set_attribute("rag.top_k", top_k)
-
-                        if self._config.streaming_enabled and hasattr(
-                            self._llm_provider, "stream_chat"
-                        ):
-                            try:
-                                messages = [{"role": "user", "content": prompt}]
-                                accumulated_resp: list[str] = []
-
-                                def on_chunk(
-                                    content: str, _reasoning: str | None
-                                ) -> None:
-                                    if content:
-                                        accumulated_resp.append(content)
-                                    if self._on_chunk and content:
-                                        self._on_chunk(content, _reasoning)
-
-                                enum_max_tokens = self._config.llm_max_tokens
-                                self._llm_provider.stream_chat(
-                                    messages=messages,
-                                    on_chunk=on_chunk,
-                                    temperature=self._config.llm_temperature,
-                                    max_tokens=enum_max_tokens,
-                                )
-                                answer = "".join(accumulated_resp)
-                            except Exception:
-                                answer = ""
-
-                        if not answer or not answer.strip():
-                            enum_max_tokens = self._config.llm_max_tokens
-                            answer = self._llm_provider.generate(
-                                prompt=prompt,
-                                temperature=self._config.llm_temperature,
-                                max_tokens=enum_max_tokens,
+                    if is_multi_chapter and chapter_buckets:
+                        # Map-reduce the chapter-by-chapter overview: one bounded
+                        # LLM call per chapter, then concatenate.  A single call
+                        # covering every chapter overflows the output token budget
+                        # and degenerates into token-soup after a few chapters.
+                        with trace_operation("rag_generation_iterative") as span:
+                            if span:
+                                span.set_attribute("rag.iterative_mode", True)
+                                span.set_attribute("rag.enumeration_mode", True)
+                                span.set_attribute("rag.top_k", top_k)
+                            answer = self._generate_multi_chapter_summary(
+                                chapter_keys, chapter_buckets, ch_titles
+                            )
+                    elif has_section_target and not raw_section_target and final_chunks:
+                        # Single-chapter detailed breakdown (e.g. "tell me about
+                        # chapter 18").  Map-reduce by section: summarizing the
+                        # whole chapter in one call overflows the output token
+                        # budget and degenerates into token-soup part-way through.
+                        with trace_operation("rag_generation_iterative") as span:
+                            if span:
+                                span.set_attribute("rag.iterative_mode", True)
+                                span.set_attribute("rag.enumeration_mode", True)
+                                span.set_attribute("rag.top_k", top_k)
+                            chapter_title = next(
+                                (
+                                    t
+                                    for ct, _s, t in chapters_to_cover
+                                    if str(ct) == str(enum_target)
+                                ),
+                                "",
+                            )
+                            foreign_titles = [
+                                t
+                                for ct, _s, t in full_chapters
+                                if str(ct) != str(enum_target) and t
+                            ]
+                            answer = self._generate_single_chapter_summary(
+                                final_chunks,
+                                str(enum_target),
+                                chapter_title,
+                                foreign_titles=foreign_titles,
+                            )
+                    else:
+                        # Single-chapter overview (this query's path): generate
+                        # non-streaming, vet (ground figures to the source and
+                        # regenerate deterministically if the draft leaked reasoning,
+                        # was empty, or burned the reasoning budget), then emit once
+                        # -- so a spiral or "I got stuck" is never shown and figures
+                        # are quoted from the source.
+                        prompt = self._build_prompt(query, context_text)
+                        prompt += (
+                            "\n\nYou are summarizing source material. Quote figures "
+                            "(percentages, counts, years, metrics, returns) EXACTLY as "
+                            "stated in the retrieved context; never invent, estimate, "
+                            "round, or 'correct' a value the source does not state. "
+                            "This rule applies to prose statistics only -- do not "
+                            "fixate on reproducing code details or function arguments "
+                            "(e.g. list(range(...))) verbatim. State each figure once, "
+                            "confidently, and move on."
+                        )
+                        with trace_operation("rag_generation_iterative") as span:
+                            if span:
+                                span.set_attribute("rag.iterative_mode", True)
+                                span.set_attribute("rag.enumeration_mode", True)
+                                span.set_attribute("rag.top_k", top_k)
+                            answer = self._vet_answer(
+                                self._generate(prompt), prompt, context_text
                             )
                             if self._on_chunk and answer:
                                 self._on_chunk(answer, None)
@@ -1321,7 +1760,11 @@ class RAGPipeline(
         context_text = chapter_roster + self._format_context(final_chunks)
         prompt = self._build_prompt(query, context_text)
 
-        # 6. Generate answer (same LLM call as query() uses)
+        # 6. Generate answer. Every query that reaches _iterative_query is a
+        #    chapter/section/coverage summary, so generate non-streaming and vet
+        #    (ground figures to the source; a leak/empty/budget-fallback
+        #    regenerated deterministically) then emit once -- a reasoning spiral or
+        #    "I got stuck" can never surface in the terminal.
         generation_start = time.perf_counter()
         answer = ""
         try:
@@ -1330,37 +1773,23 @@ class RAGPipeline(
                     span.set_attribute("rag.iterative_mode", True)
                     span.set_attribute("rag.top_k", top_k)
 
-                if self._config.streaming_enabled and hasattr(
-                    self._llm_provider, "stream_chat"
-                ):
-                    try:
-                        messages = [{"role": "user", "content": prompt}]
-                        accumulated_resp = []
-
-                        def on_chunk(content: str, _reasoning: str | None) -> None:
-                            if content:
-                                accumulated_resp.append(content)
-                            if self._on_chunk and content:
-                                self._on_chunk(content, _reasoning)
-
-                        self._llm_provider.stream_chat(
-                            messages=messages,
-                            on_chunk=on_chunk,
-                            temperature=self._config.llm_temperature,
-                            max_tokens=self._config.llm_max_tokens,
-                        )
-                        answer = "".join(accumulated_resp)
-                    except Exception:
-                        answer = ""
-
+                prompt += (
+                    "\n\nYou are summarizing source material. Quote figures "
+                    "(percentages, counts, years, metrics, returns) EXACTLY as stated "
+                    "in the retrieved context; never invent, estimate, round, or "
+                    "'correct' a value the source does not state. This rule applies to "
+                    "prose statistics only -- do not fixate on reproducing code "
+                    "details or function arguments (e.g. list(range(...))) verbatim. "
+                    "State each figure once, confidently, and move on."
+                )
+                answer = self._vet_answer(self._generate(prompt), prompt, context_text)
                 if not answer or not answer.strip():
-                    answer = self._llm_provider.generate(
-                        prompt=prompt,
-                        temperature=self._config.llm_temperature,
-                        max_tokens=self._config.llm_max_tokens,
+                    answer = (
+                        "I couldn't produce a complete summary. Please try again or "
+                        "narrow the scope of your request."
                     )
-                    if self._on_chunk and answer:
-                        self._on_chunk(answer, None)
+                if self._on_chunk and answer:
+                    self._on_chunk(answer, None)
         except Exception as e:
             logger.error(
                 "Iterative query generation failed: %s: %s", type(e).__name__, e
@@ -1405,6 +1834,11 @@ class RAGPipeline(
 
             # --- Resolve document-scoped source_filter from query ---
             source_filter = self._resolve_source_filter(query)
+
+            # --- Page-number lookup: "what is on page 500" ---
+            page_result = await self._answer_page_query_async(query)
+            if page_result is not None:
+                return page_result
 
             retrieval_start = time.perf_counter()
             try:
@@ -1459,7 +1893,7 @@ class RAGPipeline(
                             def on_chunk(content: str, _reasoning: str | None) -> None:
                                 if content:
                                     accumulated.append(content)
-                                if self._on_chunk and content:
+                                if self._on_chunk and (content or _reasoning):
                                     self._on_chunk(content, _reasoning)
 
                             await self._llm_provider.stream_chat_async(
@@ -1526,6 +1960,11 @@ class RAGPipeline(
 
             # --- Resolve document-scoped source_filter from query ---
             source_filter = self._resolve_source_filter(query)
+
+            # --- Page-number lookup: "what is on page 500" ---
+            page_result = await self._answer_page_query_async(query)
+            if page_result is not None:
+                return page_result
 
             rewritten_query = self._rewrite_query_with_history(query, session)
 
@@ -1610,7 +2049,7 @@ class RAGPipeline(
                             def on_chunk(content: str, _reasoning: str | None) -> None:
                                 if content:
                                     accumulated.append(content)
-                                if self._on_chunk and content:
+                                if self._on_chunk and (content or _reasoning):
                                     self._on_chunk(content, _reasoning)
 
                             await self._llm_provider.stream_chat_async(

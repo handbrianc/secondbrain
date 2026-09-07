@@ -125,6 +125,7 @@ SECONDBRAIN_INGEST_POOL=process
 SECONDBRAIN_SKIP_EXISTING_ON_REINGEST=true
 SECONDBRAIN_PDF_OCR_ENABLED=false
 SECONDBRAIN_PDF_FAST_TEXT_ENABLED=true  # skip docling layout/OCR for PDFs with a native text layer; falls back to full docling when the PDF has no/insufficient native text; ignored when SECONDBRAIN_PDF_OCR_ENABLED=true
+SECONDBRAIN_PDF_STRUCTURE_PROBE_ENABLED=true  # route text-layer PDFs that look like structured books (chapter openers or dotted ToC entries in the leading pages) through full docling to capture per-item structural labels; set false to keep every text-layer PDF on the fast path
 SECONDBRAIN_PDF_TABLE_STRUCTURE_ENABLED=false
 SECONDBRAIN_PDF_TABLE_FAST_MODE=true
 SECONDBRAIN_PDF_TABLE_CELL_MATCHING=false

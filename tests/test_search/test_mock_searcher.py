@@ -123,7 +123,7 @@ class TestMockSearcherSearch:
         assert isinstance(results, list)
         assert len(results) > 0
 
-    def test_search_returns_mock_data_not_mongodb(self):
+    def test_search_returns_mock_data(self):
         """Test that search returns predefined mock data."""
         searcher = MockSearcher()
 
@@ -258,14 +258,14 @@ class TestMockSearcherContent:
         assert len(results) > 0
         assert any("architecture" in chunk["chunk_text"].lower() for chunk in results)
 
-    def test_has_mongodb_chunk(self):
-        """Test that mock data includes MongoDB-related chunks."""
+    def test_has_vector_store_chunk(self):
+        """Test that mock data includes Qdrant vector store chunks."""
         searcher = MockSearcher()
 
-        results = searcher.search("MongoDB")
+        results = searcher.search("Qdrant")
 
         assert len(results) > 0
-        assert any("mongodb" in chunk["chunk_text"].lower() for chunk in results)
+        assert any("qdrant" in chunk["chunk_text"].lower() for chunk in results)
 
     def test_chunks_have_correct_source_files(self):
         """Test that chunks reference correct source files."""

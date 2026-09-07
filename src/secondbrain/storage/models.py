@@ -31,7 +31,7 @@ class StorableDocument:
     Attributes
     ----------
         chunk_id: Unique identifier for this chunk.
-        text: The chunk text content (stored as 'chunk_text' in MongoDB).
+        text: The chunk text content (stored as 'chunk_text' in the vector store).
         embedding: Vector embedding for semantic search.
         metadata: Reference to parent document metadata.
         page_number: Page number in source document (if applicable).

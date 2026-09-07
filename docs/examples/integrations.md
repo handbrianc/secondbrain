@@ -52,11 +52,13 @@ def ingest_document():
         )
         results = ingestor.ingest(tmp_path)
 
-        return jsonify({
-            "success": results["success"],
-            "failed": results["failed"],
-            "message": f"Ingested {results['success']} files"
-        })
+        return jsonify(
+            {
+                "success": results["success"],
+                "failed": results["failed"],
+                "message": f"Ingested {results['success']} files",
+            }
+        )
     finally:
         os.unlink(tmp_path)
 
@@ -87,19 +89,21 @@ def search_documents():
             top_k=top_k,
         )
 
-    return jsonify({
-        "query": query,
-        "count": len(results),
-        "results": [
-            {
-                "score": r.get("score"),
-                "source": r.get("source"),
-                "page": r.get("page"),
-                "text": r.get("text", "")[:200],
-            }
-            for r in results
-        ]
-    })
+    return jsonify(
+        {
+            "query": query,
+            "count": len(results),
+            "results": [
+                {
+                    "score": r.get("score"),
+                    "source": r.get("source"),
+                    "page": r.get("page"),
+                    "text": r.get("text", "")[:200],
+                }
+                for r in results
+            ],
+        }
+    )
 
 
 @app.route("/status", methods=["GET"])
@@ -204,7 +208,7 @@ async def ingest_document(file: UploadFile = File(...)):
         return IngestResponse(
             success=results["success"],
             failed=results["failed"],
-            message=f"Ingested {results['success']} files"
+            message=f"Ingested {results['success']} files",
         )
     finally:
         os.unlink(tmp_path)
@@ -213,7 +217,7 @@ async def ingest_document(file: UploadFile = File(...)):
 @app.get("/search", response_model=SearchResponse)
 async def search_documents(
     q: str = Query(..., description="Search query"),
-    top_k: Optional[int] = Query(None, description="Max results")
+    top_k: Optional[int] = Query(None, description="Max results"),
 ):
     """Search ingested documents."""
     if top_k is None:
@@ -224,6 +228,7 @@ async def search_documents(
     try:
         # Async embedding generation
         import asyncio
+
         query_vec = await asyncio.to_thread(gen.generate, q)
     finally:
         gen.close()
@@ -292,9 +297,11 @@ from secondbrain.search import Searcher
 from secondbrain.embed.generator import EmbeddingGenerator
 from secondbrain.management import StatusChecker, Lister
 
+
 def setup_environment():
     """Initialize from environment or .env file."""
     return config()
+
 
 def ingest_path(path: str, cfg) -> dict:
     """Ingest documents from path."""
@@ -304,6 +311,7 @@ def ingest_path(path: str, cfg) -> dict:
     )
     return ingestor.ingest(path)
 
+
 def search_query(query: str, cfg, top_k: int = None) -> list:
     """Search for query."""
     if top_k is None:
@@ -311,6 +319,7 @@ def search_query(query: str, cfg, top_k: int = None) -> list:
 
     with Searcher() as searcher:
         return searcher.search(query=query, top_k=top_k)
+
 
 def get_status() -> dict:
     """Get database statistics."""
@@ -330,11 +339,11 @@ from secondbrain.exceptions import (
     CLIValidationError,
 )
 
+
 @app.exception_handler(SecondBrainError)
 async def handle_secondbrain_error(request, exc):
     return JSONResponse(
-        status_code=500,
-        content={"error": str(exc), "type": type(exc).__name__}
+        status_code=500, content={"error": str(exc), "type": type(exc).__name__}
     )
 ```
 
@@ -344,6 +353,7 @@ SecondBrain's Motor-based async storage can improve throughput:
 
 ```python
 from secondbrain.storage.async_client import AsyncStorageClient
+
 
 async def async_search(query: str, top_k: int):
     """True async search operation."""
@@ -386,8 +396,9 @@ uvicorn app:app --workers 4 --host 0.0.0.0 --port 8000
 Always expose a health endpoint for container orchestration:
 
 ```python
-@ app.get("/health")
+@app.get("/health")
 def health():
     from secondbrain.logging import get_health_status
+
     return get_health_status()
 ```

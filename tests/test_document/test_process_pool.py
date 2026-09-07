@@ -68,12 +68,13 @@ def make_fake(result_factory=None, record=None):
     return _fake_cls
 
 
-def _make_ingestor(progress_callback=None):
+def _make_ingestor(progress_callback=None, on_chunk_progress=None):
     ingestor = DocumentIngestor.__new__(DocumentIngestor)
     ingestor.chunk_size = 100
     ingestor.chunk_overlap = 20
     ingestor.embedding_cache = object()
     ingestor.progress_callback = progress_callback
+    ingestor.on_chunk_progress = on_chunk_progress
     return ingestor
 
 
@@ -123,7 +124,7 @@ class TestProcessPoolSelection:
         assert len(record.constructed) == 1
         assert record.constructed[0].max_workers == 8
 
-    def test_process_pool_does_not_pass_queue_or_cache_to_worker(self, monkeypatch):
+    def test_process_pool_no_progress_channel_without_callback(self, monkeypatch):
         _patch_config(monkeypatch, ingest_pool="process")
         ingestor = _make_ingestor()
         files = [Path("/tmp/a.txt"), Path("/tmp/b.txt")]
@@ -135,10 +136,12 @@ class TestProcessPoolSelection:
         for fn, args, _kwargs in executor.submitted:
             assert fn is _extract_chunk_and_embed_file
             _, _, _, progress_queue, _, cache = args
+            # No on_chunk_progress consumer -> no queue is shared with child
+            # processes (a raw queue cannot cross spawn); cache stays None too.
             assert progress_queue is None
             assert cache is None
 
-    def test_thread_pool_preserves_queue_and_cache(self, monkeypatch):
+    def test_thread_pool_no_progress_channel_without_callback(self, monkeypatch):
         _patch_config(monkeypatch, ingest_pool="thread")
         ingestor = _make_ingestor()
         files = [Path("/tmp/a.txt"), Path("/tmp/b.txt")]
@@ -150,6 +153,24 @@ class TestProcessPoolSelection:
         for fn, args, _kwargs in executor.submitted:
             assert fn is _extract_chunk_and_embed_file
             _, _, _, progress_queue, _, cache = args
+            assert progress_queue is None
+            assert cache is ingestor.embedding_cache
+
+    def test_thread_pool_uses_queue_when_on_chunk_progress_set(self, monkeypatch):
+        _patch_config(monkeypatch, ingest_pool="thread")
+        ingestor = _make_ingestor()
+        ingestor.on_chunk_progress = lambda *_: None
+        files = [Path("/tmp/a.txt"), Path("/tmp/b.txt")]
+
+        _, record = _run(monkeypatch, "thread", files, 4, ingestor)
+
+        executor = record.constructed[0]
+        assert executor.submitted
+        for fn, args, _kwargs in executor.submitted:
+            assert fn is _extract_chunk_and_embed_file
+            _, _, _, progress_queue, _, cache = args
+            # Thread pool shares memory, so a plain queue.Queue carries within-file
+            # progress; the thread-local cache is reused too.
             assert isinstance(progress_queue, queue.Queue)
             assert cache is ingestor.embedding_cache
 
@@ -261,3 +282,38 @@ class TestSkippedFileAccounting:
         assert len(calls) == 2
         assert all(success for _, success in calls)
         storage.store_batch.assert_not_called()
+
+
+class TestOnChunkProgressDispatch:
+    """Within-file progress events dispatched to ``on_chunk_progress``."""
+
+    def test_handle_progress_event_dispatches_started_and_progress(self) -> None:
+        updates: list[tuple[Path, int, int]] = []
+        ingestor = _make_ingestor()
+        ingestor.on_chunk_progress = lambda fp, done, total: updates.append(
+            (fp, done, total)
+        )
+
+        ingestor._handle_progress_event(("started", "/tmp/a.txt", 25))
+        ingestor._handle_progress_event(("progress", "/tmp/a.txt", 10, 25))
+        ingestor._handle_progress_event(("progress", "/tmp/a.txt", 25, 25))
+
+        assert updates == [
+            (Path("/tmp/a.txt"), 0, 25),
+            (Path("/tmp/a.txt"), 10, 25),
+            (Path("/tmp/a.txt"), 25, 25),
+        ]
+
+    def test_handle_progress_event_noop_without_on_chunk_progress(self) -> None:
+        ingestor = _make_ingestor()
+        ingestor.on_chunk_progress = None
+
+        # Should not raise and should not dispatch.
+        ingestor._handle_progress_event(("started", "/tmp/a.txt", 5))
+
+    def test_callback_exception_is_swallowed(self) -> None:
+        ingestor = _make_ingestor()
+        ingestor.on_chunk_progress = lambda *_: (_ for _ in ()).throw(RuntimeError)
+
+        # Should be swallowed and not propagate.
+        ingestor._handle_progress_event(("started", "/tmp/a.txt", 5))

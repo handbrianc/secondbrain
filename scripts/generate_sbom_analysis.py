@@ -47,14 +47,14 @@ def _get_timestamp() -> datetime:
     return _deterministic_timestamp
 
 
-def run_command(cmd: str, check: bool = True) -> subprocess.CompletedProcess[str]:
-    """Run a shell command and return result.
+def run_command(cmd: list[str], check: bool = True) -> subprocess.CompletedProcess[str]:
+    """Run a command (no shell) and return result.
 
-    Note: shell=True is required for complex command chains with pipes and redirects.
-    Commands are validated and controlled (not user input).
+    Commands are static argument lists built from script-internal constants,
+    never user input.
     """
-    result = subprocess.run(  # nosec B602
-        cmd, shell=True, capture_output=True, text=True, check=False
+    result = subprocess.run(
+        cmd, shell=False, capture_output=True, text=True, check=False
     )
     if check and result.returncode != 0:
         print(f"Error running command: {cmd}", file=sys.stderr)
@@ -74,21 +74,31 @@ def generate_sbom() -> Path:
         if venv_path.exists():
             shutil.rmtree(venv_path)
         print("Creating temporary venv...")
-        run_command(f"python -m venv {venv_path}")
-        run_command(f"{venv_path}/bin/pip install --upgrade pip")
-        run_command(f"{venv_path}/bin/pip install -e .")
+        run_command(["python", "-m", "venv", str(venv_path)])
+        run_command([str(venv_path / "bin" / "pip"), "install", "--upgrade", "pip"])
+        run_command([str(venv_path / "bin" / "pip"), "install", "-e", "."])
 
     cyclonedx = venv_path / "bin" / "cyclonedx-py"
     if not cyclonedx.exists():
-        run_command(f"{venv_path}/bin/pip install cyclonedx-bom")
+        run_command([str(venv_path / "bin" / "pip"), "install", "cyclonedx-bom"])
 
     # Ensure docs/architecture folder exists
     sbom_output_path = Path("docs/architecture/sbom.json")
     sbom_output_path.parent.mkdir(parents=True, exist_ok=True)
     python_bin = venv_path / "bin" / "python"
     run_command(
-        f"{cyclonedx} environment {python_bin} "
-        f"--sv 1.5 --of JSON -o {sbom_output_path} --validate"
+        [
+            str(cyclonedx),
+            "environment",
+            str(python_bin),
+            "--sv",
+            "1.5",
+            "--of",
+            "JSON",
+            "-o",
+            str(sbom_output_path),
+            "--validate",
+        ]
     )
 
     print(f"✅ SBOM generated: {sbom_output_path}")

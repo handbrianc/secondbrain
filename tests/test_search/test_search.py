@@ -49,7 +49,8 @@ class TestVectorStorage:
         assert all(r["chunk_text"] in {"sample text", "more text"} for r in results)
 
     def test_search_with_source_filter(
-        self, storage: QdrantVectorStorage,
+        self,
+        storage: QdrantVectorStorage,
     ) -> None:
         """Test search with a source filter returns only matching source."""
         storage.store_batch(

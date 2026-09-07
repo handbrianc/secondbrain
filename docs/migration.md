@@ -112,7 +112,7 @@ Current naming convention: `SECONDBRAIN_<DOMAIN>_<NAME>`
 
 For example: `SECONDBRAIN_EMBEDDING_MODEL` not `SECONDBRAIN_MODEL`
 
-### Removed Variables
+### Deprecated Variables
 
 Deprecated variables emit warnings. Check logs after upgrading.
 

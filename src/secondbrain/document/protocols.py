@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NotRequired
 
 from typing_extensions import TypedDict
 
@@ -30,10 +30,14 @@ class Segment(TypedDict):
         The extracted text content.
     page : int
         The page number where this segment was found.
+    label : str
+        Optional raw docling item label (e.g. ``"section_header"``) when the
+        parser exposed one; absent for label-less paths (fast text, plain text).
     """
 
     text: str
     page: int
+    label: NotRequired[str]
 
 
 class DocumentParsingProtocol:

@@ -16,7 +16,7 @@ import secondbrain.embedding as embedding_module
 
 _SAMPLE_TEXT = (
     "SecondBrain is a local document intelligence CLI for semantic search. "
-    "It uses MongoDB vector search and OpenAI-compatible embedding APIs to "
+    "It uses Qdrant vector search and OpenAI-compatible embedding APIs to "
     "ingest, chunk, embed, and retrieve documents from a personal knowledge "
     "base. This sentence supplies enough characters to exercise the chunker "
     "and produce at least one deterministic chunk for the worker pipeline."

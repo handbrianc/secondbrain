@@ -22,10 +22,9 @@ def test_config_default_values() -> None:
                 os.environ["PYTEST_CURRENT_TEST"] = pytest_current_test
             get_config.cache_clear()
             config = Config()
-            expected_uri = "mongodb://testuser:testpass@localhost:27018/secondbrain_test?authSource=admin"
-            assert config.mongo_uri == expected_uri
-            assert config.mongo_db == "secondbrain_test"
-            assert config.mongo_collection == "embeddings_test"
+            assert config.qdrant_url == "http://localhost:6333"
+            assert config.qdrant_collection == "embeddings"
+            assert config.storage_backend == "qdrant"
             assert config.chunk_size == 4096
             assert config.chunk_overlap == 50
             assert config.default_top_k == 20
@@ -36,9 +35,8 @@ def test_config_default_values() -> None:
 
 def test_config_from_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test configuration from environment variables."""
-    monkeypatch.setenv("SECONDBRAIN_MONGO_URI", "mongodb://localhost:27019")
-    monkeypatch.setenv("SECONDBRAIN_MONGO_DB", "custom_db")
-    monkeypatch.setenv("SECONDBRAIN_MONGO_COLLECTION", "custom_collection")
+    monkeypatch.setenv("SECONDBRAIN_QDRANT_URL", "http://localhost:27019")
+    monkeypatch.setenv("SECONDBRAIN_QDRANT_COLLECTION", "custom_collection")
     monkeypatch.setenv("SECONDBRAIN_CHUNK_SIZE", "1024")
     monkeypatch.setenv("SECONDBRAIN_CHUNK_OVERLAP", "100")
     monkeypatch.setenv("SECONDBRAIN_DEFAULT_TOP_K", "10")
@@ -46,9 +44,8 @@ def test_config_from_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     # Clear cache to pick up new env vars
     get_config.cache_clear()
     config = Config()
-    assert config.mongo_uri == "mongodb://localhost:27019"
-    assert config.mongo_db == "custom_db"
-    assert config.mongo_collection == "custom_collection"
+    assert config.qdrant_url == "http://localhost:27019"
+    assert config.qdrant_collection == "custom_collection"
     assert config.chunk_size == 1024
     assert config.chunk_overlap == 100
     assert config.default_top_k == 10

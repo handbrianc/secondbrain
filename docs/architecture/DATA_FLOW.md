@@ -239,6 +239,7 @@ Conversation context persisted:
 Conversation context persisted to SQLite (via `ConversationStorage`):
 
 ```
+
 Interaction stored in the SQLite conversations table:
 {
     session_id: "user-specified or uuid",
@@ -249,6 +250,7 @@ Interaction stored in the SQLite conversations table:
     created_at: ...,
     updated_at: ...
 }
+
 ```
 
 Context window limited to RAG_CONTEXT_WINDOW messages.
@@ -260,6 +262,7 @@ Sync operations use straightforward linear execution. Async variants interleave 
 ### Parallel Embedding
 
 ```
+
 Batch of N chunks
     │
     └─►asyncio.gather(*[
@@ -267,6 +270,7 @@ Batch of N chunks
         ])
          │
          └─► N concurrent HTTP requests (rate-limited)
+
 ```
 
 ### Stream Processing
@@ -274,6 +278,7 @@ Batch of N chunks
 Memory-efficient ingestion of large files:
 
 ```
+
 Large Document
     │
     └─► Yield chunks in stream
@@ -286,4 +291,5 @@ Large Document
               │
               └─► Downstream embed/store receives chunks
                    as they're ready
+
 ```

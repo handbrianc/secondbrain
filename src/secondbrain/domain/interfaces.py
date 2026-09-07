@@ -96,7 +96,7 @@ class EmbeddingGenerator(Protocol):
 class VectorStore(Protocol):
     """Protocol for vector database operations.
 
-    Implementations: MongoDBVectorStore, PineconeStore, etc.
+    Implementations: QdrantVectorStore, PineconeStore, etc.
     """
 
     def store(self, chunk: DocumentChunk) -> str:

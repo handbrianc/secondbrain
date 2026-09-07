@@ -1,7 +1,7 @@
 """Interface contract tests for VectorStorage backed by MockVectorStorage.
 
 These tests validate the VectorStorage interface contract using a mock
-backend. They are fast and do not require MongoDB running.
+backend. They are fast and do not require a live Qdrant server running.
 """
 
 from secondbrain.storage import MockVectorStorage
@@ -10,7 +10,7 @@ from secondbrain.storage import MockVectorStorage
 class TestVectorStorageContract:
     """Test VectorStorage interface contract with mock backend."""
 
-    def test_contract_mongo_connection(self, mock_storage: MockVectorStorage) -> None:
+    def test_contract_connection(self, mock_storage: MockVectorStorage) -> None:
         """Test storage connection interface is satisfied."""
         assert mock_storage is not None
         assert mock_storage.validate_connection() is True
@@ -67,7 +67,7 @@ class TestVectorStorageContract:
         mock_storage.delete_by_source("batch_test.pdf")
 
     def test_contract_search_similarity(self, mock_storage: MockVectorStorage) -> None:
-        """Test semantic search with real MongoDB."""
+        """Test semantic search through the interface."""
         # Clean up first
         mock_storage.delete_all()
 
@@ -169,7 +169,7 @@ class TestVectorStorageContract:
         mock_storage.delete_all()
 
     def test_contract_delete_operations(self, mock_storage: MockVectorStorage) -> None:
-        """Test delete operations with real MongoDB."""
+        """Test delete operations through the interface."""
         # Clean up first
         mock_storage.delete_all()
 
@@ -268,7 +268,7 @@ class TestVectorStorageContract:
     ) -> None:
         """Test reconnection after connection loss."""
         # This test validates that the storage can handle connection issues
-        # In a real scenario, we would disconnect MongoDB, but for now we
+        # In a real scenario, we would disconnect the vector store, but for now we
         # just test that the connection validation works
 
         # Validate connection

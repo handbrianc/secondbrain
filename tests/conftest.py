@@ -209,7 +209,7 @@ def mock_searcher():
 
 
 @pytest.fixture(scope="function", autouse=True)
-def cleanup_mongo_connections() -> Generator[None]:
+def cleanup_test_state() -> Generator[None]:
     yield
     # Prevent env var leakage across randomized test order
     for _key in (

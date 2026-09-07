@@ -139,10 +139,12 @@ Example:
 ```python
 import pytest
 
+
 @pytest.mark.safety
 @pytest.mark.pii
 def test_pii_detection(pii_patterns):
     pass
+
 
 @pytest.mark.factual
 @pytest.mark.hallucination

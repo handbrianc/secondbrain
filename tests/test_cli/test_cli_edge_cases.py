@@ -346,7 +346,7 @@ class TestCLIHealthEdgeCases:
             "status": "degraded",
             "timestamp": "2024-01-01T00:00:00+00:00",
             "uptime": None,
-            "services": {"mongodb": False},
+            "services": {"qdrant": False},
             "check_duration_seconds": 0.5,
         }
 
@@ -364,7 +364,7 @@ class TestCLIHealthEdgeCases:
             "status": "healthy",
             "timestamp": "2026-01-01T00:00:00+00:00",
             "uptime": None,
-            "services": {"mongodb": True},
+            "services": {"qdrant": True},
             "check_duration_seconds": 0.1,
         }
 
@@ -379,7 +379,7 @@ class TestCLIHealthEdgeCases:
     ) -> None:
         """Test health command with verbose output."""
         mock_status = MagicMock(
-            mongo_healthy=True,
+            qdrant_healthy=True,
             degraded=False,
         )
         mock_get_health_status.return_value = mock_status

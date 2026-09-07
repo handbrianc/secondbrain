@@ -10,10 +10,9 @@ The circuit breaker protects against cascade failures:
 from secondbrain.utils.circuit_breaker import CircuitBreaker
 
 breaker = CircuitBreaker(
-    failure_threshold=5,
-    recovery_timeout=60,
-    expected_exception=ConnectionError
+    failure_threshold=5, recovery_timeout=60, expected_exception=ConnectionError
 )
+
 
 @breaker.call
 def risky_operation():
@@ -29,7 +28,7 @@ from secondbrain.utils.rate_limiter import RateLimiter
 
 limiter = RateLimiter(
     rate=10,  # requests per second
-    burst=20  # burst capacity
+    burst=20,  # burst capacity
 )
 
 if limiter.acquire():
@@ -156,10 +155,11 @@ For transient failures:
 ```python
 from secondbrain.utils.connections import ValidatableService
 
+
 class MyService(ValidatableService):
     def __init__(self):
         super().__init__(cache_ttl=300)
-    
+
     def execute(self):
         if not self.validate_connection():
             raise StorageConnectionError("Service unavailable")
@@ -173,10 +173,7 @@ Automatic recovery from failures:
 ```python
 # Circuit breaker automatically attempts recovery
 # after reset_timeout seconds
-breaker = CircuitBreaker(
-    failure_threshold=5,
-    recovery_timeout=60
-)
+breaker = CircuitBreaker(failure_threshold=5, recovery_timeout=60)
 
 # After 5 failures, circuit opens
 # After 60 seconds, half-open state
@@ -197,8 +194,8 @@ logger.info(
     extra={
         "query_length": len(query),
         "results_count": len(results),
-        "processing_time_ms": elapsed_ms
-    }
+        "processing_time_ms": elapsed_ms,
+    },
 )
 ```
 
@@ -206,6 +203,7 @@ logger.info(
 
 ```python
 from secondbrain.utils.tracing import trace_operation
+
 
 @trace_operation("query_processing")
 def process_query(query):
@@ -218,10 +216,11 @@ def process_query(query):
 ```python
 from secondbrain.utils.connections import ValidatableService
 
+
 class MyService(ValidatableService):
     def health_check(self) -> dict:
         return {
             "status": "healthy" if self.validate_connection() else "unhealthy",
-            "service": self.__class__.__name__
+            "service": self.__class__.__name__,
         }
 ```

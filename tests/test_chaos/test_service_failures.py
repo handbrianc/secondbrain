@@ -20,11 +20,11 @@ from secondbrain.utils.failure_injector import (
 
 @pytest.mark.chaos
 @pytest.mark.slow
-class TestMongoDBFailureScenarios:
-    """Test MongoDB unavailability scenarios."""
+class TestStorageFailureScenarios:
+    """Test storage unavailability scenarios."""
 
-    def test_mongodb_connection_failure_handling(self):
-        """Test handling of MongoDB connection failure."""
+    def test_storage_connection_failure_handling(self):
+        """Test handling of storage connection failure."""
         storage_cb = CircuitBreaker(CircuitBreakerConfig(failure_threshold=5))
 
         for _ in range(6):
@@ -33,8 +33,8 @@ class TestMongoDBFailureScenarios:
         assert storage_cb.state == CircuitState.OPEN
         assert storage_cb.is_allowed() is False
 
-    def test_mongodb_query_timeout_handling(self):
-        """Test handling of MongoDB query timeout."""
+    def test_storage_query_timeout_handling(self):
+        """Test handling of storage query timeout."""
         storage_cb = CircuitBreaker(CircuitBreakerConfig(failure_threshold=5))
 
         for _ in range(6):
@@ -42,8 +42,8 @@ class TestMongoDBFailureScenarios:
 
         assert storage_cb.state == CircuitState.OPEN
 
-    def test_mongodb_recovery_after_failure(self):
-        """Test recovery after MongoDB becomes available again."""
+    def test_storage_recovery_after_failure(self):
+        """Test recovery after storage becomes available again."""
         config = CircuitBreakerConfig(
             failure_threshold=3,
             success_threshold=2,
@@ -72,8 +72,8 @@ class TestMongoDBFailureScenarios:
 class TestCircuitBreakerResponse:
     """Test circuit breaker response to service failures."""
 
-    def test_circuit_opens_after_mongo_failures(self):
-        """Test that circuit opens after MongoDB failures."""
+    def test_circuit_opens_after_vector_store_failures(self):
+        """Test that circuit opens after vector store failures."""
         cb = CircuitBreaker(CircuitBreakerConfig(failure_threshold=5))
 
         for _ in range(6):
@@ -108,7 +108,9 @@ class TestCircuitBreakerResponse:
 
         with pytest.raises(CircuitBreakerError):
             if not cb.is_allowed():
-                raise CircuitBreakerError("MongoDB circuit is open", "mongo")
+                raise CircuitBreakerError(
+                    "vector store circuit is open", "vector_store"
+                )
 
     def test_circuit_half_open_after_timeout(self):
         """Test circuit transitions to half-open after timeout."""

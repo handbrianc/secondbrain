@@ -116,8 +116,8 @@ class TestQueryLengthValidation:
 class TestInjectionPatternDetection:
     """Tests for injection pattern detection."""
 
-    def test_detects_mongo_operator_injection(self) -> None:
-        """Test that MongoDB operators in queries are handled safely."""
+    def test_detects_injection_operator(self) -> None:
+        """Test that operator expressions in queries are handled safely."""
         # These should pass through as they're just text, not actual injection
         result = sanitize_query("$ne:value")
         assert "$ne" in result

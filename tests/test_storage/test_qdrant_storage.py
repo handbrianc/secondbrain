@@ -7,9 +7,12 @@ drift (e.g. ``query_points`` vs ``search``) that pure-mock tests would miss.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 from qdrant_client import QdrantClient
 
+from secondbrain.constants import MAX_LIST_LIMIT
 from secondbrain.storage.qdrant import QdrantVectorStorage
 from secondbrain.types import _validate_search_result
 
@@ -25,8 +28,13 @@ def storage() -> QdrantVectorStorage:
     return instance
 
 
-def _doc(chunk_id: str, source: str = "a.pdf", page: int = 1, text: str = "hello",
-         chapter_id: int = 1):
+def _doc(
+    chunk_id: str,
+    source: str = "a.pdf",
+    page: int = 1,
+    text: str = "hello",
+    chapter_id: int = 1,
+):
     return {
         "chunk_id": chunk_id,
         "source_file": source,
@@ -72,10 +80,38 @@ def test_store_batch_returns_count(storage: QdrantVectorStorage) -> None:
 
 def test_list_source_files_distinct(storage: QdrantVectorStorage) -> None:
     """list_source_files returns distinct source_file values."""
-    storage.store_batch([_doc("c1", source="a.pdf"), _doc("c2", source="a.pdf"),
-                         _doc("c3", source="b.pdf")])
+    storage.store_batch(
+        [
+            _doc("c1", source="a.pdf"),
+            _doc("c2", source="a.pdf"),
+            _doc("c3", source="b.pdf"),
+        ]
+    )
 
     assert storage.list_source_files() == ["a.pdf", "b.pdf"]
+
+
+def test_list_source_files_requests_nondefault_facet_limit(
+    storage: QdrantVectorStorage, monkeypatch
+) -> None:
+    """Facet must request an explicit large limit, not the client default of 10.
+
+    Qdrant's Python client defaults ``facet`` to returning only the top 10
+    buckets (by chunk count), which would silently hide sources beyond the
+    ten most-populated documents. Regression test for that source-drop bug.
+    """
+    calls: dict[str, object] = {}
+
+    def fake_facet(**kwargs: object) -> SimpleNamespace:
+        calls.update(kwargs)
+        return SimpleNamespace(
+            hits=[SimpleNamespace(value="c.pdf"), SimpleNamespace(value="a.pdf")]
+        )
+
+    monkeypatch.setattr(storage._client, "facet", fake_facet)
+
+    assert storage.list_source_files() == ["a.pdf", "c.pdf"]
+    assert calls.get("limit") == MAX_LIST_LIMIT
 
 
 def test_has_existing_hashes(storage: QdrantVectorStorage) -> None:
@@ -87,20 +123,24 @@ def test_has_existing_hashes(storage: QdrantVectorStorage) -> None:
 
 def test_find_chunks_by_chapter_id_coerces_int(storage: QdrantVectorStorage) -> None:
     """find_chunks matches a str chapter_id against an int stored payload."""
-    storage.store_batch([
-        _doc("c1", source="a.pdf", chapter_id=1),
-        _doc("c2", source="b.pdf", chapter_id=2),
-    ])
+    storage.store_batch(
+        [
+            _doc("c1", source="a.pdf", chapter_id=1),
+            _doc("c2", source="b.pdf", chapter_id=2),
+        ]
+    )
 
     assert [c["chunk_id"] for c in storage.find_chunks(chapter_id="1")] == ["c1"]
 
 
 def test_get_source_chunks_ordered_by_page(storage: QdrantVectorStorage) -> None:
     """get_source_chunks returns a source's chunks ordered by page."""
-    storage.store_batch([
-        _doc("c1", source="a.pdf", page=2),
-        _doc("c2", source="a.pdf", page=1),
-    ])
+    storage.store_batch(
+        [
+            _doc("c1", source="a.pdf", page=2),
+            _doc("c2", source="a.pdf", page=1),
+        ]
+    )
 
     pages = [c["page_number"] for c in storage.get_source_chunks("a.pdf")]
     assert pages == [1, 2]

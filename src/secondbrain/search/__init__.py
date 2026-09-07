@@ -5,6 +5,7 @@ against the stored embeddings using vector similarity matching.
 """
 
 import asyncio
+import inspect
 import logging
 import re
 from collections.abc import Sequence
@@ -78,8 +79,9 @@ def sanitize_query(query: str) -> str:
 class Searcher:
     """Performs semantic search against stored embeddings.
 
-    Uses sentence-transformers to generate query embeddings and MongoDB for
-    vector similarity search against the stored document embeddings.
+    Uses sentence-transformers to generate query embeddings and the Qdrant
+    vector store for vector similarity search against the stored document
+    embeddings.
     """
 
     def __init__(self, verbose: bool = False) -> None:
@@ -166,7 +168,7 @@ class Searcher:
         top_k = top_k or self._config.default_top_k
 
         if not self.storage.validate_connection():
-            raise RuntimeError("Cannot connect to MongoDB")
+            raise RuntimeError("Cannot connect to the vector store")
 
         with trace_operation("search_generate_embedding") as span:
             if span:
@@ -207,7 +209,7 @@ class Searcher:
         top_k = top_k or self._config.default_top_k
 
         if not self.storage.validate_connection():
-            raise RuntimeError("Cannot connect to MongoDB")
+            raise RuntimeError("Cannot connect to the vector store")
 
         with trace_operation("search_generate_embedding_async") as span:
             if span:
@@ -216,11 +218,15 @@ class Searcher:
 
             async def _generate_embedding(embed_text: str) -> list[float]:
                 generate_async = getattr(self.embedding_gen, "generate_async", None)
-                if callable(generate_async) and asyncio.iscoroutinefunction(
+                if callable(generate_async) and inspect.iscoroutinefunction(
                     generate_async
                 ):
-                    return await generate_async(embed_text)
-                return await asyncio.to_thread(self.embedding_gen.generate, embed_text)
+                    embedding = await generate_async(embed_text)
+                    return [float(v) for v in embedding]
+                embedding = await asyncio.to_thread(
+                    self.embedding_gen.generate, embed_text
+                )
+                return [float(v) for v in embedding]
 
             query_embedding = await self.embedding_cache.get_or_create_async(
                 sanitized_query, _generate_embedding

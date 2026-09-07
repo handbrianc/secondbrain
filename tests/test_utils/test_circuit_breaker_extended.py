@@ -14,13 +14,28 @@ from secondbrain.utils.circuit_breaker import (
 )
 
 
+class FakeClock:
+    """Deterministic monotonic clock; tests advance it instead of sleeping."""
+
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def __call__(self) -> float:
+        return self.now
+
+    def advance(self, seconds: float) -> None:
+        self.now += seconds
+
+
 @pytest.mark.circuit_breaker
 @pytest.mark.slow
 class TestHalfOpenExceedsMaxCalls:
     """Test exceeding half_open_max_calls limit in HALF_OPEN state."""
 
-    def test_half_open_exceeds_max_calls(self):
+    def test_half_open_exceeds_max_calls(self, monkeypatch):
         """Test that exceeding half_open_max_calls keeps circuit in half-open state."""
+        clock = FakeClock()
+        monkeypatch.setattr(time, "monotonic", clock)
         config = CircuitBreakerConfig(
             failure_threshold=3,
             success_threshold=3,  # Need 3 successes to close
@@ -35,8 +50,8 @@ class TestHalfOpenExceedsMaxCalls:
 
         assert cb.state == CircuitState.OPEN
 
-        # Wait for timeout to elapse
-        time.sleep(0.07)
+        # Advance past the recovery timeout
+        clock.advance(0.07)
 
         # Should be in HALF_OPEN now
         assert cb.state == CircuitState.HALF_OPEN
@@ -69,8 +84,10 @@ class TestHalfOpenExceedsMaxCalls:
 class TestHalfOpenPartialSuccess:
     """Test partial success scenarios in HALF_OPEN state."""
 
-    def test_half_open_partial_success(self):
+    def test_half_open_partial_success(self, monkeypatch):
         """Test some successes, some failures in half-open - threshold not met."""
+        clock = FakeClock()
+        monkeypatch.setattr(time, "monotonic", clock)
         config = CircuitBreakerConfig(
             failure_threshold=3,
             success_threshold=3,  # Need 3 consecutive successes
@@ -83,8 +100,8 @@ class TestHalfOpenPartialSuccess:
         for _ in range(3):
             cb.record_failure()
 
-        # Wait for timeout
-        time.sleep(0.1)
+        # Advance past the timeout
+        clock.advance(0.1)
 
         # Should be in HALF_OPEN
         assert cb.state == CircuitState.HALF_OPEN
@@ -98,8 +115,8 @@ class TestHalfOpenPartialSuccess:
         cb.record_failure()
         assert cb.state == CircuitState.OPEN  # Any failure in half-open reopens
 
-        # Wait again for timeout
-        time.sleep(0.1)
+        # Advance past the timeout again
+        clock.advance(0.1)
 
         # Back to HALF_OPEN
         assert cb.state == CircuitState.HALF_OPEN
@@ -245,8 +262,10 @@ class TestRecoveryTimeoutPrecision:
 class TestSuccessThresholdRequirement:
     """Test exact success count needed to close circuit."""
 
-    def test_success_threshold_requirement(self):
+    def test_success_threshold_requirement(self, monkeypatch):
         """Test exact success count needed to transition from HALF_OPEN to CLOSED."""
+        clock = FakeClock()
+        monkeypatch.setattr(time, "monotonic", clock)
         config = CircuitBreakerConfig(
             failure_threshold=3,
             success_threshold=5,  # Need exactly 5 successes
@@ -258,8 +277,8 @@ class TestSuccessThresholdRequirement:
         for _ in range(3):
             cb.record_failure()
 
-        # Wait for timeout
-        time.sleep(0.07)
+        # Advance past the timeout
+        clock.advance(0.07)
 
         assert cb.state == CircuitState.HALF_OPEN
 
@@ -274,8 +293,10 @@ class TestSuccessThresholdRequirement:
         assert cb.state == CircuitState.CLOSED
         assert cb.success_count == 0  # Reset after closing
 
-    def test_threshold_not_met(self):
+    def test_threshold_not_met(self, monkeypatch):
         """Test that circuit stays open if threshold not met."""
+        clock = FakeClock()
+        monkeypatch.setattr(time, "monotonic", clock)
         config = CircuitBreakerConfig(
             failure_threshold=3,
             success_threshold=10,  # High threshold
@@ -287,8 +308,8 @@ class TestSuccessThresholdRequirement:
         for _ in range(3):
             cb.record_failure()
 
-        # Wait for timeout
-        time.sleep(0.07)
+        # Advance past the timeout
+        clock.advance(0.07)
 
         assert cb.state == CircuitState.HALF_OPEN
 
@@ -303,8 +324,10 @@ class TestSuccessThresholdRequirement:
         cb.record_failure()
         assert cb.state == CircuitState.OPEN
 
-    def test_threshold_exceeded(self):
+    def test_threshold_exceeded(self, monkeypatch):
         """Test behavior when success count exceeds threshold."""
+        clock = FakeClock()
+        monkeypatch.setattr(time, "monotonic", clock)
         config = CircuitBreakerConfig(
             failure_threshold=3,
             success_threshold=2,
@@ -316,8 +339,8 @@ class TestSuccessThresholdRequirement:
         for _ in range(3):
             cb.record_failure()
 
-        # Wait for timeout
-        time.sleep(0.07)
+        # Advance past the timeout
+        clock.advance(0.07)
 
         assert cb.state == CircuitState.HALF_OPEN
 

@@ -35,9 +35,7 @@ def mock_llm_provider() -> MagicMock:
 def mock_config(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
     """Mock configuration for pipeline tests."""
     config = {
-        "SECONDBRAIN_MONGO_URI": "mongodb://localhost:27018",
-        "SECONDBRAIN_MONGO_DB": "test_secondbrain",
-        "SECONDBRAIN_MONGO_COLLECTION": "test_embeddings",
+        "SECONDBRAIN_QDRANT_URL": "http://localhost:6333",
         "SECONDBRAIN_LOCALHOST": "http://localhost:11434",
         "SECONDBRAIN_LOCAL_EMBEDDING_MODEL": "all-MiniLM-L6-v2",
         "SECONDBRAIN_CHUNK_SIZE": "512",
@@ -96,7 +94,7 @@ class TestRAGPipelineErrorHandling:
     ) -> None:
         """Verify pipeline handles searcher failures gracefully."""
         mock_searcher.search.side_effect = ServiceUnavailableError(
-            "MongoDB", "Database connection failed"
+            "Qdrant", "Database connection failed"
         )
 
         pipeline = RAGPipeline(

@@ -44,7 +44,7 @@ class TestStatusHealthMetrics:
     def test_health_json_output(self) -> None:
         """Test --format json for health check.
 
-        Verifies JSON structure with service statuses and MongoDB
+        Verifies JSON structure with service statuses and Qdrant
         and embedding service health indicators.
         """
         runner = CliRunner()
@@ -55,7 +55,7 @@ class TestStatusHealthMetrics:
                 "timestamp": "2024-01-15T10:30:00+00:00",
                 "uptime": None,
                 "services": {
-                    "mongodb": True,
+                    "qdrant": True,
                     "embedding": True,
                 },
                 "check_duration_seconds": 0.123,
@@ -68,7 +68,7 @@ class TestStatusHealthMetrics:
 
             assert output["status"] == "healthy"
             assert output["timestamp"] == "2024-01-15T10:30:00+00:00"
-            assert output["services"]["mongodb"] is True
+            assert output["services"]["qdrant"] is True
             assert output["services"]["embedding"] is True
             assert "check_duration_seconds" in output
 

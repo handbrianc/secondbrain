@@ -1,4 +1,4 @@
-"""Mock Searcher for testing without MongoDB."""
+"""Mock Searcher for testing without a live vector store."""
 
 import types
 from typing import Any, NotRequired, cast
@@ -19,9 +19,9 @@ class _TestChunk(TypedDict):
 
 
 class MockSearcher:
-    """Mock searcher that returns predefined test chunks without MongoDB.
+    """Mock searcher that returns predefined test chunks without a live vector store.
 
-    This allows tests to run without requiring MongoDB to be running.
+    This allows tests to run without requiring a Qdrant server to be running.
     The mock searcher returns hardcoded test chunks that match common test queries.
     """
 
@@ -47,7 +47,7 @@ class MockSearcher:
                 "chunk_id": "chunk-010",
                 "source_file": "tests/config.md",
                 "page_number": 2,
-                "chunk_text": "MongoDB connection URI is configured via the SECONDBRAIN_MONGO_URI environment variable - there is no default and the variable MUST be set.",
+                "chunk_text": "The Qdrant vector store connection URL is configured via the SECONDBRAIN_QDRANT_URL environment variable.",
                 "file_type": "markdown",
                 "metadata": {},
                 "similarity": 0.92,
@@ -110,7 +110,7 @@ class MockSearcher:
                 "chunk_id": "chunk-080",
                 "source_file": "tests/features.md",
                 "page_number": 2,
-                "chunk_text": "Semantic search works by converting queries and documents into embedding vectors using sentence-transformers, then performing vector similarity search in MongoDB using cosine similarity to find the most relevant results.",
+                "chunk_text": "Semantic search works by converting queries and documents into embedding vectors using sentence-transformers, then performing vector similarity search in the Qdrant vector store using cosine similarity to find the most relevant results.",
                 "file_type": "markdown",
                 "metadata": {},
                 "similarity": 0.95,
@@ -193,9 +193,7 @@ class MockSearcher:
         """Return the distinct source files across the mock chunks."""
         return list(
             dict.fromkeys(
-                c.get("source_file")
-                for c in self._test_chunks
-                if c.get("source_file")
+                c.get("source_file") for c in self._test_chunks if c.get("source_file")
             )
         )
 

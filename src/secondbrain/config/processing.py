@@ -71,10 +71,6 @@ class ProcessingStorageMixin:
             raise ValueError("streaming_chunk_batch_size must be between 1 and 200")
         return v
 
-    storage_compression_enabled: bool = Field(
-        default=True,
-        description="Enable MongoDB collection-level compression (zstd)",
-    )
     embedding_dtype: str = Field(
         default="float32",
         description="Embedding data type: 'float32' (50% smaller) or 'float64'",
@@ -104,6 +100,15 @@ class ProcessingStorageMixin:
             "text layer, extracting text with pypdfium2 directly. Falls back "
             "to the full docling pipeline when the PDF has no/insufficient "
             "native text. Ignored when pdf_ocr_enabled is True."
+        ),
+    )
+    pdf_structure_probe_enabled: bool = Field(
+        default=True,
+        description=(
+            "Route text-layer PDFs that look like structured books (chapter "
+            "openers or dotted ToC entries in the leading pages) through the "
+            "full docling pipeline to capture per-item structural labels. "
+            "False keeps every text-layer PDF on the fast path."
         ),
     )
     pdf_table_structure_enabled: bool = Field(

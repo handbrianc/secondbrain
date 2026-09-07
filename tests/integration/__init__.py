@@ -1,1 +1,1 @@
-"""Integration tests with real services (MongoDB, OpenAI-compatible embedding API)."""
+"""Integration tests with real services (Qdrant, OpenAI-compatible embedding API)."""

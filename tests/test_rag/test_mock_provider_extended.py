@@ -158,13 +158,13 @@ class TestMockLLMProviderWithContext:
 
         assert "4096" in response
 
-    def test_context_provider_mongodb(self):
-        """Test MongoDB configuration query."""
+    def test_context_provider_vector_store(self):
+        """Test vector store configuration query."""
         provider = MockLLMProviderWithContext()
-        response = provider.generate("MongoDB connection")
+        response = provider.generate("vector store connection")
 
-        assert "MongoDB" in response
-        assert "URI" in response
+        assert "Qdrant" in response
+        assert "URL" in response
 
     def test_context_provider_circuit_breaker(self):
         """Test circuit breaker configuration query."""

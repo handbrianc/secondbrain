@@ -765,8 +765,8 @@ class TestDataLeakage:
         """Test detection of exposed credentials in output."""
         credential_examples = [
             {
-                "input": "Database connection: mongodb://admin:password123@localhost:27017",
-                "pattern": r"mongodb://[^:]+:[^@]+@",
+                "input": "Database connection: postgresql://admin:password123@localhost:5432",
+                "pattern": r"postgresql://[^:]+:[^@]+@",
                 "type": "database_credentials",
             },
             {
@@ -877,5 +877,5 @@ class TestDataLeakage:
 
 
 # ============================================================================
-# INTEGRATION TESTS (Optional - require MongoDB/LLM)
+# INTEGRATION TESTS (Optional - require a live LLM backend)
 # ============================================================================

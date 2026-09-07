@@ -1,7 +1,7 @@
 """SecondBrain - A local document intelligence CLI tool for semantic search.
 
 This package provides a CLI tool that ingests documents, generates embeddings
-using sentence-transformers, and stores vectors in MongoDB for semantic search.
+using sentence-transformers, and stores vectors in a Qdrant vector store for semantic search.
 """
 
 from importlib.metadata import version as _get_version

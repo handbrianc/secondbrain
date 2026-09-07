@@ -13,7 +13,11 @@ from typing import Any
 from uuid import uuid4
 
 from secondbrain.config import config
-from secondbrain.document.chunker import classify_chunk_role
+from secondbrain.document.chunker import (
+    classify_chunk_role,
+    label_to_element_type,
+)
+from secondbrain.document.fast_text import extract_printed_page
 from secondbrain.document.ingestor._constants import get_file_type
 from secondbrain.document.ingestor._sync import DocumentIngestor
 from secondbrain.exceptions import DocumentExtractionError
@@ -165,6 +169,18 @@ class AsyncDocumentIngestor(DocumentIngestor):
                 and not cleaned.strip().endswith(".")
             )
 
+            labeled_role = label_to_element_type(segment.get("label"))
+            chunk_role = (
+                labeled_role
+                if labeled_role is not None
+                else classify_chunk_role(
+                    cleaned,
+                    stream_seg_counter,
+                    stream_total_segs,
+                    is_likely_title_raw,
+                )
+            )
+
             batch_chunks.append(
                 {
                     "file_path": file_path,
@@ -172,12 +188,8 @@ class AsyncDocumentIngestor(DocumentIngestor):
                     "text": cleaned,
                     "page": segment["page"],
                     "text_hash": text_hash,
-                    "chunk_role": classify_chunk_role(
-                        cleaned,
-                        stream_seg_counter,
-                        stream_total_segs,
-                        is_likely_title_raw,
-                    ),
+                    "chunk_role": chunk_role,
+                    "element_type": chunk_role,
                 }
             )
 
@@ -272,6 +284,8 @@ class AsyncDocumentIngestor(DocumentIngestor):
 
         docs_to_store: list[dict[str, Any]] = []
         seen_doc_keys = set()
+        page_pos = 0
+        last_page: int | None = None
 
         for chunk_item in chunks:
             text_hash = chunk_item["text_hash"]
@@ -282,6 +296,9 @@ class AsyncDocumentIngestor(DocumentIngestor):
             if doc_key in seen_doc_keys:
                 continue
             seen_doc_keys.add(doc_key)
+            if chunk_item["page"] != last_page:
+                page_pos = 0
+                last_page = chunk_item["page"]
 
             embedding = chunk_to_embedding[text_hash]
             file_type = get_file_type(chunk_item["file_path"])
@@ -291,13 +308,17 @@ class AsyncDocumentIngestor(DocumentIngestor):
                 "chunk_id": str(uuid4()),
                 "source_file": str(chunk_item["file_path"]),
                 "page_number": chunk_item["page"],
+                "printed_page": extract_printed_page(chunk_item["text"]),
+                "page_pos": page_pos,
                 "chunk_role": chunk_item.get("chunk_role", "body"),
+                "element_type": chunk_item.get("element_type", "body"),
                 "chunk_text": chunk_item["text"],
                 "embedding": embedding,
                 "file_type": file_type,
                 "ingested_at": ingested_at,
             }
             docs_to_store.append(doc)
+            page_pos += 1
 
         if docs_to_store:
             with trace_operation("storage.store") as span:
