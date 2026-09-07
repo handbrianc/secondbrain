@@ -18,19 +18,19 @@ classifiers = [
 ]
 
 dependencies = [
-    "click>=8.4.1",  # CLI framework - stable API, minor updates only
-    "docling>=2.118.1",  # Document parsing - requires recent features
-    "docling-core>=2.91.0",  # Core types - matches docling version
+    "click>=8.5.0",  # CLI framework - stable API, minor updates only
+    "docling>=2.125.0",  # Document parsing - requires recent features
+    "docling-core>=2.94.1",  # Core types - matches docling version
     "qdrant-client>=1.9.0",  # Qdrant vector DB client - production storage backend
     "httpx>=0.28.1",  # HTTP client - async support for LLM calls
-    "pydantic>=2.13.4",  # Data validation - pydantic v2 compatible
+    "pydantic>=2.13.5",  # Data validation - pydantic v2 compatible
     "pydantic-settings>=2.15.0",  # Settings management - pydantic v2 compatible
     "rich>=15.0.0",  # CLI formatting - modern terminal output
-    "python-dotenv>=1.2.2",  # Environment config - stable API
-    "numpy>=2.5.1",  # Numerical computing - array API compatibility
+    "python-dotenv>=1.2.3",  # Environment config - stable API
+    "numpy>=2.5.2",  # Numerical computing - array API compatibility
     "opentelemetry-api>=1.44.0",  # Telemetry - stable tracing API
     "opentelemetry-sdk>=1.44.0",  # Telemetry - tracing implementation
-    "openai>=2.49.0",  # LLM provider - v1 SDK required
+    "openai>=3.8.0",  # LLM provider - v1 SDK required
     "anthropic>=0.122.0",  # LLM provider - Claude models support
     "typing_extensions>=4.16.0",  # Type hints - backport new features
     "pyobjc-core>=12.2.1; sys_platform == 'darwin'",  # MacOS Objective-C bridge - required for ocrmac

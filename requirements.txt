@@ -5,14 +5,12 @@
 #    pip-compile --output-file=requirements.txt requirements.in
 #
 accelerate==1.13.0
-    # via
-    #   docling-ibm-models
-    #   docling-slim
+    # via docling-slim
 annotated-doc==0.0.4
     # via typer
 annotated-types==0.7.0
     # via pydantic
-anthropic==0.116.0
+anthropic==1.4.0
     # via -r requirements.in
 antlr4-python3-runtime==4.9.3
     # via omegaconf
@@ -20,10 +18,10 @@ anyio==4.12.1
     # via
     #   anthropic
     #   httpx
+    #   httpx2
     #   openai
 attrs==25.4.0
     # via
-    #   jsonlines
     #   jsonschema
     #   referencing
 beautifulsoup4==4.14.3
@@ -36,7 +34,7 @@ certifi==2026.2.25
     #   requests
 charset-normalizer==3.4.5
     # via requests
-click==8.4.2
+click==8.5.0
     # via
     #   -r requirements.in
     #   python-oxmsg
@@ -53,27 +51,22 @@ defusedxml==0.7.1
     #   docling-slim
 dill==0.4.1
     # via multiprocess
-distro==1.9.0
-    # via
-    #   anthropic
-    #   openai
 dnspython==2.8.0
     # via pymongo
 doclang==0.7.2
     # via docling-core
-docling==2.119.0
+docling==2.126.0
     # via -r requirements.in
-docling-core[chunking]==2.91.0
+docling-core[chunking]==2.95.0
     # via
     #   -r requirements.in
-    #   docling-ibm-models
     #   docling-parse
     #   docling-slim
-docling-ibm-models==3.13.3
+docling-ibm-models==4.0.2
     # via docling-slim
-docling-parse==7.5.0
+docling-parse==7.17.0
     # via docling-slim
-docling-slim[standard]==2.119.0
+docling-slim[standard]==2.126.0
     # via docling
 docstring-parser==0.18.0
     # via anthropic
@@ -93,16 +86,22 @@ fsspec==2026.2.0
     #   huggingface-hub
     #   torch
 h11==0.16.0
-    # via httpcore
+    # via
+    #   httpcore
+    #   httpcore2
 hf-xet==1.4.2
     # via huggingface-hub
 httpcore==1.0.9
     # via httpx
+httpcore2==2.12.0
+    # via httpx2
 httpx==0.28.1
     # via
     #   -r requirements.in
-    #   anthropic
     #   docling-slim
+httpx2==2.12.0
+    # via
+    #   anthropic
     #   openai
 huggingface-hub==0.36.2
     # via
@@ -115,15 +114,14 @@ idna==3.18
     # via
     #   anyio
     #   httpx
+    #   httpx2
     #   requests
 jinja2==3.1.6
     # via torch
-jiter==0.14.0
+jiter==0.16.0
     # via
     #   anthropic
     #   openai
-jsonlines==4.0.0
-    # via docling-ibm-models
 jsonref==1.1.0
     # via docling-core
 jsonschema==4.26.0
@@ -157,7 +155,7 @@ multiprocess==0.70.19
     # via mpire
 networkx==3.6.1
     # via torch
-numpy==2.5.1
+numpy==2.5.3
     # via
     #   -r requirements.in
     #   accelerate
@@ -214,7 +212,7 @@ olefile==0.47
     # via python-oxmsg
 omegaconf==2.3.0
     # via rapidocr
-openai==2.53.0
+openai==3.8.0
     # via -r requirements.in
 opencv-python==4.13.0.92
     # via rapidocr
@@ -254,17 +252,16 @@ psutil==7.2.2
     # via accelerate
 pyclipper==1.4.0
     # via rapidocr
-pydantic==2.13.4
+pydantic==2.13.5
     # via
     #   -r requirements.in
     #   anthropic
     #   docling-core
-    #   docling-ibm-models
     #   docling-parse
     #   docling-slim
     #   openai
     #   pydantic-settings
-pydantic-core==2.46.4
+pydantic-core==2.46.5
     # via pydantic
 pydantic-settings==2.15.0
     # via
@@ -277,7 +274,7 @@ pygments==2.19.2
     #   rich
 pylatexenc==2.10
     # via docling-slim
-pymongo==4.17.0
+pymongo==4.18.0
     # via
     #   -r requirements.in
     #   motor
@@ -287,7 +284,7 @@ python-dateutil==2.9.0.post0
     # via pandas
 python-docx==1.2.0
     # via docling-slim
-python-dotenv==1.2.2
+python-dotenv==1.2.3
     # via
     #   -r requirements.in
     #   docling-slim
@@ -328,9 +325,7 @@ rpds-py==0.30.0
     #   jsonschema
     #   referencing
 rtree==1.4.1
-    # via
-    #   docling-ibm-models
-    #   docling-slim
+    # via docling-slim
 safetensors[numpy,torch]==0.7.0
     # via
     #   accelerate
@@ -373,11 +368,9 @@ torchvision==0.25.0
     #   docling-slim
 tqdm==4.67.3
     # via
-    #   docling-ibm-models
     #   docling-slim
     #   huggingface-hub
     #   mpire
-    #   openai
     #   rapidocr
     #   semchunk
     #   transformers
@@ -397,12 +390,16 @@ tree-sitter-typescript==0.23.2
     # via docling-core
 triton==3.6.0
     # via torch
+truststore==0.10.4
+    # via
+    #   httpcore2
+    #   httpx2
 typer==0.21.2
     # via
     #   doclang
     #   docling-core
     #   docling-slim
-typing-extensions==4.15.0
+typing-extensions==4.16.0
     # via
     #   -r requirements.in
     #   anthropic
