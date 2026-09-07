@@ -69,5 +69,5 @@ PyJWT>=2.13.0
 pyasn1>=0.6.4
 pyopenssl>=26.4.0
 twisted>=26.4.0
-idna>=3.18
+idna>=3.19
 wheel>=0.47.0
