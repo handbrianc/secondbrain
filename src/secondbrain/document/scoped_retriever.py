@@ -58,15 +58,11 @@ def _build_section_filter(scope: str) -> dict[str, Any] | None:
         One of:
         - ``"3.9"``        specific subsection
         - ``"4.*"``        wildcard: all children of chapter 4
-        - ``"heading"``    only heading / toc_entry chunks
 
     Returns
     -------
     A query filter fragment, or ``None`` when no meaningful filter applies.
     """
-    if scope == "heading":
-        return {"element_type": {"$in": list(_HEADING_ROLES)}}
-
     # Wildcard chapter expansion  "4.*"  ->  section_id starts with "4."
     wc_match = _WILDCARD_CHAPTER_PATTERN.match(scope)
     if wc_match is not None:
