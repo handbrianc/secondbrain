@@ -108,6 +108,32 @@ _SINGLE_PASS_MAX_CHARS = 320_000
 _HIERARCHY_GROUP_SIZE = 8
 _HIERARCHY_THRESHOLD = 12
 
+# Front-matter "about this book" pages describe every chapter in prose:
+# "Chapter 9 , AI Cloud Platforms for IoT , introduces major cloud platforms ...".
+# These body-role sentences are the only "Chapter N" matches in books extracted
+# without real heading/toc_entry chunks, and pinning a chapter's start page to
+# the page its description sits on collapses the chapter's page range to that
+# front-matter page and starves its content bucket.  The pattern requires the
+# comma form ("Chapter N , Title") plus a description verb shortly after, so
+# genuine headings ("Chapter 9: AI Cloud Platforms", "9 AI Cloud Platforms") and
+# cross-references ("see Chapter 9 on page 144") never match.
+_CHAPTER_DESC_RE = re.compile(
+    r"Chapter\s+(\d+)\s*,\s+[A-Z].{0,240}?\b(?:introduces|explores|focuses|"
+    r"dives|delves|provides|covers|describes|examines|presents|outlines|"
+    r"walks|discusses|explains|is\s+where)\b",
+    re.DOTALL,
+)
+
+# Tail of a front-matter chapter-description sentence inside a captured title:
+# "... , introduces the core concepts of IoT and edge computing ...".  Trimming
+# at the description verb leaves the bare chapter title.  The leading comma is
+# required so ordinary titles ("How Regularization Introduces Robustness") are
+# never cut.
+_CHAPTER_DESC_TAIL_RE = re.compile(
+    r",\s+(?:introduces|explores|focuses|dives|delves|provides|covers|describes|"
+    r"examines|presents|outlines|walks|discusses|explains|is\s+where)\b.*$",
+)
+
 # Deterministic word ceiling for the final overview, enforced by trimming at
 # a sentence boundary after generation (in _finalize_overview).  The prompt
 # asks for a short overview in prose terms; the bound itself lives here so
@@ -1111,16 +1137,46 @@ class _StructureMixin(_RAGPipelineState):
 
     @staticmethod
     def _clean_chapter_title(title: str) -> str:
-        """Return a TOC chapter title with its dot-leader and trailing page number removed.
+        """Return a TOC chapter title with page numbers and run-on entries removed.
 
-        Table-of-contents chapter heads look like ``Chapter 8 The ML4T Workflow ....... 223``
-        where the trailing digits are the page number.  Stripping the dot leader and page
-        number yields a clean title (``The ML4T Workflow``) so every heading is consistent.
+        Dotted ToC heads look like ``Chapter 8 The ML4T Workflow ....... 223``.
+        Docling-flattened ToCs drop the dots and run consecutive entries together,
+        separating them with bare page numbers only ("Title 147 Next section 148
+        More"). The capture regexes therefore grab the following entries too, so
+        the text is cut at the first standalone page number that precedes a
+        capitalized continuation (the start of the next entry); trailing page
+        numbers and run-on description sentences are then stripped, leaving the
+        real chapter heading.
         """
         title = re.sub(r"\s*\.{2,}[.\-\u2013\u2014]*", " ", title)
         title = re.sub(r"\s+", " ", title).strip()
+        title = re.split(r"\s+\d{1,4}\s+(?=[A-Z(])", title)[0]
         title = re.sub(r"[\s.\u2026:\-\u2013\u2014]*\d+\s*$", "", title)
-        return title.strip(" \t\r\n.:;-\u2013\u2014")
+        # Front-matter description sentences run the captured title on into the
+        # sentence body ("Chapter 3 , Machine Learning for IoT , explores
+        # supervised and unsupervised ..."); cut at the description verb so the
+        # heading carries the chapter title only.
+        title = _CHAPTER_DESC_TAIL_RE.sub("", title)
+        return title.strip(" \t\r\n.,:;-\u2013\u2014")
+
+    @staticmethod
+    def _front_matter_desc_pages(structure_chunks: list[Any]) -> dict[int, int]:
+        """Map chapter number -> page of its front-matter description sentence.
+
+        Books extracted without heading/toc_entry roles still carry per-chapter
+        prose descriptions in the front matter ("Chapter 9 , AI Cloud Platforms
+        for IoT , introduces ...").  Those sentences used to serve as page
+        anchors for the very chapters they describe, pinning them to the
+        front-matter page instead of their real start.  Callers use the result
+        to refuse anchoring a chapter on its description page.
+        """
+        desc_pages: dict[int, int] = {}
+        for c in structure_chunks:
+            page = int(c.get("page_number") or 0)
+            text = c.get("chunk_text") or ""
+            for m in _CHAPTER_DESC_RE.finditer(text):
+                desc_pages.setdefault(int(m.group(1)), page)
+        return desc_pages
 
     @staticmethod
     def _detect_chapter_openings(body_chunks: list[Any]) -> dict[int, int]:
@@ -1928,14 +1984,38 @@ class _FallbackMixin(_RAGPipelineState):
         chapter_buckets: dict[int, list[dict[str, Any]]],
         ch_titles: dict[int, str],
     ) -> str:
-        """Produce a chapter-by-chapter overview via bounded windows per chapter."""
+        """Produce a chapter-by-chapter overview via bounded windows per chapter.
+
+        Chapters whose bucket is empty (page-range detection found no body text
+        in their range) are still listed, with an explicit placeholder note, so
+        a partial overview is visible to the reader instead of silently
+        omitting chapters.
+        """
         all_parts: list[str] = []
         for ch_num in chapter_keys:
             bucket = chapter_buckets.get(ch_num)
-            if not bucket:
-                continue
             title = ch_titles.get(ch_num, "")
             heading = f"Chapter {ch_num}" + (f" — {title}" if title else "")
+            if not bucket:
+                # An empty bucket means the chapter's page range contained no
+                # body chunks (usually a mis-pinned start page).  Emit an
+                # explicit placeholder: silently omitting chapters made a
+                # partial overview look complete.
+                note = (
+                    "No document content was retrieved for this chapter "
+                    "(its detected page range contains no body text), so no "
+                    "summary could be generated."
+                )
+                if self._on_chunk:
+                    # The returned text joins blocks with "\n\n"; the live
+                    # stream needs its own separators or chapters glue together.
+                    self._on_chunk(
+                        (f"{heading}\n\n" if not all_parts else f"\n\n{heading}\n\n")
+                        + note,
+                        None,
+                    )
+                all_parts.append(f"{heading}\n\n{note}")
+                continue
             if self._on_chunk:
                 # The returned text joins blocks with "\n\n"; the live stream
                 # needs its own separators or consecutive chapters glue together.

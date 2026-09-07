@@ -522,6 +522,59 @@ class RAGPipeline(
             logger.error("Chat failed: %s: %s", type(e).__name__, e)
             return self._create_error_response(str(e), query)
 
+    @staticmethod
+    def _heading_title_anchors(
+        chapters: list[tuple[int, str, str]],
+        src: str,
+        heading_chunks: list[dict[str, Any]],
+    ) -> dict[int, int]:
+        """Map chapter numbers to opener pages via heading-role title matches.
+
+        Labeled docling output drops the "Chapter N" banner text and strips
+        section numbers from headings, but keeps each chapter's title as a
+        heading chunk on its real opening page — while ToC/covers pages stay
+        body-role. Matching each detected chapter title (cut at embedded ToC
+        page numbers, e.g. "Title 147 How ma") against heading chunks
+        therefore anchors chapters on their true openers even when every
+        "Chapter N"/section-number scan fails. Comparison normalizes the
+        subtitle separators docling is inconsistent about (" - " vs " ") and
+        allows a leading chapter-number prefix on the heading ("5 Title").
+        Heading chunks arrive page-ordered, so the first match per chapter is
+        the earliest page; pages < 10 (front matter) never anchor.
+        """
+        import re
+
+        anchors: dict[int, int] = {}
+        for ch_num, ch_src, title in chapters:
+            if ch_src != src:
+                continue
+            tt = re.sub(r"\s+\d{1,4}\s*$", "", title)
+            tt = re.split(r"\s+\d{1,4}\s+", tt)[0]
+            needle = (
+                re.sub(r"\s+", " ", re.sub(r"[-\u2013\u2014:]", " ", tt))
+                .strip()
+                .casefold()
+            )
+            if len(needle) < 4:
+                continue
+            for hc in heading_chunks:
+                page = int(hc.get("page_number") or 0)
+                if page < 10:
+                    continue
+                head_line = re.sub(
+                    r"[-\u2013\u2014:]",
+                    " ",
+                    (hc.get("chunk_text") or "").split("\n")[0],
+                )
+                head_line = re.sub(r"\s+", " ", head_line).strip().casefold()
+                head_line = re.sub(
+                    r"^(?:chapter\s+\d+[\s:.\-]*)?(?:\d+[\s.:\-]+)?", "", head_line
+                )
+                if head_line == needle or head_line.startswith(needle):
+                    anchors[ch_num] = page
+                    break
+        return anchors
+
     def _iterative_query(
         self,
         query: str,
@@ -651,6 +704,16 @@ class RAGPipeline(
                 # BARE_CHAPTER_RE titles (e.g. "5 Working with VMs") are NOT included
                 # here — they're less reliable and may conflict with other chapters.
                 chapter_first_pg: dict[int, int] = {}
+                # Front-matter "about this book" pages describe every chapter
+                # in prose ("Chapter 9 , AI Cloud Platforms for IoT , introduces
+                # ...").  In books extracted without heading/toc_entry chunks
+                # these body-role sentences are the only "Chapter N" matches,
+                # and anchoring on them pinned chapters to the front-matter page
+                # their description sits on — collapsing the chapter's page
+                # range to that single page and starving its content bucket.
+                # Collect (chapter -> description page) once; every scan below
+                # refuses to anchor a chapter on its description page.
+                desc_pages = self._front_matter_desc_pages(structure_chunks)
                 # Title-anchored detection: the numbered chapter-title heading
                 # (e.g. "13 Troubleshooting", "12 Customizing Oracle VirtualBox") is
                 # the single most reliable chapter-start signal.  Section-number
@@ -665,15 +728,17 @@ class RAGPipeline(
                 body_all_ = list(
                     storage.get_body_chunks(
                         src,
-                        limit=3500,
+                        limit=None,
                     )
                 )
                 for tn_ in full_chapters:
                     tn, ts_, tt_ = tn_
-                    # Detected titles often carry a trailing printed-page artifact
-                    # (e.g. "The pandas I/O System 79"); strip it so the anchor
-                    # matches the real heading ("The pandas I/O System").
-                    tt_ = re.sub(r"\s+\d{1,4}\s*$", "", tt_).rstrip(" .:;-")
+                    # Detected titles often carry a printed-page artifact,
+                    # trailing ("The pandas I/O System 79") or embedded before
+                    # the next ToC line's text ("Title 147 How ma"); strip
+                    # both so the anchor matches the real heading.
+                    tt_ = re.sub(r"\s+\d{1,4}\s*$", "", tt_)
+                    tt_ = re.split(r"\s+\d{1,4}\s+", tt_)[0].rstrip(" .:;-")
                     if ts_ != src or not tt_ or len(tt_) < 4:
                         continue
                     # Join title tokens with \s+ so wrapped headings (e.g. the title
@@ -696,6 +761,35 @@ class RAGPipeline(
                             continue
                         chapter_first_pg[tn] = int(bc_.get("page_number") or 0)
                         break
+                # Labeled-docling books (element_type migration): docling drops
+                # the "Chapter N" banner, strips section numbers from headings,
+                # and leaves ToC/covers pages as body chunks — the scans below
+                # then fail or misfire, and Phase 2's loose digit scan pins
+                # chapters to front-matter pages (empty/wrong chapter buckets).
+                # The chapter titles themselves ARE heading chunks on the real
+                # opening pages, so anchor on them first; every later scan
+                # skips chapters already pre-populated here.
+                try:
+                    heading_all_ = list(
+                        cast(
+                            list[dict[str, Any]],
+                            storage.find_structural_chunks(
+                                chunk_roles=["heading"], source_prefix=src
+                            ),
+                        )
+                    )
+                except Exception:
+                    logger.warning(
+                        "Heading-chunk fetch failed for %s; skipping "
+                        "heading-title anchoring",
+                        src,
+                        exc_info=True,
+                    )
+                    heading_all_ = []
+                for an_ch, an_pg in self._heading_title_anchors(
+                    full_chapters, src, heading_all_
+                ).items():
+                    chapter_first_pg.setdefault(an_ch, an_pg)
                 ch_n = re.compile(
                     r"(?:Chapter\s+(\d+)\s*[:\-]?\s*|(?:Module|Lesson)\s+(\d+)"
                     r"\s*[:\-]\s*)(.{2,60})",
@@ -740,6 +834,11 @@ class RAGPipeline(
                             # colon, period, or plain space after the number.
                             if re.match(r"Chapter\s+\d+,", nm.group(0), re.IGNORECASE):
                                 continue
+                            if desc_pages.get(ch) == pg:
+                                # The description sentence sits on a front-
+                                # matter page and never marks the real chapter
+                                # start (see desc_pages above).
+                                continue
                             chapter_first_pg[ch] = pg
 
                 # Scan body chunks for magazine-style chapter openings (bare
@@ -763,7 +862,7 @@ class RAGPipeline(
                 # most universal approach — works for any document regardless of TOC format.
                 appendix_sec_re = re.compile(r"\b([A-Za-z])\.\d+\s")
                 appendix_labels_found: set[str] = set()
-                for chunk in storage.get_body_chunks(src, limit=3500):
+                for chunk in storage.get_body_chunks(src, limit=None):
                     txt = chunk.get("chunk_text", "")[:150]
                     page = chunk.get("page_number") or 0
 
@@ -776,6 +875,8 @@ class RAGPipeline(
                     if m:
                         ch = int(m.group(1))
                         if 1 <= ch <= 30 and ch not in chapter_first_pg:
+                            if desc_pages.get(ch) == page:
+                                continue
                             # Skip cross-references like "9.2 Virtual
                             # Networking Hardware on page 144" which
                             # appear on pages belonging to OTHER chapters.
@@ -799,14 +900,15 @@ class RAGPipeline(
                     if n not in chapter_first_pg
                 ]
                 if missing:
-                    for chunk in storage.get_body_chunks(src, limit=3500):
+                    for chunk in storage.get_body_chunks(src, limit=None):
                         txt = chunk.get("chunk_text", "")[:150]
+                        pg2 = int(chunk.get("page_number") or 0)
                         for ch_num in list(missing):
+                            if desc_pages.get(ch_num) == pg2:
+                                continue
                             pat = re.compile(rf"\b{ch_num}\D")
                             if pat.search(txt):
-                                chapter_first_pg[ch_num] = int(
-                                    chunk.get("page_number") or 0
-                                )
+                                chapter_first_pg[ch_num] = pg2
                                 missing.remove(ch_num)
                         if not missing:
                             break
@@ -923,7 +1025,10 @@ class RAGPipeline(
                     # (e.g. ch5 at p51 with ch1 at p56 in page order → end=55).
                     # Skip any boundary whose page is <= start_pg_ to avoid
                     # false positives producing start>end ranges.
-                    end_pg_ = 700
+                    # The sentinel must exceed any real book length: a fixed
+                    # 700 inverted the last chapter's range for books with
+                    # >700 pages (start>end → empty bucket → placeholder).
+                    end_pg_ = 10**6
                     for nxt in range(ch_ + 1, max_ch_ + 2):
                         if nxt in boundary_pgs and boundary_pgs[nxt] > start_pg_:
                             end_pg_ = boundary_pgs[nxt] - 1
@@ -941,9 +1046,13 @@ class RAGPipeline(
                         query, top_k, show_sources, source_filter=source_filter
                     )
                 single_section_mode = len(chapter_keys) <= 2
-                # Multi-chapter round-robin cap, pre-bound because the final
-                # trim below reads it in both modes.
-                per_chapter_limit = 4
+                # Per-chapter fetch budget for multi-chapter overviews.  Each
+                # chapter is summarized independently via _summarize_bounded
+                # (single-pass budget 320k chars), so 8 chunks stay within one
+                # LLM call per chapter while tripling per-chapter coverage
+                # versus the old 4-chunk cap, which summarized dense chapters
+                # from one or two pages.
+                per_chapter_limit = 8
                 chapter_buckets: dict[int, list[dict[str, Any]]] = {
                     ch: [] for ch in chapter_keys
                 }
@@ -974,9 +1083,10 @@ class RAGPipeline(
                             c["score"] = 0.5
                         chapter_buckets[ch_num] = in_range
                 else:
-                    # Multi-chapter round-robin keeps tight per-chapter caps so
-                    # no single chapter dominates the merged context.
-                    page_cap = 2
+                    # Multi-chapter round-robin: per-page caps keep sampling
+                    # spread across the chapter's range instead of clustering
+                    # on its first pages.
+                    page_cap = 3
                     page_count_per_ch: dict[int, dict[int, int]] = {
                         ch: {} for ch in chapter_keys
                     }

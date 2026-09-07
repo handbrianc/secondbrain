@@ -397,6 +397,89 @@ class TestDeriveChapterNumbers:
             p._clean_chapter_title(long_title)
             == "Time-Series Models for Volatility Forecasts and Statistical Arbitrage"
         )
+        # Docling-flattened ToCs run entries together with bare page numbers
+        # and no dot leaders; the cut at the first page-number boundary keeps
+        # only the real chapter heading.
+        assert (
+            p._clean_chapter_title(
+                "Machine Learning for Trading - From Idea to Execution 1 "
+                "The rise of ML in the investment industry 2 From electronic to h"
+            )
+            == "Machine Learning for Trading - From Idea to Execution"
+        )
+        assert (
+            p._clean_chapter_title(
+                "Portfolio Optimization and Performance Evaluation 121 "
+                "How to measure portfolio performance"
+            )
+            == "Portfolio Optimization and Performance Evaluation"
+        )
+
+    def test_clean_chapter_title_trims_description_sentence(self) -> None:
+        """Front-matter description sentences are cut at the description verb.
+
+        Books without TOC entries expose only prose descriptions ("Chapter 1 ,
+        Principles and Foundations of IoT and AI , introduces the core
+        concepts..."); the captured title must not run on into the sentence
+        body, and the leading punctuation left by the comma form is stripped.
+        """
+        p = self._make_test_pipeline()
+        assert (
+            p._clean_chapter_title(
+                "—, Principles and Foundations of IoT and AI , "
+                "introduces the core concepts of IoT, AI, data science"
+            )
+            == "Principles and Foundations of IoT and AI"
+        )
+        assert (
+            p._clean_chapter_title(
+                ", Data Access and Distributed Processing for IoT , "
+                "is where you will learn how to access and process data"
+            )
+            == "Data Access and Distributed Processing for IoT"
+        )
+        # Verbs WITHOUT a leading comma are part of ordinary titles: untouched.
+        assert (
+            p._clean_chapter_title("How Regularization Introduces Robustness 12")
+            == "How Regularization Introduces Robustness"
+        )
+
+    def test_front_matter_desc_pages_maps_description_pages(self) -> None:
+        """Description sentences map each chapter to its front-matter page.
+
+        Cross-reference prose ("As discussed in Chapter 9, the platform
+        services...") must not match: the description verb is missing, so no
+        page is recorded and the real chapter anchor is never suppressed.
+        """
+        p = self._make_test_pipeline()
+        chunks = [
+            {
+                "page_number": 18,
+                "chunk_role": "body",
+                "chunk_text": (
+                    "Chapter 9 , AI Cloud Platforms for IoT , introduces major "
+                    "cloud platforms and their AI services tailored for IoT "
+                    "applications. You will gain hands-on experience."
+                ),
+            },
+            {
+                "page_number": 19,
+                "chunk_role": "navigation",
+                "chunk_text": (
+                    "Chapter 15, AI for Smart Cities IoT , explores how AI and "
+                    "IoT are transforming urban living. You will build models."
+                ),
+            },
+            {
+                "page_number": 40,
+                "chunk_role": "body",
+                "chunk_text": (
+                    "As discussed in Chapter 9, the platform services scale to "
+                    "millions of connected devices in production settings."
+                ),
+            },
+        ]
+        assert p._front_matter_desc_pages(chunks) == {9: 18, 15: 19}
 
     def test_crlf_toc_title_stops_at_page_number(self) -> None:
         """A CRLF-wrapped TOC row yields the full title, stopped at the page number."""
@@ -1270,7 +1353,13 @@ class TestMultiChapterMapReduce:
         assert "A clean summary of chapter two" in result
         assert len(provider.calls) == 3
 
-    def test_multi_chapter_summary_empty_bucket_skipped(self) -> None:
+    def test_multi_chapter_empty_bucket_gets_explicit_placeholder(self) -> None:
+        """An empty bucket is announced, never silently skipped.
+
+        A chapter-by-chapter overview that quietly omits chapters (page-range
+        detection found no body text) reads as complete to the reader.  The
+        placeholder keeps the omission visible in the answer.
+        """
         provider = _SequenceProvider(
             by_key={"Chapter 2": "Summary for chapter two with enough detail here."}
         )
@@ -1279,9 +1368,30 @@ class TestMultiChapterMapReduce:
         result = p._generate_multi_chapter_summary(
             [1, 2], buckets, {1: "One", 2: "Two"}
         )
-        assert "Chapter 1" not in result
+        assert "Chapter 1 — One" in result
+        assert "No document content was retrieved" in result
         assert "Chapter 2 — Two" in result
+        assert "Summary for chapter two" in result
+        # The placeholder costs no LLM call.
         assert len(provider.calls) == 1
+
+    def test_multi_chapter_empty_bucket_streams_placeholder(self) -> None:
+        """The placeholder is streamed live and the next chapter stays separated."""
+        streamed: list[str] = []
+        provider = _SequenceProvider(
+            by_key={"Chapter 2": "Chapter two summary with enough detail to pass."}
+        )
+        p = self._make_pipeline(provider)
+        p._on_chunk = lambda content, _reasoning: streamed.append(content or "")
+        buckets = {1: [], 2: [self._chunk("chapter two body")]}
+        result = p._generate_multi_chapter_summary(
+            [1, 2], buckets, {1: "One", 2: "Two"}
+        )
+        live = "".join(streamed)
+        assert "Chapter 1 — One" in live
+        assert "No document content was retrieved" in live
+        assert "\n\nChapter 2" in live
+        assert "Chapter 2 — Two" in result
 
     def test_single_chapter_splits_into_bounded_windows(
         self, monkeypatch: pytest.MonkeyPatch
@@ -2857,6 +2967,70 @@ class TestMultiChapterMapReduce:
         ]
         starts = p._detect_chapter_openings(chunks)
         assert starts == {}
+
+    def test_heading_title_anchors_match_labeled_docling_openers(self) -> None:
+        """Chapter titles carried as heading chunks anchor real opener pages.
+
+        Labeled docling output drops the "Chapter N" banner text, so the
+        title-only heading chunk is the only opener signal.
+        """
+        p = self._make_pipeline(_SequenceProvider([]))
+        src = "/books/ml4t.pdf"
+        chapters = [
+            (6, src, "The Machine Learning Process 147 How ma"),
+            (23, src, "Conclusions and Next Steps"),
+        ]
+        headings = [
+            {"chunk_text": "The Machine Learning Process", "page_number": 176},
+            {"chunk_text": "Conclusions and Next Steps", "page_number": 742},
+        ]
+        assert p._heading_title_anchors(chapters, src, headings) == {
+            6: 176,
+            23: 742,
+        }
+
+    def test_heading_title_anchors_cuts_embedded_toc_page_number(self) -> None:
+        """A ToC-captured title ("Title 21 Next section text") reduces to "Title"."""
+        p = self._make_pipeline(_SequenceProvider([]))
+        src = "/books/x.pdf"
+        chapters = [
+            (
+                2,
+                src,
+                "Market and Fundamental Data - Sources and Techniques 21 Market data reflects",
+            ),
+        ]
+        headings = [
+            {
+                "chunk_text": "Market and Fundamental Data - Sources and Techniques",
+                "page_number": 51,
+            },
+        ]
+        assert p._heading_title_anchors(chapters, src, headings) == {2: 51}
+
+    def test_heading_title_anchors_ignores_front_matter_and_foreign_sources(
+        self,
+    ) -> None:
+        """Pages < 10 never anchor; other sources' chapters are skipped."""
+        p = self._make_pipeline(_SequenceProvider([]))
+        src = "/books/x.pdf"
+        chapters = [
+            (6, src, "The Machine Learning Process"),
+            (1, "/books/other.pdf", "Another Book Title"),
+        ]
+        headings = [
+            {"chunk_text": "The Machine Learning Process", "page_number": 9},
+            {"chunk_text": "The Machine Learning Process", "page_number": 176},
+            {"chunk_text": "Another Book Title", "page_number": 60},
+        ]
+        assert p._heading_title_anchors(chapters, src, headings) == {6: 176}
+
+    def test_heading_title_anchors_no_match_returns_empty(self) -> None:
+        """Chapters without a heading-title match stay absent from the map."""
+        p = self._make_pipeline(_SequenceProvider([]))
+        chapters = [(6, "/books/x.pdf", "No Such Title Here")]
+        headings = [{"chunk_text": "Unrelated Heading", "page_number": 30}]
+        assert p._heading_title_anchors(chapters, "/books/x.pdf", headings) == {}
 
     def test_single_large_chunk_is_not_skipped(self) -> None:
         """A very long single chunk is still summarized, never dropped."""
