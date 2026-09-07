@@ -46,6 +46,7 @@ class Searcher(Protocol):
 
 _SECTION_NUM_PATTERN = re.compile(r"^\d+(?:\.\d+)*$")
 _WILDCARD_CHAPTER_PATTERN = re.compile(r"^(?P<prefix>\d+)\.\*$")
+_HEADING_ROLES = ("heading", "toc_entry")
 
 
 def _build_section_filter(scope: str) -> dict[str, Any] | None:
@@ -64,7 +65,7 @@ def _build_section_filter(scope: str) -> dict[str, Any] | None:
     A query filter fragment, or ``None`` when no meaningful filter applies.
     """
     if scope == "heading":
-        return {"element_type": {"$in": ["heading", "toc_entry"]}}
+        return {"element_type": {"$in": list(_HEADING_ROLES)}}
 
     # Wildcard chapter expansion  "4.*"  ->  section_id starts with "4."
     wc_match = _WILDCARD_CHAPTER_PATTERN.match(scope)
@@ -80,6 +81,30 @@ def _build_section_filter(scope: str) -> dict[str, Any] | None:
     return None
 
 
+def _filter_heading_scope(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Keep chunks whose role fields mark them as heading or toc_entry.
+
+    The role is read from the chunk payload first, then its metadata mapping,
+    falling back from ``element_type`` to ``chunk_role`` for chunks written
+    before the element_type field existed. Chunks lacking both fields predate
+    role tracking entirely and are kept rather than silently dropped.
+
+    Parameters
+    ----------
+    results :
+        Flat chunk dicts as returned by the inner searcher.
+    """
+    kept: list[dict[str, Any]] = []
+    for chunk in results:
+        meta = chunk.get("metadata", {})
+        role = chunk.get("element_type") or meta.get("element_type")
+        if role is None:
+            role = chunk.get("chunk_role") or meta.get("chunk_role")
+        if role is None or role in _HEADING_ROLES:
+            kept.append(chunk)
+    return kept
+
+
 def _apply_scope_filter(
     results: list[dict[str, Any]],
     scope: str,
@@ -88,9 +113,16 @@ def _apply_scope_filter(
 
     Older chunks may lack a ``section_id`` field entirely; such records are
     kept (except for numeric scopes) to avoid silently discarding legacy data.
+    The ``heading`` scope is evaluated against role fields instead of
+    ``section_id``: chunks whose ``element_type`` (falling back to
+    ``chunk_role``) is ``heading`` or ``toc_entry`` are kept, as are chunks
+    predating both fields.
     """
     if not scope:
         return results
+
+    if scope == "heading":
+        return _filter_heading_scope(results)
 
     filter_clause = _build_section_filter(scope)
     if filter_clause is None:
@@ -103,37 +135,46 @@ def _apply_scope_filter(
 
         if section_id is None:
             # Degrade gracefully: no section_id field -> old chunk, include it.
-            # Exact-numeric "heading" scope is intentionally excluding.
-            if scope != "heading":
-                filtered.append(chunk)
+            filtered.append(chunk)
             continue
 
-        if _matches_filter(str(section_id), filter_clause):
+        if _matches_filter({"section_id": str(section_id)}, filter_clause):
             filtered.append(chunk)
 
     return filtered
 
 
-def _matches_filter(section_id: str, filt: dict[str, Any]) -> bool:
-    """Evaluate a compiled filter against a concrete section_id."""
-    # Handle $and/$or wrappers
+def _matches_filter(record: dict[str, Any], filt: dict[str, Any]) -> bool:
+    """Evaluate a compiled filter fragment against a chunk field mapping."""
     if "$and" in filt:
-        return all(_matches_filter(section_id, sub) for sub in filt["$and"])
+        return all(_matches_filter(record, sub) for sub in filt["$and"])
     if "$or" in filt:
-        return any(_matches_filter(section_id, sub) for sub in filt["$or"])
+        return any(_matches_filter(record, sub) for sub in filt["$or"])
 
-    # Primitive comparisons
-    for op, rhs in filt.items():
+    for field, clause in filt.items():
+        value = record.get(field)
+        if value is None or not _match_clause(str(value), clause):
+            return False
+
+    return True
+
+
+def _match_clause(value: str, clause: dict[str, Any]) -> bool:
+    """Evaluate one field's operator clause against a concrete string value."""
+    for op, rhs in clause.items():
         if op == "$regex":
-            if isinstance(rhs, str) and not re.search(rhs, section_id):
+            if isinstance(rhs, str) and not re.search(rhs, value):
                 return False
         elif op == "$eq":
-            if section_id != rhs:
+            if value != rhs:
+                return False
+        elif op == "$in":
+            if value not in rhs:
                 return False
         elif op == "$gte":
-            if section_id < rhs:
+            if value < rhs:
                 return False
-        elif op == "$lt" and section_id >= rhs:
+        elif op == "$lt" and value >= rhs:
             return False
 
     return True

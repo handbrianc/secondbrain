@@ -23,7 +23,7 @@ import os
 import warnings
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NotRequired
 
 from typing_extensions import TypedDict
 
@@ -31,7 +31,7 @@ if TYPE_CHECKING:
     from secondbrain.utils.embedding_cache import EmbeddingCache
 
 # Apply MPS patch before any docling import
-from secondbrain.document.chunker import classify_chunk_role
+from secondbrain.document.chunker import chunk_segments, docling_item_label
 from secondbrain.document.fast_text import extract_printed_page
 from secondbrain.utils.mps_patch import patch_transformers_for_mps
 from secondbrain.utils.tracing import trace_operation
@@ -91,6 +91,7 @@ class _Segment(TypedDict):
 
     text: str
     page: int
+    label: NotRequired[str]
 
 
 # ---------------------------------------------------------------------------
@@ -157,7 +158,11 @@ def convert_file_to_segments(file_path: Path) -> list[_Segment]:
                 if hasattr(prov, "page_no"):
                     page_num = prov.page_no
 
-            segments.append({"text": text_item.text, "page": page_num})
+            segment: _Segment = {"text": text_item.text, "page": page_num}
+            label = docling_item_label(text_item)
+            if label is not None:
+                segment["label"] = label
+            segments.append(segment)
 
     # Fallback: plain text read
     if not segments:
@@ -219,7 +224,11 @@ def _extract_and_chunk_file(
                         if hasattr(prov, "page_no"):
                             page_num = prov.page_no
 
-                    segments.append({"text": text_item.text, "page": page_num})
+                    segment: _Segment = {"text": text_item.text, "page": page_num}
+                    label = docling_item_label(text_item)
+                    if label is not None:
+                        segment["label"] = label
+                    segments.append(segment)
 
         # Fallback: read file directly for plain text formats
         if not segments:
@@ -429,115 +438,30 @@ def _extract_chunk_and_embed_file(
                             prov = text_item.prov[0]
                             if hasattr(prov, "page_no"):
                                 page_num = prov.page_no
-                        segments.append({"text": text_item.text, "page": page_num})
+                        segment: _Segment = {
+                            "text": text_item.text,
+                            "page": page_num,
+                        }
+                        label = docling_item_label(text_item)
+                        if label is not None:
+                            segment["label"] = label
+                        segments.append(segment)
 
                 if not segments:
                     with file_path.open(encoding="utf-8", errors="ignore") as f:
                         text = f.read()
                     segments = [{"text": text, "page": 1}]
 
-        # NOTE: chunk_segments is imported here to avoid circular dep at module init
-        # (chunker is in a sibling module)
-        #
-        # Inline the chunking logic rather than importing to keep workers self-contained.
-        # When _chunk_segments moves to chunker.py, replace this inline with:
-        #   from secondbrain.document.chunker import chunk_segments
-        #   chunks = chunk_segments(segments, chunk_size, chunk_overlap)
-        #
-        # Inline minimal chunker for this worker only — not exported from this module.
         with trace_operation("ingest_worker_chunk") as span:
             if span is not None:
                 span.set_attribute("ingest.segments_count", len(segments))
-            min_segment_size = 200
-            merged_segments: list[_Segment] = []
-            current_text = ""
-            current_page = 0
-
-            for _i, segment in enumerate(segments):
-                text = segment["text"]
-                page = segment.get("page", 0)
-                if not text.strip():
-                    continue
-                stripped = text.strip()
-                is_likely_title = (
-                    len(stripped) < 100
-                    and not any(p in stripped for p in [".", ":", "-", "—"])
-                    and not stripped.endswith(".")
-                )
-                if len(current_text) < min_segment_size or is_likely_title:
-                    if current_text:
-                        current_text += " " + stripped
-                    else:
-                        current_text = stripped
-                    current_page = page
-                else:
-                    merged_segments.append({"text": current_text, "page": current_page})
-                    current_text = stripped
-                    current_page = page
-
-            if current_text:
-                merged_segments.append({"text": current_text, "page": current_page})
-
-            chunks: list[dict[str, Any]] = []
-            total_segs = len(merged_segments)
-            seg_counter = 0
-            for segment in merged_segments:
-                text = segment["text"]
-                page = segment.get("page", 0)
-                if not text.strip():
-                    continue
-                is_likely_title_for_seg = (
-                    len(text.strip()) < 100
-                    and not any(p in text.strip() for p in [".", ":", "-", "—"])
-                    and not text.strip().endswith(".")
-                )
-                start = 0
-                while start < len(text):
-                    if start + chunk_size >= len(text):
-                        chunk_text = text[start:].rstrip()
-                        if chunk_text:
-                            chunks.append(
-                                {
-                                    "text": chunk_text,
-                                    "page": page,
-                                    "chunk_role": classify_chunk_role(
-                                        chunk_text,
-                                        seg_counter,
-                                        total_segs,
-                                        is_likely_title_for_seg,
-                                    ),
-                                }
-                            )
-                        seg_counter += 1
-                        break
-                    next_start = start + chunk_size
-                    chunk_end = next_start
-                    last_space = text.rfind(" ", start, chunk_end)
-                    if last_space > start:
-                        chunk_end = last_space
-                    chunk_text = text[start:chunk_end]
-                    if chunk_text.strip():
-                        chunks.append(
-                            {
-                                "text": chunk_text,
-                                "page": page,
-                                "chunk_role": classify_chunk_role(
-                                    chunk_text,
-                                    seg_counter,
-                                    total_segs,
-                                    is_likely_title_for_seg,
-                                ),
-                            }
-                        )
-                        seg_counter += 1
-                    new_start = chunk_end - chunk_overlap
-                    start = chunk_end if new_start <= start else new_start
+            chunks = chunk_segments(segments, chunk_size, chunk_overlap)
 
         cfg = config()
         embedding_model = EmbeddingProviderFactory.create_from_config(cfg)
 
         seen_hashes = set()
-        unique_chunks = []
+        unique_chunks: list[dict[str, Any]] = []
         for chunk in chunks:
             cleaned = chunk["text"].strip()
             if not cleaned:
@@ -552,6 +476,7 @@ def _extract_chunk_and_embed_file(
                         "page": chunk["page"],
                         "text_hash": text_hash,
                         "chunk_role": chunk.get("chunk_role", "body"),
+                        "element_type": chunk.get("element_type", "body"),
                     }
                 )
 
@@ -655,6 +580,7 @@ def _extract_chunk_and_embed_file(
                 "file_type": file_type,
                 "ingested_at": ingested_at,
                 "chunk_role": chunk_item.get("chunk_role", "body"),
+                "element_type": chunk_item.get("element_type", "body"),
             }
             documents.append(doc)
             page_pos += 1
