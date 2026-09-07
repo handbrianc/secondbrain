@@ -21,6 +21,8 @@ from secondbrain.document.chunker import (
     _chunk_segments,
     chunk_segments,
     deduplicate_segments,
+    docling_item_label,
+    label_to_element_type,
 )
 from secondbrain.document.ingestor import (
     SUPPORTED_EXTENSIONS,
