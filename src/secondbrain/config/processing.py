@@ -102,6 +102,15 @@ class ProcessingStorageMixin:
             "native text. Ignored when pdf_ocr_enabled is True."
         ),
     )
+    pdf_structure_probe_enabled: bool = Field(
+        default=True,
+        description=(
+            "Route text-layer PDFs that look like structured books (chapter "
+            "openers or dotted ToC entries in the leading pages) through the "
+            "full docling pipeline to capture per-item structural labels. "
+            "False keeps every text-layer PDF on the fast path."
+        ),
+    )
     pdf_table_structure_enabled: bool = Field(
         default=False,
         description="Detect table structure in PDFs.",
