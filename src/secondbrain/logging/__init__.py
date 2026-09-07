@@ -1,4 +1,12 @@
-"""Logging utilities for SecondBrain application."""
+"""Logging utilities for SecondBrain application.
+
+Log transport follows 12-Factor Factor XI (treat logs as event streams):
+the default transport is stdout/stderr only, and the consuming terminal or
+process manager owns routing and storage. Writing to a log file is strictly
+opt-in for local CLI debugging via the SECONDBRAIN_LOG_FILE environment
+variable (or an explicit log_file argument); no file handler is attached
+unless that opt-in is present.
+"""
 
 import json
 import logging
@@ -64,25 +72,59 @@ def set_request_id(request_id: str | None = None) -> str:
     return request_id
 
 
+def _quiet_noisy_loggers() -> None:
+    # Third-party HTTP/telemetry loggers log one INFO line per request (httpx
+    # emits "HTTP Request: GET ... 200 OK" for qdrant and the LLM/embedding
+    # providers), which floods the console during normal use. Raise them to
+    # WARNING so only real warnings/errors surface.
+    for name in (
+        "httpx",
+        "httpcore",
+        "httpcore.http11",
+        "httpcore.http12",
+        "urllib3",
+        "openai",
+        "qdrant_client",
+        "qpylib",
+        "opentelemetry",
+    ):
+        logging.getLogger(name).setLevel(logging.WARNING)
+
+
 def setup_logging(
     verbose: bool = False,
     json_format: bool = False,
     log_file: str | None = None,
     max_bytes: int | None = None,
     backup_count: int = 5,
+    level_name: str | None = None,
 ) -> None:
     """Configure logging with the specified options.
 
+    stdout/stderr is the default transport; a log file is attached only when
+    explicitly requested (see the module docstring for the 12-factor contract).
+
     Args:
-        verbose: Enable DEBUG level if True, WARNING (no logs) otherwise.
+        verbose: Enable DEBUG level if True.
         json_format: Use JSON format if True, rich text otherwise.
         log_file: Path to log file. If None, reads from SECONDBRAIN_LOG_FILE env var.
+            When neither is set, no file handler is attached.
         max_bytes: Max log file size before rotation. If None, reads from
             SECONDBRAIN_LOG_MAX_BYTES env var (default 10MB).
         backup_count: Number of backup files to keep. If None, reads from
             SECONDBRAIN_LOG_BACKUP_COUNT env var (default 5).
+        level_name: Log level name to use when verbose is False (e.g. "ERROR",
+            "WARNING", "INFO", "DEBUG"). Controls the minimum severity shown on
+            the console. If omitted, defaults to WARNING (warnings and above).
     """
-    level = logging.DEBUG if verbose else logging.WARNING
+    if verbose:
+        level = logging.DEBUG
+    elif level_name is not None:
+        level = getattr(logging, level_name.upper(), logging.WARNING)
+    else:
+        level = logging.WARNING
+
+    _quiet_noisy_loggers()
 
     # If handlers are already configured, just update the level
     if logging.root.handlers:

@@ -67,11 +67,9 @@ generator = EmbeddingGenerator()
 embedding = await generator.generate_async("Your text here")
 
 # Generate batch
-embeddings = await generator.generate_batch_async([
-    "First text",
-    "Second text",
-    "Third text"
-])
+embeddings = await generator.generate_batch_async(
+    ["First text", "Second text", "Third text"]
+)
 
 generator.close()
 ```
@@ -111,14 +109,14 @@ Full RAG pipeline with async operations:
 from secondbrain.rag.pipeline import RAGPipeline
 
 pipeline = RAGPipeline(
-    searcher=search_client,
-    llm_provider=llm_factory.create_provider(),
-    top_k=10
+    searcher=search_client, llm_provider=llm_factory.create_provider(), top_k=10
 )
+
 
 async def ask_question(question: str, session: Session):
     async for chunk in pipelineachat_stream(question, session):
         yield chunk
+
 
 # Stream responses
 async for delta in ask_question("What is RAG?", session):
@@ -135,23 +133,25 @@ Run multiple coroutines concurrently:
 import asyncio
 from secondbrain.embed.generator import EmbeddingGenerator
 
+
 async def process_batch(batch: list[str]) -> list[list[float]]:
     gen = EmbeddingGenerator()
     results = await gen.generate_batch_async(batch)
     gen.close()
     return results
 
+
 async def main():
     all_texts = [...]  # Your documents
-    
+
     # Process in parallel batches
     tasks = [
-        process_batch(all_texts[i:i+100])
-        for i in range(0, len(all_texts), 100)
+        process_batch(all_texts[i : i + 100]) for i in range(0, len(all_texts), 100)
     ]
-    
+
     all_embeddings = await asyncio.gather(*tasks)
     flat_embeddings = [emb for batch in all_embeddings for emb in batch]
+
 
 asyncio.run(main())
 ```
@@ -162,6 +162,7 @@ Prevent overwhelming external services:
 
 ```python
 semaphore = asyncio.Semaphore(5)  # Max 5 concurrent requests
+
 
 async def limited_call(url: str):
     async with semaphore:
@@ -191,6 +192,7 @@ async def safe_search(query: str):
 ```python
 import asyncio
 from tenacity import retry, stop_after_attempt, wait_exponential
+
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10))
 async def resilient_call():

@@ -24,12 +24,11 @@ All functions must have type annotations:
 
 ```python
 # Correct
-def process_document(path: str, options: dict[str, Any]) -> list[Chunk]:
-    ...
+def process_document(path: str, options: dict[str, Any]) -> list[Chunk]: ...
+
 
 # Incorrect - missing types
-def process_document(path, options):
-    ...
+def process_document(path, options): ...
 ```
 
 ### Generic Types
@@ -38,16 +37,15 @@ Use concrete generic types rather than bare generics:
 
 ```python
 # Preferred
-def fetch_items() -> list[Item]:
-    ...
+def fetch_items() -> list[Item]: ...
+
 
 # Acceptable for heterogeneous lists
-def fetch_mixed() -> list[Any]:
-    ...
+def fetch_mixed() -> list[Any]: ...
+
 
 # Discouraged
-def fetch_items() -> list:
-    ...
+def fetch_items() -> list: ...
 ```
 
 ## Linting
@@ -162,11 +160,10 @@ tests/
 Pattern: `test_<functionality>_<scenario>`
 
 ```python
-def test_search_returns_empty_when_no_matches():
-    ...
+def test_search_returns_empty_when_no_matches(): ...
 
-def test_search_filters_by_source_with_regex():
-    ...
+
+def test_search_filters_by_source_with_regex(): ...
 ```
 
 ### Fixtures
@@ -188,6 +185,7 @@ Define in `exceptions.py`:
 ```python
 class ValidationError(Exception):
     """Raised when input validation fails."""
+
     pass
 ```
 

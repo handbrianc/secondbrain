@@ -131,7 +131,7 @@ def _build_known_names(source_files: list[str]) -> dict[str, str]:
 
 
 class DocumentRouter:
-    r"""Resolves document mentions in user queries to MongoDB source_file paths.
+    r"""Resolves document mentions in user queries to vector store source_file paths.
 
     Maintains a fuzzy-match registry of all ingested document filenames
     extracted from the vector store at construction time (with TTL caching).
@@ -155,7 +155,7 @@ class DocumentRouter:
 
         Args:
             storage: Optional VectorStorage/AsyncVectorStorage instance for
-                querying source files from MongoDB. Required unless
+                querying source files from the vector store. Required unless
                 ``known_names`` is provided (for testing).
             known_names: Pre-built name→source_file mapping for testing
                 or when storage is not available.
@@ -268,9 +268,7 @@ class DocumentRouter:
         # Normalize each token so an in-sentence filename like "index.html"
         # (not at end-of-string, so _normalize_name leaves the extension)
         # still matches its bare-name registry key "index".
-        query_tokens = {
-            t for word in q.split() for t in _normalize_name(word).split()
-        }
+        query_tokens = {t for word in q.split() for t in _normalize_name(word).split()}
 
         # Phase 1: Jaccard similarity on token sets
         best_name: str | None = None
@@ -343,7 +341,7 @@ class DocumentRouter:
         return None
 
     def resolve_source_file(self, doc_name: str | None) -> str | None:
-        """Resolve a matched document name to a MongoDB ``source_file`` path.
+        """Resolve a matched document name to a vector store ``source_file`` path.
 
         Args:
             doc_name: A normalized document name returned by

@@ -1,7 +1,5 @@
 """Tests for connection utilities."""
 
-import asyncio
-import time
 from unittest.mock import MagicMock
 
 import pytest
@@ -11,6 +9,19 @@ from secondbrain.utils.connections import (
     ValidatableService,
     ensure_service_available,
 )
+
+
+class FakeClock:
+    """Deterministic monotonic clock; tests advance it instead of sleeping."""
+
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def __call__(self) -> float:
+        return self.now
+
+    def advance(self, seconds: float) -> None:
+        self.now += seconds
 
 
 class TestServiceUnavailableError:
@@ -82,10 +93,13 @@ class TestValidatableService:
         result2 = service.validate_connection()
         assert result2 is True
 
-    def test_validate_connection_cache_miss(self) -> None:
+    def test_validate_connection_cache_miss(self, monkeypatch) -> None:
         """Test that ValidatableService validate_connection revalidates after TTL."""
+        from secondbrain.utils import connections as connections_module
         from secondbrain.utils.connections import ValidatableService
 
+        clock = FakeClock()
+        monkeypatch.setattr(connections_module, "monotonic", clock)
         call_count = 0
 
         class ConcreteService(ValidatableService):
@@ -104,8 +118,8 @@ class TestValidatableService:
         assert result1 is True
         assert call_count == 1
 
-        # Wait for cache to expire
-        time.sleep(0.11)
+        # Advance past the cache TTL
+        clock.advance(0.11)
 
         # Second call should revalidate
         result2 = service.validate_connection()
@@ -239,10 +253,13 @@ class TestValidatableServiceAsync:
         assert result2 is True
 
     @pytest.mark.asyncio
-    async def test_validate_connection_async_cache_miss(self) -> None:
+    async def test_validate_connection_async_cache_miss(self, monkeypatch) -> None:
         """Test that ValidatableService validate_connection_async revalidates after TTL."""
+        from secondbrain.utils import connections as connections_module
         from secondbrain.utils.connections import ValidatableService
 
+        clock = FakeClock()
+        monkeypatch.setattr(connections_module, "monotonic", clock)
         call_count = 0
 
         class ConcreteService(ValidatableService):
@@ -261,8 +278,8 @@ class TestValidatableServiceAsync:
         assert result1 is True
         assert call_count == 1
 
-        # Wait for cache to expire
-        await asyncio.sleep(0.11)
+        # Advance past the cache TTL
+        clock.advance(0.11)
 
         # Second call should revalidate
         result2 = await service.validate_connection_async()

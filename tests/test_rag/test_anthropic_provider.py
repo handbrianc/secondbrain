@@ -8,7 +8,7 @@ import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from anthropic import APIError
+from anthropic import APIConnectionError, APIError
 
 from secondbrain.exceptions import ServiceUnavailableError
 from secondbrain.rag.providers.anthropic import AnthropicLLMProvider
@@ -23,8 +23,9 @@ class TestAnthropicLLMProviderInit:
             provider = AnthropicLLMProvider()
 
             assert provider._model == "claude-3-sonnet-20240229"
-            assert provider._temperature == 0.1
-            assert provider._max_tokens == 2048
+            assert provider._temperature == 1.0
+            assert provider._top_p == 0.95
+            assert provider._max_tokens == 384000
             assert provider._timeout == 120
             assert provider._api_key == "test-key"
 
@@ -115,15 +116,13 @@ class TestAnthropicLLMProviderAsyncGenerate:
     @pytest.mark.asyncio
     async def test_agenerate_raises_service_unavailable(self):
         """Test that ConnectError raises ServiceUnavailableError."""
-        import httpx
-
         with patch.dict(os.environ, {"SECONDBRAIN_ANTHROPIC_API_KEY": "test-key"}):
             with patch(
                 "secondbrain.rag.providers.anthropic.AsyncAnthropic"
             ) as mock_client_class:
                 mock_client = MagicMock()
                 mock_client.messages.create = AsyncMock(
-                    side_effect=httpx.ConnectError("Connection failed")
+                    side_effect=APIConnectionError(request=MagicMock())
                 )
                 mock_client_class.return_value = mock_client
 
@@ -177,15 +176,13 @@ class TestAnthropicLLMProviderHealthCheck:
 
     def test_health_check_failure(self):
         """Test health check returns False on failure."""
-        import httpx
-
         with patch.dict(os.environ, {"SECONDBRAIN_ANTHROPIC_API_KEY": "test-key"}):
             with patch(
                 "secondbrain.rag.providers.anthropic.Anthropic"
             ) as mock_client_class:
                 mock_client = MagicMock()
-                mock_client.models.list.side_effect = httpx.ConnectError(
-                    "Connection failed"
+                mock_client.models.list.side_effect = APIConnectionError(
+                    request=MagicMock()
                 )
                 mock_client_class.return_value = mock_client
 
@@ -299,3 +296,57 @@ class TestAnthropicLLMProviderGenerate:
                 mock_client_class.return_value = mock_client
 
                 provider = AnthropicLLMProvider()
+
+                with pytest.raises(RuntimeError, match="Anthropic API error"):
+                    provider.generate("Test")
+
+
+class TestAnthropicLLMProviderClosedState:
+    """Tests for provider behavior after close()/aclose()."""
+
+    def test_generate_after_close_raises_runtime_error(self):
+        """Test that generate raises RuntimeError after close()."""
+        with patch.dict(os.environ, {"SECONDBRAIN_ANTHROPIC_API_KEY": "test-key"}):
+            provider = AnthropicLLMProvider()
+            provider.close()
+
+            with pytest.raises(RuntimeError, match="has been closed"):
+                provider.generate("Test")
+
+    @pytest.mark.asyncio
+    async def test_agenerate_after_aclose_raises_runtime_error(self):
+        """Test that agenerate raises RuntimeError after aclose()."""
+        with patch.dict(os.environ, {"SECONDBRAIN_ANTHROPIC_API_KEY": "test-key"}):
+            provider = AnthropicLLMProvider()
+            await provider.aclose()
+
+            with pytest.raises(RuntimeError, match="has been closed"):
+                await provider.agenerate("Test")
+
+    @pytest.mark.asyncio
+    async def test_stream_chat_async_after_aclose_raises_runtime_error(self):
+        """Test that stream_chat_async raises RuntimeError after aclose()."""
+        with patch.dict(os.environ, {"SECONDBRAIN_ANTHROPIC_API_KEY": "test-key"}):
+            provider = AnthropicLLMProvider()
+            await provider.aclose()
+
+            with pytest.raises(RuntimeError, match="has been closed"):
+                await provider.stream_chat_async(
+                    [{"role": "user", "content": "Test"}], MagicMock()
+                )
+
+    def test_health_check_after_close_returns_false(self):
+        """Test that health_check returns False after close()."""
+        with patch.dict(os.environ, {"SECONDBRAIN_ANTHROPIC_API_KEY": "test-key"}):
+            provider = AnthropicLLMProvider()
+            provider.close()
+
+            assert provider.health_check() is False
+
+    def test_close_is_idempotent(self):
+        """Test that close() can be called multiple times safely."""
+        with patch.dict(os.environ, {"SECONDBRAIN_ANTHROPIC_API_KEY": "test-key"}):
+            provider = AnthropicLLMProvider()
+            provider.close()
+
+            provider.close()

@@ -302,7 +302,7 @@ class TestSearchTimeoutHandling:
         from secondbrain.exceptions import StorageConnectionError
 
         mock_searcher_class = create_mock_searcher(
-            side_effect=StorageConnectionError("Cannot connect to MongoDB")
+            side_effect=StorageConnectionError("Cannot connect to the vector store")
         )
 
         with patch("secondbrain.search.Searcher", mock_searcher_class):

@@ -4,13 +4,14 @@ Consolidated tests covering:
 - Tracing enable/disable via environment variables
 - Metrics enable/disable via environment variables
 - Exporter endpoint and sampling rate configuration
-- Span creation for ingestion, search, and MongoDB operations
+- Span creation for ingestion, search, and vector store operations
 - Context propagation helpers
 """
 
 from __future__ import annotations
 
 import importlib
+import logging
 
 import pytest
 
@@ -61,7 +62,16 @@ class TestOTELConfig:
     def test_sampling_rate_invalid_uses_default(self, monkeypatch, caplog):
         monkeypatch.setenv("SECONDBRAIN_TRACING_ENABLED", "true")
         monkeypatch.setenv("SECONDBRAIN_OTEL_SAMPLING_RATE", "invalid")
-        tracing_module.setup_tracing(service_name="test-service")
+        # Full-suite runs mask this warning via cross-test logging
+        # reconfiguration; force level + propagation so caplog always sees it.
+        tracing_logger = logging.getLogger(tracing_module.__name__)
+        with caplog.at_level(logging.WARNING, logger=tracing_logger.name):
+            original_propagate = tracing_logger.propagate
+            tracing_logger.propagate = True
+            try:
+                tracing_module.setup_tracing(service_name="test-service")
+            finally:
+                tracing_logger.propagate = original_propagate
         assert "Invalid SECONDBRAIN_OTEL_SAMPLING_RATE" in str(caplog.text)
 
 
@@ -95,19 +105,19 @@ class TestOTELSpans:
         operation_name = "search.query"
         assert "query" in operation_name
 
-    def test_trace_operation_for_mongodb(self):
+    def test_trace_operation_for_vector_store(self):
         from secondbrain.utils.tracing import trace_operation
 
-        with trace_operation("db.mongodb.find") as span:
+        with trace_operation("db.vector.find") as span:
             if span:
                 span.set_attribute("database", "secondbrain")
 
-    def test_mongodb_span_operation_name_format(self):
+    def test_vector_store_span_operation_name_format(self):
         from secondbrain.utils.tracing import trace_operation
 
-        with trace_operation("db.mongodb.find") as span:
+        with trace_operation("db.vector.find") as span:
             if span:
-                assert span.name == "db.mongodb.find"
+                assert span.name == "db.vector.find"
 
 
 class TestContextHelpers:

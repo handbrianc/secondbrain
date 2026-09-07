@@ -24,7 +24,7 @@ class ValidationError(SecondBrainError):
 
 
 class ServiceError(SecondBrainError):
-    """Raised when external service (e.g., MongoDB) is unavailable."""
+    """Raised when an external service (e.g., the vector store) is unavailable."""
 
     pass
 
@@ -48,11 +48,12 @@ class EmbeddingError(SecondBrainError):
 
 
 class StorageConnectionError(SecondBrainError):
-    """Raised when MongoDB connection cannot be established."""
+    """Raised when a storage connection cannot be established."""
 
     def __init__(self, message: str | None = None) -> None:
         super().__init__(
-            message or "Session storage unavailable. Check MongoDB connection."
+            message
+            or "Session storage unavailable. Check the persistence configuration."
         )
 
 

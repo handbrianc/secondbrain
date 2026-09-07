@@ -4,11 +4,13 @@ Qdrant payload and SQLite schemas for SecondBrain.
 
 ## Vector Collection: `embeddings`
 
-Stores all ingested document chunks with their vector representations as Qdrant points. The default collection name is `embeddings`, configured via `SECONDBRAIN_QDRANT_COLLECTION`.
+Stores all ingested document chunks with their vector representations as Qdrant points. The default collection
+name is `embeddings`, configured via `SECONDBRAIN_QDRANT_COLLECTION`.
 
 ### Point Schema
 
-Each chunk is a Qdrant point: a vector plus a payload. All chunk metadata lives in the payload so search needs one round trip.
+Each chunk is a Qdrant point: a vector plus a payload. All chunk metadata lives in the payload so search needs
+one round trip.
 
 ```json
 {
@@ -59,11 +61,14 @@ Structural role of a chunk within its parent document. Introduced in v2.x (struc
 | `"table_row"` | Table cell content |
 | `"table_caption"` | Caption within or beneath a table |
 
-**Note**: `chunk_role` is retained in the payload for backwards compatibility with documents ingested prior to v2.x. New documents set `element_type`.
+**Note**: `chunk_role` is retained in the payload for backwards compatibility with documents ingested prior to
+v2.x. New documents set `element_type`.
 
 ## Conversations: SQLite
 
-Conversation history for the chat command is persisted to SQLite (`ConversationStorage` at `src/secondbrain/conversation/storage_sqlite.py`). The default database path is `~/.secondbrain/secondbrain.db`, configured via `SECONDBRAIN_SQLITE_PATH`.
+Conversation history for the chat command is persisted to SQLite (`ConversationStorage` at
+`src/secondbrain/conversation/storage_sqlite.py`). The default database path is `~/.secondbrain/secondbrain.db`,
+configured via `SECONDBRAIN_SQLITE_PATH`.
 
 ### `sessions` Table
 
@@ -125,7 +130,8 @@ With STORAGE_COMPRESSION_ENABLED=true (zstd):
 
 ### Vector Format Change (v0.3 → v0.4)
 
-Previously vectors were stored as BSON Binary in MongoDB. Now stored as plain float arrays in Qdrant points during the MongoDB→Qdrant migration.
+Previously vectors were stored as BSON Binary in MongoDB. Now stored as plain float arrays in Qdrant points
+during the MongoDB→Qdrant migration.
 
 Migration is manual: re-ingest affected documents.
 

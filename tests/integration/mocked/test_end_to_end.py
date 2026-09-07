@@ -351,9 +351,7 @@ class TestIntegrationDataFlow:
                 }
             )
 
-        filtered = [
-            c for c in storage.list_chunks() if "test0" in c["source_file"]
-        ]
+        filtered = [c for c in storage.list_chunks() if "test0" in c["source_file"]]
 
         for chunk in filtered:
             assert "test0" in chunk["source_file"]

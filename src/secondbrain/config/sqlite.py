@@ -1,7 +1,6 @@
 """SQLite storage settings fragment for :class:`secondbrain.config.Config`.
 
-Hosts conversation sessions/messages (non-vector data) that previously lived
-in MongoDB. SQLite is embedded; no server is required.
+Hosts conversation sessions/messages (non-vector data). SQLite is embedded; no server is required.
 """
 
 from pathlib import Path

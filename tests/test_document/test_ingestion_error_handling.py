@@ -410,15 +410,15 @@ class TestMemoryExhaustion:
 
 
 class TestDatabaseConnectionFailures:
-    """Tests for MongoDB connection failure scenarios."""
+    """Tests for storage connection failure scenarios."""
 
     @patch(
         "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
     )
-    def test_ingest_handles_mongo_connection_failure(
+    def test_ingest_handles_storage_connection_failure(
         self, mock_factory: MagicMock, tmp_path: Path, mocked_pdf_extraction: MagicMock
     ) -> None:
-        """Test handling of MongoDB connection failures."""
+        """Test handling of storage connection failures."""
         mock_embedding = MagicMock()
         mock_embedding.generate_batch = MagicMock(
             return_value=[[0.1] * 384 for _ in range(5)]
@@ -433,7 +433,7 @@ class TestDatabaseConnectionFailures:
 
         mock_storage = MagicMock()
         mock_storage.store_batch.side_effect = StorageConnectionError(
-            "MongoDB connection failed"
+            "Storage connection failed"
         )
         with patch(
             "secondbrain.storage.StorageFactory.create_from_config",
@@ -446,10 +446,10 @@ class TestDatabaseConnectionFailures:
     @patch(
         "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
     )
-    def test_ingest_retries_on_mongo_timeout(
+    def test_ingest_retries_on_storage_timeout(
         self, mock_factory: MagicMock, tmp_path: Path
     ) -> None:
-        """Test that ingestion handles MongoDB timeout gracefully without crashing."""
+        """Test that ingestion handles storage timeout gracefully without crashing."""
         mock_embedding = MagicMock()
         mock_embedding.generate_batch = MagicMock(
             return_value=[[0.1] * 384 for _ in range(100)]
@@ -463,7 +463,7 @@ class TestDatabaseConnectionFailures:
         test_file.write_text("sample content")
 
         mock_storage = MagicMock()
-        mock_storage.store_batch.side_effect = TimeoutError("MongoDB timeout")
+        mock_storage.store_batch.side_effect = TimeoutError("Storage timeout")
         with patch(
             "secondbrain.storage.StorageFactory.create_from_config",
             return_value=mock_storage,

@@ -1,6 +1,6 @@
 """Qdrant vector storage backend for SecondBrain.
 
-Replaces the MongoDB vector store. All chunk metadata (including
+The Qdrant vector store. All chunk metadata (including
 ``chunk_text``) lives in the Qdrant payload, so ``search`` returns everything
 the Searcher needs in a single round trip. The payload uses *top-level* keys
 (nested ``metadata`` is intentionally avoided).
@@ -25,6 +25,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.http import models
 
 from secondbrain.config import config
+from secondbrain.constants import MAX_LIST_LIMIT
 from secondbrain.types import (
     ChunkInfo,
     SearchResult,
@@ -41,12 +42,15 @@ _INDEXED_FIELDS = (
     "text_hash",
     "chapter_id",
     "section_id",
+    "printed_page",
 )
 
 _OUTPUT_KEYS = (
     "chunk_id",
     "source_file",
     "page_number",
+    "printed_page",
+    "page_pos",
     "chunk_text",
     "element_type",
     "chunk_role",
@@ -94,8 +98,6 @@ class QdrantVectorStorage:
 
     def _ensure_collection(self) -> None:
         """Provision collection + payload indexes once per instance (locked)."""
-        if self._collection_ready:
-            return
         with self._collection_lock:
             if self._collection_ready:
                 return
@@ -154,7 +156,7 @@ class QdrantVectorStorage:
                         )
                     )
             except ValueError:
-                pass
+                logger.debug("Keyword %r is not a plain integer; no int match", value)
         return conditions
 
     def _build_search_filter(
@@ -344,6 +346,7 @@ class QdrantVectorStorage:
             resp = self._get_client().facet(
                 collection_name=self.collection_name,
                 key="source_file",
+                limit=MAX_LIST_LIMIT,
             )
             seen: set[str] = set()
             for bucket in resp.hits:
@@ -376,7 +379,7 @@ class QdrantVectorStorage:
         }
 
     # ------------------------------------------------------------------
-    # Document-structure scans (replaces Mongo ``collection`` reaches)
+    # Document-structure scans (replaces legacy ``collection`` reaches)
     # ------------------------------------------------------------------
 
     def get_source_chunks(
@@ -408,6 +411,8 @@ class QdrantVectorStorage:
         chapter_id: str | None = None,
         section_id: str | None = None,
         section_id_pattern: str | None = None,
+        printed_page: int | str | None = None,
+        page_number: int | list[int] | None = None,
         with_text: bool = True,
     ) -> Sequence[ChunkInfo]:
         """Chunks matching equality filters; optional Python regex on section_id."""
@@ -425,6 +430,30 @@ class QdrantVectorStorage:
             must_conds.append(
                 models.Filter(should=self._key_conditions("section_id", section_id))
             )
+        if printed_page is not None:
+            must_conds.append(
+                models.Filter(should=self._key_conditions("printed_page", printed_page))
+            )
+        if page_number is not None:
+            if isinstance(page_number, list):
+                must_conds.append(
+                    models.Filter(
+                        must=[
+                            models.FieldCondition(
+                                key="page_number",
+                                match=models.MatchAny(
+                                    any=[int(p) for p in page_number]
+                                ),
+                            )
+                        ]
+                    )
+                )
+            else:
+                must_conds.append(
+                    models.Filter(
+                        should=self._key_conditions("page_number", page_number)
+                    )
+                )
         records = self._scroll_records(
             models.Filter(must=must_conds) if must_conds else None,
             None,
@@ -461,7 +490,7 @@ class QdrantVectorStorage:
         with that prefix are considered. Results are ordered by ascending
         ``page_number`` and truncated to *limit*.
 
-        Ports the Mongo ``_probe_document_structure`` OR-filter
+        Ports the legacy ``_probe_document_structure`` OR-filter
         (``{"$or": [{"element_type": {"$in": [...]}}, {"chunk_role": {"$in": [...]}}]}``)
         plus its ``{"source_file": {"$regex": "^<prefix>"}}`` scoping.
         """
@@ -506,7 +535,7 @@ class QdrantVectorStorage:
     ) -> Sequence[ChunkInfo]:
         """Return a source's body chunks (``chunk_role == 'body'``) ordered by page.
 
-        Mirrors the Mongo ``coll.find({"source_file": src, "chunk_role": "body"},
+        Mirrors the legacy ``collection.find({"source_file": src, "chunk_role": "body"},
         {...}).sort("page_number", 1).limit(n)`` reads used by the chapter/section
         reconstruction path. If *page_gte* is given, only chunks on or after that
         page are returned (used for appendix extraction); the page filter is
@@ -543,7 +572,7 @@ class QdrantVectorStorage:
     ) -> int:
         """Count chunks matching optional ``source_file`` / ``chunk_role`` filters.
 
-        Mirrors the Mongo ``coll.count_documents({"source_file": s,
+        Mirrors the legacy ``collection.count_documents({"source_file": s,
         "chunk_role": "body"})`` used by the chapter-enumeration path to pick the
         source with the most body chunks. Filters are exact keyword matches.
         """
@@ -608,7 +637,7 @@ class QdrantVectorStorage:
     # ------------------------------------------------------------------
 
     def get_stats(self) -> dict[str, Any]:
-        """Stats matching the Mongo ``get_stats`` shape for the ``status`` CLI."""
+        """Stats matching the legacy ``get_stats`` shape for the ``status`` CLI."""
         self._ensure_collection()
         total = (
             self._get_client()

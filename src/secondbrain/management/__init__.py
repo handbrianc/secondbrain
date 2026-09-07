@@ -19,7 +19,7 @@ __all__ = [
 
 
 class BaseManager:
-    """Base class for management operations with MongoDB availability validation.
+    """Base class for management operations with storage availability validation.
 
     This class provides a shared implementation of the service validation
     pattern used across all management operations (list, delete, status).

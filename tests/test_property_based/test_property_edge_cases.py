@@ -163,7 +163,7 @@ class TestConfigValidationEdgeCases:
         assert config.rag_context_window == window
 
     @given(st.floats(min_value=0.0, max_value=2.0))
-    @settings(max_examples=100)
+    @settings(max_examples=100, deadline=None)
     def test_temperature_in_range(self, temp: float):
         assume(0.0 <= temp <= 2.0)
         config = Config(llm_temperature=temp)

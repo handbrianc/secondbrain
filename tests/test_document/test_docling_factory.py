@@ -134,6 +134,8 @@ def test_shared_converter_builds_real_cached_ocr_converter() -> None:
 
     from docling.datamodel.base_models import InputFormat
 
-    pipeline_options = get_shared_converter().format_to_options[InputFormat.PDF].pipeline_options
+    pipeline_options = (
+        get_shared_converter().format_to_options[InputFormat.PDF].pipeline_options
+    )
     assert pipeline_options is not None
     assert pipeline_options.model_dump().get("do_ocr") is True

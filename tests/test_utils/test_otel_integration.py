@@ -452,28 +452,28 @@ class TestOTELEndToEnd:
         assert "secondbrain.operations.duration" in metric_names
         assert "secondbrain.errors.count" in metric_names
 
-    def test_mongodb_span_attributes(self):
-        """MongoDB operation spans include collection name and operation type.
+    def test_vector_store_span_attributes(self):
+        """Vector store operation spans include collection name and operation type.
 
-        Verifies that when MongoDB operations are performed, the spans include:
-        - db.mongodb.collection (collection name)
+        Verifies that when vector store operations are performed, the spans include:
+        - db.qdrant.collection (collection name)
         - db.operation (operation type: find, insert, update, delete)
         """
         tracer = trace.get_tracer(__name__)
 
-        # Simulate MongoDB operations
-        with tracer.start_as_current_span("db.mongodb.query") as span:
-            span.set_attribute("db.mongodb.collection", "embeddings")
+        # Simulate vector store operations
+        with tracer.start_as_current_span("db.qdrant.query") as span:
+            span.set_attribute("db.qdrant.collection", "embeddings")
             span.set_attribute("db.operation", "find")
-            span.set_attribute("db.mongodb.query.filter", '{"source_file": "test.pdf"}')
+            span.set_attribute("db.qdrant.query.filter", '{"source_file": "test.pdf"}')
 
         spans = get_spans()
         assert len(spans) >= 1
 
-        mongo_span = spans[0]
-        assert mongo_span.name == "db.mongodb.query"
-        assert mongo_span.attributes.get("db.mongodb.collection") == "embeddings"
-        assert mongo_span.attributes.get("db.operation") == "find"
+        vector_span = spans[0]
+        assert vector_span.name == "db.qdrant.query"
+        assert vector_span.attributes.get("db.qdrant.collection") == "embeddings"
+        assert vector_span.attributes.get("db.operation") == "find"
 
     def test_exception_events_in_spans(self):
         """Exception events are recorded in spans with type and message.

@@ -190,6 +190,19 @@ class FailureInjectorCore:
 
             return False
 
+    @staticmethod
+    def _resolve_message(
+        config: FailureConfig | None,
+        error_message: str | None,
+        default: str,
+    ) -> str:
+        """Resolve the effective failure message from caller/config defaults."""
+        if error_message is not None:
+            return error_message
+        if config is not None and config.error_message is not None:
+            return config.error_message
+        return default
+
     def raise_failure(
         self, failure_type: FailureType, error_message: str | None = None
     ) -> None:
@@ -218,20 +231,14 @@ class FailureInjectorCore:
             msg = error_message or f"Injected timeout after {timeout_value}s"
             raise InjectedTimeoutError(msg, timeout_value)
         elif failure_type == FailureType.CONNECTION_ERROR:
-            if error_message is not None:
-                msg = error_message
-            elif config is not None and config.error_message is not None:
-                msg = config.error_message
-            else:
-                msg = "Injected connection error"
+            msg = self._resolve_message(
+                config, error_message, "Injected connection error"
+            )
             raise InjectedConnectionError(msg)
         elif failure_type == FailureType.GENERAL_FAILURE:
-            if error_message is not None:
-                msg = error_message
-            elif config is not None and config.error_message is not None:
-                msg = config.error_message
-            else:
-                msg = "Injected general failure"
+            msg = self._resolve_message(
+                config, error_message, "Injected general failure"
+            )
             raise InjectedFailureError(msg)
         elif failure_type == FailureType.SLOW_RESPONSE:
             # Slow response is handled differently - it delays instead of raising

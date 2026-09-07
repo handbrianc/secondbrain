@@ -21,8 +21,9 @@ import hashlib
 import logging
 import os
 import warnings
+from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NotRequired
 
 from typing_extensions import TypedDict
 
@@ -30,7 +31,8 @@ if TYPE_CHECKING:
     from secondbrain.utils.embedding_cache import EmbeddingCache
 
 # Apply MPS patch before any docling import
-from secondbrain.document.chunker import classify_chunk_role
+from secondbrain.document.chunker import chunk_segments, docling_item_label
+from secondbrain.document.fast_text import extract_printed_page
 from secondbrain.utils.mps_patch import patch_transformers_for_mps
 from secondbrain.utils.tracing import trace_operation
 
@@ -89,6 +91,7 @@ class _Segment(TypedDict):
 
     text: str
     page: int
+    label: NotRequired[str]
 
 
 # ---------------------------------------------------------------------------
@@ -155,7 +158,11 @@ def convert_file_to_segments(file_path: Path) -> list[_Segment]:
                 if hasattr(prov, "page_no"):
                     page_num = prov.page_no
 
-            segments.append({"text": text_item.text, "page": page_num})
+            segment: _Segment = {"text": text_item.text, "page": page_num}
+            label = docling_item_label(text_item)
+            if label is not None:
+                segment["label"] = label
+            segments.append(segment)
 
     # Fallback: plain text read
     if not segments:
@@ -217,7 +224,11 @@ def _extract_and_chunk_file(
                         if hasattr(prov, "page_no"):
                             page_num = prov.page_no
 
-                    segments.append({"text": text_item.text, "page": page_num})
+                    segment: _Segment = {"text": text_item.text, "page": page_num}
+                    label = docling_item_label(text_item)
+                    if label is not None:
+                        segment["label"] = label
+                    segments.append(segment)
 
         # Fallback: read file directly for plain text formats
         if not segments:
@@ -245,6 +256,7 @@ def _embed_unique_chunks(
     unique_chunks: list[dict[str, Any]],
     embedding_cache: EmbeddingCache | None = None,
     batch_size: int | None = None,
+    progress_callback: Callable[[int, int], None] | None = None,
 ) -> list[list[float]]:
     """Embed a list of unique chunk dicts in batches, optionally reusing a cache.
 
@@ -261,6 +273,9 @@ def _embed_unique_chunks(
         embedding_cache: Optional thread-safe embedding cache to reuse hits.
         batch_size: Size of each embedder batch. Defaults to the configured
             ``embedding_batch_size``.
+        progress_callback: Optional callback ``(done, total)`` invoked after each
+            batch completes so callers can report within-file ingestion progress.
+            ``total`` is always ``len(unique_chunks)``.
 
     Returns
     -------
@@ -273,37 +288,42 @@ def _embed_unique_chunks(
 
     texts = [c["text"] for c in unique_chunks]
     embeddings: list[list[float]] = []
+    processed = 0
+    total = len(texts)
 
     for start in range(0, len(texts), batch_size):
         slice_texts = texts[start : start + batch_size]
 
         if embedding_cache is None:
             embeddings.extend(embedding_model.generate_batch(slice_texts))
-            continue
+        else:
+            batch_results: list[list[float] | None] = [None] * len(slice_texts)
+            missing_texts: list[str] = []
+            missing_slots: list[int] = []
 
-        batch_results: list[list[float] | None] = [None] * len(slice_texts)
-        missing_texts: list[str] = []
-        missing_slots: list[int] = []
+            for index, text in enumerate(slice_texts):
+                cached = embedding_cache.get(text)
+                if cached is not None:
+                    batch_results[index] = cached
+                else:
+                    missing_slots.append(index)
+                    missing_texts.append(text)
 
-        for index, text in enumerate(slice_texts):
-            cached = embedding_cache.get(text)
-            if cached is not None:
-                batch_results[index] = cached
-            else:
-                missing_slots.append(index)
-                missing_texts.append(text)
+            if missing_texts:
+                missing_embeddings = embedding_model.generate_batch(missing_texts)
+                for slot, text, emb in zip(
+                    missing_slots, missing_texts, missing_embeddings, strict=True
+                ):
+                    batch_results[slot] = emb
+                    embedding_cache.set(text, emb)
 
-        if missing_texts:
-            missing_embeddings = embedding_model.generate_batch(missing_texts)
-            for slot, text, emb in zip(
-                missing_slots, missing_texts, missing_embeddings, strict=True
-            ):
-                batch_results[slot] = emb
-                embedding_cache.set(text, emb)
+            for result in batch_results:
+                assert result is not None  # nosec B101
+                embeddings.append(result)
 
-        for result in batch_results:
-            assert result is not None
-            embeddings.append(result)
+        processed += len(slice_texts)
+        if progress_callback is not None:
+            progress_callback(processed, total)
 
     return embeddings
 
@@ -418,115 +438,30 @@ def _extract_chunk_and_embed_file(
                             prov = text_item.prov[0]
                             if hasattr(prov, "page_no"):
                                 page_num = prov.page_no
-                        segments.append({"text": text_item.text, "page": page_num})
+                        segment: _Segment = {
+                            "text": text_item.text,
+                            "page": page_num,
+                        }
+                        label = docling_item_label(text_item)
+                        if label is not None:
+                            segment["label"] = label
+                        segments.append(segment)
 
                 if not segments:
                     with file_path.open(encoding="utf-8", errors="ignore") as f:
                         text = f.read()
                     segments = [{"text": text, "page": 1}]
 
-        # NOTE: chunk_segments is imported here to avoid circular dep at module init
-        # (chunker is in a sibling module)
-        #
-        # Inline the chunking logic rather than importing to keep workers self-contained.
-        # When _chunk_segments moves to chunker.py, replace this inline with:
-        #   from secondbrain.document.chunker import chunk_segments
-        #   chunks = chunk_segments(segments, chunk_size, chunk_overlap)
-        #
-        # Inline minimal chunker for this worker only — not exported from this module.
         with trace_operation("ingest_worker_chunk") as span:
             if span is not None:
                 span.set_attribute("ingest.segments_count", len(segments))
-            min_segment_size = 200
-            merged_segments: list[_Segment] = []
-            current_text = ""
-            current_page = 0
-
-            for _i, segment in enumerate(segments):
-                text = segment["text"]
-                page = segment.get("page", 0)
-                if not text.strip():
-                    continue
-                stripped = text.strip()
-                is_likely_title = (
-                    len(stripped) < 100
-                    and not any(p in stripped for p in [".", ":", "-", "—"])
-                    and not stripped.endswith(".")
-                )
-                if len(current_text) < min_segment_size or is_likely_title:
-                    if current_text:
-                        current_text += " " + stripped
-                    else:
-                        current_text = stripped
-                    current_page = page
-                else:
-                    merged_segments.append({"text": current_text, "page": current_page})
-                    current_text = stripped
-                    current_page = page
-
-            if current_text:
-                merged_segments.append({"text": current_text, "page": current_page})
-
-            chunks: list[dict[str, Any]] = []
-            total_segs = len(merged_segments)
-            seg_counter = 0
-            for segment in merged_segments:
-                text = segment["text"]
-                page = segment.get("page", 0)
-                if not text.strip():
-                    continue
-                is_likely_title_for_seg = (
-                    len(text.strip()) < 100
-                    and not any(p in text.strip() for p in [".", ":", "-", "—"])
-                    and not text.strip().endswith(".")
-                )
-                start = 0
-                while start < len(text):
-                    if start + chunk_size >= len(text):
-                        chunk_text = text[start:].rstrip()
-                        if chunk_text:
-                            chunks.append(
-                                {
-                                    "text": chunk_text,
-                                    "page": page,
-                                    "chunk_role": classify_chunk_role(
-                                        chunk_text,
-                                        seg_counter,
-                                        total_segs,
-                                        is_likely_title_for_seg,
-                                    ),
-                                }
-                            )
-                        seg_counter += 1
-                        break
-                    next_start = start + chunk_size
-                    chunk_end = next_start
-                    last_space = text.rfind(" ", start, chunk_end)
-                    if last_space > start:
-                        chunk_end = last_space
-                    chunk_text = text[start:chunk_end]
-                    if chunk_text.strip():
-                        chunks.append(
-                            {
-                                "text": chunk_text,
-                                "page": page,
-                                "chunk_role": classify_chunk_role(
-                                    chunk_text,
-                                    seg_counter,
-                                    total_segs,
-                                    is_likely_title_for_seg,
-                                ),
-                            }
-                        )
-                        seg_counter += 1
-                    new_start = chunk_end - chunk_overlap
-                    start = chunk_end if new_start <= start else new_start
+            chunks = chunk_segments(segments, chunk_size, chunk_overlap)
 
         cfg = config()
         embedding_model = EmbeddingProviderFactory.create_from_config(cfg)
 
         seen_hashes = set()
-        unique_chunks = []
+        unique_chunks: list[dict[str, Any]] = []
         for chunk in chunks:
             cleaned = chunk["text"].strip()
             if not cleaned:
@@ -541,6 +476,7 @@ def _extract_chunk_and_embed_file(
                         "page": chunk["page"],
                         "text_hash": text_hash,
                         "chunk_role": chunk.get("chunk_role", "body"),
+                        "element_type": chunk.get("element_type", "body"),
                     }
                 )
 
@@ -567,11 +503,28 @@ def _extract_chunk_and_embed_file(
                 "skipped": True,
             }
 
+        # Signal ingestion of this file has begun (with its total chunk count) so
+        # the CLI can render a determinate per-file progress bar.
+        if progress_queue is not None:
+            with contextlib.suppress(Exception):
+                progress_queue.put_nowait(
+                    ("started", str(file_path), len(unique_chunks))
+                )
+
+        def _report_chunk_progress(done: int, total: int) -> None:
+            if progress_queue is None:
+                return
+            with contextlib.suppress(Exception):
+                progress_queue.put_nowait(("progress", str(file_path), done, total))
+
         with trace_operation("ingest_worker_embed") as span:
             if span is not None:
                 span.set_attribute("ingest.chunks_count", len(unique_chunks))
             embeddings = _embed_unique_chunks(
-                embedding_model, unique_chunks, embedding_cache=embedding_cache
+                embedding_model,
+                unique_chunks,
+                embedding_cache=embedding_cache,
+                progress_callback=_report_chunk_progress,
             )
 
         documents = []
@@ -608,19 +561,29 @@ def _extract_chunk_and_embed_file(
 
         ingested_at = datetime.now(UTC).isoformat()
 
+        page_pos = 0
+        last_page: int | None = None
         for chunk_item, embedding in zip(unique_chunks, embeddings, strict=True):
+            page = chunk_item["page"]
+            if page != last_page:
+                page_pos = 0
+                last_page = page
             doc = {
                 "chunk_id": str(uuid4()),
                 "source_file": str(file_path),
-                "page_number": chunk_item["page"],
+                "page_number": page,
+                "printed_page": extract_printed_page(chunk_item["text"]),
+                "page_pos": page_pos,
                 "chunk_text": chunk_item["text"],
                 "text_hash": chunk_item["text_hash"],
                 "embedding": embedding,
                 "file_type": file_type,
                 "ingested_at": ingested_at,
                 "chunk_role": chunk_item.get("chunk_role", "body"),
+                "element_type": chunk_item.get("element_type", "body"),
             }
             documents.append(doc)
+            page_pos += 1
 
         if progress_queue is not None:
             with contextlib.suppress(Exception):

@@ -46,6 +46,28 @@ class TestIngestProgressCallback:
         assert mock_ingestor.ingest.called
 
 
+class TestIngestProgressCallbacksForFiles:
+    """Single and multi-file ingestion wires up the progress callbacks."""
+
+    def test_single_file_sets_progress_and_chunk_callbacks(self, tmp_path) -> None:
+        test_file = tmp_path / "doc.txt"
+        test_file.write_text("hello world content")
+        mock_ingestor = MagicMock()
+        mock_ingestor.ingest.return_value = {"success": 1, "failed": 0}
+        mock_ingestor_class = MagicMock(return_value=mock_ingestor)
+
+        runner = CliRunner()
+        with patch("secondbrain.document.DocumentIngestor", mock_ingestor_class):
+            with patch("secondbrain.document.is_supported", return_value=True):
+                result = runner.invoke(cli, ["ingest", str(test_file)])
+
+        assert result.exit_code == 0
+        call_kwargs = mock_ingestor_class.call_args[1]
+        assert call_kwargs.get("progress_callback") is not None
+        assert callable(call_kwargs.get("on_chunk_progress"))
+        mock_ingestor.ingest.assert_called_once()
+
+
 class TestIngestCoresValidation:
     """Tests for ingest command cores parameter validation."""
 

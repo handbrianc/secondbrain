@@ -85,9 +85,13 @@ design for any OpenAI-compatible local server.
 
 ```python
 class LocalLLMProvider(Protocol):
-    def generate(self, prompt: str, temperature: float = 0.7, max_tokens: int = 4096) -> str: ...
-    async def agenerate(self, prompt: str, temperature: float = 0.7, max_tokens: int = 4096) -> str: ...
-    
+    def generate(
+        self, prompt: str, temperature: float = 0.7, max_tokens: int = 4096
+    ) -> str: ...
+    async def agenerate(
+        self, prompt: str, temperature: float = 0.7, max_tokens: int = 4096
+    ) -> str: ...
+
     # Health check for 12-factor backing service pattern
     def health_check(self) -> bool: ...
 ```
@@ -102,7 +106,9 @@ config = {
     "model": os.getenv("SECONDBRAIN_LLM_MODEL", "llama3.2"),
     "temperature": float(os.getenv("SECONDBRAIN_LLM_TEMPERATURE", "0.7")),
     "max_tokens": int(os.getenv("SECONDBRAIN_LLM_MAX_TOKENS", "4096")),
-    "timeout": int(os.getenv("SECONDBRAIN_LLM_TIMEOUT", "120")),  # Local models can be slow
+    "timeout": int(
+        os.getenv("SECONDBRAIN_LLM_TIMEOUT", "120")
+    ),  # Local models can be slow
 }
 ```
 
@@ -128,15 +134,15 @@ config = {
             "role": "user|assistant|system",
             "content": str,
             "timestamp": ISO8601,
-            "retrieved_chunks": list[str] | None  # Optional: chunk IDs for reference
+            "retrieved_chunks": list[str] | None,  # Optional: chunk IDs for reference
         }
     ],
     "created_at": ISO8601,
     "updated_at": ISO8601,
     "metadata": {
         "source_files": list[str],  # Documents referenced in conversation
-        "topic": str | None  # Optional auto-classification
-    }
+        "topic": str | None,  # Optional auto-classification
+    },
 }
 ```
 

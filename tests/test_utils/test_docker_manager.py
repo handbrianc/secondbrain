@@ -56,9 +56,7 @@ class TestDockerManagerBasic:
     def test_is_local_qdrant_static_method(self):
         """Test static method is_local_qdrant_url."""
         assert DockerManager.is_local_qdrant_url(_test_config.qdrant_url) is True
-        assert (
-            DockerManager.is_local_qdrant_url("https://qdrant.example.com") is False
-        )
+        assert DockerManager.is_local_qdrant_url("https://qdrant.example.com") is False
 
 
 class TestDockerInstallationChecks:
@@ -184,7 +182,9 @@ class TestWaitForQdrantReady:
         from unittest.mock import patch
 
         with patch("secondbrain.utils.docker_manager.config") as mock_config_func:
-            with patch("secondbrain.storage.factory.StorageFactory.create_from_config") as mock_storage_class:
+            with patch(
+                "secondbrain.storage.factory.StorageFactory.create_from_config"
+            ) as mock_storage_class:
                 from secondbrain.config import Config
 
                 _test_config = Config()
@@ -201,7 +201,9 @@ class TestWaitForQdrantReady:
         from unittest.mock import patch
 
         with patch("secondbrain.utils.docker_manager.config") as mock_config_func:
-            with patch("secondbrain.storage.factory.StorageFactory.create_from_config") as mock_storage_class:
+            with patch(
+                "secondbrain.storage.factory.StorageFactory.create_from_config"
+            ) as mock_storage_class:
                 from secondbrain.config import Config
 
                 _test_config = Config()
@@ -212,9 +214,14 @@ class TestWaitForQdrantReady:
 
                 manager = DockerManager()
                 clock = itertools.count()
-                with patch("time.time", side_effect=lambda: next(clock) * 100.0), patch("time.sleep"):
+                with (
+                    patch("time.time", side_effect=lambda: next(clock) * 100.0),
+                    patch("time.sleep"),
+                ):
                     with pytest.raises(QdrantStartupError):
-                        manager.wait_for_qdrant_ready(max_wait_seconds=1, check_interval=0.1)
+                        manager.wait_for_qdrant_ready(
+                            max_wait_seconds=1, check_interval=0.1
+                        )
 
 
 class TestEnsureQdrantRunning:
@@ -354,7 +361,9 @@ class TestDockerManagerCoverage:
         _test_config = Config()
         mock_config.return_value.qdrant_url = _test_config.qdrant_url
 
-        with patch("secondbrain.storage.factory.StorageFactory.create_from_config") as mock_storage_class:
+        with patch(
+            "secondbrain.storage.factory.StorageFactory.create_from_config"
+        ) as mock_storage_class:
             mock_storage = MagicMock()
             mock_storage.validate_connection.return_value = True
             mock_storage._wait_for_index_ready.side_effect = Exception(
@@ -364,9 +373,14 @@ class TestDockerManagerCoverage:
 
             manager = DockerManager()
             clock = itertools.count()
-            with patch("time.time", side_effect=lambda: next(clock) * 100.0), patch("time.sleep"):
+            with (
+                patch("time.time", side_effect=lambda: next(clock) * 100.0),
+                patch("time.sleep"),
+            ):
                 with pytest.raises(QdrantStartupError):
-                    manager.wait_for_qdrant_ready(max_wait_seconds=1, check_interval=0.1)
+                    manager.wait_for_qdrant_ready(
+                        max_wait_seconds=1, check_interval=0.1
+                    )
 
     @patch("secondbrain.utils.docker_manager.config")
     def test_wait_for_qdrant_ready_handles_generic_exception(self, mock_config):
@@ -376,16 +390,23 @@ class TestDockerManagerCoverage:
         _test_config = Config()
         mock_config.return_value.qdrant_url = _test_config.qdrant_url
 
-        with patch("secondbrain.storage.factory.StorageFactory.create_from_config") as mock_storage_class:
+        with patch(
+            "secondbrain.storage.factory.StorageFactory.create_from_config"
+        ) as mock_storage_class:
             mock_storage = MagicMock()
             mock_storage.validate_connection.side_effect = Exception("Connection error")
             mock_storage_class.return_value = mock_storage
 
             manager = DockerManager()
             clock = itertools.count()
-            with patch("time.time", side_effect=lambda: next(clock) * 100.0), patch("time.sleep"):
+            with (
+                patch("time.time", side_effect=lambda: next(clock) * 100.0),
+                patch("time.sleep"),
+            ):
                 with pytest.raises(QdrantStartupError):
-                    manager.wait_for_qdrant_ready(max_wait_seconds=1, check_interval=0.1)
+                    manager.wait_for_qdrant_ready(
+                        max_wait_seconds=1, check_interval=0.1
+                    )
 
     @patch("secondbrain.utils.docker_manager.config")
     def test_ensure_qdrant_running_verbose_remote(self, mock_config, capsys):

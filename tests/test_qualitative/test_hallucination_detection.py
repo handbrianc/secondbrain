@@ -251,7 +251,7 @@ class TestFeatureInvention:
 
     def test_detects_invented_config_options(self) -> None:
         actual_config_options = {
-            "SECONDBRAIN_MONGO_URI",
+            "SECONDBRAIN_QDRANT_URL",
             "SECONDBRAIN_LOCAL_EMBEDDING_MODEL",
             "SECONDBRAIN_CHUNK_SIZE",
             "SECONDBRAIN_MAX_WORKERS",
@@ -262,7 +262,7 @@ class TestFeatureInvention:
         }
 
         claimed_config = {
-            "SECONDBRAIN_MONGO_URI",
+            "SECONDBRAIN_QDRANT_URL",
             "SECONDBRAIN_CHUNK_SIZE",
             "SECONDBRAIN_SECRET_KEY",
             "SECONDBRAIN_API_TOKEN",
@@ -350,16 +350,16 @@ class TestFeatureInvention:
     def test_detects_invented_library_versions(self) -> None:
         min_versions = {
             "click": "8.1.0",
-            "pymongo": "4.6.0",
-            "motor": "3.0.0",
+            "httpx": "0.28.1",
+            "anthropic": "0.122.0",
             "rich": "14.0.0",
             "pydantic": "2.0.0",
         }
 
         claimed_versions = {
             "click": "8.1.0",
-            "pymongo": "4.6.0",
-            "motor": "1.0.0",
+            "httpx": "0.28.1",
+            "anthropic": "0.1.0",
             "rich": "14.0.0",
         }
 
@@ -371,19 +371,19 @@ class TestFeatureInvention:
                     violations.append((lib, version, min_ver))
 
         assert len(violations) == 1, f"Should detect 1 version violation: {violations}"
-        assert violations[0][0] == "motor"
-        assert violations[0][1] == "1.0.0"
+        assert violations[0][0] == "anthropic"
+        assert violations[0][1] == "0.1.0"
 
     def test_detects_invented_integration_capabilities(self) -> None:
         actual_integrations = {
-            "MongoDB",
+            "Qdrant",
             "OpenAI",
             "Anthropic",
             "docling",
         }
 
         claimed_integrations = {
-            "MongoDB",
+            "Qdrant",
             "OpenAI",
             "Anthropic",
             "Pinecone",
@@ -405,17 +405,17 @@ class TestFeatureInvention:
 class TestGroundedness:
     def test_all_claims_must_have_source_context(self) -> None:
         response_with_sources = {
-            "answer": "MongoDB supports vector search.",
+            "answer": "Qdrant supports vector search.",
             "sources": [
                 {
                     "chunk_id": "doc1_chunk3",
-                    "snippet": "MongoDB 7.0+ includes vector search...",
+                    "snippet": "Qdrant 7.0+ includes vector search...",
                 },
             ],
         }
 
         response_without_sources = {
-            "answer": "MongoDB supports vector search.",
+            "answer": "Qdrant supports vector search.",
             "sources": [],
         }
 
@@ -427,16 +427,16 @@ class TestGroundedness:
         )
 
     def test_no_external_knowledge_without_citation(self) -> None:
-        retrieved_context = "MongoDB supports vector search through Atlas."
+        retrieved_context = "Qdrant supports vector search through Atlas."
 
         response_from_context = {
-            "claim": "MongoDB supports vector search.",
+            "claim": "Qdrant supports vector search.",
             "supported_by_context": True,
             "context_match": retrieved_context,
         }
 
         response_from_external = {
-            "claim": "MongoDB was founded in 2007.",
+            "claim": "Qdrant was founded in 2007.",
             "supported_by_context": False,
             "reason": "Information from external knowledge",
         }
@@ -452,14 +452,14 @@ class TestGroundedness:
         context = """
         SecondBrain is a local document intelligence CLI tool.
         It uses OpenAI-compatible embeddings.
-        MongoDB stores the vector data.
+        Qdrant stores the vector data.
         The system supports PDF, DOCX, and HTML formats.
         """
 
         claims_with_context = [
             ("SecondBrain is a CLI tool", True),
             ("Uses OpenAI-compatible embeddings", True),
-            ("MongoDB stores vectors", True),
+            ("Qdrant stores vectors", True),
             ("Supports PDF format", True),
             ("Supports XML format", False),
             ("Uses PostgreSQL", False),
@@ -498,16 +498,16 @@ class TestGroundedness:
         )
 
     def test_context_completeness_check(self) -> None:
-        minimal_context = "MongoDB is a database."
+        minimal_context = "Qdrant is a database."
 
-        claim = "MongoDB supports vector search with cosine similarity."
+        claim = "Qdrant supports vector search with cosine similarity."
 
         is_sufficient = claim.lower() in minimal_context.lower()
 
         assert not is_sufficient, "Minimal context should not support detailed claim"
 
         complete_context = """
-        MongoDB 7.0+ supports vector search using cosine similarity.
+        Qdrant 7.0+ supports vector search using cosine similarity.
         The vectorSearch stage enables approximate nearest neighbor search.
         """
 
@@ -521,16 +521,16 @@ class TestGroundedness:
     def test_no_contradictory_claims_within_response(self) -> None:
         consistent_response = {
             "claims": [
-                "MongoDB is a document database.",
-                "MongoDB uses BSON for data storage.",
-                "MongoDB supports horizontal scaling via sharding.",
+                "Qdrant is a document database.",
+                "Qdrant uses BSON for data storage.",
+                "Qdrant supports horizontal scaling via sharding.",
             ],
         }
 
         contradictory_response = {
             "claims": [
-                "MongoDB is a relational database.",
-                "MongoDB is a document database.",
+                "Qdrant is a relational database.",
+                "Qdrant is a document database.",
             ],
         }
 

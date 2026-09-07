@@ -327,6 +327,33 @@ class TestRAGPipelineChat:
         assert "sources" in result
         assert result["sources"] == []
 
+    def test_chat_persists_fallback_turn_to_session(
+        self,
+        pipeline_with_rewriter: RAGPipeline,
+        mock_searcher: MagicMock,
+    ) -> None:
+        """Record a knowledge-fallback turn so a later follow-up can reference it."""
+        session = ConversationSession("test-session", MagicMock(), context_window=10)
+        mock_searcher.search.return_value = []
+
+        pipeline_with_rewriter.chat("first question", session)
+        first = session.get_history()
+        assert [m["role"] for m in first] == ["user", "assistant"]
+        assert first[0]["content"] == "first question"
+        assert "Generated answer" in first[1]["content"]
+
+        pipeline_with_rewriter.chat("follow-up referencing it", session)
+        second = session.get_history()
+        assert [m["role"] for m in second] == [
+            "user",
+            "assistant",
+            "user",
+            "assistant",
+        ]
+        recent = session.get_context_messages()
+        assert "first question" in recent[0]["content"]
+        assert "Generated answer" in recent[1]["content"]
+
     def test_chat_handles_exception_gracefully(
         self,
         pipeline_with_rewriter: RAGPipeline,
@@ -1423,7 +1450,9 @@ class TestRAGPipelineListSources:
         # Vector search and the LLM must not be used for a pure listing.
         mock_searcher.search.assert_not_called()
 
-    def test_query_lists_single_source(self, pipeline_with_mocks, mock_searcher) -> None:
+    def test_query_lists_single_source(
+        self, pipeline_with_mocks, mock_searcher
+    ) -> None:
         mock_searcher.list_source_files.return_value = ["only.md"]
         result = pipeline_with_mocks.query("list sources")
         assert "1 unique source" in result["answer"]
@@ -1441,9 +1470,7 @@ class TestRAGPipelineListSources:
         mock_searcher: MagicMock,
     ) -> None:
         mock_searcher.list_source_files.return_value = ["a.md", "b.md"]
-        result = pipeline_with_mocks.chat(
-            "list all sources", MagicMock()
-        )
+        result = pipeline_with_mocks.chat("list all sources", MagicMock())
         assert result["list_sources"] is True
         assert "2 unique sources" in result["answer"]
         mock_searcher.search.assert_not_called()

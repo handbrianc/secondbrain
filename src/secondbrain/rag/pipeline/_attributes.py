@@ -71,3 +71,19 @@ class _RAGPipelineState:
             allow_llm_fallback: bool = True,
             conversation_history: list[dict[str, Any]] | None = None,
         ) -> str: ...
+
+        def _generate(self, prompt: str) -> str: ...
+
+        async def _agenerate(self, prompt: str) -> str: ...
+
+        def _generate_guarded(
+            self,
+            prompt: str,
+            *,
+            temperature: float | None = None,
+            max_tokens: int | None = None,
+        ) -> str: ...
+
+        def _stream_generate(
+            self, prompt: str, prefix: str = ""
+        ) -> tuple[str, bool]: ...

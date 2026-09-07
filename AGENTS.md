@@ -1,12 +1,12 @@
 # AGENTS.md - Agent Coding Guidelines
 
-**Last Updated:** 2026-05-03  
+**Last Updated:** 2026-09-06  
 **Commit:** 80fd894
 
 SecondBrain is a local document intelligence CLI for semantic search using Qdrant vector search (with SQLite for
 conversation storage) and OpenAI-compatible embedding APIs.
 
-**Stack:** Python 3.14+, Click, Pydantic 2, Motor, OpenAI-compatible API, Docker
+**Stack:** Python 3.14+, Click, Pydantic 2, Qdrant, OpenAI-compatible API, Docker
 
 ---
 
@@ -16,13 +16,11 @@ conversation storage) and OpenAI-compatible embedding APIs.
 secondbrain/
 ├── src/secondbrain/       # Main package (48 files, 13 modules)
 ├── tests/                 # Test suite (20+ directories)
-├── scripts/               # Build/deployment utilities (9 scripts)
+├── scripts/               # Build/deployment utilities (14 scripts)
 ├── docs/                  # MkDocs documentation
 ├── docker-compose.yml     # Production services
 └── docker-compose.test.yml # Test services (Qdrant + Ollama)
 ```
-
-**Note**: Dual package structure - `src/secondbrain/` (core) + `src/secondbrain_cli/` (CLI, orphaned)
 
 ---
 
@@ -63,11 +61,8 @@ secondbrain/
 **Only deviations from standard Python CLI patterns:**
 
 1. **Entry point in `__init__.py`**: `main()` in `src/secondbrain/cli/__init__.py` instead of dedicated `cli.py`
-2. **Dual package structure**: `secondbrain_cli/` package exists but is orphaned/unused
-3. **No `__main__.py`**: Cannot run via `python -m secondbrain`
-4. **Inline Python in shell scripts**: `scripts/generate-sbom.sh` contains 60+ lines of embedded Python
-5. **Pre-commit runs full test suite**: `pytest` with `always_run: true` (slow)
-6. **Hard-coded credentials**: ✅ RESOLVED: `scripts/init-mongo.js` used `MONGO_ADMIN_PASSWORD` env var (May 2026); the script is now obsolete — MongoDB was removed in the Aug 2026 Qdrant migration and `scripts/init-mongo.js` should be deleted.
+2. **No `__main__.py`**: Cannot run via `python -m secondbrain`
+3. **Inline Python in shell scripts**: `scripts/generate-sbom.sh` contains 60+ lines of embedded Python
 
 **Standard patterns followed:**
 
@@ -85,10 +80,9 @@ secondbrain/
 
 1. **Hard-coded credentials** - Use environment variables or `.env` files
 2. **Inline Python in shell scripts** - Extract to separate `.py` modules
-3. **Full test suite in pre-commit** - Use `pytest -m "not integration"` instead
-4. **Auto-installing dependencies in scripts** - Require virtual environment setup
-5. **Relative paths in scripts** - Use absolute paths or Python orchestration
-6. **Duplicate integration tests** - ✅ RESOLVED: Consolidated `tests/test_integration/`
+3. **Auto-installing dependencies in scripts** - Require virtual environment setup
+4. **Relative paths in scripts** - Use absolute paths or Python orchestration
+5. **Duplicate integration tests** - ✅ RESOLVED: Consolidated `tests/test_integration/`
    into `tests/integration/mocked/` (May 2026)
 
 ---
@@ -145,27 +139,31 @@ pytest
 
 **High Priority:**
 
-- **Orphaned MongoDB script** `scripts/init-mongo.js` - obsolete since MongoDB was removed in the Aug 2026 Qdrant migration; safe to remove
 - **Inline Python** in `scripts/generate-sbom.sh` - extract to `.py` module
 - **Duplicate tests** - ✅ RESOLVED: Removed `tests/test_integration/` directory (consolidated into `tests/integration/mocked/`)
-- **Orphaned package** `src/secondbrain_cli/` - safe to remove
 
-**No TODO/FIXME markers** - clean codebase with excellent hygiene.
+**Single TODO marker** remains at `src/secondbrain/document/chunker.py:33` (`element_type-migration`); no FIXME markers.
 
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **secondbrain** (9686 symbols, 15921 relationships, 117 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **secondbrain** (10321 symbols, 16643 relationships, 91 execution
+flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
 ## Always Do
 
-- **MUST run impact analysis before editing any symbol.** Before modifying a function, class, or method, run `gitnexus_impact({target: "symbolName", direction: "upstream"})` and report the blast radius (direct callers, affected processes, risk level) to the user.
-- **MUST run `gitnexus_detect_changes()` before committing** to verify your changes only affect expected symbols and execution flows.
+- **MUST run impact analysis before editing any symbol.** Before modifying a function, class, or method, run
+  `gitnexus_impact({target: "symbolName", direction: "upstream"})` and report the blast radius (direct callers,
+  affected processes, risk level) to the user.
+- **MUST run `gitnexus_detect_changes()` before committing** to verify your changes only affect expected symbols
+  and execution flows.
 - **MUST warn the user** if impact analysis returns HIGH or CRITICAL risk before proceeding with edits.
-- When exploring unfamiliar code, use `gitnexus_query({query: "concept"})` to find execution flows instead of grepping. It returns process-grouped results ranked by relevance.
-- When you need full context on a specific symbol — callers, callees, which execution flows it participates in — use `gitnexus_context({name: "symbolName"})`.
+- When exploring unfamiliar code, use `gitnexus_query({query: "concept"})` to find execution flows instead of
+  grepping. It returns process-grouped results ranked by relevance.
+- When you need full context on a specific symbol — callers, callees, which execution flows it participates in
+  — use `gitnexus_context({name: "symbolName"})`.
 
 ## Never Do
 
@@ -177,7 +175,7 @@ This project is indexed by GitNexus as **secondbrain** (9686 symbols, 15921 rela
 ## Resources
 
 | Resource | Use for |
-|----------|---------|
+| ---------- | --------- |
 | `gitnexus://repo/secondbrain/context` | Codebase overview, check index freshness |
 | `gitnexus://repo/secondbrain/clusters` | All functional areas |
 | `gitnexus://repo/secondbrain/processes` | All execution flows |
@@ -186,7 +184,7 @@ This project is indexed by GitNexus as **secondbrain** (9686 symbols, 15921 rela
 ## CLI
 
 | Task | Read this skill file |
-|------|---------------------|
+| ------ | --------------------- |
 | Understand architecture / "How does X work?" | `.claude/skills/gitnexus/gitnexus-exploring/SKILL.md` |
 | Blast radius / "What breaks if I change X?" | `.claude/skills/gitnexus/gitnexus-impact-analysis/SKILL.md` |
 | Trace bugs / "Why is X failing?" | `.claude/skills/gitnexus/gitnexus-debugging/SKILL.md` |

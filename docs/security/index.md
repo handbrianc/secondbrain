@@ -101,11 +101,27 @@ Only documented file types are accepted:
 
 ```python
 SUPPORTED_EXTENSIONS = {
-    ".pdf", ".docx", ".pptx", ".xlsx",
-    ".html", ".htm", ".md", ".txt",
-    ".csv", ".xml", ".json", ".png",
-    ".jpg", ".jpeg", ".tiff", ".tif",
-    ".bmp", ".webp", ".wav", ".mp3", ".vtt"
+    ".pdf",
+    ".docx",
+    ".pptx",
+    ".xlsx",
+    ".html",
+    ".htm",
+    ".md",
+    ".txt",
+    ".csv",
+    ".xml",
+    ".json",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".tiff",
+    ".tif",
+    ".bmp",
+    ".webp",
+    ".wav",
+    ".mp3",
+    ".vtt",
 }
 ```
 

@@ -153,7 +153,7 @@ class TestLister:
         try:
             lister.list_chunks()
         except ServiceUnavailableError as e:
-            assert "MongoDB" in str(e)
+            assert "vector storage" in str(e)
 
 
 class TestDeleter:
@@ -264,7 +264,7 @@ class TestDeleter:
         try:
             deleter.delete(all=True)
         except ServiceUnavailableError as e:
-            assert "MongoDB" in str(e)
+            assert "vector storage" in str(e)
 
 
 class TestStatusChecker:
@@ -310,4 +310,4 @@ class TestStatusChecker:
         try:
             status_checker.get_status()
         except ServiceUnavailableError as e:
-            assert "MongoDB" in str(e)
+            assert "vector storage" in str(e)
