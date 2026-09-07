@@ -13,6 +13,7 @@ import logging
 import os
 import re
 import time
+import unicodedata
 from collections import Counter
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, ClassVar
@@ -120,7 +121,9 @@ _HIERARCHY_THRESHOLD = 12
 _CHAPTER_DESC_RE = re.compile(
     r"Chapter\s+(\d+)\s*,\s+[A-Z].{0,240}?\b(?:introduces|explores|focuses|"
     r"dives|delves|provides|covers|describes|examines|presents|outlines|"
-    r"walks|discusses|explains|is\s+where)\b",
+    r"walks|discusses|explains|emphasizes|helps|contains|shows|builds|"
+    r"teaches|prepares|starts|takes|brings|opens|closes|gives|guides|"
+    r"includes|is\b)",
     re.DOTALL,
 )
 
@@ -131,8 +134,33 @@ _CHAPTER_DESC_RE = re.compile(
 # never cut.
 _CHAPTER_DESC_TAIL_RE = re.compile(
     r",\s+(?:introduces|explores|focuses|dives|delves|provides|covers|describes|"
-    r"examines|presents|outlines|walks|discusses|explains|is\s+where)\b.*$",
+    r"examines|presents|outlines|walks|discusses|explains|emphasizes|helps|"
+    r"contains|shows|builds|teaches|prepares|starts|takes|brings|opens|closes|"
+    r"gives|guides|includes|is\b).*$",
 )
+
+# Front-matter ToC listing lines, parsed for the chapter pin/phantom-kill
+# reconciliation tier.  Docling flattens the printed ToC into two row shapes:
+# bare listing lines ("12 Bayesian Deep Learning 310") and Chapter-prefixed
+# rows ("Chapter 4: Unsupervised Graph Learning 107") that run-on into the
+# next entry on the same flattened line.  The per-line anchor plus the lazy
+# 2-90 char letter-started title keeps a run-on section row ("584 Using
+# Spearman's rank correlation ...") from satisfying the trailing page capture;
+# roman-numeral rows ("IX Old Chapters 55") and multi-line fragments (page
+# number orphaned on the next line) match neither shape and parse to nothing.
+_TOC_LISTING_LINE_RE = re.compile(r"^\s*(\d{1,2})\s+([A-Za-z].{2,90}?)\s+(\d{1,3})\s*$")
+_TOC_CHAPTER_ENTRY_RE = re.compile(
+    r"Chapter\s+(\d{1,2})\s*[:.\-]\s*([A-Za-z].{2,90}?)\s+(\d{1,3})\b"
+)
+# Same Chapter-prefixed row WITHOUT a trailing page number (a wrapped entry,
+# or one whose page number was lost in extraction).  A roster chapter with
+# such a row in the ToC region is ambiguous, so the tier keeps (never kills)
+# it and logs instead.
+_TOC_CHAPTER_MENTION_RE = re.compile(r"Chapter\s+(\d{1,2})\s*[:.\-]")
+# Coverage floor for the reconciliation tier: the parsed ToC must list at
+# least this fraction of the roster chapters before a pin or a phantom kill
+# may act; below it the tier is fully disabled.
+_TOC_MIN_COVERAGE = 0.6
 
 # Deterministic word ceiling for the final overview, enforced by trimming at
 # a sentence boundary after generation (in _finalize_overview).  The prompt
@@ -1148,6 +1176,15 @@ class _StructureMixin(_RAGPipelineState):
         numbers and run-on description sentences are then stripped, leaving the
         real chapter heading.
         """
+        # NFKD + combining-mark stripping canonicalizes the docling spellings
+        # of accented titles (precomposed U+00EF vs decomposed i + U+0308) so
+        # both clean to the same complete string instead of being split or
+        # mangled at the non-ASCII mark.
+        title = "".join(
+            ch
+            for ch in unicodedata.normalize("NFKD", title)
+            if not unicodedata.combining(ch)
+        )
         title = re.sub(r"\s*\.{2,}[.\-\u2013\u2014]*", " ", title)
         title = re.sub(r"\s+", " ", title).strip()
         title = re.split(r"\s+\d{1,4}\s+(?=[A-Z(])", title)[0]
@@ -1177,6 +1214,68 @@ class _StructureMixin(_RAGPipelineState):
             for m in _CHAPTER_DESC_RE.finditer(text):
                 desc_pages.setdefault(int(m.group(1)), page)
         return desc_pages
+
+    @staticmethod
+    def _toc_chapter_listings(
+        structure_chunks: list[Any],
+    ) -> tuple[dict[int, tuple[str, int]], set[int]]:
+        """Parse front-matter ToC listing rows into chapter -> (title, page).
+
+        Returns (listings, mentions).  Chapter rows arrive in the two shapes
+        the module ToC regexes describe; a "Chapter N :.-" row whose trailing
+        page number was lost in extraction is collected separately as an
+        ambiguous mention so the reconciliation tier can keep (never kill)
+        its chapter.
+        """
+        listings: dict[int, tuple[str, int]] = {}
+        mentions: set[int] = set()
+        for c in structure_chunks:
+            text = c.get("chunk_text") or ""
+            for line in text.split("\n"):
+                m = _TOC_LISTING_LINE_RE.match(line)
+                if m:
+                    listings.setdefault(
+                        int(m.group(1)), (m.group(2).strip(), int(m.group(3)))
+                    )
+                    continue
+                entry = _TOC_CHAPTER_ENTRY_RE.search(line)
+                if entry:
+                    listings.setdefault(
+                        int(entry.group(1)),
+                        (entry.group(2).strip(), int(entry.group(3))),
+                    )
+                mention = _TOC_CHAPTER_MENTION_RE.search(line)
+                if mention:
+                    mentions.add(int(mention.group(1)))
+        return listings, mentions
+
+    @staticmethod
+    def _toc_listing_pages(
+        structure_chunks: list[Any],
+        desc_pages: dict[int, int],
+        roster: set[int],
+    ) -> tuple[dict[int, tuple[str, int]], set[int]]:
+        """Gate the ToC parse to the region and coverage the tier trusts.
+
+        Only chunks strictly below the earliest chapter-description page are
+        parsed: that front-matter span is where the printed ToC lives, and
+        the description pages mark where the book's prose begins.  With no
+        description evidence, or when the parse lists fewer than
+        ``_TOC_MIN_COVERAGE`` of the roster chapters, the tier is disabled
+        and both results come back empty so neither a pin nor a phantom kill
+        can act.
+        """
+        if not desc_pages or not roster:
+            return {}, set()
+        cap = min(desc_pages.values())
+        region = [c for c in structure_chunks if int(c.get("page_number") or 0) < cap]
+        if not region:
+            return {}, set()
+        listings, mentions = _StructureMixin._toc_chapter_listings(region)
+        matched = sum(1 for ch in roster if ch in listings)
+        if matched / len(roster) < _TOC_MIN_COVERAGE:
+            return {}, set()
+        return listings, mentions
 
     @staticmethod
     def _detect_chapter_openings(body_chunks: list[Any]) -> dict[int, int]:
@@ -1242,7 +1341,7 @@ class _StructureMixin(_RAGPipelineState):
         chapter_n_re = re.compile(
             r"(?:Chapter\s+(\d+)\s*[:\-]?\s*|(?:Module|Lesson)\s+(\d+)\s*[:\-]\s*)"
             r"((?:(?!\.{2,})(?!\s+\d{1,4}\s*[\r\n])(?!\n\s*(?:\n|(?:Chapter|Module|Lesson|Appendix)\s+\d+))"
-            r"[A-Za-z0-9 ,'\-():/\s.\u2013\u2014]){2,120})",
+            r"[A-Za-z0-9 ,'\-():/+\s.\u2013\u2014]){2,120})",
             re.IGNORECASE,
         )
         bare_chapter_re = re.compile(
@@ -1256,15 +1355,29 @@ class _StructureMixin(_RAGPipelineState):
         sec_limit = 0
 
         # Pass 1: CHAPTER_N_RE + APPENDIX_N_RE (most reliable patterns)
+        desc_titles: dict[tuple[int, str], str] = {}
         for chunk in structure_chunks:
             raw = chunk.get("chunk_text", "")
             source = chunk.get("source_file", "")
+            for dm in _CHAPTER_DESC_RE.finditer(raw):
+                dch = int(dm.group(1))
+                dtitle = self._clean_chapter_title(
+                    re.sub(r"^Chapter\s+\d+\s*,\s*", "", dm.group(0))
+                )
+                if len(dtitle) >= 4 and (dch, source) not in desc_titles:
+                    desc_titles[(dch, source)] = dtitle
             for nm in chapter_n_re.finditer(raw):
                 major = int(nm.group(1) or nm.group(2))
                 if major < 1 or major > 30 or (major, source) in seen:
                     continue
                 title = self._clean_chapter_title(nm.group(3))
                 if len(title) < 2:
+                    continue
+                # Mid-sentence cross-references ("discussed in Chapter 12 of
+                # Doing Bayesian Data Analysis by Kruschke") capture a
+                # lowercase run-on as the title; real headings never start
+                # lowercase.
+                if title[0].islower():
                     continue
                 fw = title.lower().split()[0] if title.split() else ""
                 if fw in (
@@ -1275,6 +1388,14 @@ class _StructureMixin(_RAGPipelineState):
                     "trolltech",
                     "red",
                     "bootstrap",
+                    "of",
+                    "and",
+                    "in",
+                    "by",
+                    "from",
+                    "with",
+                    "for",
+                    "to",
                 ):
                     continue
                 if re.match(r"\d+(?:\.\d+)*$", fw):
@@ -1317,6 +1438,16 @@ class _StructureMixin(_RAGPipelineState):
                     continue
                 seen_appendix.add((label, source))
                 appendix_entries.append((label, source, title))
+
+        # Rescue roster titles captured from preface cross-references:
+        # "(covered in Chapter 10). My goal is …" captures "). My goal is …"
+        # as the title — garbage that can never match a heading.  The
+        # verb-gated description sentence carries the real title, so swap
+        # it in when the roster title starts with punctuation.
+        for i, (major, source, title) in enumerate(entries):
+            rescued = desc_titles.get((major, source))
+            if rescued and title and not title[0].isalnum():
+                entries[i] = (major, source, rescued)
 
         # Authoritative "Chapter N" headings (from chapter_n_re in pass 1) define
         # the true chapter span.  When present, bare-number and section matches

@@ -4,8 +4,9 @@ These tests verify that the RAG pipeline correctly routes requests to either
 stream_chat or generate based on config.streaming_enabled and provider capabilities.
 """
 
+import logging
 from collections.abc import Callable, Sequence
-from typing import Any, cast
+from typing import Any, ClassVar, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -443,6 +444,101 @@ class TestDeriveChapterNumbers:
             p._clean_chapter_title("How Regularization Introduces Robustness 12")
             == "How Regularization Introduces Robustness"
         )
+        # Extended verb list covers the "What this book covers" prose shapes
+        # (", emphasizes ...", ", contains ...", ", is an important chapter").
+        assert (
+            p._clean_chapter_title(
+                "Automation in Cybersecurity , emphasizes the importance of "
+                "automation as a driver for efficiency"
+            )
+            == "Automation in Cybersecurity"
+        )
+        assert (
+            p._clean_chapter_title(
+                "Fraud, Spam, and Phishing Detection , contains a description "
+                "of typical methods"
+            )
+            == "Fraud, Spam, and Phishing Detection"
+        )
+        assert (
+            p._clean_chapter_title(
+                "Data Quality and its Usage in the AI and LLM Era , is an "
+                "important chapter, as contemporary methods are data-driven"
+            )
+            == "Data Quality and its Usage in the AI and LLM Era"
+        )
+        assert (
+            p._clean_chapter_title(
+                "Implementing Knowledge Mining, Document Intelligence, and "
+                "Content Understanding , teaches you how to use Azure AI Search"
+            )
+            == "Implementing Knowledge Mining, Document Intelligence, and "
+            "Content Understanding"
+        )
+        assert (
+            p._clean_chapter_title(
+                "Preparing for the AI-102: Azure AI Engineer Associate "
+                "Certification Exam , prepares you for the AI-102 certification"
+            )
+            == "Preparing for the AI-102: Azure AI Engineer Associate "
+            "Certification Exam"
+        )
+        assert (
+            p._clean_chapter_title(
+                "Graphical Models , starts with a refresher on graphs and "
+                "basic graph theory"
+            )
+            == "Graphical Models"
+        )
+        assert (
+            p._clean_chapter_title(
+                "The Four-Step Process of Causal Inference , takes us to the "
+                "practical side of causality"
+            )
+            == "The Four-Step Process of Causal Inference"
+        )
+        assert (
+            p._clean_chapter_title(
+                "Causal Models - Assumptions and Challenges , brings our "
+                "attention back to the topic of assumptions"
+            )
+            == "Causal Models - Assumptions and Challenges"
+        )
+        assert (
+            p._clean_chapter_title(
+                "Causal Inference and Machine Learning - from Matching to "
+                "Meta-learners , opens the door to practical causal inference"
+            )
+            == "Causal Inference and Machine Learning - from Matching to "
+            "Meta-learners"
+        )
+        assert (
+            p._clean_chapter_title(
+                "Epilogue , closes Part 3 of the book with a summary"
+            )
+            == "Epilogue"
+        )
+        assert (
+            p._clean_chapter_title(
+                "Recommender Systems , gives you familiarity with recommender "
+                "system concepts"
+            )
+            == "Recommender Systems"
+        )
+        assert (
+            p._clean_chapter_title(
+                "Deploying Models on a Mobile Platform , guides you through "
+                "the development of applications"
+            )
+            == "Deploying Models on a Mobile Platform"
+        )
+        assert (
+            p._clean_chapter_title(
+                "Dimensionality Reduction Techniques , includes updated "
+                "approaches for dimensionality reduction"
+            )
+            == "Dimensionality Reduction Techniques"
+        )
 
     def test_front_matter_desc_pages_maps_description_pages(self) -> None:
         """Description sentences map each chapter to its front-matter page.
@@ -529,6 +625,93 @@ class TestDeriveChapterNumbers:
             top_k=5,
             context_window=5,
         )
+
+    def test_cross_reference_preposition_title_yields_no_phantom_chapter(
+        self,
+    ) -> None:
+        """A mid-sentence cross-reference must not invent a phantom chapter.
+
+        "...discussed in Chapter 12 of Doing Bayesian Data Analysis by
+        Kruschke..." captures the preposition-led run-on as the title; a
+        lowercase-initial title is body prose, not a heading, so chapter 12
+        must not appear in the roster.
+        """
+        pipeline = self._make_test_pipeline()
+        structure_chunks = [
+            {
+                "chunk_text": (
+                    "Generalized linear models are discussed in Chapter 12 of "
+                    "Doing Bayesian Data Analysis by Kruschke, which covers "
+                    "hierarchical models in depth."
+                ),
+                "source_file": "bayesian.pdf",
+            },
+        ]
+        entries, _, _ = pipeline._derive_chapter_numbers(structure_chunks)
+        majors = [e[0] for e in entries]
+        assert 12 not in majors, f"phantom chapter 12 invented: {entries!r}"
+        assert entries == [], f"cross-reference fabricated a roster: {entries!r}"
+
+    def test_cpp_title_captured_in_full(self) -> None:
+        """'C++' inside a chapter title is captured whole, not cut at 'C'."""
+        pipeline = self._make_test_pipeline()
+        structure_chunks = [
+            {
+                "chunk_text": ("Chapter 1 , Introduction to Machine Learning with C++"),
+                "source_file": "cppml.pdf",
+            },
+        ]
+        entries, _, _ = pipeline._derive_chapter_numbers(structure_chunks)
+        assert entries == [
+            (1, "cppml.pdf", "Introduction to Machine Learning with C++")
+        ], f"C++ title truncated: {entries!r}"
+
+    def test_clean_chapter_title_unicode_naive_survives_both_spellings(self) -> None:
+        """Precomposed and decomposed spellings clean to the same full title.
+
+        Docling variants emit "Naïve" either precomposed (U+00EF) or
+        decomposed (i + U+0308); NFKD + combining-mark stripping canonicalizes
+        both, so the accented word survives as one complete token instead of
+        being amputated mid-word at the non-ASCII mark.  The decomposed result
+        must equal the precomposed result (round-trip), and cleaning is
+        idempotent.
+        """
+        p = self._make_test_pipeline()
+        precomposed = p._clean_chapter_title("Engine with Na\u00efve Bayes")
+        decomposed = p._clean_chapter_title("Engine with Nai\u0308ve Bayes")
+        assert precomposed == "Engine with Naive Bayes", (
+            f"accented word amputated: {precomposed!r}"
+        )
+        assert decomposed == precomposed, (
+            f"decomposed spelling diverged: {decomposed!r} != {precomposed!r}"
+        )
+        assert p._clean_chapter_title(precomposed) == precomposed
+
+    def test_blocklist_keeps_legitimate_titles(self) -> None:
+        """Uppercase-initial and 'Data...' titles survive the new guards.
+
+        Titles starting with uppercase "The"/"A" are real headings, and words
+        merely containing the blocked tokens ("Data Access and ... for IoT")
+        must not be dropped — the blocklist matches whole first words only.
+        """
+        pipeline = self._make_test_pipeline()
+        structure_chunks = [
+            {
+                "chunk_text": (
+                    "Chapter 2 The Transformer Architecture\n"
+                    "Chapter 3 A Unified View of Generative Models\n"
+                    "Chapter 5 Data Access and Distributed Processing for IoT"
+                ),
+                "source_file": "legit.pdf",
+            },
+        ]
+        entries, _, _ = pipeline._derive_chapter_numbers(structure_chunks)
+        titles = {e[0]: e[2] for e in entries}
+        assert titles == {
+            2: "The Transformer Architecture",
+            3: "A Unified View of Generative Models",
+            5: "Data Access and Distributed Processing for IoT",
+        }, f"legitimate titles rejected: {entries!r}"
 
     def test_break_instead_of_continue_allows_later_chunks_when_early_chunk_has_out_of_range(
         self,
@@ -3032,6 +3215,100 @@ class TestMultiChapterMapReduce:
         headings = [{"chunk_text": "Unrelated Heading", "page_number": 30}]
         assert p._heading_title_anchors(chapters, "/books/x.pdf", headings) == {}
 
+    def test_heading_title_anchors_refuses_blocked_description_pages(self) -> None:
+        """Listing-page headings never anchor; the real opener does.
+
+        Two listing shapes are refused: a ToC-entry heading carrying a
+        trailing page reference ("Title 295") is skipped outright, and a
+        bare listing title on a blocked front-matter description page is
+        passed over in favor of the real opener heading.
+        """
+        p = self._make_pipeline(_SequenceProvider([]))
+        src = "/books/x.pdf"
+        chapters = [(18, src, "Privacy, Accountability, Explainability")]
+        headings = [
+            {
+                "chunk_text": "Privacy, Accountability, Explainability 295",
+                "page_number": 14,
+            },
+            {
+                "chunk_text": "Privacy, Accountability, Explainability",
+                "page_number": 20,
+            },
+            {
+                "chunk_text": "Privacy, Accountability, Explainability",
+                "page_number": 318,
+            },
+        ]
+        # The trailing page reference ("Title 295") is skipped as a ToC
+        # artifact; the bare listing title at page 20 is a valid earliest
+        # match until its page is blocked, which pushes the anchor to the
+        # real opener.
+        assert p._heading_title_anchors(chapters, src, headings) == {18: 20}
+        assert p._heading_title_anchors(
+            chapters, src, headings, blocked_pages={18: 20}
+        ) == {18: 318}
+
+    def test_heading_title_anchors_refuses_front_matter_below_desc_region(
+        self,
+    ) -> None:
+        """Part-divider ToC pages never anchor when desc pages mark front matter.
+
+        Packt-style part dividers repeat chapter titles as headings inside the
+        ToC (page 10 here); the "What this book covers" region (page 15+) sits
+        after the ToC, so everything below its first page is refused and the
+        anchor lands on the real opener.
+        """
+        p = self._make_pipeline(_SequenceProvider([]))
+        src = "/books/x.pdf"
+        chapters = [(5, src, "Exploring Azure AI Vision Solutions")]
+        headings = [
+            {"chunk_text": "Exploring Azure AI Vision Solutions", "page_number": 10},
+            {"chunk_text": "Exploring Azure AI Vision Solutions", "page_number": 118},
+        ]
+        assert p._heading_title_anchors(chapters, src, headings) == {5: 10}
+        assert p._heading_title_anchors(
+            chapters, src, headings, blocked_pages={5: 15}
+        ) == {5: 118}
+
+    def test_derive_chapter_numbers_rescues_crossref_title_from_desc_sentence(
+        self,
+    ) -> None:
+        """A preface cross-reference capture is replaced by the desc title.
+
+        "(covered in Chapter 10). My goal is …" makes the roster capture
+        "). My goal is …" — punctuation-led garbage.  The verb-gated
+        description sentence carries the real title, which is swapped in.
+        """
+        p = self._make_pipeline(_SequenceProvider([]))
+        src = "/books/x.pdf"
+        chunks = [
+            {
+                "chunk_text": (
+                    "Many readers pick this up after Chapter 10). My goal is "
+                    "for you to walk away with both confidence and practical "
+                    "skills that open doors."
+                ),
+                "source_file": src,
+                "page_number": 14,
+                "chunk_role": "body",
+            },
+            {
+                "chunk_text": (
+                    "Chapter 10 , Practical AI Implementation: Industry Use "
+                    "Cases , walks you through real-world projects and "
+                    "hands-on patterns."
+                ),
+                "source_file": src,
+                "page_number": 16,
+                "chunk_role": "body",
+            },
+        ]
+        entries, good_nums, _appendix = p._derive_chapter_numbers(chunks)
+        ch10 = [t for n, s, t in entries if n == 10 and s == src]
+        assert ch10 == ["Practical AI Implementation: Industry Use Cases"]
+        assert 10 in good_nums
+
     def test_single_large_chunk_is_not_skipped(self) -> None:
         """A very long single chunk is still summarized, never dropped."""
         by_key = {
@@ -3219,3 +3496,1011 @@ class _DualProvider(_RecordingProvider):
     ) -> str:
         self.stream_chat_called = True
         return ""
+
+
+class TestPinFitsWindow:
+    """Static checks of the open-interval monotonic-window pin guard."""
+
+    def test_empty_map_accepts_any_page(self) -> None:
+        assert RAGPipeline._pin_fits_window({}, 1, 5) is True
+
+    def test_lower_neighbor_requires_strictly_higher_pin(self) -> None:
+        first_pg = {1: 20}
+        assert RAGPipeline._pin_fits_window(first_pg, 2, 21) is True
+        assert RAGPipeline._pin_fits_window(first_pg, 2, 20) is False
+
+    def test_upper_neighbor_requires_strictly_lower_pin(self) -> None:
+        first_pg = {3: 60}
+        assert RAGPipeline._pin_fits_window(first_pg, 2, 59) is True
+        assert RAGPipeline._pin_fits_window(first_pg, 2, 60) is False
+
+    def test_gap_neighbors_reject_boundary_equality(self) -> None:
+        first_pg = {1: 20, 5: 60}
+        assert RAGPipeline._pin_fits_window(first_pg, 3, 40) is True
+        assert RAGPipeline._pin_fits_window(first_pg, 3, 20) is False
+        assert RAGPipeline._pin_fits_window(first_pg, 3, 60) is False
+        assert RAGPipeline._pin_fits_window(first_pg, 3, 10) is False
+        assert RAGPipeline._pin_fits_window(first_pg, 3, 75) is False
+
+
+class TestChapterPinWindowResolution:
+    """Pin-resolution fixtures for the _iterative_query chapter anchoring.
+
+    Heading-title anchors are applied before the body-title scan and cannot
+    be overridden by it; every pin must then satisfy its open-interval
+    monotonic window (strictly above the prior chapter's pin and strictly
+    below the next one), and the highest-numbered violating pin is popped
+    once per scan until the map reaches a fixed point.  The scripted
+    provider returns no usable chapter summaries, so the answer falls back
+    to the chapter roster, whose "approx pages N+" lines double as pin
+    assertions.
+    """
+
+    SRC = "book.pdf"
+    QUERY = "give an overview of the whole document by chapters"
+
+    @staticmethod
+    def _toc(chapters: list[tuple[int, str]]) -> list[dict[str, Any]]:
+        """Structure-probe chunks: one "Chapter N Title" line per chapter."""
+        return [
+            {
+                "chunk_text": f"Chapter {num} {title}",
+                "chunk_role": "toc_entry",
+                "source_file": TestChapterPinWindowResolution.SRC,
+                "page": 20 + idx,
+            }
+            for idx, (num, title) in enumerate(chapters)
+        ]
+
+    @staticmethod
+    def _body(text: str, page: int) -> dict[str, Any]:
+        return {
+            "chunk_text": text,
+            "page_number": page,
+            "source_file": TestChapterPinWindowResolution.SRC,
+        }
+
+    @staticmethod
+    def _heading(text: str, page: int) -> dict[str, Any]:
+        return {
+            "chunk_text": text,
+            "page_number": page,
+            "chunk_role": "heading",
+            "source_file": TestChapterPinWindowResolution.SRC,
+        }
+
+    class _StubStorage:
+        """Storage double: ordered body chunks plus optional heading chunks."""
+
+        def __init__(
+            self,
+            body: list[dict[str, Any]],
+            headings: list[dict[str, Any]] | None = None,
+        ) -> None:
+            self._body = body
+            self._headings = headings or []
+
+        def get_body_chunks(
+            self,
+            source: str,
+            limit: int | None = None,
+            page_gte: int | None = None,
+        ) -> list[dict[str, Any]]:
+            chunks = [c for c in self._body if c.get("source_file") == source]
+            if page_gte is not None:
+                chunks = [c for c in chunks if (c.get("page_number") or 0) >= page_gte]
+            return chunks[:limit] if limit is not None else chunks
+
+        def find_structural_chunks(
+            self,
+            chunk_roles: list[str] | None = None,
+            source_prefix: str | None = None,
+        ) -> list[dict[str, Any]]:
+            return [
+                c
+                for c in self._headings
+                if (chunk_roles is None or c.get("chunk_role") in chunk_roles)
+                and (
+                    source_prefix is None
+                    or str(c.get("source_file", "")).startswith(source_prefix)
+                )
+            ]
+
+    def _make(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        toc: list[dict[str, Any]],
+        body: list[dict[str, Any]],
+        headings: list[dict[str, Any]] | None = None,
+    ) -> RAGPipeline:
+        from secondbrain.rag.intent_parser import IntentDecision, QueryIntent
+
+        searcher = _make_mock_searcher()
+        searcher.storage = self._StubStorage(body, headings)
+        pipeline = RAGPipeline(
+            searcher=searcher,
+            llm_provider=_SequenceProvider(by_key={"Chapter": ""}),  # type: ignore
+            top_k=5,
+            context_window=5,
+        )
+        pipeline._config.streaming_enabled = False
+        monkeypatch.setattr(
+            pipeline,
+            "_probe_document_structure",
+            lambda top_k, source_filter=None: toc,
+        )
+        monkeypatch.setattr(
+            pipeline._intent_parser,
+            "parse",
+            lambda q: IntentDecision(
+                intent=QueryIntent.BROAD_COVERAGE,
+                confidence=0.5,
+                target=None,
+                reason="test",
+                suggested_pipeline="structural",
+            ),
+        )
+        return pipeline
+
+    def _run(self, pipeline: RAGPipeline) -> str:
+        result = pipeline._iterative_query(
+            self.QUERY,
+            top_k=5,
+            show_sources=False,
+            source_filter=self.SRC,
+        )
+        return result["answer"]
+
+    def test_first_chapter_low_pin_survives(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        toc = self._toc(
+            [
+                (1, "Convolutions Foundational Ideas"),
+                (2, "Optimization Landscapes Explored"),
+            ]
+        )
+        body = [
+            self._body(
+                "1 Convolutions Foundational Ideas\n"
+                "prose tracing spatial kernel decompositions",
+                10,
+            ),
+            self._body(
+                "2 Optimization Landscapes Explored\n"
+                "prose mapping convexity regimes alongside",
+                78,
+            ),
+        ]
+        pipeline = self._make(monkeypatch, toc, body)
+        with caplog.at_level(logging.DEBUG, logger="secondbrain.rag.pipeline"):
+            answer = self._run(pipeline)
+        assert (
+            "Chapter 1 — Convolutions Foundational Ideas (approx pages 10+)" in answer
+        )
+        assert (
+            "Chapter 2 — Optimization Landscapes Explored (approx pages 78+)" in answer
+        )
+        assert "approx pages 20+" not in answer, "TOC pages must never pin"
+        assert "Rejected chapter" not in caplog.text
+
+    def test_heading_anchor_wins_over_earlier_body_title(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        toc = self._toc(
+            [
+                (4, "Fourth Passage Survey"),
+                (5, "Causal Inference Models"),
+                (6, "Gradual Regularization Approaches"),
+            ]
+        )
+        headings = [self._heading("Causal Inference Models", 100)]
+        body = [
+            self._body(
+                "4 Fourth Passage Survey\n"
+                "prose surveying predictable control corrections",
+                60,
+            ),
+            self._body(
+                "5 Causal Inference Models\nprose relating dose response adjustments",
+                12,
+            ),
+            self._body("prose expanding bench instrumentation baselines", 120),
+            self._body(
+                "6 Gradual Regularization Approaches\n"
+                "prose narrowing shrinkage penalties",
+                150,
+            ),
+        ]
+        pipeline = self._make(monkeypatch, toc, body, headings)
+        with caplog.at_level(logging.DEBUG, logger="secondbrain.rag.pipeline"):
+            answer = self._run(pipeline)
+        assert "Chapter 5 — Causal Inference Models (approx pages 100+)" in answer, (
+            "heading anchor at page 100 must win over the body title @12"
+        )
+        assert "approx pages 12+" not in answer, "body title @12 must not pin"
+        assert "Chapter 4 — Fourth Passage Survey (approx pages 60+)" in answer
+        assert (
+            "Chapter 6 — Gradual Regularization Approaches (approx pages 150+)"
+            in answer
+        )
+        assert "Rejected chapter" not in caplog.text
+
+    @pytest.mark.parametrize(
+        ("chapters", "raw_body", "reject_line", "pages", "banned"),
+        [
+            pytest.param(
+                [
+                    (10, "Instrumented Ensemble Suites"),
+                    (11, "Eleventh Model Pipelines"),
+                    (12, "Twelfth Deployment Cases"),
+                ],
+                [
+                    ("see 11 for worked examples and archived notes", 300),
+                    (
+                        "11 Eleventh Model Pipelines\nprose on parallel estimator runs",
+                        6,
+                    ),
+                    (
+                        "10 Instrumented Ensemble Suites\n"
+                        "prose stacking calibrated votes",
+                        276,
+                    ),
+                    (
+                        "12 Twelfth Deployment Cases\nprose streaming model registries",
+                        336,
+                    ),
+                ],
+                "Rejected chapter 11 pin @6",
+                [276, 300, 336],
+                [6],
+                id="sklearn",
+            ),
+            pytest.param(
+                [
+                    (10, "Subsystem Telemetry Suites"),
+                    (11, "Eleventh Compute Pipelines"),
+                    (12, "Twelfth Storage Cases"),
+                ],
+                [
+                    ("see 11 for worked examples and archived notes", 321),
+                    (
+                        "11 Eleventh Compute Pipelines\n"
+                        "prose relaying gateway payloads",
+                        4,
+                    ),
+                    (
+                        "10 Subsystem Telemetry Suites\nprose charting sensor uptimes",
+                        284,
+                    ),
+                    (
+                        "12 Twelfth Storage Cases\nprose archiving ledger snapshots",
+                        362,
+                    ),
+                ],
+                "Rejected chapter 11 pin @4",
+                [284, 321, 362],
+                [4],
+                id="iot",
+            ),
+        ],
+    )
+    def test_front_matter_pin_rejected_and_rescanned(
+        self,
+        chapters: list[tuple[int, str]],
+        raw_body: list[tuple[str, int]],
+        reject_line: str,
+        pages: list[int],
+        banned: list[int],
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        body = [self._body(text, page) for text, page in raw_body]
+        pipeline = self._make(monkeypatch, self._toc(chapters), body)
+        with caplog.at_level(logging.DEBUG, logger="secondbrain.rag.pipeline"):
+            answer = self._run(pipeline)
+        assert reject_line in caplog.text, caplog.text
+        for (num, title), page in zip(chapters, pages, strict=True):
+            assert f"Chapter {num} — {title} (approx pages {page}+)" in answer, answer
+        for bad in banned:
+            assert f"approx pages {bad}+" not in answer, (
+                "front-matter pin must not ship"
+            )
+
+    def test_heading_anchor_below_prior_chapter_rejected(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        toc = self._toc(
+            [
+                (9, "Reinforcement Training Loops"),
+                (10, "Streaming Telemetry Insights"),
+            ]
+        )
+        headings = [self._heading("Streaming Telemetry Insights", 159)]
+        body = [
+            self._body(
+                "9 Reinforcement Training Loops\nprose tuning rollout rewards",
+                248,
+            ),
+            self._body("prose buffering stream windows between phases", 250),
+        ]
+        pipeline = self._make(monkeypatch, toc, body, headings)
+        with caplog.at_level(logging.DEBUG, logger="secondbrain.rag.pipeline"):
+            answer = self._run(pipeline)
+        assert "Rejected chapter 10 pin @159" in caplog.text
+        assert "Chapter 9 — Reinforcement Training Loops (approx pages 248+)" in answer
+        assert (
+            "Chapter 10 — Streaming Telemetry Insights (approx pages 249+)" in answer
+        ), "spacing fallback must repopulate chapter 10 after the rejection"
+        assert "approx pages 159+" not in answer
+
+    def test_cascading_rejection_falls_back_to_spacing(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        toc = self._toc(
+            [
+                (1, "Foundational Signal Concepts"),
+                (2, "Metrics Ordering Systems"),
+            ]
+        )
+        padding = "archival note annealed spectra passage " * 5
+        body = [
+            self._body(
+                "1 Foundational Signal Concepts\nprose deriving wavelet bases",
+                90,
+            ),
+            self._body(
+                padding + "\n2 Metrics Ordering Systems\nprose ranking delayed",
+                40,
+            ),
+            self._body("prose pacing coherence schedules onward", 95),
+        ]
+        pipeline = self._make(monkeypatch, toc, body)
+        with caplog.at_level(logging.DEBUG, logger="secondbrain.rag.pipeline"):
+            answer = self._run(pipeline)
+        assert "Rejected chapter 2 pin @40" in caplog.text
+        assert (
+            "Chapter 1 — Foundational Signal Concepts (approx pages 90+)" in answer
+        ), "first-chapter pin has no lower neighbor and must survive"
+        assert "Chapter 2 — Metrics Ordering Systems (approx pages 91+)" in answer, (
+            "spacing fallback must repopulate chapter 2 after the rejection"
+        )
+        assert "approx pages 40+" not in answer
+
+    def _capture(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        pipeline: RAGPipeline,
+    ) -> dict[str, Any]:
+        """Record the chapter keys and bucket pages handed to the summarizer.
+
+        The spy returns "" so the chapter roster fallback renders the answer,
+        whose "approx pages N+" lines double as pin-page assertions.
+        """
+        captured: dict[str, Any] = {}
+
+        def _spy(
+            chapter_keys: list[int],
+            chapter_buckets: dict[int, list[dict[str, Any]]],
+            _ch_titles: dict[int, str],
+        ) -> str:
+            captured["keys"] = list(chapter_keys)
+            captured["pages"] = {
+                ch: [int(c.get("page_number") or 0) for c in chapter_buckets[ch]]
+                for ch in chapter_keys
+            }
+            return ""
+
+        monkeypatch.setattr(pipeline, "_generate_multi_chapter_summary", _spy)
+        return captured
+
+    def test_late_scan_pin_respects_monotonic_window(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A stray probe "Chapter 2" line below ch1's pin must not pin ch2."""
+        toc = self._toc(
+            [
+                (1, "Foundational Signal Concepts"),
+                (2, "Metrics Ordering Systems"),
+            ]
+        )
+        toc.append(
+            {
+                "chunk_text": "Chapter 2 covers Metrics Ordering Systems across labs",
+                "chunk_role": "heading",
+                "page_number": 15,
+                "source_file": self.SRC,
+            }
+        )
+        body = [
+            self._body(
+                "1 Foundational Signal Concepts\nprose deriving wavelet bases",
+                20,
+            ),
+            self._body("prose buffering stream windows between phases", 26),
+            self._body("prose pacing coherence schedules onward", 32),
+            self._body(
+                "2.1 Capacity Ordering Baselines\nprose recasting basin metrics",
+                45,
+            ),
+            self._body("prose deriving wavelet bases", 50),
+            self._body("prose mapping convexity regimes alongside", 58),
+        ]
+        pipeline = self._make(monkeypatch, toc, body)
+        captured = self._capture(monkeypatch, pipeline)
+        answer = self._run(pipeline)
+        assert "Chapter 2 — Metrics Ordering Systems (approx pages 45+)" in answer, (
+            "sec-header rescan must recover chapter 2 after the probe refusal"
+        )
+        assert "approx pages 15+" not in answer
+        assert captured["keys"] == [1, 2]
+        assert captured["pages"] == {1: [20, 26, 32], 2: [45, 50, 58]}
+
+    def test_loose_digit_refusal_keeps_chapter_rescannable(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A refused phase-2 digit pin must leave the chapter in missing."""
+        toc = self._toc(
+            [
+                (1, "Foundational Signal Concepts"),
+                (2, "Metrics Ordering Systems"),
+            ]
+        )
+        body = [
+            self._body("2 spare drives slotted into caddies", 8),
+            self._body(
+                "1 Foundational Signal Concepts\nprose deriving wavelet bases",
+                20,
+            ),
+            self._body("prose buffering stream windows between phases", 24),
+            self._body("prose pacing coherence schedules onward", 30),
+            self._body(
+                "2 capacity ledgers ordering systems predominate\n"
+                "prose recasting basin metrics",
+                45,
+            ),
+            self._body("prose deriving wavelet bases", 50),
+            self._body("prose mapping convexity regimes alongside", 58),
+        ]
+        pipeline = self._make(monkeypatch, toc, body)
+        captured = self._capture(monkeypatch, pipeline)
+        answer = self._run(pipeline)
+        assert "Chapter 2 — Metrics Ordering Systems (approx pages 45+)" in answer, (
+            "phase-2 rescan must recover chapter 2 after the @8 refusal"
+        )
+        assert "approx pages 8+" not in answer
+        assert captured["keys"] == [1, 2]
+        assert captured["pages"] == {1: [20, 24, 30], 2: [45, 50, 58]}
+
+    def test_degenerate_interp_gap_skips_duplicate_pin(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A one-page gap must not interpolate a duplicate of ch1's pin."""
+        toc = self._toc(
+            [
+                (1, "Foundational Signal Concepts"),
+                (2, "Metrics Ordering Systems"),
+                (3, "Convergence Limits Probed"),
+            ]
+        )
+        body = [
+            self._body(
+                "1 Foundational Signal Concepts\nprose deriving wavelet bases",
+                20,
+            ),
+            self._body(
+                "3 Convergence Limits Probed\nprose mapping convexity regimes",
+                21,
+            ),
+            self._body("prose pacing coherence schedules onward", 24),
+        ]
+        pipeline = self._make(monkeypatch, toc, body)
+        captured = self._capture(monkeypatch, pipeline)
+        answer = self._run(pipeline)
+        assert captured["keys"] == [1]
+        assert captured["pages"] == {1: [20, 21, 24]}
+        assert answer.count("(approx pages 20+)") == 1, (
+            "the degenerate midpoint must not duplicate chapter 1's pin"
+        )
+        assert "Chapter 2 — Metrics Ordering Systems" not in answer
+
+    def test_repinned_real_opener_refused_spans_to_interpolation(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A validated-away opener (sklearn shape) must not re-pin."""
+        toc = self._toc(
+            [
+                (1, "Foundational Signal Concepts"),
+                (2, "Metrics Ordering Systems"),
+                (3, "Convergence Limits Probed"),
+            ]
+        )
+        headings = [self._heading("Metrics Ordering Systems", 36)]
+        body = [
+            self._body(
+                "2 Metrics Ordering Systems\nprose ranking delayed results",
+                36,
+            ),
+            self._body(
+                "1 Foundational Signal Concepts\nprose deriving wavelet bases",
+                55,
+            ),
+            self._body("prose buffering stream windows between phases", 62),
+            self._body("prose pacing coherence schedules onward", 68),
+            self._body("prose narrowing shrinkage penalties", 70),
+            self._body("prose recasting basin metrics", 75),
+            self._body(
+                "3 Convergence Limits Probed\nprose mapping convexity regimes",
+                80,
+            ),
+            self._body("prose expanding bench instrumentation baselines", 90),
+        ]
+        pipeline = self._make(monkeypatch, toc, body, headings)
+        captured = self._capture(monkeypatch, pipeline)
+        with caplog.at_level(logging.DEBUG, logger="secondbrain.rag.pipeline"):
+            answer = self._run(pipeline)
+        assert "Rejected chapter 2 pin @36" in caplog.text
+        assert "approx pages 36+" not in answer
+        assert "Chapter 2 — Metrics Ordering Systems (approx pages 67+)" in answer, (
+            "interpolation must span the refused opener"
+        )
+        assert captured["keys"] == [1, 2, 3]
+        assert captured["pages"] == {1: [55, 62], 2: [68, 70, 75], 3: [80, 90]}
+
+    def test_phase2_rescue_refuses_front_matter_page(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A front-matter "1" line must not rescue unpinned ch1."""
+        toc = self._toc(
+            [
+                (1, "Foundational Signal Concepts"),
+                (2, "Metrics Ordering Systems"),
+                (3, "Convergence Limits Probed"),
+            ]
+        )
+        headings = [self._heading("Metrics Ordering Systems", 36)]
+        # Page-3 digit line carries a non-roster title so the body-title
+        # anchor pass cannot pre-pin ch1; only Phase 2's loose digit pattern
+        # can claim it, exercising the pin floor.
+        body = [
+            self._body(
+                "1 Signal processing preliminaries\nprose deriving wavelet bases",
+                3,
+            ),
+            self._body("prose buffering stream windows between phases", 34),
+            self._body("prose pacing coherence schedules onward", 35),
+            self._body(
+                "2 Metrics Ordering Systems\nprose ranking delayed results",
+                36,
+            ),
+            self._body(
+                "3 Convergence Limits Probed\nprose mapping convexity regimes",
+                80,
+            ),
+            self._body("prose expanding bench instrumentation baselines", 90),
+        ]
+        pipeline = self._make(monkeypatch, toc, body, headings)
+        captured = self._capture(monkeypatch, pipeline)
+        answer = self._run(pipeline)
+        assert "approx pages 3+" not in answer
+        assert (
+            "Chapter 1 — Foundational Signal Concepts (approx pages 35+)" in answer
+        ), (
+            "head-gap interpolation must recover chapter 1 after the front-matter refusal"
+        )
+        assert captured["keys"] == [1, 2, 3]
+        assert captured["pages"] == {1: [35], 2: [36], 3: [80, 90]}
+
+
+class TestToCListingResolution:
+    """Front-matter ToC-listing reconciliation fixtures (pins + phantom kills).
+
+    The tier parses the printed ToC from front-matter chunks below the
+    earliest chapter-description page and requires >=60% roster coverage
+    before acting: chapters the heading/body scans left unpinned are pinned
+    at printed page plus the median print-to-scan offset, and unpinned
+    roster chapters the parse neither lists nor mentions are killed.  A ToC
+    row mentioned without a trailing page number is ambiguous and keeps its
+    chapter.  Derived pins must still fit their open-interval monotonic
+    window, and existing heading anchors are never overridden.
+    """
+
+    SRC = TestChapterPinWindowResolution.SRC
+    QUERY = TestChapterPinWindowResolution.QUERY
+    OFF = 30
+    DESC_PAGE = 24
+    _StubStorage = TestChapterPinWindowResolution._StubStorage
+
+    TITLES: ClassVar[dict[int, str]] = {
+        1: "Alpha Foundational Frameworks",
+        2: "Beta Optimization Landscapes",
+        3: "Gamma Convolution Pipelines",
+        4: "Delta Recurrent Architectures",
+        5: "Epsilon Attention Mechanisms",
+        6: "Zeta Embedding Representations",
+        7: "Eta Generative Adversarial Nets",
+        8: "Theta Transfer Learning Flows",
+        9: "Iota Distributed Training Grids",
+        10: "Kappa Quantization Strategies",
+        11: "Lambda Federated Learning Rings",
+        12: "Bayesian Deep Learning",
+    }
+
+    _toc = staticmethod(TestChapterPinWindowResolution._toc)
+    _body = staticmethod(TestChapterPinWindowResolution._body)
+    _heading = staticmethod(TestChapterPinWindowResolution._heading)
+
+    @classmethod
+    def _printed(cls, num: int) -> int:
+        return 12 + 28 * (num - 1)
+
+    @classmethod
+    def _anchor_page(cls, num: int) -> int:
+        return cls._printed(num) + cls.OFF
+
+    @classmethod
+    def _listing_rows(cls, nums: list[int]) -> list[str]:
+        return [f"{n} {cls.TITLES[n]} {cls._printed(n)}" for n in nums]
+
+    @staticmethod
+    def _listing_chunk(rows: list[str], page: int = 5) -> dict[str, Any]:
+        return {
+            "chunk_text": "\n".join(rows),
+            "chunk_role": "toc_entry",
+            "source_file": TestChapterPinWindowResolution.SRC,
+            "page_number": page,
+        }
+
+    @classmethod
+    def _desc_chunk(cls, num: int = 12) -> dict[str, Any]:
+        return {
+            "chunk_text": (
+                f"Chapter {num} , {cls.TITLES[num]} , presents the closing synthesis"
+            ),
+            "chunk_role": "body",
+            "source_file": TestChapterPinWindowResolution.SRC,
+            "page_number": cls.DESC_PAGE,
+        }
+
+    @staticmethod
+    def _inert_body(pages: list[int] | None = None) -> list[dict[str, Any]]:
+        return [
+            TestChapterPinWindowResolution._body(
+                "prose harvest meadow quiet fields unfold amber skies rising",
+                pg,
+            )
+            for pg in (
+                pages or [45, 73, 101, 129, 157, 185, 213, 241, 269, 297, 325, 353]
+            )
+        ]
+
+    @classmethod
+    def _anchors(cls, nums: list[int]) -> list[dict[str, Any]]:
+        return [cls._heading(cls.TITLES[n], cls._anchor_page(n)) for n in nums]
+
+    def _base_fixtures(self) -> TestChapterPinWindowResolution:
+        """Type-safe adapter so base _make/_run keep their declared receiver."""
+        return TestChapterPinWindowResolution()
+
+    def _make(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        toc: list[dict[str, Any]],
+        body: list[dict[str, Any]] | None = None,
+        headings: list[dict[str, Any]] | None = None,
+    ) -> RAGPipeline:
+        return self._base_fixtures()._make(
+            monkeypatch, toc, body or self._inert_body(), headings
+        )
+
+    def _run(self, pipeline: RAGPipeline) -> str:
+        return self._base_fixtures()._run(pipeline)
+
+    def test_toc_listing_pins_missing_chapter(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        toc = [
+            *self._toc([(n, self.TITLES[n]) for n in range(1, 13)]),
+            self._listing_chunk(self._listing_rows(list(range(1, 13)))),
+            self._desc_chunk(),
+        ]
+        pipeline = self._make(
+            monkeypatch, toc, headings=self._anchors(list(range(1, 12)))
+        )
+        with caplog.at_level(logging.DEBUG, logger="secondbrain.rag.pipeline"):
+            answer = self._run(pipeline)
+        for n in range(1, 12):
+            assert (
+                f"Chapter {n} — {self.TITLES[n]} "
+                f"(approx pages {self._anchor_page(n)}+)" in answer
+            ), answer
+        assert "Chapter 12 — Bayesian Deep Learning (approx pages 350+)" in answer, (
+            answer
+        )
+        assert "approx pages 320+" not in answer, "printed page alone must not pin"
+        assert "median=30" in caplog.text
+        assert "Rejected chapter" not in caplog.text
+        assert "Dropped phantom" not in caplog.text
+
+    def test_toc_low_coverage_disables_tier(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        base = [
+            *self._toc([(n, self.TITLES[n]) for n in range(1, 13)]),
+            self._desc_chunk(),
+        ]
+        sparse = [self._listing_chunk(self._listing_rows(list(range(1, 4))))]
+        headings = self._anchors(list(range(1, 12)))
+        body = self._inert_body(
+            [45, 73, 101, 129, 157, 185, 213, 241, 269, 297, 322, 323]
+        )
+        answer_sparse = self._run(
+            self._make(monkeypatch, base + sparse, body, headings)
+        )
+        answer_pure = self._run(self._make(monkeypatch, base, body, headings))
+        assert answer_sparse == answer_pure
+        assert (
+            "Chapter 12 — Bayesian Deep Learning (approx pages 323+)" in answer_pure
+        ), answer_pure
+
+    def test_toc_high_coverage_kills_phantom_chapter(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        rogue = "Rogue Applications Annex"
+        probe_rows = [(n, self.TITLES[n]) for n in range(1, 13)]
+        killed_toc = [
+            *self._toc(probe_rows),
+            *self._toc([(13, rogue)]),
+            self._listing_chunk(self._listing_rows(list(range(1, 13)))),
+            self._desc_chunk(),
+        ]
+        spared_toc = [
+            *self._toc(probe_rows),
+            *self._toc([(13, rogue)]),
+            self._desc_chunk(),
+        ]
+        pipeline = self._make(
+            monkeypatch,
+            killed_toc,
+            body=self._inert_body(
+                [45, 73, 101, 129, 157, 185, 213, 241, 269, 297, 322, 323, 353]
+            ),
+            headings=self._anchors(list(range(1, 12))),
+        )
+        with caplog.at_level(logging.DEBUG, logger="secondbrain.rag.pipeline"):
+            answer_killed = self._run(pipeline)
+        assert "Chapter 13" not in answer_killed, answer_killed
+        assert "approx pages 324+" not in answer_killed
+        assert (
+            "Chapter 12 — Bayesian Deep Learning (approx pages 350+)" in answer_killed
+        ), answer_killed
+        assert "Dropped phantom roster chapter 13" in caplog.text
+        pipeline = self._make(
+            monkeypatch,
+            spared_toc,
+            body=self._inert_body(
+                [45, 73, 101, 129, 157, 185, 213, 241, 269, 297, 322, 323, 353]
+            ),
+            headings=self._anchors(list(range(1, 12))),
+        )
+        answer_spared = self._run(pipeline)
+        assert (
+            "Chapter 12 — Bayesian Deep Learning (approx pages 323+)" in answer_spared
+        ), answer_spared
+        assert (
+            "Chapter 13 — Rogue Applications Annex (approx pages 324+)" in answer_spared
+        ), answer_spared
+
+    def test_toc_pin_respects_heading_anchor_precedence(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        toc = [
+            *self._toc([(n, self.TITLES[n]) for n in range(1, 13)]),
+            self._listing_chunk(self._listing_rows(list(range(1, 13)))),
+            self._desc_chunk(),
+        ]
+        special_5 = 140
+        headings = [
+            self._heading(self.TITLES[n], special_5 if n == 5 else self._anchor_page(n))
+            for n in range(1, 12)
+        ]
+        pipeline = self._make(monkeypatch, toc, headings=headings)
+        with caplog.at_level(logging.DEBUG, logger="secondbrain.rag.pipeline"):
+            answer = self._run(pipeline)
+        assert (
+            "Chapter 5 — Epsilon Attention Mechanisms (approx pages 140+)" in answer
+        ), answer
+        assert "approx pages 154+" not in answer, "anchor must not be overridden"
+        assert "Chapter 12 — Bayesian Deep Learning (approx pages 350+)" in answer, (
+            answer
+        )
+        assert "median=30" in caplog.text
+
+    def test_toc_fragment_lines_inert(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        probe_rows = [(n, self.TITLES[n]) for n in range(1, 13)]
+        clean_rows = self._listing_rows(list(range(1, 13)))
+        noisy_rows = [
+            *clean_rows,
+            "IX Old Chapters 55",
+            "12 Bayesian Deep Learning",
+            "Deep Learning 320",
+        ]
+        headings = self._anchors(list(range(1, 12)))
+        answer_noise = self._run(
+            self._make(
+                monkeypatch,
+                [
+                    *self._toc(probe_rows),
+                    self._listing_chunk(noisy_rows),
+                    self._desc_chunk(),
+                ],
+                headings=headings,
+            )
+        )
+        answer_clean = self._run(
+            self._make(
+                monkeypatch,
+                [
+                    *self._toc(probe_rows),
+                    self._listing_chunk(clean_rows),
+                    self._desc_chunk(),
+                ],
+                headings=headings,
+            )
+        )
+        assert answer_noise == answer_clean
+        assert (
+            "Chapter 12 — Bayesian Deep Learning (approx pages 350+)" in answer_clean
+        ), answer_clean
+
+    def test_toc_coverage_boundary_exact_floor(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        probe_rows = [(n, self.TITLES[n]) for n in range(1, 11)]
+        desc = self._desc_chunk(10)
+        on_rows = self._listing_rows([1, 2, 3, 4, 5]) + self._listing_rows([10])
+        off_rows = self._listing_rows([1, 2, 3, 4, 5])
+        headings = self._anchors(list(range(1, 10)))
+        pipeline = self._make(
+            monkeypatch,
+            [*self._toc(probe_rows), desc, self._listing_chunk(on_rows)],
+            self._inert_body([45, 73, 101, 129, 157, 185, 213, 241, 266, 297]),
+            headings=headings,
+        )
+        with caplog.at_level(logging.DEBUG, logger="secondbrain.rag.pipeline"):
+            answer_on = self._run(pipeline)
+        assert (
+            "Chapter 10 — Kappa Quantization Strategies (approx pages 294+)"
+            in answer_on
+        ), answer_on
+        assert "median=30" in caplog.text
+        assert "Dropped phantom" not in caplog.text
+        pipeline = self._make(
+            monkeypatch,
+            [*self._toc(probe_rows), desc, self._listing_chunk(off_rows)],
+            self._inert_body([45, 73, 101, 129, 157, 185, 213, 241, 266, 297]),
+            headings=headings,
+        )
+        answer_off = self._run(pipeline)
+        assert (
+            "Chapter 10 — Kappa Quantization Strategies (approx pages 267+)"
+            in answer_off
+        ), answer_off
+        assert "approx pages 294+" not in answer_off
+
+    def test_toc_mention_without_page_is_ambiguous_keep(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        base = [
+            *self._toc([(n, self.TITLES[n]) for n in range(1, 13)]),
+            self._desc_chunk(),
+        ]
+        keep_rows = [
+            *self._listing_rows(list(range(1, 12))),
+            "Chapter 12: Bayesian Deep Learning",
+        ]
+        pipeline = self._make(
+            monkeypatch,
+            [*base, self._listing_chunk(keep_rows)],
+            body=self._inert_body(
+                [45, 73, 101, 129, 157, 185, 213, 241, 269, 297, 322, 323]
+            ),
+            headings=self._anchors(list(range(1, 12))),
+        )
+        with caplog.at_level(logging.DEBUG, logger="secondbrain.rag.pipeline"):
+            answer = self._run(pipeline)
+        assert "Chapter 12 — Bayesian Deep Learning (approx pages 323+)" in answer, (
+            answer
+        )
+        assert "Dropped phantom roster chapter 12" not in caplog.text
+        assert "median=30" in caplog.text
+
+    def test_toc_mention_twin_missing_row_kills_phantom(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        base = [
+            *self._toc([(n, self.TITLES[n]) for n in range(1, 13)]),
+            self._desc_chunk(),
+        ]
+        kill_rows = self._listing_rows(list(range(1, 12)))
+        pipeline = self._make(
+            monkeypatch,
+            [*base, self._listing_chunk(kill_rows)],
+            body=self._inert_body(
+                [45, 73, 101, 129, 157, 185, 213, 241, 269, 297, 322, 323]
+            ),
+            headings=self._anchors(list(range(1, 12))),
+        )
+        with caplog.at_level(logging.DEBUG, logger="secondbrain.rag.pipeline"):
+            answer = self._run(pipeline)
+        assert "Chapter 12" not in answer, answer
+        assert "Dropped phantom roster chapter 12" in caplog.text
+        assert (
+            "Chapter 11 — Lambda Federated Learning Rings (approx pages 322+)" in answer
+        ), answer
+
+    def test_toc_ignores_foreign_source_rows_in_region(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        base = [
+            *self._toc([(n, self.TITLES[n]) for n in range(1, 13)]),
+            self._desc_chunk(),
+        ]
+        foreign_chunk = self._listing_chunk([f"12 {self.TITLES[12]} 55"])
+        foreign_chunk["source_file"] = "other.pdf"
+        original = RAGPipeline._toc_listing_pages
+        tier_sources: set[str] = set()
+
+        def spy(
+            self: RAGPipeline,
+            structure_chunks: list[dict[str, Any]],
+            desc_pages: dict[int, int],
+            roster: set[int],
+        ) -> tuple[dict[int, tuple[str, int]], set[int]]:
+            tier_sources.update(str(c["source_file"]) for c in structure_chunks)
+            return original(structure_chunks, desc_pages, roster)
+
+        monkeypatch.setattr(RAGPipeline, "_toc_listing_pages", spy)
+        pipeline = self._make(
+            monkeypatch,
+            [
+                *base,
+                self._listing_chunk(self._listing_rows(list(range(1, 12)))),
+                foreign_chunk,
+            ],
+            body=self._inert_body(
+                [45, 73, 101, 129, 157, 185, 213, 241, 269, 297, 322, 323]
+            ),
+            headings=self._anchors(list(range(1, 12))),
+        )
+        with caplog.at_level(logging.DEBUG, logger="secondbrain.rag.pipeline"):
+            answer = self._run(pipeline)
+        assert tier_sources == {"book.pdf"}, tier_sources
+        assert "Dropped phantom roster chapter 12" in caplog.text, caplog.text
+        assert "median=30" in caplog.text, caplog.text
+        assert (
+            "Chapter 11 — Lambda Federated Learning Rings (approx pages 322+)" in answer
+        ), answer
+
+    def test_toc_derived_pin_below_floor_refused(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        listing_rows = [
+            "1 Alpha Foundational Frameworks 34",
+            "2 Beta Optimization Landscapes 1",
+        ]
+        toc = [
+            *self._toc([(1, self.TITLES[1]), (2, self.TITLES[2])]),
+            self._listing_chunk(listing_rows),
+            self._desc_chunk(2),
+        ]
+        headings = [self._heading(self.TITLES[1], 42)]
+        pipeline = self._make(monkeypatch, toc, headings=headings)
+        with caplog.at_level(logging.DEBUG, logger="secondbrain.rag.pipeline"):
+            answer = self._run(pipeline)
+        assert (
+            "Rejected chapter 2 ToC pin @9: below the front-matter floor" in caplog.text
+        ), caplog.text
+        assert "approx pages 9+" not in answer, answer
+        assert "median=8" in caplog.text, caplog.text
+        assert "Chapter 1 — Alpha Foundational Frameworks" in answer, answer
