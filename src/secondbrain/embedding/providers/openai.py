@@ -211,7 +211,9 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
                 "input": text,
                 "model": self._model,
             }
-            if self._dimensions:
+            # Only pass dimensions for models that support it (text-embedding-3-* series)
+            # Custom models via LiteLLM may not support this parameter
+            if self._dimensions and self._model.startswith("text-embedding-3-"):
                 kwargs["dimensions"] = self._dimensions
 
             response = await self._async_client.embeddings.create(**kwargs)
@@ -257,7 +259,9 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
                 "input": valid_texts,
                 "model": self._model,
             }
-            if self._dimensions:
+            # Only pass dimensions for models that support it (text-embedding-3-* series)
+            # Custom models via LiteLLM may not support this parameter
+            if self._dimensions and self._model.startswith("text-embedding-3-"):
                 kwargs["dimensions"] = self._dimensions
 
             response = await self._async_client.embeddings.create(**kwargs)
