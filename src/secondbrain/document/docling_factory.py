@@ -92,6 +92,48 @@ def _disable_torch_model_compilation_on_mps() -> None:
         return
 
 
+def _rapidocr_use_mps_available() -> bool:
+    """Whether RapidOCR's torch engine may target MPS on this host.
+
+    RapidOCR validates ``use_mps`` against ``torch.backends.mps`` at engine
+    construction and raises when MPS is absent (e.g. Intel/CUDA hosts), so the
+    accelerator hint must only be emitted where MPS actually exists.
+    """
+    try:
+        import torch
+    except ImportError:
+        return False
+    return torch.backends.mps.is_available()
+
+
+class AcceleratorDeviceUnavailableError(ValueError):
+    """A configured accelerator pin cannot be honored on this host."""
+
+
+def _preflight_accelerator_device(device_name: str) -> None:
+    """Fail fast at converter-build time when a pinned device is unavailable.
+
+    Docling resolves each model's device lazily during pipeline initialization,
+    so an unfulfillable ``pdf_accelerator_device`` pin otherwise surfaces as one
+    confusing error per extracted file. A preflight here turns that into a
+    single clear error on the first converter build.
+    """
+    try:
+        from docling.utils.accelerator_utils import decide_device
+    except ModuleNotFoundError:
+        return
+
+    try:
+        decide_device(device_name)
+    except Exception as exc:
+        raise AcceleratorDeviceUnavailableError(
+            f"SECONDBRAIN_PDF_ACCELERATOR_DEVICE='{device_name}' is unavailable "
+            f"on this host ({type(exc).__name__}: {exc}). Install torch support "
+            "for that device (for 'xpu': an XPU-enabled torch build plus the "
+            "Level-Zero runtime), or set SECONDBRAIN_PDF_ACCELERATOR_DEVICE=auto."
+        ) from exc
+
+
 def _build_pdf_format_option(*, do_ocr: bool, do_table_structure: bool) -> Any:
     """Build a ``PdfFormatOption`` for the given OCR/table flags (lazy)."""
     import logging as _logging
@@ -131,6 +173,7 @@ def _build_pdf_format_option(*, do_ocr: bool, do_table_structure: bool) -> Any:
     from docling.document_converter import PdfFormatOption
 
     device = getattr(AcceleratorDevice, cfg.pdf_accelerator_device.upper())
+    _preflight_accelerator_device(cfg.pdf_accelerator_device)
     pipe_cls = (
         ThreadedPdfPipelineOptions if cfg.pdf_threaded_pipeline else PdfPipelineOptions
     )
@@ -140,7 +183,11 @@ def _build_pdf_format_option(*, do_ocr: bool, do_table_structure: bool) -> Any:
         "do_table_structure": do_table_structure,
         "ocr_options": RapidOcrOptions(
             backend="torch",
-            rapidocr_params={"EngineConfig.torch.use_mps": True},
+            rapidocr_params=(
+                {"EngineConfig.torch.use_mps": True}
+                if _rapidocr_use_mps_available()
+                else {}
+            ),
         ),
         "accelerator_options": AcceleratorOptions(
             device=device, num_threads=cfg.pdf_num_threads
