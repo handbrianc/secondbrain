@@ -85,7 +85,14 @@ behavior by default**. Enable a lever only when you want the corresponding speed
 or behavior change:
 
 - `pdf_accelerator_device` / `pdf_num_threads` — select the docling inference
-  device (`auto`, `cpu`, `mps`, `cuda`) and thread count.
+  device (`auto`, `cpu`, `mps`, `cuda`, `xpu`) and thread count. `xpu` targets
+  Intel GPUs (integrated or Arc); either pin it or keep `auto`, which already
+  resolves to XPU on hosts without CUDA/MPS. Intel hosts need an XPU-enabled
+  torch build (install torch from `https://download.pytorch.org/whl/xpu`) plus
+  the Level-Zero/SYCL runtime. Only docling's layout model runs on the iGPU:
+  the RapidOCR stage has no XPU backend (OCR stays on CPU) and table structure
+  does not support XPU, so keep `pdf_table_structure_enabled=false` on Intel
+  GPUs.
 - `pdf_threaded_pipeline` / `pdf_layout_batch_size` — use docling's threaded/batched
   PDF pipeline instead of the default, and set the layout-model batch size.
 - `pdf_generate_page_images` / `pdf_generate_picture_images` / `pdf_images_scale` —
@@ -103,7 +110,7 @@ or behavior change:
 |`SECONDBRAIN_PDF_TABLE_STRUCTURE_ENABLED`  |`false`             |Detect table structure in PDFs (`pdf_table_structure_enabled`). Disabled by default for speed; set `true` to enable                                                                                                                                                                              |
 |`SECONDBRAIN_PDF_TABLE_FAST_MODE`          |`true`              |When table structure is enabled, use TableFormer 'fast' mode instead of the slower, more accurate mode (`pdf_table_fast_mode`)                                                                                                                                                                   |
 |`SECONDBRAIN_PDF_TABLE_CELL_MATCHING`      |`false`             |Enable docling table cell matching (post-processing); disabled by default for speed and OCR compatibility (`pdf_table_cell_matching`)                                                                                                                                                            |
-|`SECONDBRAIN_PDF_ACCELERATOR_DEVICE`       |`auto`              |Docling accelerator device: `auto` \| `cpu` \| `mps` \| `cuda` (`pdf_accelerator_device`)                                                                                                                                                                                                        |
+|`SECONDBRAIN_PDF_ACCELERATOR_DEVICE`       |`auto`              |Docling accelerator device: `auto` \| `cpu` \| `mps` \| `cuda` \| `xpu` — Intel iGPU/dGPU (`pdf_accelerator_device`)                                                                                                                                                                                                        |
 |`SECONDBRAIN_PDF_NUM_THREADS`              |`4`                 |Threads for docling inference, must be >= 1 (`pdf_num_threads`)                                                                                                                                                                                                                                  |
 |`SECONDBRAIN_PDF_THREADED_PIPELINE`        |`false`             |Use docling's threaded/batched PDF pipeline instead of the default (`pdf_threaded_pipeline`)                                                                                                                                                                                                     |
 |`SECONDBRAIN_PDF_LAYOUT_BATCH_SIZE`        |`4`                 |Layout-model batch size for the threaded pipeline, must be >= 1; only used when `pdf_threaded_pipeline` is true (`pdf_layout_batch_size`)                                                                                                                                                        |
