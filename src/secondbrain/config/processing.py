@@ -180,9 +180,10 @@ class ProcessingStorageMixin:
     @classmethod
     def validate_pdf_accelerator_device(cls, v: str) -> str:
         """Validate the accelerator device is one of the supported values."""
-        if v.lower() not in {"auto", "cpu", "mps", "cuda"}:
+        if v.lower() not in {"auto", "cpu", "mps", "cuda", "xpu"}:
             raise ValueError(
-                "pdf_accelerator_device must be one of {'auto', 'cpu', 'mps', 'cuda'}"
+                "pdf_accelerator_device must be one of "
+                "{'auto', 'cpu', 'mps', 'cuda', 'xpu'}"
             )
         return v.lower()
 

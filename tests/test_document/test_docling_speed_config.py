@@ -38,6 +38,7 @@ DEV_AUTO = object()
 DEV_CPU = object()
 DEV_MPS = object()
 DEV_CUDA = object()
+DEV_XPU = object()
 
 
 @pytest.fixture(autouse=True)
@@ -73,6 +74,8 @@ def _set_env(monkeypatch: pytest.MonkeyPatch, **overrides: str) -> None:
 
 def _capture(
     monkeypatch: pytest.MonkeyPatch,
+    *,
+    disable_preflight: bool = True,
 ) -> tuple[MagicMock, MagicMock, MagicMock]:
     """Replace the docling modules the factory imports with capture mocks.
 
@@ -80,6 +83,10 @@ def _capture(
     ``PdfPipelineOptions`` and ``ThreadedPdfPipelineOptions`` capture mocks plus
     the ``AcceleratorOptions`` capture mock. ``PdfFormatOption`` is patched to
     echo the ``pipeline_options`` it was built with.
+
+    Device preflight is disabled by default because the wiring tests feed
+    sentinel ``AcceleratorDevice`` members that real docling device resolution
+    cannot see; preflight tests re-enable it with a ``decide_device`` stub.
     """
     import docling.datamodel.pipeline_options as po_import
 
@@ -94,7 +101,7 @@ def _capture(
 
     ao: Any = ModuleType("docling.datamodel.accelerator_options")
     ao.AcceleratorDevice = SimpleNamespace(
-        AUTO=DEV_AUTO, CPU=DEV_CPU, MPS=DEV_MPS, CUDA=DEV_CUDA
+        AUTO=DEV_AUTO, CPU=DEV_CPU, MPS=DEV_MPS, CUDA=DEV_CUDA, XPU=DEV_XPU
     )
     accelerator_options_mock = MagicMock()
     ao.AcceleratorOptions = accelerator_options_mock
@@ -109,6 +116,11 @@ def _capture(
         return obj
 
     dc.PdfFormatOption = _fake_format_option
+
+    if disable_preflight:
+        monkeypatch.setattr(
+            docling_factory, "_preflight_accelerator_device", lambda name: None
+        )
 
     monkeypatch.setitem(sys.modules, "docling.datamodel.pipeline_options", po)
     monkeypatch.setitem(sys.modules, "docling.datamodel.accelerator_options", ao)
@@ -169,16 +181,24 @@ def test_config_reads_env_toggles(monkeypatch: pytest.MonkeyPatch) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("device", ["gpu", "xpu", ""])
+@pytest.mark.parametrize("device", ["gpu", ""])
 def test_config_rejects_invalid_device(
     monkeypatch: pytest.MonkeyPatch, device: str
 ) -> None:
-    """Only auto/cpu/mps/cuda are allowed for the accelerator device."""
+    """Devices outside auto/cpu/mps/cuda/xpu are rejected."""
     from secondbrain.config import config
 
     _set_env(monkeypatch, SECONDBRAIN_PDF_ACCELERATOR_DEVICE=device)
     with pytest.raises(pydantic.ValidationError):
         config()
+
+
+def test_config_accepts_xpu_device(monkeypatch: pytest.MonkeyPatch) -> None:
+    """'xpu' (Intel iGPU/dGPU) is accepted for the accelerator device."""
+    from secondbrain.config import config
+
+    _set_env(monkeypatch, SECONDBRAIN_PDF_ACCELERATOR_DEVICE="xpu")
+    assert config().pdf_accelerator_device == "xpu"
 
 
 def test_config_rejects_num_threads_zero(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -268,6 +288,18 @@ def test_device_and_num_threads_map_to_accelerator_options(
     accelerator_mock.assert_called_once_with(device=DEV_CUDA, num_threads=8)
 
 
+def test_xpu_device_maps_to_accelerator_options(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """'xpu' maps through to the AcceleratorDevice.XPU enum member."""
+    _set_env(monkeypatch, SECONDBRAIN_PDF_ACCELERATOR_DEVICE="xpu")
+    _, _, accelerator_mock = _capture(monkeypatch)
+
+    docling_factory._build_pdf_format_option(do_ocr=False, do_table_structure=False)
+
+    accelerator_mock.assert_called_once_with(device=DEV_XPU, num_threads=4)
+
+
 def test_threaded_pipeline_uses_threaded_class_and_batch_size(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -317,3 +349,87 @@ def test_table_structure_options_still_added_when_enabled(
     docling_factory._build_pdf_format_option(do_ocr=False, do_table_structure=True)
 
     assert "table_structure_options" in pdf_options_mock.call_args.kwargs
+
+
+# ---------------------------------------------------------------------------
+# RapidOCR MPS hint + device preflight (stub-robust)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("mps_available", [True, False])
+def test_rapidocr_use_mps_emitted_only_when_mps_available(
+    monkeypatch: pytest.MonkeyPatch,
+    mps_available: bool,
+) -> None:
+    """RapidOCR's use_mps hint is emitted only when torch MPS exists.
+
+    RapidOCR raises at engine construction on hosts without MPS, so the param
+    must be omitted elsewhere.
+    """
+    _set_env(monkeypatch)
+    _capture(monkeypatch)
+    monkeypatch.setattr(
+        docling_factory, "_rapidocr_use_mps_available", lambda: mps_available
+    )
+
+    import docling.datamodel.pipeline_options as po_import
+
+    docling_factory._build_pdf_format_option(do_ocr=True, do_table_structure=False)
+
+    po: Any = po_import
+    kwargs = po.RapidOcrOptions.call_args.kwargs
+    assert kwargs["backend"] == "torch"
+    expected = {"EngineConfig.torch.use_mps": True} if mps_available else {}
+    assert kwargs["rapidocr_params"] == expected
+
+
+def test_preflight_passes_pin_to_decide_device(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Preflight hands the configured accelerator pin to decide_device."""
+    import sys
+    import types
+
+    _set_env(monkeypatch, SECONDBRAIN_PDF_ACCELERATOR_DEVICE="cpu")
+    _capture(monkeypatch, disable_preflight=False)
+    decide_calls: list[str] = []
+
+    def fake_decide(device: str) -> str:
+        decide_calls.append(device)
+        return device
+
+    stub_utils = types.ModuleType("docling.utils.accelerator_utils")
+    stub_utils.__dict__["decide_device"] = fake_decide
+    monkeypatch.setitem(sys.modules, "docling.utils", types.ModuleType("docling.utils"))
+    monkeypatch.setitem(sys.modules, "docling.utils.accelerator_utils", stub_utils)
+
+    docling_factory._build_pdf_format_option(do_ocr=False, do_table_structure=False)
+
+    assert decide_calls == ["cpu"]
+
+
+def test_preflight_wraps_unavailable_device(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An unavailable pin raises once with an actionable message."""
+    import sys
+    import types
+
+    _set_env(monkeypatch, SECONDBRAIN_PDF_ACCELERATOR_DEVICE="xpu")
+    _capture(monkeypatch, disable_preflight=False)
+
+    def failing_decide(device: str) -> str:
+        raise ValueError("XPU is not available in the system")
+
+    stub_utils = types.ModuleType("docling.utils.accelerator_utils")
+    stub_utils.__dict__["decide_device"] = failing_decide
+    monkeypatch.setitem(sys.modules, "docling.utils", types.ModuleType("docling.utils"))
+    monkeypatch.setitem(sys.modules, "docling.utils.accelerator_utils", stub_utils)
+
+    with pytest.raises(
+        docling_factory.AcceleratorDeviceUnavailableError,
+        match="SECONDBRAIN_PDF_ACCELERATOR_DEVICE='xpu'",
+    ) as excinfo:
+        docling_factory._build_pdf_format_option(do_ocr=False, do_table_structure=False)
+
+    assert isinstance(excinfo.value.__cause__, ValueError)
