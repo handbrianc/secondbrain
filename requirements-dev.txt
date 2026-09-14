@@ -35,7 +35,7 @@ vulture==2.16
 mkdocs==1.6.1
 mkdocstrings==0.29.0
 mkdocstrings-python==2.0.3
-mkdocs-material==9.7.6
+mkdocs-material==9.7.7
 
 # Build and packaging
 pyinstaller==6.22.2
