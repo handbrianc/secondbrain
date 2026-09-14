@@ -69,7 +69,7 @@ security = [
 # Documentation generation
 docs = [
     "mkdocs>=1.6.0",  # Documentation - static site generator
-    "mkdocstrings>=0.24.0",  # API docs - auto-generate from docstrings
+    "mkdocstrings>=1.0.6",  # API docs - auto-generate from docstrings
     "mkdocstrings-python>=2.0.3",  # Python plugin - mkdocstrings support
     "mkdocs-material>=9.7.7",  # Theme - professional documentation (GHSA-xvg9-69gf-fjrf fixed in 9.7.7)
     "jinja2>=3.1.6",  # Templating - security patch required
@@ -118,7 +118,7 @@ bundled = [
     "pipdeptree>=2.35.3",
     # All docs deps
     "mkdocs>=1.6.0",
-    "mkdocstrings>=0.24.0",
+    "mkdocstrings>=1.0.6",
     "mkdocstrings-python>=2.0.3",
     "mkdocs-material>=9.7.7",
     "jinja2>=3.1.6",

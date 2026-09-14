@@ -33,7 +33,7 @@ vulture==2.16
 
 # Documentation
 mkdocs==1.6.1
-mkdocstrings==0.29.0
+mkdocstrings==1.0.6
 mkdocstrings-python==2.0.3
 mkdocs-material==9.7.6
 
