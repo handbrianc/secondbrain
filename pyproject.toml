@@ -115,7 +115,7 @@ bundled = [
     "pre-commit>=4.6.2",
     "pyinstaller>=6.22.2",
     "vulture>=2.16",
-    "pipdeptree>=2.35.3",
+    "pipdeptree>=4.2.5",
     # All docs deps
     "mkdocs>=1.6.0",
     "mkdocstrings>=0.24.0",
