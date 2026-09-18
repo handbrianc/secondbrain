@@ -11,7 +11,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from secondbrain.rag.pipeline import RAGPipeline
+from secondbrain.document.fast_text import extract_printed_page, resolve_printed_pages
+from secondbrain.rag.pipeline import RAGPipeline, strip_document_filenames
 from secondbrain.rag.pipeline._mixins import (
     _OVERVIEW_MAX_WORDS,
     _SUMMARY_REDUCE_MAX_TOKENS,
@@ -2516,6 +2517,35 @@ class TestMultiChapterMapReduce:
             "Word Embeddings for Earnings Calls and SEC Filings\nPreprocessing body"
         )
 
+    def test_page_query_strips_footer_page_line(self) -> None:
+        """A standalone 'N / total' footer line is removed from the page text."""
+        p = self._make_pipeline(_SequenceProvider([]))
+        searcher_mock = cast(Any, p._searcher)
+        storage_mock = MagicMock()
+        storage_mock.find_chunks.return_value = [
+            {
+                "chunk_id": "c1",
+                "chunk_text": "3.12.2 Certificates for API and Web GUI\ncertificate prose body",
+                "page_number": 122,
+                "page_pos": 0,
+            },
+            {
+                "chunk_id": "c2",
+                "chunk_text": "100 / 634",
+                "page_number": 122,
+                "page_pos": 1,
+                "chunk_role": "navigation",
+            },
+        ]
+        searcher_mock.attach_mock(storage_mock, "storage")
+
+        res = p._answer_page_query("show what is on page 100 of the guide.pdf")
+
+        assert res is not None
+        assert res["answer"] == (
+            "3.12.2 Certificates for API and Web GUI\ncertificate prose body"
+        )
+
     def test_single_chapter_preserves_window_order(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -2717,6 +2747,36 @@ class TestMultiChapterMapReduce:
         )
         assert any(r for _c, r in events), "map reasoning still streams for liveness"
         assert "The overview weaves" in result
+
+    def test_resume_summary_logs_completed_continuation(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A successful mid-sentence resume logs the recovery for operators.
+
+        The provider-side halt warning ("Stream halted (answer limit)") alarmed
+        without its counterpart recovery signal, so a healthy auto-resume read
+        as a failure in the chat transcript.
+        """
+        p = self._make_pipeline(_SequenceProvider([]))
+        p._config.streaming_enabled = True
+
+        class _StreamingStub(_SequenceProvider):
+            def stream_chat(
+                self, messages, on_chunk, temperature=0.7, max_tokens=4096
+            ) -> str:
+                text = " and the sentence finishes cleanly here."
+                for i in range(0, len(text), 10):
+                    on_chunk(text[i : i + 10], None)
+                return text
+
+        p = self._make_pipeline(_StreamingStub())
+        p._config.streaming_enabled = True
+        with caplog.at_level(logging.INFO, logger="secondbrain.rag.pipeline"):
+            p._resume_summary(
+                "Explain.", "Partial draft cut off mid-", lambda c, r: None
+            )
+        assert "overview continuation completed" in caplog.text, caplog.text
+        assert "extended by 26" in caplog.text
 
     def test_reduce_amputated_mid_sentence_gets_continuation(self) -> None:
         """A normal return cut mid-sentence (GLM output cap) is continued."""
@@ -3527,13 +3587,12 @@ class TestChapterPinWindowResolution:
     """Pin-resolution fixtures for the _iterative_query chapter anchoring.
 
     Heading-title anchors are applied before the body-title scan and cannot
-    be overridden by it; every pin must then satisfy its open-interval
-    monotonic window (strictly above the prior chapter's pin and strictly
-    below the next one), and the highest-numbered violating pin is popped
-    once per scan until the map reaches a fixed point.  The scripted
-    provider returns no usable chapter summaries, so the answer falls back
-    to the chapter roster, whose "approx pages N+" lines double as pin
-    assertions.
+    be overridden by it; conflicting pins are resolved in one maximal-monotone
+    pass (_select_monotone_pins) — the largest strictly-increasing subset
+    survives, so a single false pin is dropped instead of cascade-killing the
+    real pins around it.  The scripted provider returns no usable chapter
+    summaries, so the answer falls back to the chapter roster, whose
+    "approx pages N+" lines double as pin assertions.
     """
 
     SRC = "book.pdf"
@@ -3612,9 +3671,18 @@ class TestChapterPinWindowResolution:
         toc: list[dict[str, Any]],
         body: list[dict[str, Any]],
         headings: list[dict[str, Any]] | None = None,
+        intent: Any | None = None,
     ) -> RAGPipeline:
         from secondbrain.rag.intent_parser import IntentDecision, QueryIntent
 
+        if intent is None:
+            intent = IntentDecision(
+                intent=QueryIntent.BROAD_COVERAGE,
+                confidence=0.5,
+                target=None,
+                reason="test",
+                suggested_pipeline="structural",
+            )
         searcher = _make_mock_searcher()
         searcher.storage = self._StubStorage(body, headings)
         pipeline = RAGPipeline(
@@ -3632,13 +3700,7 @@ class TestChapterPinWindowResolution:
         monkeypatch.setattr(
             pipeline._intent_parser,
             "parse",
-            lambda q: IntentDecision(
-                intent=QueryIntent.BROAD_COVERAGE,
-                confidence=0.5,
-                target=None,
-                reason="test",
-                suggested_pipeline="structural",
-            ),
+            lambda q: intent,
         )
         return pipeline
 
@@ -3867,6 +3929,102 @@ class TestChapterPinWindowResolution:
         )
         assert "approx pages 40+" not in answer
 
+    def test_single_chapter_target_survives_titleless_neighbor(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """PVE shape: a title-less middle chapter must not strand the target.
+
+        Regression for the live failure "summarize chapter 1 of the
+        pve-admin-guide-9.1.pdf": chapter 6's title heading was lost in
+        extraction and its only roster evidence was a gated license caption
+        ("6. COLLECTIONS OF DOCUMENTS"), so the roster carried a title-less
+        entry.  Two coupled defects then dropped every pin for chapters
+        1-5: Phase-3 interpolation ran over the target-filtered roster ({1})
+        so the title-less ch6 was never pinned, and the long-consecutive-run
+        filter kept only the longest pin run — [7-20] — discarding the
+        correct [1-5] pins and emptying the target's range ("No chapter
+        page ranges derived" → generic search).
+        """
+        from secondbrain.rag.intent_parser import IntentDecision, QueryIntent
+
+        toc = [
+            {
+                "chunk_text": "Chapter 1 Foundational Signal Concepts",
+                "chunk_role": "toc_entry",
+                "source_file": self.SRC,
+                "page_number": 3,
+            },
+            {
+                # Gated license caption: seeds ch2 as a TITLE-LESS roster
+                # entry (mirrors PVE ch6's "6. COLLECTIONS OF DOCUMENTS").
+                "chunk_text": "2. COLLECTIONS OF DOCUMENTS\n"
+                "You may copy and distribute verbatim copies of the Document.",
+                "chunk_role": "toc_entry",
+                "source_file": self.SRC,
+                "page_number": 4,
+            },
+            {
+                "chunk_text": "Chapter 3 Convergence Limits Probed",
+                "chunk_role": "toc_entry",
+                "source_file": self.SRC,
+                "page_number": 5,
+            },
+        ]
+        # ch2's opener page carries ONLY prose — no title line, no section
+        # number, no digits — so no scan tier can pin it; only interpolation
+        # can place it between ch1 and ch3 (PVE ch6's exact pin situation).
+        body = [
+            self._body(
+                "1 Foundational Signal Concepts\nprose deriving wavelet bases",
+                10,
+            ),
+            self._body("prose buffering stream windows between phases", 12),
+            self._body("prose pacing coherence schedules onward", 14),
+            self._body("prose ranking delayed results beside archived notes", 40),
+            self._body(
+                "3 Convergence Limits Probed\nprose mapping convexity regimes",
+                60,
+            ),
+            self._body("prose pacing coherence schedules onward", 62),
+        ]
+        intent = IntentDecision(
+            intent=QueryIntent.CHAPTER_ENUMERATE,
+            confidence=0.9,
+            target="1",
+            reason="test",
+            suggested_pipeline="structural",
+        )
+        pipeline = self._make(monkeypatch, toc, body, intent=intent)
+
+        captured: dict[str, Any] = {}
+
+        def _spy(
+            chunks: list[dict[str, Any]],
+            chapter_num: int | str,
+            chapter_title: str,
+            *,
+            foreign_titles: list[str] | None = None,
+        ) -> str:
+            captured["chapter"] = chapter_num
+            captured["pages"] = [int(c.get("page_number") or 0) for c in chunks]
+            return ""
+
+        monkeypatch.setattr(pipeline, "_generate_single_chapter_summary", _spy)
+        with caplog.at_level(logging.DEBUG, logger="secondbrain.rag.pipeline"):
+            answer = self._run(pipeline)
+        assert "No chapter page ranges derived" not in caplog.text, caplog.text
+        assert str(captured["chapter"]) == "1"
+        assert captured["pages"] == [10, 12, 14], (
+            "chapter 1's bucket must hold its own pages 10-14, "
+            "not ch2's content from the unpinned 40-59 span"
+        )
+        assert "(approx pages 10+)" in answer
+        assert "approx pages 40+" not in answer, (
+            "title-less ch2's body pages must not leak into the ch1 bucket"
+        )
+
     def _capture(
         self,
         monkeypatch: pytest.MonkeyPatch,
@@ -3997,8 +4155,14 @@ class TestChapterPinWindowResolution:
         pipeline = self._make(monkeypatch, toc, body)
         captured = self._capture(monkeypatch, pipeline)
         answer = self._run(pipeline)
-        assert captured["keys"] == [1]
-        assert captured["pages"] == {1: [20, 21, 24]}
+        assert captured["keys"] == [1, 3], (
+            "the degenerate midpoint must not interpolate a ch2 pin, while "
+            "ch3's real pin survives the run filter with its own bucket"
+        )
+        assert captured["pages"] == {1: [20], 3: [21, 24]}, (
+            "ch3's pages must stay in ch3's bucket, not leak into ch1's "
+            "range as they did before the run filter kept both runs"
+        )
         assert answer.count("(approx pages 20+)") == 1, (
             "the degenerate midpoint must not duplicate chapter 1's pin"
         )
@@ -4504,3 +4668,697 @@ class TestToCListingResolution:
         assert "approx pages 9+" not in answer, answer
         assert "median=8" in caplog.text, caplog.text
         assert "Chapter 1 — Alpha Foundational Frameworks" in answer, answer
+
+
+class TestSelectMonotonePinsPolicy:
+    """Unit tests for the maximal-monotone pin filter (_select_monotone_pins)."""
+
+    def test_pve_shape_false_tail_pin_dropped_real_pins_kept(self) -> None:
+        """PVE shape: one late-page license pin vs many real pins.
+
+        Cardinality decides: the four real consecutive pins survive and the
+        single license-tail pin (ch6 @ the GFDL page) drops itself — the
+        previous sequential loop instead kept the license pin and rejected
+        chapters 7-20 one scan at a time.
+        """
+        pins = {6: 654, 7: 163, 8: 195, 9: 221, 10: 225}
+        assert RAGPipeline._select_monotone_pins(pins) == {
+            7: 163,
+            8: 195,
+            9: 221,
+            10: 225,
+        }
+
+    def test_equal_cardinality_prefers_larger_page_sum(self) -> None:
+        """{10,12} and {11,12} tie on size; body-page pins beat front-matter ones."""
+        pins = {10: 276, 11: 6, 12: 336}
+        assert RAGPipeline._select_monotone_pins(pins) == {10: 276, 12: 336}
+
+    def test_lexicographic_tiebreak_deterministic(self) -> None:
+        """Equal length and page sum resolve to the smallest chapter set."""
+        pins = {1: 10, 2: 20, 3: 20}
+        assert RAGPipeline._select_monotone_pins(pins) == {1: 10, 2: 20}
+
+    def test_empty_and_singleton_unchanged(self) -> None:
+        assert RAGPipeline._select_monotone_pins({}) == {}
+        assert RAGPipeline._select_monotone_pins({1: 7}) == {1: 7}
+
+    def test_monotone_input_unchanged(self) -> None:
+        pins = {1: 10, 2: 20, 3: 30}
+        assert RAGPipeline._select_monotone_pins(pins) == pins
+
+
+class TestBoilerplateGating:
+    """License-caption roster gate + boilerplate-page detection."""
+
+    SRC = "guide.pdf"
+
+    def _pipeline(self) -> RAGPipeline:
+        return RAGPipeline(
+            searcher=MagicMock(spec=Searcher),
+            llm_provider=MagicMock(),
+            top_k=5,
+            context_window=5,
+        )
+
+    def test_license_captions_become_gapless_placeholders(self) -> None:
+        """GFDL captions are excluded from titles but keep roster numbering."""
+        p = self._pipeline()
+        rows = [
+            "1 Introduction 3",
+            "2 Installing Guide 10",
+            "3 Consoles And Peripherals 34",
+            "4 Status Dashboards 46",
+            "5 Cluster Ops 58",
+            "7 Storage Replication 110",
+        ]
+        toc_chunks = [
+            {
+                "chunk_text": row,
+                "chunk_role": "toc_entry",
+                "page_number": 4,
+                "source_file": self.SRC,
+            }
+            for row in rows
+        ]
+        license_caption = {
+            "chunk_text": "\n6. COLLECTIONS OF DOCUMENTS\n",
+            "chunk_role": "heading",
+            "page_number": 654,
+            "source_file": self.SRC,
+        }
+        entries, good, _ = p._derive_chapter_numbers([*toc_chunks, license_caption])
+        pairs = {(e[0], e[2]) for e in entries}
+        assert (6, "COLLECTIONS OF DOCUMENTS") not in pairs, entries
+        assert (6, "") in pairs, f"gapless placeholder missing: {entries!r}"
+        assert (1, "Introduction") in pairs, entries
+        assert 6 in good, good
+
+    def test_title_case_real_chapter_not_gated(self) -> None:
+        p = self._pipeline()
+        structure_chunks = [
+            {
+                "chunk_text": "1 Introduction and Cleanup Procedures",
+                "chunk_role": "heading",
+                "page_number": 12,
+                "source_file": self.SRC,
+            }
+        ]
+        entries, _, _ = p._derive_chapter_numbers(structure_chunks)
+        assert (1, self.SRC, "Introduction and Cleanup Procedures") in entries, entries
+
+    def test_boilerplate_pages_order_independent(self) -> None:
+        """Detection works regardless of storage scroll order."""
+
+        def chunk(page: int, text: str, role: str) -> dict[str, Any]:
+            return {
+                "chunk_text": text,
+                "chunk_role": role,
+                "page_number": page,
+                "source_file": self.SRC,
+            }
+
+        chunks = [
+            chunk(103, "6. COLLECTIONS OF DOCUMENTS", "heading"),
+            chunk(5, "1. PREAMBLE", "heading"),
+            chunk(100, "GNU Free Documentation License", "heading"),
+        ]
+        pages = RAGPipeline._boilerplate_pages(chunks)
+        assert 100 in pages
+        assert 103 in pages
+        assert 5 not in pages, "front-matter caption below the license opener stays out"
+
+    def test_heading_anchor_refuses_license_page(self) -> None:
+        p = self._pipeline()
+        chapters = [
+            (6, self.SRC, "Collections of documents"),
+            (7, self.SRC, "Storage Replication"),
+        ]
+        headings = [
+            {
+                "chunk_text": "6. COLLECTIONS OF DOCUMENTS",
+                "page_number": 654,
+                "chunk_role": "heading",
+                "source_file": self.SRC,
+            },
+            {
+                "chunk_text": "Storage Replication",
+                "page_number": 163,
+                "chunk_role": "heading",
+                "source_file": self.SRC,
+            },
+        ]
+        asserts = p._heading_title_anchors(chapters, self.SRC, headings)
+        assert asserts == {7: 163}
+
+        assert p._heading_title_anchors(
+            chapters, self.SRC, headings, boiler_pages={650, 654}
+        ) == {7: 163}, "page-set refusal must hold even if caption text changed"
+
+
+class TestQueryFilenameStripping:
+    """Filename tokens must never feed the section-target regex (P1)."""
+
+    def test_version_suffix_filename_removed_from_section_scan(self) -> None:
+        import re
+
+        cleaned = strip_document_filenames(
+            "summarize by chapter pve-admin-guide-9.1.pdf"
+        )
+        assert re.search(r"(\d+(?:\.\d+)+)", cleaned) is None, cleaned
+        assert "chapter" in cleaned
+
+    def test_explicit_section_target_survives(self) -> None:
+        import re
+
+        cleaned = strip_document_filenames(
+            "summarize section 11.33 of the cluster guide"
+        )
+        m = re.search(r"(\d+(?:\.\d+)+)", cleaned)
+        assert m is not None and m.group(1) == "11.33"
+
+    def test_plain_filename_removed(self) -> None:
+        assert strip_document_filenames("summarize report.pdf").strip() == ("summarize")
+
+
+class TestLicenseBoilerplateEndToEnd:
+    """PVE-shaped fixture: a license book tail must not sabotage chapter ranges.
+
+    Mirrors the observed failure: labeled-docling book with clean ToC rows and
+    heading-chunk openers, one chapter with no opener in stored chunks, and
+    GFDL license pages whose numbered all-caps captions mimic openers.  The
+    structural path must derive chapter ranges (no generic-search fallback),
+    pin real chapters on their true pages, and keep license text out of the
+    roster.
+    """
+
+    SRC = TestChapterPinWindowResolution.SRC
+    QUERY = "summarize by chapter pve admin guide"
+    _StubStorage = TestChapterPinWindowResolution._StubStorage
+
+    TITLES: ClassVar[dict[int, str]] = {
+        1: "Introduction",
+        2: "Installing Guide",
+        3: "Consoles And Peripherals",
+        4: "Status Dashboards",
+        5: "Cluster Ops",
+        6: "Web Interfaces",
+        7: "Storage Replication",
+        8: "Notification Manager",
+        9: "Backup Schedules",
+    }
+    OPENERS: ClassVar[dict[int, int]] = {
+        1: 10,
+        2: 22,
+        3: 34,
+        4: 46,
+        5: 58,
+        7: 163,
+        8: 195,
+        9: 230,
+    }
+
+    @staticmethod
+    def _heading(text: str, page: int) -> dict[str, Any]:
+        return {
+            "chunk_text": text,
+            "page_number": page,
+            "chunk_role": "heading",
+            "source_file": TestLicenseBoilerplateEndToEnd.SRC,
+        }
+
+    @staticmethod
+    def _body(text: str, page: int) -> dict[str, Any]:
+        return {
+            "chunk_text": text,
+            "page_number": page,
+            "source_file": TestLicenseBoilerplateEndToEnd.SRC,
+        }
+
+    @classmethod
+    def _toc_probe_chunks(cls) -> list[dict[str, Any]]:
+        """Per-row ToC chunks (storage emits one chunk per flattened line)."""
+        chunks: list[dict[str, Any]] = []
+        for n in sorted(cls.TITLES):
+            if n == 5:
+                # Chapter 6's printed row is swallowed mid-line by the
+                # flattened ToC (run-on row), so no opener capture ever
+                # exists for it — the same shape as the real PVE guide.
+                chunks.append(
+                    {
+                        "chunk_text": f"5 {cls.TITLES[5]} 58 6 {cls.TITLES[6]} 90",
+                        "chunk_role": "toc_entry",
+                        "page_number": 4,
+                        "source_file": cls.SRC,
+                    }
+                )
+                continue
+            chunks.append(
+                {
+                    "chunk_text": f"{n} {cls.TITLES[n]} {cls.OPENERS.get(n, 90)}",
+                    "chunk_role": "toc_entry",
+                    "page_number": 4,
+                    "source_file": cls.SRC,
+                }
+            )
+        return chunks
+
+    @classmethod
+    def _license_tail_headings(cls) -> list[dict[str, Any]]:
+        return [
+            cls._heading("Appendix H", 648),
+            cls._heading("GNU Free Documentation License", 650),
+            cls._heading("0. PREAMBLE", 650),
+            cls._heading("2. VERBATIM COPYING", 652),
+            cls._heading("6. COLLECTIONS OF DOCUMENTS", 654),
+            cls._heading("8. TRANSLATION", 655),
+            cls._heading("10. FUTURE REVISIONS", 655),
+        ]
+
+    def _make(self, monkeypatch: pytest.MonkeyPatch) -> RAGPipeline:
+        from secondbrain.rag.intent_parser import IntentDecision, QueryIntent
+
+        # Chapter 6's real opener exists (Phase-2 rescues it at p140); its
+        # printed ToC row was swallowed by the run-on ch5 line, so the roster
+        # only knows ch6 through the (gated) license caption placeholder.
+        body = [
+            self._body(
+                "6 Web Interfaces\nprose describing machinery proceedings calmly",
+                140,
+            ),
+            # Every chapter range needs at least one body chunk, otherwise the
+            # no-content placeholder line bypasses the roster fallback the
+            # assertions below rely on (ch3 spans pages 34-45).
+            self._body("prose consoles peripherals inventory steady tidily", 40),
+        ]
+        body += [
+            self._body("prose harvest meadow quiet fields unfold", pg)
+            for pg in (12, 30, 51, 70, 120, 170, 210, 250)
+        ]
+        headings = [
+            *(self._heading(self.TITLES[n], pg) for n, pg in self.OPENERS.items()),
+            *self._license_tail_headings(),
+        ]
+        toc = [*self._toc_probe_chunks(), *self._license_tail_headings()]
+        searcher = _make_mock_searcher()
+        searcher.storage = self._StubStorage(body, headings)
+        pipeline = RAGPipeline(
+            searcher=searcher,
+            llm_provider=_SequenceProvider(by_key={"Chapter": ""}),  # type: ignore
+            top_k=5,
+            context_window=5,
+        )
+        pipeline._config.streaming_enabled = False
+        monkeypatch.setattr(
+            pipeline,
+            "_probe_document_structure",
+            lambda top_k, source_filter=None: toc,
+        )
+        monkeypatch.setattr(
+            pipeline._intent_parser,
+            "parse",
+            lambda q: IntentDecision(
+                intent=QueryIntent.BROAD_COVERAGE,
+                confidence=0.5,
+                target=None,
+                reason="test",
+                suggested_pipeline="structural",
+            ),
+        )
+        return pipeline
+
+    def _run(self, pipeline: RAGPipeline) -> str:
+        result = pipeline._iterative_query(
+            self.QUERY,
+            top_k=5,
+            show_sources=False,
+            source_filter=self.SRC,
+        )
+        return result["answer"]
+
+    def test_license_tail_neutralized(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        pipeline = self._make(monkeypatch)
+        with caplog.at_level(logging.DEBUG, logger="secondbrain.rag.pipeline"):
+            answer = self._run(pipeline)
+        assert "falling back to generic search" not in caplog.text, caplog.text
+        assert "larger consistent pin subset kept" not in caplog.text, caplog.text
+        for n in (1, 2, 3, 4, 5, 7, 8, 9):
+            assert f"Chapter {n} —" in answer, answer
+        assert "Chapter 6 —" in answer, answer
+        assert "COLLECTIONS OF DOCUMENTS" not in answer, answer
+        assert "VERBATIM COPYING" not in answer, answer
+        assert "AGGREGATION" not in answer, answer
+        assert "PREAMBLE" not in answer, answer
+        assert "approx pages 654" not in answer, answer
+        assert "Chapter 7 — Storage Replication (approx pages 163+)" in answer, answer
+
+    def test_real_openers_pinned_not_license_pages(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        pipeline = self._make(monkeypatch)
+        with caplog.at_level(logging.DEBUG, logger="secondbrain.rag.pipeline"):
+            answer = self._run(pipeline)
+        assert "Chapter 8 — Notification Manager (approx pages 195+)" in answer, answer
+        assert "Chapter 9 — Backup Schedules (approx pages 230+)" in answer, answer
+        assert "(approx pages 4+)" not in answer, "ToC probe pages must never pin"
+
+
+class TestPrintedPageFooterStamps:
+    """Footer "N / total" page stamps: resolver + ingest-time stamping (A2/A3)."""
+
+    SRC = "guide.pdf"
+
+    def _nav(self, page: int, text: str) -> dict[str, Any]:
+        return {
+            "chunk_text": text,
+            "chunk_role": "navigation",
+            "element_type": "navigation",
+            "page_number": page,
+            "source_file": self.SRC,
+            "printed_page": None,
+        }
+
+    def _body(
+        self, page: int, text: str = "prose examines corpus quietly"
+    ) -> dict[str, Any]:
+        return {
+            "chunk_text": text,
+            "chunk_role": "body",
+            "element_type": "body",
+            "page_number": page,
+            "source_file": self.SRC,
+            "printed_page": None,
+        }
+
+    def test_resolver_stamps_pages_from_consistent_footers(self) -> None:
+        docs = [self._nav(pg, f"{pg - 22} / 634") for pg in (23, 24, 25, 100, 122)]
+        docs += [self._body(122), self._body(100)]
+        stamped = resolve_printed_pages(docs)
+        assert stamped == 5
+        for c in docs:
+            if c["page_number"] in (23, 24, 25, 100, 122):
+                assert c["printed_page"] == c["page_number"] - 22, c
+
+    def test_resolver_refuses_inconsistent_offsets(self) -> None:
+        docs = [
+            self._nav(101, "1 / 634"),
+            self._nav(102, "2 / 634"),
+            self._nav(103, "60 / 634"),
+            self._nav(104, "61 / 634"),
+        ]
+        assert resolve_printed_pages(docs) == 0
+        for c in docs:
+            assert c["printed_page"] is None
+
+    def test_resolver_needs_three_footer_pages(self) -> None:
+        docs = [self._nav(100, "78 / 634"), self._nav(101, "79 / 634")]
+        assert resolve_printed_pages(docs) == 0
+
+    def test_resolver_refuses_stamp_at_or_above_physical(self) -> None:
+        docs = [
+            self._nav(10, "10 / 634"),
+            self._nav(11, "11 / 634"),
+            self._nav(12, "12 / 634"),
+            self._nav(13, "13 / 634"),
+        ]
+        assert resolve_printed_pages(docs) == 0
+
+    def test_extract_printed_page_rejects_citation_noise(self) -> None:
+        """Citation-bracket noise is neutralized by the resolver's overwrite.
+
+        The per-chunk bracket extractor cannot tell "[ 500 ]" page markers
+        from "[ 1647 ]" citation brackets without document context; the
+        page-level resolver supplies it: with consistent footer evidence its
+        mapping is authoritative and replaces the chunk-level bracket guess
+        (see the resolver's contract).  Only the sanity bound rejects
+        chunk-level values outright.
+        """
+        assert extract_printed_page("[ 1647 ] IEEE Std 1364-2005") == 1647
+        assert extract_printed_page("[ 500 ] real marker") == 500
+        assert extract_printed_page("[ 99999 ] beyond sanity bound") is None
+        assert extract_printed_page("no marker here") is None
+
+    def test_pipeline_calls_resolver_via_processor(self) -> None:
+        """The acceptable processor path imports resolve_printed_pages."""
+        import secondbrain.document.processor as proc
+
+        assert hasattr(proc, "resolve_printed_pages")
+
+    def test_resolver_overwrites_corrupted_bracket_stamp(self) -> None:
+        """Footer mapping is authoritative over chunk-level bracket guesses.
+
+        Reproduces the live-store artifact: a citation block on an earlier
+        page parsed "[ 1647 ]" as a page stamp (a 634-page book has no page
+        1647), seeding a phantom printed-page index.  With consistent footer
+        evidence the resolver's page mapping replaces that value on every
+        covered page.
+        """
+        docs = [self._nav(pg, f"{pg - 22} / 634") for pg in (23, 24, 25, 122)]
+        corrupted = self._body(122, "[ 1647 ] IEEE Std 1364 citation text")
+        corrupted["printed_page"] = 1647
+        docs.append(corrupted)
+        assert resolve_printed_pages(docs) == 4
+        assert corrupted["printed_page"] == 100
+
+
+class TestFooterOffsetLookup:
+    """A1: printed-page lookup falls back to the "N / total" footer offset."""
+
+    SRC = "guide.pdf"
+
+    def _pipeline(self) -> RAGPipeline:
+        p = RAGPipeline(
+            searcher=_make_mock_searcher(),
+            llm_provider=_SequenceProvider([]),  # type: ignore[arg-type]
+            top_k=5,
+            context_window=5,
+        )
+        return p
+
+    def _footer_nav(self, page: int, printed: int, total: int = 634) -> dict[str, Any]:
+        return {
+            "chunk_text": f"{printed} / {total}",
+            "chunk_role": "navigation",
+            "page_number": page,
+            "source_file": self.SRC,
+        }
+
+    def test_lookup_translates_through_footer_offset(self) -> None:
+        p = self._pipeline()
+        searcher_mock = cast(Any, p._searcher)
+        storage_mock = MagicMock()
+        footers = [self._footer_nav(pg, pg - 22) for pg in (23, 24, 25, 122)]
+        page_chunks = [
+            {
+                "chunk_id": "p100",
+                "chunk_text": "Certificates for API and Web GUI — page text",
+                "page_number": 122,
+                "page_pos": 1,
+            }
+        ]
+        storage_mock.find_chunks.side_effect = [
+            [],  # printed_page=100 direct lookup: pre-footer-stamp data
+            page_chunks,  # page_number=122 physical lookup
+        ]
+        storage_mock.find_structural_chunks.return_value = footers
+        searcher_mock.attach_mock(storage_mock, "storage")
+
+        res = p._answer_page_query("show what is on page 100 of the guide.pdf")
+
+        assert res is not None
+        assert res["answer"] == "Certificates for API and Web GUI — page text"
+        assert res["sources"][0]["page_number"] == 122
+        assert res["sources"][0]["page_lookup_offset"] == 22
+
+    def test_lookup_not_found_preserved_without_footers(self) -> None:
+        p = self._pipeline()
+        searcher_mock = cast(Any, p._searcher)
+        storage_mock = MagicMock()
+        storage_mock.find_chunks.return_value = []
+        storage_mock.find_structural_chunks.return_value = []
+        searcher_mock.attach_mock(storage_mock, "storage")
+        res = p._answer_page_query("what is on page 999")
+        assert res is not None
+        assert "do not contain a page matching" in res["answer"]
+
+    def test_lookup_inconsistent_footers_stay_not_found(self) -> None:
+        p = self._pipeline()
+        searcher_mock = cast(Any, p._searcher)
+        storage_mock = MagicMock()
+        storage_mock.find_chunks.return_value = []
+        storage_mock.find_structural_chunks.return_value = [
+            self._footer_nav(101, 1),
+            self._footer_nav(102, 2),
+            self._footer_nav(103, 60),
+            self._footer_nav(104, 61),
+        ]
+        searcher_mock.attach_mock(storage_mock, "storage")
+        res = p._answer_page_query("what is on page 55")
+        assert res is not None
+        assert "do not contain a page matching" in res["answer"]
+
+
+class TestChapterTitleCleanup:
+    """B1/B2: polluted ToC-capture titles never reach display surfaces."""
+
+    SRC = "guide.pdf"
+
+    def _pipeline(self) -> RAGPipeline:
+        return RAGPipeline(
+            searcher=_make_mock_searcher(),
+            llm_provider=_SequenceProvider([]),  # type: ignore[arg-type]
+            top_k=5,
+            context_window=5,
+        )
+
+    def test_clean_chapter_title_cuts_dotted_section_runon(self) -> None:
+        """PVE ToC Pollution shape: page serial + next row's dotted section."""
+        p = self._pipeline()
+        cases = {
+            "Installing Proxmox VE 10 2.1 System Requirements": "Installing Proxmox VE",
+            "Host System Administration 27 3.1 Package Repositories": (
+                "Host System Administration"
+            ),
+            "Graphical User Interface 97 4.1 Features": ("Graphical User Interface"),
+            "Cluster Manager 110 5.1 Requirements": "Cluster Manager",
+            "Proxmox Cluster File System (pmxcfs) 136 6.1 POSIX": (
+                "Proxmox Cluster File System (pmxcfs)"
+            ),
+            "Storage Replication 199 9.1 Supported Storage Types": (
+                "Storage Replication"
+            ),
+        }
+        for raw, want in cases.items():
+            assert p._clean_chapter_title(raw) == want, raw
+
+    def test_display_chapter_title_joint_trim(self) -> None:
+        """The display helper applies the same pollution cuts centrally."""
+        p = self._pipeline()
+        assert (
+            p._display_chapter_title("Installing Proxmox VE 10 2.1 System Requirements")
+            == "Installing Proxmox VE"
+        )
+        # Roster builder output trims too: "GNU General Public License v3..."
+        assert p._display_chapter_title("Freedom Rules. All that follows is cut") == (
+            "Freedom Rules"
+        )
+        assert p._display_chapter_title("") == ""
+        assert p._display_chapter_title("Real Title") == "Real Title"
+
+    def test_multi_chapter_header_uses_display_trim(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """_generate_multi_chapter_summary headers carry the cleaned title."""
+        pipelines = self._pipeline()
+        from secondbrain.rag.pipeline._mixins import _FallbackMixin
+
+        buckets: dict[int, list[dict[str, Any]]] = {
+            2: [
+                {
+                    "chunk_text": "2 Installing Guide\nreal prose content",
+                    "page_number": 30,
+                }
+            ],
+        }
+
+        calls: list[str] = []
+
+        class _Recorder:
+            def generate(self, prompt: str, **kw: Any) -> str:
+                calls.append(prompt)
+                return "clean tidy well formed summary with plenty of words here"
+
+            def __getattr__(self, name: str) -> Any:
+                return lambda *a, **k: None
+
+        pipelines._llm_provider = _Recorder()  # type: ignore[assignment]
+        pipelines._config.streaming_enabled = False
+        pipelines._config.llm_max_tokens = 2048
+        out = _FallbackMixin._generate_multi_chapter_summary(
+            pipelines,
+            [2],
+            buckets,
+            {2: "Installing Proxmox VE 10 2.1 System Requirements"},
+        )
+        assert "Chapter 2 — Installing Proxmox VE (" in out or (
+            "Chapter 2 — Installing Proxmox VE\n" in out
+        ), out
+        assert "2.1 System Requirements" not in out, out
+
+    def test_runon_toc_rows_recovery_pve_shape(self) -> None:
+        """B3: the run-on 'pmxcfs' row is recovered as (title, printed page)."""
+        p = self._pipeline()
+        runon = (
+            "5.14.2 Migration Network . . . . 134 Proxmox Cluster File System "
+            "(pmxcfs) 136 6.1 POSIX Compatibility . . . . 136"
+        )
+        rows = p._recovered_runon_toc_rows(
+            [{"chunk_text": runon, "source_file": self.SRC, "page_number": 8}],
+            self.SRC,
+        )
+        assert 6 in rows, rows
+        title, printed = rows[6]
+        assert title == "Proxmox Cluster File System (pmxcfs)", rows
+        assert printed == 136, rows
+
+    def test_runon_recovery_ignores_late_pages_and_foreign_sources(self) -> None:
+        p = self._pipeline()
+        rows = p._recovered_runon_toc_rows(
+            [
+                {
+                    "chunk_text": "9 Chapter Nine Title 45 9.1 First Section 46",
+                    "source_file": "/other/book.pdf",
+                    "page_number": 8,
+                },
+                {
+                    "chunk_text": "8 Late Body Page Title 400 8.1 First Section 401",
+                    "source_file": self.SRC,
+                    "page_number": 400,
+                },
+            ],
+            self.SRC,
+        )
+        assert rows == {}, rows
+
+    def test_wrapped_column_artifact_not_taken_as_leader(self) -> None:
+        """'6 5.7.3 Separate ...' is a ToC wrap artifact, not chapter 6's row.
+
+        The killer run from the live PVE store: p8 pos1 begins '6 5.7.3
+        Separate Cluster Network' — the leading 6 is the wrapped printed
+        page-column digit, and 5.7.3 is a section of chapter 5.  Without
+        the dotted-continuation guard the splitter crowned 5.7.3's section
+        name as chapter 6's title.
+        """
+        p = self._pipeline()
+        runon = (
+            "6 5.7.3 Separate Cluster Network ..... 121 5.7.4 Corosync "
+            "Addresses ..... 124 Proxmox Cluster File System (pmxcfs) 136 "
+            "6.1 POSIX Compatibility ..... 136"
+        )
+        rows = p._recovered_runon_toc_rows(
+            [{"chunk_text": runon, "source_file": self.SRC, "page_number": 8}],
+            self.SRC,
+        )
+        assert 6 in rows, rows
+        assert rows[6][0] == "Proxmox Cluster File System (pmxcfs)", rows
+        assert rows[6][1] == 136, rows
+
+    def test_titleless_roster_gets_runon_title_and_pin(self) -> None:
+        """End of B3 chain: gated ch6 placeholder gets its real title + pin."""
+        p = self._pipeline()
+        structure_chunks = [
+            {
+                "chunk_text": (
+                    "5.14.2 Migration Network . . . 134 Proxmox Cluster File System "
+                    "(pmxcfs) 136 6.1 POSIX Compatibility . . . 136"
+                ),
+                "source_file": self.SRC,
+                "page_number": 8,
+            },
+        ]
+        recovered = p._recovered_runon_toc_rows(structure_chunks, self.SRC)
+        assert recovered[6] == ("Proxmox Cluster File System (pmxcfs)", 136)
+        # The footer offset math converts printed 136 -> physical 158 (offset 22)
+        assert 136 + 22 == 158
