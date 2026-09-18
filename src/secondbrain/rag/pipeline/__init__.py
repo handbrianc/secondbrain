@@ -5,6 +5,7 @@ Retrieval-Augmented Generation workflow for conversational Q&A.
 """
 
 import logging
+import re
 import statistics
 import time
 from contextlib import suppress
@@ -12,6 +13,7 @@ from typing import Any, cast
 
 from secondbrain.config import config
 from secondbrain.conversation import ConversationSession, QueryRewriter
+from secondbrain.document.fast_text import footer_page_offset
 from secondbrain.document.scoped_retriever import ScopedRetriever
 from secondbrain.rag.document_router import DocumentRouter
 from secondbrain.rag.intent_parser import QueryIntent, StructuralIntentParser
@@ -28,11 +30,27 @@ from secondbrain.rag.pipeline._constants import (  # noqa: E402
     filter_chapters_by_target,
 )
 from secondbrain.rag.pipeline._mixins import (  # noqa: E402
+    _BOILERPLATE_CAPTION_RE,
     _FallbackMixin,
     _FormattingMixin,
     _RoutingMixin,
     _StructureMixin,
 )
+
+_FILENAME_SUFFIX_RE = re.compile(
+    r"\S*\.(?:pdf|docx?|pptx?|xlsx?|html?|md|txt|epub)\b",
+    re.IGNORECASE,
+)
+
+
+def strip_document_filenames(query: str) -> str:
+    """Remove document-name tokens ("pve-admin-guide-9.1.pdf") from a query.
+
+    A dotted version suffix inside a filename masquerades as a section number
+    ("9.1") and silently narrows a whole-book summary request to that one
+    chapter; filename mentions never carry section targets.
+    """
+    return _FILENAME_SUFFIX_RE.sub(" ", query)
 
 
 class RAGPipeline(
@@ -529,6 +547,7 @@ class RAGPipeline(
         src: str,
         heading_chunks: list[dict[str, Any]],
         blocked_pages: dict[int, int] | None = None,
+        boiler_pages: set[int] | None = None,
     ) -> dict[int, int]:
         """Map chapter numbers to opener pages via heading-role title matches.
 
@@ -550,11 +569,13 @@ class RAGPipeline(
         pages sit in the front matter (min <= 30), everything before them is
         ToC/part-divider region — part dividers repeat chapter titles as
         headings on ToC pages — so anchoring also refuses those pages.
+        ``boiler_pages`` refuses license/colophon regions: their numbered
+        all-caps section headings can match a roster title that was itself
+        seeded by the same license text.
         """
-        import re
-
         anchors: dict[int, int] = {}
         blocked_map = blocked_pages or {}
+        boiler_map = boiler_pages or set()
         floor = min(blocked_map.values()) if blocked_map else None
         if floor is not None and floor > 30:
             floor = None
@@ -573,13 +594,20 @@ class RAGPipeline(
             blocked = blocked_map.get(ch_num)
             for hc in heading_chunks:
                 page = int(hc.get("page_number") or 0)
-                if page < 10 or page == blocked or (floor and page < floor):
+                if (
+                    page < 10
+                    or page == blocked
+                    or (floor and page < floor)
+                    or page in boiler_map
+                ):
                     continue
                 head_line = re.sub(
                     r"[-\u2013\u2014:]",
                     " ",
                     (hc.get("chunk_text") or "").split("\n")[0],
                 )
+                if _BOILERPLATE_CAPTION_RE.search(head_line):
+                    continue
                 head_line = re.sub(r"\s+", " ", head_line).strip().casefold()
                 if re.search(r"\s+\d{1,4}$", head_line):
                     continue
@@ -592,17 +620,82 @@ class RAGPipeline(
         return anchors
 
     @staticmethod
+    def _select_monotone_pins(pins: dict[int, int]) -> dict[int, int]:
+        """Keep the largest strictly-increasing subset of chapter-number pins.
+
+        Chapter openings must increase with chapter number (same open-interval
+        contract as :meth:`_pin_fits_window`).  Conflicting pins are resolved
+        by maximum-cardinality selection over (chapter, page) pairs; equal-
+        cardinality ties prefer the subset with the larger total pin page
+        (front-matter mis-anchors pin to near-page-0 listings, real openers
+        sit in the document body) with a lexicographic chapter-set final
+        tiebreak, so the outcome stays deterministic.  This replaces the
+        previous fixed-point loop that popped the highest-numbered violator
+        each scan — a pin landing on end-of-book license text outlived there
+        every real pin it corrupted.  Dropped pins are logged with the
+        historical "Rejected chapter" message shape which tests assert on.
+        """
+        items = sorted(pins.items())
+        n = len(items)
+        if n < 2:
+            return dict(pins)
+        best_len = [1] * n
+        best_sum = [0] * n
+        best_chain: list[tuple[int, ...]] = [(ch,) for ch, _ in items]
+        parent = [-1] * n
+        for i in range(n):
+            ch_i, pg_i = items[i]
+            best_sum[i] = pg_i
+            for j in range(i):
+                ch_j, pg_j = items[j]
+                if ch_j >= ch_i or pg_j >= pg_i:
+                    continue
+                cand_len = best_len[j] + 1
+                cand_sum = best_sum[j] + pg_i
+                cand_chain = best_chain[j] + (ch_i,)
+                if (cand_len, cand_sum) < (best_len[i], best_sum[i]):
+                    continue
+                if (cand_len, cand_sum) > (best_len[i], best_sum[i]) or (
+                    cand_chain < best_chain[i]
+                ):
+                    best_len[i] = cand_len
+                    best_sum[i] = cand_sum
+                    best_chain[i] = cand_chain
+                    parent[i] = j
+        max_key = max((best_len[i], best_sum[i]) for i in range(n))
+        end = min(
+            (i for i in range(n) if (best_len[i], best_sum[i]) == max_key),
+            key=lambda i: best_chain[i],
+        )
+        keep: set[int] = set()
+        node = end
+        while node != -1:
+            keep.add(items[node][0])
+            node = parent[node]
+        if len(keep) == n:
+            return dict(pins)
+        for ch, pg in items:
+            if ch not in keep:
+                logger.debug(
+                    "Rejected chapter %d pin @%d violating monotonic window; "
+                    "larger consistent pin subset kept",
+                    ch,
+                    pg,
+                )
+        return {ch: pg for ch, pg in pins.items() if ch in keep}
+
+    @staticmethod
     def _pin_fits_window(first_pg: dict[int, int], ch: int, pg: int) -> bool:
         """Open-interval monotonic-window check for a candidate chapter pin.
 
-        Mirrors the fixed-point validation applied to the heading/body-title
+        Mirrors the monotone selection applied to the heading/body-title
         pins: the pin must sit strictly above the nearest lower-numbered
         pinned chapter's page and strictly below the nearest higher-numbered
         pinned chapter's page, so chapter-number order keeps matching page
         order and the derived page ranges stay disjoint (an out-of-window
         pin collides with a neighbor's range and the ascending-key bucket
         assignment starves the numbered-later chapter of every body chunk).
-        Later scan tiers pin after that validation has run and nothing
+        Later scan tiers pin after that selection has run and nothing
         re-checks their pins, so they apply this check at insertion time.
         """
         lo_pg = max((p for n, p in first_pg.items() if n < ch), default=None)
@@ -666,10 +759,12 @@ class RAGPipeline(
             QueryIntent.SECTION_ENUMERATE,
         ):
             # BROAD_COVERAGE only extracts "chapter N" targets, not
-            # "section 11.33".  Check the raw query for a section number.
-            import re
-
-            sec_m = re.search(r"(\d+(?:\.\d+)+)", query)
+            # "section 11.33".  Check the raw query for a section number —
+            # but strip filename mentions first, so a version suffix such as
+            # "pve-admin-guide-9.1.pdf" cannot masquerade as a "section 9.1"
+            # target and silently narrow a whole-book request to chapter 9.
+            query_no_files_ = strip_document_filenames(query)
+            sec_m = re.search(r"(\d+(?:\.\d+)+)", query_no_files_)
             if sec_m:
                 enum_target = sec_m.group(1)
                 raw_section_target = enum_target  # preserve before truncation
@@ -729,8 +824,6 @@ class RAGPipeline(
                         query, top_k, show_sources, source_filter=source_filter
                     )
 
-                import re
-
                 # Pre-populate chapter_first_pg from reliable CHAPTER_N_RE titles
                 # (e.g. "Chapter 5 Importing...") so SEC_HEADER_RE doesn't overwrite
                 # them with section-number false matches (e.g. "5.1 Running a VM"
@@ -748,6 +841,9 @@ class RAGPipeline(
                 # Collect (chapter -> description page) once; every scan below
                 # refuses to anchor a chapter on its description page.
                 desc_pages = self._front_matter_desc_pages(structure_chunks)
+                # License/colophon pages (GFDL/GNU) carry numbered all-caps
+                # headings that mimic chapter openers — no scan may anchor on them.
+                boiler_pages_ = self._boilerplate_pages(structure_chunks)
                 # Labeled-docling books (element_type migration): docling drops
                 # the "Chapter N" banner, strips section numbers from headings,
                 # and leaves ToC/covers pages as body chunks — the scans below
@@ -777,7 +873,11 @@ class RAGPipeline(
                     )
                     heading_all_ = []
                 for an_ch, an_pg in self._heading_title_anchors(
-                    full_chapters, src, heading_all_, blocked_pages=desc_pages
+                    full_chapters,
+                    src,
+                    heading_all_,
+                    blocked_pages=desc_pages,
+                    boiler_pages=boiler_pages_,
                 ).items():
                     chapter_first_pg.setdefault(an_ch, an_pg)
                 # Title-anchored detection: the numbered chapter-title heading
@@ -815,6 +915,8 @@ class RAGPipeline(
                         re.IGNORECASE,
                     )
                     for bc_ in body_all_:
+                        if int(bc_.get("page_number") or 0) in boiler_pages_:
+                            continue
                         btext_ = bc_.get("chunk_text", "")
                         bm_ = anchor_.search(btext_)
                         if not bm_:
@@ -836,56 +938,16 @@ class RAGPipeline(
                         break
                 # Monotonic-window validation of every pin collected by the
                 # heading-anchor and body-title passes: chapter opening pages
-                # must strictly increase with chapter number (open interval —
-                # a pin must exceed the nearest lower pinned chapter's pin and
-                # fall below the nearest higher pinned chapter's pin; a chapter
-                # with no pinned neighbor on one side validates only against
-                # the side that exists, so a legitimate first-chapter pin is
-                # never pushed to a page floor).  A pin outside its window is
-                # a mis-anchor (front-matter cross-reference, ToC remnant)
-                # that would collapse or invert the chapter's page range, so
-                # it is rejected and its chapter is left to the later scan
-                # tiers and the spacing fallback.  Removing one pin can rescue
-                # a neighbor whose window was only broken by the removed pin,
-                # so scans repeat to a fixed point; each scan rejects at most
-                # one pin — the later-ordered (higher-numbered) violator,
-                # which also resolves duplicate first pages deterministically
-                # — bounding the loop at one pass per pinned chapter.
-                scan_bound_ = len(chapter_first_pg) + 1
-                for _ in range(scan_bound_):
-                    pins_sorted_ = sorted(chapter_first_pg.items())
-                    reject_ch_: int | None = None
-                    reject_lo_: int | None = None
-                    reject_hi_: int | None = None
-                    for idx_, (ch_, pg_) in enumerate(pins_sorted_):
-                        lo_pg_ = pins_sorted_[idx_ - 1][1] if idx_ else None
-                        hi_pg_ = (
-                            pins_sorted_[idx_ + 1][1]
-                            if idx_ + 1 < len(pins_sorted_)
-                            else None
-                        )
-                        if (lo_pg_ is not None and pg_ <= lo_pg_) or (
-                            hi_pg_ is not None and pg_ >= hi_pg_
-                        ):
-                            # Keep overwriting so the highest-numbered
-                            # violating pin is rejected first; earlier
-                            # violators are re-checked against the updated
-                            # map on the next scan.
-                            reject_ch_ = ch_
-                            reject_lo_ = lo_pg_
-                            reject_hi_ = hi_pg_
-                    if reject_ch_ is None:
-                        break
-                    rej_pg_ = chapter_first_pg.pop(reject_ch_)
-                    logger.debug(
-                        "Rejected chapter %d pin @%d violating monotonic "
-                        "window (lower=%s, upper=%s); chapter left to "
-                        "later fallback resolution",
-                        reject_ch_,
-                        rej_pg_,
-                        reject_lo_,
-                        reject_hi_,
-                    )
+                # must strictly increase with chapter number (same open-interval
+                # contract as _pin_fits_window).  Conflicting pins are resolved
+                # in one maximal-monotone pass (_select_monotone_pins): the
+                # largest consistent subset survives.  A single false pin
+                # therefore drops itself instead of cascade-rejecting the real
+                # pins above it (the previous highest-numbered-violator loop
+                # let a license caption kill chapters 7-20 one scan at a
+                # time).  Dropped chapters fall to the later scan tiers and
+                # the ToC reconciliation.
+                chapter_first_pg = self._select_monotone_pins(chapter_first_pg)
 
                 # Front-matter ToC-listing reconciliation.  When the printed
                 # ToC parses with enough roster coverage, chapters the heading
@@ -1009,6 +1071,73 @@ class RAGPipeline(
                                 toc_printed_,
                                 toc_offset_,
                             )
+
+                # Run-on ToC row recovery.  Flattened ToCs merge consecutive
+                # rows into one body chunk ("... 134 Proxmox Cluster File
+                # System (pmxcfs) 136 6.1 POSIX ..."), so chapters whose row
+                # only exists mid-run-on (PVE ch6 — its opener banner carries
+                # no title) have neither a roster title nor a pin.  Split the
+                # run-ons from early-page chunks into per-row shapes the
+                # listing parser can read, then store recovered (title,
+                # printed page) pairs for the title-less roster chapters.
+                runon_rows_: dict[int, tuple[str, int]] = {}
+                titleless_now_ = {
+                    ct[0] for ct in chapters_to_cover if ct[1] == src and not ct[2]
+                }
+                if titleless_now_:
+                    runon_rows_ = self._recovered_runon_toc_rows(structure_chunks, src)
+                if runon_rows_:
+                    # Fill roster titles first (display correctness), then
+                    # pin through the footer offset when the ToC-printed
+                    # page and the book's footer index agree.
+                    for ch, (_title, _printed) in sorted(runon_rows_.items()):
+                        if ch not in titleless_now_:
+                            continue
+                        ct_idx_ = next(
+                            (
+                                i
+                                for i, ct in enumerate(chapters_to_cover)
+                                if ct[0] == ch and ct[1] == src and not ct[2]
+                            ),
+                            None,
+                        )
+                        if ct_idx_ is None:
+                            continue
+                        chapters_to_cover[ct_idx_] = (ch, src, runon_rows_[ch][0])
+                        good_title_nums.add(ch)
+                    footer_offset_ = None
+                    try:
+                        nav_texts_: dict[int, str] = {}
+                        for nav_c in storage.get_body_chunks(src, limit=None):
+                            if nav_c.get("chunk_role") == "navigation" or (
+                                nav_c.get("element_type") == "navigation"
+                            ):
+                                nav_texts_[int(nav_c.get("page_number") or 0)] = (
+                                    nav_c.get("chunk_text") or ""
+                                )
+                        footer_offset_ = footer_page_offset(nav_texts_)
+                    except Exception:
+                        footer_offset_ = None
+                    for ch, (title, printed) in sorted(runon_rows_.items()):
+                        if ch not in titleless_now_ or ch in chapter_first_pg:
+                            continue
+                        if footer_offset_ is None:
+                            continue
+                        physical = printed + footer_offset_
+                        if physical < 10:
+                            continue
+                        if not self._pin_fits_window(chapter_first_pg, ch, physical):
+                            continue
+                        chapter_first_pg[ch] = physical
+                        logger.debug(
+                            "Pinned chapter %d (%s) at page %d via run-on "
+                            "ToC row (printed %d + footer offset %d)",
+                            ch,
+                            title,
+                            physical,
+                            printed,
+                            footer_offset_,
+                        )
                 ch_n = re.compile(
                     r"(?:Chapter\s+(\d+)\s*[:\-]?\s*|(?:Module|Lesson)\s+(\d+)"
                     r"\s*[:\-]\s*)(.{2,60})",
@@ -1041,6 +1170,8 @@ class RAGPipeline(
                     # protection.
                     if role in ("toc_entry", "caption", "navigation"):
                         continue
+                    if pg in boiler_pages_:
+                        continue
                     for nm in ch_n.finditer(txt):
                         ch = int(nm.group(1) or nm.group(2))
                         if ch in good_title_nums and ch not in chapter_first_pg:
@@ -1071,6 +1202,7 @@ class RAGPipeline(
                     if (
                         open_n not in chapter_first_pg
                         and open_n not in toc_killed_
+                        and open_pg not in boiler_pages_
                         and self._pin_fits_window(chapter_first_pg, open_n, open_pg)
                     ):
                         chapter_first_pg[open_n] = open_pg
@@ -1090,6 +1222,8 @@ class RAGPipeline(
                 for chunk in storage.get_body_chunks(src, limit=None):
                     txt = chunk.get("chunk_text", "")[:150]
                     page = chunk.get("page_number") or 0
+                    if page in boiler_pages_:
+                        continue
 
                     # Detect appendix labels from body section numbering
                     am = appendix_sec_re.search(txt)
@@ -1128,10 +1262,20 @@ class RAGPipeline(
                     )
                     if n not in chapter_first_pg
                 ]
+                # License-caption placeholders carry no real title; the loose
+                # digit rescue below would pin them to any in-text digit
+                # ("6 Devices ...").  Phase-3 interpolation between the real
+                # neighbors owns those chapters instead.
+                titleless_roster_ = {
+                    ct[0] for ct in chapters_to_cover if ct[1] == src and not ct[2]
+                }
+                missing = [n for n in missing if n not in titleless_roster_]
                 if missing:
                     for chunk in storage.get_body_chunks(src, limit=None):
                         txt = chunk.get("chunk_text", "")[:150]
                         pg2 = int(chunk.get("page_number") or 0)
+                        if pg2 in boiler_pages_:
+                            continue
                         for ch_num in list(missing):
                             if desc_pages.get(ch_num) == pg2:
                                 continue
@@ -1155,10 +1299,23 @@ class RAGPipeline(
                         seen_appendix_labels.add(label)
                         appendix_entries.append((label, src, f"Appendix {label}"))
 
-                # Phase 3: interpolate page numbers for chapters still missing
-                # Only interpolates chapters known to exist (from _derive_chapter_numbers)
-                # Using hardcoded 1-21 would create phantom chapters for shorter docs
-                for n in sorted({ct[0] for ct in chapters_to_cover}):
+                # Phase 3: interpolate page numbers for chapters still missing.
+                # Interpolate over the FULL src roster (minus ToC-verified
+                # phantoms), not just the target-filtered set: a title-less
+                # middle chapter (PVE 9.1 ch6) splits the pin map into
+                # disjoint runs, and the consecutive-run trim below then
+                # discards the target's pins.  Boundary chapters are needed
+                # even when untargeted — a target's end page is the next
+                # chapter's start page.
+                # Only interpolates chapters known to exist (from
+                # _derive_chapter_numbers); hardcoded 1-21 would create
+                # phantom chapters for shorter docs.
+                full_src_nums_ = {
+                    ct[0]
+                    for ct in full_chapters
+                    if ct[1] == src and ct[0] not in toc_killed_
+                }
+                for n in sorted(full_src_nums_):
                     if n in chapter_first_pg:
                         continue
                     before = max([k for k in chapter_first_pg if k < n], default=None)
@@ -1184,18 +1341,36 @@ class RAGPipeline(
                             runs[-1].append(sorted_chs[i])
                         else:
                             runs.append([sorted_chs[i]])
+                    # The run filter must never discard a run carrying a
+                    # roster chapter: after Phase-3 full-roster interpolation
+                    # the map should be gapless, but a chapter whose
+                    # interpolation was refused still splits the runs — and
+                    # dropping the SHORTER run once deleted five correct
+                    # pins (1-5) because one chapter (PVE ch6) lost its
+                    # title heading.  Merge runs that contain roster
+                    # chapters into the longest run; stray pins outside the
+                    # roster still die.
                     main_run = max(runs, key=len)
+                    main_set = set(main_run)
+                    for run in runs:
+                        if run is main_run:
+                            continue
+                        if full_src_nums_ & set(run):
+                            main_set |= set(run)
                     chapter_first_pg = {
-                        k: v
-                        for k, v in chapter_first_pg.items()
-                        if main_run[0] <= k <= main_run[-1]
+                        k: v for k, v in chapter_first_pg.items() if k in main_set
                     }
                 # Drop chapters with duplicate first-word (≥ 6 chars).
                 # "VBoxManage CLI Reference" and "VBoxManage Command Reference"
                 # both start with "VBoxManage" → ch19 excluded from unique_nums.
+                # Derive the surviving set from the FULL src roster: in
+                # single-target mode the filtered roster holds only the target,
+                # and sec_buffer = max_unique + 3 would then delete the
+                # boundary pins (ch_next, …) that end the target's page range,
+                # letting the next chapters' pages leak into its bucket.
                 seen_first: set[str] = set()
                 unique_nums: set[int] = set()
-                for ct in chapters_to_cover:
+                for ct in full_chapters:
                     if ct[1] != src or len(ct[2]) < 3:
                         continue
                     fw = ct[2].lower().split()[0]
@@ -1279,9 +1454,15 @@ class RAGPipeline(
                         "falling back to generic search",
                         src,
                     )
+                    logger.debug("chapter_first_pg was empty: %s", chapter_first_pg)
                     return self._generic_one_shot(
                         query, top_k, show_sources, source_filter=source_filter
                     )
+                logger.debug(
+                    "Chapter page ranges for %s: %s",
+                    src,
+                    chapter_ranges_,
+                )
                 single_section_mode = len(chapter_keys) <= 2
                 # Per-chapter fetch budget for multi-chapter overviews.  Each
                 # chapter is summarized independently via _summarize_bounded
@@ -1456,11 +1637,17 @@ class RAGPipeline(
                                 interleaved.append(pg_groups[pg][slot])
                     final_chunks = interleaved
 
-                if appendix_entries:
+                if appendix_entries and enum_target is None:
                     # Use only target chapters for the appendix start page.
                     # Non-target chapters from sec_header_re false positives
                     # (e.g. a phantom "22.3" at the very end of the document)
                     # would push the start page past all appendix content.
+                    # The sweep is single-target-blind: in a "chapter N" query
+                    # its start page (the target's opener) sweeps the +200
+                    # following chunks — i.e. the NEXT chapters' bodies — into
+                    # the answer (PVE: chapter 1's bucket came back with
+                    # pages 23-54 instead of 23-31).  The book-wide appendix
+                    # capture only makes sense for whole-book enumeration.
                     appendix_start_pg = max(
                         (
                             chapter_first_pg.get(k, 0)
@@ -1500,16 +1687,8 @@ class RAGPipeline(
                 chapter_roster_lines = []
                 for ch_num in sorted(chapter_ranges_.keys()):
                     pg_start = chapter_ranges_[ch_num][0]
-                    title = ch_titles.get(ch_num, "")
+                    title = self._display_chapter_title(ch_titles.get(ch_num, ""))
                     if title:
-                        dot = title.find(". ")
-                        if 10 < dot < 150:
-                            title = title[:dot]
-                        dup = re.search(r"\s+\d{1,2}\s+", title[5:])
-                        if dup:
-                            title = title[: 5 + dup.start()].strip()
-                        if len(title) > 100:
-                            title = title[:100].rsplit(" ", 1)[0]
                         chapter_roster_lines.append(
                             f"Chapter {ch_num} — {title} (approx pages {pg_start}+)"
                         )

@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from secondbrain.config import config
 from secondbrain.conversation import ConversationSession
+from secondbrain.document.fast_text import footer_page_offset
 from secondbrain.exceptions import ServiceUnavailableError
 from secondbrain.rag.document_router import DocumentRouter
 from secondbrain.rag.intent_parser import QueryIntent
@@ -161,6 +162,33 @@ _TOC_CHAPTER_MENTION_RE = re.compile(r"Chapter\s+(\d{1,2})\s*[:.\-]")
 # least this fraction of the roster chapters before a pin or a phantom kill
 # may act; below it the tier is fully disabled.
 _TOC_MIN_COVERAGE = 0.6
+
+# Boilerplate caption detection: end-of-book license/colophon headings
+# ("GNU Free Documentation License", GFDL numbered sections such as
+# "6. COLLECTIONS OF DOCUMENTS") are tagged `heading` by docling, and their
+# numbered-caps shape mimics bare-number chapter openers.  On the Proxmox VE
+# 9.1 admin guide they seeded the chapter roster with a license-section
+# title for a chapter whose real opener was never extracted, and anchored
+# that chapter on the license page near the END of the book — which then
+# cascade-killed every legitimate chapter pin in the monotonic validator.
+# The gate requires the all-caps shape (real chapter titles are Title Case)
+# AND a license-section token, so ordinary all-caps headings pass.
+_BOILERPLATE_CAPTION_RE = re.compile(
+    r"\b(?:(?:FREE\s+DOCUMENTATION|GENERAL\s+PUBLIC)\s+LICENSE|"
+    r"PREAMBLE|APPLICABILITY\s+AND\s+DEFINITIONS|VERBATIM\s+COPYING|"
+    r"COPY\s+IN\s+QUANTITY|MODIFICATIONS|COMBINING\s+DOCUMENTS|"
+    r"COLLECTIONS\s+OF\s+DOCUMENTS|AGGREGATION\s+WITH\s+INDEPENDENT\s+"
+    r"WORKS|TRANSLATION|TERMINATION|FUTURE\s+REVISIONS|"
+    r"PERMISSION\s+NOTICE)\b"
+)
+
+# Standalone headings that start a license/colophon region regardless of
+# letter case (unnumbered license openers between real appendices).
+_BOILERPLATE_TITLE_RE = re.compile(
+    r"^(?:the\s+)?GNU\s+(?:Free\s+Documentation|General\s+Public|Lesser\s+"
+    r"General\s+Public)\s+License\b|^(?:MIT|Apache|BSD|ISC)\s+License\b",
+    re.IGNORECASE,
+)
 
 # Deterministic word ceiling for the final overview, enforced by trimming at
 # a sentence boundary after generation (in _finalize_overview).  The prompt
@@ -758,6 +786,11 @@ _PAGE_MARKER_RE = re.compile(r"^\[\s*\d{1,4}\s*\]\s*")
 # its own line (e.g. under a section heading) rather than at the chunk start.
 _PAGE_STUB_LINE_RE = re.compile(r"^\s*\[\s*\d{1,4}\s*\]\s*$", re.MULTILINE)
 
+# A whole line shaped "N / total" — the LaTeX-stamped printed-page footer
+# extracted as a standalone navigation chunk.  Verification noise like the
+# bracket stub above, so it is stripped from verbatim page output too.
+_PAGE_FOOTER_LINE_RE = re.compile(r"^\s*\d{1,4}\s*/\s*\d{1,4}\s*$", re.MULTILINE)
+
 
 def _boundary_overlap(prev: str, nxt: str) -> int:
     """Longest k such that ``prev[-k:] == nxt[:k]`` (collapse chunk overlap)."""
@@ -1188,6 +1221,12 @@ class _StructureMixin(_RAGPipelineState):
         title = re.sub(r"\s*\.{2,}[.\-\u2013\u2014]*", " ", title)
         title = re.sub(r"\s+", " ", title).strip()
         title = re.split(r"\s+\d{1,4}\s+(?=[A-Z(])", title)[0]
+        # Flattened-ToC run-ons continue with a DOTTED SECTION number instead
+        # of a capital ("... VE 10 2.1 System Requirements"): a standalone
+        # printed page serial (<= 3 digits) followed by an "N.N" section
+        # number is a row boundary — cut there.  Ordinary titles carrying a
+        # dotted number with no preceding serial are unaffected.
+        title = re.split(r"\s+\d{1,3}\s+(?=\d+(?:\.\d+)+(?:\s|$))", title)[0]
         title = re.sub(r"[\s.\u2026:\-\u2013\u2014]*\d+\s*$", "", title)
         # Front-matter description sentences run the captured title on into the
         # sentence body ("Chapter 3 , Machine Learning for IoT , explores
@@ -1195,6 +1234,170 @@ class _StructureMixin(_RAGPipelineState):
         # heading carries the chapter title only.
         title = _CHAPTER_DESC_TAIL_RE.sub("", title)
         return title.strip(" \t\r\n.,:;-\u2013\u2014")
+
+    @staticmethod
+    def _recovered_runon_toc_rows(
+        structure_chunks: list[dict[str, Any]],
+        src: str,
+    ) -> dict[int, tuple[str, int]]:
+        """Recover chapter (title, printed page) from run-on flattened ToC rows.
+
+        Flattened ToCs merge consecutive rows into one body chunk ("5.14.2
+        Migration Network . 134 Proxmox Cluster File System (pmxcfs) 136 6.1
+        POSIX" -- chapter 6's row is stranded mid-run-on after section 5.14.2
+        and BEFORE its own 6.1 subsection row).  Split each early-page chunk
+        at "serial-followed-by-dotted-section" boundaries, then parse the
+        boundary-tail shape: the split's LEFT segment ends with the recovered
+        row's "<printed> <title>", and the RIGHT segment's leading "N.N"
+        prefix names the recovered chapter (6.1 -> chapter 6).  The left
+        seg's own number-prefixed run-on (5.14.2) must not be confused with
+        the row: only its TAIL after the last printed serial is the row.
+        """
+        row_title_re = re.compile(r"^(?:Chapter\s+)?(\d{1,2})\.?\s+")
+        dotted_prefix_re = re.compile(r"^(\d{1,2})\.\d+\s")
+        recovered: dict[int, tuple[str, int]] = {}
+        split_re = re.compile(r"\s+(\d{1,3})\s+(?=\d{1,2}\.\d+\s)")
+        serial_re = re.compile(r"(?<![\d.])\d{1,3}(?![\d.])\s+")
+        dot_run_re = re.compile(r"(?:\s*\.\s*){2,}")
+        for c in structure_chunks:
+            page = int(c.get("page_number") or 0)
+            if page > 30 or (c.get("source_file") or "") != src:
+                continue
+            text = c.get("chunk_text") or ""
+            flat = re.sub(r"\s+", " ", dot_run_re.sub(" ", text)).strip()
+            if not flat:
+                continue
+            matches = list(split_re.finditer(flat))
+            if not matches:
+                continue
+            spans: list[tuple[str, str]] = []
+            cut = 0
+            for m in matches:
+                spans.append((flat[cut : m.start()], m.group(1)))
+                cut = m.end()
+            if cut < len(flat):
+                spans.append((flat[cut:], ""))
+            for idx, (left, serial) in enumerate(spans):
+                left = left.strip()
+                right = spans[idx + 1][0] if idx + 1 < len(spans) else ""
+                rm = row_title_re.match(left)
+                split_valid = False
+                if rm is not None:
+                    ch = int(rm.group(1))
+                    title_head = re.sub(r"^(?:Chapter\s+)?\d{1,2}\.?\s+", "", left)
+                    # A real chapter row's title never starts with its own
+                    # dotted section number ("6 5.7.3 Separate ...": the 6 is
+                    # a wrapped page-column artifact of the ToC layout, and
+                    # 5.7.3 is a section of chapter 5, not chapter 6's name).
+                    if not re.match(r"^\d+(?:\.\d+)+\s", title_head):
+                        title = _StructureMixin._clean_chapter_title(
+                            re.sub(r"\s+\d{1,3}\s*$", "", title_head)
+                        )
+                        if (
+                            len(title) >= 4
+                            and 1 <= ch <= 30
+                            and serial.isdigit()
+                            and int(serial) > 0
+                        ):
+                            recovered.setdefault(ch, (title, int(serial)))
+                            split_valid = True
+                if split_valid:
+                    continue
+                # Tail shape: the chapter row is stranded mid-run-on
+                # ("... 134 <Chapter-6 title>" inside a 5.14.x section run-on).
+                # The title runs from after the LAST standalone serial in the
+                # span to its end; the earlier serials belong to section rows.
+                serials_in_left = list(serial_re.finditer(left))
+                if not serials_in_left:
+                    continue
+                last = serials_in_left[-1]
+                if last.start() == 0:
+                    # A span leading with its serial ("136 6.2 File ...") is a
+                    # continuation chunk boundary — no chapter row text sits
+                    # in front of it; the title after it is a section name,
+                    # not a chapter title.
+                    continue
+                title = _StructureMixin._clean_chapter_title(left[last.end() :])
+                next_dotted = dotted_prefix_re.match(right.strip())
+                if next_dotted is None or len(title) < 4:
+                    continue
+                ch = int(next_dotted.group(1))
+                # The chapter's printed page is the boundary serial the
+                # splitter consumed; the serial inside the tail (134 above)
+                # belongs to the previous section's row.
+                printed = int(serial) if serial.isdigit() else 0
+                if not (1 <= ch <= 30) or printed <= 0:
+                    continue
+                recovered.setdefault(ch, (title, printed))
+        return recovered
+
+    @staticmethod
+    def _display_chapter_title(title: str) -> str:
+        """Return the trimmed single-line title for display in rosters/headers.
+
+        The last consumer-side cleanup against polluted roster captures: cuts
+        run-on ToC artifacts (embedded printed-page serials, next-row text)
+        after every capture-side filter has been applied.  Kept on the mixin
+        so the roster builder and the answer header builder share one
+        implementation.
+        """
+        title = title.strip()
+        if not title:
+            return ""
+        dot = title.find(". ")
+        if 10 < dot < 150:
+            title = title[:dot]
+        dup = re.search(r"\s+\d{1,2}\s+", title[5:])
+        if dup:
+            title = title[: 5 + dup.start()].strip()
+        if len(title) > 100:
+            title = title[:100].rsplit(" ", 1)[0]
+        return title.strip()
+
+    @staticmethod
+    def _is_boilerplate_caption(title: str) -> bool:
+        """Return True for license captions shaped like chapter titles.
+
+        Numbered all-caps GFDL sections ("6. COLLECTIONS OF DOCUMENTS") match
+        the bare-number roster patterns yet name legal boilerplate, not a
+        chapter.  The gate needs BOTH an all-caps body (real chapter titles
+        are Title Case) and a known license-section token, so ordinary
+        all-caps headings ("WHAT IS NEW") are unaffected.
+        """
+        if not re.search(r"\d{1,2}[.)]?\s+\S", title[:6]):
+            return False
+        if not re.search(r"[A-Z]{4,}", title):
+            return False
+        return bool(_BOILERPLATE_CAPTION_RE.search(title))
+
+    @staticmethod
+    def _boilerplate_pages(structure_chunks: list[Any]) -> set[int]:
+        """Pages inside license/colophon regions, from license opener headings.
+
+        Scans structural chunks for GNU/MIT/Apache-style license headings and
+        collects every numbered all-caps section heading at or below the
+        earliest opener page.  Two passes keep the result independent of the
+        (unordered) storage iteration order: openers are found first, then
+        candidate captions are intersected with the license span.
+        """
+        openers: list[int] = []
+        caps_pages: set[int] = set()
+        for c in structure_chunks:
+            page = int(c.get("page_number") or 0)
+            text = c.get("chunk_text") or ""
+            first_line = text.split("\n")[0].strip()
+            role = c.get("chunk_role") or c.get("element_type") or ""
+            if _BOILERPLATE_TITLE_RE.match(first_line):
+                openers.append(page)
+                continue
+            if "heading" in str(role) and re.match(
+                r"^\d{1,2}[.)]\s+[A-Z][A-Z\s,'()-]+$", first_line
+            ):
+                caps_pages.add(page)
+        if not openers:
+            return set()
+        floor = min(openers)
+        return {p for p in caps_pages if p >= floor} | set(openers)
 
     @staticmethod
     def _front_matter_desc_pages(structure_chunks: list[Any]) -> dict[int, int]:
@@ -1336,6 +1539,7 @@ class _StructureMixin(_RAGPipelineState):
         appendix_entries: list[tuple[str, str, str]] = []
         seen: set[tuple[int, str]] = set()
         seen_appendix: set[tuple[str, str]] = set()
+        gated_nums: set[tuple[int, str]] = set()
         dot_leader = re.compile(r"\.{2,}[.\-]+")
         section_re = re.compile(r"(\d+)(?:\.(\d+))+(?:\s+(.+))?")
         chapter_n_re = re.compile(
@@ -1522,6 +1726,9 @@ class _StructureMixin(_RAGPipelineState):
                     continue
                 if re.search(r"\bon\s+page\s+\d+", title, re.IGNORECASE):
                     continue
+                if self._is_boilerplate_caption(f"{major}. {title}"):
+                    gated_nums.add((major, source))
+                    continue
                 seen.add((major, source))
                 entries.append((major, source, title))
 
@@ -1555,6 +1762,9 @@ class _StructureMixin(_RAGPipelineState):
                 if title_ft[0].islower():
                     continue
                 if re.search(r"\bon\s+page\s+\d+", title_ft, re.IGNORECASE):
+                    continue
+                if self._is_boilerplate_caption(f"{major_ft}. {title_ft}"):
+                    gated_nums.add((major_ft, source))
                     continue
                 seen.add((major_ft, source))
                 entries.append((major_ft, source, title_ft))
@@ -1617,6 +1827,25 @@ class _StructureMixin(_RAGPipelineState):
 
         entries.sort(key=lambda x: x[0])
         appendix_entries.sort(key=lambda x: x[0])
+
+        # Gated license captions yield no roster entry; if one sits INSIDE the
+        # detected chapter span it leaves a numbering hole that the
+        # consecutive-run trim below would resolve by dropping the SHORTER
+        # side (PVE: a gated ch6 would discard chapters 1-5).  Re-add those
+        # interior numbers as title-less placeholders — they keep the span
+        # gapless and give Phase-3 interpolation a slot — while captions
+        # numbered beyond the real span (GFDL "10. FUTURE REVISIONS" in a
+        # 9-chapter book) produce no phantom chapter.
+        if gated_nums and entries:
+            real_nums = {e[0] for e in entries if e[2]}
+            if real_nums:
+                span_lo, span_hi = min(real_nums), max(real_nums)
+                for g_num, g_src in sorted(gated_nums):
+                    if span_lo < g_num < span_hi and not any(
+                        e[0] == g_num and e[1] == g_src for e in entries
+                    ):
+                        seen.add((g_num, g_src))
+                        entries.append((g_num, g_src, ""))
 
         # Post-validation: drop outlier chapters that are likely false
         # positives from over-eager pass-2 regex patterns (bare_chapter_re,
@@ -2125,7 +2354,7 @@ class _FallbackMixin(_RAGPipelineState):
         all_parts: list[str] = []
         for ch_num in chapter_keys:
             bucket = chapter_buckets.get(ch_num)
-            title = ch_titles.get(ch_num, "")
+            title = self._display_chapter_title(ch_titles.get(ch_num, ""))
             heading = f"Chapter {ch_num}" + (f" — {title}" if title else "")
             if not bucket:
                 # An empty bucket means the chapter's page range contained no
@@ -2204,7 +2433,9 @@ class _FallbackMixin(_RAGPipelineState):
             f"Summarize the following portion of chapter {chapter_num} "
             f"({chapter_title}). Use ONLY the document content below. Write a "
             "flowing prose overview in six to ten short paragraphs, one "
-            "topic per paragraph, then STOP -- do "
+            "topic per paragraph, keeping each paragraph tight -- do not "
+            "exhaust every subsection detail, select the chapter's major "
+            "topics and their key supporting facts only. Then STOP -- do "
             "not fill extra space or restate. Cover the "
             "main topics, key concepts, and supporting details. Do "
             "NOT use headings, sub-headers, or bullet lists. Do NOT open with "
@@ -2802,6 +3033,11 @@ class _FallbackMixin(_RAGPipelineState):
                 on_chunk=on_chunk,
                 temperature=SUMMARY_TEMPERATURE,
                 max_tokens=_SUMMARY_REDUCE_MAX_TOKENS,
+            )
+            logger.info(
+                "overview continuation completed: draft extended by %d "
+                "characters after a mid-sentence cutoff",
+                len(partial),
             )
         except Exception as e:
             logger.warning(
@@ -3720,12 +3956,15 @@ class _RoutingMixin(_RAGPipelineState):
             marker = _PAGE_MARKER_RE.match(text)
             if marker:
                 text = text[marker.end() :].strip()
-            if _PAGE_STUB_LINE_RE.search(text):
+            if _PAGE_STUB_LINE_RE.search(text) or _PAGE_FOOTER_LINE_RE.search(text):
                 text = "\n".join(
                     line
                     for line in text.splitlines()
                     if not _PAGE_STUB_LINE_RE.match(line)
+                    and not _PAGE_FOOTER_LINE_RE.match(line)
                 ).strip()
+            if not text:
+                continue
             parts.append(text)
         if not parts:
             return ""
@@ -3750,14 +3989,63 @@ class _RoutingMixin(_RAGPipelineState):
             return None
         source = self._resolve_source_filter(query)
         try:
-            found = storage.find_chunks(source_file=source, printed_page=printed)
-            found = self._expand_page_chunks(storage, source, list(found))
+            found = list(storage.find_chunks(source_file=source, printed_page=printed))
+            if not found:
+                found = self._footer_offset_lookup(storage, source, printed)
+            found = self._expand_page_chunks(storage, source, found)
         except Exception as exc:  # pragma: no cover - backend-dependent
             logger.warning(
                 "Page lookup failed; falling back to semantic search: %s", exc
             )
             return None
         return [dict(c) for c in found]
+
+    def _footer_offset_lookup(
+        self,
+        storage: Any,
+        source: str | None,
+        printed: int,
+    ) -> list[dict[str, Any]]:
+        """Translate a printed-page request through the "N / total" footer offset.
+
+        Documents ingested before footer stamping existed (or extracted by an
+        engine that emits no ``[ N ]`` markers) carry their printed index only
+        as footer text ("78 / 634" navigation chunks).  When the direct
+        ``printed_page`` lookup misses, derive the print-to-physical offset
+        from those footers here and return the matching physical page's
+        chunks, so the answer is page text rather than "not found".  The
+        offset is trusted only when it is consistent (>= 80 % agreement over
+        at least three distinct footer pages); a unique physical page number
+        is looked up, and equally-printed physical pages pick the first match.
+        """
+        try:
+            nav_chunks = list(
+                storage.find_structural_chunks(
+                    chunk_roles=["navigation"], source_prefix=source
+                )
+            )
+        except Exception:
+            return []
+        nav_texts: dict[int, str] = {}
+        for c in nav_chunks:
+            physical = int(c.get("page_number") or 0)
+            if physical > 0:
+                nav_texts[physical] = c.get("chunk_text") or ""
+        offset = footer_page_offset(nav_texts)
+        if offset is None:
+            return []
+        physical_page = printed + offset
+        try:
+            found = list(
+                storage.find_chunks(source_file=source, page_number=physical_page)
+            )
+        except Exception:
+            return []
+        if not found:
+            return []
+        for c in found:
+            c.setdefault("page_lookup_offset", offset)
+        return found
 
     @staticmethod
     def _printed_page_from_query(query: str) -> int | None:
