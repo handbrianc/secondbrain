@@ -65,6 +65,9 @@ class _RAGPipelineState:
 
         def _has_relevant_chunks(self, chunks: list[dict[str, Any]]) -> bool: ...
 
+        @staticmethod
+        def _display_chapter_title(title: str) -> str: ...
+
         def _handle_no_results(
             self,
             query: str,
