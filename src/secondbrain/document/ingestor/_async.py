@@ -17,7 +17,7 @@ from secondbrain.document.chunker import (
     classify_chunk_role,
     label_to_element_type,
 )
-from secondbrain.document.fast_text import extract_printed_page
+from secondbrain.document.fast_text import extract_printed_page, resolve_printed_pages
 from secondbrain.document.ingestor._constants import get_file_type
 from secondbrain.document.ingestor._sync import DocumentIngestor
 from secondbrain.exceptions import DocumentExtractionError
@@ -319,6 +319,14 @@ class AsyncDocumentIngestor(DocumentIngestor):
             }
             docs_to_store.append(doc)
             page_pos += 1
+
+        stamped_pages = resolve_printed_pages(docs_to_store)
+        if stamped_pages:
+            logger.debug(
+                "Footer page stamps: %d physical pages stamped for %s",
+                stamped_pages,
+                file_path,
+            )
 
         if docs_to_store:
             with trace_operation("storage.store") as span:
