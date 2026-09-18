@@ -22,6 +22,7 @@ avoid pulling anything heavy in at module import time.
 from __future__ import annotations
 
 import re
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -60,6 +61,19 @@ _TOC_ENTRY_RE = re.compile(r"^\s*.+\.{3,}\s*\d+\s*$", re.MULTILINE)
 # printed marker is the ground truth for "what is on page N" lookups.
 _PRINTED_PAGE_RE = re.compile(r"\[\s*(\d{1,4})\s*\]")
 
+# LaTeX/manual books stamp the printed page number in a page footer shaped
+# "N / total" ("78 / 634").  Docling extracts such footers as stand-alone
+# navigation chunks, so the printed index is carried in plain text rather
+# than a bracket marker.  The full "N / total" shape is required (not a bare
+# number) so ordinary body digits can never parse as a page stamp.
+_FOOTER_PAGE_RE = re.compile(r"^\s*(\d{1,4})\s*/\s*\d{1,4}\s*$")
+
+# Sanity bound for any parsed page stamp: values beyond this are in-text
+# citations/IDs that regex-extraction mistook for page markers (observed:
+# "[ 1647 ]" from a citation block in a 634-page book), which would seed a
+# phantom printed-page index.
+_PRINTED_PAGE_MAX = 9999
+
 
 def extract_printed_page(text: str) -> int | None:
     """Return the printed-page marker in *text*, or None.
@@ -71,9 +85,119 @@ def extract_printed_page(text: str) -> int | None:
     if not match:
         return None
     try:
-        return int(match.group(1))
+        return _checked_page(int(match.group(1)))
     except ValueError:
         return None
+
+
+def _checked_page(value: int) -> int:
+    """Reject page stamps beyond the sanity bound (in-text citation noise)."""
+    if value < 1 or value > _PRINTED_PAGE_MAX:
+        raise ValueError(value)
+    return value
+
+
+def footer_page_offset(nav_texts: dict[int, str]) -> int | None:
+    """Return the print-to-physical offset from navigation footer texts.
+
+    Keys are physical page numbers, values the footer text ("78 / 634").
+    The offset is the majority physical-minus-printed difference, trusted
+    only when it holds for at least 80 % of at least three distinct footer
+    pages (the same gates :func:`resolve_printed_pages` applies).
+    """
+    sampled: dict[int, int] = {}
+    for physical, text in nav_texts.items():
+        m = _FOOTER_PAGE_RE.match(text.strip())
+        if not m:
+            continue
+        try:
+            printed = _checked_page(int(m.group(1)))
+        except ValueError:
+            continue
+        if 0 < printed < physical:
+            sampled[physical] = printed
+    if len(sampled) < 3:
+        return None
+    offset_counts: Counter[int] = Counter(
+        physical - printed for physical, printed in sampled.items()
+    )
+    offset, agree = max(offset_counts.items(), key=lambda pair: (pair[1], -pair[0]))
+    if agree < 3 or agree / len(sampled) < 0.8:
+        return None
+    return offset
+
+
+def resolve_printed_pages(
+    docs: list[dict[str, Any]],
+) -> int:
+    """Fill ``printed_page`` per physical page from "N / total" footer chunks.
+
+    Bracket-marker extraction (``extract_printed_page``) covers books that
+    stamp ``[ N ]`` markers; footer-stamped books (Proxmox VE admin guide,
+    most LaTeX manuals) instead carry "N / 634" navigation chunks that docling
+    never scans for page stamps.  After a document's chunk list is assembled,
+    this pass parses those footers, derives each footer's physical
+    ``page_number``, checks the extraction for consistency and plausibility,
+    then stamps ``printed_page`` on every chunk of each matched physical page.
+
+    Confidence gates (conservative by design — a wrong stamp corrupts page
+    lookups forever):
+    - every footer's printed value must be below its own physical page number
+      (printed indexes trail the physical index for books with front matter);
+    - the physical-minus-printed offset must agree across at least 80 % of
+      footer pages and at least three distinct physical pages.
+
+    When the gates pass, the agreed footer mapping is authoritative: it
+    overwrites any pre-existing ``printed_page`` on the covered pages.
+    Chunk-level bracket-marker extraction cannot see the book context
+    (in-text citations like "[ 1647 ] IEEE Std ..." parse as a marker), so
+    footer evidence is the stronger signal on every page it covers; pages
+    outside the footer-covered set keep whatever bracket stamps they carry.
+
+    Mutates *docs* in place and returns the number of physical pages stamped.
+
+    Parameters
+    ----------
+    docs:
+        Chunk dicts as built by the ingest assembly sites; each carries
+        ``page_number``, ``printed_page`` (from bracket-marker extraction),
+        ``chunk_text`` and ``element_type``/``chunk_role``.
+    """
+    footer_pages: dict[int, int] = {}
+    nav_texts: dict[int, str] = {}
+    for c in docs:
+        if (c.get("element_type") or c.get("chunk_role") or "body") != "navigation":
+            continue
+        m = _FOOTER_PAGE_RE.match(c.get("chunk_text") or "")
+        if m:
+            try:
+                printed = _checked_page(int(m.group(1)))
+            except ValueError:
+                continue
+            physical = int(c.get("page_number") or 0)
+            # Printed indexes never lead the physical index by design (front
+            # matter shifts them the other way); a stamp at/above its page
+            # cannot belong to this book's pagination.
+            if printed < physical:
+                footer_pages[physical] = printed
+                nav_texts[physical] = c.get("chunk_text") or ""
+    if len(footer_pages) < 3:
+        return 0
+    offset = footer_page_offset(nav_texts)
+    if offset is None:
+        return 0
+    valid = set(footer_pages)
+    page_maps: dict[int, int] = {}
+    for physical in valid:
+        page_maps[physical] = physical - offset
+    for c in docs:
+        physical = int(c.get("page_number") or 0)
+        stamped_page = page_maps.get(physical)
+        if stamped_page is None:
+            continue
+        if c.get("printed_page") != stamped_page:
+            c["printed_page"] = stamped_page
+    return len(page_maps)
 
 
 def _looks_corrupted(text: str) -> bool:

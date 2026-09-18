@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 
 # Apply MPS patch before any docling import
 from secondbrain.document.chunker import chunk_segments, docling_item_label
-from secondbrain.document.fast_text import extract_printed_page
+from secondbrain.document.fast_text import extract_printed_page, resolve_printed_pages
 from secondbrain.utils.mps_patch import patch_transformers_for_mps
 from secondbrain.utils.tracing import trace_operation
 
@@ -584,6 +584,14 @@ def _extract_chunk_and_embed_file(
             }
             documents.append(doc)
             page_pos += 1
+
+        setup_pages = resolve_printed_pages(documents)
+        if setup_pages:
+            logger.debug(
+                "Footer page stamps: %d physical pages stamped for %s",
+                setup_pages,
+                file_path,
+            )
 
         if progress_queue is not None:
             with contextlib.suppress(Exception):

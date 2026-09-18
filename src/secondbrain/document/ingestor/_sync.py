@@ -19,7 +19,7 @@ from secondbrain.document.chunker import (
     docling_item_label,
     label_to_element_type,
 )
-from secondbrain.document.fast_text import extract_printed_page
+from secondbrain.document.fast_text import extract_printed_page, resolve_printed_pages
 from secondbrain.document.ingestor._constants import (
     MAX_MEMORY_BATCH_SIZE,
     _detect_cpu_count,
@@ -407,6 +407,12 @@ class DocumentIngestor:
             docs_to_store.append(doc)
             page_pos += 1
 
+        stamped_pages = resolve_printed_pages(docs_to_store)
+        if stamped_pages:
+            logger.debug(
+                "Footer page stamps: %d physical pages stamped",
+                stamped_pages,
+            )
         return docs_to_store
 
     def _build_documents_with_embeddings(
@@ -648,6 +654,14 @@ class DocumentIngestor:
             }
             docs_to_store.append(doc)
             page_pos += 1
+
+        stamped_pages = resolve_printed_pages(docs_to_store)
+        if stamped_pages:
+            logger.debug(
+                "Footer page stamps: %d physical pages stamped for %s",
+                stamped_pages,
+                file_path,
+            )
 
         if docs_to_store:
             with trace_operation("storage.store") as span:
