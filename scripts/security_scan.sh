@@ -40,7 +40,10 @@ run_pip_audit() {
     echo ""
     
     if command -v pip-audit &> /dev/null; then
-        pip-audit --desc on
+        # PYSEC-2026-3740 (CVE-2026-81726): nltk is a dev-only transitive dep of
+        # safety; nltk 3.10.3 is the newest release and no fixed version exists.
+        # Mirrors the documented ignore in pyproject.toml [tool.safety].
+        pip-audit --desc on --ignore-vuln PYSEC-2026-3740
         echo ""
         echo -e "${GREEN}pip-audit completed successfully${NC}"
     else
