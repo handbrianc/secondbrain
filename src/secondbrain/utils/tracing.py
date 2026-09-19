@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import contextvars
+import importlib.util
 import logging
 import os
 import re
@@ -18,7 +19,6 @@ logger = logging.getLogger(__name__)
 try:
     from opentelemetry import metrics as otel_metrics
     from opentelemetry import trace as otel_trace
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 
     OTTEL_AVAILABLE = True
 except ImportError:
@@ -33,6 +33,31 @@ _metrics_enabled: bool = False
 _operations_counter: Any = None
 _duration_histogram: Any = None
 _errors_counter: Any = None
+
+# OTLP exporter is an optional extra; api+sdk alone still support in-process
+# tracing, so resolve it lazily instead of disabling tracing without it.
+_otlp_exporter_cls: Any = None
+_otlp_checked: bool = False
+
+
+def _load_otlp_exporter() -> Any:
+    """Return the OTLP span exporter class, or None when not installed."""
+    global _otlp_exporter_cls, _otlp_checked
+    if not _otlp_checked:
+        _otlp_checked = True
+        try:
+            spec = importlib.util.find_spec(
+                "opentelemetry.exporter.otlp.proto.grpc.trace_exporter"
+            )
+        except (ImportError, ValueError):
+            spec = None
+        if spec is not None:
+            module = importlib.import_module(
+                "opentelemetry.exporter.otlp.proto.grpc.trace_exporter"
+            )
+            _otlp_exporter_cls = module.OTLPSpanExporter
+    return _otlp_exporter_cls
+
 
 _TRACEPARENT_PATTERN = re.compile(r"^00-([a-f0-9]{32})-([a-f0-9]{16})-([a-f0-9]{2})$")
 _trace_context_var: contextvars.ContextVar[dict[str, str] | None] = (
@@ -190,7 +215,10 @@ def setup_tracing(
         tracer_provider = OTelTracerProvider(resource=resource, sampler=sampler)
 
         try:
-            otlp_exporter = OTLPSpanExporter(endpoint=otlp_endpoint)
+            otlp_exporter_cls = _load_otlp_exporter()
+            if otlp_exporter_cls is None:
+                raise ImportError("opentelemetry-exporter-otlp is not installed")
+            otlp_exporter = otlp_exporter_cls(endpoint=otlp_endpoint)
             tracer_provider.add_span_processor(BatchSpanProcessor(otlp_exporter))
             logger.info(
                 "OpenTelemetry OTLP exporter configured for endpoint: %s", otlp_endpoint
@@ -209,7 +237,7 @@ def setup_tracing(
             otel_trace.set_tracer_provider(tracer_provider)
             _tracer = otel_trace.get_tracer(service_name, service_version)
 
-        if is_metrics_enabled():
+        if otel_metrics is not None and is_metrics_enabled():
             from opentelemetry.sdk.metrics import MeterProvider
             from opentelemetry.sdk.metrics.export import (
                 ConsoleMetricExporter,
@@ -309,12 +337,13 @@ def trace_operation(operation_name: str) -> Generator[Any]:
     tracer = get_tracer()
     start_time = time.monotonic()
     success = True
+    span: Any = None
     try:
         with tracer.start_as_current_span(operation_name) as span:
             yield span
     except Exception as e:
         success = False
-        if OTTEL_AVAILABLE:
+        if span is not None and otel_trace is not None:
             span.record_exception(e)
             span.set_status(otel_trace.Status(otel_trace.StatusCode.ERROR), str(e))
         raise
