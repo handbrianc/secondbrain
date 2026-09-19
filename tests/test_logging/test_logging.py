@@ -302,6 +302,19 @@ class TestFileLogging:
 
         del os.environ["SECONDBRAIN_LOG_FILE"]
 
+    def test_setup_logging_without_log_file_attaches_no_file_handler(self) -> None:
+        root_logger = logging.getLogger()
+        root_logger.handlers.clear()
+
+        os.environ.pop("SECONDBRAIN_LOG_FILE", None)
+        setup_logging(verbose=True)
+
+        assert len(root_logger.handlers) == 1
+        assert not any(
+            isinstance(h, logging.handlers.RotatingFileHandler)
+            for h in root_logger.handlers
+        )
+
     def test_setup_logging_with_log_file_and_json_format(self, tmp_path: Path) -> None:
         log_file = tmp_path / "test_json.log"
         root_logger = logging.getLogger()

@@ -219,7 +219,7 @@ def setup_json_logging(
             }
             return json.dumps(log_entry)
 
-    handlers: list[logging.Handler] = [RichHandler()]
+    handlers: list[logging.Handler] = [RichHandler(console=Console(stderr=True))]
 
     # Add file handler if log file is specified
     if log_file:
