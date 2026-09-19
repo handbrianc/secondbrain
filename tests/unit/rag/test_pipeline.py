@@ -5200,6 +5200,239 @@ class TestFooterOffsetLookup:
         assert "do not contain a page matching" in res["answer"]
 
 
+class TestDefinitionRecall:
+    """Definition-query detection and chapter-opener recall (Option A)."""
+
+    SRC = "/docs/manual.pdf"
+
+    def _pipeline(self, storage: Any) -> RAGPipeline:
+        searcher = _make_mock_searcher()
+        searcher.storage = storage
+        return RAGPipeline(
+            searcher=searcher,
+            llm_provider=MagicMock(),
+            top_k=5,
+            context_window=5,
+        )
+
+    @staticmethod
+    def _storage(
+        headings: list[dict[str, Any]],
+        body: list[dict[str, Any]],
+    ) -> MagicMock:
+        m = MagicMock()
+        m.find_structural_chunks.side_effect = (
+            lambda chunk_roles=None, source_prefix=None, **kw: [
+                h
+                for h in headings
+                if chunk_roles is None or h.get("chunk_role") in chunk_roles
+            ]
+        )
+        m.get_body_chunks.side_effect = lambda source_file, **kw: [
+            b for b in body if b.get("source_file") == source_file
+        ]
+        return m
+
+    @staticmethod
+    def _heading(text: str, page: int, pos: int) -> dict[str, Any]:
+        return {
+            "chunk_text": text,
+            "chunk_role": "heading",
+            "page_number": page,
+            "page_pos": pos,
+            "source_file": TestDefinitionRecall.SRC,
+        }
+
+    @staticmethod
+    def _body(text: str, page: int, pos: int = 3) -> dict[str, Any]:
+        return {
+            "chunk_text": text,
+            "chunk_role": "body",
+            "page_number": page,
+            "page_pos": pos,
+            "source_file": TestDefinitionRecall.SRC,
+        }
+
+    @staticmethod
+    def _hit(text: str, page: int, score: float) -> dict[str, Any]:
+        return {
+            "chunk_text": text,
+            "chunk_role": "body",
+            "page_number": page,
+            "source_file": TestDefinitionRecall.SRC,
+            "score": score,
+        }
+
+    def test_definition_query_detection(self) -> None:
+        assert RAGPipeline._is_definition_query("what is proxmox?")
+        assert RAGPipeline._is_definition_query("What is Proxmox VE?")
+        assert RAGPipeline._is_definition_query("define LXC")
+        assert RAGPipeline._is_definition_query("what does pmxcfs mean")
+        assert RAGPipeline._is_definition_query("Who was Auger?")
+        assert not RAGPipeline._is_definition_query("what is on page 5")
+        assert not RAGPipeline._is_definition_query("how do I backup a VM")
+        assert not RAGPipeline._is_definition_query("")
+
+    def test_chapter_opener_pages_detects_banner_title_pairs(self) -> None:
+        openers = [
+            self._heading("Chapter 1", 10, 1),
+            self._heading("Introduction", 10, 2),
+            self._heading("1.1 Central Management", 11, 1),
+            self._heading("Chapter 2", 20, 1),
+            self._heading("Installing", 20, 2),
+        ]
+        assert RAGPipeline._chapter_opener_pages(openers) == {10, 20}
+
+    def test_chapter_opener_pages_rejects_lone_banners(self) -> None:
+        openers = [
+            self._heading("Chapter 1", 10, 1),
+            self._heading("Chapter 2", 20, 1),
+        ]
+        assert RAGPipeline._chapter_opener_pages(openers) == set()
+
+    def test_union_adds_opener_definition_after_hits(self) -> None:
+        headings = [
+            self._heading("Chapter 1", 10, 1),
+            self._heading("Introduction", 10, 2),
+        ]
+        body = [
+            self._body(
+                "Proxmox VE is a platform to run virtual machines and "
+                "containers. It is based on Debian Linux.",
+                10,
+            ),
+            self._body("Unrelated filler prose far from the opener.", 11),
+        ]
+        storage = self._storage(headings, body)
+        p = self._pipeline(storage)
+        hits = [self._hit("Proxmox VE Firewall chapter prose", 100, 0.87)]
+        merged = p._union_opener_chunks("What is Proxmox VE?", hits, self.SRC)
+        assert merged[:1] == hits, "similarity ranking must be undisturbed"
+        extras = [c for c in merged if c.get("definition_recall")]
+        assert len(extras) == 1
+        assert extras[0]["page_number"] == 10
+        assert extras[0]["score"] == 0.5
+        assert "virtual machines" in extras[0]["chunk_text"]
+
+    def test_union_skips_non_definition_queries(self) -> None:
+        storage = self._storage([], [])
+        p = self._pipeline(storage)
+        hits = [self._hit("prose", 1, 0.9)]
+        assert p._union_opener_chunks("how do I backup a VM", hits, self.SRC) is hits
+        storage.find_structural_chunks.assert_not_called()
+
+    def test_union_requires_keyword_match_in_opener_chunk(self) -> None:
+        headings = [
+            self._heading("Chapter 1", 10, 1),
+            self._heading("Introduction", 10, 2),
+        ]
+        body = [self._body("Wholly unrelated opener prose about weather.", 10)]
+        storage = self._storage(headings, body)
+        p = self._pipeline(storage)
+        hits = [self._hit("proxmox chapter prose", 100, 0.87)]
+        merged = p._union_opener_chunks("What is Proxmox VE?", hits, self.SRC)
+        assert merged == hits, "opener prose without a query keyword must not join"
+
+    def test_union_caps_extras(self) -> None:
+        headings = [
+            self._heading("Chapter 1", 10, 1),
+            self._heading("Introduction", 10, 2),
+            self._heading("Chapter 2", 20, 1),
+            self._heading("Next", 20, 2),
+            self._heading("Chapter 3", 30, 1),
+            self._heading("Third", 30, 2),
+        ]
+        body = [
+            self._body(f"proxmox opener body page {pg} prose.", pg)
+            for pg in (10, 20, 30)
+        ]
+        storage = self._storage(headings, body * 4)
+        p = self._pipeline(storage)
+        hits = [self._hit("proxmox chapter prose", 100, 0.87)]
+        merged = p._union_opener_chunks("What is Proxmox VE?", hits, self.SRC)
+        extras = [c for c in merged if c.get("definition_recall")]
+        assert len(extras) <= 6
+
+    def test_union_handles_storage_failure(self) -> None:
+        storage = MagicMock()
+        storage.find_structural_chunks.side_effect = RuntimeError("down")
+        p = self._pipeline(storage)
+        hits = [self._hit("proxmox chapter prose", 100, 0.87)]
+        assert p._union_opener_chunks("What is Proxmox VE?", hits, self.SRC) == hits
+
+    def test_union_scopes_to_hit_sources_without_filter(self) -> None:
+        headings = [
+            self._heading("Chapter 1", 10, 1),
+            self._heading("Introduction", 10, 2),
+        ]
+        body = [self._body("proxmox is a platform prose.", 10)]
+        other_body = [self._body("other doc opener prose.", 5)]
+        storage = self._storage(headings, body + other_body)
+        p = self._pipeline(storage)
+        hits = [
+            {
+                "chunk_text": "proxmox chapter prose",
+                "chunk_role": "body",
+                "page_number": 100,
+                "source_file": self.SRC,
+                "score": 0.87,
+            }
+        ]
+        merged = p._union_opener_chunks("What is Proxmox VE?", hits, None)
+        extras = [c for c in merged if c.get("definition_recall")]
+        assert len(extras) == 1
+        assert extras[0]["source_file"] == self.SRC
+
+
+class TestHeadingDiversity:
+    """Heading-role quota in generic result sets (Option B)."""
+
+    @staticmethod
+    def _chunk(text: str, role: str, score: float) -> dict[str, Any]:
+        return {
+            "chunk_text": text,
+            "chunk_role": role,
+            "page_number": 1,
+            "source_file": "doc.pdf",
+            "score": score,
+        }
+
+    def test_under_quota_unchanged(self) -> None:
+        chunks = [
+            self._chunk("body prose", "body", 0.9),
+            self._chunk("A Heading", "heading", 0.85),
+        ]
+        assert RAGPipeline._apply_heading_diversity(chunks) is chunks
+
+    def test_excess_headings_dropped_first_ranked_kept(self) -> None:
+        chunks = [
+            self._chunk("Top Heading", "heading", 0.9),
+            self._chunk("body one", "body", 0.8),
+            self._chunk("Second Heading", "heading", 0.7),
+            self._chunk("body two", "body", 0.6),
+            self._chunk("Third Heading", "heading", 0.5),
+        ]
+        kept = RAGPipeline._apply_heading_diversity(chunks)
+        texts = [c["chunk_text"] for c in kept]
+        assert "Top Heading" in texts and "Second Heading" in texts, (
+            "the first-ranked headings survive the cap"
+        )
+        assert "Third Heading" not in texts, "excess headings drop"
+        assert "body one" in texts and "body two" in texts
+
+    def test_all_heading_set_kept_whole(self) -> None:
+        chunks = [self._chunk(f"H{i}", "heading", 0.9 - i * 0.01) for i in range(5)]
+        assert RAGPipeline._apply_heading_diversity(chunks) == chunks
+
+    def test_zero_cap_keeps_nothing_but_headings_dropped(self) -> None:
+        chunks = [
+            self._chunk("H", "heading", 0.9),
+            self._chunk("b", "body", 0.5),
+        ]
+        kept = RAGPipeline._apply_heading_diversity(chunks, max_headings=0)
+        assert [c["chunk_text"] for c in kept] == ["b"]
+
+
 class TestChapterTitleCleanup:
     """B1/B2: polluted ToC-capture titles never reach display surfaces."""
 
