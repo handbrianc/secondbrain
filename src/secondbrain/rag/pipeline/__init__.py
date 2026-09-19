@@ -202,6 +202,14 @@ class RAGPipeline(
                     result["sources"] = []
                 return result
 
+            # Definition queries recall chapter-opener body chunks (a manual's
+            # own definitions) so "what is X" never answers from the LLM's
+            # general knowledge when the document opens with the definition.
+            chunks = self._union_opener_chunks(
+                query, chunks, source_filter, top_k=effective_top_k
+            )
+            chunks = self._apply_heading_diversity(chunks)
+
             # Step 3: Format context from chunks
             context_text = self._format_context(chunks)
 
@@ -2045,6 +2053,11 @@ class RAGPipeline(
                     result["sources"] = []
                 return result
 
+            chunks = self._union_opener_chunks(
+                query, chunks, source_filter, top_k=effective_top_k
+            )
+            chunks = self._apply_heading_diversity(chunks)
+
             context_text = self._format_context(chunks)
             prompt = self._build_prompt(query, context_text)
 
@@ -2198,6 +2211,11 @@ class RAGPipeline(
                 if show_sources:
                     result["sources"] = []
                 return result
+
+            chunks = self._union_opener_chunks(
+                rewritten_query, chunks, source_filter, top_k=effective_top_k
+            )
+            chunks = self._apply_heading_diversity(chunks)
 
             context_text = self._format_context(chunks)
             history = session.get_history(limit=self._context_window)
