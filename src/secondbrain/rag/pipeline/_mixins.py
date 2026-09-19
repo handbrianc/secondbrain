@@ -9,6 +9,7 @@ always present on the composed ``RAGPipeline`` instance.
 from __future__ import annotations
 
 import asyncio
+import itertools
 import logging
 import os
 import re
@@ -2016,6 +2017,8 @@ class _StructureMixin(_RAGPipelineState):
         )
         if not self._has_relevant_chunks(chunks):
             return {"answer": self._handle_no_results(query), "query": query}
+        chunks = self._union_opener_chunks(query, chunks, source_filter, top_k=top_k)
+        chunks = self._apply_heading_diversity(chunks)
         context = self._format_context(chunks)
         prompt = self._build_prompt(query, context)
 
@@ -3892,7 +3895,172 @@ class _FallbackMixin(_RAGPipelineState):
 
 
 class _RoutingMixin(_RAGPipelineState):
-    """Document routing and source-filter helpers."""
+    """Document routing, source-filter, and query-intent helpers."""
+
+    # Definitional query shapes ("what is X", "define X", "what does X mean").
+    # Fired only in the GENERIC retrieval paths (query/query_async/
+    # _generic_one_shot) — the structural paths have their own machinery.
+    _DEFINITION_QUERY_RE = re.compile(
+        r"^\s*(?:what|who)\s+(?:is|are|was|were)\b(?!\s+on\s+page\b)"
+        r"|\bwhat\s+does\s+[a-z0-9\- ]{2,60}\bmean\b"
+        r"|\b(?:define|definition of|meaning of|explain)\b",
+        re.IGNORECASE,
+    )
+    # Opener-adjacent body chunks are canonical definition sites in manuals;
+    # this is the cap on how many extras a single union may add.
+    _DEFINITION_MAX_EXTRA = 6
+
+    @classmethod
+    def _is_definition_query(cls, query: str) -> bool:
+        """Return True for definitional queries ("what is X", "define X").
+
+        The page-lookup shape ("what is on page 5") is excluded by the
+        pattern itself, so the page-query branch is unaffected.
+        """
+        return bool(cls._DEFINITION_QUERY_RE.search(query))
+
+    @staticmethod
+    def _definition_query_keywords(query: str) -> set[str]:
+        """Return significant query terms for the lexical eligibility gate."""
+        return {
+            w
+            for w in re.findall(r"[a-z0-9][a-z0-9\-]*", query.lower())
+            if len(w) >= 3 and w not in _FUNCTION_WORDS
+        }
+
+    def _union_opener_chunks(
+        self,
+        query: str,
+        chunks: list[dict[str, Any]],
+        source_filter: str | None,
+        *,
+        top_k: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """Union similarity results with chapter-opener body chunks.
+
+        Definitional queries lose cosine contests against heading-like
+        chunks: a 272-char definition paragraph scores below titles
+        ("Proxmox VE Firewall" 0.867 vs the actual definition 0.792 for
+        "What is Proxmox VE?"), because embeddings compress title semantics
+        into the query's subspace.  A manual declares where its definitions
+        live — the body chunks immediately following each chapter-opener
+        heading pair (banner + title) — so recall them deterministically
+        instead of hoping similarity finds them.
+
+        Eligibility is a lexical gate (chunk shares a significant query
+        keyword), not a similarity floor: structurally fetched chunks carry
+        no similarity score, and the query terms must appear in the
+        definition text for the recall to be on-topic.  Union is additive —
+        the ranking of similarity hits is never disturbed; extras are
+        appended with the structural-collection score convention (0.5, the
+        same value the chapter bucket collector assigns), capped at
+        _DEFINITION_MAX_EXTRA, deduped by 512-char text prefix.
+        """
+        if not chunks or not self._is_definition_query(query):
+            return chunks
+        keywords = self._definition_query_keywords(query)
+        if not keywords:
+            return chunks
+        storage = getattr(self._searcher, "storage", None)
+        if storage is None or not hasattr(storage, "find_structural_chunks"):
+            return chunks
+
+        if source_filter:
+            sources = [source_filter]
+        else:
+            sources = list(
+                dict.fromkeys(
+                    str(c.get("source_file")) for c in chunks if c.get("source_file")
+                )
+            )[:3]
+        extra: list[dict[str, Any]] = []
+        try:
+            for src in sources:
+                openers = list(
+                    storage.find_structural_chunks(
+                        chunk_roles=["heading"],
+                        source_prefix=src,
+                    )
+                )
+                opener_pages = self._chapter_opener_pages(openers)
+                if not opener_pages:
+                    continue
+                for c in storage.get_body_chunks(source_file=src):
+                    if len(extra) >= self._DEFINITION_MAX_EXTRA:
+                        break
+                    if int(c.get("page_number") or 0) not in opener_pages:
+                        continue
+                    text_lower = (c.get("chunk_text") or "").lower()
+                    if not any(k in text_lower for k in keywords):
+                        continue
+                    extra.append({**c, "score": 0.5, "definition_recall": True})
+        except Exception as exc:
+            logger.warning(
+                "Opener-chunk union skipped (structure fetch failed): %s", exc
+            )
+            return chunks
+        if not extra:
+            return chunks
+        return self._dedupe_by_text_hash([*chunks, *extra])
+
+    @staticmethod
+    def _chapter_opener_pages(openers: list[dict[str, Any]]) -> set[int]:
+        """Return the pages carrying a chapter-opener heading pair.
+
+        Docling splits each opener into a banner heading chunk ("Chapter N")
+        followed by a title heading chunk on the same page; body chunks
+        between that pair and the next section heading are the chapter's
+        definition region.  A page counts as an opener page when a banner
+        heading and a following non-banner heading share it.
+        """
+        opener_pages: set[int] = set()
+        ordered = sorted(
+            openers,
+            key=lambda c: (
+                int(c.get("page_number") or 0),
+                int(c.get("page_pos") or 0),
+            ),
+        )
+        banner_re = re.compile(r"^Chapter\s+\d+$", re.IGNORECASE)
+        for prev, cur in itertools.pairwise(ordered):
+            prev_page = int(prev.get("page_number") or 0)
+            if prev_page != int(cur.get("page_number") or 0):
+                continue
+            if banner_re.fullmatch(
+                (prev.get("chunk_text") or "").strip()
+            ) and not banner_re.fullmatch((cur.get("chunk_text") or "").strip()):
+                opener_pages.add(prev_page)
+        return opener_pages
+
+    # Heading chunks crowd the result set: embedding models score short
+    # title-like strings ("Proxmox VE Firewall") above body prose for
+    # name-shaped queries, so the top-k fills with headings that name topics
+    # instead of chunks that explain them.  Keep the highest-scored few and
+    # cap the rest so body content survives in the context.
+    _MAX_HEADING_CHUNKS = 2
+
+    @staticmethod
+    def _apply_heading_diversity(
+        chunks: list[dict[str, Any]],
+        max_headings: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """Cap heading-role chunks in a result set, preserving the first ones.
+
+        The first *max_headings* heading chunks (in the caller's ranking
+        order) are kept; later heading-role chunks are dropped — unless the
+        result set is ALL headings, where capping would empty the context.
+        """
+        if max_headings is None:
+            max_headings = _RoutingMixin._MAX_HEADING_CHUNKS
+        heading_idx = [
+            i for i, c in enumerate(chunks) if c.get("chunk_role") == "heading"
+        ]
+        if len(heading_idx) <= max_headings:
+            return chunks
+        if len(heading_idx) == len(chunks):
+            return chunks
+        drop = set(heading_idx[max_headings:])
+        return [c for i, c in enumerate(chunks) if i not in drop]
 
     def _get_document_router(self) -> DocumentRouter:
         """Return the DocumentRouter, creating it lazily if needed."""

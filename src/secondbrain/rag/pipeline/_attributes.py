@@ -68,6 +68,25 @@ class _RAGPipelineState:
         @staticmethod
         def _display_chapter_title(title: str) -> str: ...
 
+        def _dedupe_by_text_hash(
+            self, chunks: list[dict[str, Any]]
+        ) -> list[dict[str, Any]]: ...
+
+        def _union_opener_chunks(
+            self,
+            query: str,
+            chunks: list[dict[str, Any]],
+            source_filter: str | None,
+            *,
+            top_k: int | None = None,
+        ) -> list[dict[str, Any]]: ...
+
+        def _apply_heading_diversity(
+            self,
+            chunks: list[dict[str, Any]],
+            max_headings: int | None = None,
+        ) -> list[dict[str, Any]]: ...
+
         def _handle_no_results(
             self,
             query: str,
