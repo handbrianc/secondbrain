@@ -254,6 +254,23 @@ class TestOpenAILLMProviderGenerate:
                 with pytest.raises(ServiceUnavailableError):
                     provider.generate("Test prompt")
 
+    def test_generate_raises_service_unavailable_on_timeout_error(self):
+        """Test that APITimeoutError is converted to ServiceUnavailableError."""
+        from openai import APITimeoutError
+
+        with patch.dict(os.environ, {"SECONDBRAIN_OPENAI_API_KEY": "test-key"}):
+            with patch("secondbrain.rag.providers.openai.OpenAI") as mock_client_class:
+                mock_client = MagicMock()
+                mock_client.chat.completions.create.side_effect = APITimeoutError(
+                    request=MagicMock()
+                )
+                mock_client_class.return_value = mock_client
+
+                provider = OpenAILLMProvider()
+
+                with pytest.raises(ServiceUnavailableError, match="timed out after"):
+                    provider.generate("Test prompt")
+
 
 class TestOpenAILLMProviderAGenerate:
     """Tests for OpenAILLMProvider agenerate_async method."""
@@ -308,8 +325,8 @@ class TestOpenAILLMProviderAGenerate:
 
     @pytest.mark.asyncio
     async def test_agenerate_async_raises_service_unavailable_on_connect_error(self):
-        """Test that ConnectError raises ServiceUnavailableError."""
-        import httpx
+        """Test that APIConnectionError raises ServiceUnavailableError."""
+        from openai import APIConnectionError
 
         with patch.dict(os.environ, {"SECONDBRAIN_OPENAI_API_KEY": "test-key"}):
             with patch(
@@ -317,7 +334,7 @@ class TestOpenAILLMProviderAGenerate:
             ) as mock_client_class:
                 mock_client = MagicMock()
                 mock_client.chat.completions.create = AsyncMock(
-                    side_effect=httpx.ConnectError("Connection failed")
+                    side_effect=APIConnectionError(request=MagicMock())
                 )
                 mock_client_class.return_value = mock_client
 
@@ -325,6 +342,28 @@ class TestOpenAILLMProviderAGenerate:
 
                 with pytest.raises(
                     ServiceUnavailableError, match="OpenAI API unreachable"
+                ):
+                    await provider.generate_async("Test prompt")
+
+    @pytest.mark.asyncio
+    async def test_agenerate_async_raises_service_unavailable_on_timeout_error(self):
+        """Test that APITimeoutError raises ServiceUnavailableError."""
+        from openai import APITimeoutError
+
+        with patch.dict(os.environ, {"SECONDBRAIN_OPENAI_API_KEY": "test-key"}):
+            with patch(
+                "secondbrain.rag.providers.openai.AsyncOpenAI"
+            ) as mock_client_class:
+                mock_client = MagicMock()
+                mock_client.chat.completions.create = AsyncMock(
+                    side_effect=APITimeoutError(request=MagicMock())
+                )
+                mock_client_class.return_value = mock_client
+
+                provider = OpenAILLMProvider()
+
+                with pytest.raises(
+                    ServiceUnavailableError, match="OpenAI API request timed out"
                 ):
                     await provider.generate_async("Test prompt")
 

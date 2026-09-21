@@ -7,17 +7,25 @@ for using OpenAI API as an LLM backend.
 # mypy: disable-error-code=attr-defined
 # mypy: disable-error-code=arg-type
 # mypy: disable-error-code=union-attr
-# (openai package stubs don't explicitly export APIError/AsyncOpenAI/OpenAI;
-#  arg-type suppressed for list[dict[str,str]] vs ChatCompletionMessageParam unions;
-#  union-attr from the create() overload return union when streaming with top_p)
+# (openai 3.x stub gaps: dict-based messages don't satisfy the
+#  ChatCompletionMessageParam union without casting; the create() overload
+#  union on stream=True + top_p trips union-attr. arg-type also covers the
+#  kwargs-dict passed to embeddings.create in the embedding provider's twin
+#  module, which has the same stub-gap shape.)
 
 import logging
 import os
 import re
 from difflib import SequenceMatcher
 
-import httpx
-from openai import APIError, AsyncOpenAI, OpenAI
+import httpx2
+from openai import (
+    APIConnectionError,
+    APIError,
+    APITimeoutError,
+    AsyncOpenAI,
+    OpenAI,
+)
 
 from secondbrain.exceptions import ServiceUnavailableError
 
@@ -134,7 +142,7 @@ class OpenAILLMProvider(LocalLLMProvider):
         read_timeout = (
             stream_idle_timeout_seconds if stream_idle_timeout_seconds > 0 else None
         )
-        ttft_timeout = httpx.Timeout(
+        ttft_timeout = httpx2.Timeout(
             connect=timeout, read=read_timeout, write=timeout, pool=timeout
         )
         self._client = OpenAI(
@@ -202,7 +210,11 @@ class OpenAILLMProvider(LocalLLMProvider):
 
             return response.choices[0].message.content or ""
 
-        except httpx.ConnectError as e:
+        except APITimeoutError as e:
+            raise ServiceUnavailableError(
+                f"OpenAI API request timed out after {self._timeout}s: {e}"
+            ) from e
+        except APIConnectionError as e:
             raise ServiceUnavailableError(f"OpenAI API unreachable: {e}") from e
         except APIError as e:
             raise ServiceUnavailableError(f"OpenAI API error: {e}") from e
@@ -246,7 +258,11 @@ class OpenAILLMProvider(LocalLLMProvider):
 
             return response.choices[0].message.content or ""
 
-        except httpx.ConnectError as e:
+        except APITimeoutError as e:
+            raise ServiceUnavailableError(
+                f"OpenAI API request timed out after {self._timeout}s: {e}"
+            ) from e
+        except APIConnectionError as e:
             raise ServiceUnavailableError(f"OpenAI API unreachable: {e}") from e
         except APIError as e:
             raise ServiceUnavailableError(f"OpenAI API error: {e}") from e
@@ -443,7 +459,11 @@ class OpenAILLMProvider(LocalLLMProvider):
                     on_chunk(answer, None)
             return answer
 
-        except httpx.ConnectError as e:
+        except APITimeoutError as e:
+            raise ServiceUnavailableError(
+                f"OpenAI API request timed out after {self._timeout}s: {e}"
+            ) from e
+        except APIConnectionError as e:
             raise ServiceUnavailableError(f"OpenAI API unreachable: {e}") from e
         except APIError as e:
             raise ServiceUnavailableError(f"OpenAI API error: {e}") from e
