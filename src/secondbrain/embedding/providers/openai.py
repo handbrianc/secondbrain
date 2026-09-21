@@ -23,8 +23,14 @@ import contextlib
 import os
 from typing import Any
 
-import httpx
-from openai import APIError, AsyncOpenAI, OpenAI
+import httpx2
+from openai import (
+    APIConnectionError,
+    APIError,
+    APITimeoutError,
+    AsyncOpenAI,
+    OpenAI,
+)
 
 from secondbrain.embedding.interfaces import EmbeddingProvider
 from secondbrain.exceptions import ServiceUnavailableError
@@ -77,7 +83,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         self._api_key = api_key or os.getenv("SECONDBRAIN_EMBEDDING_API_KEY")
 
         client_kwargs: dict[str, Any] = {
-            "timeout": httpx.Timeout(timeout),
+            "timeout": httpx2.Timeout(timeout),
         }
         if self._api_key:
             client_kwargs["api_key"] = self._api_key
@@ -126,16 +132,14 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
             embedding: list[float] = response.data[0].embedding
             return embedding
 
-        except httpx.ConnectError as e:
-            raise ServiceUnavailableError(
-                "Embedding",
-                "OpenAI embeddings API unreachable. "
-                "Ensure SECONDBRAIN_EMBEDDING_API_KEY is set correctly and network is available",
-            ) from e
-        except httpx.TimeoutException as e:
+        except APITimeoutError as e:
             raise ServiceUnavailableError(
                 "Embedding",
                 f"OpenAI embeddings API request timed out after {self._timeout}s",
+            ) from e
+        except APIConnectionError as e:
+            raise ServiceUnavailableError(
+                "Embedding", "OpenAI embeddings API unreachable"
             ) from e
         except APIError as e:
             raise ServiceUnavailableError(
@@ -180,14 +184,14 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
             embeddings_sorted = sorted(response.data, key=lambda x: x.index)
             return [emb.embedding for emb in embeddings_sorted]
 
-        except httpx.ConnectError as e:
-            raise ServiceUnavailableError(
-                "Embedding", "OpenAI embeddings API unreachable"
-            ) from e
-        except httpx.TimeoutException as e:
+        except APITimeoutError as e:
             raise ServiceUnavailableError(
                 "Embedding",
                 f"OpenAI embeddings API request timed out after {self._timeout}s",
+            ) from e
+        except APIConnectionError as e:
+            raise ServiceUnavailableError(
+                "Embedding", "OpenAI embeddings API unreachable"
             ) from e
         except APIError as e:
             raise ServiceUnavailableError(
@@ -220,14 +224,14 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
             embedding: list[float] = response.data[0].embedding
             return embedding
 
-        except httpx.ConnectError as e:
-            raise ServiceUnavailableError(
-                "Embedding", "OpenAI embeddings API unreachable"
-            ) from e
-        except httpx.TimeoutException as e:
+        except APITimeoutError as e:
             raise ServiceUnavailableError(
                 "Embedding",
                 f"OpenAI embeddings API request timed out after {self._timeout}s",
+            ) from e
+        except APIConnectionError as e:
+            raise ServiceUnavailableError(
+                "Embedding", "OpenAI embeddings API unreachable"
             ) from e
         except APIError as e:
             raise ServiceUnavailableError(
@@ -268,14 +272,14 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
             embeddings_sorted = sorted(response.data, key=lambda x: x.index)
             return [emb.embedding for emb in embeddings_sorted]
 
-        except httpx.ConnectError as e:
-            raise ServiceUnavailableError(
-                "Embedding", "OpenAI embeddings API unreachable"
-            ) from e
-        except httpx.TimeoutException as e:
+        except APITimeoutError as e:
             raise ServiceUnavailableError(
                 "Embedding",
                 f"OpenAI embeddings API request timed out after {self._timeout}s",
+            ) from e
+        except APIConnectionError as e:
+            raise ServiceUnavailableError(
+                "Embedding", "OpenAI embeddings API unreachable"
             ) from e
         except APIError as e:
             raise ServiceUnavailableError(
@@ -306,7 +310,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         """Close clients and release resources.
 
         Note: For proper async cleanup in async context, use aclose() instead.
-        This method closes the sync httpx client but does not close the async
+        This method closes the sync httpx2 client but does not close the async
         client — the async client must be closed with aclose() to avoid
         RuntimeWarnings from unawaited coroutines.
         """
