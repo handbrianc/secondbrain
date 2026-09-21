@@ -33,7 +33,23 @@ from secondbrain.utils.failure_injector import (
 )
 
 
-@pytest.mark.slow
+class _ManualTimer:
+    """Non-firing stand-in for ``threading.Timer``.
+
+    ``start()`` is a no-op, so the scheduled cleanup is captured but held;
+    tests fire ``function()`` manually to simulate duration expiry without
+    waiting wall-clock time.
+    """
+
+    def __init__(self, interval, function, *args):
+        self.interval = interval
+        self.function = function
+        self.args = args
+
+    def start(self):
+        pass
+
+
 class TestFailureType:
     """Test FailureType enum."""
 
@@ -59,7 +75,6 @@ class TestFailureType:
         assert FailureType.CONNECTION_ERROR in types
 
 
-@pytest.mark.slow
 class TestFailureConfig:
     """Test FailureConfig dataclass."""
 
@@ -104,7 +119,6 @@ class TestFailureConfig:
         assert config.repeat_count is None
 
 
-@pytest.mark.slow
 class TestFailureInjectorInit:
     """Test FailureInjector initialization."""
 
@@ -138,7 +152,6 @@ class TestFailureInjectorInit:
         assert injector._cleanup_callbacks == []
 
 
-@pytest.mark.slow
 class TestFailureInjectorInjectFailure:
     """Test FailureInjector.inject_failure method."""
 
@@ -183,7 +196,6 @@ class TestFailureInjectorInjectFailure:
         assert len(injector._active_failures) == 2
 
 
-@pytest.mark.slow
 class TestFailureInjectorReset:
     """Test FailureInjector.reset method."""
 
@@ -229,7 +241,6 @@ class TestFailureInjectorReset:
         assert injector._start_time is None
 
 
-@pytest.mark.slow
 class TestFailureInjectorIsFailureActive:
     """Test FailureInjector.is_failure_active method."""
 
@@ -258,7 +269,6 @@ class TestFailureInjectorIsFailureActive:
         assert injector.is_failure_active(FailureType.TIMEOUT) is False
 
 
-@pytest.mark.slow
 class TestFailureInjectorScheduleCleanup:
     """Test FailureInjector._schedule_cleanup method."""
 
@@ -267,25 +277,32 @@ class TestFailureInjectorScheduleCleanup:
         injector = FailureInjector()
         key = "test_key"
         injector._active_failures[key] = FailureConfig(failure_type=FailureType.TIMEOUT)
-        injector._schedule_cleanup(key, 0.1)
-        # _schedule_cleanup uses threading.Timer, doesn't add to _cleanup_callbacks
-        # Just verify it doesn't raise an exception
-        assert key in injector._active_failures
+        with patch(
+            "secondbrain.utils.failure_injector.core.threading.Timer", _ManualTimer
+        ):
+            injector._schedule_cleanup(key, 0.1)
+            # _schedule_cleanup uses threading.Timer, doesn't add to _cleanup_callbacks
+            # Just verify it doesn't raise an exception
+            assert key in injector._active_failures
 
     def test_schedule_cleanup_executes(self):
         """Test that scheduled cleanup executes."""
         injector = FailureInjector()
         key = "test_key"
         injector._active_failures[key] = FailureConfig(failure_type=FailureType.TIMEOUT)
-        injector._schedule_cleanup(key, 0.1)
+        with patch(
+            "secondbrain.utils.failure_injector.core.threading.Timer", _ManualTimer
+        ):
+            injector._schedule_cleanup(key, 0.1)
+            assert key in injector._active_failures
 
-        # Wait for cleanup
-        time.sleep(0.2)
+            # Fire the captured timer synchronously instead of waiting
+            timer = injector._cleanup_callbacks[0]
+            timer.function()
 
-        assert key not in injector._active_failures
+            assert key not in injector._active_failures
 
 
-@pytest.mark.slow
 class TestInjectTimeoutContextManager:
     """Test inject_timeout context manager."""
 
@@ -296,12 +313,13 @@ class TestInjectTimeoutContextManager:
             assert injector.is_failure_active(FailureType.TIMEOUT) is True
         assert injector.is_failure_active(FailureType.TIMEOUT) is False
 
-    def test_timeout_context_with_delay(self):
+    def test_timeout_context_with_delay(self, fake_clock):
         """Test timeout context with delay."""
         injector = FailureInjector()
-        with injector.inject_timeout(duration=2.0, delay=0.1):
+        with injector.inject_timeout(duration=2.0, delay=0.1) as _:
             # After delay, should be active
             assert injector.is_failure_active(FailureType.TIMEOUT) is True
+            assert fake_clock.sleeps == [0.1]
 
     def test_timeout_context_with_custom_timeout_value(self):
         """Test timeout context with custom timeout value."""
@@ -328,7 +346,6 @@ class TestInjectTimeoutContextManager:
         assert injector.is_failure_active(FailureType.TIMEOUT) is False
 
 
-@pytest.mark.slow
 class TestInjectConnectionErrorContextManager:
     """Test inject_connection_error context manager."""
 
@@ -339,11 +356,12 @@ class TestInjectConnectionErrorContextManager:
             assert injector.is_failure_active(FailureType.CONNECTION_ERROR) is True
         assert injector.is_failure_active(FailureType.CONNECTION_ERROR) is False
 
-    def test_connection_error_context_with_delay(self):
+    def test_connection_error_context_with_delay(self, fake_clock):
         """Test connection error context with delay."""
         injector = FailureInjector()
         with injector.inject_connection_error(duration=2.0, delay=0.1):
             assert injector.is_failure_active(FailureType.CONNECTION_ERROR) is True
+            assert fake_clock.sleeps == [0.1]
 
     def test_connection_error_context_with_custom_message(self):
         """Test connection error context with custom message."""
@@ -363,7 +381,6 @@ class TestInjectConnectionErrorContextManager:
         assert injector.is_failure_active(FailureType.CONNECTION_ERROR) is False
 
 
-@pytest.mark.slow
 class TestInjectGeneralFailureContextManager:
     """Test inject_general_failure context manager."""
 
@@ -381,11 +398,12 @@ class TestInjectGeneralFailureContextManager:
             config = next(iter(injector._active_failures.values()))
             assert config.probability == 0.5
 
-    def test_general_failure_context_with_delay(self):
+    def test_general_failure_context_with_delay(self, fake_clock):
         """Test general failure context with delay."""
         injector = FailureInjector()
         with injector.inject_general_failure(duration=2.0, delay=0.1):
             assert injector.is_failure_active(FailureType.GENERAL_FAILURE) is True
+            assert fake_clock.sleeps == [0.1]
 
     def test_general_failure_context_with_custom_message(self):
         """Test general failure context with custom message."""
@@ -395,7 +413,6 @@ class TestInjectGeneralFailureContextManager:
             assert config.error_message == "Custom failure"
 
 
-@pytest.mark.slow
 class TestInjectNetworkPartitionContextManager:
     """Test inject_network_partition context manager."""
 
@@ -422,59 +439,54 @@ class TestInjectNetworkPartitionContextManager:
             config = next(iter(injector._active_failures.values()))
             assert config is not None
 
-    def test_network_partition_context_with_delay(self):
+    def test_network_partition_context_with_delay(self, fake_clock):
         """Test network partition context with delay."""
         injector = FailureInjector()
         with injector.inject_network_partition(duration=2.0, delay=0.1):
             assert injector.is_failure_active(FailureType.NETWORK_PARTITION) is True
+            assert fake_clock.sleeps == [0.1]
 
 
-@pytest.mark.slow
 class TestInjectLatencyContextManager:
     """Test inject_latency context manager."""
 
-    def test_latency_context_basic(self):
+    def test_latency_context_basic(self, fake_clock):
         """Test basic latency context manager."""
         injector = FailureInjector()
-        start = time.time()
         with injector.inject_latency(latency_ms=100):
-            elapsed = time.time() - start
-            assert elapsed >= 0.1  # At least 100ms
+            assert fake_clock.sleeps == [0.1]
         assert injector.is_failure_active(FailureType.LATENCY_INJECTION) is False
 
-    def test_latency_context_with_jitter(self):
+    def test_latency_context_with_jitter(self, fake_clock):
         """Test latency context with jitter."""
         injector = FailureInjector()
         # With jitter, latency should vary
-        latencies = []
         for _ in range(5):
-            start = time.time()
             with injector.inject_latency(latency_ms=50, jitter_ms=50):
-                elapsed = time.time() - start
-                latencies.append(elapsed)
+                pass
             injector.reset()
 
-        # Should have some variation
-        assert max(latencies) > min(latencies)
+        # Should have some variation; each sleep in [50ms, 100ms]
+        assert max(fake_clock.sleeps) > min(fake_clock.sleeps)
+        assert min(fake_clock.sleeps) >= 0.05
+        assert max(fake_clock.sleeps) <= 0.10
 
-    def test_latency_context_with_delay(self):
+    def test_latency_context_with_delay(self, fake_clock):
         """Test latency context with delay."""
         injector = FailureInjector()
-        start = time.time()
         with injector.inject_latency(latency_ms=50, delay=0.1):
-            elapsed = time.time() - start
-            # Should include both delay and latency
-            assert elapsed >= 0.1
+            # Should include both delay and latency sleeps
+            assert fake_clock.sleeps == [0.1, 0.05]
 
-    def test_latency_context_cleanup(self):
+    def test_latency_context_cleanup(self, fake_clock):
         """Test that latency context cleans up properly."""
         injector = FailureInjector()
         with injector.inject_latency(latency_ms=10):
             assert injector.is_failure_active(FailureType.LATENCY_INJECTION) is True
         assert injector.is_failure_active(FailureType.LATENCY_INJECTION) is False
+        assert fake_clock.sleeps == [0.01]
 
 
-@pytest.mark.slow
 class TestConvenienceFunctions:
     """Test convenience functions for failure injection."""
 
@@ -502,14 +514,14 @@ class TestConvenienceFunctions:
             instance = FailureInjector.get_instance()
             assert instance.is_failure_active(FailureType.NETWORK_PARTITION) is True
 
-    def test_inject_latency_function(self):
+    def test_inject_latency_function(self, fake_clock):
         """Test inject_latency convenience function."""
         with inject_latency(latency_ms=10):
             instance = FailureInjector.get_instance()
             assert instance.is_failure_active(FailureType.LATENCY_INJECTION) is True
+            assert fake_clock.sleeps == [0.01]
 
 
-@pytest.mark.slow
 class TestAsyncContextManager:
     """Test async context manager support."""
 
@@ -535,7 +547,6 @@ class TestAsyncContextManager:
         assert len(injector._active_failures) == 0
 
 
-@pytest.mark.slow
 class TestCircuitBreakerIntegration:
     """Test circuit breaker integration with failure injection."""
 
@@ -599,7 +610,6 @@ class TestCircuitBreakerIntegration:
         assert cb.state.value == "closed"
 
 
-@pytest.mark.slow
 class TestResourceExhaustionScenarios:
     """Test resource exhaustion failure scenarios."""
 
@@ -621,7 +631,7 @@ class TestResourceExhaustionScenarios:
         # Should have approximately 80% failures
         assert failure_count > success_count
 
-    def test_concurrent_failure_injection(self):
+    def test_concurrent_failure_injection(self, fake_clock):
         """Test concurrent failure injection."""
         injector = FailureInjector()
         results = []
@@ -651,7 +661,6 @@ class TestResourceExhaustionScenarios:
         assert injector._failure_count == 0
 
 
-@pytest.mark.slow
 class TestEdgeCases:
     """Test edge cases and boundary conditions."""
 
@@ -710,7 +719,6 @@ class TestEdgeCases:
             assert config.error_message == ""
 
 
-@pytest.mark.slow
 class TestThreadSafety:
     """Test thread safety of failure injector."""
 
@@ -735,7 +743,7 @@ class TestThreadSafety:
 
         assert len(errors) == 0
 
-    def test_concurrent_context_managers(self):
+    def test_concurrent_context_managers(self, fake_clock):
         """Test concurrent context manager usage."""
         injector = FailureInjector()
         results = []
@@ -754,7 +762,6 @@ class TestThreadSafety:
         assert len(results) == 3
 
 
-@pytest.mark.slow
 class TestLogging:
     """Test logging behavior."""
 
@@ -773,11 +780,10 @@ class TestLogging:
             mock_logger.info.assert_called()
 
 
-@pytest.mark.slow
 class TestIntegrationScenarios:
     """Test integration scenarios with real usage patterns."""
 
-    def test_retry_pattern_with_failure_injection(self):
+    def test_retry_pattern_with_failure_injection(self, fake_clock):
         """Test retry pattern with injected failures."""
         injector = FailureInjector()
         attempts = []
@@ -854,7 +860,7 @@ class TestIntegrationScenarios:
         assert result is True
         assert len(fallback_results) == 1
 
-    def test_bulkhead_pattern_with_failures(self):
+    def test_bulkhead_pattern_with_failures(self, fake_clock):
         """Test bulkhead pattern with failure injection."""
         injector = FailureInjector()
         max_concurrent = 2
@@ -884,7 +890,6 @@ class TestIntegrationScenarios:
         assert max_observed <= 5  # All 5 workers can run concurrently
 
 
-@pytest.mark.slow
 class TestFailureInjectorPytestFixture:
     """Test the pytest fixture for failure injector."""
 
@@ -900,7 +905,6 @@ class TestFailureInjectorPytestFixture:
         assert pytest.mark.slow is not None
 
 
-@pytest.mark.slow
 class TestFailureInjectorErrorHandling:
     """Test error handling in failure injector."""
 
@@ -935,7 +939,6 @@ class TestFailureInjectorErrorHandling:
         assert injector.is_failure_active(FailureType.TIMEOUT) is False
 
 
-@pytest.mark.slow
 class TestFailureInjectorProbability:
     """Test probability-based failure injection."""
 
@@ -994,7 +997,6 @@ class TestFailureInjectorProbability:
         assert failures == 20
 
 
-@pytest.mark.slow
 class TestScheduleCleanup:
     """Test _schedule_cleanup method and timing-based failures."""
 
@@ -1002,17 +1004,21 @@ class TestScheduleCleanup:
         """Test that scheduled cleanup removes failures after duration."""
         injector = FailureInjector()
 
-        # Inject a failure with a short duration
-        injector.inject(failure_type=FailureType.TIMEOUT, duration=0.2)
+        # Inject a failure with a short duration; hold the cleanup timer
+        # so expiry can be simulated by firing it manually.
+        with patch(
+            "secondbrain.utils.failure_injector.core.threading.Timer", _ManualTimer
+        ):
+            injector.inject(failure_type=FailureType.TIMEOUT, duration=0.2)
 
-        # Failure should be active immediately
-        assert injector.is_failure_active(FailureType.TIMEOUT) is True
+            # Failure should be active immediately
+            assert injector.is_failure_active(FailureType.TIMEOUT) is True
 
-        # Wait for cleanup
-        time.sleep(0.3)
+            # Fire the captured timer to simulate duration expiry
+            injector._cleanup_callbacks[0].function()
 
-        # Failure should be cleaned up
-        assert injector.is_failure_active(FailureType.TIMEOUT) is False
+            # Failure should be cleaned up
+            assert injector.is_failure_active(FailureType.TIMEOUT) is False
 
     def test_schedule_cleanup_with_delay_no_auto_cleanup(self):
         """Test that delayed failures don't schedule automatic cleanup."""
@@ -1050,7 +1056,6 @@ class TestScheduleCleanup:
         assert len(injector._cleanup_callbacks) == 0
 
 
-@pytest.mark.slow
 class TestRaiseFailure:
     """Test raise_failure method with all failure types."""
 
@@ -1152,7 +1157,7 @@ class TestRaiseFailure:
 
         assert "Injected general failure" in str(exc_info.value)
 
-    def test_raise_slow_response_delays_and_raises(self):
+    def test_raise_slow_response_delays_and_raises(self, fake_clock):
         """Test that slow response delays before raising."""
         injector = FailureInjector()
         config = FailureConfig(
@@ -1160,13 +1165,11 @@ class TestRaiseFailure:
         )
         injector._active_failures["slow_test"] = config
 
-        start = time.time()
         with pytest.raises(InjectedFailureError):
             injector.raise_failure(FailureType.SLOW_RESPONSE)
-        elapsed = time.time() - start
 
-        # Should have slept for timeout_value
-        assert elapsed >= 0.08  # Allow some tolerance
+        # Should have slept for timeout_value on the fake clock
+        assert fake_clock.sleeps == [0.1]
 
     def test_raise_slow_response_with_custom_message(self):
         """Test raising slow response with custom message."""
@@ -1224,79 +1227,67 @@ class TestRaiseFailure:
         assert injector._failure_count == 2
 
 
-@pytest.mark.slow
 class TestContextManagerDelays:
     """Test context managers with delay parameter."""
 
-    def test_timeout_with_delay(self):
+    def test_timeout_with_delay(self, fake_clock):
         """Test timeout context manager with delay."""
         injector = FailureInjector()
 
-        start = time.time()
         with injector.inject_timeout(duration=1.0, delay=0.2):
-            elapsed = time.time() - start
-            assert elapsed >= 0.15  # Delay should have passed
+            # Delay should have been slept on the fake clock
+            assert fake_clock.sleeps == [0.2]
 
         # Context should have exited after delay
         assert len(injector._active_failures) == 0
 
-    def test_connection_error_with_delay(self):
+    def test_connection_error_with_delay(self, fake_clock):
         """Test connection error context manager with delay."""
         injector = FailureInjector()
 
-        start = time.time()
         with injector.inject_connection_error(duration=1.0, delay=0.2):
-            elapsed = time.time() - start
-            assert elapsed >= 0.15
+            assert fake_clock.sleeps == [0.2]
 
         assert len(injector._active_failures) == 0
 
-    def test_general_failure_with_delay(self):
+    def test_general_failure_with_delay(self, fake_clock):
         """Test general failure context manager with delay."""
         injector = FailureInjector()
 
-        start = time.time()
         with injector.inject_general_failure(duration=1.0, delay=0.2):
-            elapsed = time.time() - start
-            assert elapsed >= 0.15
+            assert fake_clock.sleeps == [0.2]
 
         assert len(injector._active_failures) == 0
 
-    def test_slow_response_with_delay(self):
+    def test_slow_response_with_delay(self, fake_clock):
         """Test slow response context manager with delay."""
         injector = FailureInjector()
 
-        start = time.time()
         with injector.inject_slow_response(duration=1.0, delay=0.2, slow_duration=0.05):
-            elapsed = time.time() - start
-            assert elapsed >= 0.15
+            assert fake_clock.sleeps == [0.2]
 
         assert len(injector._active_failures) == 0
 
-    def test_network_partition_with_delay(self):
+    def test_network_partition_with_delay(self, fake_clock):
         """Test network partition context manager with delay."""
         injector = FailureInjector()
 
-        start = time.time()
         with injector.inject_network_partition(duration=1.0, delay=0.2):
-            elapsed = time.time() - start
-            assert elapsed >= 0.15
+            assert fake_clock.sleeps == [0.2]
 
         assert len(injector._active_failures) == 0
 
-    def test_latency_with_delay(self):
+    def test_latency_with_delay(self, fake_clock):
         """Test latency context manager with delay."""
         injector = FailureInjector()
 
-        start = time.time()
         with injector.inject_latency(duration=1.0, delay=0.2, latency_ms=10):
-            elapsed = time.time() - start
-            assert elapsed >= 0.15
+            # Delay sleep plus latency sleep on the fake clock
+            assert fake_clock.sleeps == [0.2, 0.01]
 
         assert len(injector._active_failures) == 0
 
 
-@pytest.mark.slow
 class TestNetworkPartitionScenarios:
     """Test network partition injection scenarios."""
 
@@ -1349,65 +1340,59 @@ class TestNetworkPartitionScenarios:
         assert len(injector._active_failures) == 0
 
 
-@pytest.mark.slow
 class TestLatencyInjectionScenarios:
     """Test latency injection scenarios."""
 
+    @pytest.mark.slow
     def test_latency_basic(self):
         """Test basic latency injection."""
         injector = FailureInjector()
 
         start = time.time()
-        with injector.inject_latency(latency_ms=100):
+        with injector.inject_latency(latency_ms=20):
             elapsed = time.time() - start
-            assert elapsed >= 0.08  # 100ms with tolerance
+            assert elapsed >= 0.01  # 20ms with tolerance
 
         assert len(injector._active_failures) == 0
 
-    def test_latency_with_jitter(self):
+    def test_latency_with_jitter(self, fake_clock):
         """Test latency injection with jitter."""
         injector = FailureInjector()
 
         # Run multiple times to see jitter effect
-        latencies = []
         for _ in range(5):
-            start = time.time()
             with injector.inject_latency(latency_ms=50, jitter_ms=50):
-                elapsed = time.time() - start
-                latencies.append(elapsed)
+                pass
             injector.reset()
 
-        # Should have variance due to jitter
-        assert max(latencies) > min(latencies)
-        # All should be at least 50ms
-        assert all(lat >= 0.04 for lat in latencies)
+        # Should have variance due to jitter; each sleep in [50ms, 100ms]
+        assert max(fake_clock.sleeps) > min(fake_clock.sleeps)
+        assert min(fake_clock.sleeps) >= 0.05
+        assert max(fake_clock.sleeps) <= 0.10
 
-    def test_latency_duration(self):
+    def test_latency_duration(self, fake_clock):
         """Test latency injection with duration."""
         injector = FailureInjector()
 
         with injector.inject_latency(duration=0.5, latency_ms=20):
             assert injector.is_failure_active(FailureType.LATENCY_INJECTION) is True
+            assert fake_clock.sleeps == [0.02]
 
         assert len(injector._active_failures) == 0
 
-    def test_latency_zero_jitter(self):
+    def test_latency_zero_jitter(self, fake_clock):
         """Test latency with zero jitter is consistent."""
         injector = FailureInjector()
 
-        latencies = []
-        for _ in range(10):
-            start = time.time()
+        for _ in range(5):
             with injector.inject_latency(latency_ms=50, jitter_ms=0):
-                elapsed = time.time() - start
-                latencies.append(elapsed)
+                pass
             injector.reset()
 
-        # Sleep is deterministic; assert per-sample so a scheduler hiccup can't flake max-min.
-        assert all(0.04 <= lat < 0.085 for lat in latencies)
+        # Sleep is deterministic; every recorded sleep is exactly 50ms.
+        assert fake_clock.sleeps == [0.05, 0.05, 0.05, 0.05, 0.05]
 
 
-@pytest.mark.slow
 class TestConvenienceFunctionWrappers:
     """Test convenience function wrapper implementations."""
 
@@ -1451,20 +1436,17 @@ class TestConvenienceFunctionWrappers:
         injector = FailureInjector.get_instance()
         assert len(injector._active_failures) == 0
 
-    def test_convenience_latency(self):
+    def test_convenience_latency(self, fake_clock):
         """Test inject_latency convenience function."""
-        start = time.time()
         with inject_latency(latency_ms=50):
             injector = FailureInjector.get_instance()
             assert injector.is_failure_active(FailureType.LATENCY_INJECTION) is True
-            elapsed = time.time() - start
-            assert elapsed >= 0.04
+            assert fake_clock.sleeps == [0.05]
 
         injector = FailureInjector.get_instance()
         assert len(injector._active_failures) == 0
 
 
-@pytest.mark.slow
 class TestEdgeCasesAndBoundaries:
     """Test edge cases, boundary conditions, and stress scenarios."""
 
@@ -1477,9 +1459,9 @@ class TestEdgeCasesAndBoundaries:
         # Should be active initially
         assert len(injector._active_failures) > 0
 
-        # Wait for cleanup — 0.5s accommodates Timer scheduling latency
-        # under parallel pytest-xdist workers
-        time.sleep(0.5)
+        # Fire the captured cleanup timer synchronously instead of waiting
+        # for Timer scheduling latency under parallel pytest-xdist workers
+        injector._cleanup_callbacks[0].function()
 
         # Should be cleaned up
         assert len(injector._active_failures) == 0
@@ -1558,7 +1540,7 @@ class TestEdgeCasesAndBoundaries:
         assert injector.is_failure_active(FailureType.CONNECTION_ERROR) is False
         assert injector.is_failure_active(FailureType.GENERAL_FAILURE) is False
 
-    def test_thread_safety_concurrent_injection(self):
+    def test_thread_safety_concurrent_injection(self, fake_clock):
         """Test thread safety with concurrent failure injections."""
         injector = FailureInjector()
         results = []
@@ -1597,7 +1579,6 @@ class TestEdgeCasesAndBoundaries:
         assert len(injector._active_failures) == 0
 
 
-@pytest.mark.slow
 class TestFailureCountAndRepeat:
     """Test failure count and repeat functionality."""
 
@@ -1631,7 +1612,6 @@ class TestFailureCountAndRepeat:
         assert injector._failure_count == 5
 
 
-@pytest.mark.slow
 class TestShouldFail:
     """Test should_fail method with probability and repeat count."""
 

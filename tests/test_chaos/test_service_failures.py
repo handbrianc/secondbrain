@@ -1,7 +1,5 @@
 """Tests for service failure scenarios and resilience."""
 
-import time
-
 import pytest
 
 from secondbrain.utils.circuit_breaker import (
@@ -42,7 +40,7 @@ class TestStorageFailureScenarios:
 
         assert storage_cb.state == CircuitState.OPEN
 
-    def test_storage_recovery_after_failure(self):
+    def test_storage_recovery_after_failure(self, fake_clock):
         """Test recovery after storage becomes available again."""
         config = CircuitBreakerConfig(
             failure_threshold=3,
@@ -56,7 +54,7 @@ class TestStorageFailureScenarios:
 
         assert storage_cb.state == CircuitState.OPEN
 
-        time.sleep(0.15)
+        fake_clock.advance(0.15)
 
         assert storage_cb.is_allowed() is True
         assert storage_cb.state == CircuitState.HALF_OPEN
@@ -112,7 +110,7 @@ class TestCircuitBreakerResponse:
                     "vector store circuit is open", "vector_store"
                 )
 
-    def test_circuit_half_open_after_timeout(self):
+    def test_circuit_half_open_after_timeout(self, fake_clock):
         """Test circuit transitions to half-open after timeout."""
         config = CircuitBreakerConfig(
             failure_threshold=3,
@@ -125,7 +123,7 @@ class TestCircuitBreakerResponse:
 
         assert cb.state == CircuitState.OPEN
 
-        time.sleep(0.15)
+        fake_clock.advance(0.15)
 
         assert cb.is_allowed() is True
         assert cb.state == CircuitState.HALF_OPEN
@@ -150,7 +148,7 @@ class TestGracefulDegradation:
         assert hasattr(cb, "record_failure")
         assert hasattr(cb, "record_success")
 
-    def test_retry_with_backoff(self):
+    def test_retry_with_backoff(self, fake_clock):
         """Test retry logic with exponential backoff."""
         config = CircuitBreakerConfig(
             failure_threshold=3,
@@ -163,7 +161,7 @@ class TestGracefulDegradation:
 
         assert cb.state == CircuitState.OPEN
 
-        time.sleep(0.15)
+        fake_clock.advance(0.15)
 
         assert cb.is_allowed() is True
         assert cb.state == CircuitState.HALF_OPEN

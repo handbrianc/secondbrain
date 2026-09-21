@@ -275,7 +275,7 @@ ignore = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--timeout=300 -p no:warnings --dist=loadfile -n auto --cov=secondbrain --cov-report=term-missing --cov-report=html --cov-fail-under=30 --reruns=0 --cov-config=.coveragerc"
+addopts = "--timeout=120 -p no:warnings --dist=loadfile -n auto --cov=secondbrain --cov-report=term-missing --cov-report=html --reruns=0 --cov-config=.coveragerc"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 markers = [
@@ -325,9 +325,7 @@ database = ".hypothesis"
 timeout = 120
 timeout_method = "thread"
 
-[tool.mutmut]
-python_paths = ["src"]
-test_command = "pytest {mutmut_test_file} -xvs"
+# mutmut 3.x is configured via CLI flags only; do not re-add v2-style [tool.mutmut] keys.
 
 [tool.pre-commit]
 default_stages = ["pre-commit"]

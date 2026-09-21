@@ -87,7 +87,7 @@ class TestTimeoutInjection:
         assert "Test timeout" in str(exc_info.value)
         assert exc_info.value.timeout_value == 5.0
 
-    def test_timeout_with_delay(self):
+    def test_timeout_with_delay(self, fake_clock):
         """Test timeout injection with delay."""
         injector = FailureInjector()
 
@@ -97,13 +97,13 @@ class TestTimeoutInjection:
             assert elapsed >= 0.1
             assert injector.is_failure_active(FailureType.TIMEOUT) is True
 
-    def test_timeout_duration_expires(self):
+    def test_timeout_duration_expires(self, fake_clock):
         """Test that timeout injection ends after duration."""
         injector = FailureInjector()
 
         with injector.inject_timeout(duration=0.2):
             assert injector.is_failure_active(FailureType.TIMEOUT) is True
-            time.sleep(0.25)
+            fake_clock.sleep(0.25)
 
         assert injector.is_failure_active(FailureType.TIMEOUT) is False
 
@@ -193,13 +193,13 @@ class TestSlowResponseInjection:
 
         assert injector.is_failure_active(FailureType.SLOW_RESPONSE) is False
 
-    def test_slow_response_delays_execution(self):
+    def test_slow_response_delays_execution(self, fake_clock):
         """Test that slow response actually delays execution."""
         injector = FailureInjector()
 
         start_time = time.monotonic()
         with injector.inject_slow_response(slow_duration=0.2):
-            time.sleep(0.05)
+            fake_clock.sleep(1.0)
             elapsed = time.monotonic() - start_time
             assert elapsed >= 0.05
 
@@ -333,7 +333,7 @@ class TestIntegrationWithCircuitBreaker:
 
         assert cb.state == CircuitState.OPEN
 
-    def test_circuit_breaker_recovery_with_injector(self):
+    def test_circuit_breaker_recovery_with_injector(self, fake_clock):
         """Test circuit breaker recovery with failure injector."""
         from secondbrain.utils.circuit_breaker import (
             CircuitBreaker,
@@ -360,7 +360,7 @@ class TestIntegrationWithCircuitBreaker:
         assert cb.state == CircuitState.OPEN
 
         # Wait for recovery timeout
-        time.sleep(0.15)
+        fake_clock.advance(0.15)
 
         # Trigger OPEN -> HALF_OPEN transition by accessing state
         assert cb.state == CircuitState.HALF_OPEN

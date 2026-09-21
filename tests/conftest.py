@@ -1,6 +1,8 @@
 """Root pytest fixtures for all tests with mock fallbacks."""
 
 import os
+import threading
+from unittest.mock import patch
 
 os.environ["PYTHOSTRACKING_TEST"] = "pytest"
 os.environ["SECONDBRAIN_TRACING_ENABLED"] = "false"
@@ -50,6 +52,82 @@ def _cleanup_temp_path(path: Path) -> None:
         path.unlink()
     except FileNotFoundError:
         pass
+
+
+class FakeClock:
+    """Controllable stand-in for ``time.monotonic`` / ``time.time``.
+
+    Advance manually with :meth:`advance` instead of waiting real wall-clock
+    time. ``sleep`` just advances the clock, so tests exercising durations,
+    backoff, and circuit-breaker recovery run instantly.
+    """
+
+    def __init__(self, start: float = 1000.0) -> None:
+        self._now = start
+        self.sleeps: list[float] = []
+
+    def monotonic(self) -> float:
+        return self._now
+
+    def advance(self, seconds: float) -> None:
+        self._now += seconds
+
+    def sleep(self, seconds: float) -> None:
+        self.sleeps.append(seconds)
+        self._now += seconds
+
+
+@pytest.fixture
+def fake_clock() -> Generator[FakeClock]:
+    """Patch clocks in failure-injector/circuit-breaker modules with a fake.
+
+    Replaces ``time.monotonic``/``time.time``/``time.sleep`` with one shared
+    controllable clock.
+
+    Usage::
+
+        def test_recovery(fake_clock):
+            cb.record_failure()
+            fake_clock.advance(0.11)   # recovery_timeout = 0.1
+            assert cb.is_allowed()
+
+    """
+    from secondbrain.utils import circuit_breaker as cb_mod
+    from secondbrain.utils.failure_injector import contexts as fi_contexts
+    from secondbrain.utils.failure_injector import core as fi_core
+
+    clock = FakeClock()
+    with (
+        patch.object(cb_mod.time, "monotonic", clock.monotonic),
+        patch.object(cb_mod.time, "sleep", clock.sleep),
+        patch.object(fi_core.time, "monotonic", clock.monotonic),
+        patch.object(fi_core.time, "sleep", clock.sleep),
+        patch.object(fi_contexts.time, "monotonic", clock.monotonic),
+        patch.object(fi_contexts.time, "sleep", clock.sleep),
+    ):
+        yield clock
+
+
+@pytest.fixture
+def instant_timer() -> Generator[None]:
+    """Make ``threading.Timer`` fire its target synchronously on ``start()``.
+
+    Lets tests assert scheduled-cleanups took effect without sleeping for
+    the timer duration.
+    """
+
+    class _InstantTimer(threading.Thread):
+        def __init__(self, interval: float, function: Any, *args: Any) -> None:
+            super().__init__(target=function, args=args, daemon=True)
+
+        def start(self) -> None:
+            # Run synchronously instead of spawning a thread.
+            self.run()
+
+    with patch(
+        "secondbrain.utils.failure_injector.core.threading.Timer", _InstantTimer
+    ):
+        yield
 
 
 @pytest.fixture

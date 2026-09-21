@@ -9,6 +9,8 @@ This module tests validation methods in the document ingestion pipeline:
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any, Callable
 from unittest.mock import patch
 
 import pytest
@@ -49,31 +51,38 @@ class TestValidateFilePath:
 class TestValidateFileSize:
     """Tests for _validate_file_size validation."""
 
+    @staticmethod
+    def _fake_stat(size_bytes: int) -> Callable[[Path], Any]:
+        """Return a stat stand-in reporting *size_bytes* via st_size."""
+
+        def fake_stat(self: Path) -> Any:
+            return SimpleNamespace(st_size=size_bytes)
+
+        return fake_stat
+
     def test_validate_file_size_exceeds(self, tmp_path: Path) -> None:
         """Test files exceeding max_size limit are rejected."""
-        large_file = tmp_path / "large_file.bin"
-        large_file.write_bytes(b"x" * (150 * 1024 * 1024))
-
         ingestor = DocumentIngestor()
 
-        with pytest.raises(ValueError, match="exceeds maximum size limit"):
-            ingestor._validate_file_size(large_file)
+        large_file = tmp_path / "large_file.bin"
+        large_file.touch()
+        with patch.object(
+            Path, "stat", self._fake_stat(ingestor.max_file_size_bytes + 1)
+        ):
+            with pytest.raises(ValueError, match="exceeds maximum size limit"):
+                ingestor._validate_file_size(large_file)
 
     def test_validate_file_size_within_limit(self, tmp_path: Path) -> None:
         """Test files within limit pass validation."""
         ingestor = DocumentIngestor()
 
-        exact_limit_file = tmp_path / "exact_limit.bin"
-        exact_limit_file.write_bytes(b"x" * ingestor.max_file_size_bytes)
-        ingestor._validate_file_size(exact_limit_file)
-
         small_file = tmp_path / "small.txt"
         small_file.write_text("Hello, world!")
-        ingestor._validate_file_size(small_file)
 
-        under_limit_file = tmp_path / "under_limit.bin"
-        under_limit_file.write_bytes(b"x" * (ingestor.max_file_size_bytes - 1))
-        ingestor._validate_file_size(under_limit_file)
+        with patch.object(Path, "stat", self._fake_stat(ingestor.max_file_size_bytes)):
+            ingestor._validate_file_size(small_file)
+        with patch.object(Path, "stat", self._fake_stat(ingestor.max_file_size_bytes - 1)):
+            ingestor._validate_file_size(small_file)
 
 
 class TestResolveCoreCount:

@@ -33,14 +33,11 @@ if TYPE_CHECKING:
 # Apply MPS patch before any docling import
 from secondbrain.document.chunker import chunk_segments, docling_item_label
 from secondbrain.document.fast_text import extract_printed_page, resolve_printed_pages
-from secondbrain.utils.mps_patch import patch_transformers_for_mps
 from secondbrain.utils.tracing import trace_operation
 
 # Suppress HF-hub progress bars before any docling/transformers import.
 os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
 os.environ.setdefault("HF_HUB_VERBOSITY", "error")
-
-patch_transformers_for_mps()
 
 # Suppress PyTorch user warnings about padding+dilation on MPS - harmless
 warnings.filterwarnings(

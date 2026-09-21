@@ -217,6 +217,13 @@ def _build_docling_converter(
     *, do_ocr: bool, do_table_structure: bool
 ) -> DocumentConverter:
     """Build a docling converter configured for PDFs (lazy)."""
+    from secondbrain.utils.mps_patch import patch_transformers_for_mps
+
+    # RT-DETR position-embedding patch must be in place before the layout
+    # pipeline initializes (first _get_pipeline call), not at import time —
+    # applying it here keeps torch/transformers out of the import path.
+    patch_transformers_for_mps()
+
     from docling.datamodel.base_models import InputFormat
     from docling.document_converter import DocumentConverter
 

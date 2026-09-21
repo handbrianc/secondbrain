@@ -31,7 +31,7 @@ class DocumentConverter(Protocol):
         dict[str, str]
             Dictionary mapping page numbers to extracted text
         """
-        ...
+        ...  # pragma: no cover
 
     def supports_format(self, file_path: Path) -> bool:
         """Check if this converter supports the given file format.
@@ -46,7 +46,7 @@ class DocumentConverter(Protocol):
         bool
             True if converter can handle this file type
         """
-        ...
+        ...  # pragma: no cover
 
 
 @runtime_checkable
@@ -69,7 +69,7 @@ class EmbeddingGenerator(Protocol):
         list[float]
             Embedding vector (float32 values)
         """
-        ...
+        ...  # pragma: no cover
 
     def generate_batch(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings for multiple texts efficiently.
@@ -84,12 +84,12 @@ class EmbeddingGenerator(Protocol):
         list[list[float]]
             List of embedding vectors, same order as input
         """
-        ...
+        ...  # pragma: no cover
 
     @property
     def dimensions(self) -> int:
         """Dimensionality of generated embeddings."""
-        ...
+        ...  # pragma: no cover
 
 
 @runtime_checkable
@@ -112,7 +112,7 @@ class VectorStore(Protocol):
         str
             Database ID of stored document
         """
-        ...
+        ...  # pragma: no cover
 
     def store_batch(self, chunks: list[DocumentChunk]) -> int:
         """Store multiple chunks efficiently.
@@ -127,7 +127,7 @@ class VectorStore(Protocol):
         int
             Number of chunks successfully stored
         """
-        ...
+        ...  # pragma: no cover
 
     def search(
         self,
@@ -151,7 +151,7 @@ class VectorStore(Protocol):
         Sequence[DocumentChunk]
             Similar chunks sorted by similarity score
         """
-        ...
+        ...  # pragma: no cover
 
     def delete_by_source(self, source: str) -> int:
         """Delete all chunks from a source file.
@@ -166,7 +166,7 @@ class VectorStore(Protocol):
         int
             Number of deleted chunks
         """
-        ...
+        ...  # pragma: no cover
 
     def delete_all(self) -> int:
         """Delete all stored chunks.
@@ -176,4 +176,4 @@ class VectorStore(Protocol):
         int
             Number of deleted chunks
         """
-        ...
+        ...  # pragma: no cover

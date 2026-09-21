@@ -108,8 +108,9 @@ class MockLLMProvider(LocalLLMProvider):
         on_chunk: StreamingCallback,
         temperature: float | None = None,
         max_tokens: int | None = None,
+        chunk_delay: float = 0.0,
     ) -> str:
-        """Stream mock response with simulated delays."""
+        """Stream mock response, optionally simulating per-chunk latency."""
         last_user_message = ""
         for msg in reversed(messages):
             if msg.get("role") == "user":
@@ -122,7 +123,8 @@ class MockLLMProvider(LocalLLMProvider):
         for i in range(0, len(full_response), chunk_size):
             chunk = full_response[i : i + chunk_size]
             on_chunk(chunk, None)
-            time.sleep(0.01)
+            if chunk_delay > 0:
+                time.sleep(chunk_delay)
 
         return full_response
 
@@ -132,12 +134,15 @@ class MockLLMProvider(LocalLLMProvider):
         on_chunk: StreamingCallback,
         temperature: float | None = None,
         max_tokens: int | None = None,
+        chunk_delay: float = 0.0,
     ) -> str:
         """Async streaming mock response."""
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(
             None,
-            lambda: self.stream_chat(messages, on_chunk, temperature, max_tokens),
+            lambda: self.stream_chat(
+                messages, on_chunk, temperature, max_tokens, chunk_delay=chunk_delay
+            ),
         )
 
     def chat(
