@@ -53,7 +53,7 @@ test = [
     "pytest-cov>=4.1.0",  # Coverage reporting - test quality
     "pytest-xdist>=3.0.0",  # Parallel tests - 18 workers for speed
     "pytest-timeout>=2.2.0",  # Test timeouts - prevent hangs
-    "pytest-rerunfailures>=16.5",  # Retry flaky tests - concurrent test stability
+    "pytest-rerunfailures>=16.7",  # Retry flaky tests - concurrent test stability
     "hypothesis>=6.167.1",  # Property-based testing - edge case discovery
     "factory-boy>=3.3.3",  # Test factories - factory_boy for test data
 ]
@@ -103,7 +103,7 @@ bundled = [
     "pytest-cov>=4.1.0",
     "pytest-xdist>=3.0.0",
     "pytest-timeout>=2.2.0",
-    "pytest-rerunfailures>=16.5",
+    "pytest-rerunfailures>=16.7",
     "hypothesis>=6.167.1",
     "factory-boy>=3.3.3",
     # All security deps
