@@ -212,14 +212,16 @@ class TestOpenAIEmbeddingProviderVariants:
 
     def test_validate_connection_false_on_network_error(self) -> None:
         """validate_connection returns False when the API endpoint is unreachable."""
+        from unittest.mock import MagicMock
+
         from secondbrain.embedding.providers.openai import OpenAIEmbeddingProvider
 
-        # Use a nonsense address so connection definitely fails.
         provider = OpenAIEmbeddingProvider(
             model="text-embedding-3-small",
             api_key="sk-fake",
             api_base="http://localhost:99999/nonexistent",
         )
+        provider._client.models.list = MagicMock(side_effect=ConnectionError("refused"))
         # Force the client to attempt connection (normally a cache is checked first).
         result = provider.validate_connection(force=True)
 

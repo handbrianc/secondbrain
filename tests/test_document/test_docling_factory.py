@@ -45,6 +45,7 @@ def _unmask_real_docling() -> None:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 def test_modules_do_not_import_docling_at_import_time() -> None:
     """Importing factory/ingestor/processor must not import docling."""
     code = (
@@ -126,6 +127,7 @@ def test_concurrent_callers_get_same_object() -> None:
     assert all(r is results[0] for r in results), "converter was double-built"
 
 
+@pytest.mark.slow
 def test_shared_converter_builds_real_cached_ocr_converter() -> None:
     """Factory returns a cached real docling converter running OCR for PDFs."""
     _unmask_real_docling()

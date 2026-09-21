@@ -50,12 +50,12 @@ class TestConcurrentSearch:
         mock_collection = MagicMock()
 
         async def search_operation():
-            await asyncio.sleep(0.01)
+            await asyncio.sleep(0)
             return [{"doc_id": "result", "score": 0.9}]
 
         async def ingest_operation(doc_id):
             mock_collection.insert_one({"doc_id": doc_id})
-            await asyncio.sleep(0.01)
+            await asyncio.sleep(0)
 
         operations = [
             search_operation(),
@@ -74,7 +74,7 @@ class TestConcurrentSearch:
         """Test concurrent searches on different collections."""
 
         async def search_collection(collection_name):
-            await asyncio.sleep(0.01)
+            await asyncio.sleep(0)
             return [{"doc_id": "result", "score": 0.9}]
 
         results = await asyncio.gather(
@@ -95,11 +95,11 @@ class TestSearchRaceConditions:
         ingestion_complete = asyncio.Event()
 
         async def simulate_ingestion():
-            await asyncio.sleep(0.01)
+            await asyncio.sleep(0)
             ingestion_complete.set()
 
         async def simulate_search():
-            await asyncio.sleep(0.01)
+            await asyncio.sleep(0)
             return [{"doc_id": "result", "score": 0.9}]
 
         ingest_task = asyncio.create_task(simulate_ingestion())
@@ -113,11 +113,11 @@ class TestSearchRaceConditions:
         """Test search behavior during index creation."""
 
         async def create_index():
-            await asyncio.sleep(0.01)
+            await asyncio.sleep(0)
             return True
 
         async def search_with_index():
-            await asyncio.sleep(0.01)
+            await asyncio.sleep(0)
             return [{"doc_id": "result", "score": 0.9}]
 
         results = await asyncio.gather(
@@ -141,7 +141,7 @@ class TestSearchPerformanceUnderLoad:
 
         async def slow_search():
             start = asyncio.get_event_loop().time()
-            await asyncio.sleep(0.01)
+            await asyncio.sleep(0)
             end = asyncio.get_event_loop().time()
             search_times.append(end - start)
             return [{"doc_id": "result", "score": 0.9}]
@@ -158,7 +158,7 @@ class TestSearchPerformanceUnderLoad:
 
         async def count_search():
             nonlocal completed
-            await asyncio.sleep(0.01)
+            await asyncio.sleep(0)
             completed += 1
 
         await asyncio.gather(*[count_search() for _ in range(50)])
@@ -191,7 +191,7 @@ class TestSearchWithCircuitBreaker:
         assert cb.is_allowed() is True
 
     @pytest.mark.asyncio
-    async def test_concurrent_search_during_circuit_recovery(self):
+    async def test_concurrent_search_during_circuit_recovery(self, fake_clock):
         """Test concurrent searches during circuit recovery."""
         config = CircuitBreakerConfig(
             failure_threshold=3,
@@ -203,7 +203,7 @@ class TestSearchWithCircuitBreaker:
         for _ in range(3):
             cb.record_failure()
 
-        await asyncio.sleep(0.15)
+        fake_clock.advance(0.15)
 
         assert cb.state == CircuitState.HALF_OPEN
 
@@ -223,7 +223,7 @@ class TestSearchConsistency:
         """Test that search returns consistent results."""
 
         async def mock_search():
-            await asyncio.sleep(0.01)
+            await asyncio.sleep(0)
             return [{"doc_id": "doc-1", "score": 0.9}]
 
         results = await asyncio.gather(*[mock_search() for _ in range(5)])
@@ -239,7 +239,7 @@ class TestSearchConsistency:
 
         async def delete_document(doc_id):
             mock_collection.delete_one({"doc_id": doc_id})
-            await asyncio.sleep(0.01)
+            await asyncio.sleep(0)
 
         await delete_document("doc-1")
 
@@ -255,7 +255,7 @@ class TestSearchConsistency:
         async def delete_document(doc_id):
             """Simulate document deletion with potential race conditions."""
             # Simulate some async work
-            await asyncio.sleep(0.001)
+            await asyncio.sleep(0)
 
             # Perform deletion
             mock_collection.delete_one({"doc_id": doc_id})
@@ -293,7 +293,7 @@ class TestSearchConsistency:
             """Multiple deletions of the same document."""
             nonlocal deletion_count
 
-            await asyncio.sleep(0.001)
+            await asyncio.sleep(0)
 
             async with lock:
                 deletion_count += 1

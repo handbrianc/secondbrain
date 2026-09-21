@@ -58,6 +58,7 @@ def setup_span_capture(monkeypatch) -> InMemorySpanExporter:
     provider = TracerProvider()
     provider.add_span_processor(SimpleSpanProcessor(exporter))
     tracer = provider.get_tracer("test")
+    monkeypatch.setattr(tracing_module, "OTTEL_AVAILABLE", True)
     monkeypatch.setattr(tracing_module, "get_tracer", lambda: tracer)
     monkeypatch.setattr(tracing_module, "is_tracing_enabled", lambda: True)
     return exporter

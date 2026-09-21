@@ -19,7 +19,7 @@ from secondbrain.utils.failure_injector import (
 class TestChaosAdvanced:
     """Advanced chaos testing scenarios."""
 
-    def test_concurrent_chaos_attacks(self):
+    def test_concurrent_chaos_attacks(self, fake_clock):
         """Test system resilience under concurrent chaos attacks."""
         injector = FailureInjector()
 
@@ -28,7 +28,7 @@ class TestChaosAdvanced:
         def run_with_latency():
             try:
                 with injector.inject_latency(duration=1.0, latency_ms=100):
-                    time.sleep(0.05)
+                    fake_clock.sleep(0.05)
                     if injector.should_fail(FailureType.LATENCY_INJECTION):
                         injector.raise_failure(FailureType.LATENCY_INJECTION)
                     results.append("latency_done")
@@ -38,7 +38,7 @@ class TestChaosAdvanced:
         def run_with_failure():
             try:
                 with injector.inject_general_failure(duration=1.0, probability=1.0):
-                    time.sleep(0.05)
+                    fake_clock.sleep(0.05)
                     if injector.should_fail(FailureType.GENERAL_FAILURE):
                         injector.raise_failure(FailureType.GENERAL_FAILURE)
                     results.append("failure_done")
@@ -48,7 +48,7 @@ class TestChaosAdvanced:
         with ThreadPoolExecutor(max_workers=2) as executor:
             executor.submit(run_with_latency)
             executor.submit(run_with_failure)
-            time.sleep(0.15)
+            fake_clock.advance(0.15)
 
         assert len(results) >= 1
 
@@ -117,18 +117,18 @@ class TestChaosAdvanced:
 
         assert successes == 2
 
-    def test_chaos_recovery_time_measurement(self):
+    def test_chaos_recovery_time_measurement(self, fake_clock):
         """Test that recovery time is accurately measured."""
         injector = FailureInjector()
 
         with injector.inject_general_failure(duration=0.3, probability=1.0):
-            start = time.time()
-            time.sleep(0.1)
-            duration = time.time() - start
+            start = time.monotonic()
+            fake_clock.sleep(0.1)
+            duration = time.monotonic() - start
             assert duration >= 0.1
 
-        recovery_start = time.time()
-        recovery_time = time.time() - recovery_start
+        recovery_start = time.monotonic()
+        recovery_time = time.monotonic() - recovery_start
         assert recovery_time < 0.1
 
     def test_connection_error_injection(self):
@@ -183,7 +183,7 @@ class TestChaosAdvanced:
 class TestChaosResilienceMetrics:
     """Tests for resilience metrics in chaos test reports."""
 
-    def test_resilience_metrics_in_report(self):
+    def test_resilience_metrics_in_report(self, fake_clock):
         """Test that chaos tests include resilience metrics in reports."""
         import time
 
@@ -209,9 +209,9 @@ class TestChaosResilienceMetrics:
         assert cb.state == CircuitState.OPEN
 
         # Measure recovery time
-        start_time = time.time()
-        time.sleep(0.25)  # Wait for recovery (>= recovery_timeout=0.2s)
-        recovery_time = time.time() - start_time
+        start_time = time.monotonic()
+        fake_clock.advance(0.25)  # Wait for recovery (>= recovery_timeout=0.2s)
+        recovery_time = time.monotonic() - start_time
 
         # Verify circuit recovered to HALF_OPEN
         assert cb.state == CircuitState.HALF_OPEN
@@ -229,7 +229,7 @@ class TestChaosResilienceMetrics:
         assert metrics["state_transitions"] >= 2
         assert metrics["error_rate"] > 0
 
-    def test_circuit_breaker_triggers_logged(self):
+    def test_circuit_breaker_triggers_logged(self, fake_clock):
         """Test that circuit breaker triggers are logged in chaos tests."""
         from secondbrain.utils.circuit_breaker import (
             CircuitBreaker,
@@ -253,7 +253,7 @@ class TestChaosResilienceMetrics:
         transitions.append(("AFTER_FAILURES", cb.state))
 
         # Wait for recovery (>= recovery_timeout=0.1s)
-        time.sleep(0.15)
+        fake_clock.advance(0.15)
         transitions.append(("AFTER_RECOVERY", cb.state))
 
         # Verify transitions were tracked
@@ -263,7 +263,7 @@ class TestChaosResilienceMetrics:
         assert transitions[1][1] == CircuitState.OPEN
         assert transitions[2][1] == CircuitState.HALF_OPEN
 
-    def test_recovery_time_measurement(self):
+    def test_recovery_time_measurement(self, fake_clock):
         """Test that recovery time is accurately measured in chaos tests."""
         import time
 
@@ -285,10 +285,10 @@ class TestChaosResilienceMetrics:
         assert cb.state == CircuitState.OPEN
 
         # Measure actual recovery time
-        start_time = time.time()
+        start_time = time.monotonic()
         while cb.state != CircuitState.HALF_OPEN:
-            time.sleep(0.05)
-        actual_recovery_time = time.time() - start_time
+            fake_clock.sleep(0.05)
+        actual_recovery_time = time.monotonic() - start_time
 
         # Verify recovery time is approximately the configured timeout
         assert actual_recovery_time >= 0.3, (

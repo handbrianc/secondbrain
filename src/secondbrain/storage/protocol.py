@@ -31,7 +31,7 @@ class VectorStorageProtocol(Protocol):
         file_type_filter: str | None = None,
     ) -> Sequence[SearchResult]:
         """Search for similar chunks, optionally filtered by payload fields."""
-        ...
+        ...  # pragma: no cover
 
     async def search_async(
         self,
@@ -41,19 +41,19 @@ class VectorStorageProtocol(Protocol):
         file_type_filter: str | None = None,
     ) -> Sequence[SearchResult]:
         """Async variant of :meth:`search`."""
-        ...
+        ...  # pragma: no cover
 
     def store(self, document: dict[str, Any]) -> str:
         """Upsert a single chunk; return its id."""
-        ...
+        ...  # pragma: no cover
 
     def store_batch(self, documents: list[dict[str, Any]]) -> int:
         """Upsert a batch of chunks; return the number of documents."""
-        ...
+        ...  # pragma: no cover
 
     async def store_batch_async(self, documents: list[dict[str, Any]]) -> int:
         """Async variant of :meth:`store_batch`."""
-        ...
+        ...  # pragma: no cover
 
     def list_chunks(
         self,
@@ -64,15 +64,15 @@ class VectorStorageProtocol(Protocol):
         use_prefix_match: bool = True,
     ) -> Sequence[ChunkInfo]:
         """List chunks with optional filters and offset/limit pagination."""
-        ...
+        ...  # pragma: no cover
 
     def list_source_files(self) -> list[str]:
         """Return every distinct source file path in the store."""
-        ...
+        ...  # pragma: no cover
 
     def has_existing_hashes(self, hashes: list[str]) -> set[str]:
         """Return the subset of ``hashes`` already present in the store."""
-        ...
+        ...  # pragma: no cover
 
     def get_source_chunks(
         self,
@@ -82,7 +82,7 @@ class VectorStorageProtocol(Protocol):
         with_text: bool = True,
     ) -> Sequence[ChunkInfo]:
         """Return a source's chunks ordered by page number."""
-        ...
+        ...  # pragma: no cover
 
     def find_chunks(
         self,
@@ -96,7 +96,7 @@ class VectorStorageProtocol(Protocol):
         with_text: bool = True,
     ) -> Sequence[ChunkInfo]:
         """Return chunks matching metadata filters (optional section regex)."""
-        ...
+        ...  # pragma: no cover
 
     def find_structural_chunks(
         self,
@@ -113,7 +113,7 @@ class VectorStorageProtocol(Protocol):
         values starting with *source_prefix*, ordered by ascending
         ``page_number`` and truncated to *limit*.
         """
-        ...
+        ...  # pragma: no cover
 
     def get_body_chunks(
         self,
@@ -124,7 +124,7 @@ class VectorStorageProtocol(Protocol):
         with_text: bool = True,
     ) -> Sequence[ChunkInfo]:
         """Return a source's body chunks ordered by page, optionally page/limit."""
-        ...
+        ...  # pragma: no cover
 
     def count_chunks(
         self,
@@ -132,36 +132,36 @@ class VectorStorageProtocol(Protocol):
         chunk_role: str | None = None,
     ) -> int:
         """Count chunks matching optional source_file / chunk_role filters."""
-        ...
+        ...  # pragma: no cover
 
     def delete_by_source(self, source: str) -> int:
         """Delete all chunks from a source file; return the count."""
-        ...
+        ...  # pragma: no cover
 
     def delete_by_chunk_id(self, chunk_id: str) -> int:
         """Delete a specific chunk; return the count (0 or 1)."""
-        ...
+        ...  # pragma: no cover
 
     def delete_all(self) -> int:
         """Delete all chunks; return the count."""
-        ...
+        ...  # pragma: no cover
 
     def get_stats(self) -> dict[str, Any]:
         """Return storage statistics (total chunks, unique sources)."""
-        ...
+        ...  # pragma: no cover
 
     def validate_connection(self, force: bool = False) -> bool:
         """Return True if the backend is reachable; never raises."""
-        ...
+        ...  # pragma: no cover
 
     def close(self) -> None:
         """Release backend resources."""
-        ...
+        ...  # pragma: no cover
 
     def __enter__(self) -> Any:
         """Enter a context manager; return self."""
-        ...
+        ...  # pragma: no cover
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         """Exit a context manager and close the backend."""
-        ...
+        ...  # pragma: no cover
