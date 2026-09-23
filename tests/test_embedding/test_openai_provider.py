@@ -27,7 +27,8 @@ from secondbrain.exceptions import ServiceUnavailableError
 
 def _api_error(message: str) -> APIError:
     """Build a real openai.APIError whose .message the provider reads."""
-    return APIError(message=message, request=MagicMock(), body=None)
+    request = MagicMock()
+    return APIError(message=message, request=request, body=None)
 
 
 def _response(items: list[tuple[int, list[float]]]) -> MagicMock:

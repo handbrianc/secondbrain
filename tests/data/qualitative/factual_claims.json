@@ -36,7 +36,7 @@
          "context": "Database dependency",
          "expected": {
             "verifiable": true,
-             "fact": "qdrant-client>=1.19.0 (Qdrant vector database client)",
+             "fact": "qdrant-client>=1.19.1 (Qdrant vector database client)",
             "source": "pyproject.toml dependencies",
             "source_required": true,
             "hallucination_risk": "low"
