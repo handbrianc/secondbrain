@@ -56,25 +56,48 @@ class TestTypedDictValidators:
     """Runtime validation gates in secondbrain.types."""
 
     def test_validate_chunk_info_passes_through_valid(self):
-        d = {"chunk_id": "c1", "source_file": "a.pdf", "chunk_text": "x", "page_number": 1}
+        d = {
+            "chunk_id": "c1",
+            "source_file": "a.pdf",
+            "chunk_text": "x",
+            "page_number": 1,
+        }
         assert _validate_chunk_info(d) is d
 
-    @pytest.mark.parametrize("missing", ["chunk_id", "source_file", "chunk_text", "page_number"])
+    @pytest.mark.parametrize(
+        "missing", ["chunk_id", "source_file", "chunk_text", "page_number"]
+    )
     def test_validate_chunk_info_rejects_missing_key(self, missing: str):
-        d = {"chunk_id": "c1", "source_file": "a.pdf", "chunk_text": "x", "page_number": 1}
+        d = {
+            "chunk_id": "c1",
+            "source_file": "a.pdf",
+            "chunk_text": "x",
+            "page_number": 1,
+        }
         del d[missing]
         with pytest.raises(TypeError, match="missing required key"):
             _validate_chunk_info(d)
 
     def test_validate_search_result_passes_through_valid(self):
-        d = {"chunk_id": "c1", "source_file": "a.pdf", "chunk_text": "x", "page_number": 2, "score": 0.9}
+        d = {
+            "chunk_id": "c1",
+            "source_file": "a.pdf",
+            "chunk_text": "x",
+            "page_number": 2,
+            "score": 0.9,
+        }
         assert _validate_search_result(d) is d
 
     @pytest.mark.parametrize(
         "missing", ["chunk_id", "source_file", "chunk_text", "page_number"]
     )
     def test_validate_search_result_rejects_missing_key(self, missing: str):
-        d = {"chunk_id": "c1", "source_file": "a.pdf", "chunk_text": "x", "page_number": 2}
+        d = {
+            "chunk_id": "c1",
+            "source_file": "a.pdf",
+            "chunk_text": "x",
+            "page_number": 2,
+        }
         del d[missing]
         with pytest.raises(TypeError, match="missing required key"):
             _validate_search_result(d)
@@ -132,7 +155,9 @@ class TestConfigValidators:
             self._cfg(llm_stream_idle_timeout_seconds=-1)
 
     def test_embedding_cache_size_non_negative(self):
-        with pytest.raises(ValueError, match="embedding_cache_size must be non-negative"):
+        with pytest.raises(
+            ValueError, match="embedding_cache_size must be non-negative"
+        ):
             self._cfg(embedding_cache_size=-1)
 
     def test_embedding_batch_size_bounds(self):
