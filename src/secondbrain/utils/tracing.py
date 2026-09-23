@@ -49,7 +49,7 @@ def _load_otlp_exporter() -> Any:
             spec = importlib.util.find_spec(
                 "opentelemetry.exporter.otlp.proto.grpc.trace_exporter"
             )
-        except (ImportError, ValueError):
+        except (ImportError, ModuleNotFoundError, ValueError):
             spec = None
         if spec is not None:
             module = importlib.import_module(
