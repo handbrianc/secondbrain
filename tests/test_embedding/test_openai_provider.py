@@ -1,8 +1,9 @@
 """Tests for OpenAIEmbeddingProvider and remaining MockEmbeddingProvider gaps.
 
 All OpenAI SDK clients are patched at the provider module, so no test ever
-touches the network. Error branches map: httpx.ConnectError / TimeoutException
-and openai.APIError -> ServiceUnavailableError, anything else -> RuntimeError.
+touches the network. Error branches map: openai.APITimeoutError and
+APIConnectionError and openai.APIError -> ServiceUnavailableError, anything
+else -> RuntimeError (openai 3.x / httpx2 transport).
 """
 
 from __future__ import annotations
@@ -11,9 +12,9 @@ from collections.abc import Callable
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import httpx
+import httpx2
 import pytest
-from openai import APIError
+from openai import APIConnectionError, APIError, APITimeoutError
 
 import secondbrain.embedding.providers.openai as openai_mod
 from secondbrain.embedding.mock import (
@@ -26,8 +27,7 @@ from secondbrain.exceptions import ServiceUnavailableError
 
 def _api_error(message: str) -> APIError:
     """Build a real openai.APIError whose .message the provider reads."""
-    request = httpx.Request("POST", "http://embeddings.test/v1/embeddings")
-    return APIError(message=message, request=request, body=None)
+    return APIError(message=message, request=MagicMock(), body=None)
 
 
 def _response(items: list[tuple[int, list[float]]]) -> MagicMock:
@@ -67,12 +67,12 @@ def _make_provider(**overrides: Any) -> tuple[Any, MagicMock, MagicMock]:
 
 _ERROR_CASES: list[tuple[Callable[[], Exception], type[Exception], str]] = [
     (
-        lambda: httpx.ConnectError("refused"),
+        lambda: APIConnectionError(request=MagicMock()),
         ServiceUnavailableError,
         "unreachable",
     ),
     (
-        lambda: httpx.TimeoutException("slow"),
+        lambda: APITimeoutError(request=MagicMock()),
         ServiceUnavailableError,
         "timed out after 30s",
     ),
@@ -101,7 +101,7 @@ class TestOpenAIProviderInit:
         assert provider._api_key == "sk-test"
         assert provider._dimensions == 512
         expected = {
-            "timeout": httpx.Timeout(7),
+            "timeout": httpx2.Timeout(7),
             "api_key": "sk-test",
             "base_url": "https://api.example.com/v1",
             "default_query": {"drop_params": "true"},
@@ -130,7 +130,7 @@ class TestOpenAIProviderInit:
             provider = openai_mod.OpenAIEmbeddingProvider()
 
         assert provider._api_key is None
-        expected = {"timeout": httpx.Timeout(120), "api_key": "no-auth-placeholder"}
+        expected = {"timeout": httpx2.Timeout(120), "api_key": "no-auth-placeholder"}
         mock_openai.assert_called_once_with(**expected)
         mock_async.assert_called_once_with(**expected)
 

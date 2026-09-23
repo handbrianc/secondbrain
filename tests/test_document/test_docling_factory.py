@@ -5,8 +5,8 @@ Covers the behavioral contract of :func:`get_shared_converter`:
 - lazy import (docling must NOT be imported at module import time)
 - singleton identity (same object on repeated calls)
 - race-safe construction across threads
-- a real-docling smoke test (unmasks the conftest stub) verifying the
-  cached OCR converter config is wired correctly.
+- a real-docling smoke test run in a subprocess (keeps the conftest stubs
+  intact in this process) verifying the cached OCR converter config.
 """
 
 import subprocess
@@ -14,7 +14,6 @@ import sys
 import threading
 from collections.abc import Iterator
 from typing import Any
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -31,13 +30,6 @@ def _reset_singleton() -> Iterator[None]:
     close_shared_converter()
     yield
     close_shared_converter()
-
-
-def _unmask_real_docling() -> None:
-    """Purge the conftest's docling MagicMock stubs so real docling imports."""
-    for name in list(sys.modules):
-        if name.startswith("docling") and isinstance(sys.modules[name], MagicMock):
-            del sys.modules[name]
 
 
 # ---------------------------------------------------------------------------
@@ -129,15 +121,39 @@ def test_concurrent_callers_get_same_object() -> None:
 
 @pytest.mark.slow
 def test_shared_converter_builds_real_cached_ocr_converter() -> None:
-    """Factory returns a cached real docling converter running OCR for PDFs."""
-    _unmask_real_docling()
+    """Real docling builds a cached OCR converter, verified in a subprocess.
 
-    assert get_shared_converter() is get_shared_converter()
-
-    from docling.datamodel.base_models import InputFormat
-
-    pipeline_options = (
-        get_shared_converter().format_to_options[InputFormat.PDF].pipeline_options
+    Running in a subprocess keeps the real docling import and the unmasking of
+    the session's docling stubs out of this process, so later tests in a
+    single-process run never observe half-stub/half-real docling state.
+    """
+    code = (
+        "import sys\n"
+        "from unittest.mock import MagicMock\n"
+        "for name in list(sys.modules):\n"
+        "    if name.startswith('docling') and isinstance(sys.modules[name], MagicMock):\n"
+        "        del sys.modules[name]\n"
+        "from secondbrain.document.docling_factory import (\n"
+        "    close_shared_converter,\n"
+        "    get_shared_converter,\n"
+        ")\n"
+        "assert get_shared_converter() is get_shared_converter()\n"
+        "from docling.datamodel.base_models import InputFormat\n"
+        "pipeline_options = (\n"
+        "    get_shared_converter().format_to_options[InputFormat.PDF].pipeline_options\n"
+        ")\n"
+        "assert pipeline_options is not None\n"
+        "assert pipeline_options.model_dump().get('do_ocr') is True\n"
+        "close_shared_converter()\n"
+        "print('OK')\n"
     )
-    assert pipeline_options is not None
-    assert pipeline_options.model_dump().get("do_ocr") is True
+    proc = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+    assert proc.returncode == 0, (
+        f"real-converter check failed:\n{proc.stdout}\n{proc.stderr}"
+    )
+    assert "OK" in proc.stdout
