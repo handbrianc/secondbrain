@@ -181,6 +181,23 @@ beyond their process lifetime. Enable it only when you need on-disk retention:
 When `SECONDBRAIN_LOG_FILE` is unset, no file handler is created and all output stays on stdout,
 preserving the 12-Factor delivery model.
 
+## TLS Certificates
+
+Since the openai SDK 3.x migration, SecondBrain's LLM/embedding clients use the operating
+system trust store instead of the bundled `certifi` CA bundle. `python:3.14-slim` images
+and standard desktop installs ship a working CA store out of the box (verified against a
+real HTTPS endpoint).
+
+In minimal container bases (distroless, scratch, alpine without `ca-certificates`), HTTPS
+calls fail certificate verification. Either install the OS CA package or point
+`SSL_CERT_FILE` at a PEM bundle:
+
+```dockerfile
+RUN apt-get update && apt-get install -y --no-recommends ca-certificates
+# or, with a bundle copied into the image:
+ENV SSL_CERT_FILE=/etc/secondbrain/ca-bundle.pem
+```
+
 ## Configuration Validation
 
 On startup, SecondBrain validates configuration values. Invalid configurations raise errors:
