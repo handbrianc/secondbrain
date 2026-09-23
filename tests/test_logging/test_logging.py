@@ -165,6 +165,8 @@ class TestSetupJsonLogging:
 
         setup_json_logging(logging.DEBUG)
         assert len(root_logger.handlers) > 0
+        assert isinstance(root_logger.handlers[0], logging.StreamHandler)
+        assert not isinstance(root_logger.handlers[0], RichHandler)
 
     def test_setup_json_logging_sets_level(self) -> None:
         root_logger = logging.getLogger()
@@ -213,8 +215,13 @@ class TestSetupJsonLogging:
         root_logger.handlers.clear()
 
         setup_json_logging(logging.DEBUG)
+        stream = io.StringIO()
+        root_logger.handlers[0].setStream(stream)
         set_request_id("test-request-id")
         get_logger("test_json_output").info("Test message for JSON output")
+        json_data = json.loads(stream.getvalue().strip())
+        assert json_data["message"] == "Test message for JSON output"
+        assert json_data["request_id"] == "test-request-id"
         assert len(root_logger.handlers) > 0
 
 
