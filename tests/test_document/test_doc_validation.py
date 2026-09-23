@@ -8,9 +8,10 @@ This module tests validation methods in the document ingestion pipeline:
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Callable
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -81,7 +82,9 @@ class TestValidateFileSize:
 
         with patch.object(Path, "stat", self._fake_stat(ingestor.max_file_size_bytes)):
             ingestor._validate_file_size(small_file)
-        with patch.object(Path, "stat", self._fake_stat(ingestor.max_file_size_bytes - 1)):
+        with patch.object(
+            Path, "stat", self._fake_stat(ingestor.max_file_size_bytes - 1)
+        ):
             ingestor._validate_file_size(small_file)
 
 

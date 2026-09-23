@@ -214,7 +214,7 @@ warn_unused_ignores = true
 warn_no_return = true
 warn_unreachable = true
 strict_equality = true
-exclude = ["venv/", ".git/", "tests/", ".*\\.egg-info/", "scripts/", "docs/examples/integrations/"]
+exclude = ["venv/", ".git/", "build/", "tests/", ".*\\.egg-info/", "scripts/", "docs/examples/integrations/"]
 ignore_missing_imports = true
 namespace_packages = false
 
@@ -299,6 +299,7 @@ markers = [
     "threshold_validation: marks tests for threshold validation and sensitivity analysis",
     "xdist_group: marks tests that should run in same xdist worker (shared resources)",
     "flaky: marks tests as known flaky tests that may need retry",
+    "performance: marks performance monitoring tests (PerfMetrics, timing decorator)",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning:docling",
