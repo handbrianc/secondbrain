@@ -82,7 +82,9 @@ class TestValidateFileSize:
 
         with patch.object(Path, "stat", self._fake_stat(ingestor.max_file_size_bytes)):
             ingestor._validate_file_size(small_file)
-        with patch.object(Path, "stat", self._fake_stat(ingestor.max_file_size_bytes - 1)):
+        with patch.object(
+            Path, "stat", self._fake_stat(ingestor.max_file_size_bytes - 1)
+        ):
             ingestor._validate_file_size(small_file)
 
 
