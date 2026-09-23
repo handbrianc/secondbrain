@@ -6,7 +6,7 @@ Corpus: generated plain-text corpus, 8 files
 ## Measured table (verbatim)
 
 | cores | wall_s | files/s | peak_rss_MB | success |
-|-------|--------|---------|-------------|---------|
+| ------- | -------- | --------- | ------------- | --------- |
 | 1 | 7.85 | 1.02 | 684.77 | 8 |
 | 2 | 8.25 | 0.97 | 684.77 | 8 |
 | 4 | 9.14 | 0.88 | 684.77 | 8 |
@@ -31,4 +31,5 @@ Corpus: generated plain-text corpus, 8 files
 2. EMBEDDING requires `wall_max / wall_min <= 1.2` (1.254 > 1.2 ✗) → not met.
 3. NONE otherwise → met.
 
-VERDICT: NONE. Wall time rises with core count (1.254x from 1 to 8 cores) and peak RSS is flat (ratio 1.007), so no scaling bottleneck is confirmed and the run is not embedding-bound.
+VERDICT: NONE. Wall time rises with core count (1.254x from 1 to 8 cores) and peak RSS is flat (ratio 1.007),
+so no scaling bottleneck is confirmed and the run is not embedding-bound.

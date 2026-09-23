@@ -219,7 +219,9 @@ def setup_json_logging(
             }
             return json.dumps(log_entry)
 
-    handlers: list[logging.Handler] = [RichHandler()]
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(JSONFormatter())
+    handlers: list[logging.Handler] = [console_handler]
 
     # Add file handler if log file is specified
     if log_file:
@@ -236,9 +238,6 @@ def setup_json_logging(
         format="%(message)s",
         handlers=handlers,
     )
-
-    if logging.root.handlers:
-        logging.root.handlers[0].setFormatter(JSONFormatter())
 
 
 def check_services() -> dict[str, bool]:

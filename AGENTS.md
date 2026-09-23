@@ -147,8 +147,8 @@ pytest
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **secondbrain** (10321 symbols, 16643 relationships, 91 execution
-flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **secondbrain** (11249 symbols, 21567 relationships, 272 execution flows).
+Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
@@ -162,8 +162,8 @@ flows). Use the GitNexus MCP tools to understand code, assess impact, and naviga
 - **MUST warn the user** if impact analysis returns HIGH or CRITICAL risk before proceeding with edits.
 - When exploring unfamiliar code, use `gitnexus_query({query: "concept"})` to find execution flows instead of
   grepping. It returns process-grouped results ranked by relevance.
-- When you need full context on a specific symbol — callers, callees, which execution flows it participates in
-  — use `gitnexus_context({name: "symbolName"})`.
+- When you need full context on a specific symbol — callers, callees, which execution flows it participates in —
+  use `gitnexus_context({name: "symbolName"})`.
 
 ## Never Do
 
@@ -197,9 +197,13 @@ flows). Use the GitNexus MCP tools to understand code, assess impact, and naviga
 <!-- CODEGRAPH_START -->
 ## CodeGraph
 
-In repositories indexed by CodeGraph (a `.codegraph/` directory exists at the repo root), reach for it BEFORE grep/find or reading files when you need to understand or locate code:
+In repositories indexed by CodeGraph (a `.codegraph/` directory exists at the repo root), reach for it BEFORE
+grep/find or reading files when you need to understand or locate code:
 
-- **MCP tool** (when available): `codegraph_explore` answers most code questions in one call — the relevant symbols' verbatim source plus the call paths between them, including dynamic-dispatch hops grep can't follow. Name a file or symbol in the query to read its current line-numbered source. If it's listed but deferred, load it by name via tool search.
+- **MCP tool** (when available): `codegraph_explore` answers most code questions in one call — the relevant
+  symbols' verbatim source plus the call paths between them, including dynamic-dispatch hops grep can't follow.
+  Name a file or symbol in the query to read its current line-numbered source. If it's listed but deferred, load
+  it by name via tool search.
 - **Shell** (always works): `codegraph explore "<symbol names or question>"` prints the same output.
 
 If there is no `.codegraph/` directory, skip CodeGraph entirely — indexing is the user's decision.

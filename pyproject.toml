@@ -254,7 +254,8 @@ ignore = [
     "CVE-2026-33231",
     "GHSA-rf74-v2fm-23pw",
     "PYSEC-2026-597",  # NLTK 3.9.4 path traversal - no fix available yet
-    
+    "PYSEC-2026-3740",  # CVE-2026-81726; NLTK 3.10.3 is latest, no fixed release exists
+
     # Transitive dependencies - mitigated by context
     "54843",
     "CVE-2023-26112",

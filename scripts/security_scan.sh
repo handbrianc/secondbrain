@@ -27,6 +27,11 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
+# PYSEC-2026-3740 (CVE-2026-81726): nltk is a dev-only transitive dep of
+# safety; nltk 3.10.3 is the newest release and no fixed version exists.
+# Mirrors the documented ignore in pyproject.toml [tool.safety].
+PIP_AUDIT_IGNORE_ARGS=(--ignore-vuln PYSEC-2026-3740)
+
 # Check if virtual environment is activated
 if [ -z "$VIRTUAL_ENV" ]; then
     echo -e "${YELLOW}Warning: Virtual environment not activated.${NC}"
@@ -40,7 +45,7 @@ run_pip_audit() {
     echo ""
     
     if command -v pip-audit &> /dev/null; then
-        pip-audit --desc on
+        pip-audit --desc on "${PIP_AUDIT_IGNORE_ARGS[@]}"
         echo ""
         echo -e "${GREEN}pip-audit completed successfully${NC}"
     else
@@ -102,7 +107,7 @@ scan_sbom() {
     
     if [ -f "sbom.json" ]; then
         if command -v pip-audit &> /dev/null; then
-            pip-audit --requirement sbom.json
+            pip-audit --requirement sbom.json "${PIP_AUDIT_IGNORE_ARGS[@]}"
             echo ""
             echo -e "${GREEN}SBOM scan completed${NC}"
         else

@@ -2,6 +2,8 @@
 
 import contextlib
 import os
+import sys
+from types import ModuleType
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -596,16 +598,85 @@ class TestSetupTracingWithMetrics:
     def test_handles_otlp_exporter_failure(self, caplog):
         """Should fallback to console exporter when OTLP fails."""
         os.environ["SECONDBRAIN_TRACING_ENABLED"] = "true"
+        os.environ["OTEL_METRICS_ENABLED"] = "false"
 
         from secondbrain.utils import tracing
 
         tracing._tracer = None
         tracing._tracing_enabled = False
+        tracing._metrics_enabled = False
+        tracing._otlp_checked = False
+        tracing._otlp_exporter_cls = None
 
-        with patch("secondbrain.utils.tracing.OTTEL_AVAILABLE", False):
-            # When OTel is not available, setup_tracing is a no-op
+        resources_module = ModuleType("opentelemetry.sdk.resources")
+        trace_module = ModuleType("opentelemetry.sdk.trace")
+        trace_export_module = ModuleType("opentelemetry.sdk.trace.export")
+        trace_sampling_module = ModuleType("opentelemetry.sdk.trace.sampling")
+        sdk_module = ModuleType("opentelemetry.sdk")
+
+        class FakeResource:
+            @staticmethod
+            def create(attributes):
+                return attributes
+
+        class FakeTracerProvider:
+            def __init__(self, *, resource, sampler):
+                self.resource = resource
+                self.sampler = sampler
+                self.span_processors = []
+
+            def add_span_processor(self, processor):
+                self.span_processors.append(processor)
+
+        class FakeBatchSpanProcessor:
+            def __init__(self, exporter):
+                self.span_exporter = exporter
+
+        class FakeConsoleSpanExporter:
+            pass
+
+        class FakeTraceIdRatioBased:
+            def __init__(self, rate):
+                self.rate = rate
+
+        resources_module.Resource = FakeResource
+        trace_module.TracerProvider = FakeTracerProvider
+        trace_export_module.BatchSpanProcessor = FakeBatchSpanProcessor
+        trace_export_module.ConsoleSpanExporter = FakeConsoleSpanExporter
+        trace_sampling_module.TraceIdRatioBased = FakeTraceIdRatioBased
+
+        with (
+            patch.dict(
+                sys.modules,
+                {
+                    "opentelemetry.sdk": sdk_module,
+                    "opentelemetry.sdk.resources": resources_module,
+                    "opentelemetry.sdk.trace": trace_module,
+                    "opentelemetry.sdk.trace.export": trace_export_module,
+                    "opentelemetry.sdk.trace.sampling": trace_sampling_module,
+                },
+            ),
+            patch("secondbrain.utils.tracing.OTTEL_AVAILABLE", True),
+            patch("secondbrain.utils.tracing._load_otlp_exporter", return_value=None),
+            patch("secondbrain.utils.tracing.otel_trace") as mock_trace,
+            patch("secondbrain.utils.tracing.otel_metrics", None),
+            caplog.at_level("WARNING"),
+        ):
+            mock_trace.get_tracer.return_value = object()
+
             setup_tracing(service_name="test", service_version="1.0")
-            # Test passes if no exception is raised
+
+            tracer_provider = mock_trace.set_tracer_provider.call_args.args[0]
+            assert tracer_provider.span_processors
+            assert isinstance(
+                tracer_provider.span_processors[0].span_exporter,
+                FakeConsoleSpanExporter,
+            )
+            assert tracing._tracing_enabled is True
+            assert any(
+                "falling back to console exporter" in msg.lower()
+                for msg in caplog.messages
+            )
 
 
 class TestGetMeter:
