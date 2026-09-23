@@ -85,6 +85,15 @@ class TestListSourcesIntent:
             "list all documents",
             "what documents do you have",
             "list your sources",
+            "show all sources",
+            "show sources",
+            "show the sources",
+            "show your sources",
+            "show me all sources",
+            "show me the sources",
+            "show all unique sources",
+            "show all documents",
+            "show me your documents",
         ]:
             decision = self.parse(q)
             assert decision.intent is QueryIntent.LIST_SOURCES, (

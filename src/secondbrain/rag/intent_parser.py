@@ -165,6 +165,26 @@ class StructuralIntentParser:
         "all documents stored",
         "which documents are stored",
         "list all unique",
+        # INVARIANT: "show" phrasings mirror the "list" phrasings above —
+        # "show all sources" and "list all sources" must classify identically.
+        # When adding a "list ..." trigger, add its "show ..." mirror here.
+        "show all sources",
+        "show sources",
+        "show the sources",
+        "show unique sources",
+        "show your sources",
+        "show me all sources",
+        "show me the sources",
+        "show me your sources",
+        "show all unique sources",
+        "show all unique",
+        "show all documents",
+        "show documents",
+        "show the documents",
+        "show your documents",
+        "show me all documents",
+        "show me the documents",
+        "show me your documents",
     ]
 
     def __init__(
