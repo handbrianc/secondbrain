@@ -87,16 +87,19 @@ def _capture(
     Device preflight is disabled by default because the wiring tests feed
     sentinel ``AcceleratorDevice`` members that real docling device resolution
     cannot see; preflight tests re-enable it with a ``decide_device`` stub.
-    """
-    import docling.datamodel.pipeline_options as po_import
 
-    po: Any = po_import
+    Fresh ModuleType stand-ins are installed for every module: mutating the
+    live module in place (real docling or the session stub) would leak the
+    mutated attributes past teardown in single-process runs.
+    """
+    po: Any = ModuleType("docling.datamodel.pipeline_options")
     pdf_options_mock = MagicMock()
     threaded_mock = MagicMock()
 
     po.PdfPipelineOptions = pdf_options_mock
     po.ThreadedPdfPipelineOptions = threaded_mock
     po.RapidOcrOptions = MagicMock()
+    po.TableStructureOptions = MagicMock()
     po.TableFormerMode = SimpleNamespace(FAST=object(), ACCURATE=object())
 
     ao: Any = ModuleType("docling.datamodel.accelerator_options")
@@ -367,17 +370,15 @@ def test_rapidocr_use_mps_emitted_only_when_mps_available(
     must be omitted elsewhere.
     """
     _set_env(monkeypatch)
-    _capture(monkeypatch)
+    _, _, _ = _capture(monkeypatch)
     monkeypatch.setattr(
         docling_factory, "_rapidocr_use_mps_available", lambda: mps_available
     )
 
-    import docling.datamodel.pipeline_options as po_import
-
     docling_factory._build_pdf_format_option(do_ocr=True, do_table_structure=False)
 
-    po: Any = po_import
-    kwargs = po.RapidOcrOptions.call_args.kwargs
+    po_installed: Any = sys.modules["docling.datamodel.pipeline_options"]
+    kwargs = po_installed.RapidOcrOptions.call_args.kwargs
     assert kwargs["backend"] == "torch"
     expected = {"EngineConfig.torch.use_mps": True} if mps_available else {}
     assert kwargs["rapidocr_params"] == expected
