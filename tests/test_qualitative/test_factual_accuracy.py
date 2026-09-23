@@ -16,7 +16,6 @@ class TestFactVerification:
         "claim",
         [
             pytest.param("fv_config_python_version", id="python_version"),
-            pytest.param("fv_config_qdrant_version", id="qdrant_version"),
         ],
     )
     def test_configuration_facts(self, factual_claims: dict, claim: str) -> None:
@@ -63,6 +62,7 @@ class TestFactVerification:
     @pytest.mark.parametrize(
         "claim",
         [
+            pytest.param("fv_config_qdrant_version", id="qdrant_version"),
             pytest.param("fv_dependency_docling", id="docling"),
             pytest.param("fv_dependency_ruff_linting", id="ruff_linting"),
         ],

@@ -103,7 +103,9 @@ def _rapidocr_use_mps_available() -> bool:
         import torch
     except ImportError:
         return False
-    return torch.backends.mps.is_available()
+    # torch 2.14's inline stubs resolve mps.is_available() to Any; normalize
+    # explicitly rather than returning Any from a bool function.
+    return bool(torch.backends.mps.is_available())
 
 
 class AcceleratorDeviceUnavailableError(ValueError):
