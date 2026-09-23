@@ -34,11 +34,11 @@ vulture==2.16
 # Documentation
 mkdocs==1.6.1
 mkdocstrings==1.0.6
-mkdocstrings-python==2.0.3
+mkdocstrings-python==2.0.8
 mkdocs-material==9.7.7
 
 # Build and packaging
-pyinstaller==6.22.2
+pyinstaller==6.22.3
 
 # Testing utilities
 mongomock==4.3.0
@@ -65,9 +65,9 @@ setuptools>=84.0.0
 cryptography>=50.0.1
 pillow>=12.3.0
 paramiko>=5.0.0
-PyJWT>=2.13.0
+PyJWT>=2.14.0
 pyasn1>=0.6.4
 pyopenssl>=26.4.0
 twisted>=26.4.0
-idna>=3.19
+idna>=3.20
 wheel>=0.48.0

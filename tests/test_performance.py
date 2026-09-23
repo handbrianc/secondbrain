@@ -8,6 +8,8 @@ import pytest
 
 from secondbrain.utils.perf_monitor import PerfMetrics, metrics, timing
 
+pytestmark = pytest.mark.performance
+
 
 class TestPercentileTracking:
     """Test p50/p95/p99 latency percentile assertions."""

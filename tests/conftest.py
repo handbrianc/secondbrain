@@ -306,6 +306,12 @@ def cleanup_test_state() -> Generator[None]:
     _tm._tracing_enabled = False
     _tm._tracer = None
     _tm._metrics_enabled = False
+    # Reset the shared docling converter singleton so a fixture-scoped mock
+    # converter cached by DocumentIngestor.__init__ can never outlive the
+    # test that populated it (poisons later single-process tests).
+    import secondbrain.document.docling_factory as _df
+
+    _df.close_shared_converter()
     # Restore telemetry env vars after any test that toggles them, so a test
     # enabling tracing/metrics does not leak the "on" state to later tests.
     # (Provider shutdown is handled once at session finish by shutdown_tracing so

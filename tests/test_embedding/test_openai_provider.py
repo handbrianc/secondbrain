@@ -1,8 +1,9 @@
 """Tests for OpenAIEmbeddingProvider and remaining MockEmbeddingProvider gaps.
 
 All OpenAI SDK clients are patched at the provider module, so no test ever
-touches the network. Error branches map: httpx.ConnectError / TimeoutException
-and openai.APIError -> ServiceUnavailableError, anything else -> RuntimeError.
+touches the network. Error branches map: openai.APITimeoutError and
+APIConnectionError and openai.APIError -> ServiceUnavailableError, anything
+else -> RuntimeError (openai 3.x / httpx2 transport).
 """
 
 from __future__ import annotations
@@ -13,11 +14,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx2
 import pytest
-from openai import (
-    APIConnectionError,
-    APIError,
-    APITimeoutError,
-)
+from openai import APIConnectionError, APIError, APITimeoutError
 
 import secondbrain.embedding.providers.openai as openai_mod
 from secondbrain.embedding.mock import (
