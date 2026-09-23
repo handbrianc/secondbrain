@@ -113,7 +113,7 @@ class TestParallelPerformance:
         results_parallel = []
 
         def io_task(x):
-            time.sleep(0.1)
+            time.sleep(0.02)
             return x * 2
 
         num_items = 10

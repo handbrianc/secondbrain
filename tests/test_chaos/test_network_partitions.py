@@ -31,7 +31,7 @@ class TestNetworkPartitionScenarios:
 
         assert cb.state == CircuitState.OPEN
 
-    def test_partition_recovery_detection(self):
+    def test_partition_recovery_detection(self, fake_clock):
         """Test detection of network partition recovery."""
         config = CircuitBreakerConfig(
             failure_threshold=3,
@@ -45,7 +45,7 @@ class TestNetworkPartitionScenarios:
 
         assert cb.state == CircuitState.OPEN
 
-        time.sleep(0.15)
+        fake_clock.advance(0.15)
 
         assert cb.is_allowed() is True
         assert cb.state == CircuitState.HALF_OPEN
@@ -66,7 +66,7 @@ class TestNetworkPartitionScenarios:
         assert vector_cb.state == CircuitState.OPEN
         assert embedding_cb.state == CircuitState.CLOSED
 
-    def test_circuit_breaker_response_to_partition(self):
+    def test_circuit_breaker_response_to_partition(self, fake_clock):
         """Test circuit breaker response pattern to network partitions."""
         config = CircuitBreakerConfig(
             failure_threshold=5,
@@ -84,7 +84,7 @@ class TestNetworkPartitionScenarios:
             cb.record_failure()
         assert cb.state == CircuitState.OPEN
 
-        time.sleep(0.25)
+        fake_clock.advance(0.25)
         assert cb.is_allowed() is True
         assert cb.state == CircuitState.HALF_OPEN
 
@@ -146,7 +146,7 @@ class TestTimeoutHandling:
 class TestRecoveryPatterns:
     """Test recovery patterns after network partitions."""
 
-    def test_exponential_backoff_recovery(self):
+    def test_exponential_backoff_recovery(self, fake_clock):
         """Test exponential backoff during recovery."""
         config = CircuitBreakerConfig(
             failure_threshold=3,
@@ -160,7 +160,7 @@ class TestRecoveryPatterns:
 
         recovery_times = []
         for attempt in range(5):
-            time.sleep(0.15)
+            fake_clock.advance(0.15)
             if cb.is_allowed():
                 recovery_times.append(attempt)
                 cb.record_success()
@@ -170,7 +170,7 @@ class TestRecoveryPatterns:
         assert cb.state == CircuitState.CLOSED
         assert len(recovery_times) > 0
 
-    def test_gradual_traffic_increase_after_recovery(self):
+    def test_gradual_traffic_increase_after_recovery(self, fake_clock):
         """Test gradual traffic increase after partition recovery."""
         config = CircuitBreakerConfig(
             failure_threshold=3,
@@ -183,7 +183,7 @@ class TestRecoveryPatterns:
         for _ in range(3):
             cb.record_failure()
 
-        time.sleep(0.15)
+        fake_clock.advance(0.15)
 
         calls_in_half_open = 0
         for _ in range(10):
@@ -196,7 +196,7 @@ class TestRecoveryPatterns:
         assert calls_in_half_open >= 1
         assert cb.state == CircuitState.CLOSED
 
-    def test_permanent_partition_handling(self):
+    def test_permanent_partition_handling(self, fake_clock):
         """Test handling of permanent network partitions."""
         cb = CircuitBreaker(
             CircuitBreakerConfig(failure_threshold=2, recovery_timeout=0.1)
@@ -208,7 +208,7 @@ class TestRecoveryPatterns:
         assert cb.state == CircuitState.OPEN
 
         for _ in range(5):
-            time.sleep(0.15)
+            fake_clock.advance(0.15)
             if cb.is_allowed():
                 cb.record_failure()
 
@@ -221,13 +221,13 @@ class TestRecoveryPatterns:
 class TestFailureInjectorNetworkPartitions:
     """Tests demonstrating FailureInjector for network partition testing."""
 
-    def test_slow_response_injection(self):
+    def test_slow_response_injection(self, fake_clock):
         """Test slow response injection simulates network latency."""
         injector = FailureInjector()
 
         start_time = time.monotonic()
         with injector.inject_slow_response(slow_duration=0.2):
-            time.sleep(0.05)
+            fake_clock.advance(1.0)
             elapsed = time.monotonic() - start_time
             assert elapsed >= 0.05
             assert injector.is_failure_active(FailureType.SLOW_RESPONSE) is True

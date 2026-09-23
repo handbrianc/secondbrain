@@ -30,7 +30,7 @@ class TestConcurrentIngestion:
             nonlocal call_count
             async with lock:
                 call_count += 1
-            await asyncio.sleep(0.001)
+            await asyncio.sleep(0)
             async with lock:
                 call_count -= 1
 
@@ -48,7 +48,7 @@ class TestConcurrentIngestion:
         async def mock_ingest(doc_id):
             async with lock:
                 inserted.append(doc_id)
-            await asyncio.sleep(0.001)
+            await asyncio.sleep(0)
 
         tasks = [mock_ingest(f"doc-{i}") for i in range(10)]
         await asyncio.gather(*tasks)
@@ -65,7 +65,7 @@ class TestConcurrentIngestion:
             async with lock:
                 if doc_id not in inserted:
                     inserted.add(doc_id)
-            await asyncio.sleep(0.001)
+            await asyncio.sleep(0)
 
         tasks = [mock_ingest(f"doc-{i}") for i in range(3)]
         await asyncio.gather(*tasks)
@@ -84,7 +84,7 @@ class TestRaceConditionDetection:
 
         async def read_modify_write(doc_id, modification):
             doc = {"id": doc_id, "value": 0}
-            await asyncio.sleep(0.01)
+            await asyncio.sleep(0)
             doc["value"] += modification
             return doc
 
@@ -104,7 +104,7 @@ class TestRaceConditionDetection:
         lock = threading.Lock()
 
         async def delete_document(doc_id):
-            await asyncio.sleep(0.01)
+            await asyncio.sleep(0)
             with lock:
                 if doc_id not in deleted:
                     deleted.append(doc_id)
@@ -128,7 +128,7 @@ class TestRaceConditionDetection:
 
         async def create_index(collection_name, _index_spec):
             del _index_spec  # Unused but part of interface
-            await asyncio.sleep(0.01)
+            await asyncio.sleep(0)
             with lock:
                 if collection_name not in index_created:
                     index_created.append(collection_name)
@@ -209,7 +209,7 @@ class TestConcurrencyWithCircuitBreaker:
         assert blocked_count == 100
 
     @pytest.mark.asyncio
-    async def test_concurrent_requests_during_half_open(self):
+    async def test_concurrent_requests_during_half_open(self, fake_clock):
         """Test concurrent requests during half-open state."""
         config = CircuitBreakerConfig(
             failure_threshold=3,
@@ -222,7 +222,7 @@ class TestConcurrencyWithCircuitBreaker:
         for _ in range(3):
             cb.record_failure()
 
-        await asyncio.sleep(0.15)
+        fake_clock.advance(0.15)
 
         assert cb.state == CircuitState.HALF_OPEN
 

@@ -486,10 +486,12 @@ class TestChatCommands:
             assert result.exit_code == 0
             assert "Session History" in result.output
             assert "test-session-123" in result.output
-            assert "What is secondbrain?" in result.output
-            assert "SecondBrain is a local document intelligence CLI" in result.output
-            assert "How do I search documents?" in result.output
-            assert "Use the 'secondbrain search' command" in result.output
+            # rich wraps at the environment's terminal width; flatten so wrap points don't matter.
+            flat_output = " ".join(result.output.split())
+            assert "What is secondbrain?" in flat_output
+            assert "SecondBrain is a local document intelligence CLI" in flat_output
+            assert "How do I search documents?" in flat_output
+            assert "Use the 'secondbrain search' command" in flat_output
 
     def test_create_flag(self) -> None:
         """Test --create flag forces new session with UUID.
