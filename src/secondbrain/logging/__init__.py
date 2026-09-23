@@ -79,9 +79,11 @@ def _quiet_noisy_loggers() -> None:
     # WARNING so only real warnings/errors surface.
     for name in (
         "httpx",
+        "httpx2",  # httpx fork used by openai>=3.x (litellm proxy traffic)
         "httpcore",
         "httpcore.http11",
         "httpcore.http12",
+        "httpx2.httpcore",  # httpx2's bundled httpcore fork
         "urllib3",
         "openai",
         "qdrant_client",
