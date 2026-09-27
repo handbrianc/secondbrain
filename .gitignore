@@ -78,8 +78,4 @@ TEST_*.md
 
 # Generated knowledge graph
 graphify-out/
-.gitnexus
 .codegraph/
-
-# Claude
-.claude/
