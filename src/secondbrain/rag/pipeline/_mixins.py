@@ -4148,6 +4148,12 @@ class _RoutingMixin(_RAGPipelineState):
         Returns ``None`` when the query has no page reference (or the backend
         cannot do a page lookup) so the caller falls back to semantic search;
         returns ``[]`` when a referenced page has no matching chunks.
+
+        The lookup tries, in order: the trusted ``printed_page`` stamp
+        (bracket-marker or footer-derived), the "N / total" footer offset,
+        and finally the PDF's physical page index — a document whose
+        extraction carried no page stamps has no printed index, so the
+        requested number can only be meant as the file's Nth page.
         """
         printed = self._printed_page_from_query(query)
         if printed is None:
@@ -4160,6 +4166,8 @@ class _RoutingMixin(_RAGPipelineState):
             found = list(storage.find_chunks(source_file=source, printed_page=printed))
             if not found:
                 found = self._footer_offset_lookup(storage, source, printed)
+            if not found:
+                found = self._physical_page_lookup(storage, source, printed)
             found = self._expand_page_chunks(storage, source, found)
         except Exception as exc:  # pragma: no cover - backend-dependent
             logger.warning(
@@ -4167,6 +4175,29 @@ class _RoutingMixin(_RAGPipelineState):
             )
             return None
         return [dict(c) for c in found]
+
+    def _physical_page_lookup(
+        self,
+        storage: Any,
+        source: str | None,
+        printed: int,
+    ) -> list[dict[str, Any]]:
+        """Last-resort page lookup against the physical PDF page index.
+
+        Fires only after both the printed-page stamp and the footer offset
+        missed — i.e. the document carries no trusted printed index at all.
+        The requested number is then interpreted as the file's Nth page.
+        Chunks are tagged with ``page_lookup_fallback: "physical"`` so
+        answers can disclose that the number was read as a physical index
+        rather than a printed one.
+        """
+        try:
+            found = list(storage.find_chunks(source_file=source, page_number=printed))
+        except Exception:
+            return []
+        for c in found:
+            c.setdefault("page_lookup_fallback", "physical")
+        return found
 
     def _footer_offset_lookup(
         self,

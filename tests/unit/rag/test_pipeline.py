@@ -5086,17 +5086,19 @@ class TestPrintedPageFooterStamps:
         assert resolve_printed_pages(docs) == 0
 
     def test_extract_printed_page_rejects_citation_noise(self) -> None:
-        """Citation-bracket noise is neutralized by the resolver's overwrite.
+        """Citation-bracket noise is neutralized in two layers.
 
         The per-chunk bracket extractor cannot tell "[ 500 ]" page markers
         from "[ 1647 ]" citation brackets without document context; the
-        page-level resolver supplies it: with consistent footer evidence its
-        mapping is authoritative and replaces the chunk-level bracket guess
-        (see the resolver's contract).  Only the sanity bound rejects
-        chunk-level values outright.
+        position gate only accepts page-stamp shapes (chunk-opening marker,
+        or a standalone marker line after a heading), and the document-wide
+        prune clears chunk-initial values that no book-wide offset consensus
+        corroborates (see the resolver's contract).  Only the sanity bound
+        rejects chunk-level values outright.
         """
         assert extract_printed_page("[ 1647 ] IEEE Std 1364-2005") == 1647
         assert extract_printed_page("[ 500 ] real marker") == 500
+        assert extract_printed_page("in-text citation [ 500 ] mid-chunk") is None
         assert extract_printed_page("[ 99999 ] beyond sanity bound") is None
         assert extract_printed_page("no marker here") is None
 
@@ -5198,6 +5200,96 @@ class TestFooterOffsetLookup:
         res = p._answer_page_query("what is on page 55")
         assert res is not None
         assert "do not contain a page matching" in res["answer"]
+
+
+class TestPhysicalPageFallback:
+    """Stampless documents: page lookup falls back to the physical PDF index."""
+
+    def _pipeline(self) -> RAGPipeline:
+        p = RAGPipeline(
+            searcher=_make_mock_searcher(),
+            llm_provider=_SequenceProvider([]),  # type: ignore[arg-type]
+            top_k=5,
+            context_window=5,
+        )
+        return p
+
+    def test_falls_back_to_physical_page(self) -> None:
+        """No stamps, no footers -> the number is read as the file's Nth page."""
+        p = self._pipeline()
+        searcher_mock = cast(Any, p._searcher)
+        storage_mock = MagicMock()
+        page_chunks = [
+            {
+                "chunk_id": "c1",
+                "chunk_text": "Proxmox storage configuration body",
+                "page_number": 105,
+                "page_pos": 0,
+            },
+            {
+                "chunk_id": "c2",
+                "chunk_text": "ZFS pool continuation text",
+                "page_number": 105,
+                "page_pos": 1,
+            },
+        ]
+
+        def _find(**kwargs: Any) -> list[dict[str, Any]]:
+            if "printed_page" in kwargs:
+                return []  # document carries no trusted printed index
+            if isinstance(kwargs.get("page_number"), list):
+                return page_chunks  # expansion returns the whole page
+            return [page_chunks[0]]  # scalar physical lookup
+
+        storage_mock.find_chunks.side_effect = _find
+        storage_mock.find_structural_chunks.return_value = []  # no footers
+        searcher_mock.attach_mock(storage_mock, "storage")
+
+        res = p._answer_page_query(
+            "what is on page 105 of artificialintelligenceforcybersecurity.pdf"
+        )
+
+        assert res is not None
+        assert res["answer"] == (
+            "Proxmox storage configuration body\nZFS pool continuation text"
+        )
+        assert res["sources"][0]["page_lookup_fallback"] == "physical"
+        storage_mock.find_chunks.assert_any_call(source_file=None, printed_page=105)
+        storage_mock.find_chunks.assert_any_call(source_file=None, page_number=105)
+
+    def test_stamp_hit_skips_physical_lookup(self) -> None:
+        """A trusted printed-page hit never consults the physical fallback."""
+        p = self._pipeline()
+        searcher_mock = cast(Any, p._searcher)
+        storage_mock = MagicMock()
+        physical_scalar_calls = 0
+
+        def _find(**kwargs: Any) -> list[dict[str, Any]]:
+            nonlocal physical_scalar_calls
+            if "printed_page" in kwargs:
+                return [
+                    {
+                        "chunk_id": "c1",
+                        "chunk_text": "[ 500 ] stamped page text",
+                        "page_number": 529,
+                        "printed_page": 500,
+                    }
+                ]
+            if isinstance(kwargs.get("page_number"), list):
+                return []  # single-chunk page: expansion adds nothing
+            physical_scalar_calls += 1
+            return []
+
+        storage_mock.find_chunks.side_effect = _find
+        storage_mock.find_structural_chunks.return_value = []
+        searcher_mock.attach_mock(storage_mock, "storage")
+
+        res = p._answer_page_query("what is on page 500")
+
+        assert res is not None
+        assert res["answer"] == "stamped page text"
+        assert "page_lookup_fallback" not in res["sources"][0]
+        assert physical_scalar_calls == 0
 
 
 class TestDefinitionRecall:
