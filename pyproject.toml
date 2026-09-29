@@ -88,7 +88,7 @@ precommit = [
 # Web frameworks and serving
 web = [
     "fastapi>=0.141.1",  # API framework - future REST API support
-    "uvicorn>=0.51.0",  # ASGI server - async HTTP server
+    "uvicorn>=0.54.0",  # ASGI server - async HTTP server
     "flask>=3.1.3",  # Web framework - alternative API option
 ]
 
@@ -124,7 +124,7 @@ bundled = [
     "jinja2>=3.1.6",
     # All web deps
     "fastapi>=0.141.1",
-    "uvicorn>=0.51.0",
+    "uvicorn>=0.54.0",
     "flask>=3.1.3",
     # Transitive/util deps (with CVE fixes)
     "msgpack>=1.2.2",  # GHSA-6v7p-g79w-8964 (was 1.1.2)
