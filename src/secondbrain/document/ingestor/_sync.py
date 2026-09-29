@@ -873,6 +873,7 @@ class DocumentIngestor:
                         file_path = futures[future]
                         try:
                             result = future.result(timeout=300)
+                            self._drain_progress_queue(progress_queue)
 
                             if not result["success"]:
                                 error_msg = result.get("error", "Unknown error")
@@ -944,6 +945,7 @@ class DocumentIngestor:
                             done_futures.append(future)
 
                         except Exception as e:
+                            self._drain_progress_queue(progress_queue)
                             error_msg = f"{type(e).__name__}: {e}"
                             logger.error(
                                 "Unexpected error processing file %s: %s",
@@ -967,6 +969,8 @@ class DocumentIngestor:
 
                 if pending_futures and not done_futures:
                     time.sleep(0.01)
+
+            self._drain_progress_queue(progress_queue)
 
         return successful_files, failed_files, failure_reasons
 

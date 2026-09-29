@@ -342,6 +342,46 @@ class TestExtractAndChunkFile:
 class TestExtractChunkAndEmbedErrors:
     """_extract_chunk_and_embed_file error result + queue failure message."""
 
+    def test_fast_pdf_fallback_resets_extract_progress(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        import secondbrain.document.fast_text as fast_text
+
+        pdf = tmp_path / "fallback.pdf"
+        pdf.write_bytes(b"%PDF-1.4 minimal")
+        queue = _Queue()
+
+        def reject_fast_path(
+            _path: Path, page_progress: Any = None
+        ) -> None:
+            assert page_progress is not None
+            page_progress(3, 3)
+            return None
+
+        monkeypatch.setattr(fast_text, "try_fast_pdf_extraction", reject_fast_path)
+
+        class _Converter(_FakeConverter):
+            def convert(self, file_path: Any) -> _Result:
+                extract_events = [item for item in queue.items if item[2] == "extract"]
+                assert extract_events[-1] == ("phase", str(pdf), "extract", 0, 0)
+                return super().convert(file_path)
+
+        _install_converter(monkeypatch, _Converter([_TextItem(_sample_text())]))
+        _install_embedder(monkeypatch, _FakeEmbeddingModel())
+
+        result = processor._extract_chunk_and_embed_file(
+            str(pdf),
+            chunk_size=512,
+            chunk_overlap=50,
+            progress_queue=queue,
+            embedding_model_name="test-model",
+            skip_existing=False,
+        )
+
+        extract_events = [item for item in queue.items if item[2] == "extract"]
+        assert [item[3:] for item in extract_events] == [(0, 0), (3, 3), (0, 0)]
+        assert result["success"] is True
+
     def test_error_result_and_failure_queued(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
@@ -666,6 +706,7 @@ class TestPhaseQueueMessages:
         assert embed_events, "at least one embed batch tick expected"
         total_chunks = len(result["documents"])
         assert all(m[4] == total_chunks for m in embed_events)
+        assert embed_events[0] == ("phase", str(f), "embed", 0, total_chunks)
         assert embed_events[-1][3] == total_chunks
 
         # Legacy events are preserved alongside.

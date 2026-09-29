@@ -18,10 +18,10 @@ Because docling's ancestor ``docling`` logger is forced to WARNING elsewhere
 in this repo (``docling_factory.py``), the DEBUG records would normally be
 dropped before reaching the handler. This context manager therefore raises the
 ``docling.pipeline.base_pipeline`` logger's level to DEBUG on entry and
-restores the previous level on exit; ``propagate`` is left untouched (root
-handlers sit at WARNING and silently drop DEBUG records, so nothing leaks to
-the console). Throughput-affecting docling settings (e.g. ``page_batch_size``)
-are never modified — only the log level is borrowed for the conversion.
+restores the previous level on exit. Propagation is disabled during the
+conversion so DEBUG records do not reach root handlers, then restored on exit.
+Throughput-affecting docling settings (e.g. ``page_batch_size``) are never
+modified — only the logger state is borrowed for the conversion.
 
 Everything here is defensive: if docling is not installed or anything else
 fails, the context manager degrades to a no-op so ingestion is never blocked
@@ -86,9 +86,9 @@ def scraped_page_progress(
 
     The ``docling`` ancestor logger is pinned to WARNING elsewhere in this
     repo, so on entry the target logger's level is raised to DEBUG and the
-    previous level is restored on exit. ``propagate`` is deliberately not
-    touched: root handlers at WARNING drop the DEBUG records anyway, so
-    nothing leaks to the console. Docling settings that affect throughput
+    previous level is restored on exit. Propagation is disabled while the
+    handler is attached to prevent DEBUG records from reaching root handlers,
+    and restored on exit. Docling settings that affect throughput
     (``page_batch_size`` etc.) are never modified. ``on_tick`` failures are
     swallowed.
 
@@ -118,9 +118,11 @@ def scraped_page_progress(
     try:
         log = logging.getLogger(_TARGET_LOGGER)
         previous_level = log.level
+        previous_propagate = log.propagate
         handler = _PageBatchHandler(on_tick)
         log.addHandler(handler)
         log.setLevel(logging.DEBUG)
+        log.propagate = False
     except Exception:
         # Defensive-coding failure before tracking can start (e.g. exotic
         # logger state): run the block untracked instead of failing.
@@ -133,5 +135,6 @@ def scraped_page_progress(
         try:
             log.removeHandler(handler)
             log.setLevel(previous_level)
+            log.propagate = previous_propagate
         except Exception:
             pass

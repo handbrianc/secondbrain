@@ -100,22 +100,28 @@ class TestScrapedPageProgress:
     """scraped_page_progress level/handler lifecycle and delivery."""
 
     def test_ticks_delivered_and_level_restored(
-        self, monkeypatch: pytest.MonkeyPatch
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
         _inject_stub_docling(monkeypatch)
         log = logging.getLogger(TARGET)
         original_level = log.level
+        original_propagate = log.propagate
         ticks: list[tuple[int, int]] = []
         batch_record = _make_record("Finished converting pages 4/10 time=0.500")
 
-        with scraped_page_progress(lambda d, t: ticks.append((d, t))):
+        with caplog.at_level(logging.DEBUG), scraped_page_progress(
+            lambda d, t: ticks.append((d, t))
+        ):
             assert log.level == logging.DEBUG
+            assert log.propagate is False
             # The record travels through the real logger hierarchy, proving
             # both the level raise and the attached handler work end to end.
             log.handle(batch_record)
 
         assert ticks == [(4, 10)]
         assert log.level == original_level
+        assert log.propagate is original_propagate
+        assert not any(record.name == TARGET for record in caplog.records)
         handlers = [h for h in log.handlers if isinstance(h, _PageBatchHandler)]
         assert handlers == []
 

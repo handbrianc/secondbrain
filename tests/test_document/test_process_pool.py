@@ -243,6 +243,54 @@ class TestProcessPoolProgress:
         assert len(calls) == 2
         assert all(success for _, success in calls)
 
+    def test_worker_phase_events_drain_before_file_done(self, monkeypatch):
+        _patch_config(monkeypatch, ingest_pool="thread")
+        event_order = []
+        ingestor = _make_ingestor(
+            progress_callback=lambda _path, _success: event_order.append("done")
+        )
+        ingestor.on_phase_progress = (
+            lambda _path, _phase, _done, _total: event_order.append("phase")
+        )
+
+        class _LateProgressFuture(Future):
+            def __init__(self, progress_queue):
+                super().__init__()
+                self._progress_queue = progress_queue
+                self.set_result(
+                    {
+                        "success": True,
+                        "file_path": "fake",
+                        "documents": [],
+                        "error": None,
+                        "skipped": True,
+                    }
+                )
+
+            def result(self, timeout=None):
+                self._progress_queue.put_nowait(
+                    ("phase", "/tmp/a.txt", "embed", 1, 1)
+                )
+                return super().result(timeout)
+
+        class _FakeLateProgressExecutor(_FakeExecutor):
+            def submit(self, fn, *args, **kwargs):
+                self.submitted.append((fn, args, kwargs))
+                return _LateProgressFuture(args[3])
+
+        def _executor(max_workers, **kwargs):
+            return _FakeLateProgressExecutor(max_workers)
+
+        monkeypatch.setattr(_sync, "ThreadPoolExecutor", _executor)
+        monkeypatch.setattr(_sync, "ProcessPoolExecutor", _executor)
+
+        result = ingestor._process_parallel_with_progress(
+            [Path("/tmp/a.txt")], MagicMock(), MagicMock(), 1, "thread"
+        )
+
+        assert result[:2] == (1, 0)
+        assert event_order == ["phase", "done"]
+
 
 class TestSkippedFileAccounting:
     """A fully-skipped file (skipped=True, no docs) must count as success."""

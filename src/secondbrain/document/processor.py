@@ -458,6 +458,9 @@ def _extract_chunk_and_embed_file(
                     {"text": s["text"], "page": s["page"]} for s in fast_segments
                 ]
         else:
+            # Native extraction may have reported completion before deciding
+            # this PDF needs the slower Docling fallback.
+            _emit_phase("extract", 0, 0)
             with trace_operation("ingest_worker_extract") as span:
                 if span is not None:
                     span.set_attribute(
@@ -579,6 +582,7 @@ def _extract_chunk_and_embed_file(
                     ("phase", str(file_path), "embed", done, total)
                 )
 
+        _emit_phase("embed", 0, len(unique_chunks))
         with trace_operation("ingest_worker_embed") as span:
             if span is not None:
                 span.set_attribute("ingest.chunks_count", len(unique_chunks))
