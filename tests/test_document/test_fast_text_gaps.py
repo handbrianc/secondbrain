@@ -53,6 +53,118 @@ class TestPrintedPageBounds:
         assert fast_text._checked_page(42) == 42
 
 
+class TestPruneUntrustedBracketStamps:
+    """prune_untrusted_bracket_stamps consensus gating."""
+
+    def _stamp(self, physical: int, printed: int) -> dict[str, Any]:
+        return {
+            "page_number": physical,
+            "chunk_text": f"[ {printed} ] page text",
+            "element_type": "body",
+            "chunk_role": "body",
+            "printed_page": printed,
+        }
+
+    def test_below_three_stamped_pages_untouched(self) -> None:
+        docs = [self._stamp(88, 74), self._stamp(89, 75)]
+        assert fast_text.prune_untrusted_bracket_stamps(docs) == 0
+        assert [d["printed_page"] for d in docs] == [74, 75]
+
+    def test_consensus_keeps_markers_clears_noise(self) -> None:
+        """Offset-group consensus: real stamps win, citation noise is cleared."""
+        docs = [self._stamp(pg, pg - 14) for pg in range(20, 30)]
+        noise = [self._stamp(180, 25), self._stamp(184, 20)]  # bib-label offsets
+        docs += noise
+        cleared = fast_text.prune_untrusted_bracket_stamps(docs)
+        assert cleared == 2
+        for doc in docs[:10]:
+            assert doc["printed_page"] == doc["page_number"] - 14
+        for doc in noise:
+            assert doc["printed_page"] is None
+
+    def test_bibliography_run_never_survives_alongside_real_run(self) -> None:
+        """A bib run's perfect internal offset still loses to the real page index.
+
+        13 bibliography chunks (printed 20..32 on pages 181..193, offset 161)
+        agree perfectly within themselves, but the real page markers (pages
+        20..320, offset 14) span the whole book, and only the best eligible
+        group keeps its stamps.  The book is the live case: 363 physical
+        pages, sparse real markers, one mid-book references cluster.
+        """
+        real = [
+            self._stamp(pg, pg - 14)
+            for pg in (20, 30, 40, 60, 80, 100, 150, 200, 250, 300, 320, 340)
+        ]
+        bib = [self._stamp(180 + i, 20 + i) for i in range(13)]
+        docs = real + bib
+        stamped_real_pages = {20, 30, 40, 60, 80, 100, 150, 200, 250, 300, 320, 340}
+        stamped_bib_pages = {180 + i for i in range(13)}
+        docs += [
+            {"page_number": pg, "chunk_text": "body prose", "printed_page": None}
+            for pg in range(1, 364)
+            if pg not in stamped_real_pages and pg not in stamped_bib_pages
+        ]
+        cleared = fast_text.prune_untrusted_bracket_stamps(docs)
+        assert cleared == 13
+        for doc in bib:
+            assert doc["printed_page"] is None
+        for doc in real:
+            assert doc["printed_page"] == doc["page_number"] - 14
+
+    def test_no_consensus_clears_all(self) -> None:
+        docs = [
+            self._stamp(pg, printed)
+            for pg, printed in ((20, 3), (55, 7), (99, 25), (140, 44))
+        ]
+        assert fast_text.prune_untrusted_bracket_stamps(docs) == 4
+        for doc in docs:
+            assert doc["printed_page"] is None
+
+    def test_bibliography_session_bug_reproduced_and_fixed(self) -> None:
+        """The live bug: "[25] Hoskin..." bibliography chunks stamped as page 25.
+
+        The bibliography run agrees internally (each entry opens its chunk),
+        but it covers three pages of a 363-page book, so the coverage gate
+        makes it noise.
+        """
+        docs = [
+            self._stamp(181, 25),
+            self._stamp(182, 26),
+            self._stamp(183, 27),
+        ]
+        docs += [
+            {"page_number": pg, "chunk_text": "body prose", "printed_page": None}
+            for pg in range(1, 181)
+        ]
+        assert fast_text.prune_untrusted_bracket_stamps(docs) == 3
+        for doc in docs[:3]:
+            assert doc["printed_page"] is None
+
+    def test_integrated_resolver_prunes_then_stamps_footers(self) -> None:
+        """resolve_printed_pages prunes bracket noise, then applies footer stamps."""
+        docs = [
+            self._stamp(181, 25),  # citation noise, would collide with page 25
+            self._stamp(182, 26),
+            self._stamp(183, 27),
+            _nav_chunk(88, 78),
+            _nav_chunk(89, 79),
+            _nav_chunk(90, 80),
+            _body_chunk(88),
+            _body_chunk(89),
+        ]
+        docs += [
+            {"page_number": pg, "chunk_text": "body prose", "printed_page": None}
+            for pg in range(1, 80)
+        ]
+        stamped = fast_text.resolve_printed_pages(docs)
+        assert stamped == 3
+        by_page = {d["page_number"]: d["printed_page"] for d in docs}
+        assert by_page[181] is None  # noise pruned
+        assert by_page[88] == 78  # footer mapping applied
+        assert by_page[89] == 79
+        assert by_page[90] == 80
+
+
 class TestFooterPageOffset:
     """footer_page_offset sampling, skips, and agreement gates."""
 
