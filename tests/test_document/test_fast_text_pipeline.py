@@ -115,6 +115,39 @@ def test_extract_printed_page() -> None:
 
 @pytest.mark.unit
 @pytest.mark.fast
+def test_extract_printed_page_marker_positions() -> None:
+    """Only page-stamp positions count; inline brackets are citation noise."""
+    # Page-top stamp: marker opens the chunk text.
+    assert extract_printed_page("[ 500 ] real page content") == 500
+    # Stamp as a standalone line after a heading (optionally a blank line).
+    assert extract_printed_page("Chapter 15\n\n[ 471 ]\nFigure 15.6") == 471
+    # Citation noise: the bracket is not in a page-stamp position.
+    assert extract_printed_page("... pp. 442. [24] Kanan, K., & Sharma ...") is None
+    assert extract_printed_page("citation [ 1647 ] IEEE Std 1364-2005") is None
+    assert extract_printed_page("Preface\n\n[ 7 ] Preface body") is None
+    # Chunk-initial bibliography labels are indistinguishable from page-top
+    # stamps at chunk level (same "[ N ] text" shape) — the extractor accepts
+    # them and prune_untrusted_bracket_stamps clears them with document-wide
+    # evidence.
+    assert extract_printed_page("[25] Hoskin, R. A. (2019). Femmephobia") == 25
+
+
+@pytest.mark.unit
+@pytest.mark.fast
+def test_extract_printed_page_marker_positions_boundaries() -> None:
+    """Stamp window: heading + optional blank line, then the stamp; deeper is content."""
+    # Marker on line 2 or line 3 (heading + optional blank line) is accepted.
+    assert extract_printed_page("Chapter 15\n[ 471 ]\nFigure 15.6") == 471
+    assert extract_printed_page("Chapter 15\n\n[ 471 ]\nFigure 15.6") == 471
+    # Marker deeper than the page top is content, not a stamp.
+    assert extract_printed_page("Heading\nbody text\n[24]\ncontinued body") is None
+    assert extract_printed_page("Chapter 15\n\n\n[ 471 ]\nFigure 15.6") is None
+    # A CRLF stamp line after a heading still resolves (\r is trailing \s*).
+    assert extract_printed_page("Chapter 15\r\n[ 471 ]\r\nFigure 15.6") == 471
+
+
+@pytest.mark.unit
+@pytest.mark.fast
 def test_non_pdf_never_fast(fake_config, tmp_path: Path) -> None:
     """A non-PDF extension returns None even with the feature enabled."""
     fake_config(fast_text=True, ocr=False)
