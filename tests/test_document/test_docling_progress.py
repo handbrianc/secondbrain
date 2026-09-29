@@ -109,8 +109,9 @@ class TestScrapedPageProgress:
         ticks: list[tuple[int, int]] = []
         batch_record = _make_record("Finished converting pages 4/10 time=0.500")
 
-        with caplog.at_level(logging.DEBUG), scraped_page_progress(
-            lambda d, t: ticks.append((d, t))
+        with (
+            caplog.at_level(logging.DEBUG),
+            scraped_page_progress(lambda d, t: ticks.append((d, t))),
         ):
             assert log.level == logging.DEBUG
             assert log.propagate is False

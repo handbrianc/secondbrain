@@ -351,9 +351,7 @@ class TestExtractChunkAndEmbedErrors:
         pdf.write_bytes(b"%PDF-1.4 minimal")
         queue = _Queue()
 
-        def reject_fast_path(
-            _path: Path, page_progress: Any = None
-        ) -> None:
+        def reject_fast_path(_path: Path, page_progress: Any = None) -> None:
             assert page_progress is not None
             page_progress(3, 3)
             return None

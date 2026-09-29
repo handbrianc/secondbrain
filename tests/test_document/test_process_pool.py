@@ -249,8 +249,8 @@ class TestProcessPoolProgress:
         ingestor = _make_ingestor(
             progress_callback=lambda _path, _success: event_order.append("done")
         )
-        ingestor.on_phase_progress = (
-            lambda _path, _phase, _done, _total: event_order.append("phase")
+        ingestor.on_phase_progress = lambda _path, _phase, _done, _total: (
+            event_order.append("phase")
         )
 
         class _LateProgressFuture(Future):
@@ -268,9 +268,7 @@ class TestProcessPoolProgress:
                 )
 
             def result(self, timeout=None):
-                self._progress_queue.put_nowait(
-                    ("phase", "/tmp/a.txt", "embed", 1, 1)
-                )
+                self._progress_queue.put_nowait(("phase", "/tmp/a.txt", "embed", 1, 1))
                 return super().result(timeout)
 
         class _FakeLateProgressExecutor(_FakeExecutor):
