@@ -30,7 +30,7 @@ dependencies = [
     "opentelemetry-api>=1.45.0",  # Telemetry - stable tracing API
     "opentelemetry-sdk>=1.45.0",  # Telemetry - tracing implementation
     "openai>=3.19.2",  # LLM provider - v1 SDK required
-    "anthropic>=1.4.0",  # LLM provider - Claude models support
+    "anthropic>=1.8.0",  # LLM provider - Claude models support
     "typing_extensions>=4.16.0",  # Type hints - backport new features
     "pyobjc-core>=12.2.2; sys_platform == 'darwin'",  # MacOS Objective-C bridge - required for ocrmac
     "pyobjc-framework-cocoa>=12.2.2; sys_platform == 'darwin'",  # MacOS Cocoa framework - required for ocrmac
