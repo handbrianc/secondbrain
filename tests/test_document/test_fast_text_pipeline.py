@@ -140,6 +140,7 @@ def test_extract_printed_page_marker_positions_boundaries() -> None:
     assert extract_printed_page("Chapter 15\n[ 471 ]\nFigure 15.6") == 471
     assert extract_printed_page("Chapter 15\n\n[ 471 ]\nFigure 15.6") == 471
     # Marker deeper than the page top is content, not a stamp.
+    assert extract_printed_page("Heading\nbody text\n[24]\ncontinued body") is None
     assert extract_printed_page("Chapter 15\n\n\n[ 471 ]\nFigure 15.6") is None
     # A CRLF stamp line after a heading still resolves (\r is trailing \s*).
     assert extract_printed_page("Chapter 15\r\n[ 471 ]\r\nFigure 15.6") == 471

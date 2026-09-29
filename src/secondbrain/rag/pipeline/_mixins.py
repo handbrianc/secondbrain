@@ -4151,9 +4151,8 @@ class _RoutingMixin(_RAGPipelineState):
 
         The lookup tries, in order: the trusted ``printed_page`` stamp
         (bracket-marker or footer-derived), the "N / total" footer offset,
-        and finally the PDF's physical page index — a document whose
-        extraction carried no page stamps has no printed index, so the
-        requested number can only be meant as the file's Nth page.
+        and finally the PDF's physical page index only if the selected source
+        has no trusted printed-page stamps at all.
         """
         printed = self._printed_page_from_query(query)
         if printed is None:
@@ -4166,7 +4165,7 @@ class _RoutingMixin(_RAGPipelineState):
             found = list(storage.find_chunks(source_file=source, printed_page=printed))
             if not found:
                 found = self._footer_offset_lookup(storage, source, printed)
-            if not found:
+            if not found and not self._has_printed_page_index(storage, source):
                 found = self._physical_page_lookup(storage, source, printed)
             found = self._expand_page_chunks(storage, source, found)
         except Exception as exc:  # pragma: no cover - backend-dependent
@@ -4175,6 +4174,12 @@ class _RoutingMixin(_RAGPipelineState):
             )
             return None
         return [dict(c) for c in found]
+
+    @staticmethod
+    def _has_printed_page_index(storage: Any, source: str | None) -> bool:
+        """Return whether the selected source has any trusted printed-page stamps."""
+        chunks = storage.find_chunks(source_file=source, with_text=False)
+        return any(chunk.get("printed_page") is not None for chunk in chunks)
 
     def _physical_page_lookup(
         self,
@@ -4185,7 +4190,7 @@ class _RoutingMixin(_RAGPipelineState):
         """Last-resort page lookup against the physical PDF page index.
 
         Fires only after both the printed-page stamp and the footer offset
-        missed — i.e. the document carries no trusted printed index at all.
+        missed and the selected source has no trusted printed-page stamps.
         The requested number is then interpreted as the file's Nth page.
         Chunks are tagged with ``page_lookup_fallback: "physical"`` so
         answers can disclose that the number was read as a physical index

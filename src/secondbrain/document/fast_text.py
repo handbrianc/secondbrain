@@ -103,7 +103,10 @@ def extract_printed_page(text: str) -> int | None:
         # Stamp line after the first (a heading may precede it, optionally
         # with a blank line between).  Page stamps never appear deeper in the
         # chunk: past the page top, standalone bracketed numbers are content.
-        for line in text.splitlines()[1:3]:
+        lines = text.splitlines()
+        for index, line in enumerate(lines[1:3], start=1):
+            if index == 2 and lines[1].strip():
+                break
             match = _PRINTED_PAGE_LINE_RE.fullmatch(line)
             if match is not None:
                 break

@@ -5162,7 +5162,8 @@ class TestFooterOffsetLookup:
         ]
         storage_mock.find_chunks.side_effect = [
             [],  # printed_page=100 direct lookup: pre-footer-stamp data
-            page_chunks,  # page_number=122 physical lookup
+            page_chunks,  # footer-offset physical lookup
+            page_chunks,  # expansion to the full physical page
         ]
         storage_mock.find_structural_chunks.return_value = footers
         searcher_mock.attach_mock(storage_mock, "storage")
@@ -5173,6 +5174,37 @@ class TestFooterOffsetLookup:
         assert res["answer"] == "Certificates for API and Web GUI — page text"
         assert res["sources"][0]["page_number"] == 122
         assert res["sources"][0]["page_lookup_offset"] == 22
+
+    def test_miss_does_not_fallback_when_source_has_other_printed_pages(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        p = self._pipeline()
+        monkeypatch.setattr(p, "_resolve_source_filter", lambda _query: "indexed.pdf")
+        storage = MagicMock()
+        searcher = cast(Any, p._searcher)
+        physical_calls = 0
+
+        def _find(**kwargs: Any) -> list[dict[str, Any]]:
+            nonlocal physical_calls
+            if "printed_page" in kwargs:
+                return []
+            if "page_number" in kwargs:
+                physical_calls += 1
+                return [{"page_number": 350, "chunk_text": "unrelated page"}]
+            return [{"printed_page": 42, "page_number": 42}]
+
+        storage.find_chunks.side_effect = _find
+        storage.find_structural_chunks.return_value = []
+        searcher.attach_mock(storage, "storage")
+
+        result = p._answer_page_query("what is on page 350 of indexed.pdf")
+
+        assert result is not None
+        assert "do not contain a page matching" in result["answer"]
+        assert physical_calls == 0
+        storage.find_chunks.assert_any_call(
+            source_file="indexed.pdf", with_text=False
+        )
 
     def test_lookup_not_found_preserved_without_footers(self) -> None:
         p = self._pipeline()
