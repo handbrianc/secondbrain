@@ -360,7 +360,11 @@ class TestExtractChunkAndEmbedErrors:
 
         class _Converter(_FakeConverter):
             def convert(self, file_path: Any) -> _Result:
-                extract_events = [item for item in queue.items if item[2] == "extract"]
+                extract_events = [
+                    item
+                    for item in queue.items
+                    if len(item) > 2 and item[2] == "extract"
+                ]
                 assert extract_events[-1] == ("phase", str(pdf), "extract", 0, 0)
                 return super().convert(file_path)
 
@@ -376,7 +380,11 @@ class TestExtractChunkAndEmbedErrors:
             skip_existing=False,
         )
 
-        extract_events = [item for item in queue.items if item[2] == "extract"]
+        extract_events = [
+            item
+            for item in queue.items
+            if len(item) > 2 and item[2] == "extract"
+        ]
         assert [item[3:] for item in extract_events] == [(0, 0), (3, 3), (0, 0)]
         assert result["success"] is True
 
