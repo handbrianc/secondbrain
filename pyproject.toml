@@ -165,7 +165,7 @@ rag = [
 ]
 
 opentelemetry = [
-    "opentelemetry-exporter-otlp>=1.20.0",  # OTLP exporter - remote tracing
+    "opentelemetry-exporter-otlp>=1.45.0",  # OTLP exporter - remote tracing
 ]
 
 [project.scripts]
