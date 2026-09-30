@@ -381,9 +381,7 @@ class TestExtractChunkAndEmbedErrors:
         )
 
         extract_events = [
-            item
-            for item in queue.items
-            if len(item) > 2 and item[2] == "extract"
+            item for item in queue.items if len(item) > 2 and item[2] == "extract"
         ]
         assert [item[3:] for item in extract_events] == [(0, 0), (3, 3), (0, 0)]
         assert result["success"] is True
