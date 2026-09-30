@@ -5202,9 +5202,7 @@ class TestFooterOffsetLookup:
         assert result is not None
         assert "do not contain a page matching" in result["answer"]
         assert physical_calls == 0
-        storage.find_chunks.assert_any_call(
-            source_file="indexed.pdf", with_text=False
-        )
+        storage.find_chunks.assert_any_call(source_file="indexed.pdf", with_text=False)
 
     def test_lookup_not_found_preserved_without_footers(self) -> None:
         p = self._pipeline()

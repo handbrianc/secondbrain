@@ -5,13 +5,17 @@ including progress callbacks, cores validation, streaming config, file validatio
 empty directories, and mixed success/failure scenarios.
 """
 
+import io
+import logging
 import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from click.testing import CliRunner
+from rich.console import Console
 
 from secondbrain.cli import cli
+from secondbrain.cli.ingest_progress import IngestProgressUI
 from secondbrain.config import Config
 
 
@@ -64,8 +68,125 @@ class TestIngestProgressCallbacksForFiles:
         assert result.exit_code == 0
         call_kwargs = mock_ingestor_class.call_args[1]
         assert call_kwargs.get("progress_callback") is not None
-        assert callable(call_kwargs.get("on_chunk_progress"))
+        assert callable(call_kwargs.get("on_phase_progress"))
+        assert "on_chunk_progress" not in call_kwargs
         mock_ingestor.ingest.assert_called_once()
+
+
+class TestIngestProgressUI:
+    """Unit tests for the fixed-row :class:`IngestProgressUI` state machine.
+
+    Assertions target the underlying Rich task state (description, completed,
+    total) plus one rendered-output check, keeping the tests deterministic.
+    """
+
+    @staticmethod
+    def _console() -> Console:
+        """Build a deterministic terminal console writing to an in-memory buffer."""
+        return Console(
+            file=io.StringIO(),
+            force_terminal=True,
+            width=100,
+            legacy_windows=False,
+        )
+
+    @staticmethod
+    def _tasks(ui: IngestProgressUI) -> dict:
+        """Map task id to the live Rich task row for state assertions."""
+        return {task.id: task for task in ui.progress.tasks}
+
+    def test_single_file_phase_tracks_percent(self) -> None:
+        ui = IngestProgressUI(self._console(), total_files=1, is_single=True)
+        with ui:
+            ui.on_phase(Path("report.pdf"), "extract", 10, 20)
+
+            assert ui.overall_task_id is None
+            assert ui.activity_task_id is not None
+            task = self._tasks(ui)[ui.activity_task_id]
+            assert task.description == "report.pdf · extracting"
+            assert task.completed == 10
+            assert task.total == 20
+            assert task.percentage == 50.0
+
+            ui.finish()
+            assert task.completed == 20
+
+    def test_rendered_output_contains_phase_and_percent(self) -> None:
+        console = self._console()
+        ui = IngestProgressUI(console, total_files=1, is_single=True)
+        with ui:
+            ui.on_phase(Path("report.pdf"), "extract", 10, 20)
+        output = console.file.getvalue()
+        assert "report.pdf · extracting" in output
+        assert "50%" in output
+
+    def test_multi_file_overall_increments_and_activity_marks(self) -> None:
+        ui = IngestProgressUI(self._console(), total_files=3, is_single=False)
+        with ui:
+            assert ui.overall_task_id is not None
+            assert ui.activity_task_id is not None
+
+            ui.on_file_done(Path("a.txt"), True)
+            ui.on_file_done(Path("b.txt"), False)
+
+            tasks = self._tasks(ui)
+            overall = tasks[ui.overall_task_id]
+            activity = tasks[ui.activity_task_id]
+            assert "Ingesting 3 files" in overall.description
+            assert overall.total == 3
+            assert overall.completed == 2
+            assert overall.fields.get("show_mofn") is True
+            assert activity.description == "[red]✗ b.txt[/red]"
+            assert (activity.completed, activity.total) == (1, 1)
+
+            ui.finish()
+            assert overall.completed == 3
+            assert activity.description == "[red]✗ b.txt[/red]"
+
+    def test_indeterminate_phase_keeps_total_none(self) -> None:
+        ui = IngestProgressUI(self._console(), total_files=1, is_single=True)
+        with ui:
+            ui.on_phase(Path("scan.pdf"), "extract", 0, 0)
+            task = self._tasks(ui)[ui.activity_task_id]
+            assert task.total is None
+            assert task.description == "scan.pdf · extracting"
+
+            # A later known-total phase becomes determinate again.
+            ui.on_phase(Path("scan.pdf"), "chunk", 1, 1)
+            assert task.total == 1
+            assert task.completed == 1
+            assert task.description == "scan.pdf · chunking"
+
+            # And a subsequent unknown-total phase returns to indeterminate.
+            ui.on_phase(Path("scan.pdf"), "embed", 0, 0)
+            assert task.total is None
+            assert task.completed == 0
+
+    def test_unknown_phase_falls_back_to_phase_name(self) -> None:
+        ui = IngestProgressUI(self._console(), total_files=1, is_single=True)
+        with ui:
+            ui.on_phase(Path("report.pdf"), "future", 2, 4)
+            task = self._tasks(ui)[ui.activity_task_id]
+            assert task.description == "report.pdf · future"
+
+    def test_deferred_logging_replays_after_close(self) -> None:
+        stream = io.StringIO()
+        handler = logging.StreamHandler(stream)
+        root = logging.getLogger()
+        previous_level = root.level
+        root.addHandler(handler)
+        root.setLevel(logging.INFO)
+        try:
+            ui = IngestProgressUI(self._console(), total_files=1, is_single=True)
+            with ui:
+                logging.getLogger("test.ingest_progress").info("quiet passthrough")
+                logging.getLogger("test.ingest_progress").warning("boom")
+                assert "boom" not in stream.getvalue()
+                assert "quiet passthrough" in stream.getvalue()
+            assert "boom" in stream.getvalue()
+        finally:
+            root.removeHandler(handler)
+            root.setLevel(previous_level)
 
 
 class TestIngestCoresValidation:

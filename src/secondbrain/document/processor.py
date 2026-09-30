@@ -32,7 +32,12 @@ if TYPE_CHECKING:
 
 # Apply MPS patch before any docling import
 from secondbrain.document.chunker import chunk_segments, docling_item_label
-from secondbrain.document.fast_text import extract_printed_page, resolve_printed_pages
+from secondbrain.document.docling_progress import scraped_page_progress
+from secondbrain.document.fast_text import (
+    extract_printed_page,
+    pdf_page_count,
+    resolve_printed_pages,
+)
 from secondbrain.utils.tracing import trace_operation
 
 # Suppress HF-hub progress bars before any docling/transformers import.
@@ -366,12 +371,23 @@ def _extract_chunk_and_embed_file(
     embedding_model_name: str,
     embedding_cache: EmbeddingCache | None = None,
     skip_existing: bool | None = None,
+    scrape_docling_pages: bool = False,
 ) -> dict[str, Any]:
     """Worker function that extracts, chunks, embeds, and reports progress.
 
     This function runs in a separate thread and returns documents with embeddings.
     All CPU/GPU intensive work (extraction, chunking, embedding) happens in thread.
     Main thread only handles storage.
+
+    In addition to the legacy ("started", "progress", final) queue events, this
+    worker emits per-phase ("phase", file_path, phase, done, total) tuples so
+    callers can render a phase-aware progress bar:
+
+    - ``"extract"``: ``(0, 0)`` at worker start (indeterminate), then page
+      ticks with a known total for PDFs (fast native extraction and, when
+      ``scrape_docling_pages`` is set, scraped docling page batches).
+    - ``"chunk"``: ``(0, 1)`` just before, ``(1, 1)`` right after chunking.
+    - ``"embed"``: per embedding batch with ``total = len(unique_chunks)``.
 
     Args:
         file_path_str: String path to the file to process.
@@ -384,6 +400,13 @@ def _extract_chunk_and_embed_file(
         skip_existing: If True, drop chunks whose text_hash already exists in
             storage before embedding, so unchanged content is neither re-embedded
             nor re-stored. If None, falls back to config().skip_existing_on_reingest.
+        scrape_docling_pages: If True and *progress_queue* is set, scrape
+            docling's per-page-batch DEBUG log for "extract" phase ticks
+            during ``converter.convert()``. Only enable for single-thread
+            executors or process pools (one conversion per process): the
+            scraper mutates a shared process-wide logger's level, so a
+            multi-worker thread pool would cross-contaminate concurrent
+            conversions.
 
     Returns
     -------
@@ -407,14 +430,37 @@ def _extract_chunk_and_embed_file(
         from secondbrain.document.docling_factory import get_converter_for_path
         from secondbrain.document.fast_text import try_fast_pdf_extraction
 
+        def _emit_phase(phase: str, done: int, total: int) -> None:
+            """Queue one ("phase", ...) tuple; never raises.
+
+            Failures (hostile/full/closed queues) are suppressed exactly like
+            the legacy progress events so a progress hiccup cannot kill the
+            worker.
+            """
+            if progress_queue is None:
+                return
+            with contextlib.suppress(Exception):
+                progress_queue.put_nowait(("phase", str(file_path), phase, done, total))
+
+        def _emit_extract(done: int, total: int) -> None:
+            """Forward fast/docling page progress into the extract phase."""
+            _emit_phase("extract", done, total)
+
+        # Signal extraction has begun; total=0 marks the indeterminate state
+        # until a page count (PDF) or a first batch tick provides one.
+        _emit_phase("extract", 0, 0)
+
         segments: list[_Segment]
-        fast_segments = try_fast_pdf_extraction(file_path)
+        fast_segments = try_fast_pdf_extraction(file_path, page_progress=_emit_extract)
         if fast_segments is not None:
             with trace_operation("extract_fast_text"):
                 segments = [
                     {"text": s["text"], "page": s["page"]} for s in fast_segments
                 ]
         else:
+            # Native extraction may have reported completion before deciding
+            # this PDF needs the slower Docling fallback.
+            _emit_phase("extract", 0, 0)
             with trace_operation("ingest_worker_extract") as span:
                 if span is not None:
                     span.set_attribute(
@@ -422,7 +468,21 @@ def _extract_chunk_and_embed_file(
                     )
                 converter = get_converter_for_path(file_path)
 
-                result = converter.convert(file_path)
+                if scrape_docling_pages and progress_queue is not None:
+                    # Docling has no progress callback API; the per-page-batch
+                    # DEBUG log on base_pipeline is the only in-band signal.
+                    # see secondbrain.document.docling_progress for the why.
+                    total_pages = (
+                        pdf_page_count(file_path)
+                        if file_path.suffix.lower() == ".pdf"
+                        else 0
+                    )
+                    if total_pages:
+                        _emit_extract(0, total_pages)
+                    with scraped_page_progress(_emit_extract):
+                        result = converter.convert(file_path)
+                else:
+                    result = converter.convert(file_path)
                 content = result.document
 
                 segments = []
@@ -449,10 +509,12 @@ def _extract_chunk_and_embed_file(
                         text = f.read()
                     segments = [{"text": text, "page": 1}]
 
+        _emit_phase("chunk", 0, 1)
         with trace_operation("ingest_worker_chunk") as span:
             if span is not None:
                 span.set_attribute("ingest.segments_count", len(segments))
             chunks = chunk_segments(segments, chunk_size, chunk_overlap)
+        _emit_phase("chunk", 1, 1)
 
         cfg = config()
         embedding_model = EmbeddingProviderFactory.create_from_config(cfg)
@@ -511,9 +573,16 @@ def _extract_chunk_and_embed_file(
         def _report_chunk_progress(done: int, total: int) -> None:
             if progress_queue is None:
                 return
+            # Legacy within-file embed progress (kept for backward compat)…
             with contextlib.suppress(Exception):
                 progress_queue.put_nowait(("progress", str(file_path), done, total))
+            # …plus the new per-phase embed tick with the same numbers.
+            with contextlib.suppress(Exception):
+                progress_queue.put_nowait(
+                    ("phase", str(file_path), "embed", done, total)
+                )
 
+        _emit_phase("embed", 0, len(unique_chunks))
         with trace_operation("ingest_worker_embed") as span:
             if span is not None:
                 span.set_attribute("ingest.chunks_count", len(unique_chunks))

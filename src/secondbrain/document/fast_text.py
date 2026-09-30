@@ -21,8 +21,10 @@ avoid pulling anything heavy in at module import time.
 
 from __future__ import annotations
 
+import contextlib
 import re
 from collections import Counter
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -369,7 +371,10 @@ def _looks_like_structured_book(segments: list[dict[str, Any]]) -> bool:
     return chapter_hits >= 2 or toc_hits >= 3
 
 
-def extract_native_pdf_text(path: Path) -> list[dict[str, Any]]:
+def extract_native_pdf_text(
+    path: Path,
+    page_progress: Callable[[int, int], None] | None = None,
+) -> list[dict[str, Any]]:
     """Extract a PDF's native text layer with pure pypdfium2 (no docling).
 
     Opens the PDF, iterates its pages (1-indexed), and collects the non-empty
@@ -384,6 +389,12 @@ def extract_native_pdf_text(path: Path) -> list[dict[str, Any]]:
     ----------
     path:
         Path to the PDF file.
+    page_progress:
+        Optional callback ``(done, total)`` reporting native extraction
+        progress in pages. Called once as ``(0, len(pdf))`` after the document
+        is opened (so the caller learns the total), then ``(page_index + 1,
+        len(pdf))`` after each page's text has been appended. Callback failures
+        are swallowed — they must never break extraction.
 
     Returns
     -------
@@ -396,11 +407,19 @@ def extract_native_pdf_text(path: Path) -> list[dict[str, Any]]:
     except Exception:
         return []
 
+    def _tick(done: int, total: int) -> None:
+        if page_progress is None:
+            return
+        with contextlib.suppress(Exception):
+            page_progress(done, total)
+
     try:
         pdf = pdfium.PdfDocument(str(path))
         try:
+            total_pages = len(pdf)
+            _tick(0, total_pages)
             segments: list[dict[str, Any]] = []
-            for page_index in range(len(pdf)):
+            for page_index in range(total_pages):
                 page = pdf[page_index]
                 textpage = page.get_textpage()
                 try:
@@ -410,6 +429,7 @@ def extract_native_pdf_text(path: Path) -> list[dict[str, Any]]:
                 stripped = text.strip()
                 if stripped:
                     segments.append({"text": stripped, "page": page_index + 1})
+                _tick(page_index + 1, total_pages)
             return segments
         finally:
             pdf.close()
@@ -417,7 +437,45 @@ def extract_native_pdf_text(path: Path) -> list[dict[str, Any]]:
         return []
 
 
-def try_fast_pdf_extraction(file_path: Path) -> list[dict[str, Any]] | None:
+def pdf_page_count(path: Path) -> int:
+    """Return the number of pages in *path*, or 0 on any failure.
+
+    Opens the PDF with pypdfium2 (lazily imported, same as
+    :func:`extract_native_pdf_text`) only to read ``len(pdf)``; the document is
+    closed immediately and no page content is parsed. Used by the docling
+    extraction path to size a determinate per-page progress bar without paying
+    for text extraction.
+
+    Parameters
+    ----------
+    path:
+        Path to the PDF file.
+
+    Returns
+    -------
+    int
+        Page count, or 0 when the file is not a readable PDF or pypdfium2 is
+        unavailable (callers treat 0 as "unknown total").
+    """
+    try:
+        import pypdfium2 as pdfium
+    except Exception:
+        return 0
+
+    try:
+        pdf = pdfium.PdfDocument(str(path))
+        try:
+            return len(pdf)
+        finally:
+            pdf.close()
+    except Exception:
+        return 0
+
+
+def try_fast_pdf_extraction(
+    file_path: Path,
+    page_progress: Callable[[int, int], None] | None = None,
+) -> list[dict[str, Any]] | None:
     """Return native-text PDF segments via the fast path, or ``None`` to fall back.
 
     Returns ``None`` (the caller should fall through to the full docling
@@ -443,6 +501,11 @@ def try_fast_pdf_extraction(file_path: Path) -> list[dict[str, Any]] | None:
     ----------
     file_path:
         Path to the candidate file.
+    page_progress:
+        Optional ``(done, total)`` page callback forwarded verbatim to
+        :func:`extract_native_pdf_text` when the fast path actually extracts
+        (never invoked when ``None`` is returned without extraction). Callback
+        failures are swallowed inside the extractor.
 
     Returns
     -------
@@ -460,7 +523,13 @@ def try_fast_pdf_extraction(file_path: Path) -> list[dict[str, Any]] | None:
     if cfg.pdf_ocr_enabled:
         return None
 
-    segments = extract_native_pdf_text(file_path)
+    if page_progress is None:
+        # Keep the legacy single-argument call shape: tests (and any caller)
+        # that monkeypatch extract_native_pdf_text with a single-arg stub keep
+        # working when no callback is requested.
+        segments = extract_native_pdf_text(file_path)
+    else:
+        segments = extract_native_pdf_text(file_path, page_progress=page_progress)
     if not segments:
         return None
 
