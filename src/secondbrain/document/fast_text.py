@@ -60,8 +60,16 @@ _TOC_ENTRY_RE = re.compile(r"^\s*.+\.{3,}\s*\d+\s*$", re.MULTILINE)
 # The book's printed page number appears as a "[ N ]" marker, typically at the
 # top of each page.  The stored ``page_number`` is the PDF's *physical* page
 # index, which differs from it (front matter / blank pages shift them), so the
-# printed marker is the ground truth for "what is on page N" lookups.
-_PRINTED_PAGE_RE = re.compile(r"\[\s*(\d{1,4})\s*\]")
+# printed marker is the ground truth for "what is on page N" lookups.  The
+# marker is only trusted in page-stamp positions: opening the chunk text, or a
+# standalone marker line right after a heading line.  A bracketed number
+# anywhere else in the text is citation noise ("... 442. [24] Kanan, K., &
+# Sharma ..."), never a page index.
+_PRINTED_PAGE_RE = re.compile(r"[ \t]*\[\s*(\d{1,4})\s*\]")
+
+# A standalone stamp line: the entire line is the bracketed page number
+# (extraction often emits a heading line before the page's stamp line).
+_PRINTED_PAGE_LINE_RE = re.compile(r"\s*\[\s*(\d{1,4})\s*\]\s*")
 
 # LaTeX/manual books stamp the printed page number in a page footer shaped
 # "N / total" ("78 / 634").  Docling extracts such footers as stand-alone
@@ -78,14 +86,34 @@ _PRINTED_PAGE_MAX = 9999
 
 
 def extract_printed_page(text: str) -> int | None:
-    """Return the printed-page marker in *text*, or None.
+    r"""Return the printed-page marker in *text*, or None.
 
-    Scans for a bracketed ``[ N ]`` marker (the book's printed page number) and
-    returns ``N``. Returns ``None`` when no marker is present.
+    Only page-stamp positions count: the bracketed ``[ N ]`` marker opening
+    the chunk text (docling page-top stamps: ``"[ 500 ] real content..."``),
+    or a standalone marker line right after the first line
+    (``"Chapter 15\\r\\n[ 471 ]\\r\\nFigure 15.6"``).  A bracketed number
+    anywhere else is citation/bibliography noise ("... pp. 442. [24] Kanan,
+    K., & Sharma ...") and returns ``None``.  Chunk-initial bibliography
+    labels ("[25] Hoskin, R. A. (2019) ...") are indistinguishable from page
+    stamps at this level; :func:`prune_untrusted_bracket_stamps` removes
+    them with document-wide evidence after the chunk list is assembled.
     """
-    match = _PRINTED_PAGE_RE.search(text)
-    if not match:
+    if not text:
         return None
+    match = _PRINTED_PAGE_RE.match(text)
+    if match is None:
+        # Stamp line after the first (a heading may precede it, optionally
+        # with a blank line between).  Page stamps never appear deeper in the
+        # chunk: past the page top, standalone bracketed numbers are content.
+        lines = text.splitlines()
+        for index, line in enumerate(lines[1:3], start=1):
+            if index == 2 and lines[1].strip():
+                break
+            match = _PRINTED_PAGE_LINE_RE.fullmatch(line)
+            if match is not None:
+                break
+        if match is None:
+            return None
     try:
         return _checked_page(int(match.group(1)))
     except ValueError:
@@ -129,6 +157,78 @@ def footer_page_offset(nav_texts: dict[int, str]) -> int | None:
     return offset
 
 
+def prune_untrusted_bracket_stamps(docs: list[dict[str, Any]]) -> int:
+    r"""Clear bracket-derived ``printed_page`` stamps that lack book-wide corroboration.
+
+    Chunk-level bracket extraction cannot see document context, so a
+    bibliography entry that starts a chunk ("[25] Hoskin, R. A. (2019) ...")
+    is indistinguishable from a page-top stamp and pollutes the printed-page
+    index (a 363-page book would gain a phantom "page 25" in its references
+    section).  Real page stamps form one long, consistent run: every marked
+    page carries one, so ``page_number - printed_page`` (the print-to-physical
+    offset) is constant from the first marked page to the last.  Citation
+    noise looks different:
+
+    - random citations produce random offsets (no coherent run);
+    - a chapter's numbered bibliography produces its own internally
+      consistent run, but one confined to a narrow page slice (entries
+      "[25]..[32]" on consecutive pages).
+
+    The pass therefore groups the stamped chunks by offset and trusts only a
+    group that looks like a page index: at least three distinct pages, and
+    either >= 30 % of the document's physical pages covered or a span across
+    >= 30 % of the document's page range — real page-top stamps (first to
+    last page) always satisfy at least one, a references cluster neither.
+    Only the best eligible group (most pages, then widest span, then smaller
+    offset) keeps its stamps; every other stamp is cleared, and with no
+    eligible group at all the stamps are uncorroborated and ALL are cleared.
+    With fewer than three stamped pages the evidence is too weak to judge
+    either way, so the stamps are left untouched.
+
+    Runs before :func:`resolve_printed_pages`, whose footer mapping is
+    authoritative on the pages it covers regardless of what survives here.
+    Mutates *docs* in place and returns the number of chunks cleared.
+
+    Parameters
+    ----------
+    docs:
+        Chunk dicts as built by the ingest assembly sites, carrying
+        ``page_number`` and the chunk-level ``printed_page`` candidate.
+    """
+    stamped = [c for c in docs if c.get("printed_page") is not None]
+    stamped_pages = {int(c.get("page_number") or 0) for c in stamped}
+    if len(stamped_pages) < 3:
+        return 0
+    all_pages = {page for c in docs if (page := int(c.get("page_number") or 0)) > 0}
+    if not all_pages:
+        return 0
+    doc_span = max(all_pages) - min(all_pages)
+    by_offset: dict[int, set[int]] = {}
+    for c in stamped:
+        offset = int(c.get("page_number") or 0) - int(c["printed_page"])
+        by_offset.setdefault(offset, set()).add(int(c.get("page_number") or 0))
+    eligible: list[tuple[int, set[int]]] = []
+    for offset, pages in by_offset.items():
+        span_ok = (max(pages) - min(pages)) >= doc_span * 0.3
+        coverage_ok = len(pages) >= len(all_pages) * 0.3
+        if len(pages) >= 3 and (coverage_ok or span_ok):
+            eligible.append((offset, pages))
+    trusted_offsets: set[int] = set()
+    if eligible:
+        best = max(
+            eligible,
+            key=lambda item: (len(item[1]), max(item[1]) - min(item[1]), -item[0]),
+        )
+        trusted_offsets = {best[0]}
+    cleared = 0
+    for c in stamped:
+        offset = int(c.get("page_number") or 0) - int(c["printed_page"])
+        if offset not in trusted_offsets:
+            c["printed_page"] = None
+            cleared += 1
+    return cleared
+
+
 def resolve_printed_pages(
     docs: list[dict[str, Any]],
 ) -> int:
@@ -137,24 +237,32 @@ def resolve_printed_pages(
     Bracket-marker extraction (``extract_printed_page``) covers books that
     stamp ``[ N ]`` markers; footer-stamped books (Proxmox VE admin guide,
     most LaTeX manuals) instead carry "N / 634" navigation chunks that docling
-    never scans for page stamps.  After a document's chunk list is assembled,
-    this pass parses those footers, derives each footer's physical
-    ``page_number``, checks the extraction for consistency and plausibility,
-    then stamps ``printed_page`` on every chunk of each matched physical page.
+    never scans for page stamps.  This entry point first prunes uncorroborated
+    chunk-level bracket stamps (citation/bibliography noise the per-chunk
+    extractor cannot distinguish from page stamps — see
+    :func:`prune_untrusted_bracket_stamps`), then parses those footers,
+    derives each footer's physical ``page_number``, checks the extraction for
+    consistency and plausibility, and stamps ``printed_page`` on every chunk
+    of each matched physical page.
 
     Confidence gates (conservative by design — a wrong stamp corrupts page
     lookups forever):
+    - chunk-level bracket stamps must form a group that looks like a page
+      index (one consistent offset, enough pages, enough span — see
+      :func:`prune_untrusted_bracket_stamps`) or be cleared as citation
+      noise;
     - every footer's printed value must be below its own physical page number
       (printed indexes trail the physical index for books with front matter);
     - the physical-minus-printed offset must agree across at least 80 % of
       footer pages and at least three distinct physical pages.
 
-    When the gates pass, the agreed footer mapping is authoritative: it
-    overwrites any pre-existing ``printed_page`` on the covered pages.
+    When the footer gates pass, the agreed footer mapping is authoritative:
+    it overwrites any pre-existing ``printed_page`` on the covered pages.
     Chunk-level bracket-marker extraction cannot see the book context
     (in-text citations like "[ 1647 ] IEEE Std ..." parse as a marker), so
     footer evidence is the stronger signal on every page it covers; pages
-    outside the footer-covered set keep whatever bracket stamps they carry.
+    outside the footer-covered set keep whatever bracket stamps survived
+    pruning.
 
     Mutates *docs* in place and returns the number of physical pages stamped.
 
@@ -165,6 +273,7 @@ def resolve_printed_pages(
         ``page_number``, ``printed_page`` (from bracket-marker extraction),
         ``chunk_text`` and ``element_type``/``chunk_role``.
     """
+    prune_untrusted_bracket_stamps(docs)
     footer_pages: dict[int, int] = {}
     nav_texts: dict[int, str] = {}
     for c in docs:

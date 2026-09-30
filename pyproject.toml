@@ -19,21 +19,21 @@ classifiers = [
 
 dependencies = [
     "click>=8.5.0",  # CLI framework - stable API, minor updates only
-    "docling>=2.129.0",  # Document parsing - requires recent features
-    "docling-core>=2.97.1",  # Core types - matches docling version
+    "docling>=2.130.0",  # Document parsing - requires recent features
+    "docling-core>=2.98.1",  # Core types - matches docling version
     "qdrant-client>=1.19.1",  # Qdrant vector DB client - production storage backend
     "httpx>=0.28.1",  # HTTP client - async support for LLM calls
     "pydantic>=2.13.5",  # Data validation - pydantic v2 compatible
     "pydantic-settings>=2.15.0",  # Settings management - pydantic v2 compatible
     "rich>=15.0.0",  # CLI formatting - modern terminal output
     "numpy>=2.5.2",  # Numerical computing - array API compatibility
-    "opentelemetry-api>=1.44.0",  # Telemetry - stable tracing API
-    "opentelemetry-sdk>=1.44.0",  # Telemetry - tracing implementation
-    "openai>=3.8.0",  # LLM provider - v1 SDK required
-    "anthropic>=1.4.0",  # LLM provider - Claude models support
+    "opentelemetry-api>=1.45.0",  # Telemetry - stable tracing API
+    "opentelemetry-sdk>=1.45.0",  # Telemetry - tracing implementation
+    "openai>=3.19.2",  # LLM provider - v1 SDK required
+    "anthropic>=1.8.0",  # LLM provider - Claude models support
     "typing_extensions>=4.16.0",  # Type hints - backport new features
     "pyobjc-core>=12.2.2; sys_platform == 'darwin'",  # MacOS Objective-C bridge - required for ocrmac
-    "pyobjc-framework-cocoa>=12.1; sys_platform == 'darwin'",  # MacOS Cocoa framework - required for ocrmac
+    "pyobjc-framework-cocoa>=12.2.2; sys_platform == 'darwin'",  # MacOS Cocoa framework - required for ocrmac
     "pyobjc-framework-coreml>=12.2.2; sys_platform == 'darwin'",  # MacOS Core ML - required for ocrmac
     "pyobjc-framework-quartz>=12.2.2; sys_platform == 'darwin'",  # MacOS Quartz - required for ocrmac
     "pyobjc-framework-vision>=12.2.2; sys_platform == 'darwin'",  # MacOS Vision - required for ocrmac
@@ -70,7 +70,7 @@ security = [
 docs = [
     "mkdocs>=1.6.0",  # Documentation - static site generator
     "mkdocstrings>=1.0.6",  # API docs - auto-generate from docstrings
-    "mkdocstrings-python>=2.0.8",  # Python plugin - mkdocstrings support
+    "mkdocstrings-python>=2.0.9",  # Python plugin - mkdocstrings support
     "mkdocs-material>=9.7.7",  # Theme - professional documentation (GHSA-xvg9-69gf-fjrf fixed in 9.7.7)
     "jinja2>=3.1.6",  # Templating - security patch required
 ]
@@ -88,7 +88,7 @@ precommit = [
 # Web frameworks and serving
 web = [
     "fastapi>=0.141.1",  # API framework - future REST API support
-    "uvicorn>=0.51.0",  # ASGI server - async HTTP server
+    "uvicorn>=0.54.0",  # ASGI server - async HTTP server
     "flask>=3.1.3",  # Web framework - alternative API option
 ]
 
@@ -119,22 +119,22 @@ bundled = [
     # All docs deps
     "mkdocs>=1.6.0",
     "mkdocstrings>=1.0.6",
-    "mkdocstrings-python>=2.0.8",
+    "mkdocstrings-python>=2.0.9",
     "mkdocs-material>=9.7.7",
     "jinja2>=3.1.6",
     # All web deps
     "fastapi>=0.141.1",
-    "uvicorn>=0.51.0",
+    "uvicorn>=0.54.0",
     "flask>=3.1.3",
     # Transitive/util deps (with CVE fixes)
     "msgpack>=1.2.2",  # GHSA-6v7p-g79w-8964 (was 1.1.2)
-    "starlette>=1.6.0",  # PYSEC-2026-248, PYSEC-2026-249 (was 1.2.1)
-    "pymdown-extensions>=11.0.1",  # CVE-2026-61632 (was 10.21.3)
+    "starlette>=1.7.0",  # PYSEC-2026-248, PYSEC-2026-249 (was 1.2.1)
+    "pymdown-extensions>=12.1",  # CVE-2026-61632 (was 10.21.3)
     "urllib3>=2.6.0",
     "cryptography>=50.0.1",
     "pillow>=11.3.0",
     "paramiko>=5.0.0",
-    "PyJWT>=2.14.0",
+    "PyJWT>=2.15.0",
     "pyasn1>=0.6.4",
     "pyopenssl>=25.1.0",
     "twisted>=26.4.0",
@@ -154,18 +154,18 @@ dev = [
 ]
 
 qualitative = [
-    "llama-cpp-python>=0.2.0",  # Local LLM - CPU inference support
+    "llama-cpp-python>=0.3.35",  # Local LLM - CPU inference support
     "transformers>=5.17.0",  # HuggingFace - model loading
     "accelerate>=1.15.0",  # Model optimization - GPU/CPU distribution
 ]
 
 rag = [
-    "llama-cpp-python>=0.2.0",  # Local LLM inference for RAG pipeline
+    "llama-cpp-python>=0.3.35",  # Local LLM inference for RAG pipeline
     "accelerate>=1.15.0",  # Model optimization for local LLM
 ]
 
 opentelemetry = [
-    "opentelemetry-exporter-otlp>=1.20.0",  # OTLP exporter - remote tracing
+    "opentelemetry-exporter-otlp>=1.45.0",  # OTLP exporter - remote tracing
 ]
 
 [project.scripts]
