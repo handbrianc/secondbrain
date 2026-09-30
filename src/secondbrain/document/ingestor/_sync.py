@@ -49,6 +49,7 @@ class DocumentIngestor:
         verbose: bool = False,
         progress_callback: Callable[[Path, bool], None] | None = None,
         on_chunk_progress: Callable[[Path, int, int], None] | None = None,
+        on_phase_progress: Callable[[Path, str, int, int], None] | None = None,
     ) -> None:
         """Initialize document ingestor.
 
@@ -59,6 +60,12 @@ class DocumentIngestor:
             progress_callback: Optional callback(file_path: Path, success: bool) called after each file.
             on_chunk_progress: Optional callback(file_path, done, total) called
                 with within-file chunk progress for the CLI progress bar.
+            on_phase_progress: Optional callback(file_path, phase, done, total)
+                called with per-phase ingestion progress, where *phase* is one
+                of ``"extract"`` (done/total in pages; total 0 means unknown),
+                ``"chunk"`` (0/1 then 1/1), ``"embed"`` (done/total in chunks
+                per embedding batch), or ``"store"`` (done/total in storage
+                slices, emitted owner-side). Callback exceptions are swallowed.
         """
         import secondbrain.document
 
@@ -77,6 +84,7 @@ class DocumentIngestor:
         self.max_file_size_bytes: int = cfg.max_file_size_bytes
         self.progress_callback = progress_callback
         self.on_chunk_progress = on_chunk_progress
+        self.on_phase_progress = on_phase_progress
         self._cpu_count_fn = _detect_cpu_count
 
         self.embedding_cache = EmbeddingCache(max_size=cfg.embedding_cache_size)
@@ -726,6 +734,13 @@ class DocumentIngestor:
         configured ``ingest_pool``. The main thread always owns storage: it consumes
         every future and stores batches, so writes stay single-writer for both pools.
 
+        The progress queue carries both the legacy within-file events
+        (``started``/``progress``/final) and per-phase ``("phase", path, phase,
+        done, total)`` tuples; ``_handle_progress_event`` routes each kind to
+        ``on_chunk_progress`` / ``on_phase_progress``. The owner emits the
+        ``"store"`` phase itself (no queue hop) while persisting
+        ``MAX_MEMORY_BATCH_SIZE`` slices of a finished worker result.
+
         For the process path the threading Queue and the thread-local embedding cache
         are NOT pickleable across process boundaries, so they are replaced with None:
         each child re-initializes its own (empty) embedding cache inside the worker and
@@ -767,12 +782,13 @@ class DocumentIngestor:
         # spawned so they cannot receive a raw multiprocessing.Queue by argument --
         # a Manager.Queue proxy (reachable over a socket) is the supported way to
         # share a queue with spawned workers. When there is no on_chunk_progress
-        # callback we create no channel at all (matches the original behavior).
+        # or on_phase_progress callback we create no channel at all (matches the
+        # original behavior).
         import queue as _queue
 
         manager: Any = None
         progress_queue: Any = None
-        if self.on_chunk_progress is not None:
+        if self.on_chunk_progress is not None or self.on_phase_progress is not None:
             if use_process:
                 import multiprocessing as mp
 
@@ -780,6 +796,13 @@ class DocumentIngestor:
                 progress_queue = manager.Queue()
             else:
                 progress_queue = _queue.Queue()
+
+        # The docling page-log scraper mutates a process-wide logger's level, so
+        # a thread pool running >1 conversion concurrently would cross-
+        # contaminate handlers/levels between workers. Scraping is therefore
+        # enabled only for the process pool (one conversion per child process)
+        # or a single-worker thread pool.
+        scrape_ok = use_process or max_workers == 1
 
         embedding_model_name = cfg.embedding_model
 
@@ -816,7 +839,9 @@ class DocumentIngestor:
             # thread-local embedding cache (Todo 3) cannot cross the boundary and is
             # passed as None (each child re-initializes its own empty cache). The
             # progress queue IS picklable and is shared across both pools.
-            def worker_args(f: Path) -> tuple[Any, Any, Any, Any, Any, Any]:
+            # skip_existing and scrape_ok travel positionally (plain bools pickle
+            # fine) so the worker signature keeps a single call shape.
+            def worker_args(f: Path) -> tuple[Any, Any, Any, Any, Any, Any, Any, Any]:
                 return (
                     str(f),
                     self.chunk_size,
@@ -824,13 +849,14 @@ class DocumentIngestor:
                     progress_queue,
                     embedding_model_name,
                     self.embedding_cache if not use_process else None,
+                    skip_existing,
+                    scrape_ok,
                 )
 
             futures = {
                 executor.submit(
                     _extract_chunk_and_embed_file,
                     *worker_args(f),
-                    skip_existing=skip_existing,
                 ): f
                 for f in files
             }
@@ -847,6 +873,7 @@ class DocumentIngestor:
                         file_path = futures[future]
                         try:
                             result = future.result(timeout=300)
+                            self._drain_progress_queue(progress_queue)
 
                             if not result["success"]:
                                 error_msg = result.get("error", "Unknown error")
@@ -886,6 +913,10 @@ class DocumentIngestor:
                                 done_futures.append(future)
                                 continue
 
+                            n_batches = (
+                                len(documents) + MAX_MEMORY_BATCH_SIZE - 1
+                            ) // MAX_MEMORY_BATCH_SIZE
+                            self._safe_phase_progress(file_path, "store", 0, n_batches)
                             for i in range(0, len(documents), MAX_MEMORY_BATCH_SIZE):
                                 batch = documents[i : i + MAX_MEMORY_BATCH_SIZE]
                                 with trace_operation("storage.store") as span:
@@ -900,6 +931,12 @@ class DocumentIngestor:
                                         span.set_attribute(
                                             "storage.duration_ms", elapsed_ms
                                         )
+                                self._safe_phase_progress(
+                                    file_path,
+                                    "store",
+                                    i // MAX_MEMORY_BATCH_SIZE + 1,
+                                    n_batches,
+                                )
 
                             successful_files += 1
                             completed += 1
@@ -908,6 +945,7 @@ class DocumentIngestor:
                             done_futures.append(future)
 
                         except Exception as e:
+                            self._drain_progress_queue(progress_queue)
                             error_msg = f"{type(e).__name__}: {e}"
                             logger.error(
                                 "Unexpected error processing file %s: %s",
@@ -932,10 +970,12 @@ class DocumentIngestor:
                 if pending_futures and not done_futures:
                     time.sleep(0.01)
 
+            self._drain_progress_queue(progress_queue)
+
         return successful_files, failed_files, failure_reasons
 
     def _drain_progress_queue(self, progress_queue: Any) -> None:
-        """Drain queued within-file progress events to ``on_chunk_progress``."""
+        """Drain queued within-file progress events to the progress callbacks."""
         if progress_queue is None:
             return
         import queue as _queue
@@ -948,15 +988,22 @@ class DocumentIngestor:
             self._handle_progress_event(event)
 
     def _handle_progress_event(self, event: tuple[Any, ...]) -> None:
-        if not self.on_chunk_progress:
-            return
         kind = event[0]
         if kind == "started":
+            if not self.on_chunk_progress:
+                return
             _, path_str, total = event[:3]
             self._safe_chunk_progress(Path(path_str), 0, total)
         elif kind == "progress":
+            if not self.on_chunk_progress:
+                return
             _, path_str, done, total = event[:4]
             self._safe_chunk_progress(Path(path_str), done, total)
+        elif kind == "phase":
+            if not self.on_phase_progress:
+                return
+            _, path_str, phase, done, total = event[:5]
+            self._safe_phase_progress(Path(path_str), phase, done, total)
 
     def _safe_chunk_progress(self, path: Path, done: int, total: int) -> None:
         if not self.on_chunk_progress:
@@ -965,6 +1012,21 @@ class DocumentIngestor:
             self.on_chunk_progress(path, done, total)
         except Exception:
             logger.debug("chunk progress callback failed", exc_info=True)
+
+    def _safe_phase_progress(
+        self, path: Path, phase: str, done: int, total: int
+    ) -> None:
+        """Invoke ``on_phase_progress``, swallowing callback failures.
+
+        Mirrors :meth:`_safe_chunk_progress`: a broken consumer must never
+        abort ingestion, it only loses its progress display.
+        """
+        if not self.on_phase_progress:
+            return
+        try:
+            self.on_phase_progress(path, phase, done, total)
+        except Exception:
+            logger.debug("phase progress callback failed", exc_info=True)
 
     def ingest(
         self,

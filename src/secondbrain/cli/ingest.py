@@ -1,7 +1,6 @@
 """Ingest command."""
 
 import os
-import time
 from pathlib import Path
 
 import click
@@ -12,6 +11,7 @@ from secondbrain.exceptions import CLIValidationError
 
 from . import cli
 from .errors import handle_cli_errors
+from .ingest_progress import IngestProgressUI
 
 console = Console(markup=True)
 
@@ -121,88 +121,15 @@ def ingest(
             skip_existing=skip_existing,
         )
     else:
-        from rich.progress import (
-            BarColumn,
-            Progress,
-            SpinnerColumn,
-            TaskID,
-            TextColumn,
-        )
-
-        is_single = total_files == 1
-        with Progress(
-            BarColumn(),
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-        ) as progress:
-            last_refresh = [0.0]
-            refresh_interval = (
-                0.05  # cap repaints ~20/s so the terminal doesn't flicker
-            )
-
-            def _refresh(force: bool = False) -> None:
-                now = time.monotonic()
-                if force or now - last_refresh[0] >= refresh_interval:
-                    progress.refresh()
-                    last_refresh[0] = now
-
-            final_status: dict[str, bool] = {}
-            task_ids: dict[str, TaskID] = {}
-
-            def _init_task(path_key: str, name: str, total: int | None) -> TaskID:
-                tid = task_ids.get(path_key)
-                if tid is None:
-                    tid = progress.add_task(name, total=total)
-                    task_ids[path_key] = tid
-                return tid
-
-            def on_chunk_progress(file_path: Path, done: int, total: int) -> None:
-                key = str(file_path)
-                if key in final_status:
-                    return
-                tid = _init_task(key, file_path.name, total)
-                progress.update(
-                    tid,
-                    description=f"{file_path.name} [cyan]{done}/{total}[/cyan]",
-                    completed=done,
-                    total=total,
-                )
-                _refresh()
-
-            def progress_callback(file_path: Path, success: bool) -> None:
-                key = str(file_path)
-                final_status[key] = success
-                status = "[green]✓[/green]" if success else "[red]✗[/red]"
-                tid = task_ids.get(key)
-                if tid is None:
-                    tid = progress.add_task(file_path.name, total=1)
-                    task_ids[key] = tid
-                progress.update(
-                    tid,
-                    description=f"{status} {file_path.name}",
-                    completed=1,
-                    total=1,
-                )
-                _refresh(force=True)
-
+        ui = IngestProgressUI(console, total_files, is_single=total_files == 1)
+        with ui:
             ingestor = DocumentIngestor(
                 chunk_size=chunk_size,
                 chunk_overlap=chunk_overlap,
                 verbose=verbose,
-                progress_callback=progress_callback,
-                on_chunk_progress=on_chunk_progress,
+                progress_callback=ui.on_file_done,
+                on_phase_progress=ui.on_phase,
             )
-
-            # Seed a single-file task so the spinner + indeterminate bar show
-            # immediately while the file is extracted (before its chunk count is
-            # known); on_chunk_progress later makes it determinate.
-            if is_single:
-                key = str(files[0])
-                task_ids[key] = progress.add_task(
-                    f"Ingesting {files[0].name}...", total=None
-                )
-
             results = ingestor.ingest(
                 path,
                 recursive=recursive,
@@ -211,6 +138,7 @@ def ingest(
                 pool=pool,
                 skip_existing=skip_existing,
             )
+            ui.finish()
 
     num_success = results["success"]
     num_failed = results["failed"]

@@ -342,6 +342,50 @@ class TestExtractAndChunkFile:
 class TestExtractChunkAndEmbedErrors:
     """_extract_chunk_and_embed_file error result + queue failure message."""
 
+    def test_fast_pdf_fallback_resets_extract_progress(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        import secondbrain.document.fast_text as fast_text
+
+        pdf = tmp_path / "fallback.pdf"
+        pdf.write_bytes(b"%PDF-1.4 minimal")
+        queue = _Queue()
+
+        def reject_fast_path(_path: Path, page_progress: Any = None) -> None:
+            assert page_progress is not None
+            page_progress(3, 3)
+            return None
+
+        monkeypatch.setattr(fast_text, "try_fast_pdf_extraction", reject_fast_path)
+
+        class _Converter(_FakeConverter):
+            def convert(self, file_path: Any) -> _Result:
+                extract_events = [
+                    item
+                    for item in queue.items
+                    if len(item) > 2 and item[2] == "extract"
+                ]
+                assert extract_events[-1] == ("phase", str(pdf), "extract", 0, 0)
+                return super().convert(file_path)
+
+        _install_converter(monkeypatch, _Converter([_TextItem(_sample_text())]))
+        _install_embedder(monkeypatch, _FakeEmbeddingModel())
+
+        result = processor._extract_chunk_and_embed_file(
+            str(pdf),
+            chunk_size=512,
+            chunk_overlap=50,
+            progress_queue=queue,
+            embedding_model_name="test-model",
+            skip_existing=False,
+        )
+
+        extract_events = [
+            item for item in queue.items if len(item) > 2 and item[2] == "extract"
+        ]
+        assert [item[3:] for item in extract_events] == [(0, 0), (3, 3), (0, 0)]
+        assert result["success"] is True
+
     def test_error_result_and_failure_queued(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
@@ -363,7 +407,7 @@ class TestExtractChunkAndEmbedErrors:
         assert result["success"] is False
         assert result["documents"] == []
         assert result["error"].startswith("RuntimeError: embed blew up")
-        assert queue.items[0][0] == "started"
+        assert queue.items[0] == ("phase", str(f), "extract", 0, 0)
         assert queue.items[-1] == (str(f), False)
 
     def test_success_without_queue_and_with_cache(
@@ -613,6 +657,115 @@ class TestProgressQueueMessages:
         assert result["success"] is True
 
 
+class TestPhaseQueueMessages:
+    """Per-phase ("phase", path, phase, done, total) events on the queue."""
+
+    def test_extract_chunk_embed_phase_events_emitted(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Phase events for extract/chunk/embed ride along the legacy events."""
+        f = _write_sample(tmp_path)
+        _install_converter(
+            monkeypatch,
+            _FakeConverter(
+                [
+                    _TextItem(_sample_text(), page_no=1),
+                    _TextItem("Intro.", page_no=2),
+                ]
+            ),
+        )
+        _install_embedder(monkeypatch, _FakeEmbeddingModel())
+        queue = _Queue()
+
+        result = processor._extract_chunk_and_embed_file(
+            str(f),
+            chunk_size=512,
+            chunk_overlap=50,
+            progress_queue=queue,
+            embedding_model_name="test-model",
+            skip_existing=False,
+        )
+
+        assert result["success"] is True
+        kinds = [m[0] for m in queue.items if isinstance(m[0], str)]
+        phase_events = [
+            m
+            for m in queue.items
+            if isinstance(m, tuple) and m[:2] == ("phase", str(f))
+        ]
+        phase_kinds = [m[2] for m in phase_events]
+
+        # extract: indeterminate seed first, chunk 0/1 -> 1/1, embed ticks.
+        assert phase_kinds[0] == "extract"
+        assert phase_events[0] == ("phase", str(f), "extract", 0, 0)
+        assert "chunk" in phase_kinds
+        assert "embed" in phase_kinds
+
+        # chunk phase is a 0/1 -> 1/1 pair, in order.
+        chunk_events = [m for m in phase_events if m[2] == "chunk"]
+        assert [m[3:] for m in chunk_events] == [(0, 1), (1, 1)]
+
+        # embed ticks carry the legacy totals (done/total of unique chunks).
+        embed_events = [m for m in phase_events if m[2] == "embed"]
+        assert embed_events, "at least one embed batch tick expected"
+        total_chunks = len(result["documents"])
+        assert all(m[4] == total_chunks for m in embed_events)
+        assert embed_events[0] == ("phase", str(f), "embed", 0, total_chunks)
+        assert embed_events[-1][3] == total_chunks
+
+        # Legacy events are preserved alongside.
+        assert "started" in kinds
+        assert kinds.count("progress") >= 1
+        assert queue.items[-1] == (str(f), True)
+
+    def test_phase_events_suppressed_for_hostile_queue(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Phase puts hit the same suppress as legacy puts (worker survives)."""
+
+        class _HostileQueue:
+            def put_nowait(self, _item: Any) -> None:
+                raise RuntimeError("queue closed")
+
+        f = _write_sample(tmp_path)
+        _install_converter(
+            monkeypatch, _FakeConverter([_TextItem(_sample_text(), page_no=1)])
+        )
+        _install_embedder(monkeypatch, _FakeEmbeddingModel())
+
+        result = processor._extract_chunk_and_embed_file(
+            str(f),
+            chunk_size=512,
+            chunk_overlap=50,
+            progress_queue=_HostileQueue(),
+            embedding_model_name="test-model",
+            skip_existing=False,
+        )
+
+        assert result["success"] is True
+
+    def test_extract_seed_only_without_queue(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """progress_queue=None -> no phase events, worker still succeeds."""
+        f = _write_sample(tmp_path)
+        _install_converter(
+            monkeypatch, _FakeConverter([_TextItem(_sample_text(), page_no=1)])
+        )
+        _install_embedder(monkeypatch, _FakeEmbeddingModel())
+
+        result = processor._extract_chunk_and_embed_file(
+            str(f),
+            chunk_size=512,
+            chunk_overlap=50,
+            progress_queue=None,
+            embedding_model_name="test-model",
+            skip_existing=False,
+        )
+
+        assert result["success"] is True
+
+
 class TestEmbedUniqueChunks:
     """_embed_unique_chunks batching, caching, and progress callbacks."""
 
@@ -794,6 +947,6 @@ class TestFilterAndSpans:
 
         assert result["success"] is False
         assert result["error"] == "ValueError: bad vector shape"
-        assert queue.items[0][0] == "started"
+        assert queue.items[0] == ("phase", str(f), "extract", 0, 0)
         assert queue.items[-1] == (str(f), False)
         del caplog
