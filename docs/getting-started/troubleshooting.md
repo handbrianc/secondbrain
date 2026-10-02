@@ -88,7 +88,7 @@ secondbrain health
 ```
 pdf, docx, pptx, xlsx, html, htm, md, txt, asciidoc, adoc,
 tex, csv, png, jpg, jpeg, tiff, tif, bmp, webp, wav, mp3,
-vtt, xml, json
+m4a, aac, ogg, flac, vtt, xml, json
 ```
 
 Consider converting your file to a supported format.

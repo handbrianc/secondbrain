@@ -45,7 +45,17 @@ SecondBrain supports the following document formats:
 | ------ | ---------- | ------------------- |
 | WAV    | `.wav`     | Transcription       |
 | MP3    | `.mp3`     | Transcription       |
+| M4A    | `.m4a`     | Transcription       |
+| AAC    | `.aac`     | Transcription       |
+| OGG    | `.ogg`     | Transcription       |
+| FLAC   | `.flac`    | Transcription       |
 | WebVTT | `.vtt`     | Subtitle extraction |
+
+Audio transcription requires the optional ASR extra: `pip install -e ".[asr]"`.
+It uses docling's WhisperS2T backend (CTranslate2) by default, which never
+imports openai-whisper and is Python 3.14 compatible; the model is selectable
+via the `audio_asr_model` setting. ffmpeg is optional — audio decodes
+in-process with PyAV, and a system ffmpeg is used when present.
 
 ## Chunking Configuration
 

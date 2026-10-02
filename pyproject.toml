@@ -168,6 +168,12 @@ opentelemetry = [
     "opentelemetry-exporter-otlp>=1.45.0",  # OTLP exporter - remote tracing
 ]
 
+# Audio transcription (docling ASR via WhisperS2T/CTranslate2 - no openai-whisper import, Python 3.14 safe)
+asr = [
+    "whisper-s2t-reborn[pyav]>=1.7.1",  # WhisperS2T backend - CTranslate2 transcription runner
+    "ctranslate2>=4.5.0",  # Inference engine - quantized WhisperS2T execution
+]
+
 [project.scripts]
 secondbrain = "secondbrain.cli:main"
 
@@ -306,6 +312,10 @@ filterwarnings = [
     "ignore::DeprecationWarning:docling",
     "ignore::DeprecationWarning:pyparsing",
     "ignore:.*This process.*is multi-threaded, use of fork.*",
+    # whisper_s2t's VAD loads TorchScript assets via torch.jit.load, which
+    # raises this FutureWarning on Python 3.14+ until upstream migrates to
+    # torch.export (also filtered in docling_factory._build_audio_converter).
+    "ignore:.*torch\\.jit\\.load.*not supported in Python 3\\.14.*:FutureWarning",
     # Suppress OpenTelemetry exporter errors during test shutdown
     "ignore:Exception while exporting metrics:UserWarning:opentelemetry",
     "ignore:I/O operation on closed file:UserWarning:opentelemetry",

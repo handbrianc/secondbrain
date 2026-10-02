@@ -10,19 +10,27 @@ fresh, expensive one per file. It existed inline in two places:
 Both sites now call :func:`get_shared_converter`, which returns the same OCR
 converter object on every call.
 
-On-demand OCR
--------------
-The factory holds two lazily-built converter instances:
+On-demand OCR + audio transcription
+-----------------------------------
+The factory holds three lazily-built converter instances:
 
 - the OCR converter (``get_shared_converter``): PDFs run with OCR + table
   structure (the historical default);
 - the text-only converter (``get_text_converter``): PDFs run with OCR disabled,
-  using only the embedded text layer (with table structure per config).
+  using only the embedded text layer (with table structure per config);
+- the audio converter (``get_audio_converter``): audio files run through
+  docling's ``AsrPipeline`` with the WhisperS2T model spec from the
+  ``audio_asr_model`` config setting (CTranslate2 transcription that never
+  imports openai-whisper). ``_build_audio_converter`` also quietens three
+  benign-but-noisy upstream messages at their causes (compute-type fallback
+  warning, module-level backend print, torch.jit.load FutureWarning); see its
+  docstring.
 
-:func:`get_converter_for_path` picks between them per document: PDFs that have
-an embedded text layer skip OCR (the fast path), scanned PDFs still OCR
-(parity preserved), and non-PDF formats always use the OCR converter (their
-behavior is unchanged).
+:func:`get_converter_for_path` picks between them per document: audio files
+(``_AUDIO_SUFFIXES``) always use the ASR converter, PDFs that have an embedded
+text layer skip OCR (the fast path), scanned PDFs still OCR (parity
+preserved), and other non-PDF formats always use the OCR converter (behavior
+unchanged).
 
 Thread-safety caveat
 --------------------
@@ -53,6 +61,11 @@ if TYPE_CHECKING:
 _lock = threading.Lock()
 _ocr_converter: DocumentConverter | None = None
 _text_converter: DocumentConverter | None = None
+_audio_converter: DocumentConverter | None = None
+
+# Audio file extensions routed to the ASR converter by get_converter_for_path.
+# Docling decodes them via PyAV (or a system ffmpeg when present).
+_AUDIO_SUFFIXES = frozenset({".wav", ".mp3", ".m4a", ".aac", ".ogg", ".flac"})
 
 
 def _disable_torch_model_compilation_on_mps() -> None:
@@ -265,6 +278,169 @@ def _build_text_converter() -> DocumentConverter:
     )
 
 
+def _coerce_s2t_preset_for_device(spec: Any, device: str) -> Any:
+    """Coerce a WhisperS2T preset's ``torch_dtype`` for the resolved device.
+
+    CTranslate2 cannot run ``float16``/``bfloat16`` compute on CPU. The
+    ``*_S2T`` presets default to ``torch_dtype="float16"`` (a CUDA performance
+    choice), so on a CPU-only install docling's transcriber would log
+    ``compute_type='float16' is not supported by CTranslate2 on CPU; falling
+    back to 'float32'.`` and quietly discard the preset value. Coercing here
+    (on a deep copy — presets are module-level singletons in
+    ``docling.datamodel.asr_model_specs``) removes both the warning and the
+    pointless float16 attempt at their cause.
+
+    Mirrors the exact condition in
+    ``docling.pipeline.asr_transcriber._WhisperS2TModel.__init__``. Defensive
+    throughout: anything unexpected (non-pydantic spec, stubbed attribute,
+    import failure) returns the original spec unmodified.
+    """
+    if device != "cpu" or spec is None:
+        return spec
+    try:
+        torch_dtype = getattr(spec, "torch_dtype", None)
+        if torch_dtype not in ("float16", "bfloat16"):
+            return spec
+        copy = spec.model_copy(deep=True)
+        copy.torch_dtype = "float32"
+        return copy
+    except Exception:  # pragma: no cover - defensive; never break builder
+        return spec
+
+
+def _resolve_s2t_device(cfg: Any, spec: Any) -> str:
+    """Resolve the ASR device the same way docling's transcriber will.
+
+    Calls docling's ``decide_device`` with the configured accelerator device
+    (mapped to its ``AcceleratorDevice`` enum member, as docling compares
+    against the lowercase enum values) and the preset's supported-device list.
+    Falls back to ``"cpu"`` on any failure, mirroring the tolerance of
+    :func:`_preflight_accelerator_device` — device resolution is only used
+    here to pre-coerce ``torch_dtype``, so a wrong guess must never break
+    converter construction (docling re-resolves authoritatively later).
+    """
+    try:
+        from docling.datamodel.accelerator_options import AcceleratorDevice
+        from docling.utils.accelerator_utils import decide_device
+
+        device_name = getattr(AcceleratorDevice, cfg.pdf_accelerator_device.upper())
+        return decide_device(device_name, supported_devices=spec.supported_devices)
+    except Exception:  # pragma: no cover - defensive; cpu is the safe default
+        return "cpu"
+
+
+def _build_audio_converter() -> DocumentConverter:
+    """Build the audio (ASR) configured docling converter.
+
+    Uses docling's ``AsrPipeline`` with the WhisperS2T model spec named by the
+    ``audio_asr_model`` config setting (default ``whisper_tiny_s2t``).
+    WhisperS2T transcribes through CTranslate2 and never imports
+    openai-whisper, which keeps audio ingestion working on Python 3.14 (the
+    native Whisper backend does import it and fails there). The backend
+    defaults to docling's ``NoOpBackend`` — correct for ASR-only pipelines.
+
+    Three benign-but-noisy upstream messages are silenced at their causes:
+
+    1. The transcriber's "compute_type='float16' is not supported by
+       CTranslate2 on CPU" warning: the preset's ``torch_dtype`` is coerced to
+       ``float32`` on a deep copy before handoff whenever the device resolves
+       to CPU (:func:`_coerce_s2t_preset_for_device`), so docling's fallback
+       branch never triggers.
+    2. ``whisper_s2t.audio``'s module-level ``print("Audio backend: ...")``
+       fires when ``whisper_s2t.backends`` is first imported (its package body
+       does ``from ..audio import LogMelSpectogram``), which docling does
+       lazily during the first transcription. Pre-importing that chain here
+       with captured stdout keeps the terminal quiet; a missing install stays
+       a loud, clear error (docling's own ImportError with its pip hint,
+       raised at transcriber init).
+    3. torch raises ``FutureWarning: `torch.jit.load` is not supported in
+       Python 3.14+ ...`` when whisper_s2t's VAD loads its TorchScript assets
+       during transcription. Only a scoped message filter is applied — never a
+       blanket FutureWarning ignore (until upstream migrates to torch.export).
+    """
+    import logging as _logging
+    import warnings as _warnings
+
+    _logging.getLogger("docling").setLevel(_logging.WARNING)
+    # Scoped filter for whisper_s2t's VAD TorchScript loads (torch.jit.load)
+    # on Python 3.14+, until upstream migrates to torch.export. Message- and
+    # category-scoped, so unrelated FutureWarnings stay visible.
+    _warnings.filterwarnings(
+        "ignore",
+        category=FutureWarning,
+        message=r".*torch\.jit\.load.*not supported in Python 3\.14.*",
+    )
+
+    from secondbrain.config import config
+
+    cfg = config()
+
+    from docling.datamodel import asr_model_specs
+    from docling.datamodel.pipeline_options import AsrPipelineOptions
+
+    pipeline_options = AsrPipelineOptions()
+    # Config stores lowercase preset names ("whisper_tiny_s2t"); the module
+    # exposes them uppercase (WHISPER_TINY_S2T). Membership-check via dir()
+    # instead of relying on getattr raising: under test stubs a missing
+    # attribute may be auto-created instead of raising AttributeError.
+    spec_name = cfg.audio_asr_model.upper()
+    available = [
+        name
+        for name in dir(asr_model_specs)
+        if name.startswith("WHISPER") and name.endswith("_S2T")
+    ]
+    if spec_name not in available:
+        raise ValueError(
+            f"Unknown audio_asr_model value '{cfg.audio_asr_model}': no such "
+            "WhisperS2T preset on docling.datamodel.asr_model_specs. Valid "
+            f"values: {', '.join(sorted(name.lower() for name in available))}."
+        )
+    spec = getattr(asr_model_specs, spec_name)
+
+    # Coerce the preset's dtype for the device docling will actually use, on a
+    # deep copy (asr_model_specs members are module-level singletons). The
+    # whole block is defensive: under docling test stubs the attributes are
+    # MagicMocks and any failure must fall back to the untouched spec.
+    try:
+        device = _resolve_s2t_device(cfg, spec)
+        spec = _coerce_s2t_preset_for_device(spec, device)
+    except Exception:  # pragma: no cover - defensive; keep original spec
+        spec = getattr(asr_model_specs, spec_name)
+    pipeline_options.asr_options = spec
+
+    # Pre-import whisper_s2t with captured stdout so the module-level
+    # "Audio backend: ..." print (whisper_s2t.audio backend probe) never
+    # reaches the terminal. The print fires on the first import of
+    # ``whisper_s2t.backends`` (its package body does
+    # ``from ..audio import LogMelSpectogram``), not at bare
+    # ``import whisper_s2t`` — so the chain is pre-imported down to the
+    # CTranslate2 model module docling's transcriber loads later. Docling's
+    # subsequent imports then resolve from sys.modules silently. A missing
+    # install must stay a loud, clear failure — only the print is silenced
+    # here (ImportError is not caught).
+    try:
+        import contextlib as _contextlib
+        import io as _io
+
+        with _contextlib.redirect_stdout(_io.StringIO()):
+            import whisper_s2t
+            import whisper_s2t.backends.ctranslate2.model  # noqa: F401
+    except ImportError:
+        pass  # _WhisperS2TModel raises a clear error at transcriber init
+
+    from docling.datamodel.base_models import InputFormat
+    from docling.document_converter import AudioFormatOption, DocumentConverter
+    from docling.pipeline.asr_pipeline import AsrPipeline
+
+    return DocumentConverter(
+        format_options={
+            InputFormat.AUDIO: AudioFormatOption(
+                pipeline_cls=AsrPipeline, pipeline_options=pipeline_options
+            )
+        }
+    )
+
+
 def get_shared_converter() -> DocumentConverter:
     """Return the single shared OCR converter, building it on first call.
 
@@ -297,14 +473,29 @@ def get_text_converter() -> DocumentConverter:
     return _text_converter
 
 
+def get_audio_converter() -> DocumentConverter:
+    """Return the single shared audio (ASR) converter, building it on first call.
+
+    Runs audio files through docling's ``AsrPipeline`` with the WhisperS2T
+    model spec from the ``audio_asr_model`` config setting.
+    """
+    global _audio_converter
+    if _audio_converter is None:
+        with _lock:
+            if _audio_converter is None:
+                _audio_converter = _build_audio_converter()
+    return _audio_converter
+
+
 def close_shared_converter() -> None:
     """Reset the shared converter singletons (for tests / cleanup).
 
     Idempotent — safe to call even when no converter has been built.
     """
-    global _ocr_converter, _text_converter
+    global _ocr_converter, _text_converter, _audio_converter
     _ocr_converter = None
     _text_converter = None
+    _audio_converter = None
 
 
 # ---------------------------------------------------------------------------
@@ -355,7 +546,9 @@ def get_converter_for_path(path: str | Path) -> DocumentConverter:
 
     Routing
     -------
-    - Non-PDF formats always use the OCR converter (unchanged behavior).
+    - Audio formats (``_AUDIO_SUFFIXES``) always use the ASR converter.
+    - Non-PDF, non-audio formats always use the OCR converter (unchanged
+      behavior).
     - PDFs: if ``pdf_ocr_enabled`` is True, always OCR. Otherwise a PDF with an
       embedded text layer uses the text-only converter (fast path, no OCR),
       and a scanned PDF (no text layer) falls back to the OCR converter.
@@ -367,6 +560,8 @@ def get_converter_for_path(path: str | Path) -> DocumentConverter:
 
     file_path = Path(path)
     cfg = config()
+    if file_path.suffix.lower() in _AUDIO_SUFFIXES:
+        return get_audio_converter()
     if file_path.suffix.lower() == ".pdf":
         if cfg.pdf_ocr_enabled:
             return get_shared_converter()

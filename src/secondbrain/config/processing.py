@@ -175,6 +175,15 @@ class ProcessingStorageMixin:
         default=1.0,
         description="Rendering scale for generated images.",
     )
+    audio_asr_model: str = Field(
+        default="whisper_tiny_s2t",
+        description=(
+            "Docling ASR model spec for audio transcription. Use a WhisperS2T "
+            "('*_s2t') preset: it transcribes via CTranslate2 without importing "
+            "openai-whisper (Python 3.14 safe). E.g. whisper_tiny_s2t, "
+            "whisper_base_s2t, whisper_large_v3_turbo_s2t."
+        ),
+    )
 
     @field_validator("pdf_accelerator_device")
     @classmethod
@@ -217,6 +226,23 @@ class ProcessingStorageMixin:
         """Validate the generated-image rendering scale is positive."""
         if v <= 0:
             raise ValueError("pdf_images_scale must be > 0")
+        return v
+
+    @field_validator("audio_asr_model")
+    @classmethod
+    def validate_audio_asr_model(cls, v: str) -> str:
+        """Validate the ASR model is a WhisperS2T ('*_s2t') docling preset.
+
+        Only the 'whisper_*_s2t' presets transcribe through CTranslate2 without
+        importing openai-whisper (which has no Python 3.14 support); the
+        full-preset-name check happens at converter-build time in the factory.
+        """
+        v = v.lower()
+        if not v.endswith("_s2t"):
+            raise ValueError(
+                "audio_asr_model must be a WhisperS2T ('*_s2t') docling ASR "
+                "preset (e.g. 'whisper_tiny_s2t', 'whisper_large_v3_turbo_s2t')"
+            )
         return v
 
     text_compression_algorithm: str = Field(
