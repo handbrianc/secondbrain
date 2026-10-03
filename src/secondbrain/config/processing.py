@@ -233,9 +233,9 @@ class ProcessingStorageMixin:
     def validate_audio_asr_model(cls, v: str) -> str:
         """Validate the ASR model is a WhisperS2T ('*_s2t') docling preset.
 
-        Only the 'whisper_*_s2t' presets transcribe through CTranslate2 without
-        importing openai-whisper (which has no Python 3.14 support); the
-        full-preset-name check happens at converter-build time in the factory.
+        Only the 'whisper_*_s2t' presets transcribe through CTranslate2 instead
+        of Docling's optional openai-whisper backend. The full-preset-name check
+        happens at converter-build time in the factory.
         """
         v = v.lower()
         if not v.endswith("_s2t"):

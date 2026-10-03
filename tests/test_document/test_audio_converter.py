@@ -160,7 +160,7 @@ def test_build_audio_converter_rejects_bogus_model(
 # ---------------------------------------------------------------------------
 
 
-def _import_real_s2t_preset() -> tuple[type, object] | None:
+def _import_real_s2t_preset() -> tuple[type, object]:
     """Import the real S2T preset + its class despite the session docling stubs.
 
     ``tests/test_document/conftest.py`` parks MagicMock stubs over the docling
@@ -172,8 +172,8 @@ def _import_real_s2t_preset() -> tuple[type, object] | None:
     the returned class and instance are consistent), then restores
     ``sys.modules`` to exactly its prior state (stubs back in place; real
     modules newly imported inside the window are dropped again so no real
-    docling state leaks into subsequent tests). Returns ``None`` when the real
-    import fails for any reason, so the caller can skip deterministically.
+    docling state leaks into subsequent tests). Import and API errors propagate
+    so this test fails if the required Docling API changes or is unavailable.
     """
     import importlib
     import sys
@@ -191,11 +191,8 @@ def _import_real_s2t_preset() -> tuple[type, object] | None:
             "docling.datamodel.pipeline_options_asr_model"
         ).InlineAsrWhisperS2TOptions
         instance = specs.WHISPER_TINY_S2T
-        if not isinstance(instance, options_cls):
-            return None
+        assert isinstance(instance, options_cls)
         return options_cls, instance
-    except Exception:
-        return None
     finally:
         newly = [
             k
@@ -220,13 +217,10 @@ def test_coerce_s2t_preset_for_device() -> None:
     """CPU + float16 -> float32 copy; CUDA/float32 passthrough; original kept.
 
     Uses the real ``InlineAsrWhisperS2TOptions`` pydantic preset imported
-    straight from the installed docling — cheap and no-network. Skips when the
-    real class cannot be imported (e.g. a future conftest stub covering it).
+    straight from the installed docling — cheap and no-network. Import or API
+    changes must fail this test rather than silently skipping its coverage.
     """
-    preset = _import_real_s2t_preset()
-    if preset is None:
-        pytest.skip("real WhisperS2T preset not importable under stub")
-    options_cls, original = preset
+    options_cls, original = _import_real_s2t_preset()
 
     # cpu + float16 (the preset default) -> coerced float32 deep copy
     coerced = docling_factory._coerce_s2t_preset_for_device(original, "cpu")
