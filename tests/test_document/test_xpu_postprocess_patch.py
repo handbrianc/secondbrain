@@ -63,7 +63,13 @@ def _restore_processor_method(
 
     get_config.cache_clear()
     monkeypatch.setattr(docling_factory, "_xpu_postprocess_patched", False)
-    pytest.importorskip(_PROC_PATH, reason="transformers missing")
+    processor_module = pytest.importorskip(_PROC_PATH, reason="transformers missing")
+    processor_class = processor_module.RTDetrImageProcessor
+    monkeypatch.setattr(
+        processor_class,
+        "post_process_object_detection",
+        processor_class.post_process_object_detection,
+    )
     FakeXpuTensor.moved_to = []
     yield
     get_config.cache_clear()
