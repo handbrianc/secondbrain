@@ -272,10 +272,11 @@ stage1_cmd_for_mode() {
   if [ -n "$INDEX" ]; then CMD+=( --index-url "$INDEX" ); fi
 }
 
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 if [ -n "$EXTRAS" ]; then
-  PROJECT_CMD=( "$PY_BIN" -m pip install -e ".[$EXTRAS]" )
+  PROJECT_CMD=( "$PY_BIN" -m pip install -e "${PROJECT_ROOT}[$EXTRAS]" )
 else
-  PROJECT_CMD=( "$PY_BIN" -m pip install -e "." )
+  PROJECT_CMD=( "$PY_BIN" -m pip install -e "$PROJECT_ROOT" )
 fi
 
 # Device check run after install: prints "<version> <is_available>".
