@@ -24,7 +24,9 @@ persisted to SQLite.
 ## Quick Start
 
 ```bash
-# 1. Install SecondBrain (GPU-aware: picks the right torch build for your host)
+# 1. Create and activate an environment, then install SecondBrain
+python3 -m venv .venv
+source .venv/bin/activate
 ./scripts/install.sh
 
 # 2. Start Qdrant (vector database)
