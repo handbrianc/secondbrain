@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **XPU (Intel GPU) layout-stage crash**: on torch 2.14 XPU builds for
+  Xe2-class Intel GPUs (e.g. Lunar Lake iGPU), the docling layout stage
+  crashed with `numel: integer multiplication overflow` or an absurd
+  `OutOfMemoryError` in the detection post-process (boolean-mask indexing is
+  broken in that torch build). The RT-DETR post-process now runs on CPU when
+  the layout model resolves to XPU; the forward pass stays on the GPU
+  (verified output parity CPU vs XPU). The patch installs only when an
+  XPU-enabled torch build detects a device and the configured device is
+  `xpu`/`auto` — no-op elsewhere. See pytorch/pytorch#199157 and #172934.
+
 ### Changed
 
 - **2026-08 / MongoDB → Qdrant + SQLite migration**: vector storage moved to Qdrant (`QdrantVectorStorage` +
