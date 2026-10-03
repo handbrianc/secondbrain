@@ -378,7 +378,7 @@ class TestXpuConverterIntegration:
             font=font,
             fill="black",
         )
-        pdf_path = "/tmp/opencode/xpu_docling_integration.pdf"
+        pdf_path = "/tmp/xpu_docling_integration.pdf"
         img.save(pdf_path, "PDF", resolution=150)
 
         # Ensure the config singleton reflects the xpu pin for this process.
