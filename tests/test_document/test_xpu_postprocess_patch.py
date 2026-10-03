@@ -331,6 +331,9 @@ class TestXpuConverterIntegration:
         try:
             yield
         finally:
+            for name in list(sys.modules):
+                if name == "docling" or name.startswith("docling."):
+                    sys.modules.pop(name)
             for name, mod in saved.items():
                 sys.modules[name] = mod
             get_config.cache_clear()
