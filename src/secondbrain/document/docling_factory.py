@@ -53,7 +53,7 @@ from __future__ import annotations
 import os
 import threading
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from docling.document_converter import DocumentConverter
@@ -62,6 +62,7 @@ _lock = threading.Lock()
 _ocr_converter: DocumentConverter | None = None
 _text_converter: DocumentConverter | None = None
 _audio_converter: DocumentConverter | None = None
+_xpu_postprocess_patched: bool = False
 
 # Audio file extensions routed to the ASR converter by get_converter_for_path.
 # Docling decodes them via PyAV (or a system ffmpeg when present).
@@ -147,6 +148,125 @@ def _preflight_accelerator_device(device_name: str) -> None:
             "for that device (for 'xpu': an XPU-enabled torch build plus the "
             "Level-Zero runtime), or set SECONDBRAIN_PDF_ACCELERATOR_DEVICE=auto."
         ) from exc
+
+
+def _xpu_postprocess_needed() -> bool:
+    """Whether the docling layout stage will run on Intel XPU on this host.
+
+    Mirrors docling's ``decide_device`` resolution: an explicit ``xpu`` pin or
+    ``auto`` (which prefers ``cuda -> mps -> xpu -> cpu``) both land on XPU when
+    an XPU-enabled torch build sees a device. On any other device the
+    post-process patch below is unnecessary and must not install.
+    """
+    try:
+        import torch
+    except ImportError:
+        return False
+    if not (hasattr(torch, "xpu") and torch.xpu.is_available()):
+        return False
+
+    from secondbrain.config import config
+
+    device = config().pdf_accelerator_device
+    return device in {"xpu", "auto"}
+
+
+def _patch_rt_detr_postprocess_for_xpu() -> None:
+    """Run the RT-DETR detection post-process on CPU when layout runs on XPU.
+
+    torch 2.14.x XPU builds on Xe2-class Intel GPUs (e.g. Lunar Lake iGPU) have
+    a boolean-mask-indexing bug: ``tensor[mask]`` (masked_select, internally
+    nonzero + a device->host scalar copy of the element count) returns a
+    garbage size — surfacing as ``RuntimeError: numel: integer multiplication
+    overflow`` or an absurd multi-TiB ``torch.OutOfMemoryError``. Docling's
+    layout stage hits this in transformers'
+    ``RTDetrImageProcessor.post_process_object_detection`` (the per-detection
+    ``score[score > threshold]`` filter), the only masked-select in the
+    pipeline. References: pytorch/pytorch#199157, pytorch/pytorch#199163,
+    pytorch/pytorch#172934.
+
+    The model forward on XPU is numerically correct (verified against CPU
+    within normal float noise), and only the tiny ``300 x num_classes``
+    post-process tensors are affected, so this patch moves just the
+    post-processing inputs to CPU and delegates to the original
+    implementation. Cost is negligible; the forward stays on the GPU.
+    Idempotent; installs only when the resolved device is XPU.
+    """
+    global _xpu_postprocess_patched
+    if _xpu_postprocess_patched:
+        return
+    if not _xpu_postprocess_needed():
+        return
+
+    try:
+        from transformers.models.rt_detr.image_processing_rt_detr import (
+            RTDetrImageProcessor,
+        )
+    except ImportError:
+        return
+
+    original = RTDetrImageProcessor.post_process_object_detection
+    if getattr(original, "_secondbrain_xpu_cpu_postprocess", False):
+        _xpu_postprocess_patched = True
+        return
+
+    def post_process_on_cpu(
+        self: Any,
+        outputs: Any,
+        threshold: float = 0.5,
+        target_sizes: Any = None,
+        use_focal_loss: bool = True,
+    ) -> list[dict[str, Any]]:
+        """Original post-process, with logits/boxes/targets moved to CPU."""
+        outputs, target_sizes = _move_detection_outputs_to_cpu(outputs, target_sizes)
+        return cast(
+            "list[dict[str, Any]]",
+            original(
+                self,
+                outputs,
+                threshold=threshold,
+                target_sizes=target_sizes,
+                use_focal_loss=use_focal_loss,
+            ),
+        )
+
+    post_process_on_cpu._secondbrain_xpu_cpu_postprocess = True  # type: ignore[attr-defined]
+    RTDetrImageProcessor.post_process_object_detection = post_process_on_cpu  # type: ignore[method-assign]
+    _xpu_postprocess_patched = True
+
+
+def _move_detection_outputs_to_cpu(outputs: Any, target_sizes: Any) -> tuple[Any, Any]:
+    """Move RT-DETR detection outputs and target sizes to CPU when on XPU.
+
+    Operates in place on the ``outputs`` mapping (as
+    ``post_process_object_detection`` expects) and returns the possibly
+    rewritten ``(outputs, target_sizes)`` pair. Non-XPU tensors pass through
+    untouched so behavior on CPU/CUDA/MPS hosts is bit-identical to unpatched
+    docling.
+    """
+    import torch
+
+    if not isinstance(outputs, dict):
+        return outputs, target_sizes
+
+    def _is_xpu_tensor(value: Any) -> bool:
+        return isinstance(value, torch.Tensor) and value.device.type == "xpu"
+
+    logits = outputs.get("logits")
+    boxes = outputs.get("pred_boxes")
+    if not (
+        isinstance(logits, torch.Tensor)
+        and isinstance(boxes, torch.Tensor)
+        and logits.device.type == "xpu"
+        and boxes.device.type == "xpu"
+    ):
+        return outputs, target_sizes
+
+    outputs["logits"] = logits.to("cpu")
+    outputs["pred_boxes"] = boxes.to("cpu")
+    if _is_xpu_tensor(target_sizes):
+        target_sizes = target_sizes.to("cpu")
+    return outputs, target_sizes
 
 
 def _build_pdf_format_option(*, do_ocr: bool, do_table_structure: bool) -> Any:
@@ -238,6 +358,10 @@ def _build_docling_converter(
     # pipeline initializes (first _get_pipeline call), not at import time —
     # applying it here keeps torch/transformers out of the import path.
     patch_transformers_for_mps()
+
+    # torch 2.14 XPU on Xe2 GPUs crashes in the detection post-process
+    # (masked-select); keep that stage on CPU when layout resolves to XPU.
+    _patch_rt_detr_postprocess_for_xpu()
 
     from docling.datamodel.base_models import InputFormat
     from docling.document_converter import DocumentConverter

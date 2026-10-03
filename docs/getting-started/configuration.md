@@ -89,10 +89,13 @@ or behavior change:
   Intel GPUs (integrated or Arc); either pin it or keep `auto`, which already
   resolves to XPU on hosts without CUDA/MPS. Intel hosts need an XPU-enabled
   torch build (install torch from `https://download.pytorch.org/whl/xpu`) plus
-  the Level-Zero/SYCL runtime. Only docling's layout model runs on the iGPU:
-  the RapidOCR stage has no XPU backend (OCR stays on CPU) and table structure
-  does not support XPU, so keep `pdf_table_structure_enabled=false` on Intel
-  GPUs.
+  the Level-Zero/SYCL runtime. The layout and table-structure models run on
+  the iGPU; the RapidOCR stage has no XPU backend (OCR stays on CPU). On
+  torch 2.14 XPU builds for Xe2-class Intel GPUs (e.g. Lunar Lake), the
+  detection post-process stage runs on CPU automatically — boolean-mask
+  indexing (`tensor[mask]`) is broken on those builds and would otherwise
+  crash the layout stage (pytorch/pytorch#199157, #172934). The expensive
+  model forward still runs on the GPU.
 - `pdf_threaded_pipeline` / `pdf_layout_batch_size` — use docling's threaded/batched
   PDF pipeline instead of the default, and set the layout-model batch size.
 - `pdf_generate_page_images` / `pdf_generate_picture_images` / `pdf_images_scale` —
