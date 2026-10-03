@@ -141,13 +141,18 @@ detect_target() {
     ldconfig_out="$(ldconfig -p 2>/dev/null || true)"
   fi
 
-  # 1. NVIDIA: nvidia-smi on PATH, or an NVIDIA VGA/3D device via lspci.
-  if command -v nvidia-smi >/dev/null 2>&1; then echo "cuda"; return; fi
-  if [[ "$lspci_out" =~ nvidia ]] && [[ "$lspci_out" =~ vga|3d ]]; then echo "cuda"; return; fi
-  # 2. Intel XPU: an Intel VGA/3D/Display device AND the level-zero loader.
-  #    (The torch XPU wheel bundles the compute stack but needs the loader.)
-  if [[ "$lspci_out" =~ intel ]] && [[ "$lspci_out" =~ vga|3d|display ]] \
-     && [[ "$ldconfig_out" == *libze_loader* ]]; then echo "xpu"; return; fi
+  # 1. Identify GPU vendors, requiring the vendor and display class on one line.
+  local pci_line has_nvidia_gpu=0 has_intel_gpu=0
+  while IFS= read -r pci_line; do
+    if [[ "$pci_line" =~ nvidia ]] && [[ "$pci_line" =~ vga|3d ]]; then
+      has_nvidia_gpu=1
+    elif [[ "$pci_line" =~ intel ]] && [[ "$pci_line" =~ vga|3d|display ]]; then
+      has_intel_gpu=1
+    fi
+  done <<< "$lspci_out"
+  if command -v nvidia-smi >/dev/null 2>&1 || [ "$has_nvidia_gpu" -eq 1 ]; then echo "cuda"; return; fi
+  # 2. Intel XPU also requires the level-zero loader.
+  if [ "$has_intel_gpu" -eq 1 ] && [[ "$ldconfig_out" == *libze_loader* ]]; then echo "xpu"; return; fi
   # 3. macOS: MPS is built into the plain PyPI torch/torchvision builds.
   if [ "$(uname -s)" = "Darwin" ]; then echo "mps"; return; fi
   # 4. Everything else: CPU.
