@@ -50,7 +50,7 @@ first, e.g. on Ubuntu 24.04+:
 sudo apt install intel-level-zero-gpu level-zero
 ```
 
-Plain `pip install -e .` remains the CPU-only minimal alternative:
+Plain `pip install -e .` remains the minimal alternative using PyPI's default torch build:
 
 ```bash
 pip install -e .
