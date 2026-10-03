@@ -117,6 +117,7 @@ or behavior change:
 |`SECONDBRAIN_PDF_GENERATE_PAGE_IMAGES`     |`false`             |Render full-page images during parsing; unused for storage, disabled for speed (`pdf_generate_page_images`)                                                                                                                                                                                      |
 |`SECONDBRAIN_PDF_GENERATE_PICTURE_IMAGES`  |`false`             |Render embedded picture images during parsing; unused for storage, disabled for speed (`pdf_generate_picture_images`)                                                                                                                                                                            |
 |`SECONDBRAIN_PDF_IMAGES_SCALE`             |`1.0`               |Rendering scale for generated images, must be > 0 (`pdf_images_scale`)                                                                                                                                                                                                                           |
+|`SECONDBRAIN_AUDIO_ASR_MODEL`               |`whisper_tiny_s2t`   |Docling WhisperS2T preset; use a `*_s2t` preset (e.g. `whisper_base_s2t`). Requires the ASR extra: `pip install 'secondbrain[asr]'` (`audio_asr_model`)                                                                                                                                           |
 
 ### Search Settings
 
