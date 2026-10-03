@@ -46,7 +46,7 @@ SecondBrain supports a wide variety of document formats:
 | Documents | PDF, DOCX, PPTX, XLSX, HTML, MD, TXT, ASCII_DOC, ADOC, TEX |
 | Data | CSV, XML, JSON |
 | Images | PNG, JPG, JPEG, TIFF, TIF, BMP, WEBP |
-| Media | WAV, MP3, VTT |
+| Media | WAV, MP3, M4A, AAC, OGG, FLAC, VTT |
 
 ## Package Information
 

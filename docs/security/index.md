@@ -121,6 +121,10 @@ SUPPORTED_EXTENSIONS = {
     ".webp",
     ".wav",
     ".mp3",
+    ".m4a",
+    ".aac",
+    ".ogg",
+    ".flac",
     ".vtt",
 }
 ```

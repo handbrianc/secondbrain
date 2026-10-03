@@ -52,7 +52,7 @@ def _clear_config_cache() -> Iterator[None]:
 
 
 def _set_env(monkeypatch: pytest.MonkeyPatch, **overrides: str) -> None:
-    """Set SECONDBRAIN_PDF_* env vars (defaults except overridden) and reset cache."""
+    """Set config environment defaults except overridden values and reset cache."""
     from secondbrain.config import get_config
 
     defaults = {
@@ -63,6 +63,7 @@ def _set_env(monkeypatch: pytest.MonkeyPatch, **overrides: str) -> None:
         "SECONDBRAIN_PDF_GENERATE_PAGE_IMAGES": "false",
         "SECONDBRAIN_PDF_GENERATE_PICTURE_IMAGES": "false",
         "SECONDBRAIN_PDF_IMAGES_SCALE": "1.0",
+        "SECONDBRAIN_AUDIO_ASR_MODEL": "whisper_tiny_s2t",
     }
     if "SECONDBRAIN_MAX_INGEST_PROCESSES" in overrides:
         defaults["SECONDBRAIN_MAX_INGEST_PROCESSES"] = "0"
@@ -151,6 +152,36 @@ def test_config_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     assert c.pdf_generate_page_images is False
     assert c.pdf_generate_picture_images is False
     assert c.pdf_images_scale == 1.0
+    assert c.audio_asr_model == "whisper_tiny_s2t"
+
+
+def test_config_reads_audio_asr_model_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The SECONDBRAIN_AUDIO_ASR_MODEL environment variable selects the preset."""
+    from secondbrain.config import config
+
+    _set_env(monkeypatch, SECONDBRAIN_AUDIO_ASR_MODEL="whisper_base_s2t")
+    assert config().audio_asr_model == "whisper_base_s2t"
+
+
+def test_config_normalizes_audio_asr_model_case(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The configured ASR model preset is normalized to lowercase."""
+    from secondbrain.config import config
+
+    _set_env(monkeypatch, SECONDBRAIN_AUDIO_ASR_MODEL="WHISPER_BASE_S2T")
+    assert config().audio_asr_model == "whisper_base_s2t"
+
+
+def test_config_rejects_audio_asr_model_without_s2t_suffix(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Non-WhisperS2T presets are rejected."""
+    from secondbrain.config import config
+
+    _set_env(monkeypatch, SECONDBRAIN_AUDIO_ASR_MODEL="whisper_tiny")
+    with pytest.raises(pydantic.ValidationError):
+        config()
 
 
 def test_config_reads_env_toggles(monkeypatch: pytest.MonkeyPatch) -> None:

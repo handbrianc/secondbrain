@@ -9,7 +9,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from secondbrain.document import DocumentIngestor, get_file_type, is_supported
+from secondbrain.document import (
+    DocumentIngestor,
+    docling_factory,
+    get_file_type,
+    is_supported,
+)
 
 
 class TestOfficeFormats:
@@ -412,7 +417,7 @@ class TestImageFormats:
 
 
 class TestAudioFormats:
-    """Tests for audio formats (WAV, MP3)."""
+    """Tests for audio formats (WAV, MP3, M4A, AAC, OGG, FLAC)."""
 
     def test_wav_file_type_detection(self) -> None:
         """Test WAV file type is correctly detected."""
@@ -424,9 +429,29 @@ class TestAudioFormats:
         assert get_file_type(Path("audio.mp3")) == "audio"
         assert get_file_type(Path("AUDIO.MP3")) == "audio"
 
+    def test_m4a_file_type_detection(self) -> None:
+        """Test M4A file type is correctly detected."""
+        assert get_file_type(Path("audio.m4a")) == "audio"
+        assert get_file_type(Path("AUDIO.M4A")) == "audio"
+
+    def test_aac_file_type_detection(self) -> None:
+        """Test AAC file type is correctly detected."""
+        assert get_file_type(Path("audio.aac")) == "audio"
+        assert get_file_type(Path("AUDIO.AAC")) == "audio"
+
+    def test_ogg_file_type_detection(self) -> None:
+        """Test OGG file type is correctly detected."""
+        assert get_file_type(Path("audio.ogg")) == "audio"
+        assert get_file_type(Path("AUDIO.OGG")) == "audio"
+
+    def test_flac_file_type_detection(self) -> None:
+        """Test FLAC file type is correctly detected."""
+        assert get_file_type(Path("audio.flac")) == "audio"
+        assert get_file_type(Path("AUDIO.FLAC")) == "audio"
+
     def test_all_audio_extensions_supported(self) -> None:
         """Test all audio extensions are supported."""
-        audio_extensions = [".wav", ".mp3"]
+        audio_extensions = [".wav", ".mp3", ".m4a", ".aac", ".ogg", ".flac"]
         for ext in audio_extensions:
             assert is_supported(Path(f"test{ext}")), f"{ext} should be supported"
 
@@ -438,7 +463,15 @@ class TestAudioFormats:
 
         ingestor = DocumentIngestor(chunk_size=512)
 
-        with patch.object(ingestor.converter, "convert") as mock_convert:
+        # Audio routes through the ASR converter singleton now, so bind the
+        # factory's audio-builder seam to the ingestor's converter (pre-ASR
+        # behavior: the OCR converter was the ingestor's converter).
+        with (
+            patch.object(
+                docling_factory, "_build_audio_converter", lambda: ingestor.converter
+            ),
+            patch.object(ingestor.converter, "convert") as mock_convert,
+        ):
             mock_result = MagicMock()
             mock_text = MagicMock()
             if hasattr(mock_text, "export_to_data_frame"):
@@ -460,7 +493,14 @@ class TestAudioFormats:
 
         ingestor = DocumentIngestor(chunk_size=512)
 
-        with patch.object(ingestor.converter, "convert") as mock_convert:
+        # Audio routes through the ASR converter singleton now; see the WAV
+        # test above for why the audio-builder seam is bound here.
+        with (
+            patch.object(
+                docling_factory, "_build_audio_converter", lambda: ingestor.converter
+            ),
+            patch.object(ingestor.converter, "convert") as mock_convert,
+        ):
             mock_result = MagicMock()
             mock_text = MagicMock()
             if hasattr(mock_text, "export_to_data_frame"):
@@ -641,6 +681,10 @@ class TestDocumentTypeCoverage:
             ".webp": "image",
             ".wav": "audio",
             ".mp3": "audio",
+            ".m4a": "audio",
+            ".aac": "audio",
+            ".ogg": "audio",
+            ".flac": "audio",
             ".vtt": "webvtt",
             ".xml": "xml",
             ".json": "docling-json",
@@ -659,7 +703,7 @@ class TestDocumentTypeCoverage:
         # - Web: HTML, Markdown, XML
         # - Structured: CSV, JSON
         # - Images: PNG, JPEG, TIFF, BMP, WEBP
-        # - Audio: WAV, MP3
+        # - Audio: WAV, MP3, M4A, AAC, OGG, FLAC
         # - Specialty: LaTeX, AsciiDoc, WebVTT, TXT
         test_methods = inspect.getmembers(self, predicate=inspect.ismethod)
         test_names = [name for name, _ in test_methods if name.startswith("test_")]
