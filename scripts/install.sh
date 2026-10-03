@@ -114,7 +114,7 @@ PY_BIN="$(command -v "$PYTHON")" || die "Interpreter '$PYTHON' not found on PATH
 # that resolves inside a virtualenv (sys.prefix != sys.base_prefix).
 venv_ok=0
 case "$PY_BIN" in *pyenv/shims/*|*pyenv/versions/*) venv_ok=1 ;; esac
-if [ -n "${VIRTUAL_ENV:-}" ]; then venv_ok=1; fi
+# Validate the selected interpreter below; PYTHON may override the active environment.
 if [ "$venv_ok" -eq 0 ] \
    && "$PY_BIN" -c 'import sys; raise SystemExit(0 if sys.prefix != sys.base_prefix else 1)' >/dev/null 2>&1; then
   venv_ok=1
