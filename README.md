@@ -24,8 +24,10 @@ persisted to SQLite.
 ## Quick Start
 
 ```bash
-# 1. Install SecondBrain
-pip install -e .
+# 1. Create and activate an environment, then install SecondBrain
+python3 -m venv .venv
+source .venv/bin/activate
+./scripts/install.sh
 
 # 2. Start Qdrant (vector database)
 secondbrain start --wait
@@ -35,6 +37,23 @@ secondbrain ingest ./documents/
 
 # 4. Search semantically
 secondbrain search "what is this about?"
+```
+
+`./scripts/install.sh` auto-detects the accelerator — NVIDIA (CUDA), Intel
+(XPU), Apple Silicon (MPS), or CPU-only — and installs the matching torch
+build from the correct index before the editable install. Run
+`./scripts/install.sh --help` for flags (`--cpu/--cuda/--xpu/--mps`,
+`--dry-run`, `--extras`). On an Intel GPU you need the level-zero loader
+first, e.g. on Ubuntu 24.04+:
+
+```bash
+sudo apt install intel-level-zero-gpu level-zero
+```
+
+Plain `pip install -e .` remains the minimal alternative using PyPI's default torch build:
+
+```bash
+pip install -e .
 ```
 
 ## CLI Commands
