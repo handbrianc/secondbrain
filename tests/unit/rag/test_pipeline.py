@@ -6218,9 +6218,7 @@ class TestGluedTitleAnchoringEndToEnd:
             self.H._body(
                 "5 Graphical User Interface\nprose about the interface calmly", 200
             ),
-            self.H._body(
-                "6 Storage Replication\nprose about replication calmly", 302
-            ),
+            self.H._body("6 Storage Replication\nprose about replication calmly", 302),
         ]
         pipeline = self.H._make(monkeypatch, toc_probe, body, [])
         answer = self.H._run(pipeline)

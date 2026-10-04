@@ -959,8 +959,7 @@ class RAGPipeline(
                         re.escape(char_) for char_ in title_chars_
                     )
                     anchor_ = re.compile(
-                        rf"(?:^|\n)\s*{tn}\.?\s*"
-                        + rf"(?P<title>{title_pattern_})",
+                        rf"(?:^|\n)\s*{tn}\.?\s*" + rf"(?P<title>{title_pattern_})",
                         re.IGNORECASE,
                     )
                     for bc_ in body_all_:
@@ -1040,11 +1039,9 @@ class RAGPipeline(
                             flags=re.IGNORECASE,
                         ).strip()
                         spaced_norm_ = re.sub(r"\s+", " ", spaced_title_).strip()
-                    if (
-                        re.sub(r"\s+", "", spaced_norm_)
-                        != re.sub(r"\s+", "", old_norm_)
-                        or len(spaced_norm_) <= len(old_norm_)
-                    ):
+                    if re.sub(r"\s+", "", spaced_norm_) != re.sub(
+                        r"\s+", "", old_norm_
+                    ) or len(spaced_norm_) <= len(old_norm_):
                         # Same safeguard as every other repair path: only the
                         # glued-vs-spaced spellings of ONE title may swap, and
                         # only toward the more-spaced form.
