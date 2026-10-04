@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from contextlib import nullcontext
 from datetime import UTC, datetime
@@ -35,9 +35,9 @@ from secondbrain.utils.tracing import trace_operation
 logger = logging.getLogger(__name__)
 
 
-def _warn_if_glued_text(
-    file_path: Path, segments: list[dict[str, Any]]
-) -> list[dict[str, Any]]:
+def _warn_if_glued_text[T: Mapping[str, object]](
+    file_path: Path, segments: list[T]
+) -> list[T]:
     """Warn when an extraction looks word-glued, then pass it through."""
     joined = "".join(str(seg.get("text") or "") for seg in segments)
     if len(joined) >= 1000:

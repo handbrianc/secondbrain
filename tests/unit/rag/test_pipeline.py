@@ -6294,7 +6294,7 @@ class TestGluedTitleAnchoringEndToEnd:
                 "source_file": self.SRC,
             },
         ]
-        headings = [self.H._heading("Graphical User Interface", 119)]
+        headings = [self.H._heading("Chapter 4 — Graphical User Interface", 119)]
         body = [
             self.H._body("4 GraphicalUser Interface 44", 6),
             self.H._body(
@@ -6312,6 +6312,28 @@ class TestGluedTitleAnchoringEndToEnd:
         # ... while ch6 keeps its own (already spaced, differently worded
         # relationship: same book, unrelated title) roster title.
         assert "Chapter 6 — Storage Replication (approx pages 302+)" in answer, answer
+
+    def test_spaced_title_backfill_keeps_prefix_free_digit_title(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A title beginning with its chapter number is not prefix-stripped."""
+        toc_probe = [
+            {
+                "chunk_text": "3 3DModeling 30",
+                "chunk_role": "toc_entry",
+                "page_number": 4,
+                "source_file": self.SRC,
+            },
+        ]
+        headings = [self.H._heading("3D Modeling", 80)]
+        body = [
+            self.H._body("3 3D Modeling\nprose describing 3D modeling calmly", 80),
+            self.H._body("prose describing later content quietly", 120),
+        ]
+        pipeline = self.H._make(monkeypatch, toc_probe, body, headings)
+        answer = self.H._run(pipeline)
+
+        assert "Chapter 3 — 3D Modeling (approx pages 80+)" in answer, answer
 
     def test_backfill_refuses_differently_worded_titles(
         self, monkeypatch: pytest.MonkeyPatch

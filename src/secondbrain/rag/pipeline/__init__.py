@@ -1016,12 +1016,7 @@ class RAGPipeline(
                     spaced_ = anchor_titles_.get(ch_)
                     if not spaced_:
                         continue
-                    spaced_title_ = re.sub(
-                        rf"^(?:chapter\s*)?{ch_}(?:\.\d+)?[\s:.\-]*",
-                        "",
-                        spaced_,
-                        flags=re.IGNORECASE,
-                    ).strip()
+                    spaced_title_ = spaced_.strip()
                     ct_idx_ = next(
                         (
                             i
@@ -1035,6 +1030,16 @@ class RAGPipeline(
                     old_ = chapters_to_cover[ct_idx_][2]
                     spaced_norm_ = re.sub(r"\s+", " ", spaced_title_).strip()
                     old_norm_ = re.sub(r"\s+", " ", old_).strip()
+                    if re.sub(r"\s+", "", spaced_norm_) != re.sub(
+                        r"\s+", "", old_norm_
+                    ):
+                        spaced_title_ = re.sub(
+                            rf"^(?:chapter\s*)?{ch_}(?:\.\d+)?[\s:.\-\u2013\u2014]*",
+                            "",
+                            spaced_,
+                            flags=re.IGNORECASE,
+                        ).strip()
+                        spaced_norm_ = re.sub(r"\s+", " ", spaced_title_).strip()
                     if (
                         re.sub(r"\s+", "", spaced_norm_)
                         != re.sub(r"\s+", "", old_norm_)
