@@ -3331,6 +3331,94 @@ class TestMultiChapterMapReduce:
             chapters, src, headings, blocked_pages={5: 15}
         ) == {5: 118}
 
+    def test_heading_title_anchors_match_glued_roster_vs_spaced_heading(
+        self,
+    ) -> None:
+        """Squash comparison: glued ToC title matches the spaced opener.
+
+        The docling space regression glues ToC-row words ("InstallingProxmoxVE")
+        while the real opener heading is correctly spaced ("Installing Proxmox
+        VE"); whitespace-insensitive comparison anchors the chapter and the
+        opener's spaced spelling is recorded through ``titles_out``.
+        """
+        p = self._make_pipeline(_SequenceProvider([]))
+        src = "/books/pve.pdf"
+        chapters = [(2, src, "InstallingProxmoxVE")]
+        headings = [{"chunk_text": "Installing Proxmox VE", "page_number": 119}]
+        titles: dict[int, str] = {}
+        assert p._heading_title_anchors(chapters, src, headings, titles_out=titles) == {
+            2: 119
+        }
+        assert titles == {2: "Installing Proxmox VE"}, titles
+
+    def test_heading_title_anchors_match_spaced_roster_vs_glued_heading(
+        self,
+    ) -> None:
+        """Reverse direction: spaced roster title vs glued heading text."""
+        p = self._make_pipeline(_SequenceProvider([]))
+        src = "/books/pve.pdf"
+        chapters = [(10, src, "QEMU/KVM Virtual Machines")]
+        headings = [
+            {"chunk_text": "QEMU/KVM VirtualMachines", "page_number": 225},
+        ]
+        titles: dict[int, str] = {}
+        assert p._heading_title_anchors(chapters, src, headings, titles_out=titles) == {
+            10: 225
+        }
+        # The recorded title is the HEADING chunk's own spelling (glued here).
+        assert titles == {10: "QEMU/KVM VirtualMachines"}, titles
+
+    def test_heading_title_anchors_glued_toc_row_trailing_digit_refused(
+        self,
+    ) -> None:
+        """A glued ToC-row-shaped heading ending in a digit stays refused."""
+        p = self._make_pipeline(_SequenceProvider([]))
+        src = "/books/pve.pdf"
+        chapters = [(6, src, "ProxmoxClusterFileSystem(pmxcfs)")]
+        headings = [
+            # Glued ToC row: "title page-number" run-on, ends with a digit.
+            {
+                "chunk_text": "ProxmoxClusterFileSystem(pmxcfs) 136",
+                "page_number": 8,
+            },
+            # The real opener (spaced) anchors instead.
+            {
+                "chunk_text": "Proxmox Cluster File System (pmxcfs)",
+                "page_number": 158,
+            },
+        ]
+        titles: dict[int, str] = {}
+        assert p._heading_title_anchors(chapters, src, headings, titles_out=titles) == {
+            6: 158
+        }
+        assert titles == {6: "Proxmox Cluster File System (pmxcfs)"}, titles
+
+    def test_heading_title_anchors_blocked_and_boiler_guards_survive_squash(
+        self,
+    ) -> None:
+        """Squash matching does not bypass the blocked/boiler page guards."""
+        p = self._make_pipeline(_SequenceProvider([]))
+        src = "/books/pve.pdf"
+        chapters = [(4, src, "GraphicalUser Interface")]
+        headings = [
+            {"chunk_text": "Graphical User Interface", "page_number": 14},
+            {"chunk_text": "Graphical User Interface", "page_number": 119},
+        ]
+        # The glued-vs-spaced match on the blocked front-matter page must be
+        # refused, pushing the anchor to the real opener.
+        assert p._heading_title_anchors(
+            chapters, src, headings, blocked_pages={4: 14}
+        ) == {4: 119}
+        # The boiler-page heading is refused too; the anchor lands on the
+        # same title's next occurrence outside the boiler region.
+        boiler = [
+            {"chunk_text": "Graphical User Interface", "page_number": 119},
+            {"chunk_text": "Graphical User Interface", "page_number": 300},
+        ]
+        assert p._heading_title_anchors(chapters, src, boiler, boiler_pages={119}) == {
+            4: 300
+        }
+
     def test_derive_chapter_numbers_rescues_crossref_title_from_desc_sentence(
         self,
     ) -> None:
@@ -5588,6 +5676,27 @@ class TestChapterTitleCleanup:
         for raw, want in cases.items():
             assert p._clean_chapter_title(raw) == want, raw
 
+    def test_clean_chapter_title_cuts_glued_dotted_section_runon(self) -> None:
+        """The docling space regression glues the next row's section number.
+
+        The stored ToC rows read "203 10.1Emulateddevicesand..." with NO
+        space between the section number and its title, so the old
+        lookahead (which required whitespace or end-of-string after "N.N")
+        never cut and the whole run-on became the chapter title.
+        """
+        p = self._pipeline()
+        cases = {
+            # Existing glued-shape behavior preserved: serial + glued
+            # section-number row cuts at the serial.
+            "InstallingProxmoxVE 10 2.1SystemRequirements": "InstallingProxmoxVE",
+            # New cut: spaced title + serial + glued section number+title.
+            "QEMU/KVM Virtual Machines 203 10.1Emulateddevicesandparavirtualizeddevices": (
+                "QEMU/KVM Virtual Machines"
+            ),
+        }
+        for raw, want in cases.items():
+            assert p._clean_chapter_title(raw) == want, raw
+
     def test_display_chapter_title_joint_trim(self) -> None:
         """The display helper applies the same pollution cuts centrally."""
         p = self._pipeline()
@@ -5717,3 +5826,560 @@ class TestChapterTitleCleanup:
         assert recovered[6] == ("Proxmox Cluster File System (pmxcfs)", 136)
         # The footer offset math converts printed 136 -> physical 158 (offset 22)
         assert 136 + 22 == 158
+
+    def test_glued_runon_row_recovery_pve_live_shape(self) -> None:
+        """The LIVE PVE book's ch6 row: fully-glued inside a glued run-on.
+
+        Real stored pg-8 chunk (docling space regression deleted the space
+        after the dotted section numbers too): pass 1's split lookahead
+        demands a space there, so pass 1 recovers nothing and the stranded
+        chapter row is lost.  The pass-2 glued-shape scan must recover
+        6 -> ("ProxmoxClusterFileSystem(pmxcfs)", 136).
+        """
+        p = self._pipeline()
+        runon = (
+            "5.14.1MigrationType . . . . . 133 5.14.2MigrationNetwork . . . . . 134 "
+            "6 ProxmoxClusterFileSystem(pmxcfs) 136"
+        )
+        rows = p._recovered_runon_toc_rows(
+            [{"chunk_text": runon, "source_file": self.SRC, "page_number": 8}],
+            self.SRC,
+        )
+        assert rows == {6: ("ProxmoxClusterFileSystem(pmxcfs)", 136)}, rows
+
+    def test_glued_runon_recovery_rejects_appendix_and_lone_section_rows(self) -> None:
+        """The glued scan must not fire on appendix or section row shapes.
+
+        "B.6 pmxcfs-...": the 6 is preceded by a dot (lookbehind rejects).
+        A lone glued section row ("5.14.1MigrationType 133"): the 5 is
+        dot-followed, and no chapter-number + glued-title + serial shape
+        exists after it.
+        """
+        p = self._pipeline()
+        appendix = (
+            "B.6 pmxcfs-ProxmoxClusterFileSystem . . . 597 B.7 "
+            "pve-ha-crm-ClusterResourceManagerDaemon . . . 597"
+        )
+        assert (
+            p._recovered_runon_toc_rows(
+                [
+                    {
+                        "chunk_text": appendix,
+                        "source_file": self.SRC,
+                        "page_number": 22,
+                    }
+                ],
+                self.SRC,
+            )
+            == {}
+        )
+        lone = "5.14.1MigrationType . . . 133"
+        assert (
+            p._recovered_runon_toc_rows(
+                [
+                    {
+                        "chunk_text": lone,
+                        "source_file": self.SRC,
+                        "page_number": 8,
+                    }
+                ],
+                self.SRC,
+            )
+            == {}
+        )
+
+    def test_glued_runon_recovery_spaced_row_wins_over_glued(self) -> None:
+        """A spaced pass-1 row beats a glued pass-2 duplicate for the same ch.
+
+        Chunk order must not matter: pass 2 merges with setdefault AFTER
+        pass 1 has walked every chunk, so the spaced spelling wins even when
+        the glued chunk is scrolled last.
+        """
+        p = self._pipeline()
+        glued = {
+            "chunk_text": (
+                "5.14.1MigrationType 133 5.14.2MigrationNetwork 134 "
+                "6 ProxmoxClusterFileSystem(pmxcfs) 136"
+            ),
+            "source_file": self.SRC,
+            "page_number": 8,
+        }
+        spaced = {
+            "chunk_text": (
+                "5.14.2 Migration Network . . . 134 Proxmox Cluster File System "
+                "(pmxcfs) 136 6.1 POSIX Compatibility . . . 136"
+            ),
+            "source_file": self.SRC,
+            "page_number": 8,
+        }
+        rows = p._recovered_runon_toc_rows([glued, spaced], self.SRC)
+        assert rows[6] == ("Proxmox Cluster File System (pmxcfs)", 136), rows
+        rows_rev = p._recovered_runon_toc_rows([spaced, glued], self.SRC)
+        assert rows_rev[6] == ("Proxmox Cluster File System (pmxcfs)", 136), rows_rev
+
+    def test_glued_runon_recovery_ignores_single_plain_word_rows(self) -> None:
+        """'6 Other 8' prose noise is not a space-regression casualty.
+
+        Gluing can only delete spaces, so a single unbroken capitalized
+        word cannot be a glued title; multi-token or intra-word
+        case-boundary shapes carry the glue evidence the scan requires.
+        """
+        p = self._pipeline()
+        noise = "prose before 6 Other 8 and trailing words after"
+        assert (
+            p._recovered_runon_toc_rows(
+                [
+                    {
+                        "chunk_text": noise,
+                        "source_file": self.SRC,
+                        "page_number": 8,
+                    }
+                ],
+                self.SRC,
+            )
+            == {}
+        )
+        # Glue evidence present (CamelCase boundary): recovered.
+        glued = "6 StorageReplication 199"
+        assert p._recovered_runon_toc_rows(
+            [{"chunk_text": glued, "source_file": self.SRC, "page_number": 8}],
+            self.SRC,
+        ) == {6: ("StorageReplication", 199)}
+
+    def test_pretty_glued_title_display_respace(self) -> None:
+        """Display-only re-spacing of fully-glued titles (no spaced form left)."""
+        p = self._pipeline()
+        assert (
+            p._pretty_glued_title("ProxmoxClusterFileSystem(pmxcfs)")
+            == "Proxmox Cluster File System (pmxcfs)"
+        )
+        assert p._pretty_glued_title("InstallingProxmoxVE") == "Installing Proxmox VE"
+        # Short mixed-case words stay untouched (len < 10).
+        assert p._pretty_glued_title("macOS") == "macOS"
+        # Titles that already contain whitespace are never re-spaced.
+        assert p._pretty_glued_title("GraphicalUser Interface") == (
+            "GraphicalUser Interface"
+        )
+        # All-caps runs and normal spaced titles pass through unchanged.
+        assert p._pretty_glued_title("QEMU/KVM Virtual Machines") == (
+            "QEMU/KVM Virtual Machines"
+        )
+
+    def test_display_chapter_title_deglues_fully_glued_title(self) -> None:
+        """_display_chapter_title is the de-glue's display path (roster/header)."""
+        p = self._pipeline()
+        assert p._display_chapter_title("ProxmoxClusterFileSystem(pmxcfs)") == (
+            "Proxmox Cluster File System (pmxcfs)"
+        )
+        assert p._display_chapter_title("InstallingProxmoxVE") == (
+            "Installing Proxmox VE"
+        )
+        # A title with ANY whitespace is out of de-glue scope: only the
+        # pre-existing pollution cuts apply (the glued head stays glued).
+        # The two repairs never compose within one call — de-glue requires
+        # zero whitespace, every pollution cut requires some — so the cut
+        # side is covered by the existing trimmed-title tests above.
+        assert p._display_chapter_title("InstallingProxmoxVE 10 2.1SystemReq") == (
+            "InstallingProxmoxVE"
+        )
+        # Normal titles and short mixed-case words unchanged.
+        assert p._display_chapter_title("Real Title") == "Real Title"
+        assert p._display_chapter_title("macOS") == "macOS"
+
+
+class _GluedBookHarness:
+    """Shared storage double + pipeline builder for glued-ToC end-to-end tests.
+
+    Models the docling-parse space-regression shape: ToC rows stored as body
+    chunks carry glued titles ("InstallingProxmoxVE", "ClusterManager") and
+    the printed page serials, while the real opener pages (physical page =
+    printed + FOOTER_OFFSET) are correctly spaced.  The scripted provider
+    returns no usable chapter summaries, so the answer falls back to the
+    chapter roster whose "approx pages N+" lines double as pin assertions
+    (same trick as TestChapterPinWindowResolution).
+    """
+
+    SRC = "pve.pdf"
+    QUERY = "summarize by chapter the proxmox admin guide"
+    FOOTER_OFFSET = 22
+
+    @staticmethod
+    def _heading(text: str, page: int) -> dict[str, Any]:
+        return {
+            "chunk_text": text,
+            "page_number": page,
+            "chunk_role": "heading",
+            "source_file": _GluedBookHarness.SRC,
+        }
+
+    @staticmethod
+    def _body(text: str, page: int, role: str = "body") -> dict[str, Any]:
+        return {
+            "chunk_text": text,
+            "page_number": page,
+            "chunk_role": role,
+            "source_file": _GluedBookHarness.SRC,
+        }
+
+    @classmethod
+    def _make(
+        cls,
+        monkeypatch: pytest.MonkeyPatch,
+        toc_probe: list[dict[str, Any]],
+        body: list[dict[str, Any]],
+        headings: list[dict[str, Any]],
+    ) -> RAGPipeline:
+        from secondbrain.rag.intent_parser import IntentDecision, QueryIntent
+
+        class _StubStorage:
+            def __init__(
+                self, bodys: list[dict[str, Any]], heads: list[dict[str, Any]]
+            ) -> None:
+                self._body = bodys
+                self._heads = heads
+
+            def get_body_chunks(
+                self,
+                source: str,
+                limit: int | None = None,
+                page_gte: int | None = None,
+            ) -> list[dict[str, Any]]:
+                chunks = [c for c in self._body if c.get("source_file") == source]
+                if page_gte is not None:
+                    chunks = [
+                        c for c in chunks if (c.get("page_number") or 0) >= page_gte
+                    ]
+                return chunks[:limit] if limit is not None else chunks
+
+            def find_structural_chunks(
+                self,
+                chunk_roles: list[str] | None = None,
+                source_prefix: str | None = None,
+            ) -> list[dict[str, Any]]:
+                return [
+                    c
+                    for c in self._heads
+                    if (chunk_roles is None or c.get("chunk_role") in chunk_roles)
+                    and (
+                        source_prefix is None
+                        or str(c.get("source_file", "")).startswith(source_prefix)
+                    )
+                ]
+
+        searcher = _make_mock_searcher()
+        searcher.storage = _StubStorage(body, headings)
+        pipeline = RAGPipeline(
+            searcher=searcher,
+            llm_provider=_SequenceProvider(by_key={"Chapter": ""}),  # type: ignore
+            top_k=5,
+            context_window=5,
+        )
+        pipeline._config.streaming_enabled = False
+        monkeypatch.setattr(
+            pipeline,
+            "_probe_document_structure",
+            lambda top_k, source_filter=None: toc_probe,
+        )
+        monkeypatch.setattr(
+            pipeline._intent_parser,
+            "parse",
+            lambda q: IntentDecision(
+                intent=QueryIntent.BROAD_COVERAGE,
+                confidence=0.5,
+                target=None,
+                reason="test",
+                suggested_pipeline="structural",
+            ),
+        )
+        return pipeline
+
+    @classmethod
+    def _run(cls, pipeline: RAGPipeline) -> str:
+        result = pipeline._iterative_query(
+            cls.QUERY, top_k=5, show_sources=False, source_filter=cls.SRC
+        )
+        return result["answer"]
+
+
+class TestGluedTitleAnchoringEndToEnd:
+    """The docling space-regression book: glued ToC text, spaced openers.
+
+    The stored ToC rows read "2 InstallingProxmoxVE 10" (intra-word spaces
+    deleted, inter-token spaces intact) and the opener headings are intact
+    ("Installing Proxmox VE").  Every fixture reuses _GluedBookHarness's
+    storage double.
+    """
+
+    H = _GluedBookHarness
+    SRC = _GluedBookHarness.SRC
+
+    def test_body_title_scan_pins_spaced_body_for_glued_roster_title(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Glued roster 'ClusterManager' pins the spaced body '5 Cluster Manager'.
+
+        The body-title anchor joins title fragments with zero-width regex
+        whitespace and
+        splits fully-glued CamelCase tokens at their lower→upper boundaries,
+        so the glued roster title matches the correctly-spaced body heading.
+        An earlier cross-reference chunk ("... section 5.1 ...") baits the
+        Phase-2 loose-digit rescue, so only a working body-title scan can
+        produce the page-80 pin asserted here — a broken scan pins 50.
+        """
+        toc_probe = [
+            {
+                "chunk_text": "5 ClusterManager 58",
+                "chunk_role": "toc_entry",
+                "page_number": 4,
+                "source_file": self.SRC,
+            },
+        ]
+        body = [
+            self.H._body("appears in section 5.1 references elsewhere", 50),
+            self.H._body(
+                "5 Cluster Manager\nprose describing cluster manager duties calmly",
+                80,
+            ),
+            self.H._body("prose describing storage replication quietly", 120),
+        ]
+        pipeline = self.H._make(monkeypatch, toc_probe, body, [])
+        answer = self.H._run(pipeline)
+        # The body-title anchor matched the glued roster title against the
+        # spaced body heading; the opener page's own spelling ("Cluster
+        # Manager", intact here) is recorded and backfilled into the roster,
+        # so the display form is the SPACED one — asserting the glued form
+        # was asserting the pre-fix defect.  (This test's raison d'être is
+        # the page-80 pin over the loose-digit bait @50.)
+        assert "Chapter 5 — Cluster Manager (approx pages 80+)" in answer, answer
+        assert "ClusterManager" not in answer, answer
+
+    def test_spaced_title_backfill_replaces_glued_roster_title(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Heading-anchor backfill swaps the glued title for the spaced one.
+
+        Roster title "GraphicalUser Interface" (glued ToC row) squash-matches
+        the opener heading "Graphical User Interface"; the roster then shows
+        the opener's spaced spelling.  The backfill is only applied when the
+        two forms are the same text modulo whitespace.
+        """
+        toc_probe = [
+            {
+                "chunk_text": "4 GraphicalUser Interface 44",
+                "chunk_role": "toc_entry",
+                "page_number": 4,
+                "source_file": self.SRC,
+            },
+            {
+                "chunk_text": "6 Storage Replication 280",
+                "chunk_role": "toc_entry",
+                "page_number": 4,
+                "source_file": self.SRC,
+            },
+        ]
+        headings = [self.H._heading("Graphical User Interface", 119)]
+        body = [
+            self.H._body("4 GraphicalUser Interface 44", 6),
+            self.H._body(
+                "6 Storage Replication\nprose describing replication flow calmly", 302
+            ),
+            self.H._body("prose padding the middle of the chapter quietly", 200),
+        ]
+        pipeline = self.H._make(monkeypatch, toc_probe, body, headings)
+        answer = self.H._run(pipeline)
+        # ch4 shows the spaced opener spelling ...
+        assert "Chapter 4 — Graphical User Interface (approx pages 119+)" in answer, (
+            answer
+        )
+        assert "GraphicalUser Interface" not in answer, answer
+        # ... while ch6 keeps its own (already spaced, differently worded
+        # relationship: same book, unrelated title) roster title.
+        assert "Chapter 6 — Storage Replication (approx pages 302+)" in answer, answer
+
+    def test_backfill_refuses_differently_worded_titles(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A spaced heading that is NOT the same text never replaces a title."""
+        toc_probe = [
+            {
+                "chunk_text": "4 GraphicalUser Interface 44",
+                "chunk_role": "toc_entry",
+                "page_number": 4,
+                "source_file": self.SRC,
+            },
+        ]
+        headings = [self.H._heading("Graphical User Interface Overview", 119)]
+        body = [
+            self.H._body("4 GraphicalUser Interface 44", 6),
+            self.H._body("prose padding the middle of the chapter quietly", 200),
+        ]
+        pipeline = self.H._make(monkeypatch, toc_probe, body, headings)
+        answer = self.H._run(pipeline)
+        # The anchor still pins (squash startswith), but the roster keeps
+        # its own glued spelling — contents differ, no swap.
+        assert "Chapter 4 — GraphicalUser Interface (approx pages 119+)" in answer, (
+            answer
+        )
+
+    def test_titled_unpinned_chapter_recovered_via_runon_row(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A glued-title chapter with no anchor pins via its recovered row.
+
+        Chapter 6's ToC row parsed glued-but-nonempty ("pmxcfs" run together),
+        so the old empty-title trigger never ran recovery for it; with no
+        heading chunk and no body-title line, only the recovered (title,
+        printed page) + footer offset can pin it.  The broadened trigger must
+        fire despite the non-empty title.
+        """
+        toc_probe = [
+            {
+                "chunk_text": "5 ClusterManager 58",
+                "chunk_role": "toc_entry",
+                "page_number": 4,
+                "source_file": self.SRC,
+            },
+            {
+                "chunk_text": "6 ProxmoxClusterFileSystem(pmxcfs) 136",
+                "chunk_role": "toc_entry",
+                "page_number": 4,
+                "source_file": self.SRC,
+            },
+            # Chapter 6's row stranded mid-run-on (flattened ToC, glued
+            # spelling): recovered (title, printed 136) comes from here.
+            {
+                "chunk_text": (
+                    "5.14.2 Migration Network . . . 134 ProxmoxClusterFileSystem"
+                    "(pmxcfs) 136 6.1 POSIX Compatibility . . . 136"
+                ),
+                "source_file": self.SRC,
+                "page_number": 8,
+            },
+        ]
+        body = [
+            self.H._body(
+                "5 Cluster Manager\nprose describing cluster manager duties calmly",
+                80,
+            ),
+            self.H._body("prose filling chapter 7's opening page quietly", 300),
+        ]
+        pipeline = self.H._make(monkeypatch, toc_probe, body, [])
+        # Footer "N / total" nav chunks give the print-to-physical offset:
+        # printed 136 -> physical 158 (offset 22).
+        footers = [
+            self.H._body(f"{pg - self.H.FOOTER_OFFSET} / 634", pg, role="navigation")
+            for pg in (23, 24, 25, 160)
+        ]
+        pipeline._searcher.storage._body = [*body, *footers]
+        answer = self.H._run(pipeline)
+        # The pin comes from the recovered row + footer offset (printed 136 ->
+        # physical 158).  The displayed title is the DE-GLUED spelling: the
+        # stored roster title has no spaced form anywhere in this fixture, so
+        # the display-only re-spacing (_pretty_glued_title) is the last resort
+        # that repairs it (asserting the glued form was asserting the defect).
+        assert (
+            "Chapter 6 — Proxmox Cluster File System (pmxcfs) (approx pages 158+)"
+            in (answer)
+        ), answer
+        assert "ProxmoxClusterFileSystem(pmxcfs)" not in answer, answer
+
+    def test_fully_glued_runon_row_pins_and_degloves_display(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Live PVE ch6 shape: pass-1-dead run-on, bait, de-glued display.
+
+        The pg-8 run-on is FULLY glued (no space after the dotted section
+        numbers), so pass 1's splitter is dead and only the pass-2 glued
+        scan recovers (title, printed 136); the footer offset (22) pins
+        ch6 at physical 158.  A loose-digit bait on real ch5 content
+        ("Proxmox VE 6.2 ...") would otherwise win via the Phase-2 rescue
+        — it runs AFTER the run-on pin loop, so the recovered pin must
+        already occupy ch6 and the bait must be ignored.
+        """
+        toc_probe = [
+            {
+                "chunk_text": "5 ClusterManager 58",
+                "chunk_role": "toc_entry",
+                "page_number": 4,
+                "source_file": self.SRC,
+            },
+            {
+                "chunk_text": "6 ProxmoxClusterFileSystem(pmxcfs) 136",
+                "chunk_role": "toc_entry",
+                "page_number": 4,
+                "source_file": self.SRC,
+            },
+            # Fully-glued run-on (live pg-8 shape): pass 1 finds no split
+            # boundary (the dotted numbers have no trailing space), pass 2
+            # recovers 6 -> ("ProxmoxClusterFileSystem(pmxcfs)", 136).
+            {
+                "chunk_text": (
+                    "5.14.1MigrationType . . . 133 5.14.2MigrationNetwork . . . 134 "
+                    "6 ProxmoxClusterFileSystem(pmxcfs) 136"
+                ),
+                "source_file": self.SRC,
+                "page_number": 8,
+            },
+        ]
+        body = [
+            self.H._body(
+                "5 Cluster Manager\nprose describing cluster manager duties calmly",
+                80,
+            ),
+            # The loose-digit bait that pinned ch6@134 live (Phase-2 rescue
+            # scanning a "6" inside chapter-5 prose).
+            self.H._body("Proxmox VE 6.2 supports up to 8 fallback links calmly", 90),
+            self.H._body("prose filling chapter 7's opening page quietly", 300),
+        ]
+        pipeline = self.H._make(monkeypatch, toc_probe, body, [])
+        footers = [
+            self.H._body(f"{pg - self.H.FOOTER_OFFSET} / 634", pg, role="navigation")
+            for pg in (23, 24, 160)
+        ]
+        pipeline._searcher.storage._body = [*body, *footers]
+        answer = self.H._run(pipeline)
+        assert (
+            "Chapter 6 — Proxmox Cluster File System (pmxcfs) (approx pages 158+)"
+            in (answer)
+        ), answer
+        assert "approx pages 90+" not in answer, answer
+        assert "ProxmoxClusterFileSystem(pmxcfs)" not in answer, answer
+
+    def test_runon_recovery_backfills_spaced_title_for_glued_roster(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The recovered row's spaced spelling replaces the glued roster title.
+
+        Same recovery path, but the run-on row preserves the real spacing
+        ("Proxmox Cluster File System (pmxcfs)") while the parsed ToC row is
+        glued — the squash-equal replace rule swaps the roster title to the
+        spaced form.
+        """
+        toc_probe = [
+            {
+                "chunk_text": "6 ProxmoxClusterFileSystem(pmxcfs) 136",
+                "chunk_role": "toc_entry",
+                "page_number": 4,
+                "source_file": self.SRC,
+            },
+            {
+                "chunk_text": (
+                    "5.14.2 Migration Network . . . 134 Proxmox Cluster File System "
+                    "(pmxcfs) 136 6.1 POSIX Compatibility . . . 136"
+                ),
+                "source_file": self.SRC,
+                "page_number": 8,
+            },
+        ]
+        body = [
+            self.H._body("prose filling chapter 7's opening page quietly", 300),
+        ]
+        pipeline = self.H._make(monkeypatch, toc_probe, body, [])
+        footers = [
+            self.H._body(f"{pg - self.H.FOOTER_OFFSET} / 634", pg, role="navigation")
+            for pg in (23, 24, 25, 160)
+        ]
+        pipeline._searcher.storage._body = [*body, *footers]
+        answer = self.H._run(pipeline)
+        assert "Chapter 6 — Proxmox Cluster File System (pmxcfs)" in answer, answer
+        assert "ProxmoxClusterFileSystem(pmxcfs)" not in answer, answer
