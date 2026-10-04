@@ -954,12 +954,13 @@ class RAGPipeline(
                     # are split at the lower→upper boundaries ("ClusterManager"
                     # → Cluster/Manager) and the fragments joined with \s*;
                     # spaced tokens pass through unsplit.
-                    frags_: list[str] = []
-                    for tok_ in tt_.split():
-                        frags_.extend(re.split(r"(?<=[a-z])(?=[A-Z])", tok_))
+                    title_chars_ = re.sub(r"\s+", "", tt_)
+                    title_pattern_ = r"\s*".join(
+                        re.escape(char_) for char_ in title_chars_
+                    )
                     anchor_ = re.compile(
                         rf"(?:^|\n)\s*{tn}\.?\s*"
-                        + r"\s*".join(re.escape(f) for f in frags_),
+                        + rf"(?P<title>{title_pattern_})",
                         re.IGNORECASE,
                     )
                     for bc_ in body_all_:
@@ -980,9 +981,11 @@ class RAGPipeline(
                             brest_lead_ and brest_lead_[0].isdigit()
                         ):
                             continue
-                        chapter_first_pg.setdefault(
-                            tn, int(bc_.get("page_number") or 0)
-                        )
+                        if tn not in chapter_first_pg:
+                            chapter_first_pg[tn] = int(bc_.get("page_number") or 0)
+                            anchor_titles_[tn] = re.sub(
+                                r"\s+", " ", bm_.group("title")
+                            ).strip()
                         break
                 # Monotonic-window validation of every pin collected by the
                 # heading-anchor and body-title passes: chapter opening pages
@@ -1013,6 +1016,12 @@ class RAGPipeline(
                     spaced_ = anchor_titles_.get(ch_)
                     if not spaced_:
                         continue
+                    spaced_title_ = re.sub(
+                        rf"^(?:chapter\s*)?{ch_}(?:\.\d+)?[\s:.\-]*",
+                        "",
+                        spaced_,
+                        flags=re.IGNORECASE,
+                    ).strip()
                     ct_idx_ = next(
                         (
                             i
@@ -1024,11 +1033,18 @@ class RAGPipeline(
                     if ct_idx_ is None:
                         continue
                     old_ = chapters_to_cover[ct_idx_][2]
-                    if re.sub(r"\s+", "", spaced_) != re.sub(r"\s+", "", old_):
+                    spaced_norm_ = re.sub(r"\s+", " ", spaced_title_).strip()
+                    old_norm_ = re.sub(r"\s+", " ", old_).strip()
+                    if (
+                        re.sub(r"\s+", "", spaced_norm_)
+                        != re.sub(r"\s+", "", old_norm_)
+                        or len(spaced_norm_) <= len(old_norm_)
+                    ):
                         # Same safeguard as every other repair path: only the
-                        # glued-vs-spaced spellings of ONE title may swap.
+                        # glued-vs-spaced spellings of ONE title may swap, and
+                        # only toward the more-spaced form.
                         continue
-                    chapters_to_cover[ct_idx_] = (ch_, src, spaced_)
+                    chapters_to_cover[ct_idx_] = (ch_, src, spaced_title_)
                     good_title_nums.add(ch_)
                     logger.debug(
                         "Backfilled spaced chapter title for %d from its "
@@ -1243,6 +1259,8 @@ class RAGPipeline(
                             for nav_c in storage.find_structural_chunks(
                                 chunk_roles=["navigation"], source_prefix=src
                             ):
+                                if nav_c.get("source_file") != src:
+                                    continue
                                 nav_texts_[int(nav_c.get("page_number") or 0)] = (
                                     nav_c.get("chunk_text") or ""
                                 )

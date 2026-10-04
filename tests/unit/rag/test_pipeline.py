@@ -384,6 +384,7 @@ class TestDeriveChapterNumbers:
             p._clean_chapter_title("The ML4T Workflow ....... 223")
             == "The ML4T Workflow"
         )
+        assert p._clean_chapter_title("ConfiguringIPv6") == "ConfiguringIPv6"
         assert (
             p._clean_chapter_title(
                 "Machine Learning for Trading - From Idea to Execution 1"
@@ -5946,6 +5947,38 @@ class TestChapterTitleCleanup:
             self.SRC,
         ) == {6: ("StorageReplication", 199)}
 
+    def test_glued_runon_recovery_requires_page_separator_and_keeps_digits(
+        self,
+    ) -> None:
+        """A title's digits stay in the title; a page serial needs preceding space."""
+        p = self._pipeline()
+        numbered_title = "6 ConfiguringIPv6 136"
+        assert p._recovered_runon_toc_rows(
+            [
+                {
+                    "chunk_text": numbered_title,
+                    "source_file": self.SRC,
+                    "page_number": 8,
+                }
+            ],
+            self.SRC,
+        ) == {6: ("ConfiguringIPv6", 136)}
+
+        no_serial = "6 PROXMOX CLUSTER FILE SYSTEM (PMXCFS)"
+        assert (
+            p._recovered_runon_toc_rows(
+                [
+                    {
+                        "chunk_text": no_serial,
+                        "source_file": self.SRC,
+                        "page_number": 8,
+                    }
+                ],
+                self.SRC,
+            )
+            == {}
+        )
+
     def test_pretty_glued_title_display_respace(self) -> None:
         """Display-only re-spacing of fully-glued titles (no spaced form left)."""
         p = self._pipeline()
@@ -6152,6 +6185,90 @@ class TestGluedTitleAnchoringEndToEnd:
         # the page-80 pin over the loose-digit bait @50.)
         assert "Chapter 5 — Cluster Manager (approx pages 80+)" in answer, answer
         assert "ClusterManager" not in answer, answer
+
+    def test_body_title_scan_matches_spacing_and_backfills_spelling(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Body openers match optional title spacing and provide their display form."""
+        toc_probe = [
+            {
+                "chunk_text": "4 ProxmoxClusterFileSystem(pmxcfs) 44",
+                "chunk_role": "toc_entry",
+                "page_number": 4,
+                "source_file": self.SRC,
+            },
+            {
+                "chunk_text": "5 GraphicalUser Interface 60",
+                "chunk_role": "toc_entry",
+                "page_number": 4,
+                "source_file": self.SRC,
+            },
+            {
+                "chunk_text": "6 StorageReplication 280",
+                "chunk_role": "toc_entry",
+                "page_number": 4,
+                "source_file": self.SRC,
+            },
+        ]
+        body = [
+            self.H._body(
+                "4 Proxmox Cluster File System (pmxcfs)\nprose about pmxcfs calmly",
+                119,
+            ),
+            self.H._body(
+                "5 Graphical User Interface\nprose about the interface calmly", 200
+            ),
+            self.H._body(
+                "6 Storage Replication\nprose about replication calmly", 302
+            ),
+        ]
+        pipeline = self.H._make(monkeypatch, toc_probe, body, [])
+        answer = self.H._run(pipeline)
+
+        assert (
+            "Chapter 4 — Proxmox Cluster File System (pmxcfs) "
+            "(approx pages 119+)" in answer
+        ), answer
+        assert "Chapter 5 — Graphical User Interface (approx pages 200+)" in answer, (
+            answer
+        )
+        assert "GraphicalUser Interface" not in answer, answer
+
+    def test_heading_backfill_strips_prefix_and_preserves_healthy_spacing(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Backfill strips chapter labels and never replaces titles with less spacing."""
+        toc_probe = [
+            {
+                "chunk_text": "4 GraphicalUser Interface 44",
+                "chunk_role": "toc_entry",
+                "page_number": 4,
+                "source_file": self.SRC,
+            },
+            {
+                "chunk_text": "6 Storage Replication 280",
+                "chunk_role": "toc_entry",
+                "page_number": 4,
+                "source_file": self.SRC,
+            },
+        ]
+        headings = [
+            self.H._heading("Chapter4 Graphical User Interface", 119),
+            self.H._heading("Chapter6 StorageReplication", 302),
+        ]
+        body = [
+            self.H._body("prose about the graphical interface calmly", 119),
+            self.H._body("prose about storage replication calmly", 302),
+        ]
+        pipeline = self.H._make(monkeypatch, toc_probe, body, headings)
+        answer = self.H._run(pipeline)
+
+        assert "Chapter 4 — Graphical User Interface (approx pages 119+)" in answer, (
+            answer
+        )
+        assert "Chapter 6 — Storage Replication (approx pages 302+)" in answer, answer
+        assert "Chapter4 Graphical User Interface" not in answer, answer
+        assert "StorageReplication" not in answer, answer
 
     def test_spaced_title_backfill_replaces_glued_roster_title(
         self, monkeypatch: pytest.MonkeyPatch
@@ -6383,3 +6500,36 @@ class TestGluedTitleAnchoringEndToEnd:
         answer = self.H._run(pipeline)
         assert "Chapter 6 — Proxmox Cluster File System (pmxcfs)" in answer, answer
         assert "ProxmoxClusterFileSystem(pmxcfs)" not in answer, answer
+
+    def test_runon_recovery_ignores_prefix_matching_foreign_footers(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Footer rows from another prefix-matching source cannot set this book's offset."""
+        toc_probe = [
+            {
+                "chunk_text": "6 ProxmoxClusterFileSystem(pmxcfs) 136",
+                "chunk_role": "toc_entry",
+                "page_number": 4,
+                "source_file": self.SRC,
+            },
+            {
+                "chunk_text": (
+                    "5.14.2 Migration Network . . . 134 Proxmox Cluster File System "
+                    "(pmxcfs) 136 6.1 POSIX Compatibility . . . 136"
+                ),
+                "source_file": self.SRC,
+                "page_number": 8,
+            },
+        ]
+        body = [self.H._body("prose filling the later chapter quietly", 300)]
+        foreign_footers = [
+            {
+                **self.H._body(f"{printed} / 634", physical, role="navigation"),
+                "source_file": f"{self.SRC}-another.pdf",
+            }
+            for physical, printed in ((23, 20), (24, 21), (25, 22))
+        ]
+        pipeline = self.H._make(monkeypatch, toc_probe, body, foreign_footers)
+        answer = self.H._run(pipeline)
+
+        assert "approx pages 139+" not in answer, answer
