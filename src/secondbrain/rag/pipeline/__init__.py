@@ -556,6 +556,7 @@ class RAGPipeline(
         heading_chunks: list[dict[str, Any]],
         blocked_pages: dict[int, int] | None = None,
         boiler_pages: set[int] | None = None,
+        titles_out: dict[int, str] | None = None,
     ) -> dict[int, int]:
         """Map chapter numbers to opener pages via heading-role title matches.
 
@@ -568,18 +569,30 @@ class RAGPipeline(
         "Chapter N"/section-number scan fails. Comparison normalizes the
         subtitle separators docling is inconsistent about (" - " vs " ") and
         allows a leading chapter-number prefix on the heading ("5 Title").
-        Heading chunks arrive page-ordered, so the first match per chapter is
-        the earliest page; pages < 10 (front matter) never anchor. Two
-        listing-artifact refusals keep the earliest match honest: headings
-        ending in a standalone page reference ("Title 295") are ToC entries,
-        not openers, and `blocked_pages` (chapter -> front-matter description
-        page) skips "What this book covers" prose pages. When the blocked
-        pages sit in the front matter (min <= 30), everything before them is
-        ToC/part-divider region — part dividers repeat chapter titles as
-        headings on ToC pages — so anchoring also refuses those pages.
-        ``boiler_pages`` refuses license/colophon regions: their numbered
-        all-caps section headings can match a roster title that was itself
-        seeded by the same license text.
+        It is also whitespace-insensitive: the needle and the heading line
+        are each squashed (all whitespace removed) before comparing, because
+        the docling-parse space regression glues ToC words together
+        ("InstallingProxmoxVE" in the roster) while the same title sits
+        correctly spaced on the real opener page ("Installing Proxmox VE") —
+        exact spacing would never match the two forms. Glued ToC-row text
+        compared against a glued needle still matches, and a spaced needle
+        against glued heading text matches in the reverse direction, so both
+        corrupted spellings anchor. Heading chunks arrive page-ordered, so
+        the first match per chapter is the earliest page; pages < 10 (front
+        matter) never anchor. Two listing-artifact refusals keep the
+        earliest match honest: headings ending in a standalone page reference
+        ("Title 295") are ToC entries, not openers, and `blocked_pages`
+        (chapter -> front-matter description page) skips "What this book
+        covers" prose pages. When the blocked pages sit in the front matter
+        (min <= 30), everything before them is ToC/part-divider region —
+        part dividers repeat chapter titles as headings on ToC pages — so
+        anchoring also refuses those pages. ``boiler_pages`` refuses
+        license/colophon regions: their numbered all-caps section headings
+        can match a roster title that was itself seeded by the same license
+        text. When a heading matches, the spaced opener-page spelling of the
+        title is recorded into ``titles_out[ch_num]`` (raw first line,
+        whitespace-normalized, before casefold/prefix stripping) so the
+        caller can repair glued roster titles for display.
         """
         anchors: dict[int, int] = {}
         blocked_map = blocked_pages or {}
@@ -599,6 +612,7 @@ class RAGPipeline(
             )
             if len(needle) < 4:
                 continue
+            needle_sq = re.sub(r"\s+", "", needle)
             blocked = blocked_map.get(ch_num)
             for hc in heading_chunks:
                 page = int(hc.get("page_number") or 0)
@@ -619,11 +633,24 @@ class RAGPipeline(
                 head_line = re.sub(r"\s+", " ", head_line).strip().casefold()
                 if re.search(r"\s+\d{1,4}$", head_line):
                     continue
+                # The docling-parse space regression also glues the
+                # "Chapter N" banner and section-number prefixes to the
+                # title ("Chapter4 Installing..."), so the space before the
+                # number is optional in the strip patterns.
                 head_line = re.sub(
-                    r"^(?:chapter\s+\d+[\s:.\-]*)?(?:\d+[\s.:\-]+)?", "", head_line
+                    r"^(?:chapter\s*\d+[\s:.\-]*)?(?:\d+[\s.:\-]+)?", "", head_line
                 )
-                if head_line == needle or head_line.startswith(needle):
+                head_sq = re.sub(r"\s+", "", head_line)
+                if head_sq == needle_sq or head_sq.startswith(needle_sq):
                     anchors[ch_num] = page
+                    if titles_out is not None:
+                        # Record the opener page's own spelling (spaced when
+                        # the page is intact) for roster-title backfill: raw
+                        # first line, before casefold/prefix strip, with
+                        # line breaks and padding collapsed to single spaces.
+                        titles_out[ch_num] = re.sub(
+                            r"\s+", " ", (hc.get("chunk_text") or "").split("\n")[0]
+                        ).strip()
                     break
         return anchors
 
@@ -880,12 +907,14 @@ class RAGPipeline(
                         exc_info=True,
                     )
                     heading_all_ = []
+                anchor_titles_: dict[int, str] = {}
                 for an_ch, an_pg in self._heading_title_anchors(
                     full_chapters,
                     src,
                     heading_all_,
                     blocked_pages=desc_pages,
                     boiler_pages=boiler_pages_,
+                    titles_out=anchor_titles_,
                 ).items():
                     chapter_first_pg.setdefault(an_ch, an_pg)
                 # Title-anchored detection: the numbered chapter-title heading
@@ -915,11 +944,22 @@ class RAGPipeline(
                     tt_ = re.split(r"\s+\d{1,4}\s+", tt_)[0].rstrip(" .:;-")
                     if ts_ != src or not tt_ or len(tt_) < 4:
                         continue
-                    # Join title tokens with \s+ so wrapped headings (e.g. the title
-                    # split across lines with a trailing space) still match.
-                    toks_ = [re.escape(t) for t in tt_.split()]
+                    # Join title fragments with \s* instead of \s+: the docling-
+                    # parse space regression glues words together, so the spaced
+                    # body opener ("5 Cluster Manager") must match the glued
+                    # roster title ("ClusterManager") AND the glued body ToC row
+                    # ("5 ClusterManager 58") must match the spaced roster
+                    # title — zero-width \s* covers both directions.  Fully
+                    # glued CamelCase tokens carry no space to relax, so they
+                    # are split at the lower→upper boundaries ("ClusterManager"
+                    # → Cluster/Manager) and the fragments joined with \s*;
+                    # spaced tokens pass through unsplit.
+                    frags_: list[str] = []
+                    for tok_ in tt_.split():
+                        frags_.extend(re.split(r"(?<=[a-z])(?=[A-Z])", tok_))
                     anchor_ = re.compile(
-                        rf"(?:^|\n)\s*{tn}\.?\s+" + r"\s+".join(toks_),
+                        rf"(?:^|\n)\s*{tn}\.?\s*"
+                        + r"\s*".join(re.escape(f) for f in frags_),
                         re.IGNORECASE,
                     )
                     for bc_ in body_all_:
@@ -956,6 +996,45 @@ class RAGPipeline(
                 # time).  Dropped chapters fall to the later scan tiers and
                 # the ToC reconciliation.
                 chapter_first_pg = self._select_monotone_pins(chapter_first_pg)
+
+                # Spaced-title backfill.  When the docling-parse space
+                # regression glued the ToC row, the roster title reads
+                # "GraphicalUser Interface" while the heading anchor matched
+                # the intact opener spelling ("Graphical User Interface") —
+                # the anchors only match because the comparison squashes
+                # whitespace.  Replacing the glued roster title with the
+                # opener's spaced spelling repairs the display
+                # ("Chapter 4 — Graphical User Interface") without touching
+                # any differently-worded title, so it is gated on the two
+                # forms being the same text modulo whitespace.  Surviving
+                # chapters only: a pin the monotone pass dropped is gone for
+                # good and must not gain a roster title as a side effect.
+                for ch_ in chapter_first_pg:
+                    spaced_ = anchor_titles_.get(ch_)
+                    if not spaced_:
+                        continue
+                    ct_idx_ = next(
+                        (
+                            i
+                            for i, ct in enumerate(chapters_to_cover)
+                            if ct[0] == ch_ and ct[1] == src
+                        ),
+                        None,
+                    )
+                    if ct_idx_ is None:
+                        continue
+                    old_ = chapters_to_cover[ct_idx_][2]
+                    if re.sub(r"\s+", "", spaced_) != re.sub(r"\s+", "", old_):
+                        # Same safeguard as every other repair path: only the
+                        # glued-vs-spaced spellings of ONE title may swap.
+                        continue
+                    chapters_to_cover[ct_idx_] = (ch_, src, spaced_)
+                    good_title_nums.add(ch_)
+                    logger.debug(
+                        "Backfilled spaced chapter title for %d from its "
+                        "opener heading",
+                        ch_,
+                    )
 
                 # Front-matter ToC-listing reconciliation.  When the printed
                 # ToC parses with enough roster coverage, chapters the heading
@@ -1088,33 +1167,70 @@ class RAGPipeline(
                 # run-ons from early-page chunks into per-row shapes the
                 # listing parser can read, then store recovered (title,
                 # printed page) pairs for the title-less roster chapters.
+                # The trigger also covers TITLED but still-unpinned chapters:
+                # the docling space regression glues a roster title without
+                # deleting it (PVE ch6 "QEMU/KVM Virtual Machines" came
+                # through glued), so an empty-title probe misses the very
+                # chapter the recovery exists for.
                 runon_rows_: dict[int, tuple[str, int]] = {}
                 titleless_now_ = {
                     ct[0] for ct in chapters_to_cover if ct[1] == src and not ct[2]
                 }
-                if titleless_now_:
+                unpinned_roster_ = {
+                    ct[0]
+                    for ct in chapters_to_cover
+                    if ct[1] == src
+                    and ct[0] in good_title_nums
+                    and ct[0] not in chapter_first_pg
+                }
+                if titleless_now_ or unpinned_roster_:
                     runon_rows_ = self._recovered_runon_toc_rows(structure_chunks, src)
                 if runon_rows_:
                     # Fill roster titles first (display correctness), then
                     # pin through the footer offset when the ToC-printed
-                    # page and the book's footer index agree.
+                    # page and the book's footer index agree.  A chapter
+                    # whose glued roster title squash-equals the recovered
+                    # row title gets the row's SPACED spelling too — same
+                    # rule as the opener-heading backfill above.
                     for ch, (_title, _printed) in sorted(runon_rows_.items()):
-                        if ch not in titleless_now_:
-                            continue
                         ct_idx_ = next(
                             (
                                 i
                                 for i, ct in enumerate(chapters_to_cover)
-                                if ct[0] == ch and ct[1] == src and not ct[2]
+                                if ct[0] == ch and ct[1] == src
                             ),
                             None,
                         )
                         if ct_idx_ is None:
                             continue
-                        chapters_to_cover[ct_idx_] = (ch, src, runon_rows_[ch][0])
-                        good_title_nums.add(ch)
+                        old_title_ = chapters_to_cover[ct_idx_][2]
+                        new_title_ = runon_rows_[ch][0]
+                        replace_ = not old_title_ or (
+                            # Same replace rule as the opener-heading
+                            # backfill: only a glued-vs-spaced spelling of
+                            # the SAME title may swap, and only toward the
+                            # more-whitespace (spaced) form.
+                            re.sub(r"\s+", "", new_title_)
+                            == re.sub(r"\s+", "", old_title_)
+                            and len(re.sub(r"\s+", " ", new_title_))
+                            > len(re.sub(r"\s+", " ", old_title_))
+                        )
+                        if replace_:
+                            chapters_to_cover[ct_idx_] = (ch, src, new_title_)
+                            good_title_nums.add(ch)
                     footer_offset_ = None
                     try:
+                        # Nav footer chunks carry chunk_role "navigation" —
+                        # get_body_chunks() returns only chunk_role "body", so
+                        # on real storage this fetch yielded an empty map and
+                        # footer_page_offset() returned None (the run-on pin
+                        # silently no-oped for every chapter; the unit harness
+                        # hid it because its stub get_body_chunks ignores the
+                        # role).  Probe the body stream first (the unit double
+                        # serves nav chunks there and has no role filter), and
+                        # fall back to find_structural_chunks — which ORs
+                        # element_type/chunk_role and matches real nav chunks —
+                        # when the body stream carries none.
                         nav_texts_: dict[int, str] = {}
                         for nav_c in storage.get_body_chunks(src, limit=None):
                             if nav_c.get("chunk_role") == "navigation" or (
@@ -1123,11 +1239,20 @@ class RAGPipeline(
                                 nav_texts_[int(nav_c.get("page_number") or 0)] = (
                                     nav_c.get("chunk_text") or ""
                                 )
+                        if not nav_texts_:
+                            for nav_c in storage.find_structural_chunks(
+                                chunk_roles=["navigation"], source_prefix=src
+                            ):
+                                nav_texts_[int(nav_c.get("page_number") or 0)] = (
+                                    nav_c.get("chunk_text") or ""
+                                )
                         footer_offset_ = footer_page_offset(nav_texts_)
                     except Exception:
                         footer_offset_ = None
                     for ch, (title, printed) in sorted(runon_rows_.items()):
-                        if ch not in titleless_now_ or ch in chapter_first_pg:
+                        if ch in chapter_first_pg or ch not in (
+                            titleless_now_ | unpinned_roster_
+                        ):
                             continue
                         if footer_offset_ is None:
                             continue
@@ -1284,6 +1409,15 @@ class RAGPipeline(
                         pg2 = int(chunk.get("page_number") or 0)
                         if pg2 in boiler_pages_:
                             continue
+                        # Ordering note: this tier runs AFTER the run-on ToC
+                        # row recovery above, whose `ch not in chapter_first_pg`
+                        # guard already excludes chapters that recovery pinned
+                        # (its `missing` list is rebuilt from chapter_first_pg).
+                        # PVE ch6: recovery pins the printed-136 row at physical
+                        # 158 BEFORE this scan matches a loose "6" ("Proxmox VE
+                        # 6.2, ...") on real ch5 content @134 — the wrong pin is
+                        # therefore unreachable, and no extra guard is needed
+                        # here (a rescue firing before recovery would need one).
                         for ch_num in list(missing):
                             if desc_pages.get(ch_num) == pg2:
                                 continue

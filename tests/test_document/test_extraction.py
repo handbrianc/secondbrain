@@ -241,3 +241,106 @@ class TestExtractTextCorruptedPdf:
             "no such file" in str(exc_info.value).lower()
             or "does not exist" in str(exc_info.value).lower()
         )
+
+
+class TestExtractTextGluedTextWarning:
+    """Ingest-time detection of the docling-parse space regression.
+
+    A docling-parse word/space-reconstruction regression (>= 7.21) deletes
+    intra-word spaces on some pages ("InstallingProxmoxVE"); the corruption
+    is silent and poisons ToC parses and chapter titles downstream, so
+    extraction flags a large whitespace-free text with one warning (no
+    behavior change).
+    """
+
+    @staticmethod
+    def _glued_text() -> str:
+        # Well over the 1000-char gate, ~0% whitespace: the regression shape.
+        return "InstallingProxmoxVE2.1SystemRequirementsGraphicalUserInterface" * 40
+
+    def test_warns_on_whitespace_free_extraction(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A >=1000-char whitespace-free extraction logs the docling warning."""
+        import logging
+
+        test_pdf = tmp_path / "glued.pdf"
+        test_pdf.write_bytes(b"%PDF-1.4 fake pdf content")
+        ingestor = DocumentIngestor()
+
+        with (
+            patch(
+                "secondbrain.document.fast_text.try_fast_pdf_extraction",
+                return_value=[{"text": self._glued_text(), "page": 1}],
+            ),
+            caplog.at_level(
+                logging.WARNING, logger="secondbrain.document.ingestor._sync"
+            ),
+        ):
+            segments = ingestor._extract_text(test_pdf)
+
+        assert segments and segments[0]["text"] == self._glued_text()
+        warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert warnings, "expected a glue-regression warning"
+        assert any(
+            "whitespace-free" in r.getMessage() and "docling-parse" in r.getMessage()
+            for r in warnings
+        ), caplog.text
+
+    def test_no_warning_for_normal_prose(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Normal prose (healthy whitespace ratio) stays silent."""
+        import logging
+
+        test_pdf = tmp_path / "normal.pdf"
+        test_pdf.write_bytes(b"%PDF-1.4 fake pdf content")
+        ingestor = DocumentIngestor()
+
+        prose = " ".join(
+            f"word{i} prose" for i in range(600)
+        )  # ~1200 chars, ~28% whitespace
+        with (
+            patch(
+                "secondbrain.document.fast_text.try_fast_pdf_extraction",
+                return_value=[{"text": prose, "page": 1}],
+            ),
+            caplog.at_level(
+                logging.WARNING, logger="secondbrain.document.ingestor._sync"
+            ),
+        ):
+            segments = ingestor._extract_text(test_pdf)
+
+        assert segments and segments[0]["text"] == prose
+        assert not [
+            r
+            for r in caplog.records
+            if r.levelno == logging.WARNING and "whitespace-free" in r.getMessage()
+        ], caplog.text
+
+    def test_no_warning_below_size_gate(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A short whitespace-free text (under 1000 chars) never warns."""
+        import logging
+
+        test_pdf = tmp_path / "short.pdf"
+        test_pdf.write_bytes(b"%PDF-1.4 fake pdf content")
+        ingestor = DocumentIngestor()
+
+        with (
+            patch(
+                "secondbrain.document.fast_text.try_fast_pdf_extraction",
+                return_value=[{"text": "A" * 500, "page": 1}],
+            ),
+            caplog.at_level(
+                logging.WARNING, logger="secondbrain.document.ingestor._sync"
+            ),
+        ):
+            ingestor._extract_text(test_pdf)
+
+        assert not [
+            r
+            for r in caplog.records
+            if r.levelno == logging.WARNING and "whitespace-free" in r.getMessage()
+        ], caplog.text
