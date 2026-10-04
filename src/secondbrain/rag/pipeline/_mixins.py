@@ -1633,7 +1633,7 @@ class _StructureMixin(_RAGPipelineState):
             re.IGNORECASE,
         )
         bare_chapter_re = re.compile(
-            r"(?:^|\n)\s*(\d{1,2})\.?\s+([A-Za-z][A-Za-z0-9\s\-\(\),'/:.\u2013\u2014]{4,80})",
+            r"(?:^|\n)\s*(\d{1,2})\.?\s+([A-Za-z0-9][A-Za-z0-9\s\-\(\),'/:.\u2013\u2014]{4,80})",
             re.MULTILINE,
         )
         # Patterns for appendix detection
