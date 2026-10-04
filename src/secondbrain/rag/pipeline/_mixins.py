@@ -1226,8 +1226,12 @@ class _StructureMixin(_RAGPipelineState):
         # of a capital ("... VE 10 2.1 System Requirements"): a standalone
         # printed page serial (<= 3 digits) followed by an "N.N" section
         # number is a row boundary — cut there.  Ordinary titles carrying a
-        # dotted number with no preceding serial are unaffected.
-        title = re.split(r"\s+\d{1,3}\s+(?=\d+(?:\.\d+)+(?:\s|$))", title)[0]
+        # dotted number with no preceding serial are unaffected.  The
+        # docling-parse space regression can also GLUE the section number to
+        # its title ("10 2.1Emulated...") so the lookahead must not demand a
+        # trailing space after "N.N" — only that no further digit/dot
+        # continues the number.
+        title = re.split(r"\s+\d{1,3}\s+(?=\d+(?:\.\d+)+(?![\d.]))", title)[0]
         title = re.sub(r"[\s.\u2026:\-\u2013\u2014]*\d+\s*$", "", title)
         # Front-matter description sentences run the captured title on into the
         # sentence body ("Chapter 3 , Machine Learning for IoT , explores
@@ -1260,6 +1264,20 @@ class _StructureMixin(_RAGPipelineState):
         split_re = re.compile(r"\s+(\d{1,3})\s+(?=\d{1,2}\.\d+\s)")
         serial_re = re.compile(r"(?<![\d.])\d{1,3}(?![\d.])\s+")
         dot_run_re = re.compile(r"(?:\s*\.\s*){2,}")
+        # Glued row shape: the docling space regression deletes the space
+        # AFTER a dotted section number too ("5.14.2MigrationNetwork"), so
+        # pass 1's split lookahead ("serial + SPACE + next dotted section")
+        # finds no boundary and the stranded chapter row inside the run-on
+        # ("... 134 6 ProxmoxClusterFileSystem(pmxcfs) 136") is lost with it.
+        # Match the chapter number (not preceded by digit/dot: rejects the
+        # 5 of "5.14.1..." and the 6 of "B.6 ..."), then glued title tokens
+        # (capital/paren led, no digits, no whitespace inside), then a
+        # trailing standalone serial (the printed page).  Section rows like
+        # "5.14.1MigrationType 133" fail the shape (5 is dot-followed;
+        # title would need to start right after "5.14.1" glue-free).
+        glued_row_re = re.compile(
+            r"(?<![\d.])(\d{1,2})\s+((?:[A-Z(][^\d\s]*\s*)+?)(\d{1,3})(?![\d.])"
+        )
         for c in structure_chunks:
             page = int(c.get("page_number") or 0)
             if page > 30 or (c.get("source_file") or "") != src:
@@ -1330,7 +1348,67 @@ class _StructureMixin(_RAGPipelineState):
                 if not (1 <= ch <= 30) or printed <= 0:
                     continue
                 recovered.setdefault(ch, (title, printed))
+        # Pass 2: glued-shape scan over the SAME early-page chunks, in a
+        # separate loop so it runs even where pass 1's splitter found no
+        # boundary (the gate above `continue`s those chunks): the docling
+        # space regression deleted the space AFTER the dotted section
+        # number ("5.14.2MigrationNetwork"), so pass 1's split lookahead
+        # never fires on this book and only this pass can rescue the
+        # stranded row.  Merging still uses setdefault, and this loop runs
+        # after pass 1 has walked every chunk, so spaced pass-1 rows win
+        # over glued duplicates regardless of chunk order.
+        for c in structure_chunks:
+            page = int(c.get("page_number") or 0)
+            if page > 30 or (c.get("source_file") or "") != src:
+                continue
+            flat = re.sub(
+                r"\s+", " ", dot_run_re.sub(" ", c.get("chunk_text") or "")
+            ).strip()
+            if not flat:
+                continue
+            for gm in glued_row_re.finditer(flat):
+                ch = int(gm.group(1))
+                raw_title = re.sub(r"\s+", " ", gm.group(2)).strip()
+                printed = int(gm.group(3))
+                # Glue evidence: a real glued title shows either several
+                # tokens or an intra-word case/paren boundary.  A single
+                # unbroken capitalized word ("6 Other 8", "6 Covers 12") is
+                # prose noise, not a space-regression casualty — gluing can
+                # only delete spaces, so one-word titles are never victims.
+                tokens_ = raw_title.split(" ")
+                boundary_ = re.search(r"(?<=[a-z])[A-Z(]", raw_title)
+                if not (len(tokens_) > 1 or boundary_):
+                    continue
+                title = _StructureMixin._clean_chapter_title(raw_title)
+                if len(title) >= 4 and 1 <= ch <= 30 and printed > 0 and printed <= 999:
+                    recovered.setdefault(ch, (title, printed))
         return recovered
+
+    @staticmethod
+    def _pretty_glued_title(title: str) -> str:
+        """Re-space a fully-glued chapter title for display only.
+
+        The docling-parse space regression deletes intra-title spaces in the
+        stored ToC/roster rows ("ProxmoxClusterFileSystem(pmxcfs)").  When no
+        spaced spelling of the title survives anywhere in the document
+        (backfill and run-on recovery both need one), this is the last resort
+        so the roster shows "Proxmox Cluster File System (pmxcfs)" instead of
+        the glued wall.  Conservative by construction: it fires ONLY when the
+        title contains no whitespace at all AND is at least 10 chars — short
+        mixed-case words ("macOS", "pmxcfs") and every normally-spaced title
+        pass through untouched — and it only splits at lower→upper CamelCase
+        boundaries plus before "(" after a lowercase letter, so all-caps runs
+        and lowercase words are never broken.  Display only: matching and
+        comparison paths keep the raw stored form.  The true fix is re-ingest
+        with a docling build that does not glue; this only repairs what is
+        shown.
+        """
+        t = title.strip()
+        if len(t) < 10 or re.search(r"\s", t):
+            return t
+        spaced = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", t)
+        spaced = re.sub(r"(?<=[a-z])\(", " (", spaced)
+        return spaced
 
     @staticmethod
     def _display_chapter_title(title: str) -> str:
@@ -1340,11 +1418,14 @@ class _StructureMixin(_RAGPipelineState):
         run-on ToC artifacts (embedded printed-page serials, next-row text)
         after every capture-side filter has been applied.  Kept on the mixin
         so the roster builder and the answer header builder share one
-        implementation.
+        implementation.  A fully-glued title with no spaced form anywhere in
+        the document gets a display-only re-spacing here (see
+        :meth:`_pretty_glued_title`).
         """
         title = title.strip()
         if not title:
             return ""
+        title = _StructureMixin._pretty_glued_title(title)
         dot = title.find(". ")
         if 10 < dot < 150:
             title = title[:dot]

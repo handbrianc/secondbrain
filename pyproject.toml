@@ -19,8 +19,9 @@ classifiers = [
 
 dependencies = [
     "click>=8.5.0",  # CLI framework - stable API, minor updates only
-    "docling>=2.130.0",  # Document parsing - requires recent features
-    "docling-core>=2.98.1",  # Core types - matches docling version
+    "docling>=2.132.0,<3.0.0",  # First release forcing docling-parse >=7.22.1 (space regression fixed)
+    "docling-core>=2.99.0,<3.0.0",  # Core types - required by docling-parse 7.22.x
+    "docling-parse>=7.22.1,<8.0.0",  # Floor excludes 7.21.x-7.22.0 word/space-loss regression (docling-parse #355/#359, fixed by PR #361)
     "qdrant-client>=1.19.1",  # Qdrant vector DB client - production storage backend
     "httpx>=0.28.1",  # HTTP client - async support for LLM calls
     "pydantic>=2.13.5",  # Data validation - pydantic v2 compatible

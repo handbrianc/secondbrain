@@ -1118,9 +1118,9 @@ class DocumentIngestor:
                             text = f.read()
                             segments = [{"text": text, "page": 1}]
 
-                return segments
+                return self._warn_if_glued_text(file_path, segments)
 
-            return segments
+            return self._warn_if_glued_text(file_path, segments)
 
         except DocumentExtractionError:
             raise
@@ -1131,6 +1131,40 @@ class DocumentIngestor:
             raise DocumentExtractionError(
                 f"Failed to extract text from {file_path}: {e}"
             ) from e
+
+    @staticmethod
+    def _warn_if_glued_text(
+        file_path: Path, segments: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Warn when an extraction looks word-glued, then pass it through.
+
+        A docling-parse word/space-reconstruction regression (>= 7.21)
+        deletes the intra-word spaces of some pages ("InstallingProxmoxVE"),
+        and the corruption is silent: chunks, ToC parses, and chapter titles
+        all inherit the glued spellings downstream.  Prose is ~15% whitespace
+        ("a blank between essentially every word"), so an extraction of real
+        size with < 5% whitespace is almost certainly this regression, not a
+        legitimately dense document.  Detection-only: the text is returned
+        unchanged — re-extraction with a fixed/downgraded docling-parse is
+        the fix, and failing ingestion outright would break every other
+        extraction path.
+        """
+        joined = "".join(str(seg.get("text") or "") for seg in segments)
+        if len(joined) >= 1000:
+            ws_ratio = sum(1 for ch in joined if ch.isspace()) / len(joined)
+            if ws_ratio < 0.05:
+                logger.warning(
+                    "Extracted text for %s is almost entirely whitespace-free "
+                    "(%d chars, %.1f%% whitespace): this matches a known "
+                    "docling-parse word/space-reconstruction regression "
+                    "(docling-parse >= 7.21) that glues words together. "
+                    "Downgrade docling-parse (or re-extract with a fixed "
+                    "version) and re-ingest this document.",
+                    file_path,
+                    len(joined),
+                    ws_ratio * 100,
+                )
+        return segments
 
     def _chunk_text(self, segments: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Split segments into overlapping chunks.
