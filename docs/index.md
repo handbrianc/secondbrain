@@ -50,7 +50,7 @@ SecondBrain supports a wide variety of document formats:
 
 ## Package Information
 
-- **Package Version**: 0.4.0
+- **Package Version**: 0.5.0
 - **Package Manager**: pip
 - **Entry Point**: `secondbrain` command
 

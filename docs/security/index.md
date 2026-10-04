@@ -271,7 +271,7 @@ Run application containers as non-root where possible:
 # docker-compose.yml
 services:
   secondbrain-app:
-    image: secondbrain:0.4.0
+    image: secondbrain:0.5.0
     user: "1000:1000"
 ```
 

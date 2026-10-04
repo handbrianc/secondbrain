@@ -9,7 +9,7 @@ Defined in `pyproject.toml`:
 ```toml
 [project]
 name = "secondbrain"
-version = "0.4.0"
+version = "0.5.0"
 description = "A local document intelligence CLI tool for semantic search"
 requires-python = ">=3.14"
 authors = [
@@ -78,7 +78,7 @@ Grouped extras for specific use cases:
 pip wheel . --wheel-dir dist/
 ```
 
-Creates `dist/secondbrain-0.4.0-py3-none-any.whl`
+Creates `dist/secondbrain-0.5.0-py3-none-any.whl`
 
 ### Source Distribution
 
@@ -86,7 +86,7 @@ Creates `dist/secondbrain-0.4.0-py3-none-any.whl`
 python -m build --sdist
 ```
 
-Creates `dist/secondbrain-0.4.0.tar.gz`
+Creates `dist/secondbrain-0.5.0.tar.gz`
 
 ## Publishing to PyPI
 
@@ -146,7 +146,7 @@ SecondBrain uses semantic versioning (SemVer):
 
 ```
 MAJOR.MINOR.PATCH
-0.4.0
+0.5.0
 │ │ └─ Patch: Bug fixes
 │ └─── Minor: New features, backward compatible
 └───── Major: Breaking changes
