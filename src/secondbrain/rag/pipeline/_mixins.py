@@ -1232,7 +1232,7 @@ class _StructureMixin(_RAGPipelineState):
         # trailing space after "N.N" — only that no further digit/dot
         # continues the number.
         title = re.split(r"\s+\d{1,3}\s+(?=\d+(?:\.\d+)+(?![\d.]))", title)[0]
-        title = re.sub(r"[\s.\u2026:\-\u2013\u2014]*\d+\s*$", "", title)
+        title = re.sub(r"[\s.\u2026:\-\u2013\u2014]+\d+\s*$", "", title)
         # Front-matter description sentences run the captured title on into the
         # sentence body ("Chapter 3 , Machine Learning for IoT , explores
         # supervised and unsupervised ..."); cut at the description verb so the
@@ -1276,7 +1276,9 @@ class _StructureMixin(_RAGPipelineState):
         # "5.14.1MigrationType 133" fail the shape (5 is dot-followed;
         # title would need to start right after "5.14.1" glue-free).
         glued_row_re = re.compile(
-            r"(?<![\d.])(\d{1,2})\s+((?:[A-Z(][^\d\s]*\s*)+?)(\d{1,3})(?![\d.])"
+            r"(?<![\d.])(\d{1,2})\s+"
+            r"([A-Z(][^\s]*(?:\s+[A-Z(][^\s]*)*)"
+            r"\s+(\d{1,3})(?![\d.])"
         )
         for c in structure_chunks:
             page = int(c.get("page_number") or 0)
@@ -1631,7 +1633,7 @@ class _StructureMixin(_RAGPipelineState):
             re.IGNORECASE,
         )
         bare_chapter_re = re.compile(
-            r"(?:^|\n)\s*(\d{1,2})\.?\s+([A-Za-z][A-Za-z0-9\s\-\(\),'/:.\u2013\u2014]{4,80})",
+            r"(?:^|\n)\s*(\d{1,2})\.?\s+([A-Za-z0-9][A-Za-z0-9\s\-\(\),'/:.\u2013\u2014]{4,80})",
             re.MULTILINE,
         )
         # Patterns for appendix detection
