@@ -118,7 +118,7 @@ Confirm SecondBrain is installed correctly:
 secondbrain --version
 ```
 
-Expected output: `secondbrain, version 0.4.0`
+Expected output: `secondbrain, version 0.5.0`
 
 ## Dependency Overview
 
