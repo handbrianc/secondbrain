@@ -509,6 +509,9 @@ def _extract_chunk_and_embed_file(
                         text = f.read()
                     segments = [{"text": text, "page": 1}]
 
+        from secondbrain.document.ingestor._sync import _warn_if_glued_text
+
+        segments = _warn_if_glued_text(file_path, segments)
         _emit_phase("chunk", 0, 1)
         with trace_operation("ingest_worker_chunk") as span:
             if span is not None:

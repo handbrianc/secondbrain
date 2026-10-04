@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from contextlib import nullcontext
 from datetime import UTC, datetime
@@ -33,6 +33,28 @@ from secondbrain.utils.embedding_cache import EmbeddingCache
 from secondbrain.utils.tracing import trace_operation
 
 logger = logging.getLogger(__name__)
+
+
+def _warn_if_glued_text[T: Mapping[str, object]](
+    file_path: Path, segments: list[T]
+) -> list[T]:
+    """Warn when an extraction looks word-glued, then pass it through."""
+    joined = "".join(str(seg.get("text") or "") for seg in segments)
+    if len(joined) >= 1000:
+        ws_ratio = sum(1 for ch in joined if ch.isspace()) / len(joined)
+        if ws_ratio < 0.05:
+            logger.warning(
+                "Extracted text for %s is almost entirely whitespace-free "
+                "(%d chars, %.1f%% whitespace): this matches a known "
+                "docling-parse word/space-reconstruction regression "
+                "(docling-parse >= 7.21) that glues words together. "
+                "Downgrade docling-parse (or re-extract with a fixed "
+                "version) and re-ingest this document.",
+                file_path,
+                len(joined),
+                ws_ratio * 100,
+            )
+    return segments
 
 
 class DocumentIngestor:
@@ -1149,22 +1171,7 @@ class DocumentIngestor:
         the fix, and failing ingestion outright would break every other
         extraction path.
         """
-        joined = "".join(str(seg.get("text") or "") for seg in segments)
-        if len(joined) >= 1000:
-            ws_ratio = sum(1 for ch in joined if ch.isspace()) / len(joined)
-            if ws_ratio < 0.05:
-                logger.warning(
-                    "Extracted text for %s is almost entirely whitespace-free "
-                    "(%d chars, %.1f%% whitespace): this matches a known "
-                    "docling-parse word/space-reconstruction regression "
-                    "(docling-parse >= 7.21) that glues words together. "
-                    "Downgrade docling-parse (or re-extract with a fixed "
-                    "version) and re-ingest this document.",
-                    file_path,
-                    len(joined),
-                    ws_ratio * 100,
-                )
-        return segments
+        return _warn_if_glued_text(file_path, segments)
 
     def _chunk_text(self, segments: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Split segments into overlapping chunks.

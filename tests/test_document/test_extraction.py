@@ -287,6 +287,70 @@ class TestExtractTextGluedTextWarning:
             for r in warnings
         ), caplog.text
 
+    def test_ingest_warns_on_whitespace_free_worker_extraction(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch
+    ) -> None:
+        """The public ingest path warns when its parallel worker finds glued text."""
+        import logging
+
+        from secondbrain.document.ingestor import _sync
+        from secondbrain.utils.embedding_cache import EmbeddingCache
+
+        class _Embedder:
+            def generate_batch(self, texts):
+                return [[0.0] for _ in texts]
+
+        test_pdf = tmp_path / "glued-worker.pdf"
+        test_pdf.write_bytes(b"%PDF-1.4 fake pdf content")
+        cfg = MagicMock()
+        cfg.max_file_size_bytes = 10_000
+        cfg.embedding_cache_size = 10
+        cfg.embedding_batch_size = 50
+        cfg.embedding_model = "test-model"
+        cfg.ingest_pool = "thread"
+        cfg.pdf_ocr_enabled = False
+        cfg.skip_existing_on_reingest = False
+        monkeypatch.setattr("secondbrain.config.config", lambda: cfg)
+        monkeypatch.setattr(_sync, "config", lambda: cfg)
+        monkeypatch.setattr(
+            "secondbrain.embedding.EmbeddingProviderFactory.create_from_config",
+            lambda _cfg: _Embedder(),
+        )
+        storage = MagicMock()
+        monkeypatch.setattr(
+            "secondbrain.storage.StorageFactory.create_from_config",
+            lambda _cfg: storage,
+        )
+        monkeypatch.setattr(
+            "secondbrain.document.fast_text.try_fast_pdf_extraction",
+            lambda *_args, **_kwargs: [{"text": self._glued_text(), "page": 1}],
+        )
+
+        ingestor = DocumentIngestor.__new__(DocumentIngestor)
+        ingestor.chunk_size = 100
+        ingestor.chunk_overlap = 20
+        ingestor.max_file_size_bytes = cfg.max_file_size_bytes
+        ingestor.progress_callback = None
+        ingestor.on_chunk_progress = None
+        ingestor.on_phase_progress = None
+        ingestor._cpu_count_fn = lambda: 1
+        ingestor.embedding_cache = EmbeddingCache()
+
+        with caplog.at_level(
+            logging.WARNING, logger="secondbrain.document.ingestor._sync"
+        ):
+            result = ingestor.ingest(
+                str(test_pdf), cores=1, pool="thread", skip_existing=False
+            )
+
+        assert result["success"] == 1
+        storage.store_batch.assert_called()
+        assert any(
+            "whitespace-free" in record.getMessage()
+            and "docling-parse" in record.getMessage()
+            for record in caplog.records
+        ), caplog.text
+
     def test_no_warning_for_normal_prose(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:
