@@ -214,3 +214,44 @@ class TestResultReporting:
         assert result.exit_code == 0
         assert "Successfully ingested 1 files" in result.output
         assert "Failed:" not in result.output
+
+
+class TestSkippedReporting:
+    """Positive results["skipped"] renders a dim already-stored line."""
+
+    def test_positive_skipped_printed(self, tmp_path: Path) -> None:
+        (tmp_path / "doc.txt").write_text("hello")
+        _, ingestor_class = _mock_ingestor({"success": 2, "failed": 0, "skipped": 1})
+
+        result = _invoke(ingestor_class, tmp_path)
+
+        assert result.exit_code == 0
+        assert "Successfully ingested 2 files" in result.output
+        assert "Skipped (already stored): 1 files" in result.output
+
+    def test_missing_skipped_not_printed(self, tmp_path: Path) -> None:
+        (tmp_path / "doc.txt").write_text("hello")
+        _, ingestor_class = _mock_ingestor({"success": 1, "failed": 0})
+
+        result = _invoke(ingestor_class, tmp_path)
+
+        assert result.exit_code == 0
+        assert "Skipped" not in result.output
+
+    def test_zero_skipped_not_printed(self, tmp_path: Path) -> None:
+        (tmp_path / "doc.txt").write_text("hello")
+        _, ingestor_class = _mock_ingestor({"success": 1, "failed": 0, "skipped": 0})
+
+        result = _invoke(ingestor_class, tmp_path)
+
+        assert result.exit_code == 0
+        assert "Skipped" not in result.output
+
+    def test_non_int_skipped_not_printed(self, tmp_path: Path) -> None:
+        (tmp_path / "doc.txt").write_text("hello")
+        _, ingestor_class = _mock_ingestor({"success": 1, "failed": 0, "skipped": "?"})
+
+        result = _invoke(ingestor_class, tmp_path)
+
+        assert result.exit_code == 0
+        assert "Skipped" not in result.output

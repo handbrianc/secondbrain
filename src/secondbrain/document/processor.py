@@ -21,11 +21,13 @@ import hashlib
 import logging
 import os
 import warnings
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, NotRequired
 
 from typing_extensions import TypedDict
+
+from secondbrain.exceptions import DocumentExtractionError
 
 if TYPE_CHECKING:
     from secondbrain.utils.embedding_cache import EmbeddingCache
@@ -94,6 +96,95 @@ class _Segment(TypedDict):
     text: str
     page: int
     label: NotRequired[str]
+
+
+# Suffixes whose raw bytes are faithfully readable as UTF-8 text when docling
+# yields nothing. Anything else without extracted text is either audio (empty
+# ASR transcript) or binary/image-only content, which must fail loudly instead
+# of embedding the file's raw bytes as mojibake chunks.
+_TEXT_LIKE_SUFFIXES = frozenset(
+    {
+        ".txt",
+        ".md",
+        ".markdown",
+        ".rst",
+        ".csv",
+        ".tsv",
+        ".json",
+        ".jsonl",
+        ".yaml",
+        ".yml",
+        ".toml",
+        ".ini",
+        ".cfg",
+        ".log",
+        ".html",
+        ".htm",
+        ".xml",
+        ".asciidoc",
+        ".adoc",
+        ".tex",
+        ".vtt",
+        ".srt",
+    }
+)
+
+
+def _segments_have_text(segments: Iterable[Mapping[str, Any]]) -> bool:
+    """Return True when any segment carries non-whitespace text.
+
+    Args:
+        segments: Extracted segments, each carrying a ``"text"`` entry.
+
+    Returns
+    -------
+        False when the list is empty or every text is whitespace-only.
+    """
+    return any(str(seg.get("text") or "").strip() for seg in segments)
+
+
+def _fallback_text_or_raise(file_path: Path) -> str:
+    """Resolve a docling extraction that produced no text, by suffix.
+
+    Classification (checked in order, raising before any file read):
+
+    - audio (``docling_factory._AUDIO_SUFFIXES``): the ASR pipeline returned
+      an empty transcript (docling logs "ASR conversion resulted in an empty
+      document" and reports PARTIAL_SUCCESS, which callers do not check).
+      Reading the raw bytes would embed audio mojibake, so raise instead.
+    - text-like (``_TEXT_LIKE_SUFFIXES``): keep the historical raw UTF-8 read,
+      which is faithful for these formats.
+    - anything else (PDF, DOCX, images, unknown binaries): no text was
+      extracted and the bytes are not text, so raise.
+
+    Args:
+        file_path: Path whose extraction produced no text.
+
+    Returns
+    -------
+        Raw file text (text-like suffixes only).
+
+    Raises
+    ------
+        DocumentExtractionError: For audio files with an empty transcript and
+            for binary/image-only files with no extracted text.
+    """
+    from secondbrain.document.docling_factory import _AUDIO_SUFFIXES
+
+    suffix = file_path.suffix.lower()
+    if suffix in _AUDIO_SUFFIXES:
+        raise DocumentExtractionError(
+            f"Audio transcription produced no text for {file_path} — the ASR "
+            "model returned an empty transcript. Check ASR model availability "
+            "and ingest logs."
+        )
+    if suffix in _TEXT_LIKE_SUFFIXES:
+        with file_path.open(encoding="utf-8", errors="ignore") as f:
+            return f.read()
+    raise DocumentExtractionError(
+        f"No text could be extracted from {file_path} — file may be binary, "
+        "image-only, or extraction/transcription failed."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -411,7 +502,10 @@ def _extract_chunk_and_embed_file(
     Returns
     -------
         Dict with keys: 'success' (bool), 'file_path' (str),
-        'documents' (list[dict]), 'error' (str | None).
+        'documents' (list[dict]), 'error' (str | None). When nothing is
+        stored, 'skipped' distinguishes a legitimate re-ingest skip (True,
+        with 'extracted_chunks' counting the chunks that were extracted) from
+        a failed extraction with no text at all (reported as success=False).
     """
     import contextlib
     from datetime import UTC, datetime
@@ -504,10 +598,8 @@ def _extract_chunk_and_embed_file(
                             segment["label"] = label
                         segments.append(segment)
 
-                if not segments:
-                    with file_path.open(encoding="utf-8", errors="ignore") as f:
-                        text = f.read()
-                    segments = [{"text": text, "page": 1}]
+                if not _segments_have_text(segments):
+                    segments = [{"text": _fallback_text_or_raise(file_path), "page": 1}]
 
         from secondbrain.document.ingestor._sync import _warn_if_glued_text
 
@@ -518,6 +610,7 @@ def _extract_chunk_and_embed_file(
                 span.set_attribute("ingest.segments_count", len(segments))
             chunks = chunk_segments(segments, chunk_size, chunk_overlap)
         _emit_phase("chunk", 1, 1)
+        extracted_chunk_count = len(chunks)
 
         cfg = config()
         embedding_model = EmbeddingProviderFactory.create_from_config(cfg)
@@ -557,12 +650,28 @@ def _extract_chunk_and_embed_file(
                 )
 
         if not unique_chunks:
+            if extracted_chunk_count == 0:
+                # Nothing was ever extracted: a silent success here would
+                # report the file as ingested while it contributed no text.
+                return {
+                    "success": False,
+                    "file_path": file_path,
+                    "documents": [],
+                    "error": (
+                        f"No text extracted from {file_path} "
+                        "(empty file or failed extraction/transcription)"
+                    ),
+                    "skipped": False,
+                }
+            # Chunks were extracted but all deduplicated away (whitespace-only
+            # chunks, duplicates, or all already stored) — a legitimate skip.
             return {
                 "success": True,
                 "file_path": file_path,
                 "documents": [],
                 "error": None,
                 "skipped": True,
+                "extracted_chunks": extracted_chunk_count,
             }
 
         # Signal ingestion of this file has begun (with its total chunk count) so

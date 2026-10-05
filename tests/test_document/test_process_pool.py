@@ -234,8 +234,10 @@ class TestProcessPoolProgress:
             make_fake(result_factory=result_factory, record=record),
         )
 
-        successful, failed, _reasons = ingestor._process_parallel_with_progress(
-            files, MagicMock(), storage, 4, "process"
+        successful, failed, _reasons, _skipped = (
+            ingestor._process_parallel_with_progress(
+                files, MagicMock(), storage, 4, "process"
+            )
         )
 
         assert successful == 2
@@ -319,16 +321,60 @@ class TestSkippedFileAccounting:
             make_fake(result_factory=result_factory, record=record),
         )
 
-        successful, failed, reasons = ingestor._process_parallel_with_progress(
+        successful, failed, reasons, skipped = ingestor._process_parallel_with_progress(
             files, MagicMock(), storage, 4, "process"
         )
 
         assert successful == 2
         assert failed == 0
         assert reasons == []
+        assert skipped == 2
         assert len(calls) == 2
         assert all(success for _, success in calls)
         storage.store_batch.assert_not_called()
+
+    def test_skipped_count_and_log_line(self, monkeypatch, caplog):
+        """The skip branch returns a skipped count and logs the skip reason."""
+        import logging
+
+        _patch_config(monkeypatch, ingest_pool="process")
+
+        def result_factory(_i):
+            return {
+                "success": True,
+                "file_path": "fake",
+                "documents": [],
+                "error": None,
+                "skipped": True,
+                "extracted_chunks": 7,
+            }
+
+        ingestor = _make_ingestor()
+        files = [Path("/tmp/a.txt")]
+        storage = MagicMock()
+
+        record = ExecutorRecord()
+        monkeypatch.setattr(
+            _sync,
+            "ProcessPoolExecutor",
+            make_fake(result_factory=result_factory, record=record),
+        )
+
+        with caplog.at_level(
+            logging.INFO, logger="secondbrain.document.ingestor._sync"
+        ):
+            _successful, _failed, _reasons, skipped = (
+                ingestor._process_parallel_with_progress(
+                    files, MagicMock(), storage, 4, "process"
+                )
+            )
+
+        assert skipped == 1
+        assert any(
+            "All 7 chunks for" in record.getMessage()
+            and "already stored" in record.getMessage()
+            for record in caplog.records
+        ), caplog.text
 
 
 class TestOnChunkProgressDispatch:
@@ -509,8 +555,10 @@ class TestStorePhaseProgress:
             make_fake(result_factory=result_factory, record=record),
         )
 
-        successful, failed, _ = ingestor._process_parallel_with_progress(
-            files, MagicMock(), storage, 4, "process"
+        successful, failed, _reasons, _skipped = (
+            ingestor._process_parallel_with_progress(
+                files, MagicMock(), storage, 4, "process"
+            )
         )
 
         assert (successful, failed) == (1, 0)
