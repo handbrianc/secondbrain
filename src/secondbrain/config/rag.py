@@ -1,6 +1,8 @@
 """RAG pipeline settings fragment."""
 
-from pydantic import Field, field_validator, model_validator
+from typing import cast
+
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class RagMixin:
@@ -66,7 +68,8 @@ class RagMixin:
         threshold, except that zero/zero is valid.
         """
         scoped_is_explicit = (
-            "rag_scoped_min_similarity_threshold" in self.model_fields_set
+            "rag_scoped_min_similarity_threshold"
+            in cast(BaseModel, self).model_fields_set
         )
         if not scoped_is_explicit:
             self.rag_scoped_min_similarity_threshold = min(
