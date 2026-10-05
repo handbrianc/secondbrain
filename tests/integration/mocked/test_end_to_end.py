@@ -22,7 +22,9 @@ from __future__ import annotations
 
 import uuid
 import warnings
+from collections.abc import Generator
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -39,12 +41,43 @@ warnings.filterwarnings(
 )
 
 
+@pytest.fixture
+def mocked_pdf_extraction() -> Generator[MagicMock]:
+    """Provide explicit Docling text output while exercising real extraction logic."""
+    text_item = SimpleNamespace(
+        text=(
+            "SecondBrain test document\n\n"
+            "This is sample content for testing PDF ingestion with "
+            "machine learning and artificial intelligence topics."
+        ),
+        prov=[SimpleNamespace(page_no=1)],
+        label="text",
+    )
+    converter = MagicMock()
+    converter.convert.return_value = SimpleNamespace(
+        document=SimpleNamespace(texts=[text_item])
+    )
+    with (
+        patch(
+            "secondbrain.document.fast_text.try_fast_pdf_extraction",
+            return_value=None,
+        ),
+        patch(
+            "secondbrain.document.docling_factory.get_converter_for_path",
+            return_value=converter,
+        ),
+    ):
+        yield converter
+
+
 class TestDocumentIngestion:
     """Tests for document ingestion end-to-end workflow."""
 
     @pytest.mark.integration
     @pytest.mark.slow
-    def test_ingest_single_pdf_document(self, sample_pdf_path: Path) -> None:
+    def test_ingest_single_pdf_document(
+        self, sample_pdf_path: Path, mocked_pdf_extraction: MagicMock
+    ) -> None:
         """Test PDF segments pass through embed→build pipeline producing valid docs."""
         import random
 
@@ -64,6 +97,7 @@ class TestDocumentIngestion:
         ingestor = DocumentIngestor(chunk_size=500, chunk_overlap=50, verbose=False)
 
         segments = ingestor._extract_text(sample_pdf_path)
+        mocked_pdf_extraction.convert.assert_called_once_with(sample_pdf_path)
         assert len(segments) > 0
 
         chunks = ingestor._deduplicate_and_chunk_segments(sample_pdf_path, segments)
@@ -93,6 +127,7 @@ class TestDocumentIngestion:
         sample_pdf_path: Path,
         sample_pdf_with_multiple_pages: Path,
         tmp_path: Path,
+        mocked_pdf_extraction: MagicMock,
     ) -> None:
         """Test that building docs from two PDFs produces correct schemas."""
         import random
@@ -122,6 +157,7 @@ class TestDocumentIngestion:
 
         for pdf_path in [pdf1, pdf2]:
             segments = ingestor._extract_text(pdf_path)
+            mocked_pdf_extraction.convert.assert_called_with(pdf_path)
             assert len(segments) > 0, f"No segments from {pdf_path.name}"
 
             chunks = ingestor._deduplicate_and_chunk_segments(pdf_path, segments)
@@ -261,6 +297,7 @@ class TestIntegrationDataFlow:
     def test_ingestion_creates_proper_chunks(
         self,
         sample_pdf_path: Path,
+        mocked_pdf_extraction: MagicMock,
     ) -> None:
         """Verify chunk schema fields and embedding dimensions from build pipeline."""
         import random
@@ -281,6 +318,7 @@ class TestIntegrationDataFlow:
         ingestor = DocumentIngestor(chunk_size=500, chunk_overlap=50, verbose=False)
 
         segments = ingestor._extract_text(sample_pdf_path)
+        mocked_pdf_extraction.convert.assert_called_once_with(sample_pdf_path)
         assert len(segments) > 0
 
         chunks = ingestor._deduplicate_and_chunk_segments(sample_pdf_path, segments)
@@ -361,11 +399,13 @@ class TestIntegrationDataFlow:
     def test_chunk_overlapping_text(
         self,
         sample_pdf_path: Path,
+        mocked_pdf_extraction: MagicMock,
     ) -> None:
         """Test that text chunking preserves overlapping segments."""
         ingestor = DocumentIngestor(chunk_size=500, chunk_overlap=50, verbose=False)
 
         all_chunks = ingestor._extract_text(sample_pdf_path)
+        mocked_pdf_extraction.convert.assert_called_once_with(sample_pdf_path)
 
         assert len(all_chunks) > 0
 
