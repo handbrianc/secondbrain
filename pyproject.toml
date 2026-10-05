@@ -142,7 +142,7 @@ bundled = [
     "idna>=3.20",
     "wheel>=0.48.0",
     "setuptools>=84.0.0",
-    "fpdf2>=2.8.8",
+    "fpdf2>=2.8.9",
     "reportlab>=5.0.0",
     "python-docx>=1.0.0",
     # Bundled extras (depends on mutation)
