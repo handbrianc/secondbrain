@@ -139,10 +139,10 @@ pytest
 
 **High Priority:**
 
-- **Inline Python** in `scripts/generate-sbom.sh` - extract to `.py` module
+- **Inline Python** in `scripts/generate-sbom.sh` - ✅ RESOLVED: extracted to `scripts/sbom_converter.py` (SBOM conversion module)
 - **Duplicate tests** - ✅ RESOLVED: Removed `tests/test_integration/` directory (consolidated into `tests/integration/mocked/`)
 
-**Single TODO marker** remains at `src/secondbrain/document/chunker.py:33` (`element_type-migration`); no FIXME markers.
+**No TODO or FIXME markers** remain in `src/` (the `element_type-migration` marker was completed in PR #114).
 
 <!-- CODEGRAPH_START -->
 ## CodeGraph
