@@ -1,6 +1,6 @@
 """RAG pipeline settings fragment."""
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 
 class RagMixin:
@@ -41,6 +41,40 @@ class RagMixin:
             "LLM-knowledge fallback (default: 0.46, same as the search CLI)"
         ),
     )
+    rag_scoped_min_similarity_threshold: float = Field(
+        default=0.20,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Minimum cosine-similarity score for a retrieved chunk to count as "
+            "relevant when the user's query explicitly names an ingested "
+            "document (source_filter resolved). Lower than "
+            "rag_min_similarity_threshold because the raw query string carries "
+            "path tokens that pollute the embedding and depress its score "
+            "against the document's own chunks, while deterministically naming "
+            "a source is strong retrieval intent. Must stay below "
+            "rag_min_similarity_threshold"
+        ),
+    )
+
+    @model_validator(mode="after")
+    def validate_rag_scoped_threshold_below_global(self) -> "RagMixin":
+        """Validate the scoped threshold stays below the global one.
+
+        The scoped gate is a relaxation of the global relevance gate for
+        source-scoped retrieval; at or above the global threshold it would
+        never take effect.
+        """
+        if (
+            self.rag_scoped_min_similarity_threshold
+            >= self.rag_min_similarity_threshold
+        ):
+            raise ValueError(
+                "rag_scoped_min_similarity_threshold must be less than "
+                "rag_min_similarity_threshold"
+            )
+        return self
+
     rag_max_context_chars: int = Field(
         default=16000,
         ge=1000,

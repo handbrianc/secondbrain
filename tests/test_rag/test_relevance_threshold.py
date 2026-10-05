@@ -8,15 +8,60 @@ case. Also locks in backward compatibility: score-less chunks are treated as
 relevant so existing RAG/chat flows are unchanged.
 """
 
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from pydantic import ValidationError
 
 from secondbrain.conversation import ConversationSession
 from secondbrain.rag.interfaces import LocalLLMProvider
 from secondbrain.rag.pipeline import RAGPipeline
 
 NOTICE_PREFIX = "I couldn't find relevant documents for your query:"
+
+# Scoped-retrieval fixture: an ingested audio transcript named by a path in
+# the query. The raw path string pollutes the query embedding, so a scoped
+# query must gate at ``rag_scoped_min_similarity_threshold`` instead.
+_AUDIO_SOURCE = "/Users/bchand/Desktop/Tampa International Airport.m4a"
+_AUDIO_QUERY = "describe /Users/bchand/Desktop/Tampa International Airport.m4a"
+_AUDIO_STRIPPED = "describe /Users/bchand/Desktop/"
+
+
+def _audio_registry() -> dict[str, str]:
+    """Registry mapping the fixture's document name to its source path."""
+    from secondbrain.rag.document_router import _build_known_names
+
+    return _build_known_names([_AUDIO_SOURCE])
+
+
+def _audio_pipeline(
+    mock_searcher: MagicMock,
+    mock_llm_provider: MagicMock,
+    known_names: dict[str, str] | None,
+) -> RAGPipeline:
+    """RAGPipeline with the document router pinned to ``known_names``.
+
+    ``None`` pins an empty registry, so ``_resolve_source_filter`` returns
+    ``None`` (unscoped retrieval).
+    """
+    from secondbrain.rag.document_router import DocumentRouter
+
+    pipeline = RAGPipeline(
+        searcher=mock_searcher,
+        llm_provider=mock_llm_provider,
+        top_k=5,
+    )
+    pipeline._config.streaming_enabled = False
+    pipeline._document_router = DocumentRouter(known_names=known_names or {})
+    return pipeline
+
+
+def _make_router(known_names: dict[str, str]) -> Any:
+    """DocumentRouter pinned to ``known_names`` (no storage access)."""
+    from secondbrain.rag.document_router import DocumentRouter
+
+    return DocumentRouter(known_names=known_names)
 
 
 @pytest.fixture
@@ -105,6 +150,39 @@ class TestHasRelevantChunks:
             {"chunk_text": "b", "source_file": "test.pdf", "page": 1},
         ]
         assert pipeline._has_relevant_chunks(chunks) is True
+
+    def test_threshold_override_passes_score_between_floors(
+        self, pipeline: RAGPipeline
+    ) -> None:
+        """A score between the scoped and global floors gates only on the default.
+
+        0.30 is below ``rag_min_similarity_threshold`` (0.46) but above the
+        scoped override (0.20): the override must accept it, the default must
+        reject it.
+        """
+        chunks = [{"chunk_text": "a", "score": 0.30}]
+        assert pipeline._has_relevant_chunks(chunks, threshold=0.20) is True
+        assert pipeline._has_relevant_chunks(chunks) is False
+
+    def test_threshold_override_below_score_still_gated(
+        self, pipeline: RAGPipeline
+    ) -> None:
+        """A score below even the overridden floor stays gated out."""
+        chunks = [{"chunk_text": "a", "score": 0.10}]
+        assert pipeline._has_relevant_chunks(chunks, threshold=0.20) is False
+
+    def test_threshold_override_empty_chunks_still_false(
+        self, pipeline: RAGPipeline
+    ) -> None:
+        """The empty-batch rule is unaffected by the threshold override."""
+        assert pipeline._has_relevant_chunks([], threshold=0.20) is False
+
+    def test_threshold_override_no_scores_still_true(
+        self, pipeline: RAGPipeline
+    ) -> None:
+        """The score-less-batch rule is unaffected by the threshold override."""
+        chunks = [{"chunk_text": "test context", "source_file": "test.pdf"}]
+        assert pipeline._has_relevant_chunks(chunks, threshold=0.20) is True
 
 
 class TestRelevanceGateInQuery:
@@ -212,6 +290,276 @@ class TestRelevanceGateAsync:
 
             assert result["answer"] == f"{NOTICE_PREFIX} what is the speed of light"
             mock_llm_provider.agenerate.assert_not_awaited()
+        finally:
+            get_config.cache_clear()
+
+
+class TestScopedRelevanceGateInQuery:
+    """A source-scoped query gates at the scoped threshold with a name-stripped embed.
+
+    The user names an ingested document (source_filter resolved), so the raw
+    query string's path tokens pollute the embedding and depress its score;
+    the gate relaxes to ``rag_scoped_min_similarity_threshold`` and the
+    searcher embeds the document-name-stripped query. Prompts, the result
+    dict, and fallbacks keep the ORIGINAL query.
+    """
+
+    def test_scoped_low_score_passes_gate_with_stripped_embed(
+        self,
+        mock_searcher: MagicMock,
+        mock_llm_provider: MagicMock,
+    ) -> None:
+        """source_filter set + score 0.30 -> gate passes at the scoped floor."""
+        mock_searcher.search.return_value = [
+            {
+                "chunk_text": "airport parking transcript",
+                "source_file": _AUDIO_SOURCE,
+                "page_number": 1,
+                "score": 0.30,
+            },
+        ]
+        pipeline = _audio_pipeline(mock_searcher, mock_llm_provider, _audio_registry())
+
+        result = pipeline.query(_AUDIO_QUERY)
+
+        # Gate passed: the answer came from the LLM, not the fallback notice.
+        assert result["answer"] == "Generated answer"
+        mock_llm_provider.generate.assert_called_once()
+        # The searcher embedded the name-stripped query, scoped to the source.
+        call = mock_searcher.search.call_args
+        assert call.args[0] == _AUDIO_STRIPPED
+        assert call.kwargs["source_filter"] == _AUDIO_SOURCE
+        # Prompts keep the ORIGINAL query (with the document name).
+        prompt = mock_llm_provider.generate.call_args.kwargs["prompt"]
+        assert "Tampa International Airport.m4a" in prompt
+        # The result dict keeps the original query.
+        assert result["query"] == _AUDIO_QUERY
+
+    def test_scoped_below_scoped_floor_still_gated(
+        self,
+        mock_searcher: MagicMock,
+        mock_llm_provider: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """source_filter set + score below the scoped floor -> fallback notice."""
+        from secondbrain.config import get_config
+
+        monkeypatch.setenv("SECONDBRAIN_RAG_LLM_FALLBACK_ENABLED", "false")
+        get_config.cache_clear()
+        try:
+            mock_searcher.search.return_value = [
+                {
+                    "chunk_text": "irrelevant",
+                    "source_file": _AUDIO_SOURCE,
+                    "page_number": 1,
+                    "score": 0.10,
+                },
+            ]
+            pipeline = _audio_pipeline(
+                mock_searcher, mock_llm_provider, _audio_registry()
+            )
+
+            result = pipeline.query(_AUDIO_QUERY)
+
+            assert result["answer"] == f"{NOTICE_PREFIX} {_AUDIO_QUERY}"
+            mock_llm_provider.generate.assert_not_called()
+        finally:
+            get_config.cache_clear()
+
+    def test_unscoped_low_score_still_gated_at_global_floor(
+        self,
+        mock_searcher: MagicMock,
+        mock_llm_provider: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """source_filter None + score 0.30 -> still gated out at the global 0.46.
+
+        No document name resolves, so no scoped relaxation or query stripping
+        happens: the searcher receives the raw query and the batch is gated.
+        """
+        from secondbrain.config import get_config
+
+        monkeypatch.setenv("SECONDBRAIN_RAG_LLM_FALLBACK_ENABLED", "false")
+        get_config.cache_clear()
+        try:
+            mock_searcher.search.return_value = [
+                {
+                    "chunk_text": "airport parking transcript",
+                    "source_file": _AUDIO_SOURCE,
+                    "page_number": 1,
+                    "score": 0.30,
+                },
+            ]
+            pipeline = _audio_pipeline(mock_searcher, mock_llm_provider, None)
+
+            result = pipeline.query(_AUDIO_QUERY)
+
+            assert result["answer"] == f"{NOTICE_PREFIX} {_AUDIO_QUERY}"
+            mock_llm_provider.generate.assert_not_called()
+            # Unscoped: the searcher received the raw, un-stripped query.
+            call = mock_searcher.search.call_args
+            assert call.args[0] == _AUDIO_QUERY
+            assert call.kwargs["source_filter"] is None
+        finally:
+            get_config.cache_clear()
+
+    @pytest.mark.asyncio
+    async def test_scoped_low_score_passes_gate_async(
+        self,
+        mock_searcher: MagicMock,
+        mock_llm_provider: MagicMock,
+    ) -> None:
+        """The async single-turn path relaxes the gate the same way."""
+        mock_searcher.search_async = AsyncMock(
+            return_value=[
+                {
+                    "chunk_text": "airport parking transcript",
+                    "source_file": _AUDIO_SOURCE,
+                    "page_number": 1,
+                    "score": 0.30,
+                },
+            ]
+        )
+        pipeline = _audio_pipeline(mock_searcher, mock_llm_provider, _audio_registry())
+
+        result = await pipeline.query_async(_AUDIO_QUERY)
+
+        assert result["answer"] == "Generated answer"
+        mock_llm_provider.agenerate.assert_awaited()
+        call = mock_searcher.search_async.call_args
+        assert call.args[0] == _AUDIO_STRIPPED
+        assert call.kwargs["source_filter"] == _AUDIO_SOURCE
+        # Prompts keep the ORIGINAL query (with the document name).
+        prompt = mock_llm_provider.agenerate.call_args.kwargs["prompt"]
+        assert "Tampa International Airport.m4a" in prompt
+        assert result["query"] == _AUDIO_QUERY
+
+
+class TestScopedRelevanceGateInIterativeQuery:
+    """The broad-coverage path (_iterative_query) honours the scoped gate.
+
+    A query naming an ingested source (source_filter threaded in) falls
+    through the chapter-enumeration branch to the generic top-k search when
+    no chapters are derivable; the scoped threshold must accept a chunk that
+    scores between the scoped and global floors, and the embed must use the
+    name-stripped query.
+    """
+
+    QUERY = "summarize /Users/bchand/Desktop/Tampa International Airport.m4a"
+    STRIPPED = "summarize /Users/bchand/Desktop/"
+
+    @staticmethod
+    def _make_pipeline(
+        mock_searcher: MagicMock,
+        mock_llm_provider: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
+        known_names: dict[str, str] | None,
+    ) -> RAGPipeline:
+        """Pipeline whose structure probe yields no derivable chapters.
+
+        Mirrors an audio transcript: structure chunks exist but carry no
+        chapter targets, so _iterative_query falls through to the generic
+        top-k search with source_filter set.
+        """
+        from secondbrain.rag.intent_parser import IntentDecision, QueryIntent
+
+        pipeline = _audio_pipeline(mock_searcher, mock_llm_provider, known_names)
+        monkeypatch.setattr(
+            pipeline,
+            "_probe_document_structure",
+            lambda top_k, source_filter=None: [
+                {
+                    "chunk_text": "Introduction",
+                    "chunk_role": "heading",
+                    "source_file": _AUDIO_SOURCE,
+                    "page_number": 1,
+                }
+            ],
+        )
+        monkeypatch.setattr(
+            pipeline, "_derive_chapter_numbers", lambda structure: ([], set(), [])
+        )
+        monkeypatch.setattr(
+            pipeline._intent_parser,
+            "parse",
+            lambda q: IntentDecision(
+                intent=QueryIntent.BROAD_COVERAGE,
+                confidence=0.5,
+                target=None,
+                reason="test",
+                suggested_pipeline="structural",
+            ),
+        )
+        return pipeline
+
+    def test_scoped_low_score_passes_gate(
+        self,
+        mock_searcher: MagicMock,
+        mock_llm_provider: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """source_filter set + score 0.30 -> scoped override passes the gate."""
+        mock_searcher.search.return_value = [
+            {
+                "chunk_text": "airport parking transcript",
+                "source_file": _AUDIO_SOURCE,
+                "page_number": 1,
+                "score": 0.30,
+            },
+        ]
+        pipeline = self._make_pipeline(
+            mock_searcher, mock_llm_provider, monkeypatch, _audio_registry()
+        )
+
+        result = pipeline._iterative_query(
+            self.QUERY, top_k=5, show_sources=False, source_filter=_AUDIO_SOURCE
+        )
+
+        # Gate passed: the answer came from generation, not the fallback.
+        assert result["answer"] == "Generated answer"
+        # The searcher embedded the name-stripped query, scoped to the source.
+        call = mock_searcher.search.call_args
+        assert call.args[0] == self.STRIPPED
+        assert call.kwargs["source_filter"] == _AUDIO_SOURCE
+        # Prompts and the result dict keep the ORIGINAL query.
+        prompt = mock_llm_provider.generate.call_args.kwargs["prompt"]
+        assert "Tampa International Airport.m4a" in prompt
+        assert result["query"] == self.QUERY
+
+    def test_unscoped_low_score_still_gated(
+        self,
+        mock_searcher: MagicMock,
+        mock_llm_provider: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """source_filter None + score 0.30 -> still gated out at the global floor."""
+        from secondbrain.config import get_config
+
+        monkeypatch.setenv("SECONDBRAIN_RAG_LLM_FALLBACK_ENABLED", "false")
+        get_config.cache_clear()
+        try:
+            mock_searcher.search.return_value = [
+                {
+                    "chunk_text": "airport parking transcript",
+                    "source_file": _AUDIO_SOURCE,
+                    "page_number": 1,
+                    "score": 0.30,
+                },
+            ]
+            pipeline = self._make_pipeline(
+                mock_searcher, mock_llm_provider, monkeypatch, None
+            )
+
+            result = pipeline._iterative_query(
+                self.QUERY, top_k=5, show_sources=False, source_filter=None
+            )
+
+            assert result["answer"] == f"{NOTICE_PREFIX} {self.QUERY}"
+            mock_llm_provider.generate.assert_not_called()
+            # Unscoped: the searcher received the raw, un-stripped query.
+            call = mock_searcher.search.call_args
+            assert call.args[0] == self.QUERY
+            assert call.kwargs["source_filter"] is None
         finally:
             get_config.cache_clear()
 
@@ -696,3 +1044,76 @@ class TestGroundedRetryRequiresFollowUp:
         # Only the initial (irrelevant) retrieval happened; the follow-up gate
         # short-circuited the context-augmented re-query before a second search.
         assert mock_searcher.search.call_count == 1
+
+
+class TestScopedThresholdConfig:
+    """The scoped threshold config field exists and relaxes the global gate."""
+
+    def test_default_scoped_threshold_exists(self) -> None:
+        from secondbrain.config import get_config
+
+        cfg = get_config()
+        assert cfg.rag_scoped_min_similarity_threshold == 0.20
+
+    def test_scoped_threshold_below_global_threshold(self) -> None:
+        from secondbrain.config import get_config
+
+        cfg = get_config()
+        assert cfg.rag_scoped_min_similarity_threshold < (
+            cfg.rag_min_similarity_threshold
+        )
+
+    def test_scoped_threshold_must_stay_below_global(self) -> None:
+        """Cross-field validation rejects a scoped threshold >= the global one."""
+        from secondbrain.config import Config
+
+        with pytest.raises(ValidationError, match="must be less than"):
+            Config(rag_scoped_min_similarity_threshold=0.50)
+
+    def test_scoped_threshold_bounds(self) -> None:
+        from secondbrain.config import Config
+
+        with pytest.raises(ValidationError):
+            Config(rag_scoped_min_similarity_threshold=-0.1)
+        with pytest.raises(ValidationError):
+            Config(rag_scoped_min_similarity_threshold=1.1)
+
+
+class TestScopedGateThresholdHelper:
+    """_relevance_gate_threshold picks the floor from the retrieval scope."""
+
+    def test_scoped_when_source_filter_set(self, pipeline: RAGPipeline) -> None:
+        threshold = pipeline._relevance_gate_threshold("some source.pdf")
+        assert threshold == pipeline._config.rag_scoped_min_similarity_threshold
+
+    def test_none_when_source_filter_none(self, pipeline: RAGPipeline) -> None:
+        assert pipeline._relevance_gate_threshold(None) is None
+
+
+class TestScopedSearchQueryStripping:
+    """_scoped_search_query removes the resolved document name from the embed."""
+
+    def test_strips_resolved_name_and_collapses_whitespace(
+        self, pipeline: RAGPipeline
+    ) -> None:
+        pipeline._document_router = _make_router(_audio_registry())
+        assert pipeline._scoped_search_query(_AUDIO_QUERY) == _AUDIO_STRIPPED
+
+    def test_unresolvable_name_keeps_query(self, pipeline: RAGPipeline) -> None:
+        pipeline._document_router = _make_router({})
+        assert pipeline._scoped_search_query(_AUDIO_QUERY) == _AUDIO_QUERY
+
+    def test_name_not_found_in_query_keeps_query(self, pipeline: RAGPipeline) -> None:
+        # The registry contains the name but the query does not carry it.
+        pipeline._document_router = _make_router(_audio_registry())
+        other = "what is the speed of light"
+        assert pipeline._scoped_search_query(other) == other
+
+    def test_stripping_to_whitespace_falls_back_to_original(
+        self, pipeline: RAGPipeline
+    ) -> None:
+        """A query that is only the resolved name would strip to nothing."""
+        pipeline._document_router = _make_router(_audio_registry())
+        assert pipeline._scoped_search_query("tampa international airport.m4a") == (
+            "tampa international airport.m4a"
+        )

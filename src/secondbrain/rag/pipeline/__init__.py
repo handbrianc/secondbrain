@@ -38,7 +38,7 @@ from secondbrain.rag.pipeline._mixins import (  # noqa: E402
 )
 
 _FILENAME_SUFFIX_RE = re.compile(
-    r"\S*\.(?:pdf|docx?|pptx?|xlsx?|html?|md|txt|epub)\b",
+    r"\S*\.(?:pdf|docx?|pptx?|xlsx?|html?|md|txt|epub|m4a|m4b|mp3|wav|aac|ogg|opus|flac)\b",
     re.IGNORECASE,
 )
 
@@ -182,8 +182,14 @@ class RAGPipeline(
                         span.set_attribute("rag.query", query)
                         span.set_attribute("rag.top_k", effective_top_k)
                         span.set_attribute("rag.source_filter", source_filter or "")
+                    # Scoped retrieval embeds the name-stripped query (path
+                    # tokens pollute the embedding); prompts/results/logs keep
+                    # the original query.
+                    search_query = (
+                        self._scoped_search_query(query) if source_filter else query
+                    )
                     chunks = self._searcher.search(
-                        query,
+                        search_query,
                         top_k=effective_top_k,
                         source_filter=source_filter,
                     )
@@ -195,7 +201,9 @@ class RAGPipeline(
                 logger.debug("retrieval_latency: %.3fs", retrieval_duration)
 
             # Step 2: Handle no results
-            if not self._has_relevant_chunks(chunks):
+            if not self._has_relevant_chunks(
+                chunks, threshold=self._relevance_gate_threshold(source_filter)
+            ):
                 fallback_answer = self._handle_no_results(query)
                 result: dict[str, Any] = {"answer": fallback_answer, "query": query}
                 if show_sources:
@@ -353,8 +361,16 @@ class RAGPipeline(
                         span.set_attribute("rag.top_k", effective_top_k)
                         span.set_attribute("rag.is_chat", True)
                         span.set_attribute("rag.source_filter", source_filter or "")
+                    # Scoped retrieval embeds the name-stripped query (path
+                    # tokens pollute the embedding); prompts/results/logs keep
+                    # the rewritten query as-is.
+                    scoped_rewritten = (
+                        self._scoped_search_query(rewritten_query)
+                        if source_filter
+                        else rewritten_query
+                    )
                     chunks = self._searcher.search(
-                        rewritten_query,
+                        scoped_rewritten,
                         top_k=effective_top_k,
                         source_filter=source_filter,
                     )
@@ -390,7 +406,9 @@ class RAGPipeline(
                 logger.debug("retrieval_latency: %.3fs", retrieval_duration)
 
             # Step 3: Handle no results
-            if not self._has_relevant_chunks(chunks):
+            if not self._has_relevant_chunks(
+                chunks, threshold=self._relevance_gate_threshold(source_filter)
+            ):
                 # First attempt a grounded re-retrieval: disambiguate the query
                 # from conversation history and re-query the vector DB so a
                 # multi-turn follow-up can retrieve the actual source document.
@@ -2081,8 +2099,13 @@ class RAGPipeline(
 
         # 2. Generic top-k search: one embedding call, no per-page
         # iteration (which would make 8000+ embedding requests).
+        # Scoped retrieval embeds the name-stripped query: the raw string
+        # carries path tokens that pollute the embedding and depress its
+        # score against the document's own chunks. Prompts, the result dict,
+        # and _handle_no_results keep the ORIGINAL query.
+        search_query = self._scoped_search_query(query) if source_filter else query
         accumulated = self._searcher.search(
-            query,
+            search_query,
             top_k=top_k,
             source_filter=source_filter,
         )
@@ -2091,7 +2114,9 @@ class RAGPipeline(
         accumulated.sort(key=lambda c: c.get("score", 0.0), reverse=True)
         final_chunks = self._dedupe_by_text_hash(accumulated)[:top_k]
 
-        if not self._has_relevant_chunks(final_chunks):
+        if not self._has_relevant_chunks(
+            final_chunks, threshold=self._relevance_gate_threshold(source_filter)
+        ):
             return {
                 "answer": self._handle_no_results(query),
                 "query": query,
@@ -2190,8 +2215,16 @@ class RAGPipeline(
                         span.set_attribute("rag.is_chat", False)
                         span.set_attribute("rag.is_async", True)
                         span.set_attribute("rag.source_filter", source_filter or "")
+                    # Scoped retrieval embeds the name-stripped query (path
+                    # tokens pollute the embedding); prompts/results/logs keep
+                    # the original query.
+                    search_query = (
+                        self._scoped_search_query(query) if source_filter else query
+                    )
                     chunks = await self._searcher.search_async(
-                        query, top_k=effective_top_k, source_filter=source_filter
+                        search_query,
+                        top_k=effective_top_k,
+                        source_filter=source_filter,
                     )
                     if span and chunks:
                         span.set_attribute("rag.chunks_returned", len(chunks))
@@ -2200,7 +2233,9 @@ class RAGPipeline(
                 metrics.record("retrieval_latency_async", retrieval_duration)
                 logger.debug("retrieval_latency_async: %.3fs", retrieval_duration)
 
-            if not self._has_relevant_chunks(chunks):
+            if not self._has_relevant_chunks(
+                chunks, threshold=self._relevance_gate_threshold(source_filter)
+            ):
                 fallback_answer = await self._handle_no_results_async(query)
                 result: dict[str, Any] = {"answer": fallback_answer, "query": query}
                 if show_sources:
@@ -2323,8 +2358,16 @@ class RAGPipeline(
                         span.set_attribute("rag.is_chat", True)
                         span.set_attribute("rag.is_async", True)
                         span.set_attribute("rag.source_filter", source_filter or "")
+                    # Scoped retrieval embeds the name-stripped query (path
+                    # tokens pollute the embedding); prompts/results/logs keep
+                    # the rewritten query as-is.
+                    scoped_rewritten = (
+                        self._scoped_search_query(rewritten_query)
+                        if source_filter
+                        else rewritten_query
+                    )
                     chunks = await self._searcher.search_async(
-                        rewritten_query,
+                        scoped_rewritten,
                         top_k=effective_top_k,
                         source_filter=source_filter,
                     )
@@ -2335,7 +2378,9 @@ class RAGPipeline(
                 metrics.record("retrieval_latency_async", retrieval_duration)
                 logger.debug("retrieval_latency_async: %.3fs", retrieval_duration)
 
-            if not self._has_relevant_chunks(chunks):
+            if not self._has_relevant_chunks(
+                chunks, threshold=self._relevance_gate_threshold(source_filter)
+            ):
                 # First attempt a grounded re-retrieval: disambiguate the query
                 # from conversation history and re-query the vector DB so a
                 # multi-turn follow-up can retrieve the actual source document.
