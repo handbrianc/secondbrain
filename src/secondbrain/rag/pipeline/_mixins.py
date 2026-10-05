@@ -4265,9 +4265,7 @@ class _RoutingMixin(_RAGPipelineState):
         )
         if match is None:
             alias_parts = re.split(r"[\s_-]+", doc_name)
-            alias_pattern = r"[\s_-]+".join(
-                re.escape(part) for part in alias_parts
-            )
+            alias_pattern = r"[\s_-]+".join(re.escape(part) for part in alias_parts)
             match = re.search(
                 rf"(?<!\w){alias_pattern}(?!\w)", query, flags=re.IGNORECASE
             )
