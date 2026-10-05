@@ -748,7 +748,7 @@ class DocumentIngestor:
         max_workers: int,
         pool: str | None = None,
         skip_existing: bool | None = None,
-    ) -> tuple[int, int, list[tuple[str, str]]]:
+    ) -> tuple[int, int, list[tuple[str, str]], int]:
         """Process files using thread or process pooling with progress support.
 
         Uses a ThreadPoolExecutor (shared queue + memory, real-time progress) or a
@@ -778,7 +778,8 @@ class DocumentIngestor:
 
         Returns
         -------
-            Tuple of (successful_files, failed_files, failure_reasons) counts and reasons.
+            Tuple of (successful_files, failed_files, failure_reasons,
+            skipped_files) counts, reasons, and the re-ingest skip count.
         """
         from concurrent.futures import as_completed
 
@@ -797,6 +798,7 @@ class DocumentIngestor:
 
         successful_files = 0
         failed_files = 0
+        skipped_files = 0
         failure_reasons: list[tuple[str, str]] = []
 
         # Within-file progress channel, used only when a consumer exists. A plain
@@ -915,6 +917,13 @@ class DocumentIngestor:
                             documents = result.get("documents", [])
                             skipped = result.get("skipped", False)
                             if skipped and not documents:
+                                logger.info(
+                                    "All %s chunks for %s were already stored; "
+                                    "skipping embed/store",
+                                    result.get("extracted_chunks", "?"),
+                                    file_path,
+                                )
+                                skipped_files += 1
                                 successful_files += 1
                                 completed += 1
                                 if self.progress_callback:
@@ -960,6 +969,9 @@ class DocumentIngestor:
                                     n_batches,
                                 )
 
+                            logger.info(
+                                "Stored %d chunks for %s", len(documents), file_path
+                            )
                             successful_files += 1
                             completed += 1
                             if self.progress_callback:
@@ -994,7 +1006,7 @@ class DocumentIngestor:
 
             self._drain_progress_queue(progress_queue)
 
-        return successful_files, failed_files, failure_reasons
+        return successful_files, failed_files, failure_reasons, skipped_files
 
     def _drain_progress_queue(self, progress_queue: Any) -> None:
         """Drain queued within-file progress events to the progress callbacks."""
@@ -1074,7 +1086,8 @@ class DocumentIngestor:
 
         Returns
         -------
-            dict with 'success', 'failed' counts, and 'failures' list of (path, reason) tuples.
+            dict with 'success', 'failed', and 'skipped' (already-stored
+            re-ingest skips) counts, and 'failures' list of (path, reason) tuples.
         """
         from secondbrain.config import config
         from secondbrain.embedding import EmbeddingProviderFactory
@@ -1088,15 +1101,22 @@ class DocumentIngestor:
             files = self._collect_and_validate_files(path, recursive)
 
         if not files:
-            return {"success": 0, "failed": 0, "failures": []}
+            return {"success": 0, "failed": 0, "failures": [], "skipped": 0}
 
         cores = self._resolve_core_count(cores)
 
-        successful, failed, failure_reasons = self._process_parallel_with_progress(
-            files, embedding_gen, storage, cores, pool, skip_existing
+        successful, failed, failure_reasons, skipped = (
+            self._process_parallel_with_progress(
+                files, embedding_gen, storage, cores, pool, skip_existing
+            )
         )
 
-        return {"success": successful, "failed": failed, "failures": failure_reasons}
+        return {
+            "success": successful,
+            "failed": failed,
+            "failures": failure_reasons,
+            "skipped": skipped,
+        }
 
     def _extract_text(self, file_path: Path) -> list[dict[str, Any]]:
         """Extract text content from a file."""
@@ -1108,6 +1128,10 @@ class DocumentIngestor:
                 with trace_operation("extract_text"):
                     from secondbrain.document.docling_factory import (
                         get_converter_for_path,
+                    )
+                    from secondbrain.document.processor import (
+                        _fallback_text_or_raise,
+                        _segments_have_text,
                     )
 
                     converter = get_converter_for_path(file_path)
@@ -1135,10 +1159,10 @@ class DocumentIngestor:
                                 segment["label"] = label
                             segments.append(segment)
 
-                    if not segments:
-                        with file_path.open(encoding="utf-8", errors="ignore") as f:
-                            text = f.read()
-                            segments = [{"text": text, "page": 1}]
+                    if not _segments_have_text(segments):
+                        segments = [
+                            {"text": _fallback_text_or_raise(file_path), "page": 1}
+                        ]
 
                 return self._warn_if_glued_text(file_path, segments)
 

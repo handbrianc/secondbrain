@@ -2093,12 +2093,17 @@ class _StructureMixin(_RAGPipelineState):
         source_filter: str | None = None,
     ) -> dict[str, Any]:
         """Fallback one-shot retrieval when document structure probing fails."""
+        # Scoped retrieval embeds the name-stripped query (path tokens pollute
+        # the embedding); prompts/results/fallbacks keep the original query.
+        search_query = self._scoped_search_query(query) if source_filter else query
         chunks = self._searcher.search(
-            query,
+            search_query,
             top_k=top_k,
             source_filter=source_filter,
         )
-        if not self._has_relevant_chunks(chunks):
+        if not self._has_relevant_chunks(
+            chunks, threshold=self._relevance_gate_threshold(source_filter)
+        ):
             return {"answer": self._handle_no_results(query), "query": query}
         chunks = self._union_opener_chunks(query, chunks, source_filter, top_k=top_k)
         chunks = self._apply_heading_diversity(chunks)
@@ -3848,20 +3853,53 @@ class _FallbackMixin(_RAGPipelineState):
             result["sources"] = chunks
         return result
 
-    def _has_relevant_chunks(self, chunks: list[dict[str, Any]]) -> bool:
+    def _relevance_gate_threshold(self, source_filter: str | None) -> float | None:
+        """Return the relevance-gate threshold for the current retrieval scope.
+
+        Scoped retrieval (``source_filter`` set) means the user's query
+        explicitly names an ingested document — strong intent whose raw query
+        string carries path tokens that pollute the embedding and depress its
+        score against the document's own chunks — so the gate relaxes to
+        ``rag_scoped_min_similarity_threshold``. Unscoped retrieval keeps the
+        global ``rag_min_similarity_threshold`` (returned as ``None`` so
+        :meth:`_has_relevant_chunks` falls back to its default).
+
+        Args:
+            source_filter: Resolved source_file filter, or ``None`` for
+                unscoped (whole-knowledge-base) retrieval.
+
+        Returns:
+            The score floor to pass to :meth:`_has_relevant_chunks`, or
+            ``None`` to use its configured default.
+        """
+        return (
+            self._config.rag_scoped_min_similarity_threshold if source_filter else None
+        )
+
+    def _has_relevant_chunks(
+        self,
+        chunks: list[dict[str, Any]],
+        threshold: float | None = None,
+    ) -> bool:
         """Return True if any retrieved chunk meets the relevance score threshold.
 
         A chunk counts as relevant when its cosine-similarity ``score`` is at
-        least ``rag_min_similarity_threshold``. When none of the chunks carry a
+        least ``threshold`` (``rag_min_similarity_threshold`` when ``threshold``
+        is ``None``). Callers may pass a lower floor for source-scoped
+        retrieval, where the query explicitly names an ingested document and
+        its path tokens depress the embedding score (see
+        :meth:`_relevance_gate_threshold`). When none of the chunks carry a
         ``score`` they are all treated as relevant, so existing behaviour is
-        preserved for score-less context (e.g. unit-test fixtures). When at least
-        one chunk has a score, only the scored chunks are evaluated — a single
-        score-less chunk cannot bypass the threshold gate on an otherwise-scored
-        batch. Returns False only when *chunks* is empty or every scored chunk
-        falls below the threshold.
+        preserved for score-less context (e.g. unit-test fixtures). When at
+        least one chunk has a score, only the scored chunks are evaluated — a
+        single score-less chunk cannot bypass the threshold gate on an
+        otherwise-scored batch. Returns False only when *chunks* is empty or
+        every scored chunk falls below the threshold.
 
         Args:
             chunks: Retrieved chunk dicts (each may carry a ``score``).
+            threshold: Score floor to apply; ``None`` uses the configured
+                ``rag_min_similarity_threshold``.
 
         Returns:
             True if there is usable relevant context, False otherwise.
@@ -3871,7 +3909,12 @@ class _FallbackMixin(_RAGPipelineState):
         scored = [c["score"] for c in chunks if c.get("score") is not None]
         if not scored:
             return True  # no score signal at all -> do not gate (backward compatible)
-        return any(s >= self._config.rag_min_similarity_threshold for s in scored)
+        floor = (
+            threshold
+            if threshold is not None
+            else self._config.rag_min_similarity_threshold
+        )
+        return any(s >= floor for s in scored)
 
     def _handle_no_results(
         self,
@@ -4166,6 +4209,73 @@ class _RoutingMixin(_RAGPipelineState):
         if doc_name is not None:
             return router.resolve_source_file(doc_name)
         return None
+
+    def _scoped_search_query(self, query: str) -> str:
+        """Return *query* with the router-resolved source reference removed.
+
+        Scoped retrieval (``source_filter`` set) is already keyed to one
+        document, so the document-name tokens in the query add no retrieval
+        signal — but they pollute the query embedding (a path such as
+        "/Users/.../Tampa International Airport.m4a") and depress its
+        similarity against the document's own chunks. Removing the resolved
+        source reference yields a cleaner embed. This is pure string work on
+        the router's TTL-cached registry (the resolve just happened in the same
+        flow), and prompts, results, and fallbacks keep the ORIGINAL query.
+
+        Args:
+            query: Raw user query string (or the chat-rewritten query).
+
+        Returns:
+            The query with the matched source reference replaced by a single
+            space and whitespace collapsed, the original query when no name
+            or matching reference is found, and the original query when
+            stripping would leave nothing to embed.
+        """
+        router = self._get_document_router()
+        doc_name = router.extract_document_name(query)
+        if not doc_name:
+            return query
+
+        source_file = router.resolve_source_file(doc_name)
+        patterns: list[str] = []
+        if source_file:
+            path_parts = re.split(r"[/\\]", source_file)
+            patterns.extend(
+                (
+                    r"[/\\]".join(re.escape(part) for part in path_parts),
+                    re.escape(path_parts[-1]),
+                )
+            )
+
+        # Prefer the stored path or filename, which retains the exact original
+        # reference including separators and extension. Fall back to the
+        # normalized alias with word boundaries to avoid removing substrings
+        # from unrelated words (for example, "meta" from "metadata").
+        match = next(
+            (
+                found
+                for pattern in patterns
+                if (
+                    found := re.search(
+                        rf"(?<!\w){pattern}(?!\w)", query, flags=re.IGNORECASE
+                    )
+                )
+            ),
+            None,
+        )
+        if match is None:
+            alias_parts = re.split(r"[\s_-]+", doc_name)
+            alias_pattern = r"[\s_-]+".join(re.escape(part) for part in alias_parts)
+            match = re.search(
+                rf"(?<!\w){alias_pattern}(?!\w)", query, flags=re.IGNORECASE
+            )
+        if match is None:
+            return query
+
+        stripped = query[: match.start()] + " " + query[match.end() :]
+        stripped = " ".join(stripped.split())
+        # Fall back to the original when stripping would leave nothing to embed.
+        return stripped if stripped.strip() else query
 
     # ------------------------------------------------------------------
     # Page-number lookup ("what is on page N")

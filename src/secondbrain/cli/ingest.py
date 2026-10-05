@@ -143,6 +143,9 @@ def ingest(
     num_success = results["success"]
     num_failed = results["failed"]
     console.print(f"[green]Successfully ingested {num_success} files[/green]")
+    num_skipped = results.get("skipped")
+    if isinstance(num_skipped, int) and num_skipped > 0:
+        console.print(f"[dim]Skipped (already stored): {num_skipped} files[/dim]")
     if isinstance(num_failed, int) and num_failed > 0:
         console.print(f"[yellow]Failed: {num_failed} files[/yellow]")
         failures = results.get("failures", [])

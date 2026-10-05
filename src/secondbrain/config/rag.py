@@ -1,6 +1,8 @@
 """RAG pipeline settings fragment."""
 
-from pydantic import Field, field_validator
+from typing import cast
+
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class RagMixin:
@@ -41,6 +43,53 @@ class RagMixin:
             "LLM-knowledge fallback (default: 0.46, same as the search CLI)"
         ),
     )
+    rag_scoped_min_similarity_threshold: float = Field(
+        default=0.20,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Minimum cosine-similarity score for a retrieved chunk to count as "
+            "relevant when the user's query explicitly names an ingested "
+            "document (source_filter resolved). Normally lower than "
+            "rag_min_similarity_threshold because the raw query string carries "
+            "path tokens that pollute the embedding and depress its score "
+            "against the document's own chunks, while deterministically naming "
+            "a source is strong retrieval intent. Defaults to the lesser of "
+            "0.20 and rag_min_similarity_threshold."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def validate_rag_scoped_threshold_below_global(self) -> "RagMixin":
+        """Validate the scoped threshold is compatible with the global one.
+
+        When not explicitly configured, the scoped threshold follows a lower
+        global threshold. Explicit scoped values must be below the global
+        threshold, except that zero/zero is valid.
+        """
+        scoped_is_explicit = (
+            "rag_scoped_min_similarity_threshold"
+            in cast(BaseModel, self).model_fields_set
+        )
+        if not scoped_is_explicit:
+            self.rag_scoped_min_similarity_threshold = min(
+                self.rag_scoped_min_similarity_threshold,
+                self.rag_min_similarity_threshold,
+            )
+        elif (
+            self.rag_scoped_min_similarity_threshold
+            >= self.rag_min_similarity_threshold
+            and not (
+                self.rag_scoped_min_similarity_threshold == 0
+                and self.rag_min_similarity_threshold == 0
+            )
+        ):
+            raise ValueError(
+                "rag_scoped_min_similarity_threshold must be less than "
+                "rag_min_similarity_threshold"
+            )
+        return self
+
     rag_max_context_chars: int = Field(
         default=16000,
         ge=1000,

@@ -83,10 +83,15 @@ class TestExtractTextPdfPages:
 
 
 class TestExtractTextImageFallback:
-    """Tests for image OCR fallback mechanism."""
+    """Tests for image OCR fallback mechanism.
+
+    Since the raw-bytes fallback was removed for non-text-like suffixes, an
+    image with no extracted text raises ``DocumentExtractionError`` instead of
+    embedding the image bytes as mojibake text.
+    """
 
     def test_extract_text_image_fallback_ocr(self, tmp_path: Path) -> None:
-        """Test image OCR fallback when docling returns no text."""
+        """Test image with no docling text raises; bytes are never read as text."""
         test_image = tmp_path / "test_image.png"
         test_image.write_bytes(b"\x89PNG fake image data")
 
@@ -96,16 +101,16 @@ class TestExtractTextImageFallback:
         mock_result = MagicMock()
         mock_result.document.texts = []
 
-        with patch.object(ingestor.converter, "convert", return_value=mock_result):
-            segments = ingestor._extract_text(test_image)
+        with (
+            patch.object(ingestor.converter, "convert", return_value=mock_result),
+            pytest.raises(DocumentExtractionError) as exc_info,
+        ):
+            ingestor._extract_text(test_image)
 
-        # Should fall back to file read
-        assert len(segments) >= 1
-        assert "text" in segments[0]
-        assert "page" in segments[0]
+        assert "No text could be extracted" in str(exc_info.value)
 
     def test_extract_text_image_fallback_no_texts_attr(self, tmp_path: Path) -> None:
-        """Test image fallback when texts attribute is missing."""
+        """Test image without texts attribute also raises (no fallback)."""
         test_image = tmp_path / "test_image.jpg"
         test_image.write_bytes(b"\xff\xd8 fake jpeg data")
 
@@ -115,12 +120,13 @@ class TestExtractTextImageFallback:
         mock_result = MagicMock()
         del mock_result.document.texts
 
-        with patch.object(ingestor.converter, "convert", return_value=mock_result):
-            segments = ingestor._extract_text(test_image)
+        with (
+            patch.object(ingestor.converter, "convert", return_value=mock_result),
+            pytest.raises(DocumentExtractionError) as exc_info,
+        ):
+            ingestor._extract_text(test_image)
 
-        # Should fall back to file read
-        assert len(segments) >= 1
-        assert "page" in segments[0]
+        assert "No text could be extracted" in str(exc_info.value)
 
 
 class TestExtractTextEmptyFile:
@@ -140,7 +146,11 @@ class TestExtractTextEmptyFile:
         assert segments[0]["page"] == 1
 
     def test_extract_text_empty_file_pdf(self, tmp_path: Path) -> None:
-        """Test empty PDF file handling falls back to file read."""
+        """Test empty PDF raises instead of falling back to a raw file read.
+
+        A PDF is neither audio nor text-like, so no text means extraction
+        failed and must be reported loudly (the raw bytes are not text).
+        """
         empty_pdf = tmp_path / "empty.pdf"
         empty_pdf.write_bytes(b"")
 
@@ -150,11 +160,13 @@ class TestExtractTextEmptyFile:
         mock_result = MagicMock()
         mock_result.document.texts = []
 
-        with patch.object(ingestor.converter, "convert", return_value=mock_result):
-            segments = ingestor._extract_text(empty_pdf)
+        with (
+            patch.object(ingestor.converter, "convert", return_value=mock_result),
+            pytest.raises(DocumentExtractionError) as exc_info,
+        ):
+            ingestor._extract_text(empty_pdf)
 
-        assert len(segments) >= 1
-        assert segments[0]["text"] == ""
+        assert "No text could be extracted" in str(exc_info.value)
 
     def test_extract_text_whitespace_only(self, tmp_path: Path) -> None:
         """Test file with only whitespace handling."""
@@ -167,6 +179,84 @@ class TestExtractTextEmptyFile:
 
         assert len(segments) == 1
         assert segments[0]["text"].strip() == ""
+
+
+class TestExtractTextNoTextClassification:
+    """Empty extractions must not fall back to reading raw binary bytes.
+
+    Audio files with an empty ASR transcript and binary/image-only files raise
+    ``DocumentExtractionError``; only text-like suffixes keep the raw UTF-8
+    read fallback (which is faithful for those formats).
+    """
+
+    @staticmethod
+    def _empty_docling_result() -> MagicMock:
+        """Mock a docling result whose document carries no text items."""
+        mock_result = MagicMock()
+        mock_result.document.texts = []
+        return mock_result
+
+    @staticmethod
+    def _empty_converter() -> MagicMock:
+        mock_converter = MagicMock()
+        mock_converter.convert.return_value = (
+            TestExtractTextNoTextClassification._empty_docling_result()
+        )
+        return mock_converter
+
+    def test_audio_empty_transcript_raises(self, tmp_path: Path) -> None:
+        """A .m4a whose ASR yields no text raises instead of raw-byte mojibake."""
+        audio = tmp_path / "memo.m4a"
+        audio.write_bytes(b"\x00\x01fake audio bytes")
+
+        ingestor = DocumentIngestor()
+
+        with (
+            patch(
+                "secondbrain.document.docling_factory.get_converter_for_path",
+                return_value=self._empty_converter(),
+            ),
+            pytest.raises(DocumentExtractionError) as exc_info,
+        ):
+            ingestor._extract_text(audio)
+
+        assert "Audio transcription produced no text" in str(exc_info.value)
+        assert "empty transcript" in str(exc_info.value)
+
+    def test_binary_file_without_text_raises(self, tmp_path: Path) -> None:
+        """A non-audio, non-text-like file with no text raises (no fallback)."""
+        blob = tmp_path / "payload.bin"
+        blob.write_bytes(b"\x00\xff\x10binary-garbage")
+
+        ingestor = DocumentIngestor()
+
+        with (
+            patch(
+                "secondbrain.document.docling_factory.get_converter_for_path",
+                return_value=self._empty_converter(),
+            ),
+            pytest.raises(DocumentExtractionError) as exc_info,
+        ):
+            ingestor._extract_text(blob)
+
+        assert "No text could be extracted" in str(exc_info.value)
+
+    def test_text_like_file_still_falls_back_to_raw_read(self, tmp_path: Path) -> None:
+        """.txt keeps the raw UTF-8 read fallback when docling yields nothing."""
+        notes = tmp_path / "notes.txt"
+        notes.write_text("Fallback content", encoding="utf-8")
+
+        ingestor = DocumentIngestor()
+
+        with patch(
+            "secondbrain.document.docling_factory.get_converter_for_path",
+            return_value=self._empty_converter(),
+        ):
+            segments = ingestor._extract_text(notes)
+
+        assert len(segments) == 1
+        assert segments[0]["text"] == "Fallback content"
+        assert segments[0]["page"] == 1
 
 
 class TestExtractTextCorruptedPdf:
@@ -229,7 +319,11 @@ class TestExtractTextCorruptedPdf:
         assert "Malformed PDF" in str(exc_info.value)
 
     def test_extract_text_corrupted_file_not_found(self, tmp_path: Path) -> None:
-        """Test non-existent file raises DocumentExtractionError."""
+        """Test non-existent file raises DocumentExtractionError.
+
+        A non-text-like suffix with no extracted text raises the
+        classification error before any raw-byte fallback read is attempted.
+        """
         nonexistent = tmp_path / "does_not_exist.pdf"
 
         ingestor = DocumentIngestor()
@@ -237,10 +331,7 @@ class TestExtractTextCorruptedPdf:
         with pytest.raises(DocumentExtractionError) as exc_info:
             ingestor._extract_text(nonexistent)
 
-        assert (
-            "no such file" in str(exc_info.value).lower()
-            or "does not exist" in str(exc_info.value).lower()
-        )
+        assert "No text could be extracted" in str(exc_info.value)
 
 
 class TestExtractTextGluedTextWarning:

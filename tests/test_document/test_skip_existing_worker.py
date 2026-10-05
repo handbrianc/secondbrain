@@ -129,6 +129,7 @@ class TestWorkerFullSkip:
         assert result["success"] is True
         assert result["documents"] == []
         assert result["skipped"] is True
+        assert result["extracted_chunks"] >= 1
         assert model.calls == 0
         assert model.embed_texts == []
 
