@@ -4929,6 +4929,30 @@ class TestQueryFilenameStripping:
     def test_plain_filename_removed(self) -> None:
         assert strip_document_filenames("summarize report.pdf").strip() == ("summarize")
 
+    def test_audio_extensions_removed(self) -> None:
+        for ext in ("m4a", "m4b", "mp3", "wav", "aac", "ogg", "opus", "flac"):
+            cleaned = strip_document_filenames(f"summarize interview.{ext}")
+            assert cleaned.strip() == "summarize", (ext, cleaned)
+
+    def test_audio_path_tail_removed(self) -> None:
+        r"""An audio path whose spaces break the token regex still loses its tail.
+
+        \S* cannot span spaces, so only the final "Airport.m4a" token is
+        stripped from a spaced path — but the dotted extension token is gone,
+        which is what matters for the section-number scan.
+        """
+        cleaned = strip_document_filenames(
+            "summarize /Users/bchand/Desktop/Tampa International Airport.m4a"
+        )
+        assert ".m4a" not in cleaned
+        assert cleaned.strip() == "summarize /Users/bchand/Desktop/Tampa International"
+
+    def test_audio_extension_word_boundary_preserves_nearby_text(self) -> None:
+        # A word merely ending in an extension name without a dot is untouched.
+        assert (
+            strip_document_filenames("summarize flacca").strip() == "summarize flacca"
+        )
+
 
 class TestLicenseBoilerplateEndToEnd:
     """PVE-shaped fixture: a license book tail must not sabotage chapter ranges.

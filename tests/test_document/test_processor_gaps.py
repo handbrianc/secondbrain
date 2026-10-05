@@ -583,6 +583,136 @@ class TestExtractChunkAndEmbedErrors:
         assert len(result["documents"]) >= 1
 
 
+class TestNoTextFallbackClassification:
+    """Empty docling extractions: audio/binary raise, text-like reads raw.
+
+    The raw-bytes fallback must never run for audio (empty ASR transcript
+    would embed mojibake) or binary/image-only files; text-like suffixes keep
+    the faithful raw UTF-8 read.
+    """
+
+    def test_audio_empty_transcript_fails_loudly(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """A .m4a whose ASR conversion yields no text must fail, not embed bytes."""
+        f = tmp_path / "memo.m4a"
+        f.write_bytes(b"\x00\x01\x02fake-audio-bytes")
+        _install_converter(monkeypatch, _FakeConverter([]))
+        _install_embedder(monkeypatch, _FakeEmbeddingModel())
+
+        result = processor._extract_chunk_and_embed_file(
+            str(f),
+            chunk_size=512,
+            chunk_overlap=50,
+            progress_queue=None,
+            embedding_model_name="test-model",
+        )
+
+        assert result["success"] is False
+        assert result["error"].startswith("DocumentExtractionError:")
+        assert "Audio transcription produced no text" in result["error"]
+        assert "empty transcript" in result["error"]
+        assert result["documents"] == []
+
+    def test_binary_file_without_text_fails_loudly(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """A non-audio, non-text-like file with no text must fail (no fallback)."""
+        f = tmp_path / "payload.bin"
+        f.write_bytes(b"\x00\xff\x10binary-garbage")
+        _install_converter(monkeypatch, _FakeConverter([]))
+        _install_embedder(monkeypatch, _FakeEmbeddingModel())
+
+        result = processor._extract_chunk_and_embed_file(
+            str(f),
+            chunk_size=512,
+            chunk_overlap=50,
+            progress_queue=None,
+            embedding_model_name="test-model",
+        )
+
+        assert result["success"] is False
+        assert result["error"].startswith("DocumentExtractionError:")
+        assert "No text could be extracted" in result["error"]
+        assert result["documents"] == []
+
+    def test_text_like_file_still_falls_back_to_raw_read(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """.txt with no docling text keeps the raw UTF-8 read fallback."""
+        f = tmp_path / "notes.txt"
+        f.write_text("raw fallback body " * 20, encoding="utf-8")
+        _install_converter(monkeypatch, _FakeConverter([]))
+        model = _FakeEmbeddingModel()
+        _install_embedder(monkeypatch, model)
+
+        result = processor._extract_chunk_and_embed_file(
+            str(f),
+            chunk_size=512,
+            chunk_overlap=50,
+            progress_queue=None,
+            embedding_model_name="test-model",
+            skip_existing=False,
+        )
+
+        assert result["success"] is True
+        assert result["documents"]
+        assert any("raw fallback body" in d["chunk_text"] for d in result["documents"])
+
+    def test_zero_extracted_chunks_reports_failure(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Extraction that yields zero chunks returns success=False (not a skip)."""
+        f = tmp_path / "blank.txt"
+        f.write_text("   \n\t\n", encoding="utf-8")
+        _install_converter(monkeypatch, _FakeConverter([]))
+        model = _FakeEmbeddingModel()
+        _install_embedder(monkeypatch, model)
+
+        result = processor._extract_chunk_and_embed_file(
+            str(f),
+            chunk_size=512,
+            chunk_overlap=50,
+            progress_queue=None,
+            embedding_model_name="test-model",
+            skip_existing=False,
+        )
+
+        assert result["success"] is False
+        assert result["skipped"] is False
+        assert "No text extracted from" in result["error"]
+        assert result["documents"] == []
+        assert model.batches == [], "nothing may be embedded for an empty extract"
+
+    def test_all_chunks_deduped_reports_skipped_with_count(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Chunks extracted but all already stored -> skipped=True with count."""
+        f = _write_sample(tmp_path)
+        _install_converter(
+            monkeypatch, _FakeConverter([_TextItem(_sample_text(), page_no=1)])
+        )
+        model = _FakeEmbeddingModel()
+        _install_embedder(monkeypatch, model)
+        monkeypatch.setattr(
+            processor, "_existing_text_hashes", lambda hashes: set(hashes)
+        )
+
+        result = processor._extract_chunk_and_embed_file(
+            str(f),
+            chunk_size=512,
+            chunk_overlap=50,
+            progress_queue=None,
+            embedding_model_name="test-model",
+            skip_existing=True,
+        )
+
+        assert result["success"] is True
+        assert result["skipped"] is True
+        assert result["extracted_chunks"] >= 1
+        assert model.batches == []
+
+
 class _BrokenEmbedder:
     def generate_batch(self, texts: list[str]) -> list[list[float]]:
         raise RuntimeError("embed blew up")
