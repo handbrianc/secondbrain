@@ -37,6 +37,8 @@ from rich.progress import (
 )
 from rich.text import Text
 
+logger = logging.getLogger(__name__)
+
 PHASE_LABELS: dict[str, str] = {
     "extract": "extracting",
     "chunk": "chunking",
@@ -311,6 +313,7 @@ class IngestProgressUI:
                 handler.removeFilter(log_filter)
             except ValueError:
                 # Filter already gone (handler replaced mid-run); nothing to do.
+                logger.debug("Deferring filter already removed from handler; skipping")
                 continue
         self._attached_filters = []
 
@@ -330,5 +333,10 @@ class IngestProgressUI:
                 logging.getLogger(record.name).handle(record)
             except Exception:
                 # Skip a bad record; still replay the rest.
+                logger.debug(
+                    "Failed to replay deferred log record from %s",
+                    record.name,
+                    exc_info=True,
+                )
                 continue
         self._deferred_records.clear()

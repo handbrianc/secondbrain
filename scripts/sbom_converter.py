@@ -25,8 +25,11 @@ def convert_cyclonedx_to_spdx(cyclonedx_path: str, spdx_path: str) -> None:
             license_info = "NOASSERTION"
             if comp.get("licenses"):
                 license_data = comp["licenses"][0].get("license", {})
-                license_info = license_data.get("id") or license_data.get(
-                    "name", "NOASSERTION"
+                license_info = (
+                    license_data.get("id")
+                    or license_data.get("name")
+                    or comp["licenses"][0].get("expression")
+                    or "NOASSERTION"
                 )
 
             packages.append(
