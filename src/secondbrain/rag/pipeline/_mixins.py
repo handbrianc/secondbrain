@@ -4211,33 +4211,70 @@ class _RoutingMixin(_RAGPipelineState):
         return None
 
     def _scoped_search_query(self, query: str) -> str:
-        """Return *query* with the router-resolved document name removed.
+        """Return *query* with the router-resolved source reference removed.
 
         Scoped retrieval (``source_filter`` set) is already keyed to one
         document, so the document-name tokens in the query add no retrieval
         signal — but they pollute the query embedding (a path such as
         "/Users/.../Tampa International Airport.m4a") and depress its
         similarity against the document's own chunks. Removing the resolved
-        name yields a cleaner embed. This is pure string work on the router's
-        TTL-cached registry (the resolve just happened in the same flow), and
-        prompts, results, and fallbacks keep the ORIGINAL query.
+        source reference yields a cleaner embed. This is pure string work on
+        the router's TTL-cached registry (the resolve just happened in the same
+        flow), and prompts, results, and fallbacks keep the ORIGINAL query.
 
         Args:
             query: Raw user query string (or the chat-rewritten query).
 
         Returns:
-            The query with the resolved document name replaced by a single
+            The query with the matched source reference replaced by a single
             space and whitespace collapsed, the original query when no name
-            is resolved or its occurrence is not found, and the original
-            query when stripping would leave nothing to embed.
+            or matching reference is found, and the original query when
+            stripping would leave nothing to embed.
         """
         router = self._get_document_router()
         doc_name = router.extract_document_name(query)
         if not doc_name:
             return query
-        # The resolved name is normalized (lowercase, separators as spaces, no
-        # extension), so match its occurrence case-insensitively.
-        stripped = re.sub(re.escape(doc_name), " ", query, flags=re.IGNORECASE)
+
+        source_file = router.resolve_source_file(doc_name)
+        patterns: list[str] = []
+        if source_file:
+            path_parts = re.split(r"[/\\]", source_file)
+            patterns.extend(
+                (
+                    r"[/\\]".join(re.escape(part) for part in path_parts),
+                    re.escape(path_parts[-1]),
+                )
+            )
+
+        # Prefer the stored path or filename, which retains the exact original
+        # reference including separators and extension. Fall back to the
+        # normalized alias with word boundaries to avoid removing substrings
+        # from unrelated words (for example, "meta" from "metadata").
+        match = next(
+            (
+                found
+                for pattern in patterns
+                if (
+                    found := re.search(
+                        rf"(?<!\w){pattern}(?!\w)", query, flags=re.IGNORECASE
+                    )
+                )
+            ),
+            None,
+        )
+        if match is None:
+            alias_parts = re.split(r"[\s_-]+", doc_name)
+            alias_pattern = r"[\s_-]+".join(
+                re.escape(part) for part in alias_parts
+            )
+            match = re.search(
+                rf"(?<!\w){alias_pattern}(?!\w)", query, flags=re.IGNORECASE
+            )
+        if match is None:
+            return query
+
+        stripped = query[: match.start()] + " " + query[match.end() :]
         stripped = " ".join(stripped.split())
         # Fall back to the original when stripping would leave nothing to embed.
         return stripped if stripped.strip() else query

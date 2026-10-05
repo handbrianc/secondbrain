@@ -25,7 +25,7 @@ NOTICE_PREFIX = "I couldn't find relevant documents for your query:"
 # query must gate at ``rag_scoped_min_similarity_threshold`` instead.
 _AUDIO_SOURCE = "/Users/bchand/Desktop/Tampa International Airport.m4a"
 _AUDIO_QUERY = "describe /Users/bchand/Desktop/Tampa International Airport.m4a"
-_AUDIO_STRIPPED = "describe /Users/bchand/Desktop/"
+_AUDIO_STRIPPED = "describe"
 
 
 def _audio_registry() -> dict[str, str]:
@@ -446,7 +446,7 @@ class TestScopedRelevanceGateInIterativeQuery:
     """
 
     QUERY = "summarize /Users/bchand/Desktop/Tampa International Airport.m4a"
-    STRIPPED = "summarize /Users/bchand/Desktop/"
+    STRIPPED = "summarize"
 
     @staticmethod
     def _make_pipeline(
@@ -1063,12 +1063,42 @@ class TestScopedThresholdConfig:
             cfg.rag_min_similarity_threshold
         )
 
+    def test_low_global_threshold_derives_compatible_scoped_default(self) -> None:
+        from secondbrain.config import Config
+
+        cfg = Config(rag_min_similarity_threshold=0.1)
+        assert cfg.rag_scoped_min_similarity_threshold == 0.1
+
+    def test_zero_global_threshold_derives_zero_scoped_default(self) -> None:
+        from secondbrain.config import Config
+
+        cfg = Config(rag_min_similarity_threshold=0.0)
+        assert cfg.rag_scoped_min_similarity_threshold == 0.0
+
+    def test_explicit_zero_scoped_threshold_allows_zero_global_threshold(self) -> None:
+        from secondbrain.config import Config
+
+        cfg = Config(
+            rag_min_similarity_threshold=0.0,
+            rag_scoped_min_similarity_threshold=0.0,
+        )
+        assert cfg.rag_scoped_min_similarity_threshold == 0.0
+
     def test_scoped_threshold_must_stay_below_global(self) -> None:
         """Cross-field validation rejects a scoped threshold >= the global one."""
         from secondbrain.config import Config
 
         with pytest.raises(ValidationError, match="must be less than"):
             Config(rag_scoped_min_similarity_threshold=0.50)
+
+    def test_explicit_scoped_threshold_equal_to_low_global_is_rejected(self) -> None:
+        from secondbrain.config import Config
+
+        with pytest.raises(ValidationError, match="must be less than"):
+            Config(
+                rag_min_similarity_threshold=0.1,
+                rag_scoped_min_similarity_threshold=0.1,
+            )
 
     def test_scoped_threshold_bounds(self) -> None:
         from secondbrain.config import Config
@@ -1098,6 +1128,30 @@ class TestScopedSearchQueryStripping:
     ) -> None:
         pipeline._document_router = _make_router(_audio_registry())
         assert pipeline._scoped_search_query(_AUDIO_QUERY) == _AUDIO_STRIPPED
+
+    def test_strips_filename_with_underscores(self, pipeline: RAGPipeline) -> None:
+        from secondbrain.rag.document_router import _build_known_names
+
+        pipeline._document_router = _make_router(
+            _build_known_names(["/reports/annual_report.pdf"])
+        )
+        assert (
+            pipeline._scoped_search_query("summarize annual_report.pdf by quarter")
+            == "summarize by quarter"
+        )
+
+    def test_filename_match_preserves_unrelated_word_substrings(
+        self, pipeline: RAGPipeline
+    ) -> None:
+        from secondbrain.rag.document_router import _build_known_names
+
+        pipeline._document_router = _make_router(
+            _build_known_names(["/reports/data.pdf"])
+        )
+        assert (
+            pipeline._scoped_search_query("describe metadata in data.pdf")
+            == "describe metadata in"
+        )
 
     def test_unresolvable_name_keeps_query(self, pipeline: RAGPipeline) -> None:
         pipeline._document_router = _make_router({})
