@@ -1,0 +1,17 @@
+{
+  "name": "secondbrain-dev-tooling",
+  "private": true,
+  "dependencies": {
+    "oh-my-openagent": "^4.5.12"
+  },
+  "overrides": {
+    "fast-uri": "^3.1.8",
+    "js-yaml": "^4.3.2",
+    "hono": "^4.13.7",
+    "ip-address": "^10.7.1",
+    "toml": "^4.2.0",
+    "@hono/node-server": "^1.19.15",
+    "body-parser": "^2.3.0",
+    "qs": "^6.16.0"
+  }
+}

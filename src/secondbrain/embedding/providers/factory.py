@@ -10,9 +10,26 @@ from typing import TYPE_CHECKING, cast
 
 from secondbrain.config import Config
 from secondbrain.embedding.interfaces import EmbeddingProvider
+from secondbrain.utils.rate_limiter import SharedRateLimiter, get_shared_rate_limiter
 
 if TYPE_CHECKING:
     from secondbrain.embedding.providers.openai import OpenAIEmbeddingProvider
+
+
+def _rate_limiter_from_config(config: Config) -> SharedRateLimiter | None:
+    """Build the shared embedding rate limiter from configuration.
+
+    Returns None when rate limiting is disabled (default), so providers run
+    with zero rate-limiting overhead. When enabled, the limiter is shared
+    process-wide (thread-level sharing; process-pool workers each get their
+    own instance, which matches the documented spec limitation).
+    """
+    if not getattr(config, "rate_limit_enabled", False):
+        return None
+    return get_shared_rate_limiter(
+        max_requests=getattr(config, "rate_limit_max_requests", 100),
+        window_seconds=getattr(config, "rate_limit_window_seconds", 60.0),
+    )
 
 
 class EmbeddingProviderFactory:
@@ -61,6 +78,7 @@ class EmbeddingProviderFactory:
                     api_base=config.embedding_api_base,
                     dimensions=config.embedding_dimensions,
                     timeout=config.embedding_timeout,
+                    rate_limiter=_rate_limiter_from_config(config),
                 ),
             )
 
@@ -99,4 +117,5 @@ class EmbeddingProviderFactory:
             api_base=api_base or cfg.embedding_api_base,
             dimensions=dimensions or cfg.embedding_dimensions,
             timeout=timeout or cfg.embedding_timeout,
+            rate_limiter=_rate_limiter_from_config(cfg),
         )

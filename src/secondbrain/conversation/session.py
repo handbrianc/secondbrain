@@ -98,6 +98,44 @@ class ConversationSession:
         return cls(session_id, storage, context_window)
 
     @classmethod
+    async def create_async(
+        cls,
+        session_id: str | None = None,
+        storage: ConversationStorage | None = None,
+        context_window: int = 5,
+    ) -> ConversationSession:
+        """Async wrapper over :meth:`create`.
+
+        Mirrors the ``*_async`` convention used across the codebase (e.g.
+        :meth:`ConversationStorage.save_message_async`): the blocking SQLite
+        call is offloaded to a worker thread via :func:`asyncio.to_thread`,
+        leaving the event loop free.
+
+        Args:
+            session_id: Unique identifier for the new session. If None, generates UUID.
+            storage: ConversationStorage instance for persistence.
+            context_window: Number of recent messages to keep (default: 5 per spec).
+
+        Returns:
+            A new ConversationSession instance.
+
+        Example:
+        --------
+            >>> storage = ConversationStorage()
+            >>> session = await ConversationSession.create_async(storage=storage)
+            >>> session.is_empty
+            True
+        """
+        if session_id is None:
+            session_id = str(uuid4())
+
+        if storage is None:
+            raise ValueError("storage must be provided when creating a session")
+
+        await storage.create_session_async(session_id)
+        return cls(session_id, storage, context_window)
+
+    @classmethod
     def load(
         cls, session_id: str, storage: ConversationStorage, context_window: int = 5
     ) -> ConversationSession | None:
@@ -129,6 +167,39 @@ class ConversationSession:
         session._history = messages
         return session
 
+    @classmethod
+    async def load_async(
+        cls, session_id: str, storage: ConversationStorage, context_window: int = 5
+    ) -> ConversationSession | None:
+        """Async wrapper over :meth:`load`.
+
+        Offloads the blocking storage reads to worker threads via the
+        storage's ``*_async`` methods (``asyncio.to_thread``), keeping the
+        event loop free.
+
+        Args:
+            session_id: Identifier of the session to load.
+            storage: ConversationStorage instance for persistence.
+            context_window: Number of recent messages to keep (default: 5).
+
+        Returns:
+            ConversationSession instance if found, None otherwise.
+
+        Example:
+        --------
+            >>> storage = ConversationStorage()
+            >>> session = await ConversationSession.load_async("existing", storage)
+            >>> if session is not None:
+            ...     history = session.get_history()
+        """
+        if not await storage.session_exists_async(session_id):
+            return None
+
+        messages = await storage.get_history_async(session_id)
+        session = cls(session_id, storage, context_window)
+        session._history = messages
+        return session
+
     def add_message(self, role: str, content: str) -> None:
         """Add a message to the session.
 
@@ -146,6 +217,28 @@ class ConversationSession:
         """
         self._history.append({"role": role, "content": content})
         self._storage.save_message(self._session_id, role, content)
+
+        if len(self._history) > self._context_window:
+            self.trim_context()
+
+    async def add_message_async(self, role: str, content: str) -> None:
+        """Async wrapper over :meth:`add_message`.
+
+        Appends the message to the in-memory history and persists it via
+        :meth:`ConversationStorage.save_message_async`, offloading the
+        blocking SQLite call to a worker thread via :func:`asyncio.to_thread`.
+
+        Args:
+            role: Message role (e.g., "user", "assistant", "system").
+            content: Message content.
+
+        Example:
+        --------
+            >>> await session.add_message_async("user", "What is RAG?")
+            >>> await session.add_message_async("assistant", "Retrieval...")
+        """
+        self._history.append({"role": role, "content": content})
+        await self._storage.save_message_async(self._session_id, role, content)
 
         if len(self._history) > self._context_window:
             self.trim_context()
@@ -239,6 +332,25 @@ class ConversationSession:
         """
         self._history = []
         self._storage.update_messages(self._session_id, [])
+
+    async def clear_history_async(self) -> None:
+        """Async wrapper over :meth:`clear_history`.
+
+        Empties the in-memory message history and persists via
+        :meth:`ConversationStorage.update_messages_async`, offloading the
+        blocking SQLite call to a worker thread via :func:`asyncio.to_thread`.
+
+        Example:
+        --------
+            >>> await session.add_message_async("user", "Hello")
+            >>> session.is_empty
+            False
+            >>> await session.clear_history_async()
+            >>> session.is_empty
+            True
+        """
+        self._history = []
+        await self._storage.update_messages_async(self._session_id, [])
 
     @property
     def session_id(self) -> str:

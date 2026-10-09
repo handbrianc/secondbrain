@@ -197,7 +197,7 @@ class MockSearcher:
             )
         )
 
-    def __enter__(self) -> "MockSearcher":
+    def __enter__(self) -> MockSearcher:
         """Context manager entry."""
         return self
 

@@ -78,17 +78,46 @@ def display_list_results(results: Sequence[ChunkInfo]) -> None:
     console.print(table)
 
 
-def display_status(stats: DatabaseStats) -> None:
+def _format_bytes(num_bytes: int) -> str:
+    """Render a byte count in the largest sensible unit (B / KB / MB / GB / TB)."""
+    size = float(num_bytes)
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if size < 1024 or unit == "TB":
+            return f"{size:.1f} {unit}"
+        size /= 1024
+    return f"{size:.1f} TB"
+
+
+def display_status(
+    stats: DatabaseStats | None,
+    connection_status: str | None = None,
+    storage_size_bytes: int | None = None,
+) -> None:
     """Display database status statistics.
 
     Args:
-        stats: DatabaseStats dictionary with chunk and collection info.
+        stats: DatabaseStats dictionary with chunk and collection info, or
+            None when the database could not be read (e.g. offline backend).
+        connection_status: Backend connectivity ('reachable'/'unreachable');
+            omitted from the output when None.
+        storage_size_bytes: Approximate stored data footprint in bytes;
+            omitted from the output when None.
     """
     console.print("[bold]Database Status[/bold]")
-    console.print(f"  Total chunks: {stats['total_chunks']}")
-    console.print(f"  Unique sources: {stats['unique_sources']}")
-    console.print(f"  Database: {stats['database']}")
-    console.print(f"  Collection: {stats['collection']}")
+    if stats is None:
+        console.print(
+            "  [yellow]Statistics unavailable (database could not be read)[/yellow]"
+        )
+    else:
+        console.print(f"  Total chunks: {stats['total_chunks']}")
+        console.print(f"  Unique sources: {stats['unique_sources']}")
+        console.print(f"  Database: {stats['database']}")
+        console.print(f"  Collection: {stats['collection']}")
+    if connection_status is not None:
+        color = "green" if connection_status == "reachable" else "red"
+        console.print(f"  Connection: [{color}]{connection_status}[/{color}]")
+    if storage_size_bytes is not None:
+        console.print(f"  Storage size (approx.): {_format_bytes(storage_size_bytes)}")
 
 
 def display_health_status(status: HealthStatus) -> None:

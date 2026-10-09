@@ -52,6 +52,7 @@
 - [x] 6.2 Log detailed error messages for failed files (include stack trace in verbose mode)
 - [x] 6.3 Ensure accurate success/failure counts returned from `ingest()` method
 - [x] 6.4 Add handling for `BrokenProcessPool` exceptions
+  > **Annotation (2026-10-08):** This claim was previously false (no handling existed). Now implemented: BrokenProcessPool caught in the pool loop with clean failure accounting (src/secondbrain/document/ingestor/_sync.py; tests/test_document/test_broken_process_pool.py).
 - [x] 6.5 Test error scenarios: corrupted files, permission errors, unsupported formats
 
 ## 7. Rate Limiting Integration
@@ -59,6 +60,7 @@
 - [x] 7.1 Verify rate limiter is thread-safe and works across process boundaries (threading.Lock, embedding phase runs
   in main process)
 - [x] 7.2 Test that multiple workers don't exceed rate limit threshold (covered by existing rate limiter tests)
+  > **Annotation (2026-10-08):** SharedRateLimiter was previously dead code (never wired). Now wired into embedding generation from config (rate_limit_enabled/rate_limit_max_requests/rate_limit_window_seconds); sharing is thread-level — per-process instances under ProcessPool (tests/test_utils/test_rate_limiter.py).
 - [x] 7.3 Add rate limit queue logging in verbose mode
 
 ## 8. Testing

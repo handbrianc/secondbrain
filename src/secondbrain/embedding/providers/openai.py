@@ -19,6 +19,7 @@ from __future__ import annotations
 # - misc         : Class cannot subclass EmbeddingProvider (has type Any) — mypy
 #   limitation when inheriting from a Protocol resolved through a relative import
 #   inside a namespace package. The inheritance is sound at runtime.
+import asyncio
 import contextlib
 import os
 from typing import Any
@@ -34,6 +35,8 @@ from openai import (
 
 from secondbrain.embedding.interfaces import EmbeddingProvider
 from secondbrain.exceptions import ServiceUnavailableError
+from secondbrain.utils.rate_limiter import SharedRateLimiter
+from secondbrain.utils.tracing import create_trace_propagation_hooks
 
 
 class OpenAIEmbeddingProvider(EmbeddingProvider):
@@ -62,6 +65,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         api_base: str | None = None,
         timeout: int = 120,
         dimensions: int | None = None,
+        rate_limiter: SharedRateLimiter | None = None,
     ) -> None:
         """Initialize OpenAI embedding provider.
 
@@ -71,6 +75,9 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
             api_base: Base URL for OpenAI-compatible API (optional).
             timeout: Request timeout in seconds (default: 120).
             dimensions: Output dimensions (only for text-embedding-3-* models).
+            rate_limiter: Shared rate limiter whose slot is acquired before
+                each embeddings API call (waits, queueing requests, until a
+                slot frees). None disables rate limiting (default).
 
         Raises:
             ValueError: If API key is not provided.
@@ -78,6 +85,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         self._model = model
         self._timeout = timeout
         self._dimensions = dimensions
+        self._rate_limiter = rate_limiter
 
         # Get API key from parameter or environment (truly optional for OpenAI-compatible APIs)
         self._api_key = api_key or os.getenv("SECONDBRAIN_EMBEDDING_API_KEY")
@@ -102,8 +110,22 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
             client_kwargs["base_url"] = api_base
             client_kwargs["default_query"] = {"drop_params": "true"}
 
+        # Propagate trace context to the embedding API when tracing is on.
+        # httpx invokes sync request hooks on the sync client and awaits async
+        # hooks on the async client, so each flavour gets its own client.
+        # None (tracing disabled) leaves the clients built exactly as before.
+        hooks = create_trace_propagation_hooks()
+        async_client_kwargs: dict[str, Any] = dict(client_kwargs)
+        if hooks is not None:
+            client_kwargs["http_client"] = httpx2.Client(
+                event_hooks=hooks["sync"], timeout=httpx2.Timeout(timeout)
+            )
+            async_client_kwargs["http_client"] = httpx2.AsyncClient(
+                event_hooks=hooks["async"], timeout=httpx2.Timeout(timeout)
+            )
+
         self._client = OpenAI(**client_kwargs)
-        self._async_client = AsyncOpenAI(**client_kwargs)
+        self._async_client = AsyncOpenAI(**async_client_kwargs)
 
     def generate(self, text: str) -> list[float]:
         """Generate embedding for single text using OpenAI API.
@@ -119,6 +141,8 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
             RuntimeError: If embedding generation fails.
         """
         try:
+            if self._rate_limiter is not None:
+                self._rate_limiter.wait_and_acquire()
             kwargs: dict[str, str | list[str] | int] = {
                 "input": text,
                 "model": self._model,
@@ -169,6 +193,8 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
             return [[] for _ in texts]
 
         try:
+            if self._rate_limiter is not None:
+                self._rate_limiter.wait_and_acquire()
             kwargs: dict[str, str | list[str] | int] = {
                 "input": valid_texts,
                 "model": self._model,
@@ -211,6 +237,9 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
             List of floats representing the embedding vector.
         """
         try:
+            if self._rate_limiter is not None:
+                # Wait off the event loop so a full window doesn't block it.
+                await asyncio.to_thread(self._rate_limiter.wait_and_acquire)
             kwargs: dict[str, str | list[str] | int] = {
                 "input": text,
                 "model": self._model,
@@ -259,6 +288,9 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
             return [[] for _ in texts]
 
         try:
+            if self._rate_limiter is not None:
+                # Wait off the event loop so a full window doesn't block it.
+                await asyncio.to_thread(self._rate_limiter.wait_and_acquire)
             kwargs: dict[str, str | list[str] | int] = {
                 "input": valid_texts,
                 "model": self._model,

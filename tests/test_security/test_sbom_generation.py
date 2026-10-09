@@ -1,4 +1,10 @@
-"""Tests for SBOM generation using CycloneDX."""
+"""Tests for SBOM generation using CycloneDX.
+
+These tests exercise the *invocation plumbing* against a canned cyclonedx-py
+subprocess fixture — they do NOT run the real tool or prove the real pipeline
+works. For real-execution coverage (opt-in, env-gated), see
+test_security_tools_integration.py in this directory.
+"""
 
 import json
 import subprocess

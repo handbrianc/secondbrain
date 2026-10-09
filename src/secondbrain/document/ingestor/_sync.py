@@ -7,10 +7,11 @@ import logging
 import time
 from collections.abc import Callable, Mapping
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from concurrent.futures.process import BrokenProcessPool
 from contextlib import nullcontext
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from secondbrain.config import config
@@ -31,6 +32,9 @@ from secondbrain.exceptions import DocumentExtractionError
 from secondbrain.storage import StorageFactory
 from secondbrain.utils.embedding_cache import EmbeddingCache
 from secondbrain.utils.tracing import trace_operation
+
+if TYPE_CHECKING:
+    from docling.document_converter import DocumentConverter
 
 logger = logging.getLogger(__name__)
 
@@ -119,9 +123,33 @@ class DocumentIngestor:
         logging.getLogger("RapidOCR").setLevel(logging.ERROR)
         logging.getLogger("docling").setLevel(logging.WARNING)
 
-        from secondbrain.document.docling_factory import get_shared_converter
+        # The converter itself is built lazily on first access (see the
+        # ``converter`` property below): building it pulls in torch and
+        # transformers (multi-second import chain), which construction-time
+        # instantiation forced onto every caller — including test paths that
+        # never convert anything. Config/docling errors therefore surface at
+        # first access instead of __init__.
+        self._converter: DocumentConverter | None = None
 
-        self.converter = get_shared_converter()
+    @property
+    def converter(self) -> DocumentConverter:
+        """The shared docling converter, built on first access.
+
+        Delegates to :func:`get_shared_converter` (whose singleton is
+        race-safe), so repeated accesses — including from concurrent pool
+        workers in-process — return the same cached converter. Assignment is
+        supported for test/advanced injection.
+        """
+        if self._converter is None:
+            from secondbrain.document.docling_factory import get_shared_converter
+
+            self._converter = get_shared_converter()
+        return self._converter
+
+    @converter.setter
+    def converter(self, value: DocumentConverter) -> None:
+        """Inject a specific converter (used by tests/advanced callers)."""
+        self._converter = value
 
     def _validate_file_path(self, path: Path) -> None:
         """Validate file path for security.
@@ -849,162 +877,230 @@ class DocumentIngestor:
             max_workers = 1
 
         manager_cm = manager if manager is not None else nullcontext()
-        with (
-            trace_operation("ingest_thread_progress") as span,
-            executor_cls(max_workers=max_workers) as executor,
-            manager_cm,
-        ):
-            if span:
-                span.set_attribute("ingestion.files_total", len(files))
-                span.set_attribute("ingestion.max_workers", max_workers)
-                span.set_attribute("ingestion.pool", pool)
 
-            # Workers run in child processes for the process pool, so the embedded
-            # thread-local embedding cache (Todo 3) cannot cross the boundary and is
-            # passed as None (each child re-initializes its own empty cache). The
-            # progress queue IS picklable and is shared across both pools.
-            # skip_existing and scrape_ok travel positionally (plain bools pickle
-            # fine) so the worker signature keeps a single call shape.
-            def worker_args(f: Path) -> tuple[Any, Any, Any, Any, Any, Any, Any, Any]:
-                return (
-                    str(f),
-                    self.chunk_size,
-                    self.chunk_overlap,
-                    progress_queue,
-                    embedding_model_name,
-                    self.embedding_cache if not use_process else None,
-                    skip_existing,
-                    scrape_ok,
-                )
+        # Set when the process pool dies mid-batch (worker segfault / OOM kill):
+        # the drain loop bails out and the pool-level handler below fails every
+        # still-unaccounted file with one clear reason.
+        pool_broken: BrokenProcessPool | None = None
+        futures: dict[Any, Path] = {}
+        # Files already accounted (success/failed/skipped), used by the
+        # pool-broken handler to find what is still in flight.
+        processed_files: set[str] = set()
 
-            futures = {
-                executor.submit(
-                    _extract_chunk_and_embed_file,
-                    *worker_args(f),
-                ): f
-                for f in files
-            }
+        try:
+            with (
+                trace_operation("ingest_thread_progress") as span,
+                executor_cls(max_workers=max_workers) as executor,
+                manager_cm,
+            ):
+                if span:
+                    span.set_attribute("ingestion.files_total", len(files))
+                    span.set_attribute("ingestion.max_workers", max_workers)
+                    span.set_attribute("ingestion.pool", pool)
 
-            completed = 0
-            pending_futures = dict(futures)
+                # Workers run in child processes for the process pool, so the embedded
+                # thread-local embedding cache (Todo 3) cannot cross the boundary and is
+                # passed as None (each child re-initializes its own empty cache). The
+                # progress queue IS picklable and is shared across both pools.
+                # skip_existing and scrape_ok travel positionally (plain bools pickle
+                # fine) so the worker signature keeps a single call shape.
+                def worker_args(
+                    f: Path,
+                ) -> tuple[Any, Any, Any, Any, Any, Any, Any, Any]:
+                    return (
+                        str(f),
+                        self.chunk_size,
+                        self.chunk_overlap,
+                        progress_queue,
+                        embedding_model_name,
+                        self.embedding_cache if not use_process else None,
+                        skip_existing,
+                        scrape_ok,
+                    )
 
-            while pending_futures:
-                self._drain_progress_queue(progress_queue)
-
-                done_futures = []
                 try:
-                    for future in as_completed(pending_futures, timeout=0.2):
-                        file_path = futures[future]
-                        try:
-                            result = future.result(timeout=300)
-                            self._drain_progress_queue(progress_queue)
+                    futures = {
+                        executor.submit(
+                            _extract_chunk_and_embed_file,
+                            *worker_args(f),
+                        ): f
+                        for f in files
+                    }
+                except BrokenProcessPool as exc:
+                    # Pool already dead when submitting: nothing can run. Skip
+                    # the drain loop; the pool-level handler below accounts for
+                    # every file with one clear reason.
+                    pool_broken = exc
 
-                            if not result["success"]:
-                                error_msg = result.get("error", "Unknown error")
+                completed = 0
+                pending_futures = dict(futures)
+
+                while pending_futures:
+                    self._drain_progress_queue(progress_queue)
+
+                    done_futures = []
+                    try:
+                        for future in as_completed(pending_futures, timeout=0.2):
+                            file_path = futures[future]
+                            try:
+                                result = future.result(timeout=300)
+                                self._drain_progress_queue(progress_queue)
+
+                                if not result["success"]:
+                                    error_msg = result.get("error", "Unknown error")
+                                    logger.error(
+                                        "Failed to process %s: %s",
+                                        file_path,
+                                        error_msg,
+                                    )
+                                    failed_files += 1
+                                    failure_reasons.append((str(file_path), error_msg))
+                                    completed += 1
+                                    processed_files.add(str(file_path))
+                                    if self.progress_callback:
+                                        self.progress_callback(file_path, False)
+                                    done_futures.append(future)
+                                    continue
+
+                                documents = result.get("documents", [])
+                                skipped = result.get("skipped", False)
+                                if skipped and not documents:
+                                    logger.info(
+                                        "All %s chunks for %s were already stored; "
+                                        "skipping embed/store",
+                                        result.get("extracted_chunks", "?"),
+                                        file_path,
+                                    )
+                                    skipped_files += 1
+                                    successful_files += 1
+                                    completed += 1
+                                    processed_files.add(str(file_path))
+                                    if self.progress_callback:
+                                        self.progress_callback(file_path, True)
+                                    done_futures.append(future)
+                                    continue
+
+                                if not documents:
+                                    reason = "No documents produced (file may be empty, image-only, or extraction failed)"
+                                    logger.warning(
+                                        "No documents produced from %s", file_path
+                                    )
+                                    failed_files += 1
+                                    failure_reasons.append((str(file_path), reason))
+                                    completed += 1
+                                    processed_files.add(str(file_path))
+                                    if self.progress_callback:
+                                        self.progress_callback(file_path, False)
+                                    done_futures.append(future)
+                                    continue
+
+                                n_batches = (
+                                    len(documents) + MAX_MEMORY_BATCH_SIZE - 1
+                                ) // MAX_MEMORY_BATCH_SIZE
+                                self._safe_phase_progress(
+                                    file_path, "store", 0, n_batches
+                                )
+                                for i in range(
+                                    0, len(documents), MAX_MEMORY_BATCH_SIZE
+                                ):
+                                    batch = documents[i : i + MAX_MEMORY_BATCH_SIZE]
+                                    with trace_operation("storage.store") as span:
+                                        if span is not None:
+                                            span.set_attribute(
+                                                "storage.documents_stored", len(batch)
+                                            )
+                                        start = time.time()
+                                        storage.store_batch(batch)
+                                        elapsed_ms = (time.time() - start) * 1000
+                                        if span is not None:
+                                            span.set_attribute(
+                                                "storage.duration_ms", elapsed_ms
+                                            )
+                                    self._safe_phase_progress(
+                                        file_path,
+                                        "store",
+                                        i // MAX_MEMORY_BATCH_SIZE + 1,
+                                        n_batches,
+                                    )
+
+                                logger.info(
+                                    "Stored %d chunks for %s", len(documents), file_path
+                                )
+                                successful_files += 1
+                                completed += 1
+                                processed_files.add(str(file_path))
+                                if self.progress_callback:
+                                    self.progress_callback(file_path, True)
+                                done_futures.append(future)
+
+                            except BrokenProcessPool as exc:
+                                # A worker process died (segfault / OOM kill):
+                                # the whole pool is dead and every other pending
+                                # future would report the same failure. Bail out
+                                # of both loops so the pool-level handler below
+                                # fails each still-unaccounted file exactly once
+                                # with a clear reason instead of per-future noise.
+                                pool_broken = exc
+                                break
+                            except Exception as e:
+                                self._drain_progress_queue(progress_queue)
+                                error_msg = f"{type(e).__name__}: {e}"
                                 logger.error(
-                                    "Failed to process %s: %s",
+                                    "Unexpected error processing file %s: %s",
                                     file_path,
                                     error_msg,
                                 )
                                 failed_files += 1
                                 failure_reasons.append((str(file_path), error_msg))
                                 completed += 1
+                                processed_files.add(str(file_path))
                                 if self.progress_callback:
                                     self.progress_callback(file_path, False)
                                 done_futures.append(future)
-                                continue
+                    except TimeoutError:
+                        logger.debug(
+                            "as_completed poll timeout; %d futures still pending",
+                            len(pending_futures) - len(done_futures),
+                        )
 
-                            documents = result.get("documents", [])
-                            skipped = result.get("skipped", False)
-                            if skipped and not documents:
-                                logger.info(
-                                    "All %s chunks for %s were already stored; "
-                                    "skipping embed/store",
-                                    result.get("extracted_chunks", "?"),
-                                    file_path,
-                                )
-                                skipped_files += 1
-                                successful_files += 1
-                                completed += 1
-                                if self.progress_callback:
-                                    self.progress_callback(file_path, True)
-                                done_futures.append(future)
-                                continue
+                    for future in done_futures:
+                        del pending_futures[future]
 
-                            if not documents:
-                                reason = "No documents produced (file may be empty, image-only, or extraction failed)"
-                                logger.warning(
-                                    "No documents produced from %s", file_path
-                                )
-                                failed_files += 1
-                                failure_reasons.append((str(file_path), reason))
-                                completed += 1
-                                if self.progress_callback:
-                                    self.progress_callback(file_path, False)
-                                done_futures.append(future)
-                                continue
+                    if pool_broken is not None:
+                        break
 
-                            n_batches = (
-                                len(documents) + MAX_MEMORY_BATCH_SIZE - 1
-                            ) // MAX_MEMORY_BATCH_SIZE
-                            self._safe_phase_progress(file_path, "store", 0, n_batches)
-                            for i in range(0, len(documents), MAX_MEMORY_BATCH_SIZE):
-                                batch = documents[i : i + MAX_MEMORY_BATCH_SIZE]
-                                with trace_operation("storage.store") as span:
-                                    if span is not None:
-                                        span.set_attribute(
-                                            "storage.documents_stored", len(batch)
-                                        )
-                                    start = time.time()
-                                    storage.store_batch(batch)
-                                    elapsed_ms = (time.time() - start) * 1000
-                                    if span is not None:
-                                        span.set_attribute(
-                                            "storage.duration_ms", elapsed_ms
-                                        )
-                                self._safe_phase_progress(
-                                    file_path,
-                                    "store",
-                                    i // MAX_MEMORY_BATCH_SIZE + 1,
-                                    n_batches,
-                                )
+                    if pending_futures and not done_futures:
+                        time.sleep(0.01)
 
-                            logger.info(
-                                "Stored %d chunks for %s", len(documents), file_path
-                            )
-                            successful_files += 1
-                            completed += 1
-                            if self.progress_callback:
-                                self.progress_callback(file_path, True)
-                            done_futures.append(future)
+                self._drain_progress_queue(progress_queue)
+        except BrokenProcessPool as exc:
+            # Belt-and-braces: any BrokenProcessPool that escapes the pool loop
+            # (e.g. raised by executor shutdown) is converted into clean failure
+            # accounting instead of crashing the whole ingest.
+            pool_broken = exc
 
-                        except Exception as e:
-                            self._drain_progress_queue(progress_queue)
-                            error_msg = f"{type(e).__name__}: {e}"
-                            logger.error(
-                                "Unexpected error processing file %s: %s",
-                                file_path,
-                                error_msg,
-                            )
-                            failed_files += 1
-                            failure_reasons.append((str(file_path), error_msg))
-                            completed += 1
-                            if self.progress_callback:
-                                self.progress_callback(file_path, False)
-                            done_futures.append(future)
-                except TimeoutError:
-                    logger.debug(
-                        "as_completed poll timeout; %d futures still pending",
-                        len(pending_futures) - len(done_futures),
+        if pool_broken is not None:
+            remaining = [f for f in files if str(f) not in processed_files]
+            logger.error(
+                "Ingestion worker pool crashed (%s: %s); %d in-flight file(s) "
+                "marked failed, %d already-collected result(s) kept.",
+                type(pool_broken).__name__,
+                pool_broken,
+                len(remaining),
+                len(files) - len(remaining),
+            )
+            for f in remaining:
+                failed_files += 1
+                failure_reasons.append(
+                    (
+                        str(f),
+                        "BrokenProcessPool: worker process crashed mid-batch; "
+                        "file was in flight when the pool died",
                     )
-
-                for future in done_futures:
-                    del pending_futures[future]
-
-                if pending_futures and not done_futures:
-                    time.sleep(0.01)
-
-            self._drain_progress_queue(progress_queue)
+                )
+                processed_files.add(str(f))
+                if self.progress_callback:
+                    self.progress_callback(f, False)
 
         return successful_files, failed_files, failure_reasons, skipped_files
 

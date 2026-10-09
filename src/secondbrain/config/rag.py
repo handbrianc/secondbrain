@@ -60,7 +60,7 @@ class RagMixin:
     )
 
     @model_validator(mode="after")
-    def validate_rag_scoped_threshold_below_global(self) -> "RagMixin":
+    def validate_rag_scoped_threshold_below_global(self) -> RagMixin:
         """Validate the scoped threshold is compatible with the global one.
 
         When not explicitly configured, the scoped threshold follows a lower
@@ -134,7 +134,7 @@ class RagMixin:
             "7. Read ALL chunks in the context - important information might be in any of them.\n"
             "8. For questions about system architecture or components, list the SPECIFIC component names mentioned in the context (e.g., 'CLI Interface', 'Ingestor', 'Embedding Engine', not just 'Components').\n"
             "9. When the question asks for a SPECIFIC VALUE (like a model name, version number, configuration value, etc.), you MUST include the exact value from the context in your answer.\n"
-            "10. NEVER generalize or omit specific values - if the context says 'all-MiniLM-L6-v2', your answer must include 'all-MiniLM-L6-v2'.\n"
+            "10. NEVER generalize or omit specific values - if the context says 'text-embedding-3-small', your answer must include 'text-embedding-3-small'.\n"
             "11. Provide a detailed, substantial answer. Be expansive rather than brief: develop each point with explanation, concrete details, and relevant examples drawn from the context. Prefer a multi-paragraph, essay-style answer over a short one; write at length and only compress when the question is truly trivial (a yes/no or single-value lookup).\n"
             "12. When the question asks to summarize or list chapters, sections, or parts\n"
             "    (e.g. 'summarize by chapter', 'list all sections'), you MUST enumerate\n"

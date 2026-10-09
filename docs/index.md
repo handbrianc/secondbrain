@@ -56,4 +56,4 @@ SecondBrain supports a wide variety of document formats:
 
 ## License
 
-SecondBrain is released under the MIT License. See the [license](../LICENSE.md) page for full terms and conditions.
+SecondBrain is released under the MIT License. See the [license](license.md) page for full terms and conditions.

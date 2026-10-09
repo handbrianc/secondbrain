@@ -24,6 +24,7 @@ class TestEmbeddingProviderFactoryCreateFromConfig:
         mock_cfg.embedding_api_key = "sk-test-key"
         mock_cfg.embedding_api_base = "https://api.openai.com/v1"
         mock_cfg.embedding_dimensions = 1536
+        mock_cfg.rate_limit_enabled = False
 
         # OpenAIEmbeddingProvider is lazily imported inside create_from_config,
         # so we patch it at the source module where it lives.
@@ -41,6 +42,7 @@ class TestEmbeddingProviderFactoryCreateFromConfig:
             api_base="https://api.openai.com/v1",
             dimensions=1536,
             timeout=ANY,
+            rate_limiter=None,
         )
 
     def test_create_openai_provider_without_api_base(self) -> None:
@@ -53,6 +55,7 @@ class TestEmbeddingProviderFactoryCreateFromConfig:
         mock_cfg.embedding_api_key = "sk-test-key"
         mock_cfg.embedding_api_base = None
         mock_cfg.embedding_dimensions = 1536
+        mock_cfg.rate_limit_enabled = False
 
         with patch(
             "secondbrain.embedding.providers.openai.OpenAIEmbeddingProvider"
@@ -85,6 +88,7 @@ class TestEmbeddingProviderFactoryCreateFromConfig:
         mock_cfg.embedding_api_key = None
         mock_cfg.embedding_api_base = None
         mock_cfg.embedding_dimensions = None
+        mock_cfg.rate_limit_enabled = False
 
         with patch(
             "secondbrain.embedding.providers.openai.OpenAIEmbeddingProvider"
@@ -124,6 +128,7 @@ class TestEmbeddingProviderFactoryCreateOpenAI:
             mock_cfg.embedding_api_key = "sk-env-key"
             mock_cfg.embedding_api_base = "https://api.openai.com/v1"
             mock_cfg.embedding_dimensions = 768
+            mock_cfg.rate_limit_enabled = False
             mock_get_config.return_value = mock_cfg
 
             with patch(
@@ -146,6 +151,7 @@ class TestEmbeddingProviderFactoryCreateOpenAI:
             api_base="https://custom.example.com/v1",
             dimensions=1024,
             timeout=ANY,
+            rate_limiter=None,
         )
 
     def test_create_openai_no_args_uses_config_defaults(self) -> None:
@@ -158,6 +164,7 @@ class TestEmbeddingProviderFactoryCreateOpenAI:
             mock_cfg.embedding_api_key = "sk-config-default"
             mock_cfg.embedding_api_base = None
             mock_cfg.embedding_dimensions = 1536
+            mock_cfg.rate_limit_enabled = False
             mock_get_config.return_value = mock_cfg
 
             with patch(
@@ -175,6 +182,7 @@ class TestEmbeddingProviderFactoryCreateOpenAI:
             api_base=None,
             dimensions=1536,
             timeout=ANY,
+            rate_limiter=None,
         )
 
 

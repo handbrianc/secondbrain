@@ -48,27 +48,10 @@ from secondbrain.exceptions import (
 # Memory management constant (was previously in __init__.py directly)
 MAX_MEMORY_BATCH_SIZE = 100
 
-
-# Deferred MPS patch — avoids import side-effect at module load time
-def _deferred_patch_transformers() -> None:
-    if not hasattr(_deferred_patch_transformers, "_applied"):
-        from secondbrain.utils.mps_patch import patch_transformers_for_mps
-
-        patch_transformers_for_mps()
-        _deferred_patch_transformers._applied = True  # type: ignore[attr-defined]
-
-
-# Trigger MPS patch lazily when accessing any public entrypoint
-def __getattr__(name: str) -> object:
-    if name in (
-        "DocumentIngestor",
-        "AsyncDocumentIngestor",
-        "is_supported",
-        "get_file_type",
-        "SUPPORTED_EXTENSIONS",
-    ):
-        _deferred_patch_transformers()
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+# NOTE: The transformers MPS patch is applied by the docling factory on the
+# converter's first pipeline initialization (see
+# ``docling_factory._install_pdf_conversion_hooks``), not at import time —
+# this keeps torch/transformers out of the import path entirely.
 
 
 __all__ = [

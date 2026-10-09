@@ -2,6 +2,15 @@
 
 This module provides a rate limiter that can be shared across threads
 using threading primitives for shared state.
+
+Sharing scope: ``SharedRateLimiter`` synchronises its sliding window with
+``threading.Lock``, so a shared instance is shared across *threads within
+one process*. The process-wide instance handed out by
+:func:`get_shared_rate_limiter` is created per process — when embedding
+generation runs inside ``ProcessPoolExecutor`` workers, each worker process
+naturally holds its own limiter instance (no cross-process shared state).
+Rate limiting is opt-in via the ``rate_limit_enabled`` configuration
+setting (default ``False``).
 """
 
 from __future__ import annotations
@@ -123,3 +132,49 @@ class SharedRateLimiter:
                 self._timestamps.popleft()
 
             return max(0, self._max_requests - len(self._timestamps))
+
+
+_shared_limiter: SharedRateLimiter | None = None
+_shared_limiter_lock = threading.Lock()
+
+
+def get_shared_rate_limiter(
+    max_requests: int = 100, window_seconds: float = 60.0
+) -> SharedRateLimiter:
+    """Return the process-wide shared rate limiter, creating it on first use.
+
+    The first call creates the limiter with the given parameters; every
+    subsequent call in the same process returns that same instance, so all
+    threads (and all embedding provider instances) share one sliding window.
+    Parameters from the first call win — later calls with different values
+    still return the existing instance.
+
+    Each process has its own instance: under a process pool, every worker
+    holds an independent limiter (thread-level sharing only).
+
+    Args:
+        max_requests: Maximum requests allowed in window (first call only).
+        window_seconds: Time window in seconds (first call only).
+
+    Returns
+    -------
+        The process-wide SharedRateLimiter instance.
+    """
+    global _shared_limiter
+    if _shared_limiter is None:
+        with _shared_limiter_lock:
+            if _shared_limiter is None:
+                _shared_limiter = SharedRateLimiter(
+                    max_requests=max_requests, window_seconds=window_seconds
+                )
+    return _shared_limiter
+
+
+def reset_shared_rate_limiter() -> None:
+    """Drop the process-wide shared limiter so the next call creates a fresh one.
+
+    Intended for tests and re-initialisation after configuration changes.
+    """
+    global _shared_limiter
+    with _shared_limiter_lock:
+        _shared_limiter = None

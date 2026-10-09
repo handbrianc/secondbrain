@@ -187,7 +187,7 @@ where = ["src"]
 
 [tool.ruff]
 line-length = 88
-target-version = "py313"
+target-version = "py314"  # matches requires-python/mypy (ruff 0.16.8 supports py314; verified via `ruff check --target-version py314`)
 
 [tool.ruff.format]
 quote-style = "double"
@@ -283,7 +283,8 @@ ignore = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--timeout=120 -p no:warnings --dist=loadfile -n auto --cov=secondbrain --cov-report=term-missing --cov-report=html --reruns=0 --cov-config=.coveragerc"
+pythonpath = ["src"]
+addopts = "--timeout=120 -p no:warnings --dist=loadfile -n auto --reruns=0 -m 'not chaos'"  # chaos tests are opt-in (run with -m chaos); a CLI -m overrides this default. Coverage is intentionally NOT in addopts: it is a CI gate (test-quality-gates.yml supplies --cov* flags), and per-run coverage tracing costs ~5s — pass --cov explicitly when needed.
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 markers = [

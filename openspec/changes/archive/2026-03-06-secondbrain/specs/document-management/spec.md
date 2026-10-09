@@ -61,6 +61,8 @@ The system SHALL delete documents and chunks from the database.
 
 #### Scenario: Delete with filter
 
+> **Annotation (2026-10-08):** Now implemented — `delete --file-type` (src/secondbrain/cli/search.py, Deleter.delete(file_type=...)); accepts extensions and category aliases.
+
 - **WHEN** user runs `secondbrain delete --file-type pdf`
 - **THEN** system removes all PDF document chunks
 
@@ -75,6 +77,8 @@ The system SHALL delete documents and chunks from the database.
 The system SHALL provide database statistics and health information.
 
 #### Scenario: Show statistics
+
+> **Annotation (2026-10-08):** Storage size (approximate) and connection status now shown by `status` (StatusChecker.connection_status / estimate_storage_size, src/secondbrain/management/__init__.py).
 
 - **WHEN** user runs `secondbrain status`
 - **THEN** system shows:

@@ -9,10 +9,12 @@ Covers the behavioral contract of :func:`get_shared_converter`:
   intact in this process) verifying the cached OCR converter config.
 """
 
+import os
 import subprocess
 import sys
 import threading
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -119,7 +121,14 @@ def test_concurrent_callers_get_same_object() -> None:
     assert all(r is results[0] for r in results), "converter was double-built"
 
 
+_repo_src = str(Path(__file__).resolve().parents[2] / "src")
+
+
 @pytest.mark.slow
+@pytest.mark.skipif(
+    not os.environ.get("SECONDBRAIN_RUN_DOCLING_TESTS"),
+    reason="real docling subprocess test (set SECONDBRAIN_RUN_DOCLING_TESTS=1)",
+)
 def test_shared_converter_builds_real_cached_ocr_converter() -> None:
     """Real docling builds a cached OCR converter, verified in a subprocess.
 
@@ -155,5 +164,53 @@ def test_shared_converter_builds_real_cached_ocr_converter() -> None:
     )
     assert proc.returncode == 0, (
         f"real-converter check failed:\n{proc.stdout}\n{proc.stderr}"
+    )
+    assert "OK" in proc.stdout
+
+
+def test_converter_build_defers_torch_and_transformers_to_pipeline_init() -> None:
+    """Building a converter must not import torch/transformers (subprocess).
+
+    Verifies the deferred RT-DETR patch hooks installed by
+    ``_install_pdf_conversion_hooks``: converter construction imports neither
+    torch nor transformers and does not apply the MPS patch; the first
+    ``_get_pipeline`` call applies it exactly once. Docling is stubbed so the
+    subprocess stays fast and the session's stubs are untouched.
+    """
+    code = (
+        "import sys\n"
+        "from unittest.mock import MagicMock\n"
+        "for name in (\n"
+        "    'docling', 'docling.datamodel', 'docling.datamodel.settings',\n"
+        "    'docling.datamodel.accelerator_options',\n"
+        "    'docling.datamodel.base_models',\n"
+        "    'docling.datamodel.pipeline_options',\n"
+        "    'docling.document_converter',\n"
+        "    'docling.utils', 'docling.utils.accelerator_utils',\n"
+        "):\n"
+        "    sys.modules.setdefault(name, MagicMock())\n"
+        "import secondbrain.utils.mps_patch as mps_patch\n"
+        "calls: list[int] = []\n"
+        "mps_patch.patch_transformers_for_mps = lambda: calls.append(1)\n"
+        "from secondbrain.document.docling_factory import _build_docling_converter\n"
+        "conv = _build_docling_converter(do_ocr=True, do_table_structure=True)\n"
+        "assert 'torch' not in sys.modules, 'torch imported at converter build'\n"
+        "assert 'transformers' not in sys.modules, 'transformers imported at build'\n"
+        "assert calls == [], 'patch applied at converter build time'\n"
+        "conv._get_pipeline()\n"
+        "assert len(calls) == 1, f'patch hook fired {len(calls)} times, expected 1'\n"
+        "conv._get_pipeline()\n"
+        "assert len(calls) == 1, 'patch re-applied on second pipeline init'\n"
+        "print('OK')\n"
+    )
+    proc = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        env={**os.environ, "PYTHONPATH": str(_repo_src)},
+    )
+    assert proc.returncode == 0, (
+        f"deferred-patch check failed:\n{proc.stdout}\n{proc.stderr}"
     )
     assert "OK" in proc.stdout

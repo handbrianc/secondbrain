@@ -27,6 +27,8 @@ class TestStatusHealthMetrics:
                 "database": "secondbrain_test",
                 "collection": "chunks",
             }
+            mock_checker.connection_status.return_value = "reachable"
+            mock_checker.estimate_storage_size.return_value = 150 * 6144
             mock_checker_class.return_value.__enter__ = MagicMock(
                 return_value=mock_checker
             )
@@ -40,6 +42,35 @@ class TestStatusHealthMetrics:
             assert "Unique sources: 12" in result.output
             assert "Database: secondbrain" in result.output
             assert "Collection: chunks" in result.output
+            assert "Connection: reachable" in result.output
+            assert "Storage size (approx.):" in result.output
+            mock_checker.estimate_storage_size.assert_called_once_with(150)
+
+    def test_status_unreachable_backend_is_graceful(self) -> None:
+        """Test status command handles an offline backend gracefully.
+
+        get_status() failure must not crash the command: the connection
+        indicator is shown with an explicit 'unavailable' note and exit code 0.
+        """
+        runner = CliRunner()
+
+        with patch("secondbrain.management.StatusChecker") as mock_checker_class:
+            mock_checker = MagicMock()
+            mock_checker.get_status.side_effect = ConnectionError("backend down")
+            mock_checker.connection_status.return_value = "unreachable"
+            mock_checker_class.return_value.__enter__ = MagicMock(
+                return_value=mock_checker
+            )
+            mock_checker_class.return_value.__exit__ = MagicMock(return_value=False)
+
+            result = runner.invoke(cli, ["status"])
+
+            assert result.exit_code == 0
+            assert "Database Status" in result.output
+            assert "Statistics unavailable" in result.output
+            assert "Connection: unreachable" in result.output
+            assert "Storage size" not in result.output
+            mock_checker.estimate_storage_size.assert_not_called()
 
     def test_health_json_output(self) -> None:
         """Test --format json for health check.

@@ -35,6 +35,14 @@ class SearchEmbeddingMixin:
         description="Maximum number of embeddings to cache (0 disables cache)",
     )
 
+    rate_limit_enabled: bool = Field(
+        default=False,
+        description=(
+            "Enable shared rate limiting for embedding API calls (opt-in). "
+            "Uses rate_limit_max_requests and rate_limit_window_seconds."
+        ),
+    )
+
     @field_validator("embedding_cache_size")
     @classmethod
     def validate_embedding_cache_size(cls, v: int) -> int:

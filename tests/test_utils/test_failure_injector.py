@@ -845,7 +845,7 @@ class TestIntegrationScenarios:
             """Execute primary operation with fallback on failure."""
             try:
                 return primary()
-            except (ValueError, CircuitBreakerError):
+            except ValueError, CircuitBreakerError:
                 return fallback()
 
         def failing_primary() -> bool:

@@ -13,7 +13,6 @@ for using OpenAI API as an LLM backend.
 #  kwargs-dict passed to embeddings.create in the embedding provider's twin
 #  module, which has the same stub-gap shape.)
 
-import logging
 import os
 import re
 from difflib import SequenceMatcher
@@ -28,10 +27,11 @@ from openai import (
 )
 
 from secondbrain.exceptions import ServiceUnavailableError
+from secondbrain.logging import get_logger
 
 from ..interfaces import LocalLLMProvider, StreamingCallback
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Degenerate-loop guard: a trailing window that nearly exactly repeats an earlier
 # one means the model is re-uttering itself, not progressing. Applied to both the
@@ -56,6 +56,28 @@ def _is_repeat_window(window: str, seen: list[str], ratio: float) -> bool:
     """Return whether a trailing window nearly exactly duplicates an earlier one."""
     return bool(window) and any(
         SequenceMatcher(None, w, window).ratio() > ratio for w in seen
+    )
+
+
+def _log_token_usage(operation: str, usage: object, model: str) -> None:
+    """Emit one structured token-usage log line when a response carries usage.
+
+    OpenAI-compatible responses report ``usage.prompt_tokens``,
+    ``usage.completion_tokens`` and ``usage.total_tokens``; the fields are
+    logged verbatim (``None`` when the server omitted them) so the record can
+    be asserted or parsed downstream. Streaming endpoints that do not include
+    usage chunks simply produce no log line.
+    """
+    if usage is None:
+        return
+    logger.info(
+        "%s token usage: model=%s prompt_tokens=%s completion_tokens=%s "
+        "total_tokens=%s",
+        operation,
+        model,
+        getattr(usage, "prompt_tokens", None),
+        getattr(usage, "completion_tokens", None),
+        getattr(usage, "total_tokens", None),
     )
 
 
@@ -208,6 +230,9 @@ class OpenAILLMProvider(LocalLLMProvider):
                 extra_body=self._extra_body(),
             )
 
+            _log_token_usage(
+                "completion", getattr(response, "usage", None), self._model
+            )
             return response.choices[0].message.content or ""
 
         except APITimeoutError as e:
@@ -256,6 +281,9 @@ class OpenAILLMProvider(LocalLLMProvider):
                 extra_body=self._extra_body(),
             )
 
+            _log_token_usage(
+                "completion", getattr(response, "usage", None), self._model
+            )
             return response.choices[0].message.content or ""
 
         except APITimeoutError as e:
@@ -364,7 +392,14 @@ class OpenAILLMProvider(LocalLLMProvider):
             good_content = ""
             capped = False
             capped_reason = ""
+            stream_usage: object = None
             for chunk in response:
+                # Some OpenAI-compatible servers append a usage-bearing final
+                # chunk even without ``stream_options``; capture it when present
+                # so streaming responses log token usage too.
+                chunk_usage = getattr(chunk, "usage", None)
+                if chunk_usage is not None:
+                    stream_usage = chunk_usage
                 if chunk.choices and len(chunk.choices) > 0:
                     delta = chunk.choices[0].delta
                     reasoning = getattr(delta, "reasoning_content", None)
@@ -443,6 +478,7 @@ class OpenAILLMProvider(LocalLLMProvider):
                 answer = (prefix[:cut] if cut > 0 else prefix).rstrip()
             else:
                 answer = "".join(accumulated)
+            _log_token_usage("streaming completion", stream_usage, self._model)
             if capped:
                 logger.warning(
                     "Stream halted (%s) reasoning=%s content=%s",
