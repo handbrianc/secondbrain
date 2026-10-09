@@ -47,7 +47,7 @@ The AsyncDocumentIngestor SHALL integrate with AsyncVectorStorage for async data
 
 - **WHEN** storing multiple documents
 - **THEN** store_batch_async() SHALL be used
-- **AND** SHALL use Motor's bulk write operations
+- **AND** it SHALL delegate to the Qdrant-backed store_batch() via asyncio.to_thread (src/secondbrain/storage/qdrant.py), remaining non-blocking from the caller's perspective
 
 ### Requirement: Async context manager support
 

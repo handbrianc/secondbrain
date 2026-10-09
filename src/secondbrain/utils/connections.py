@@ -138,8 +138,16 @@ class ValidatableService:
             self._connection_checked_at = 0.0
 
     def on_service_recovery(self) -> None:
-        """Handle service recovery - clear cached connection state."""
+        """Handle service recovery - clear cached connection state.
+
+        Also resets the circuit breaker (when enabled) back to CLOSED so a
+        service that has come back online is immediately reachable again,
+        per the circuit-breaker spec's "Service recovery clears circuit"
+        scenario.
+        """
         self.invalidate_connection_cache()
+        if self._circuit_breaker_enabled and self._circuit_breaker is not None:
+            self._circuit_breaker.reset()
 
     def validate_connection_with_circuit_breaker(self, force: bool = False) -> bool:
         """Validate connection with circuit breaker protection.

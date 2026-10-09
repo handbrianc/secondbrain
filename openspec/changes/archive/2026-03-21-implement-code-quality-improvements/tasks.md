@@ -31,6 +31,9 @@
 ## 3. Async API Enhancement
 
 - [x] 3.1 Add Motor dependency - Update `pyproject.toml` to include `motor>=3.0.0` for async MongoDB support
+
+  > **Note (2026-10-08):** The `motor` dependency was removed along with the MongoDB → Qdrant migration;
+  > async storage is now Qdrant-backed (`store_batch_async` delegates via `asyncio.to_thread`).
 - [x] 3.2 Create AsyncVectorStorage class - Implement async storage in `storage/storage.py` using Motor client with
   native async/await
 - [x] 3.3 Implement async index wait - Add `_wait_for_index_ready_async()` with proper async index polling
@@ -42,16 +45,27 @@
 - [x] 3.7 Write async tests - Create `tests/test_storage/test_async_storage.py` and
   `tests/test_document/test_async_ingestor.py`
 
+  > **Note (2026-10-08):** These test files were later renamed/consolidated: async storage tests now live in
+  > `tests/test_conversation/test_async_storage.py` (conversation/session async storage), ingestion-related async
+  > tests in `tests/test_document/test_async_ingestion.py` and `tests/test_document/test_async_ingestor_gaps.py`.
+
 ## 4. Structured Logging
 
 - [x] 4.1 Enhance JSONFormatter - Update `logging/__init__.py` to include service, hostname, pid, version, and
   request_id in JSON output
+  > **Annotation (2026-10-08):** The service/hostname/pid/version fields were previously missing. Now implemented in the production JSONFormatter (module-level, importable; src/secondbrain/logging/__init__.py) with tests importing the real formatter.
 - [x] 4.2 Add environment config - Implement SECONDBRAIN_LOG_LEVEL, SECONDBRAIN_LOG_FORMAT, SECONDBRAIN_LOG_FILE
   environment variable support
 - [x] 4.3 Add rotating file handler - Support configurable rotating file handlers for production logging
 - [x] 4.4 Create request context manager - Add `RequestContext` context manager for automatic request ID lifecycle
   management
+
+  > **Note (2026-10-08):** Shipped as module-level contextvar functions `set_request_id()` / `get_request_id()`
+  > (`src/secondbrain/logging/__init__.py:64-74`), not a `RequestContext` context-manager class.
 - [x] 4.5 Add custom log levels - Implement SUCCESS and PERFORMANCE custom log levels for better observability
+
+  > **Note (2026-10-08):** Not shipped — the logging module provides only standard levels; no SUCCESS or
+  > PERFORMANCE custom levels exist in `src/secondbrain/logging/`.
 - [x] 4.6 Write logging tests - Create `tests/test_logging/test_structured_logging.py` with JSON output validation
 
 ## 5. API Documentation
@@ -105,6 +119,9 @@
 - [x] 9.2 Add pip-audit - Add `pip-audit` to dev dependencies and document usage in README
 - [x] 9.3 Create requirements-dev.txt - Generate `requirements-dev.txt` with pinned versions of all dev dependencies
 - [x] 9.4 Document version rationale - Update `DEPENDENCIES.md` with version bound rationale and compatibility notes
+
+  > **Note (2026-10-08):** `DEPENDENCIES.md` was never created; version-bound rationale lives in `pyproject.toml`
+  > inline comments and a pipdeptree-based CI dependency check (being added).
 - [x] 9.5 Generate initial SBOM - Run `cyclonedx-py environment > sbom.json` to create initial software bill of
   materials
 - [x] 9.6 Add security scan script - Create `scripts/security_scan.sh` for running pip-audit and cyclonedx checks

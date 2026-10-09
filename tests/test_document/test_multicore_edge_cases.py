@@ -58,7 +58,7 @@ class TestWorkerPickling:
             pickled = pickle.dumps(_extract_and_chunk_file)
             unpickled = pickle.loads(pickled)
             assert unpickled is not None
-        except (pickle.PicklingError, AttributeError):
+        except pickle.PicklingError, AttributeError:
             # Some functions may not be picklable depending on implementation
             # This is a known limitation of multiprocessing
             pytest.skip("Function pickling not supported in this environment")

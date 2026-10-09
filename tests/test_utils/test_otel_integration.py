@@ -409,48 +409,114 @@ class TestOTELEndToEnd:
             == child_span.get_span_context().trace_id
         )
 
-    def test_metrics_actually_exported(self):
-        """Metrics are collected and can be retrieved.
+    def test_metrics_actually_exported(self, monkeypatch):
+        """record_operation drives the real spec-named instruments.
 
-        Verifies that:
-        - secondbrain.operations.count metric is incremented
-        - secondbrain.operations.duration histogram records values
-        - secondbrain.errors.count metric is incremented
+        Verifies, via an in-memory metric reader, that the REAL
+        record_operation (secondbrain.utils.tracing) records:
+        - secondbrain_operations counter increments with the operation label
+        - secondbrain_operation_duration_ms histogram records the duration
+        - secondbrain_errors counter increments on failure only
         """
-        # Get meter
-        meter = metrics.get_meter(__name__)
+        from opentelemetry.sdk.metrics.export import Histogram, Sum
 
-        # Create metrics (these should match the ones in setup_tracing)
-        operations_counter = meter.create_counter("secondbrain.operations.count")
-        duration_histogram = meter.create_histogram("secondbrain.operations.duration")
-        errors_counter = meter.create_counter("secondbrain.errors.count")
+        from secondbrain.utils import tracing as tracing_mod
 
-        # Record some metrics
-        operations_counter.add(1, {"operation": "ingest"})
-        operations_counter.add(1, {"operation": "search"})
+        meter = metrics.get_meter("secondbrain.tracing.record_operation")
+        monkeypatch.setattr(tracing_mod, "_metrics_enabled", True)
+        monkeypatch.setattr(tracing_mod, "_meter", meter)
+        monkeypatch.setattr(
+            tracing_mod,
+            "_operations_counter",
+            meter.create_counter("secondbrain_operations"),
+        )
+        monkeypatch.setattr(
+            tracing_mod,
+            "_duration_histogram",
+            meter.create_histogram("secondbrain_operation_duration_ms"),
+        )
+        monkeypatch.setattr(
+            tracing_mod,
+            "_errors_counter",
+            meter.create_counter("secondbrain_errors"),
+        )
 
-        duration_histogram.record(0.5, {"operation": "ingest"})
-        duration_histogram.record(1.2, {"operation": "search"})
+        tracing_mod.record_operation("otel.record.success", 12.5, success=True)
+        tracing_mod.record_operation("otel.record.failure", 3.0, success=False)
 
-        errors_counter.add(1, {"error_type": "timeout"})
-
-        # Verify metrics were collected
         metrics_data = _metric_reader.get_metrics_data()
         assert metrics_data is not None
-        assert metrics_data.resource_metrics is not None
-        assert len(metrics_data.resource_metrics) > 0
 
-        # Extract scope metrics
-        scope_metrics = []
+        sums: dict[str, list] = {}
+        histograms: dict[str, list] = {}
         for resource_metric in metrics_data.resource_metrics:
             for scope_metric in resource_metric.scope_metrics:
-                scope_metrics.extend(scope_metric.metrics)
+                for metric in scope_metric.metrics:
+                    if isinstance(metric.data, Sum):
+                        sums.setdefault(metric.name, []).extend(metric.data.data_points)
+                    elif isinstance(metric.data, Histogram):
+                        histograms.setdefault(metric.name, []).extend(
+                            metric.data.data_points
+                        )
 
-        # Verify our metrics exist
-        metric_names = [m.name for m in scope_metrics]
-        assert "secondbrain.operations.count" in metric_names
-        assert "secondbrain.operations.duration" in metric_names
-        assert "secondbrain.errors.count" in metric_names
+        # Counter: both operations counted with the operation label
+        op_points = sums.get("secondbrain_operations", [])
+        success_point = next(
+            dp
+            for dp in op_points
+            if dp.attributes.get("operation") == "otel.record.success"
+        )
+        failure_point = next(
+            dp
+            for dp in op_points
+            if dp.attributes.get("operation") == "otel.record.failure"
+        )
+        assert success_point.value >= 1
+        assert failure_point.value >= 1
+
+        # Histogram: durations recorded with the operation label
+        hist_points = histograms.get("secondbrain_operation_duration_ms", [])
+        success_hist = next(
+            dp
+            for dp in hist_points
+            if dp.attributes.get("operation") == "otel.record.success"
+        )
+        assert success_hist.count >= 1
+        assert success_hist.sum >= 12.5
+
+        # Errors counter: only the failing operation, tagged as failure
+        error_points = sums.get("secondbrain_errors", [])
+        failure_error = next(
+            dp
+            for dp in error_points
+            if dp.attributes.get("operation") == "otel.record.failure"
+        )
+        assert failure_error.value >= 1
+        assert failure_error.attributes.get("error_type") == "failure"
+        assert not any(
+            dp.attributes.get("operation") == "otel.record.success"
+            for dp in error_points
+        )
+
+    def test_record_operation_noop_when_metrics_disabled(self, monkeypatch):
+        """record_operation records nothing when metrics are disabled."""
+        from secondbrain.utils import tracing as tracing_mod
+
+        monkeypatch.setattr(tracing_mod, "_metrics_enabled", False)
+        monkeypatch.setattr(tracing_mod, "_meter", None)
+        monkeypatch.setattr(tracing_mod, "_operations_counter", None)
+        monkeypatch.setattr(tracing_mod, "_duration_histogram", None)
+        monkeypatch.setattr(tracing_mod, "_errors_counter", None)
+
+        tracing_mod.record_operation("otel.record.disabled", 1.0)  # must not raise
+
+        metrics_data = _metric_reader.get_metrics_data()
+        assert metrics_data is not None
+        for resource_metric in metrics_data.resource_metrics:
+            for scope_metric in resource_metric.scope_metrics:
+                for metric in scope_metric.metrics:
+                    for dp in metric.data.data_points:
+                        assert dp.attributes.get("operation") != "otel.record.disabled"
 
     def test_vector_store_span_attributes(self):
         """Vector store operation spans include collection name and operation type.

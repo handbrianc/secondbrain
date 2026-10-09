@@ -5,8 +5,10 @@ of documents stored in the vector database.
 """
 
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Any, Self, cast
 
+from secondbrain.document.ingestor._constants import get_file_type
 from secondbrain.storage import ChunkInfo, DatabaseStats, StorageFactory
 from secondbrain.utils.connections import ensure_service_available
 
@@ -115,6 +117,7 @@ class Deleter(BaseManager):
         source: str | None = None,
         chunk_id: str | None = None,
         all: bool = False,
+        file_type: str | None = None,
     ) -> int:
         """Delete documents from storage.
 
@@ -122,6 +125,8 @@ class Deleter(BaseManager):
             source: Delete by source file.
             chunk_id: Delete by specific chunk ID.
             all: Delete all documents.
+            file_type: Delete every chunk whose source file type matches the
+                stored ``file_type`` category (e.g. ``'pdf'``, ``'markdown'``).
 
         Returns
         -------
@@ -136,7 +141,26 @@ class Deleter(BaseManager):
         if source:
             return self.storage.delete_by_source(source)
 
+        if file_type:
+            return self._delete_by_file_type(file_type)
+
         return 0
+
+    def _delete_by_file_type(self, file_type: str) -> int:
+        """Delete all chunks whose source file resolves to *file_type*.
+
+        The storage protocol exposes no file-type-filtered delete, so the
+        distinct source files are enumerated via ``list_source_files()`` and
+        each matching source is deleted with ``delete_by_source()``. This
+        mirrors how the ``file_type`` payload is written at ingest time
+        (the category is derived from the source path's extension), so
+        resolving the category per source matches the stored values exactly.
+        """
+        deleted = 0
+        for source in self.storage.list_source_files():
+            if get_file_type(Path(source)) == file_type:
+                deleted += self.storage.delete_by_source(source)
+        return deleted
 
 
 class StatusChecker(BaseManager):
@@ -158,3 +182,33 @@ class StatusChecker(BaseManager):
             Dictionary of database statistics.
         """
         return cast(DatabaseStats, self.storage.get_stats())
+
+    def connection_status(self) -> str:
+        """Return the vector storage connectivity as ``'reachable'``/``'unreachable'``.
+
+        Uses the protocol's ``validate_connection`` probe, which never raises,
+        so the ``status`` command stays printable when the backend is offline.
+        """
+        try:
+            connected = bool(self.storage.validate_connection())
+        except Exception:
+            # Defensive: the protocol promises validate_connection never
+            # raises, but a misbehaving backend must not break `status`.
+            connected = False
+        return "reachable" if connected else "unreachable"
+
+    def estimate_storage_size(self, total_chunks: int) -> int:
+        """Approximate the stored data footprint from the chunk count.
+
+        The storage protocol exposes no byte-size readout, so the ``status``
+        command estimates the dominant per-chunk terms: one float32 embedding
+        vector plus the raw chunk text (the configured chunk size in chars,
+        approximating one byte per character). It is intentionally labeled
+        approximate in the output.
+        """
+        from secondbrain.config import config
+
+        cfg = config()
+        vector_bytes = total_chunks * cfg.embedding_dimensions * 4
+        text_bytes = total_chunks * cfg.chunk_size
+        return vector_bytes + text_bytes

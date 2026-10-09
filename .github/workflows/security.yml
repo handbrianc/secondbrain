@@ -1,0 +1,45 @@
+name: Security Gates
+
+'on':
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      # Guard against vacuous passes: scripts/security_scan.sh skips a stage
+      # (exit 0) when its tool is missing, which is fine locally but must
+      # never happen in CI. Fail early if any scanner is absent.
+      - name: Verify security tooling is installed
+        run: |
+          command -v bandit
+          command -v pip-audit
+          command -v safety
+          command -v pipdeptree
+
+      - name: Bandit static analysis (fails on high severity)
+        run: ./scripts/security_scan.sh bandit
+
+      - name: pip-audit dependency vulnerabilities (PYSEC-2026-3740 documented ignore)
+        run: ./scripts/security_scan.sh audit
+
+      - name: safety vulnerability check ([tool.safety] ignore list from pyproject.toml)
+        run: ./scripts/security_scan.sh safety
+
+      - name: pipdeptree dependency tree and conflict check (fails on conflicts)
+        run: ./scripts/security_scan.sh pipdeptree

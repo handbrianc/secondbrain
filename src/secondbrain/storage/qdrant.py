@@ -18,7 +18,8 @@ import re
 import threading
 import time
 import uuid
-from collections.abc import Sequence
+from collections.abc import Generator, Sequence
+from contextlib import contextmanager
 from typing import Any
 
 from qdrant_client import QdrantClient
@@ -32,6 +33,7 @@ from secondbrain.types import (
     _validate_chunk_info,
     _validate_search_result,
 )
+from secondbrain.utils.tracing import trace_operation
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +60,31 @@ _OUTPUT_KEYS = (
 )
 
 _CONNECTION_TTL = 60.0
+
+
+@contextmanager
+def _traced_qdrant_operation(
+    collection: str, operation: str, **attributes: Any
+) -> Generator[Any]:
+    """Span for a Qdrant client operation.
+
+    Emits a ``qdrant_<operation>`` span carrying the collection name and the
+    operation type (``qdrant.collection`` / ``qdrant.operation``), so slow or
+    failing Qdrant work is identifiable per collection in traces. Extra
+    *attributes* are stamped on the span when tracing is enabled.
+
+    When tracing is disabled ``trace_operation`` yields ``None`` and the span
+    degenerates to plain execution (zero overhead), mirroring the
+    ``if span:`` pattern used in :mod:`secondbrain.search`.
+    """
+    with trace_operation(f"qdrant_{operation}") as span:
+        if span is not None:
+            span.set_attribute("qdrant.collection", collection)
+            span.set_attribute("qdrant.operation", operation)
+            for key, value in attributes.items():
+                if value is not None:
+                    span.set_attribute(f"qdrant.{key}", value)
+        yield span
 
 
 class QdrantVectorStorage:
@@ -195,24 +222,25 @@ class QdrantVectorStorage:
         scroll_filter: models.Filter | None,
         limit: int | None,
     ) -> list[Any]:
-        records: list[Any] = []
-        next_offset: Any = None
-        while True:
-            remaining = None if limit is None else limit - len(records)
-            if remaining is not None and remaining <= 0:
-                break
-            page_size = min(remaining, 256) if remaining is not None else 256
-            points, next_offset = self._get_client().scroll(
-                collection_name=self.collection_name,
-                scroll_filter=scroll_filter,
-                limit=page_size,
-                offset=next_offset,
-                with_payload=True,
-            )
-            records.extend(points)
-            if not points or next_offset is None:
-                break
-        return records
+        with _traced_qdrant_operation(self.collection_name, "scroll", limit=limit):
+            records: list[Any] = []
+            next_offset: Any = None
+            while True:
+                remaining = None if limit is None else limit - len(records)
+                if remaining is not None and remaining <= 0:
+                    break
+                page_size = min(remaining, 256) if remaining is not None else 256
+                points, next_offset = self._get_client().scroll(
+                    collection_name=self.collection_name,
+                    scroll_filter=scroll_filter,
+                    limit=page_size,
+                    offset=next_offset,
+                    with_payload=True,
+                )
+                records.extend(points)
+                if not points or next_offset is None:
+                    break
+            return records
 
     # ------------------------------------------------------------------
     # Vector search
@@ -228,13 +256,14 @@ class QdrantVectorStorage:
         """Search for similar chunks; apply a payload filter when given."""
         self._ensure_collection()
         query_filter = self._build_search_filter(source_filter, file_type_filter)
-        resp = self._get_client().query_points(
-            collection_name=self.collection_name,
-            query=embedding,
-            query_filter=query_filter,
-            limit=top_k,
-            with_payload=True,
-        )
+        with _traced_qdrant_operation(self.collection_name, "search", top_k=top_k):
+            resp = self._get_client().query_points(
+                collection_name=self.collection_name,
+                query=embedding,
+                query_filter=query_filter,
+                limit=top_k,
+                with_payload=True,
+            )
         results: list[SearchResult] = []
         for point in resp.points:
             payload = dict(point.payload or {})
@@ -286,10 +315,11 @@ class QdrantVectorStorage:
         """Upsert a single point; return its id."""
         self._ensure_collection()
         point = self._point_from_document(document)
-        self._get_client().upsert(
-            collection_name=self.collection_name,
-            points=[point],
-        )
+        with _traced_qdrant_operation(self.collection_name, "upsert"):
+            self._get_client().upsert(
+                collection_name=self.collection_name,
+                points=[point],
+            )
         return str(point.id)
 
     def store_batch(self, documents: list[dict[str, Any]]) -> int:
@@ -298,10 +328,13 @@ class QdrantVectorStorage:
             return 0
         self._ensure_collection()
         points = [self._point_from_document(doc) for doc in documents]
-        self._get_client().upsert(
-            collection_name=self.collection_name,
-            points=points,
-        )
+        with _traced_qdrant_operation(
+            self.collection_name, "upsert", points=len(documents)
+        ):
+            self._get_client().upsert(
+                collection_name=self.collection_name,
+                points=points,
+            )
         return len(documents)
 
     async def store_batch_async(self, documents: list[dict[str, Any]]) -> int:
@@ -343,18 +376,19 @@ class QdrantVectorStorage:
         """Distinct ``source_file`` values (facet, else scroll-and-dedupe)."""
         self._ensure_collection()
         try:
-            resp = self._get_client().facet(
-                collection_name=self.collection_name,
-                key="source_file",
-                limit=MAX_LIST_LIMIT,
-            )
+            with _traced_qdrant_operation(self.collection_name, "facet"):
+                resp = self._get_client().facet(
+                    collection_name=self.collection_name,
+                    key="source_file",
+                    limit=MAX_LIST_LIMIT,
+                )
             seen: set[str] = set()
             for bucket in resp.hits:
                 value = bucket.value
                 if isinstance(value, str) and value not in seen:
                     seen.add(value)
             return sorted(seen)
-        except (AttributeError, TypeError):
+        except AttributeError, TypeError:
             seen = set()
             for record in self._scroll_records(None, None):
                 src = (record.payload or {}).get("source_file")
@@ -583,15 +617,19 @@ class QdrantVectorStorage:
         if chunk_role:
             conditions.append(self._match_value_condition("chunk_role", chunk_role))
         scroll_filter = models.Filter(must=conditions) if conditions else None
-        return int(
-            self._get_client()
-            .count(
-                collection_name=self.collection_name,
-                count_filter=scroll_filter,
-                exact=True,
+        with _traced_qdrant_operation(
+            self.collection_name, "count", role=chunk_role or "all"
+        ):
+            total = int(
+                self._get_client()
+                .count(
+                    collection_name=self.collection_name,
+                    count_filter=scroll_filter,
+                    exact=True,
+                )
+                .count
             )
-            .count
-        )
+        return total
 
     # ------------------------------------------------------------------
     # Delete
@@ -601,19 +639,20 @@ class QdrantVectorStorage:
         self._ensure_collection()
         if scroll_filter is None:
             scroll_filter = models.Filter(must=[])
-        count = (
-            self._get_client()
-            .count(
-                collection_name=self.collection_name,
-                count_filter=scroll_filter,
-                exact=True,
+        with _traced_qdrant_operation(self.collection_name, "delete"):
+            count = (
+                self._get_client()
+                .count(
+                    collection_name=self.collection_name,
+                    count_filter=scroll_filter,
+                    exact=True,
+                )
+                .count
             )
-            .count
-        )
-        self._get_client().delete(
-            collection_name=self.collection_name,
-            points_selector=models.FilterSelector(filter=scroll_filter),
-        )
+            self._get_client().delete(
+                collection_name=self.collection_name,
+                points_selector=models.FilterSelector(filter=scroll_filter),
+            )
         return int(count)
 
     def delete_by_source(self, source: str) -> int:
@@ -639,14 +678,15 @@ class QdrantVectorStorage:
     def get_stats(self) -> dict[str, Any]:
         """Stats matching the legacy ``get_stats`` shape for the ``status`` CLI."""
         self._ensure_collection()
-        total = (
-            self._get_client()
-            .count(
-                collection_name=self.collection_name,
-                exact=True,
+        with _traced_qdrant_operation(self.collection_name, "count"):
+            total = (
+                self._get_client()
+                .count(
+                    collection_name=self.collection_name,
+                    exact=True,
+                )
+                .count
             )
-            .count
-        )
         return {
             "total_chunks": total,
             "unique_sources": len(self.list_source_files()),
@@ -664,7 +704,8 @@ class QdrantVectorStorage:
         ):
             return self._conn_valid
         try:
-            self._get_client().get_collections()
+            with _traced_qdrant_operation(self.collection_name, "ping"):
+                self._get_client().get_collections()
             self._conn_valid = True
         except Exception:
             self._conn_valid = False

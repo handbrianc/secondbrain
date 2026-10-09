@@ -95,7 +95,7 @@ class Config(
         return values
 
     @model_validator(mode="after")
-    def validate_config_values(self) -> "Config":
+    def validate_config_values(self) -> Config:
         """Validate configuration values.
 
         Returns

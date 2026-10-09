@@ -121,12 +121,22 @@ The system SHALL properly handle and report errors that occur in worker processe
 
 ### Requirement: Rate limiting works with parallel processing
 
-The system SHALL maintain rate limiting across all worker processes to prevent overwhelming the sentence-transformers
-API.
+The system SHALL maintain rate limiting across all workers to prevent overwhelming the OpenAI-compatible
+embedding provider's API.
+
+Rate limiting SHALL be provided by a shared, thread-safe rate limiter (`SharedRateLimiter` in
+`src/secondbrain/utils/rate_limiter.py`) wired into embedding generation, honoring the `rate_limit_enabled`
+(default: `False`), `rate_limit_max_requests`, and `rate_limit_window_seconds` configuration settings, and
+sharing its state across workers.
+
+> **Note (2026-10-08):** `SharedRateLimiter` shares state via `threading.Lock` (sliding-window token bucket),
+> so the shared guarantee applies to workers running as threads within a process; separate process-pool
+> workers each hold their own instance (no cross-process shared state). `rate_limit_enabled` defaults to
+> `False`, so rate limiting is opt-in.
 
 #### Scenario: Multiple workers respect rate limits
 
-- **WHEN** 4 worker processes simultaneously generate embeddings
+- **WHEN** 4 workers simultaneously generate embeddings
 - **AND** rate limit is set to 10 requests/second
 - **THEN** total embedding requests across all workers stay within 10/second
 - **AND** workers queue requests when limit is reached
@@ -150,6 +160,11 @@ The system SHALL maintain backward compatibility with existing ingestion behavio
 ### Requirement: Cross-platform multiprocessing support
 
 The system SHALL support multiprocessing on Windows, macOS, and Linux.
+
+> **Note (2026-10-08):** Windows and macOS are host-constrained for validation: the project is developed and
+> tested on Linux only, with no OS-matrix CI. Spawn-safety is ensured by design — worker functions are module-level
+> and picklable (`tests/test_document/test_multicore_edge_cases.py::TestWorkerPickling`) — but the Windows/macOS
+> scenarios below describe intended behavior, not CI-proven behavior.
 
 #### Scenario: Windows compatibility
 

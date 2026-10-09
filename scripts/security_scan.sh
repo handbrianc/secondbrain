@@ -119,16 +119,34 @@ scan_sbom() {
     echo ""
 }
 
+# Function to check the dependency tree for conflicts
+# pipdeptree -w fail: print dependency problems (cycles, duplicates,
+# conflicting requirements) and exit non-zero when any are found.
+run_pipdeptree() {
+    echo -e "${GREEN}Running pipdeptree dependency tree check...${NC}"
+    echo ""
+
+    if command -v pipdeptree &> /dev/null; then
+        pipdeptree --summary -w fail
+        echo ""
+        echo -e "${GREEN}pipdeptree completed${NC}"
+    else
+        echo -e "${YELLOW}pipdeptree not installed. Skipping...${NC}"
+    fi
+    echo ""
+}
+
 # Function to run all checks
 run_all() {
     echo -e "${GREEN}Running ALL security checks...${NC}"
     echo ""
-    
+
     generate_sbom
     run_pip_audit
     run_safety_check
     run_bandit
-    
+    run_pipdeptree
+
     echo ""
     echo "=========================================="
     echo -e "${GREEN}All security scans completed!${NC}"
@@ -145,6 +163,9 @@ case "${1:-all}" in
         ;;
     bandit)
         run_bandit
+        ;;
+    pipdeptree)
+        run_pipdeptree
         ;;
     sbom)
         generate_sbom
@@ -164,6 +185,7 @@ case "${1:-all}" in
         echo "  audit     Run pip-audit dependency scan"
         echo "  safety    Run safety vulnerability check"
         echo "  bandit    Run bandit security linter"
+        echo "  pipdeptree Check dependency tree for conflicts"
         echo "  sbom      Generate Software Bill of Materials"
         echo "  scan-sbom Scan SBOM for vulnerabilities"
         echo "  all       Run all security checks (default)"

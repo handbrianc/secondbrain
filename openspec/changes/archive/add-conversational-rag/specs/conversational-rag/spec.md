@@ -32,6 +32,8 @@ The system SHALL preserve conversation context across multiple user queries with
 
 #### Scenario: Context window limit
 
+> **Note (2026-10-08):** Shipped with context window = 5 turns.
+
 - **WHEN** conversation exceeds configured context window (default: 5 turns)
 - **THEN** system uses only the most recent N turns for context
 - **AND** full history remains stored in MongoDB
@@ -149,6 +151,9 @@ The system SHALL support configuration via environment variables and CLI flags f
 - **AND** defaults to `secondbrain.conversations` if not set
 
 #### Scenario: Set LLM generation parameters
+
+> **Note (2026-10-08):** Shipped defaults differ: temperature config default is 0.3 (CLI `--temperature` flag
+> defaults to 0.1); max_tokens is 384000.
 
 - **WHEN** user sets `SECONDBRAIN_LLM_TEMPERATURE=0.8`
 - **AND** `SECONDBRAIN_LLM_MAX_TOKENS=2048`

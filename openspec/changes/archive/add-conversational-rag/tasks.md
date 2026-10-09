@@ -43,6 +43,7 @@
 - [x] 5.5 Implement answer generation using local LLM provider
 - [x] 5.6 Add source attribution and citation formatting
 - [x] 5.7 Implement performance tracking (latency, token usage estimation)
+  > **Annotation (2026-10-08):** Token-usage logging previously missing. Now implemented: real usage extracted from OpenAI/Anthropic responses and logged with prompt_tokens/completion_tokens/total_tokens/model (src/secondbrain/rag/providers/; tests/test_rag/test_token_usage_logging.py).
 - [x] 5.8 Write unit tests for RAG pipeline
 
 ## 6. CLI Integration
@@ -106,9 +107,15 @@
 
 - [x] 11.1 Extract RAG service into standalone class (CLI-agnostic interface)
 - [x] 11.2 Define OpenAPI spec for HTTP API (future reference)
+
+  > **Note (2026-10-08):** No HTTP server was shipped — SecondBrain remains a CLI-only tool; no OpenAPI spec
+  > exists in the repo (the "future reference" artifact was never materialized).
 - [x] 11.3 Add async support for concurrent requests
 - [x] 11.4 Document MCP protocol mapping (which CLI commands become MCP tools)
 - [x] 11.5 Create example MCP server skeleton in `docs/examples/mcp_server.py`
+
+  > **Note (2026-10-08):** Deferred/latent — the MCP server skeleton was never shipped as a working server;
+  > MCP support remains a documented conversion path, not an implemented service.
 
 ## 12. Dependencies and Setup
 

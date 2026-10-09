@@ -8,7 +8,28 @@ import asyncio
 import hashlib
 import time
 
+from secondbrain.logging import get_logger
 from secondbrain.rag.interfaces import LocalLLMProvider, StreamingCallback
+
+logger = get_logger(__name__)
+
+# Fixed usage values reported by the mock provider: real providers report
+# per-request token counts, so the mock emits stable placeholders that keep
+# token-usage logging observable in tests and offline runs.
+MOCK_PROMPT_TOKENS = 10
+MOCK_COMPLETION_TOKENS = 20
+MOCK_TOTAL_TOKENS = MOCK_PROMPT_TOKENS + MOCK_COMPLETION_TOKENS
+
+
+def _log_token_usage() -> None:
+    """Emit the mock's fixed token-usage record, mirroring real providers."""
+    logger.info(
+        "mock token usage: model=mock prompt_tokens=%d completion_tokens=%d "
+        "total_tokens=%d",
+        MOCK_PROMPT_TOKENS,
+        MOCK_COMPLETION_TOKENS,
+        MOCK_TOTAL_TOKENS,
+    )
 
 
 class MockLLMProvider(LocalLLMProvider):
@@ -61,15 +82,18 @@ class MockLLMProvider(LocalLLMProvider):
         # Check response map first
         for pattern, response in self._response_map.items():
             if pattern in prompt:
+                _log_token_usage()
                 return response
 
         # Generate deterministic response based on prompt hash
         # This ensures same prompt always gets same response
         prompt_hash = hashlib.sha256(prompt.encode()).hexdigest()[:8]
-        return (
+        response = (
             f"[MOCK] {self._default_response} "
             f"(prompt_hash: {prompt_hash}, temperature: {temperature}, max_tokens: {max_tokens})"
         )
+        _log_token_usage()
+        return response
 
     async def agenerate(
         self,
@@ -201,31 +225,31 @@ class MockLLMProviderWithContext(MockLLMProvider):
             "circuit breaker work": "The circuit breaker provides protection by automatically monitoring service health and handling failures. When errors exceed a threshold, it opens the circuit and returns fallback responses until the service recovers automatically with built-in recovery logic.",
             "Ingestor": "The Ingestor class handles multi-format document parsing and automatic chunking using Docling library for document ingestion.",
             # Semantic search and embedding
-            "semantic search": "Semantic search uses embedding vectors from sentence-transformers with cosine similarity in vector search. The default model is all-MiniLM-L6-v2. Query processing involves embedding generation and vector similarity ranking.",
-            "SecondBrain": "SecondBrain is a local document intelligence CLI tool for semantic search over documents using Qdrant vector search and sentence-transformers.",
-            "embedding model": "Embedding model loading failures occur when sentence-transformers is not properly installed or the model files are unavailable. Ensure proper installation of sentence-transformers to prevent loading failures. The default model is all-MiniLM-L6-v2.",
-            "embedding": "The default embedding model is all-MiniLM-L6-v2 from sentence-transformers. It provides good balance of speed and accuracy for semantic search tasks.",
+            "semantic search": "Semantic search uses embedding vectors from an OpenAI-compatible embedding provider with cosine similarity in vector search. The default model is text-embedding-3-small. Query processing involves embedding generation and vector similarity ranking.",
+            "SecondBrain": "SecondBrain is a local document intelligence CLI tool for semantic search over documents using Qdrant vector search and an OpenAI-compatible embedding provider.",
+            "embedding model": "Embedding model loading failures occur when the embedding provider is not properly configured or the API is unavailable. Ensure proper configuration of the OpenAI-compatible embedding provider to prevent loading failures. The default model is text-embedding-3-small.",
+            "embedding": "The default embedding model is text-embedding-3-small from the configured OpenAI-compatible provider. It provides good balance of speed and accuracy for semantic search tasks.",
             # Logging and configuration
             "logging": "Logging is configured via SECONDBRAIN_LOG_LEVEL (INFO, DEBUG, WARNING, ERROR) and SECONDBRAIN_LOG_FORMAT (pretty, json). These are configuration environment variables.",
             "configuration": "Configuration uses SECONDBRAIN_* environment variables. Key settings include chunk_size, qdrant_url, log_level, and top_k. All configuration is done through environment variables.",
             # Default values
-            "default": "Default values: chunk_size=4096, chunk_overlap=256, top_k=5, embedding_model=all-MiniLM-L6-v2. These are standard configuration defaults.",
+            "default": "Default values: chunk_size=4096, chunk_overlap=256, top_k=50, embedding_model=text-embedding-3-small. These are standard configuration defaults.",
             "default chunk size": "The default chunk size in SecondBrain is 4096 tokens. This is a configuration parameter.",
             "default top-k": "The default top-k value is 5 results. This is a configuration setting for search queries.",
             "default chunk overlap": "The default chunk overlap value is 256 tokens. This is a configuration parameter for document chunking.",
-            "default embedding model": "The default embedding model is all-MiniLM-L6-v2 from sentence-transformers. This is the standard configuration.",
+            "default embedding model": "The default embedding model is text-embedding-3-small from the configured OpenAI-compatible provider. This is the standard configuration.",
             "top-k": "The default top-k value is 5, meaning search returns 5 results by default. This configuration can be adjusted.",
             "chunk overlap": "The default chunk overlap is 256 tokens. This configuration preserves context between chunks.",
             # Error handling
-            "error": "Common errors include vector store connection errors when Qdrant is unreachable, embedding model loading failures if sentence-transformers is not installed, and search returning no results when no documents match. Proper validation helps prevent these errors.",
-            "failure": "Failures can occur during embedding model loading if sentence-transformers is not properly installed, or during vector store connection if Qdrant is unreachable. Proper error handling and validation prevent these failures.",
-            "loading": "Loading failures occur when the embedding model is not available or sentence-transformers is not installed. Ensure proper installation to prevent loading errors.",
+            "error": "Common errors include vector store connection errors when Qdrant is unreachable, embedding model loading failures if the embedding provider is not properly configured, and search returning no results when no documents match. Proper validation helps prevent these errors.",
+            "failure": "Failures can occur during embedding model loading if the embedding provider is not properly configured, or during vector store connection if Qdrant is unreachable. Proper error handling and validation prevent these failures.",
+            "loading": "Loading failures occur when the embedding model is not available or the embedding provider API is unreachable. Ensure proper configuration to prevent loading errors.",
             "recovery": "The circuit breaker provides automatic recovery mechanisms. When errors exceed a threshold, it opens and returns fallback responses until the service recovers automatically.",
             "no documents": "When no documents match a search query, the system returns a fallback message indicating no relevant results were found. This graceful handling provides user-friendly feedback.",
             "fallback": "When no results are found, the system returns a fallback message indicating no relevant documents match the search query. This provides user-friendly error handling.",
             "validation": "Configuration validation helps prevent vector store connection errors. Proper configuration validation ensures the system works correctly.",
             # Architecture patterns
-            "architecture": "SecondBrain system architecture consists of five main components: CLI layer for user commands, Document Ingestor for parsing, Embedding Engine using sentence-transformers, Storage Layer with Qdrant vector store, and Searcher for vector search. Data flows from ingestion through chunking, embedding, storage, and search.",
+            "architecture": "SecondBrain system architecture consists of five main components: CLI layer for user commands, Document Ingestor for parsing, Embedding Engine using an OpenAI-compatible embedding provider, Storage Layer with Qdrant vector store, and Searcher for vector search. Data flows from ingestion through chunking, embedding, storage, and search.",
             "components": "The main components are CLI, Document Ingestor, Embedding Engine, Storage Layer, and Searcher. These five components make up the system architecture.",
             "Searcher": "The Searcher class performs semantic search using vector similarity with embeddings. It queries the vector store and returns results ranked by cosine similarity for the query.",
             "role of the Searcher": "The Searcher class performs semantic search using vector similarity with embeddings. It queries the vector store and returns results ranked by cosine similarity for the query.",
@@ -276,6 +300,7 @@ class MockLLMProviderWithContext(MockLLMProvider):
                 best_response = response
 
         if best_response:
+            _log_token_usage()
             return best_response
 
         # Fall back to hash-based deterministic response

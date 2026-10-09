@@ -162,7 +162,7 @@ class IngestProgressUI:
         self.overall_task_id: TaskID | None = None
         self.activity_task_id: TaskID | None = None
 
-    def __enter__(self) -> "IngestProgressUI":
+    def __enter__(self) -> IngestProgressUI:
         """Create the fixed rows, start the live display, and defer logs.
 
         Returns:

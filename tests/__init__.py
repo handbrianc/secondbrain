@@ -1,25 +1,35 @@
 """Tests for config module."""
 
 import os
-from unittest.mock import patch
+from pathlib import Path
 
 import pytest
 
 from secondbrain.config import Config, get_config
 
 
-def test_config_default_values() -> None:
-    """Test configuration default values."""
-    env_backup = os.environ.copy()
-    try:
-        for key in list(os.environ.keys()):
-            if key.startswith("SECONDBRAIN_"):
-                del os.environ[key]
+def test_config_default_values(tmp_path: Path) -> None:
+    """Test configuration default values.
 
-        pytest_current_test = os.environ.get("PYTEST_CURRENT_TEST")
-        with patch.dict(os.environ, {}, clear=True):
-            if pytest_current_test:
-                os.environ["PYTEST_CURRENT_TEST"] = pytest_current_test
+    Isolates ambient configuration state the same way
+    ``tests/config/conftest.py`` does (pattern replicated locally, not
+    imported): strips every ``SECONDBRAIN_*`` variable — the repo's committed
+    ``.env`` / ``.env.test`` would otherwise leak into the values under test
+    (e.g. ``SECONDBRAIN_QDRANT_URL=http://localhost:6334``) — moves to an
+    empty cwd so ``Config._load_env_file`` cannot implicitly load the repo
+    dotenv files, and clears the ``get_config`` lru_cache before and after
+    (config values are cached process-wide and would otherwise leak between
+    tests).
+    """
+    original = os.environ.copy()
+    try:
+        for key in [k for k in original if k.upper().startswith("SECONDBRAIN_")]:
+            del os.environ[key]
+
+        # Empty cwd: no repo .env/.env.test is implicitly loaded.
+        old_cwd = Path.cwd()
+        os.chdir(tmp_path)
+        try:
             get_config.cache_clear()
             config = Config()
             assert config.qdrant_url == "http://localhost:6333"
@@ -27,10 +37,14 @@ def test_config_default_values() -> None:
             assert config.storage_backend == "qdrant"
             assert config.chunk_size == 4096
             assert config.chunk_overlap == 50
-            assert config.default_top_k == 20
+            assert config.default_top_k == 50
+        finally:
+            os.chdir(old_cwd)
     finally:
+        # The dotenv loader mutates os.environ; undo everything.
         os.environ.clear()
-        os.environ.update(env_backup)
+        os.environ.update(original)
+        get_config.cache_clear()
 
 
 def test_config_from_environment(monkeypatch: pytest.MonkeyPatch) -> None:

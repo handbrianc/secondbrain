@@ -25,15 +25,15 @@ The ingestion pipeline SHALL be instrumented with OpenTelemetry spans.
 #### Scenario: Ingestion creates root span
 
 - **WHEN** ingest() is called
-- **THEN** "document.ingest" span SHALL be created
+- **THEN** "ingest_collect_files" span SHALL be created
 - **AND** it SHALL include file path as attribute
 
 #### Scenario: File processing creates child spans
 
 - **WHEN** individual files are processed
-- **THEN** "document.process" span SHALL be created
-- **AND** it SHALL be child of ingestion span
-- **AND** it SHALL include processing time
+- **THEN** "ingest_worker_extract", "ingest_worker_chunk", and "ingest_worker_embed" spans SHALL be created
+- **AND** each SHALL be a child of the ingestion flow
+- **AND** they SHALL include processing time attributes
 
 #### Scenario: Embedding generation is traced
 
@@ -56,15 +56,14 @@ Search operations SHALL be instrumented with OpenTelemetry spans.
 #### Scenario: Search creates root span
 
 - **WHEN** search() is called
-- **THEN** "search.query" span SHALL be created
+- **THEN** "search_generate_embedding" span SHALL be created
 - **AND** it SHALL include query length attribute
 
 #### Scenario: Embedding search is traced
 
 - **WHEN** vector search is performed
-- **THEN** "search.vector" span SHALL be created
+- **THEN** "search_storage" span SHALL be created
 - **AND** it SHALL include top_k attribute
-- **AND** it SHALL include result count
 
 ### Requirement: Qdrant operation instrumentation
 
@@ -107,19 +106,19 @@ The system SHALL collect and export OpenTelemetry metrics.
 #### Scenario: Request count metric exists
 
 - **WHEN** operations complete
-- **THEN** "secondbrain.operations.count" metric SHALL be incremented
+- **THEN** "secondbrain_operations" counter metric SHALL be incremented
 - **AND** it SHALL include operation type label
 
 #### Scenario: Duration metrics exist
 
 - **WHEN** operations complete
-- **THEN** "secondbrain.operations.duration" histogram SHALL be recorded
+- **THEN** "secondbrain_operation_duration_ms" histogram SHALL be recorded
 - **AND** it SHALL include operation type label
 
 #### Scenario: Error rate metric exists
 
 - **WHEN** errors occur
-- **THEN** "secondbrain.errors.count" metric SHALL be incremented
+- **THEN** "secondbrain_errors" counter metric SHALL be incremented
 - **AND** it SHALL include error type label
 
 ### Requirement: Configurable tracing

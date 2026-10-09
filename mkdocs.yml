@@ -38,6 +38,7 @@ nav:
       - Document Ingestion: user-guide/document-ingestion.md
       - Search Guide: user-guide/search-guide.md
       - Document Management: user-guide/document-management.md
+      - Conversational Q&A: user-guide/conversational-qa.md
   - Developer Guide:
       - Developer Guide: developer-guide/index.md
       - Development Setup: developer-guide/development.md
@@ -58,6 +59,18 @@ nav:
       - Schema Reference: architecture/SCHEMA.md
   - API Reference:
       - API Reference: api/index.md
+      - CLI: api/cli.md
+      - Configuration: api/config.md
+      - Document: api/document.md
+      - Embedding: api/embedding.md
+      - RAG: api/rag.md
+      - Search: api/search.md
+      - Storage: api/storage.md
+      - Conversation: api/conversation.md
+      - Management: api/management.md
+      - Utils: api/utils.md
+      - Logging: api/logging.md
+      - Domain: api/domain.md
   - Security:
       - Security Guide: security/index.md
   - Migration: migration.md

@@ -4,6 +4,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from secondbrain.utils.circuit_breaker import (
+    CircuitBreakerConfig,
+    CircuitState,
+)
 from secondbrain.utils.connections import (
     ServiceUnavailableError,
     ValidatableService,
@@ -198,6 +202,133 @@ class TestValidatableService:
         # Second call should revalidate
         service.validate_connection()
         assert call_count == 2
+
+    def test_on_service_recovery_resets_open_circuit_to_closed(self) -> None:
+        """Test that on_service_recovery resets an OPEN circuit breaker to CLOSED.
+
+        Circuit-breaker spec scenario "Service recovery clears circuit":
+        WHEN on_service_recovery() is called THEN circuit breaker state SHALL
+        reset to CLOSED.
+        """
+
+        class ConcreteService(ValidatableService):
+            def _do_validate(self) -> bool:
+                return False
+
+            async def _do_validate_async(self) -> bool:
+                return False
+
+        service = ConcreteService(
+            circuit_breaker_config=CircuitBreakerConfig(failure_threshold=1),
+        )
+
+        # A failed validation with threshold=1 opens the circuit
+        assert service.validate_connection_with_circuit_breaker(force=True) is False
+        assert service.circuit_breaker is not None
+        assert service.circuit_breaker.state == CircuitState.OPEN
+
+        # Simulate the service coming back online
+        service.on_service_recovery()
+
+        assert service.circuit_breaker is not None
+        assert service.circuit_breaker.state == CircuitState.CLOSED
+        assert service.circuit_breaker.failure_count == 0
+
+    def test_on_service_recovery_clears_backoff_and_counters(self) -> None:
+        """Test that on_service_recovery clears backoff and half-open counters."""
+
+        class ConcreteService(ValidatableService):
+            def _do_validate(self) -> bool:
+                return False
+
+            async def _do_validate_async(self) -> bool:
+                return False
+
+        config = CircuitBreakerConfig(
+            failure_threshold=1,
+            recovery_timeout=30.0,
+        )
+        service = ConcreteService(circuit_breaker_config=config)
+
+        # Open the circuit and escalate backoff via a half-open failure
+        assert service.validate_connection_with_circuit_breaker(force=True) is False
+        assert service.circuit_breaker is not None
+        assert service.circuit_breaker.state == CircuitState.OPEN
+
+        service.circuit_breaker._backoff_multiplier = 4
+        service.circuit_breaker._current_recovery_timeout = 120.0
+
+        # Simulate the service coming back online
+        service.on_service_recovery()
+
+        state_info = service.circuit_breaker.get_state_info()
+        assert state_info["state"] == "closed"
+        assert state_info["failure_count"] == 0
+        assert state_info["backoff_multiplier"] == 1
+        assert state_info["current_recovery_timeout"] == config.recovery_timeout
+
+    def test_on_service_recovery_is_noop_when_circuit_breaker_disabled(self) -> None:
+        """Test that on_service_recovery is a no-op for the circuit when disabled."""
+
+        class ConcreteService(ValidatableService):
+            def _do_validate(self) -> bool:
+                return True
+
+            async def _do_validate_async(self) -> bool:
+                return True
+
+        service = ConcreteService(cache_ttl=60.0)
+
+        assert service.is_circuit_breaker_enabled is False
+        assert service.circuit_breaker is None
+
+        # Recovery clears the connection cache without touching any circuit
+        service.on_service_recovery()
+
+        assert service.is_circuit_breaker_enabled is False
+        assert service.circuit_breaker is None
+
+        # Cache was still invalidated: next validation re-runs the validator
+        service.validate_connection()
+        assert service.validate_connection() is True
+
+    def test_on_service_recovery_allows_immediate_circuit_breaker_validation(
+        self,
+    ) -> None:
+        """Test that recovery makes the previously-failing service validate again.
+
+        After an OPEN circuit blocked calls, on_service_recovery() must restore
+        CLOSED so validate_connection_with_circuit_breaker() succeeds instead of
+        raising CircuitBreakerError.
+        """
+
+        class ConcreteService(ValidatableService):
+            def _do_validate(self) -> bool:
+                return False
+
+            async def _do_validate_async(self) -> bool:
+                return False
+
+        service = ConcreteService(
+            circuit_breaker_config=CircuitBreakerConfig(failure_threshold=1),
+        )
+
+        # Open the circuit
+        assert service.validate_connection_with_circuit_breaker(force=True) is False
+        assert service.circuit_breaker is not None
+        assert service.circuit_breaker.state == CircuitState.OPEN
+
+        # Recovery resets to CLOSED and clears cached connection state, so a
+        # subsequent validation re-runs instead of serving the failed cache
+        service.on_service_recovery()
+
+        # After recovery the service is back: flip the validator and validate
+        service._do_validate = lambda: True  # type: ignore[method-assign]
+        result = service.validate_connection_with_circuit_breaker(force=True)
+
+        assert result is True
+        assert service.circuit_breaker is not None
+        assert service.circuit_breaker.state == CircuitState.CLOSED
 
     def test_circuit_breaker_failure_recording(self) -> None:
         """Test that validation failure is recorded in circuit breaker."""

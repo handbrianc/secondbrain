@@ -89,7 +89,7 @@ class QueryRewriter:
 
     def __init__(
         self,
-        llm_provider: "LocalLLMProvider",
+        llm_provider: LocalLLMProvider,
         context_window: int = 5,
     ) -> None:
         """Initialize rewriter with LLM provider.

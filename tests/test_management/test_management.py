@@ -267,6 +267,95 @@ class TestDeleter:
             assert "vector storage" in str(e)
 
 
+class TestDeleterFileType:
+    """Tests for Deleter's --file-type filter (archived spec scenario)."""
+
+    @patch("secondbrain.management.StorageFactory.create_from_config")
+    def test_delete_by_file_type_deletes_matching_sources(
+        self, mock_storage_class: MagicMock
+    ) -> None:
+        """Chunks of sources whose category matches are deleted, summed."""
+        mock_storage = MagicMock()
+        mock_storage.validate_connection.return_value = True
+        mock_storage.list_source_files.return_value = [
+            "/docs/report.pdf",
+            "/docs/notes.md",
+            "/docs/slides.pdf",
+        ]
+        mock_storage.delete_by_source.side_effect = [10, 5]
+        mock_storage_class.return_value = mock_storage
+
+        deleter = Deleter()
+        result = deleter.delete(file_type="pdf")
+
+        assert result == 15
+        mock_storage.list_source_files.assert_called_once()
+        deleted_calls = mock_storage.delete_by_source.call_args_list
+        assert deleted_calls == [
+            (("/docs/report.pdf",),),
+            (("/docs/slides.pdf",),),
+        ]
+
+    @patch("secondbrain.management.StorageFactory.create_from_config")
+    def test_delete_by_file_type_no_match(self, mock_storage_class: MagicMock) -> None:
+        """An unknown category deletes nothing without touching storage."""
+        mock_storage = MagicMock()
+        mock_storage.validate_connection.return_value = True
+        mock_storage.list_source_files.return_value = ["/docs/notes.md"]
+        mock_storage_class.return_value = mock_storage
+
+        deleter = Deleter()
+        result = deleter.delete(file_type="docx")
+
+        assert result == 0
+        mock_storage.delete_by_source.assert_not_called()
+
+    @patch("secondbrain.management.StorageFactory.create_from_config")
+    def test_delete_priority_all_over_file_type(
+        self, mock_storage_class: MagicMock
+    ) -> None:
+        """all=True takes priority over file_type."""
+        mock_storage = MagicMock()
+        mock_storage.validate_connection.return_value = True
+        mock_storage.delete_all.return_value = 100
+        mock_storage_class.return_value = mock_storage
+
+        deleter = Deleter()
+        result = deleter.delete(all=True, file_type="pdf")
+
+        assert result == 100
+        mock_storage.delete_all.assert_called_once()
+        mock_storage.list_source_files.assert_not_called()
+
+    @patch("secondbrain.management.StorageFactory.create_from_config")
+    def test_delete_priority_source_over_file_type(
+        self, mock_storage_class: MagicMock
+    ) -> None:
+        """Source takes priority over file_type."""
+        mock_storage = MagicMock()
+        mock_storage.validate_connection.return_value = True
+        mock_storage.delete_by_source.return_value = 5
+        mock_storage_class.return_value = mock_storage
+
+        deleter = Deleter()
+        result = deleter.delete(source="test.pdf", file_type="pdf")
+
+        assert result == 5
+        mock_storage.delete_by_source.assert_called_once_with("test.pdf")
+        mock_storage.list_source_files.assert_not_called()
+
+    @patch("secondbrain.management.StorageFactory.create_from_config")
+    def test_delete_no_params_still_zero(self, mock_storage_class: MagicMock) -> None:
+        """Delete with no parameters (including file_type) returns 0."""
+        mock_storage = MagicMock()
+        mock_storage.validate_connection.return_value = True
+        mock_storage_class.return_value = mock_storage
+
+        deleter = Deleter()
+        assert deleter.delete() == 0
+        mock_storage.list_source_files.assert_not_called()
+
+
 class TestStatusChecker:
     """Tests for StatusChecker class."""
 
@@ -311,3 +400,65 @@ class TestStatusChecker:
             status_checker.get_status()
         except ServiceUnavailableError as e:
             assert "vector storage" in str(e)
+
+    @patch("secondbrain.management.StorageFactory.create_from_config")
+    def test_connection_status_reachable(self, mock_storage_class: MagicMock) -> None:
+        """Test connection_status reports 'reachable' when the probe passes."""
+        mock_storage = MagicMock()
+        mock_storage.validate_connection.return_value = True
+        mock_storage_class.return_value = mock_storage
+
+        status_checker = StatusChecker()
+        assert status_checker.connection_status() == "reachable"
+        mock_storage.validate_connection.assert_called_once()
+
+    @patch("secondbrain.management.StorageFactory.create_from_config")
+    def test_connection_status_unreachable(self, mock_storage_class: MagicMock) -> None:
+        """Test connection_status reports 'unreachable' when the probe fails."""
+        mock_storage = MagicMock()
+        mock_storage.validate_connection.return_value = False
+        mock_storage_class.return_value = mock_storage
+
+        status_checker = StatusChecker()
+        assert status_checker.connection_status() == "unreachable"
+
+    @patch("secondbrain.management.StorageFactory.create_from_config")
+    def test_connection_status_never_raises(
+        self, mock_storage_class: MagicMock
+    ) -> None:
+        """Test connection_status degrades to 'unreachable' on probe errors."""
+        mock_storage = MagicMock()
+        mock_storage.validate_connection.side_effect = RuntimeError("boom")
+        mock_storage_class.return_value = mock_storage
+
+        status_checker = StatusChecker()
+        assert status_checker.connection_status() == "unreachable"
+
+    @patch("secondbrain.management.StorageFactory.create_from_config")
+    def test_estimate_storage_size(self, mock_storage_class: MagicMock) -> None:
+        """Test the approximate storage size formula (vectors + chunk text)."""
+        mock_storage = MagicMock()
+        mock_storage_class.return_value = mock_storage
+
+        status_checker = StatusChecker()
+        with patch("secondbrain.config.config") as mock_config:
+            mock_cfg = MagicMock()
+            mock_cfg.embedding_dimensions = 1536
+            mock_cfg.chunk_size = 4096
+            mock_config.return_value = mock_cfg
+
+            size = status_checker.estimate_storage_size(100)
+
+        # 100 chunks x (1536 float32 vector + ~4096 bytes of chunk text).
+        assert size == 100 * (1536 * 4 + 4096)
+
+    @patch("secondbrain.management.StorageFactory.create_from_config")
+    def test_estimate_storage_size_empty_collection(
+        self, mock_storage_class: MagicMock
+    ) -> None:
+        """Test the estimate is zero for an empty collection."""
+        mock_storage = MagicMock()
+        mock_storage_class.return_value = mock_storage
+
+        status_checker = StatusChecker()
+        assert status_checker.estimate_storage_size(0) == 0

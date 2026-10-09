@@ -331,7 +331,7 @@ def _interactive_chat(
         try:
             try:
                 user_input = input("\n[you] ").strip()
-            except (KeyboardInterrupt, EOFError):
+            except KeyboardInterrupt, EOFError:
                 console.print("\n[dim]Goodbye![/dim]")
                 break
 

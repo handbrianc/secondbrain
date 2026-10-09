@@ -19,7 +19,7 @@ def filter_chapters_by_target(
                 (m, s, t) for m, s, t in chapters_to_cover if m == target_num
             ]
             good_title_nums = {n for n in good_title_nums if n == target_num}
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             logger.warning(
                 "Invalid chapter target '%s' — falling back to full enumeration",
                 target,
