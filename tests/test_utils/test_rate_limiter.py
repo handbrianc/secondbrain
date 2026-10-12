@@ -548,6 +548,7 @@ class TestFactoryRateLimiterPlumbing:
         cfg.rate_limit_enabled = False
         cfg.rate_limit_max_requests = 7
         cfg.rate_limit_window_seconds = 2.5
+        cfg.circuit_breaker_enabled = False
         for key, value in overrides.items():
             setattr(cfg, key, value)
         return cfg

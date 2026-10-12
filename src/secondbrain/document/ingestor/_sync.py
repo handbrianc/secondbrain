@@ -1174,7 +1174,9 @@ class DocumentIngestor:
             recursive: Recursively process subdirectories.
             batch_size: Number of files to process in parallel (ThreadPool).
             cores: Number of CPU cores for threading. If None, uses
-                config.max_workers or auto-detects CPU count.
+                config.max_workers or auto-detects CPU count. When exactly
+                one file is collected, the worker count is capped at 1
+                (parallelism is per-file; extra workers would sit idle).
             pool: Pool type: 'process', 'thread', or None to use config().ingest_pool.
             skip_existing: If True, skip re-embedding/re-storing chunks whose
                 text_hash already exists. If None, uses
@@ -1193,13 +1195,21 @@ class DocumentIngestor:
         embedding_gen = EmbeddingProviderFactory.create_from_config(cfg)
         storage = StorageFactory.create_from_config(cfg)
 
-        with trace_operation("ingest_collect_files"):
+        with trace_operation("ingest_collect_files") as span:
+            if span is not None:
+                span.set_attribute("ingest.file_path", str(path))
             files = self._collect_and_validate_files(path, recursive)
 
         if not files:
             return {"success": 0, "failed": 0, "failures": [], "skipped": 0}
 
         cores = self._resolve_core_count(cores)
+
+        # A single document is processed by exactly one worker (parallelism is
+        # per-file), so cap the pool at 1 worker rather than leaving the rest
+        # of a sized-up pool idle.
+        if len(files) == 1:
+            cores = 1
 
         successful, failed, failure_reasons, skipped = (
             self._process_parallel_with_progress(

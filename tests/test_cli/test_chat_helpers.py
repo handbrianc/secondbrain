@@ -190,6 +190,7 @@ class TestSingleTurnChat:
                 {
                     "source_file": "book.pdf",
                     "page": 3,
+                    "score": 0.9417,
                     "chunk_text": "x" * 250,
                 }
             ],
@@ -210,6 +211,9 @@ class TestSingleTurnChat:
         assert "single turn answer" in out
         assert "Sources:" in out
         assert "book.pdf" in out
+        # Each source line carries the similarity score, 4-decimal formatted
+        # like cli/display.py's search output.
+        assert "score: 0.9417" in out
         # Long chunk text is truncated to 200 chars + ellipsis.
         assert "..." in out
         assert mock_pipeline.chat.call_count == 1
@@ -312,6 +316,41 @@ class TestInteractiveChat:
         assert "Conversation history cleared" in out
         session.clear_history.assert_called_once()
         mock_pipeline.chat.assert_not_called()
+
+    def test_repl_prints_sources_with_similarity_scores(self, monkeypatch, capsys):
+        """Interactive-path source lines render the similarity score too."""
+        monkeypatch.setenv("SECONDBRAIN_SHOW_THINKING", "1")
+        mock_pipeline = MagicMock()
+        mock_pipeline.chat.return_value = {
+            "answer": "repl answer",
+            "sources": [
+                {
+                    "source_file": "notes.md",
+                    "page": 2,
+                    "score": 0.51234,
+                    "chunk_text": "retrieved chunk body",
+                }
+            ],
+        }
+        _storage, _session, patches = self._patches(mock_pipeline)
+        with ExitStack() as stack:
+            for p in patches:
+                stack.enter_context(p)
+            with patch("builtins.input", side_effect=["what is up?", "/quit"]):
+                _interactive_chat(
+                    session="s",
+                    top_k=3,
+                    temperature=0.2,
+                    model=None,
+                    show_sources=True,
+                )
+        out = capsys.readouterr().out
+        assert "Sources:" in out
+        assert "notes.md" in out
+        assert "retrieved chunk body" in out
+        # 4-decimal score formatting, consistent with cli/display.py:51.
+        assert "score: 0.5123" in out
+        assert mock_pipeline.chat.call_count == 1
 
     def test_repl_unknown_command_and_empty_input(self, monkeypatch, capsys):
         monkeypatch.setenv("SECONDBRAIN_SHOW_THINKING", "1")

@@ -327,6 +327,70 @@ class TestSetupJsonLogging:
         assert json_data["request_id"] == "field-check-req"
 
 
+class TestSetupLoggingEnvFormat:
+    """SECONDBRAIN_LOG_FORMAT env var auto-selects the JSON transport.
+
+    setup_logging() consults the env var only when ``json_format`` was not
+    passed explicitly; accepted values (case-insensitive) are
+    json/true/1/yes, anything else keeps the default rich transport.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _restore_root_logger_handlers(self) -> Iterator[None]:
+        """Restore root handlers so JSON handlers don't leak into other tests."""
+        root_logger = logging.getLogger()
+        snapshot = list(root_logger.handlers)
+        yield
+        root_logger.handlers = snapshot
+
+    @pytest.mark.parametrize("value", ["json", "JSON", "true", "1", "yes"])
+    def test_env_var_selects_json_handlers(self, monkeypatch, value) -> None:
+        monkeypatch.setenv("SECONDBRAIN_LOG_FORMAT", value)
+        monkeypatch.delenv("SECONDBRAIN_LOG_FILE", raising=False)
+        root_logger = logging.getLogger()
+        root_logger.handlers.clear()
+
+        setup_logging(verbose=True)  # json_format not passed: env branch decides
+
+        assert len(root_logger.handlers) >= 1
+        console_handler = root_logger.handlers[0]
+        assert isinstance(console_handler, logging.StreamHandler)
+        assert not isinstance(console_handler, RichHandler)
+        assert isinstance(console_handler.formatter, JSONFormatter)
+
+    def test_unrecognized_env_value_keeps_rich_default(self, monkeypatch) -> None:
+        monkeypatch.setenv("SECONDBRAIN_LOG_FORMAT", "plain")
+        monkeypatch.delenv("SECONDBRAIN_LOG_FILE", raising=False)
+        root_logger = logging.getLogger()
+        root_logger.handlers.clear()
+
+        setup_logging(verbose=True)
+
+        assert any(isinstance(h, RichHandler) for h in root_logger.handlers)
+        assert not any(
+            isinstance(h.formatter, JSONFormatter)
+            for h in root_logger.handlers
+            if h.formatter is not None
+        )
+
+    def test_env_var_json_output_parses_as_json(self, monkeypatch) -> None:
+        """Records logged through the env-selected transport parse as JSON."""
+        monkeypatch.setenv("SECONDBRAIN_LOG_FORMAT", "json")
+        monkeypatch.delenv("SECONDBRAIN_LOG_FILE", raising=False)
+        root_logger = logging.getLogger()
+        root_logger.handlers.clear()
+
+        setup_logging(verbose=True)
+        stream = io.StringIO()
+        root_logger.handlers[0].setStream(stream)
+        set_request_id("env-format-req")
+        get_logger("env_format_probe").info("Env format message")
+
+        json_data = json.loads(stream.getvalue().strip())
+        assert json_data["message"] == "Env format message"
+        assert json_data["request_id"] == "env-format-req"
+
+
 class TestGetHealthStatus:
     def test_get_health_status_structure(self) -> None:
         with patch(

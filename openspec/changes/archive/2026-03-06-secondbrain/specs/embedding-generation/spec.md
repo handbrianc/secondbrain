@@ -1,5 +1,27 @@
 # Embedding Generation
 
+> **Note (2026-10-11):** Staleness pass — this archived spec records the MongoDB-era design; the shipped
+> backend is Qdrant vector storage with SQLite conversation storage. The requirement text below is preserved
+> as history; shipped behavior differs as follows:
+>
+> - **Storage:** MongoDB → Qdrant (`SECONDBRAIN_QDRANT_URL`; backend override `SECONDBRAIN_STORAGE_BACKEND`);
+>   conversations → SQLite (`SECONDBRAIN_SQLITE_PATH`). All `SECONDBRAIN_MONGO_*` variables are gone.
+> - **Defaults drift:** chunk size 512 → 4096 chars (overlap stays 50); embeddings embeddinggemma:latest/384-dim
+>   → `text-embedding-3-small`/1536-dim; LLM Ollama/`llama3.2`/0.7/4096 → OpenAI-compatible/`gpt-4o-mini`/0.3;
+>   search default top-k 5 → 50 with a minimum-similarity threshold filter applied by default.
+> - **Renames:** `list` → `ls`; `--workers` → `--cores`; `--force` → `--yes`; `SECONDBRAIN_MONGO_*` →
+>   `SECONDBRAIN_QDRANT_URL`/`SECONDBRAIN_STORAGE_BACKEND`; `SECONDBRAIN_MODEL` → `SECONDBRAIN_EMBEDDING_MODEL`;
+>   `SECONDBRAIN_SENTENCE_TRANSFORMERS_URL` → `SECONDBRAIN_EMBEDDING_API_BASE`;
+>   `SECONDBRAIN_CONVERSATION_DB` → `SECONDBRAIN_SQLITE_PATH`.
+> - **Behavior inversions:** re-ingest skip is now the default (the flag inverted to `--no-skip-existing`);
+>   duplicates are deduplicated by SHA256 `text_hash` by default (no `--replace` opt-in); an embedding cache is
+>   implemented (was "no cache for now").
+> - **Display drift:** result text preview truncation 200 → 100 chars; search result rendering lives in
+>   `src/secondbrain/cli/display.py`.
+>
+> Most relevant here: the embedding model/dimension defaults, the embedding env-var renames, the
+> cache-implemented inversion, the chunk-size default, and the Text Chunking word-aligned annotation below.
+
 ## ADDED Requirements
 
 ### Requirement: Embedding Generation
@@ -48,6 +70,16 @@ The system SHALL generate semantic embeddings for text chunks using OpenAI-compa
 ### Requirement: Text Chunking
 
 The system SHALL split documents into overlapping text chunks for embedding.
+
+> **Note (2026-10-11):** Historical text below is preserved unchanged; the shipped chunker intentionally
+> deviates from the "Preserve semantic boundaries" scenario. The shipped chunker
+> (`src/secondbrain/document/chunker.py`) does not prefer sentence boundaries: it produces word-aligned,
+> overlapping chunks with guaranteed size/overlap bounds — merging small segments, title detection, and
+> overlap are all computed on word boundaries, so no chunk exceeds `chunk_size` and every consecutive pair
+> overlaps by the configured amount. Sentence-boundary preference was deliberately not implemented; the
+> algorithm is covered by invariant tests (chunk size, overlap, boundary and no-text-loss properties in
+> `tests/test_document/test_chunking.py` and the property-based suite). This annotation records the
+> word-aligned decision; the scenario text itself is retained as original intent, not shipped behavior.
 
 #### Scenario: Fixed-size chunking
 

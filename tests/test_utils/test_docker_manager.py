@@ -223,6 +223,112 @@ class TestWaitForQdrantReady:
                             max_wait_seconds=1, check_interval=0.1
                         )
 
+    def test_wait_for_qdrant_ready_survives_repeated_startup_failures(self):
+        """Startup polls keep probing through repeated failures until ready.
+
+        Regression for the breaker-starvation scenario: a CB-enabled storage
+        used to open its circuit after 5 failed polls (~10s in) and the
+        recovery backoff starved every later poll, raising a spurious
+        QdrantStartupError for a server that became ready mid-wait. The loop
+        now probes with force=True (fresh probe each poll, so the connection
+        cache cannot pin the first failure) and bypass_circuit_breaker=True
+        (startup failures record nothing), so readiness is detected as soon
+        as the server answers.
+        """
+        from unittest.mock import patch
+
+        with patch("secondbrain.utils.docker_manager.config") as mock_config_func:
+            with patch(
+                "secondbrain.storage.factory.StorageFactory.create_from_config"
+            ) as mock_storage_class:
+                from secondbrain.config import Config
+
+                _test_config = Config()
+                mock_config_func.return_value.qdrant_url = _test_config.qdrant_url
+                mock_storage = MagicMock()
+                # Failing 5+ times (enough to open a default-threshold
+                # breaker) then succeeding: the loop must ride it out.
+                mock_storage.validate_connection.side_effect = [False] * 5 + [True]
+                mock_storage._wait_for_index_ready.return_value = None
+                mock_storage_class.return_value = mock_storage
+
+                manager = DockerManager()
+                clock = itertools.count()
+                with (
+                    patch("time.time", side_effect=lambda: next(clock) * 0.5),
+                    patch("time.sleep"),
+                ):
+                    manager.wait_for_qdrant_ready(
+                        max_wait_seconds=60, check_interval=0.01
+                    )
+
+                # All six polls ran (5 failures + the succeeding one)...
+                assert mock_storage.validate_connection.call_count == 6
+                # ...each as a fresh, breaker-independent probe.
+                mock_storage.validate_connection.assert_called_with(
+                    force=True, bypass_circuit_breaker=True
+                )
+
+    def test_wait_for_qdrant_ready_with_mock_backend_no_type_error(self):
+        """D1 regression: the startup loop must work with the mock backend.
+
+        docker_manager probes with ``validate_connection(force=True,
+        bypass_circuit_breaker=True)``. QdrantVectorStorage accepts those
+        kwargs, but MockVectorStorage's signature used to declare ``force``
+        only, so with ``storage_backend=mock`` every poll raised TypeError —
+        swallowed by the loop's broad except as "Index not ready" — and the
+        wait burned its whole budget before raising a spurious
+        QdrantStartupError. With the widened protocol/mock signatures a real
+        MockVectorStorage (built by the same StorageFactory call the CLI
+        startup path uses) rides out failures, is detected as ready, and the
+        exact probe kwargs reach the mock.
+        """
+        from types import SimpleNamespace
+        from unittest.mock import patch
+
+        from secondbrain.storage.factory import StorageFactory
+        from secondbrain.storage.mock import MockVectorStorage
+
+        # Build the backend exactly the way the startup wait loop does,
+        # through StorageFactory with storage_backend=mock.
+        storage = StorageFactory.create_from_config(
+            SimpleNamespace(storage_backend="mock")
+        )
+        assert isinstance(storage, MockVectorStorage)
+
+        # A mock backend is always "available", so force the connection down
+        # then up to prove the loop polls through failures, and record every
+        # probe's kwargs.
+        probes: list[dict] = []
+        outcomes = iter([False, False, True])
+
+        def flaky_probe(*args, **kwargs):
+            probes.append(kwargs)
+            return next(outcomes)
+
+        storage.validate_connection = flaky_probe
+
+        manager = DockerManager()
+        clock = itertools.count()
+        with (
+            patch("secondbrain.utils.docker_manager.config") as mock_config_func,
+            patch(
+                "secondbrain.storage.factory.StorageFactory.create_from_config",
+                return_value=storage,
+            ),
+            patch("time.time", side_effect=lambda: next(clock) * 0.5),
+            patch("time.sleep"),
+        ):
+            mock_config_func.return_value.qdrant_url = _test_config.qdrant_url
+            manager.wait_for_qdrant_ready(max_wait_seconds=60, check_interval=0.01)
+
+        # Three polls: two failures the loop survived, then ready — no
+        # TypeError swallowed as "Index not ready", no QdrantStartupError.
+        assert len(probes) == 3
+        assert all(
+            probe == {"force": True, "bypass_circuit_breaker": True} for probe in probes
+        )
+
 
 class TestEnsureQdrantRunning:
     @patch("secondbrain.utils.docker_manager.config")

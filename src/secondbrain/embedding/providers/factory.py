@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, cast
 
 from secondbrain.config import Config
+from secondbrain.config.resilience import circuit_breaker_config_from_config
 from secondbrain.embedding.interfaces import EmbeddingProvider
 from secondbrain.utils.rate_limiter import SharedRateLimiter, get_shared_rate_limiter
 
@@ -79,6 +80,7 @@ class EmbeddingProviderFactory:
                     dimensions=config.embedding_dimensions,
                     timeout=config.embedding_timeout,
                     rate_limiter=_rate_limiter_from_config(config),
+                    circuit_breaker_config=circuit_breaker_config_from_config(config),
                 ),
             )
 
@@ -118,4 +120,5 @@ class EmbeddingProviderFactory:
             dimensions=dimensions or cfg.embedding_dimensions,
             timeout=timeout or cfg.embedding_timeout,
             rate_limiter=_rate_limiter_from_config(cfg),
+            circuit_breaker_config=circuit_breaker_config_from_config(cfg),
         )

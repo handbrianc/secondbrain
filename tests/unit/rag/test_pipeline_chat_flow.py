@@ -197,7 +197,9 @@ class TestChatStreamingFallbacks:
         # The derailed stream prefix was emitted live, then the generate
         # fallback replaced the answer and was emitted too.
         assert "Generated fallback answer" in capture.text
-        assert "Generated fallback answer" not in result["answer"][:0] or True
+        # The stream failure resets the accumulated text, so the final answer
+        # is purely the generate fallback: the derailed prefix must not leak.
+        assert "Some streamed prefix" not in result["answer"]
 
     def test_stream_success_not_reemitted(self) -> None:
         provider = _StreamedProvider(

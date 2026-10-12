@@ -9,6 +9,7 @@ Consolidated from:
 import inspect
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -227,3 +228,108 @@ class TestProgressCallbackEdgeCases:
         ingestor = DocumentIngestor(verbose=False)
         sig = inspect.signature(ingestor.ingest)
         assert "cores" in sig.parameters
+
+
+class TestSingleFileWorkerCap:
+    """A single-document ingest caps the worker count at 1 (C6).
+
+    Parallelism is per-file, so ingesting exactly one file can only ever use
+    one worker; the resolved worker count is capped so no idle workers are
+    spun up. Multi-file ingests keep the resolved count unchanged.
+    """
+
+    @staticmethod
+    def _patch_providers(monkeypatch: pytest.MonkeyPatch) -> None:
+        """Stub the embedding/storage factories created by ``ingest``."""
+        import secondbrain.embedding as emb_mod
+        import secondbrain.storage as storage_mod
+
+        monkeypatch.setattr(
+            emb_mod.EmbeddingProviderFactory,
+            "create_from_config",
+            staticmethod(lambda cfg: MagicMock()),
+        )
+        monkeypatch.setattr(
+            storage_mod.StorageFactory,
+            "create_from_config",
+            staticmethod(lambda cfg: MagicMock()),
+        )
+
+    @staticmethod
+    def _capture_max_workers(
+        ingestor: DocumentIngestor, monkeypatch: pytest.MonkeyPatch
+    ) -> dict[str, int]:
+        """Replace the parallel runner with a spy that records ``max_workers``."""
+        captured: dict[str, int] = {}
+
+        def fake_parallel(
+            files,
+            embedding_gen,
+            storage,
+            max_workers,
+            pool=None,
+            skip_existing=None,
+        ):
+            captured["max_workers"] = max_workers
+            return (len(files), 0, [], 0)
+
+        monkeypatch.setattr(ingestor, "_process_parallel_with_progress", fake_parallel)
+        return captured
+
+    def test_single_file_caps_explicit_workers_to_one(
+        self, tmp_path: Path, monkeypatch
+    ):
+        """cores=8 with one file resolves to a single worker."""
+        self._patch_providers(monkeypatch)
+        only = tmp_path / "only.txt"
+        only.write_text("content")
+
+        ingestor = DocumentIngestor(verbose=False)
+        captured = self._capture_max_workers(ingestor, monkeypatch)
+
+        result = ingestor.ingest(str(only), cores=8)
+
+        assert captured["max_workers"] == 1
+        assert result["success"] == 1
+
+    def test_single_file_caps_auto_resolved_workers(self, tmp_path: Path, monkeypatch):
+        """cores=None (auto-detect) is also capped to one worker."""
+        self._patch_providers(monkeypatch)
+        only = tmp_path / "only.txt"
+        only.write_text("content")
+
+        ingestor = DocumentIngestor(verbose=False)
+        captured = self._capture_max_workers(ingestor, monkeypatch)
+
+        ingestor.ingest(str(only))
+
+        assert captured["max_workers"] == 1
+
+    def test_multi_file_explicit_worker_count_unchanged(
+        self, tmp_path: Path, monkeypatch
+    ):
+        """cores=8 with two files keeps 8 workers."""
+        self._patch_providers(monkeypatch)
+        (tmp_path / "a.txt").write_text("a")
+        (tmp_path / "b.txt").write_text("b")
+
+        ingestor = DocumentIngestor(verbose=False)
+        captured = self._capture_max_workers(ingestor, monkeypatch)
+
+        result = ingestor.ingest(str(tmp_path), cores=8)
+
+        assert captured["max_workers"] == 8
+        assert result["success"] == 2
+
+    def test_multi_file_auto_worker_count_unchanged(self, tmp_path: Path, monkeypatch):
+        """Auto-resolved worker count for multiple files is untouched."""
+        self._patch_providers(monkeypatch)
+        (tmp_path / "a.txt").write_text("a")
+        (tmp_path / "b.txt").write_text("b")
+
+        ingestor = DocumentIngestor(verbose=False)
+        captured = self._capture_max_workers(ingestor, monkeypatch)
+
+        ingestor.ingest(str(tmp_path))
+
+        assert captured["max_workers"] == ingestor._resolve_core_count(None)

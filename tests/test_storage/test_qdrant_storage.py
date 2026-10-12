@@ -11,6 +11,7 @@ from types import SimpleNamespace
 
 import pytest
 from qdrant_client import QdrantClient
+from qdrant_client.http import models
 
 from secondbrain.constants import MAX_LIST_LIMIT
 from secondbrain.storage.qdrant import QdrantVectorStorage
@@ -62,6 +63,25 @@ def test_store_then_search_roundtrip(storage: QdrantVectorStorage) -> None:
     assert results[0]["chunk_id"] == "c1"
     assert results[0]["chunk_text"] == "hello"
     assert (results[0].get("score") or 0) > 0
+
+
+def test_ensure_collection_creates_cosine_vector_params(
+    storage: QdrantVectorStorage,
+) -> None:
+    """_ensure_collection provisions the collection with configured dims + COSINE."""
+    assert storage._client is not None
+    assert not storage._client.collection_exists(storage.collection_name)
+
+    storage._ensure_collection()
+
+    client = storage._client
+    assert client.collection_exists(storage.collection_name)
+    assert storage._collection_ready is True
+
+    vectors = client.get_collection(storage.collection_name).config.params.vectors
+    assert isinstance(vectors, models.VectorParams)
+    assert vectors.size == DIM
+    assert vectors.distance == models.Distance.COSINE
 
 
 def test_search_respects_source_filter(storage: QdrantVectorStorage) -> None:

@@ -14,6 +14,7 @@ from unittest.mock import patch
 
 import pytest
 
+from secondbrain.config import Config, get_config
 from secondbrain.document.ingestor._sync import DocumentIngestor
 
 
@@ -78,3 +79,28 @@ def test_explicit_cores_positive_validation_preserved() -> None:
     ):
         with pytest.raises(ValueError, match="cores must be positive"):
             ingestor._resolve_core_count(0)
+
+
+def test_max_workers_env_flows_into_resolve_core_count(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """SECONDBRAIN_MAX_WORKERS flows through Config into _resolve_core_count(None).
+
+    The env var is parsed into ``Config.max_workers`` by pydantic-settings
+    (``env_prefix="SECONDBRAIN_"``). With ``cores=None`` the resolver must
+    return that env-derived worker count instead of the CPU auto-detect
+    probe value, and the ``max_ingest_processes`` cap must not apply to it.
+    """
+    monkeypatch.setenv("SECONDBRAIN_MAX_WORKERS", "6")
+    assert Config().max_workers == 6
+
+    # Resolve through the real get_config() cache so the env -> config ->
+    # _resolve_core_count chain is exercised end to end. The cache is cleared
+    # around the call: the env var is monkeypatched away afterwards, and a
+    # stale cached Config must not leak it into later tests.
+    get_config.cache_clear()
+    try:
+        ingestor = _ingestor_with_cpu(2)  # CPU probe says 2; the env value wins
+        assert ingestor._resolve_core_count(None) == 6
+    finally:
+        get_config.cache_clear()

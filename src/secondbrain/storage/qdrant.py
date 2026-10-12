@@ -33,6 +33,11 @@ from secondbrain.types import (
     _validate_chunk_info,
     _validate_search_result,
 )
+from secondbrain.utils.circuit_breaker import (
+    CircuitBreaker,
+    CircuitBreakerConfig,
+    CircuitBreakerError,
+)
 from secondbrain.utils.tracing import trace_operation
 
 logger = logging.getLogger(__name__)
@@ -100,6 +105,7 @@ class QdrantVectorStorage:
         url: str | None = None,
         api_key: str | None = None,
         collection_name: str | None = None,
+        circuit_breaker_config: CircuitBreakerConfig | None = None,
     ) -> None:
         cfg = config()
         self.url = url or cfg.qdrant_url
@@ -111,6 +117,16 @@ class QdrantVectorStorage:
         self._collection_lock = threading.Lock()
         self._conn_valid: bool | None = None
         self._conn_checked_at: float = 0.0
+        # Circuit breaker for the connection-validation path. Constructed with
+        # a config (``StorageFactory``) → enabled; ``None`` → disabled, which
+        # leaves ``validate_connection`` behaving exactly as before.
+        self._circuit_breaker_enabled = circuit_breaker_config is not None
+        self._circuit_breaker: CircuitBreaker | None = None
+        if self._circuit_breaker_enabled and circuit_breaker_config is not None:
+            self._circuit_breaker = CircuitBreaker(
+                config=circuit_breaker_config,
+                service_name=self.__class__.__name__,
+            )
 
     # ------------------------------------------------------------------
     # Client / collection management (lazy)
@@ -694,8 +710,32 @@ class QdrantVectorStorage:
             "collection": self.collection_name,
         }
 
-    def validate_connection(self, force: bool = False) -> bool:
-        """TTL-cached reachability probe; returns False on failure, never raises."""
+    def validate_connection(
+        self, force: bool = False, bypass_circuit_breaker: bool = False
+    ) -> bool:
+        """TTL-cached reachability probe; returns False on failure, never raises.
+
+        When a circuit breaker is configured, the raw probe runs through it
+        (``CircuitBreaker.call``): while the circuit is OPEN the probe is
+        skipped entirely and the method degrades gracefully to ``False`` —
+        the same signal callers already handle for an unreachable server —
+        without any network call. The connection cache is left untouched on
+        that path so the probe re-runs as soon as the circuit half-opens.
+
+        With ``bypass_circuit_breaker=True`` (startup-wait probes) the raw
+        probe runs directly and the breaker is neither consulted nor updated
+        — success or failure — so transient startup failures cannot open the
+        circuit while waiting for the server to come up.
+
+        Args:
+            force: If True, bypass the connection cache and re-probe.
+            bypass_circuit_breaker: Run the probe without consulting or
+                updating the circuit breaker.
+
+        Returns
+        -------
+            True if the Qdrant server answered, False otherwise.
+        """
         now = time.monotonic()
         if (
             not force
@@ -703,18 +743,42 @@ class QdrantVectorStorage:
             and (now - self._conn_checked_at) < _CONNECTION_TTL
         ):
             return self._conn_valid
-        try:
-            with _traced_qdrant_operation(self.collection_name, "ping"):
-                self._get_client().get_collections()
-            self._conn_valid = True
-        except Exception:
-            self._conn_valid = False
+
+        if self._circuit_breaker is not None and not bypass_circuit_breaker:
+            try:
+                self._conn_valid = self._circuit_breaker.call(self._probe_connection)
+            except CircuitBreakerError:
+                logger.warning(
+                    "Circuit breaker open for %s; skipping Qdrant reachability probe",
+                    self.__class__.__name__,
+                )
+                return False
+        else:
+            self._conn_valid = self._probe_connection()
         self._conn_checked_at = now
         return self._conn_valid
 
-    async def validate_connection_async(self, force: bool = False) -> bool:
+    def _probe_connection(self) -> bool:
+        """One raw Qdrant reachability probe (no caching, no circuit breaker).
+
+        Returns
+        -------
+            True if the Qdrant server answered ``get_collections()``.
+        """
+        try:
+            with _traced_qdrant_operation(self.collection_name, "ping"):
+                self._get_client().get_collections()
+        except Exception:
+            return False
+        return True
+
+    async def validate_connection_async(
+        self, force: bool = False, bypass_circuit_breaker: bool = False
+    ) -> bool:
         """Async wrapper over :meth:`validate_connection`."""
-        return await asyncio.to_thread(self.validate_connection, force)
+        return await asyncio.to_thread(
+            self.validate_connection, force, bypass_circuit_breaker
+        )
 
     def _wait_for_index_ready(self, *args: Any, **kwargs: Any) -> None:
         """No-op: Qdrant creates indexes synchronously (docker_manager calls this)."""

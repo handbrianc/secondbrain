@@ -9,7 +9,9 @@ asserts on spans emitted by the real in-memory Qdrant storage.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 from opentelemetry.sdk.trace import TracerProvider
@@ -19,6 +21,7 @@ from opentelemetry.trace import StatusCode
 from qdrant_client import QdrantClient
 
 import secondbrain.utils.tracing as tracing_module
+from secondbrain.document.ingestor import DocumentIngestor
 from secondbrain.storage.qdrant import QdrantVectorStorage
 from secondbrain.utils.failure_injector.types import InjectedConnectionError
 
@@ -164,3 +167,41 @@ def test_qdrant_spans_nest_under_caller_when_tracing_enabled(
     assert qdrant.context.trace_id == caller.context.trace_id
     assert qdrant.parent is not None
     assert qdrant.parent.span_id == caller.context.span_id
+
+
+def test_storage_store_span_records_document_count_and_duration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The ingestor's storage.store span carries documents_stored + duration_ms.
+
+    The opentelemetry-integration spec requires the ``storage.store`` span to
+    include a document count attribute and the storage duration. Exercises the
+    real ``DocumentIngestor._store_embedding_batch`` code path with mocked
+    embedding generation and storage.
+    """
+    exporter = setup_span_capture(monkeypatch)
+
+    ingestor = DocumentIngestor(chunk_size=100, chunk_overlap=10)
+    chunks = [
+        {
+            "file_path": Path("test.pdf"),
+            "original_index": i,
+            "text": f"Text {i}",
+            "page": 1,
+            "text_hash": f"hash_{i}",
+        }
+        for i in range(5)
+    ]
+    embedding_gen = MagicMock()
+    embedding_gen.generate_batch.return_value = [[0.1] * 384 for _ in range(5)]
+    storage = MagicMock()
+
+    docs_count = ingestor._store_embedding_batch(
+        Path("test.pdf"), chunks, embedding_gen, storage
+    )
+
+    assert docs_count == 5
+    spans = _spans_by_name(exporter)
+    store_span = spans["storage.store"][0]
+    assert store_span.attributes["storage.documents_stored"] == 5
+    assert store_span.attributes["storage.duration_ms"] >= 0.0

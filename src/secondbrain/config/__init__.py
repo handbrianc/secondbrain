@@ -20,6 +20,7 @@ from secondbrain.config.llm import LLMMixin
 from secondbrain.config.processing import ProcessingStorageMixin
 from secondbrain.config.qdrant import QdrantMixin
 from secondbrain.config.rag import RagMixin
+from secondbrain.config.resilience import ResilienceMixin
 from secondbrain.config.sqlite import SqliteMixin
 
 __all__ = ["Config", "config", "get_config"]
@@ -33,6 +34,7 @@ class Config(
     ProcessingStorageMixin,
     QdrantMixin,
     SqliteMixin,
+    ResilienceMixin,
     BaseSettings,
 ):
     """Configuration for secondbrain CLI.

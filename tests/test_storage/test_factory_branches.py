@@ -12,6 +12,7 @@ import pytest
 
 from secondbrain.storage.factory import StorageFactory
 from secondbrain.storage.mock import MockVectorStorage
+from secondbrain.utils.circuit_breaker import CircuitBreakerConfig
 
 
 class TestStorageFactoryBranches:
@@ -40,6 +41,7 @@ class TestStorageFactoryBranches:
         cfg.qdrant_url = "http://qdrant:6333"
         cfg.qdrant_api_key = "sk-qdrant"
         cfg.qdrant_collection = "embeddings"
+        cfg.circuit_breaker_enabled = False
 
         with patch("secondbrain.storage.factory.QdrantVectorStorage") as mock_qdrant:
             result = StorageFactory.create_from_config(cfg)
@@ -49,6 +51,33 @@ class TestStorageFactoryBranches:
             url="http://qdrant:6333",
             api_key="sk-qdrant",
             collection_name="embeddings",
+            circuit_breaker_config=None,
+        )
+
+    def test_qdrant_branch_wires_circuit_breaker_when_enabled(self) -> None:
+        """storage_backend='qdrant' + enabled config wires a circuit breaker."""
+        cfg = MagicMock()
+        cfg.storage_backend = "qdrant"
+        cfg.qdrant_url = "http://qdrant:6333"
+        cfg.qdrant_api_key = "sk-qdrant"
+        cfg.qdrant_collection = "embeddings"
+        cfg.circuit_breaker_enabled = True
+        cfg.circuit_breaker_failure_threshold = 3
+        cfg.circuit_breaker_success_threshold = 1
+        cfg.circuit_breaker_recovery_timeout = 45.5
+
+        with patch("secondbrain.storage.factory.QdrantVectorStorage") as mock_qdrant:
+            StorageFactory.create_from_config(cfg)
+
+        mock_qdrant.assert_called_once_with(
+            url="http://qdrant:6333",
+            api_key="sk-qdrant",
+            collection_name="embeddings",
+            circuit_breaker_config=CircuitBreakerConfig(
+                failure_threshold=3,
+                success_threshold=1,
+                recovery_timeout=45.5,
+            ),
         )
 
     def test_unknown_backend_raises_value_error(self) -> None:

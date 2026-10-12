@@ -22,6 +22,7 @@ locking and transaction behavior.
 from __future__ import annotations
 
 import asyncio
+import logging
 import sqlite3
 import threading
 from datetime import UTC, datetime
@@ -29,9 +30,13 @@ from pathlib import Path
 from typing import Any
 
 from secondbrain.config import config
+from secondbrain.config.resilience import circuit_breaker_config_from_config
+from secondbrain.utils.circuit_breaker import CircuitBreakerError
 from secondbrain.utils.connections import ValidatableService
 
 __all__ = ["ConversationStorage"]
+
+logger = logging.getLogger(__name__)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS sessions (
@@ -82,7 +87,10 @@ class ConversationStorage(ValidatableService):
         path = db_path if db_path is not None else cfg.sqlite_path
         self.db_path: str = path
         self._conn: sqlite3.Connection | None = None
-        super().__init__(cache_ttl=cfg.connection_cache_ttl)
+        super().__init__(
+            cache_ttl=cfg.connection_cache_ttl,
+            circuit_breaker_config=circuit_breaker_config_from_config(cfg),
+        )
         # Dedicated reentrant lock for ALL SQLite access on the single
         # shared connection. It is separate from the plain ``Lock`` installed
         # by ``ValidatableService.__init__`` (for its cache bookkeeping) so
@@ -140,6 +148,61 @@ class ConversationStorage(ValidatableService):
             return bool(row and row[0] == "ok")
         except sqlite3.Error:
             return False
+
+    def validate_connection(
+        self, force: bool = False, bypass_circuit_breaker: bool = False
+    ) -> bool:
+        """Validate the SQLite connection through the circuit breaker.
+
+        Routes the cached probe through
+        :meth:`ValidatableService.validate_connection_with_circuit_breaker`,
+        so successes and failures feed the breaker wired at construction
+        (circuit-breaker spec: "Validation calls are wrapped"). While the
+        circuit is OPEN the probe is skipped entirely and the method degrades
+        to ``False`` — the same bool contract the base class already returns
+        for a failed validation — without touching SQLite.
+
+        Args:
+            force: If True, bypass cache and check connection.
+            bypass_circuit_breaker: Run the probe without consulting or
+                updating the circuit breaker (used by startup-wait probes).
+
+        Returns
+        -------
+            True if the connection is valid, False otherwise.
+        """
+        try:
+            return self.validate_connection_with_circuit_breaker(
+                force=force, bypass_circuit_breaker=bypass_circuit_breaker
+            )
+        except CircuitBreakerError:
+            logger.warning(
+                "Circuit breaker open for %s; skipping conversation-storage probe",
+                self.__class__.__name__,
+            )
+            return False
+
+    async def validate_connection_async(
+        self, force: bool = False, bypass_circuit_breaker: bool = False
+    ) -> bool:
+        """Async wrapper over :meth:`validate_connection`.
+
+        Offloads the blocking probe to a worker thread via
+        :func:`asyncio.to_thread`, mirroring the other async twins, so the
+        async path feeds the same circuit breaker.
+
+        Args:
+            force: If True, bypass cache and check connection.
+            bypass_circuit_breaker: Run the probe without consulting or
+                updating the circuit breaker (used by startup-wait probes).
+
+        Returns
+        -------
+            True if the connection is valid, False otherwise.
+        """
+        return await asyncio.to_thread(
+            self.validate_connection, force, bypass_circuit_breaker
+        )
 
     def create_session(self, session_id: str) -> str:
         """Create a new conversation session.

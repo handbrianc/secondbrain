@@ -591,159 +591,51 @@ def test_custom_llm_endpoint():
     """Test custom LLM endpoint configuration via environment variable."""
     import os
 
+    from secondbrain.config import get_config
+
     # Save original value
-    original = os.environ.get("SECONDBRAIN_LLM_ENDPOINT")
+    original = os.environ.get("SECONDBRAIN_OPENAI_BASE_URL")
 
     try:
-        # Set custom endpoint
+        # Set a custom OpenAI-compatible endpoint
         custom_endpoint = "http://custom-llm:8080"
-        os.environ["SECONDBRAIN_LLM_ENDPOINT"] = custom_endpoint
+        os.environ["SECONDBRAIN_OPENAI_BASE_URL"] = custom_endpoint
 
-        # Verify the environment variable is set
-        assert os.environ["SECONDBRAIN_LLM_ENDPOINT"] == custom_endpoint
-
-        # Verify that config module can read this environment variable
-        # by checking if it's in the expected location for config loading
-        from secondbrain.config import get_config
-
+        # The env var must actually reach the config surface (openai_base_url)
+        get_config.cache_clear()
         cfg = get_config()
-
-        # The config should have been loaded with the environment variable
-        # We verify by checking that the env var was actually read
-        # (config loading would fail or use default if env var wasn't read)
-        assert cfg is not None, "Config should load successfully"
-
-        # Verify the env var is in the standard location for SecondBrain config
-        assert "SECONDBRAIN_LLM_ENDPOINT" in os.environ
+        assert cfg.openai_base_url == custom_endpoint
     finally:
         # Restore original
         if original is None:
-            os.environ.pop("SECONDBRAIN_LLM_ENDPOINT", None)
+            os.environ.pop("SECONDBRAIN_OPENAI_BASE_URL", None)
         else:
-            os.environ["SECONDBRAIN_LLM_ENDPOINT"] = original
+            os.environ["SECONDBRAIN_OPENAI_BASE_URL"] = original
+        get_config.cache_clear()
 
 
 def test_custom_conversation_db():
     """Test custom conversation database configuration via environment variable."""
     import os
 
+    from secondbrain.config import get_config
+
     # Save original value
-    original = os.environ.get("SECONDBRAIN_CONVERSATION_DB")
+    original = os.environ.get("SECONDBRAIN_SQLITE_PATH")
 
     try:
-        # Set custom conversation DB
-        custom_db = "my_custom_conversations"
-        os.environ["SECONDBRAIN_CONVERSATION_DB"] = custom_db
+        # Set a custom SQLite conversation-database path
+        custom_db = "/tmp/custom_conversations.db"
+        os.environ["SECONDBRAIN_SQLITE_PATH"] = custom_db
 
-        # Verify the environment variable is set
-        assert os.environ["SECONDBRAIN_CONVERSATION_DB"] == custom_db
-
-        # Verify it can be loaded by config
-        from secondbrain.config import get_config
-
+        # The env var must actually reach the config surface (sqlite_path)
+        get_config.cache_clear()
         cfg = get_config()
-
-        # The config should load successfully with the custom DB setting
-        assert cfg is not None, (
-            "Config should load successfully with custom conversation DB"
-        )
-
-        # Verify the env var is in the standard location for SecondBrain config
-        assert "SECONDBRAIN_CONVERSATION_DB" in os.environ
+        assert cfg.sqlite_path == custom_db
     finally:
         # Restore original
         if original is None:
-            os.environ.pop("SECONDBRAIN_CONVERSATION_DB", None)
+            os.environ.pop("SECONDBRAIN_SQLITE_PATH", None)
         else:
-            os.environ["SECONDBRAIN_CONVERSATION_DB"] = original
-
-    def test_empty_response_retry_logic(self) -> None:
-        """Test that empty LLM responses trigger retry logic.
-
-        Verifies that:
-        - When LLM returns empty response, retry logic activates
-        - User sees retry feedback messages
-        - After max retries, appropriate error message is shown
-        - Valid response on retry is displayed correctly
-        """
-        with (
-            patch("secondbrain.rag.RAGPipeline") as mock_pipeline_class,
-            patch("secondbrain.conversation.ConversationSession") as mock_session_class,
-        ):
-            # Mock session
-            mock_session = MagicMock()
-            mock_session.is_empty = True
-            mock_session_class.load.return_value = None
-            mock_session_class.create.return_value = mock_session
-
-            # Mock RAG pipeline - first 2 calls return empty, 3rd succeeds
-            mock_pipeline = MagicMock()
-            mock_pipeline.chat.side_effect = [
-                {"answer": "", "rewritten_query": "test query"},  # Empty response 1
-                {"answer": "", "rewritten_query": "test query"},  # Empty response 2
-                {
-                    "answer": "Final answer after retries.",
-                    "rewritten_query": "test query",
-                },  # Success
-            ]
-            mock_pipeline_class.return_value = mock_pipeline
-
-            runner = CliRunner()
-            result = runner.invoke(cli, ["chat", "test query"])
-
-            # Verify pipeline.chat was called 3 times (2 retries + 1 success)
-            assert mock_pipeline.chat.call_count == 3
-
-            # Verify output contains retry messages
-            assert (
-                "retrying" in result.output.lower()
-                or "attempt" in result.output.lower()
-            )
-
-            # Verify final answer is displayed
-            assert "Final answer after retries." in result.output
-
-    def test_empty_response_max_retries_exhausted(self) -> None:
-        """Test behavior when all retry attempts fail with empty responses.
-
-        Verifies that:
-        - After max retries (3), error message is shown
-        - No empty answer is displayed
-        - User is prompted to try again
-        """
-        with (
-            patch("secondbrain.rag.RAGPipeline") as mock_pipeline_class,
-            patch("secondbrain.conversation.ConversationSession") as mock_session_class,
-        ):
-            # Mock session
-            mock_session = MagicMock()
-            mock_session.is_empty = True
-            mock_session_class.load.return_value = None
-            mock_session_class.create.return_value = mock_session
-
-            # Mock RAG pipeline - all calls return empty
-            mock_pipeline = MagicMock()
-            mock_pipeline.chat.return_value = {
-                "answer": "",
-                "rewritten_query": "test query",
-            }
-            mock_pipeline_class.return_value = mock_pipeline
-
-            runner = CliRunner()
-            result = runner.invoke(cli, ["chat", "test query"])
-
-            # Verify pipeline.chat was called 3 times (max retries)
-            assert mock_pipeline.chat.call_count == 3
-
-            # Verify error message is shown
-            assert "error" in result.output.lower()
-            assert (
-                "multiple attempts" in result.output.lower()
-                or "try again" in result.output.lower()
-            )
-
-            # Verify no empty answer is displayed
-            assert (
-                "Assistant:" not in result.output
-                or result.output.count("Assistant:") == 0
-            )
+            os.environ["SECONDBRAIN_SQLITE_PATH"] = original
+        get_config.cache_clear()

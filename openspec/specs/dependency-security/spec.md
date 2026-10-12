@@ -38,10 +38,15 @@ The system SHALL support vulnerability scanning using pip-audit.
 
 Dependency version bounds SHALL be documented with rationale.
 
+> **Note (2026-10-11):** Amended: `requirements.txt` is pip-compile output (a generated artifact that carries no
+> hand-written rationale). The shipped source of truth for dependency bounds and their rationale is the inline
+> comments on `[project] dependencies` in `pyproject.toml` (pyproject.toml:21-30). The scenario below was
+> amended in place to name `pyproject.toml`.
+
 #### Scenario: Version ranges are documented
 
 - **WHEN** dependency is pinned (e.g., qdrant-client>=1.9.0)
-- **THEN** rationale SHALL be in requirements.txt comments
+- **THEN** rationale SHALL be in pyproject.toml inline comments ([project] dependencies)
 - **AND** minimum version reason SHALL be explained
 
 #### Scenario: Major version constraints are explained
@@ -96,4 +101,9 @@ Dependency tree SHALL be visualizable for debugging.
 
 - **WHEN** dependency tree is generated
 - **THEN** transitive dependencies SHALL be shown
-- **AND** depth SHALL be configurable
+- **AND** depth SHALL be configurable via the pipdeptree CLI (`pipdeptree --depth`)
+
+> **Note (2026-10-11):** Clarified: depth configurability is a pipdeptree CLI capability (`--depth`), not a
+> project setting. The project's `scripts/security_scan.sh` invokes `pipdeptree --summary -w fail` (fixed form,
+> no depth control), so conflict checking via the script is summary-level; depth-controlled or full-tree views
+> are obtained by running pipdeptree directly.

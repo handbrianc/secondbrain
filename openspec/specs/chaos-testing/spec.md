@@ -22,7 +22,12 @@ The system SHALL support chaos engineering tests that simulate service failures.
 
 #### Scenario: Embedding service failure
 
-- **WHEN** sentence-transformers API is unavailable
+> **Note (2026-10-12):** Terminology updated in place: the original scenario text named the
+> "sentence-transformers API"; the shipped embedding provider is OpenAI-compatible and
+> provider-agnostic, so the trigger now reads "the embedding provider API". The original wording is
+> recorded here as history.
+
+- **WHEN** the embedding provider API is unavailable
 - **THEN** ingestion SHALL fail gracefully
 - **AND** circuit breaker SHALL open
 - **AND** subsequent calls SHALL fail fast

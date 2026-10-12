@@ -1,5 +1,27 @@
 # Document Management
 
+> **Note (2026-10-11):** Staleness pass — this archived spec records the MongoDB-era design; the shipped
+> backend is Qdrant vector storage with SQLite conversation storage. The requirement text below is preserved
+> as history; shipped behavior differs as follows:
+>
+> - **Storage:** MongoDB → Qdrant (`SECONDBRAIN_QDRANT_URL`; backend override `SECONDBRAIN_STORAGE_BACKEND`);
+>   conversations → SQLite (`SECONDBRAIN_SQLITE_PATH`). All `SECONDBRAIN_MONGO_*` variables are gone.
+> - **Defaults drift:** chunk size 512 → 4096 chars (overlap stays 50); embeddings embeddinggemma:latest/384-dim
+>   → `text-embedding-3-small`/1536-dim; LLM Ollama/`llama3.2`/0.7/4096 → OpenAI-compatible/`gpt-4o-mini`/0.3;
+>   search default top-k 5 → 50 with a minimum-similarity threshold filter applied by default.
+> - **Renames:** `list` → `ls`; `--workers` → `--cores`; `--force` → `--yes`; `SECONDBRAIN_MONGO_*` →
+>   `SECONDBRAIN_QDRANT_URL`/`SECONDBRAIN_STORAGE_BACKEND`; `SECONDBRAIN_MODEL` → `SECONDBRAIN_EMBEDDING_MODEL`;
+>   `SECONDBRAIN_SENTENCE_TRANSFORMERS_URL` → `SECONDBRAIN_EMBEDDING_API_BASE`;
+>   `SECONDBRAIN_CONVERSATION_DB` → `SECONDBRAIN_SQLITE_PATH`.
+> - **Behavior inversions:** re-ingest skip is now the default (the flag inverted to `--no-skip-existing`);
+>   duplicates are deduplicated by SHA256 `text_hash` by default (no `--replace` opt-in); an embedding cache is
+>   implemented (was "no cache for now").
+> - **Display drift:** result text preview truncation 200 → 100 chars; search result rendering lives in
+>   `src/secondbrain/cli/display.py`.
+>
+> Most relevant here: the `list` → `ls` command rename, `--force` → `--yes` on destructive deletes, the
+> storage target, and the display truncation drift.
+
 ## ADDED Requirements
 
 ### Requirement: List Documents

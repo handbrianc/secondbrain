@@ -431,11 +431,15 @@ class TestMockEmbeddingProviderGaps:
         assert all(len(emb) == 64 for emb in result)
 
     def test_validate_connection_always_true(self) -> None:
-        """validate_connection is True regardless of the force flag."""
+        """validate_connection is True regardless of the flags."""
         provider = MockEmbeddingProvider()
 
         assert provider.validate_connection() is True
         assert provider.validate_connection(force=True) is True
+        assert (
+            provider.validate_connection(force=True, bypass_circuit_breaker=True)
+            is True
+        )
 
     def test_close_is_noop_and_repeatable(self) -> None:
         """close() does nothing and can be called repeatedly."""

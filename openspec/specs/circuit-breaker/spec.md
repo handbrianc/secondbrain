@@ -91,6 +91,23 @@ The circuit breaker SHALL support configurable recovery timeout with exponential
 
 The circuit breaker SHALL integrate with ValidatableService to protect service validation calls.
 
+> **Note (2026-10-12):** Startup-wait exemption. During the docker startup wait, Qdrant connection
+> probes run with `bypass_circuit_breaker=True` **and** `force=True`
+> (`src/secondbrain/utils/docker_manager.py:338-344`): the breaker is neither consulted nor
+> recorded, so a repeatedly failing startup does NOT open the circuit and every poll probes for
+> real. `force=True` exists to defeat the 60-second connection-cache TTL
+> (`src/secondbrain/storage/qdrant.py:67,739-745`) that would otherwise pin the first failed
+> probe as `False` for the whole wait window; on TTL cache hits neither the breaker nor a probe
+> is consulted. This exemption is confined to the startup wait: post-startup connection/validation
+> paths — search (`src/secondbrain/search/__init__.py:116,170,211`), management
+> (`src/secondbrain/management/__init__.py:193`), logging (`src/secondbrain/logging/__init__.py:292`),
+> and `ConversationStorage.validate_connection`
+> (`src/secondbrain/conversation/storage_sqlite.py:152-183`) — traverse and record through the
+> breaker normally. The state-machine scenario "subsequent calls SHALL fail immediately without
+> execution" and the "Validation calls are wrapped" scenario below describe that normal,
+> post-startup behavior; the startup wait is the one path where `validate_connection()` runs
+> outside the breaker.
+
 #### Scenario: Validation calls are wrapped
 
 - **WHEN** ValidatableService.validate_connection() is called

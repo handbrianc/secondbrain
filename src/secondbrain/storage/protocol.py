@@ -150,8 +150,17 @@ class VectorStorageProtocol(Protocol):
         """Return storage statistics (total chunks, unique sources)."""
         ...  # pragma: no cover
 
-    def validate_connection(self, force: bool = False) -> bool:
-        """Return True if the backend is reachable; never raises."""
+    def validate_connection(
+        self, force: bool = False, bypass_circuit_breaker: bool = False
+    ) -> bool:
+        """Return True if the backend is reachable; never raises.
+
+        Args:
+            force: If True, bypass any connection cache and re-probe.
+            bypass_circuit_breaker: Run the probe without consulting or
+                updating the circuit breaker (startup-wait probes);
+                backends without a breaker accept and ignore it.
+        """
         ...  # pragma: no cover
 
     def close(self) -> None:

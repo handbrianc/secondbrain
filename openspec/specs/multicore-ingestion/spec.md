@@ -87,6 +87,13 @@ The system SHALL provide progress feedback during parallel document ingestion op
 
 The system SHALL limit batch sizes during parallel processing to prevent memory exhaustion.
 
+> **Note (2026-10-12):** Async streaming path memory profile
+> (`src/secondbrain/document/ingestor/_async.py:170-230`): a file's full deduplicated chunk set is
+> accumulated up front (inside the per-file `ingest_worker_chunk` span) before batch embedding begins —
+> chunk accumulation is per-file, not per-batch. Embeddings remain batch-bounded
+> (`streaming_chunk_batch_size`) and store slices stay bounded, so peak memory scales with one file's
+> chunk set, not the whole corpus. The sync path and all `MAX_MEMORY_BATCH_SIZE` guarantees are unchanged.
+
 #### Scenario: Large batches are split into smaller chunks
 
 - **WHEN** processing 1000 document chunks with embeddings

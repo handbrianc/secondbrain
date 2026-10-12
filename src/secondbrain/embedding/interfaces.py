@@ -69,11 +69,16 @@ class EmbeddingProvider(Protocol):
         """
         ...  # pragma: no cover
 
-    def validate_connection(self, force: bool = False) -> bool:
+    def validate_connection(
+        self, force: bool = False, bypass_circuit_breaker: bool = False
+    ) -> bool:
         """Check if the embedding service is available.
 
         Args:
             force: If True, bypass cache and revalidate.
+            bypass_circuit_breaker: Run the probe without consulting or
+                updating the circuit breaker (startup-wait probes);
+                providers without a breaker accept and ignore it.
 
         Returns:
             True if service is available, False otherwise.

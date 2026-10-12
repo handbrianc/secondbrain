@@ -22,6 +22,17 @@ The system SHALL integrate OpenTelemetry SDK for distributed tracing.
 
 The ingestion pipeline SHALL be instrumented with OpenTelemetry spans.
 
+> **Note (2026-10-12):** Span nesting: the worker spans ("ingest_worker_extract", "ingest_worker_chunk",
+> "ingest_worker_embed") are NOT children of the "ingest_collect_files" span — that span closes before
+> workers start on both the sync and async paths. Each worker span is therefore an independent root span
+> with its own trace_id (verified: distinct trace_ids, parent=None), started by `trace_operation` with no
+> active parent context. Worker spans are correlated with the ingestion flow by span naming and timing
+> only, NOT by trace context — the "child of the ingestion flow" wording in the scenario below holds
+> conceptually (they belong to that invocation's flow), not at span-hierarchy or trace level. Literal
+> parent-child nesting would require trace-context propagation into the workers (not implemented).
+> By contrast, spans opened while a caller span is active (e.g. "qdrant_search" under "search_storage")
+> DO nest as true children. Scenario text retained unchanged.
+
 #### Scenario: Ingestion creates root span
 
 - **WHEN** ingest() is called

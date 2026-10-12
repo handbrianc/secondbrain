@@ -66,6 +66,9 @@
 
   > **Note (2026-10-08):** Not shipped — the logging module provides only standard levels; no SUCCESS or
   > PERFORMANCE custom levels exist in `src/secondbrain/logging/`.
+  >
+  > **Note (2026-10-11):** Not shipped (2026-10-11): custom log levels not implemented; standard levels only
+  > (verified absent in `src/secondbrain/logging/`).
 - [x] 4.6 Write logging tests - Create `tests/test_logging/test_structured_logging.py` with JSON output validation
 
 ## 5. API Documentation

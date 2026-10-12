@@ -79,7 +79,7 @@ class AsyncDocumentIngestor(DocumentIngestor):
         recursive: bool = False,
         batch_size: int = 30,
         max_concurrent: int = 5,
-    ) -> dict[str, int]:
+    ) -> dict[str, int | list[tuple[str, str]]]:
         """Ingest documents asynchronously from a file or directory.
 
         Args:
@@ -90,7 +90,15 @@ class AsyncDocumentIngestor(DocumentIngestor):
 
         Returns
         -------
-            dict with 'success' and 'failed' counts.
+            dict with 'success' and 'failed' counts, 'failures' list of
+            (path, reason) tuples for every failed file, and 'skipped'
+            (already-stored re-ingest skips) counts — the same shape as the
+            sync ``ingest()``. The async pipeline does not currently detect
+            re-ingest skips, so 'skipped' is always 0. Failure reasons carry
+            the real cause when one was captured — ``"ExceptionType: message"``,
+            the same format the sync worker records — while files that fail
+            without a raised error (no text extracted, or every embedding
+            attempt failed) fall back to the generic no-documents reason.
         """
         from secondbrain.embedding import EmbeddingProviderFactory
         from secondbrain.storage import StorageFactory
@@ -100,21 +108,32 @@ class AsyncDocumentIngestor(DocumentIngestor):
         storage = StorageFactory.create_from_config(cfg)
 
         try:
-            files = await asyncio.to_thread(
-                self._collect_and_validate_files, path, recursive
-            )
+            with trace_operation("ingest_collect_files") as span:
+                if span is not None:
+                    span.set_attribute("ingest.file_path", str(path))
+                files = await asyncio.to_thread(
+                    self._collect_and_validate_files, path, recursive
+                )
 
             if not files:
-                return {"success": 0, "failed": 0}
+                return {"success": 0, "failed": 0, "failures": [], "skipped": 0}
 
             # Semaphore for concurrency control (backpressure)
             semaphore = asyncio.Semaphore(max_concurrent)
+
+            # ``process_file_async`` records the real per-file error here as
+            # "ExceptionType: message" (the sync worker's reason format) so
+            # the failures list below can name the true cause.
+            captured_reasons: dict[str, str] = {}
 
             async def process_with_semaphore(file_path: Path) -> bool:
                 """Process a single file with semaphore control."""
                 async with semaphore:
                     return await self.process_file_async(
-                        file_path, embedding_gen, storage
+                        file_path,
+                        embedding_gen,
+                        storage,
+                        failure_reasons=captured_reasons,
                     )
 
             tasks = [process_with_semaphore(f) for f in files]
@@ -123,7 +142,33 @@ class AsyncDocumentIngestor(DocumentIngestor):
             successful = sum(1 for r in results if r is True)
             failed = len(results) - successful
 
-            return {"success": successful, "failed": failed}
+            # Mirror the sync ingest() return: every failed file carries a
+            # (path, reason) entry. A False result carries the real error
+            # captured by ``process_file_async`` ("ExceptionType: message",
+            # the sync worker's format) when there was one, and otherwise the
+            # same generic no-documents reason the sync worker uses.
+            # Exceptions that escaped the worker (e.g. cancellation) carry
+            # their type and message and are never masked with the generic
+            # reason.
+            failures: list[tuple[str, str]] = []
+            for file_path, result in zip(files, results, strict=True):
+                if result is True:
+                    continue
+                if isinstance(result, BaseException):
+                    reason = f"{type(result).__name__}: {result}"
+                else:
+                    reason = captured_reasons.get(str(file_path)) or (
+                        "No documents produced (file may be empty, image-only, "
+                        "or extraction failed)"
+                    )
+                failures.append((str(file_path), reason))
+
+            return {
+                "success": successful,
+                "failed": failed,
+                "failures": failures,
+                "skipped": 0,
+            }
         finally:
             # Clean up resources to prevent connection leaks
             with contextlib.suppress(Exception):
@@ -141,84 +186,89 @@ class AsyncDocumentIngestor(DocumentIngestor):
         """Stream process chunks asynchronously for memory efficiency.
 
         Uses native async embedding generation to avoid blocking the event loop.
+
+        Chunking (dedup + role classification) runs up front inside one
+        ``ingest_worker_chunk`` span per file; embeddings and stores still
+        flush per batch so memory stays bounded.
         """
         batch_size = config().streaming_chunk_batch_size
 
-        seen_hashes = set()
-        batch_chunks: list[dict[str, Any]] = []
+        with trace_operation("ingest_worker_chunk") as span:
+            if span is not None:
+                span.set_attribute("ingest.segments_count", len(segments))
+
+            seen_hashes = set()
+            all_chunks: list[dict[str, Any]] = []
+
+            stream_seg_counter = 0
+            stream_total_segs = len(segments)
+
+            for i, segment in enumerate(segments):
+                cleaned = segment["text"].strip()
+                if not cleaned:
+                    continue
+
+                normalized = " ".join(cleaned.lower().split())
+                text_hash = hashlib.sha256(normalized.encode()).hexdigest()
+
+                if text_hash in seen_hashes:
+                    continue
+                seen_hashes.add(text_hash)
+
+                is_likely_title_raw = (
+                    len(cleaned) < 100
+                    and not any(p in cleaned for p in [".", ":", "-", "—"])
+                    and not cleaned.strip().endswith(".")
+                )
+
+                labeled_role = label_to_element_type(segment.get("label"))
+                chunk_role = (
+                    labeled_role
+                    if labeled_role is not None
+                    else classify_chunk_role(
+                        cleaned,
+                        stream_seg_counter,
+                        stream_total_segs,
+                        is_likely_title_raw,
+                    )
+                )
+
+                all_chunks.append(
+                    {
+                        "file_path": file_path,
+                        "original_index": i,
+                        "text": cleaned,
+                        "page": segment["page"],
+                        "text_hash": text_hash,
+                        "chunk_role": chunk_role,
+                        "element_type": chunk_role,
+                    }
+                )
+
+                stream_seg_counter += 1
+
         docs_stored = 0
-
-        stream_seg_counter = 0
-        stream_total_segs = len(segments)
-
-        for i, segment in enumerate(segments):
-            cleaned = segment["text"].strip()
-            if not cleaned:
-                continue
-
-            normalized = " ".join(cleaned.lower().split())
-            text_hash = hashlib.sha256(normalized.encode()).hexdigest()
-
-            if text_hash in seen_hashes:
-                continue
-            seen_hashes.add(text_hash)
-
-            is_likely_title_raw = (
-                len(cleaned) < 100
-                and not any(p in cleaned for p in [".", ":", "-", "—"])
-                and not cleaned.strip().endswith(".")
-            )
-
-            labeled_role = label_to_element_type(segment.get("label"))
-            chunk_role = (
-                labeled_role
-                if labeled_role is not None
-                else classify_chunk_role(
-                    cleaned,
-                    stream_seg_counter,
-                    stream_total_segs,
-                    is_likely_title_raw,
-                )
-            )
-
-            batch_chunks.append(
-                {
-                    "file_path": file_path,
-                    "original_index": i,
-                    "text": cleaned,
-                    "page": segment["page"],
-                    "text_hash": text_hash,
-                    "chunk_role": chunk_role,
-                    "element_type": chunk_role,
-                }
-            )
-
-            stream_seg_counter += 1
-
-            if len(batch_chunks) >= batch_size:
-                docs_stored += await self._store_embedding_batch_async(
-                    file_path, batch_chunks, embedding_gen, storage
-                )
-                batch_chunks = []
-
-        if batch_chunks:
+        for start in range(0, len(all_chunks), batch_size):
             docs_stored += await self._store_embedding_batch_async(
-                file_path, batch_chunks, embedding_gen, storage
+                file_path,
+                all_chunks[start : start + batch_size],
+                embedding_gen,
+                storage,
             )
 
         return docs_stored
 
-    async def _store_embedding_batch_async(
+    async def _embed_chunks_async(
         self,
-        file_path: Path,
         chunks: list[dict[str, Any]],
         embedding_gen: Any,
-        storage: Any,
-    ) -> int:
-        """Generate embeddings and store a batch of chunks asynchronously.
+    ) -> dict[int, list[float]]:
+        """Generate embeddings for a batch of chunks asynchronously.
 
-        Uses native async batch embedding generation for improved throughput
-        without blocking the event loop.
+        Cache-aware: cached texts reuse stored embeddings; uncached texts are
+        batch-embedded natively (AI-003), falling back to per-chunk
+        ``generate_async`` when batch generation fails. Chunks whose fallback
+        also fails are omitted from the returned mapping.
         """
         chunk_to_embedding: dict[int, list[float]] = {}
         texts_to_embed: list[str] = []
@@ -281,6 +331,25 @@ class AsyncDocumentIngestor(DocumentIngestor):
                             e2,
                         )
                         continue
+
+        return chunk_to_embedding
+
+    async def _store_embedding_batch_async(
+        self,
+        file_path: Path,
+        chunks: list[dict[str, Any]],
+        embedding_gen: Any,
+        storage: Any,
+    ) -> int:
+        """Generate embeddings and store a batch of chunks asynchronously.
+
+        Uses native async batch embedding generation for improved throughput
+        without blocking the event loop.
+        """
+        with trace_operation("ingest_worker_embed") as span:
+            if span is not None:
+                span.set_attribute("ingest.chunks_count", len(chunks))
+            chunk_to_embedding = await self._embed_chunks_async(chunks, embedding_gen)
 
         docs_to_store: list[dict[str, Any]] = []
         seen_doc_keys = set()
@@ -347,10 +416,16 @@ class AsyncDocumentIngestor(DocumentIngestor):
         embedding_gen: Any,
     ) -> list[dict[str, Any]]:
         """Build documents with embeddings from text segments asynchronously."""
-        all_chunks = self._deduplicate_and_chunk_segments(file_path, segments)
-        chunk_to_embedding = await self._generate_embeddings_with_cache_async(
-            all_chunks, embedding_gen
-        )
+        with trace_operation("ingest_worker_chunk") as span:
+            if span is not None:
+                span.set_attribute("ingest.segments_count", len(segments))
+            all_chunks = self._deduplicate_and_chunk_segments(file_path, segments)
+        with trace_operation("ingest_worker_embed") as span:
+            if span is not None:
+                span.set_attribute("ingest.chunks_count", len(all_chunks))
+            chunk_to_embedding = await self._generate_embeddings_with_cache_async(
+                all_chunks, embedding_gen
+            )
         return self._build_documents_from_chunks(all_chunks, chunk_to_embedding)
 
     async def _generate_embeddings_with_cache_async(
@@ -435,6 +510,8 @@ class AsyncDocumentIngestor(DocumentIngestor):
         file_path: Path,
         embedding_gen: Any,
         storage: Any,
+        *,
+        failure_reasons: dict[str, str] | None = None,
     ) -> bool:
         """Process a single file asynchronously.
 
@@ -444,13 +521,27 @@ class AsyncDocumentIngestor(DocumentIngestor):
             file_path: Path to file to process.
             embedding_gen: Embedding generator instance.
             storage: VectorStorage instance.
+            failure_reasons: Optional mapping keyed by ``str(file_path)`` that
+                receives the reason for any error caught here, formatted as
+                ``"ExceptionType: message"`` — exactly the format the sync
+                worker records — so ``ingest_async``'s ``failures`` list can
+                report the true cause instead of the generic no-documents
+                reason. ``BaseException`` subclasses such as
+                ``asyncio.CancelledError`` are deliberately not caught and not
+                recorded here: cancellation propagates to the caller instead
+                of being swallowed as a document failure.
 
         Returns
         -------
             True if processing succeeded, False otherwise.
         """
         try:
-            segments = await asyncio.to_thread(self._extract_text, file_path)
+            with trace_operation("ingest_worker_extract") as span:
+                if span is not None:
+                    span.set_attribute(
+                        "ingest.filesize_bytes", file_path.stat().st_size
+                    )
+                segments = await asyncio.to_thread(self._extract_text, file_path)
 
             if not segments:
                 logger.warning(
@@ -487,6 +578,8 @@ class AsyncDocumentIngestor(DocumentIngestor):
 
         except (OSError, DocumentExtractionError) as e:
             logger.error("Failed to process %s: %s", file_path, e)
+            if failure_reasons is not None:
+                failure_reasons[str(file_path)] = f"{type(e).__name__}: {e}"
             return False
         except Exception as e:
             logger.error(
@@ -495,4 +588,6 @@ class AsyncDocumentIngestor(DocumentIngestor):
                 type(e).__name__,
                 e,
             )
+            if failure_reasons is not None:
+                failure_reasons[str(file_path)] = f"{type(e).__name__}: {e}"
             return False

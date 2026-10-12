@@ -2,10 +2,18 @@
 
 Verifies that the extract, chunk, and embed phases of the sync worker are each
 wrapped in a ``trace_operation`` span so stage timing is visible per file.
+
+Also asserts the async ingestor's ``storage.store`` span (name + attributes)
+and its per-batch ``ingest_worker_embed`` span emitted by
+``_store_embedding_batch_async``.
 """
 
 from __future__ import annotations
 
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
@@ -13,6 +21,7 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 import secondbrain.document.processor as processor
 import secondbrain.embedding as embedding_module
 import secondbrain.utils.tracing as tracing_module
+from secondbrain.document.ingestor import AsyncDocumentIngestor
 
 _SAMPLE_TEXT = (
     "SecondBrain is a local document intelligence CLI for semantic search. "
@@ -134,3 +143,49 @@ def test_worker_span_order_and_attributes(monkeypatch, tmp_path):
             assert "ingest.segments_count" in attrs
         elif span.name == "ingest_worker_embed":
             assert "ingest.chunks_count" in attrs
+
+
+class TestAsyncStoreSpans:
+    """Async batch storage emits real ``storage.store``/embed spans."""
+
+    @pytest.mark.asyncio
+    async def test_async_store_span_name_and_attributes(self, monkeypatch) -> None:
+        """storage.store carries documents_stored + duration_ms; embed carries chunks_count."""
+        exporter = setup_span_capture(monkeypatch)
+
+        ingestor = AsyncDocumentIngestor()
+        gen = MagicMock()
+        gen.generate_batch_async = AsyncMock(return_value=[[0.1] * 4, [0.2] * 4])
+        storage = MagicMock()
+        storage.store_batch_async = AsyncMock(return_value=["id1", "id2"])
+
+        chunks = [
+            {
+                "file_path": Path("/tmp/sample.pdf"),
+                "original_index": n,
+                "text": f"async stored chunk {n}",
+                "page": 1,
+                "text_hash": n,
+                "chunk_role": "body",
+                "element_type": "body",
+            }
+            for n in range(2)
+        ]
+
+        stored = await ingestor._store_embedding_batch_async(
+            Path("/tmp/sample.pdf"), chunks, gen, storage
+        )
+
+        assert stored == 2
+
+        spans = exporter.get_finished_spans()
+        store_spans = [s for s in spans if s.name == "storage.store"]
+        assert len(store_spans) == 1
+        store_attrs = store_spans[0].attributes or {}
+        assert store_attrs["storage.documents_stored"] == 2
+        assert "storage.duration_ms" in store_attrs
+
+        embed_spans = [s for s in spans if s.name == "ingest_worker_embed"]
+        assert len(embed_spans) == 1
+        embed_attrs = embed_spans[0].attributes or {}
+        assert embed_attrs["ingest.chunks_count"] == 2

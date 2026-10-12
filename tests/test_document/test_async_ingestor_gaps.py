@@ -8,7 +8,13 @@ Targets the uncovered branches reported by coverage for
 - streaming path return contract (``docs_count > 0``);
 - non-streaming path when no documents materialize (False) vs stored (True);
 - ``process_file_async`` OSError / DocumentExtractionError / unexpected-error
-  handling returning False instead of raising;
+  handling returning False instead of raising, and recording the captured
+  failure reason (``"ExceptionType: message"``, the sync worker's format) when
+  a ``failure_reasons`` collector is passed;
+- ``ingest_async`` failure reasons carrying the real captured cause for
+  raised errors (storage/extraction) instead of the generic no-documents
+  reason, while cancellation still propagates and is never recorded as a
+  document failure;
 - streaming chunk loop skipping blank and duplicate segments;
 - fallback single-embedding path when batch embedding fails and the
   ``generate_async`` fallback is present;
@@ -21,6 +27,7 @@ AsyncMock storage/LLM plus a MagicMock embedding generator.
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -130,7 +137,12 @@ class TestIngestAsyncRouting:
         with patch.object(ingestor, "process_file_async", side_effect=_fail):
             result = await ingestor.ingest_async(str(empty))
 
-        assert result == {"success": 0, "failed": 0}
+        assert result == {
+            "success": 0,
+            "failed": 0,
+            "failures": [],
+            "skipped": 0,
+        }
         assert closed == ["gen", "storage"]
 
     @pytest.mark.asyncio
@@ -164,13 +176,26 @@ class TestIngestAsyncRouting:
 
         ingestor = AsyncDocumentIngestor()
 
-        async def fake_process(file_path: Path, e_gen: Any, storage: Any) -> bool:
+        async def fake_process(
+            file_path: Path, e_gen: Any, storage: Any, **_kwargs: Any
+        ) -> bool:
             return file_path == good
 
         with patch.object(ingestor, "process_file_async", side_effect=fake_process):
             result = await ingestor.ingest_async(str(tmp_path))
 
-        assert result == {"success": 1, "failed": 1}
+        assert result == {
+            "success": 1,
+            "failed": 1,
+            "failures": [
+                (
+                    str(other),
+                    "No documents produced (file may be empty, image-only, "
+                    "or extraction failed)",
+                )
+            ],
+            "skipped": 0,
+        }
         assert sorted(closed) == ["gen", "storage"]
 
     @pytest.mark.asyncio
@@ -201,13 +226,18 @@ class TestIngestAsyncRouting:
 
         ingestor = AsyncDocumentIngestor()
 
-        async def ok(_file_path: Path, _gen: Any, _st: Any) -> bool:
+        async def ok(_file_path: Path, _gen: Any, _st: Any, **_kwargs: Any) -> bool:
             return True
 
         with patch.object(ingestor, "process_file_async", side_effect=ok):
             result = await ingestor.ingest_async(str(tmp_path))
 
-        assert result == {"success": 1, "failed": 0}
+        assert result == {
+            "success": 1,
+            "failed": 0,
+            "failures": [],
+            "skipped": 0,
+        }
 
     @pytest.mark.asyncio
     async def test_invalid_path_counts_as_failed(
@@ -241,6 +271,165 @@ class TestIngestAsyncRouting:
         assert st.close.call_count == 1
 
 
+class TestIngestAsyncFailureReasons:
+    """ingest_async failures carry real captured causes, not just the generic one."""
+
+    def _patch_providers(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        gen: Any,
+        st: Any,
+        closed: list[str],
+    ) -> None:
+        """Stub the embedding/storage factories and record close() calls."""
+        gen.close = MagicMock(side_effect=lambda: closed.append("gen"))
+        st.close = MagicMock(side_effect=lambda: closed.append("storage"))
+
+        import secondbrain.embedding as emb_mod
+        import secondbrain.storage as storage_mod
+
+        monkeypatch.setattr(
+            emb_mod.EmbeddingProviderFactory,
+            "create_from_config",
+            staticmethod(lambda cfg: gen),
+        )
+        monkeypatch.setattr(
+            storage_mod.StorageFactory,
+            "create_from_config",
+            staticmethod(lambda cfg: st),
+        )
+
+    @pytest.mark.asyncio
+    async def test_storage_error_captures_real_reason(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A raised storage error surfaces as "ValueError: ..." in failures."""
+        good = tmp_path / "good.txt"
+        good.write_text("good content")
+        bad = tmp_path / "bad.txt"
+        bad.write_text("bad content")
+
+        ingestor = AsyncDocumentIngestor()
+        gen = _embedding_gen(batch_result=[[0.1] * 8])
+
+        def store_side_effect(docs: list[dict[str, Any]]) -> list[str]:
+            if docs and docs[0]["source_file"] == str(bad):
+                raise ValueError("qdrant unreachable")
+            return ["id1"]
+
+        st = MagicMock(spec=["store_batch_async", "close"])
+        st.store_batch_async = AsyncMock(side_effect=store_side_effect)
+
+        closed: list[str] = []
+        self._patch_providers(monkeypatch, gen, st, closed)
+
+        def extract_by_name(_p: Path) -> list[dict[str, Any]]:
+            return [{"text": "shared body text", "page": 1}]
+
+        monkeypatch.setattr(ingestor, "_extract_text", extract_by_name)
+
+        result = await ingestor.ingest_async(str(tmp_path))
+
+        assert result["success"] == 1
+        assert result["failed"] == 1
+        assert result["failures"] == [(str(bad), "ValueError: qdrant unreachable")]
+        assert result["skipped"] == 0
+        assert sorted(closed) == ["gen", "storage"]
+
+    @pytest.mark.asyncio
+    async def test_extraction_error_captures_real_reason(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A raised extraction error surfaces as "DocumentExtractionError: ..."."""
+        doomed = tmp_path / "doomed.txt"
+        doomed.write_text("doomed content")
+
+        ingestor = AsyncDocumentIngestor()
+        gen = _embedding_gen(batch_result=[[0.1] * 8])
+        st = _storage()
+
+        closed: list[str] = []
+        self._patch_providers(monkeypatch, gen, st, closed)
+
+        def boom(_p: Path) -> list[dict[str, Any]]:
+            raise DocumentExtractionError("bad pdf")
+
+        monkeypatch.setattr(ingestor, "_extract_text", boom)
+
+        result = await ingestor.ingest_async(str(doomed))
+
+        assert result == {
+            "success": 0,
+            "failed": 1,
+            "failures": [(str(doomed), "DocumentExtractionError: bad pdf")],
+            "skipped": 0,
+        }
+        assert sorted(closed) == ["gen", "storage"]
+
+    @pytest.mark.asyncio
+    async def test_no_documents_still_gets_generic_reason(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Failing without a raised error keeps the generic no-documents reason."""
+        empty = tmp_path / "empty.txt"
+        empty.write_text("empty content")
+
+        ingestor = AsyncDocumentIngestor()
+        gen = _embedding_gen(batch_result=[[0.1] * 8])
+        st = _storage()
+
+        closed: list[str] = []
+        self._patch_providers(monkeypatch, gen, st, closed)
+
+        def no_segments(_p: Path) -> list[dict[str, Any]]:
+            return []
+
+        monkeypatch.setattr(ingestor, "_extract_text", no_segments)
+
+        result = await ingestor.ingest_async(str(empty))
+
+        assert result == {
+            "success": 0,
+            "failed": 1,
+            "failures": [
+                (
+                    str(empty),
+                    "No documents produced (file may be empty, image-only, "
+                    "or extraction failed)",
+                )
+            ],
+            "skipped": 0,
+        }
+
+    @pytest.mark.asyncio
+    async def test_ingest_cancellation_propagates_and_records_nothing(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Cancelling the ingest raises out; no failure is recorded for it."""
+        (tmp_path / "doc.txt").write_text("cancellation target")
+
+        ingestor = AsyncDocumentIngestor()
+        gen = _embedding_gen(batch_result=[[0.1] * 8])
+        st = _storage()
+
+        closed: list[str] = []
+        self._patch_providers(monkeypatch, gen, st, closed)
+
+        async def slow_process(*_args: Any, **_kwargs: Any) -> bool:
+            await asyncio.sleep(3600)
+            return True
+
+        with patch.object(ingestor, "process_file_async", side_effect=slow_process):
+            task = asyncio.create_task(ingestor.ingest_async(str(tmp_path)))
+            await asyncio.sleep(0.05)
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+
+        assert task.cancelled() is True
+        assert sorted(closed) == ["gen", "storage"]
+
+
 class TestProcessFileAsyncBranches:
     """process_file_async success/empty/error contracts."""
 
@@ -264,12 +453,17 @@ class TestProcessFileAsyncBranches:
     ) -> None:
         ingestor = AsyncDocumentIngestor()
         f = tmp_path / "doc.txt"
+        reasons: dict[str, str] = {}
 
         def boom(_p: Path) -> list[dict[str, Any]]:
             raise DocumentExtractionError("bad pdf")
 
         monkeypatch.setattr(ingestor, "_extract_text", boom)
-        assert await ingestor.process_file_async(f, MagicMock(), MagicMock()) is False
+        ok = await ingestor.process_file_async(
+            f, MagicMock(), MagicMock(), failure_reasons=reasons
+        )
+        assert ok is False
+        assert reasons == {str(f): "DocumentExtractionError: bad pdf"}
 
     @pytest.mark.asyncio
     async def test_oserror_returns_false(
@@ -277,12 +471,17 @@ class TestProcessFileAsyncBranches:
     ) -> None:
         ingestor = AsyncDocumentIngestor()
         f = tmp_path / "doc.txt"
+        reasons: dict[str, str] = {}
 
         def boom(_p: Path) -> list[dict[str, Any]]:
             raise OSError("disk unavailable")
 
         monkeypatch.setattr(ingestor, "_extract_text", boom)
-        assert await ingestor.process_file_async(f, MagicMock(), MagicMock()) is False
+        ok = await ingestor.process_file_async(
+            f, MagicMock(), MagicMock(), failure_reasons=reasons
+        )
+        assert ok is False
+        assert reasons == {str(f): "OSError: disk unavailable"}
 
     @pytest.mark.asyncio
     async def test_unexpected_error_returns_false(
@@ -290,12 +489,17 @@ class TestProcessFileAsyncBranches:
     ) -> None:
         ingestor = AsyncDocumentIngestor()
         f = tmp_path / "doc.txt"
+        reasons: dict[str, str] = {}
 
         def boom(_p: Path) -> list[dict[str, Any]]:
             raise RuntimeError("something else exploded")
 
         monkeypatch.setattr(ingestor, "_extract_text", boom)
-        assert await ingestor.process_file_async(f, MagicMock(), MagicMock()) is False
+        ok = await ingestor.process_file_async(
+            f, MagicMock(), MagicMock(), failure_reasons=reasons
+        )
+        assert ok is False
+        assert reasons == {str(f): "RuntimeError: something else exploded"}
 
     @pytest.mark.asyncio
     async def test_nonstreaming_true_when_docs_stored(
