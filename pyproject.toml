@@ -166,7 +166,7 @@ rag = [
 ]
 
 opentelemetry = [
-    "opentelemetry-exporter-otlp>=1.45.0",  # OTLP exporter - remote tracing
+    "opentelemetry-exporter-otlp>=1.45.1",  # OTLP exporter - remote tracing
 ]
 
 # Audio transcription (docling ASR via WhisperS2T/CTranslate2 - no openai-whisper import, Python 3.14 safe)
