@@ -4,7 +4,7 @@
 #
 #    pip-compile requirements.in
 #
-accelerate==1.13.0
+accelerate==1.15.0
     # via docling-slim
 annotated-doc==0.0.4
     # via typer
@@ -37,6 +37,7 @@ charset-normalizer==3.4.5
 click==8.5.0
     # via
     #   -r requirements.in
+    #   huggingface-hub
     #   python-oxmsg
     #   typer
 colorlog==6.10.1
@@ -88,7 +89,7 @@ h11==0.16.0
     # via
     #   httpcore
     #   httpcore2
-hf-xet==1.4.2
+hf-xet==1.7.0
     # via huggingface-hub
 httpcore==1.0.9
     # via httpx
@@ -103,7 +104,7 @@ httpx2==2.12.0
     # via
     #   anthropic
     #   openai
-huggingface-hub==1.8.0
+huggingface-hub==1.33.0
     # via
     #   accelerate
     #   docling-ibm-models
@@ -369,7 +370,7 @@ tqdm==4.67.3
     #   rapidocr
     #   semchunk
     #   transformers
-transformers==5.17.0
+transformers==5.19.0
     # via
     #   -r requirements.in
     #   docling-core
@@ -395,7 +396,6 @@ typer==0.21.2
     #   doclang
     #   docling-core
     #   docling-slim
-    #   huggingface-hub
     #   transformers
 typing-extensions==4.16.0
     # via
