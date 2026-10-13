@@ -4,7 +4,7 @@
 #
 #    pip-compile requirements.in
 #
-accelerate==1.13.0
+accelerate==1.15.0
     # via docling-slim
 annotated-doc==0.0.4
     # via typer
@@ -55,18 +55,18 @@ dill==0.4.1
     # via multiprocess
 doclang==0.7.2
     # via docling-core
-docling==2.127.0
+docling==2.138.0
     # via -r requirements.in
-docling-core[chunking]==2.95.0
+docling-core[chunking]==2.101.1
     # via
     #   -r requirements.in
     #   docling-parse
     #   docling-slim
 docling-ibm-models==4.0.3
     # via docling-slim
-docling-parse==7.20.0
+docling-parse==7.22.2
     # via docling-slim
-docling-slim[standard]==2.127.0
+docling-slim[standard]==2.138.0
     # via docling
 docstring-parser==0.18.0
     # via anthropic
@@ -419,7 +419,7 @@ typing-inspection==0.4.2
     # via
     #   pydantic
     #   pydantic-settings
-urllib3==2.7.0
+urllib3==2.8.0
     # via requests
 websockets==16.0
     # via docling-slim

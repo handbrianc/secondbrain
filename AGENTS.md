@@ -14,9 +14,9 @@ conversation storage) and OpenAI-compatible embedding APIs.
 
 ```
 secondbrain/
-├── src/secondbrain/       # Main package (48 files, 13 modules)
+├── src/secondbrain/       # Main package (101 files, 12 packages)
 ├── tests/                 # Test suite (20+ directories)
-├── scripts/               # Build/deployment utilities (14 scripts)
+├── scripts/               # Build/deployment utilities (15: 9 sh + 6 py)
 ├── docs/                  # MkDocs documentation
 ├── docker-compose.yml     # Production services
 └── docker-compose.test.yml # Test services (Qdrant + Ollama)
@@ -29,7 +29,7 @@ secondbrain/
 | Task | Location | Notes |
 | ------ | ---------- | ------- |
 | CLI commands | `src/secondbrain/cli/__init__.py` | Entry point: `secondbrain.cli:main` |
-| Core logic | `src/secondbrain/` | 13 submodules (storage, search, utils, etc.) |
+| Core logic | `src/secondbrain/` | 12 packages (storage, search, utils, etc.) |
 | Tests | `tests/` | 20+ specialized test directories |
 | Scripts | `scripts/` | Build, security, migration utilities |
 | Docs | `docs/` | MkDocs structure (developer-guide, user-guide, etc.) |
@@ -46,12 +46,12 @@ secondbrain/
 
 **Core Modules**:
 
-- `storage/` - Qdrant vector storage + SQLite conversation storage (5 files)
-- `utils/` - Circuit breaker, connections, tracing (8 files)
-- `rag/` - LLM providers, pipeline (5 files)
-- `document/` - Ingestion, chunking (4 files)
-- `search/` - Semantic search (3 files)
-- `conversation/` - Session management (3 files)
+- `storage/` - Qdrant vector storage + SQLite conversation storage (7 files)
+- `utils/` - Circuit breaker, connections, tracing (15 files)
+- `rag/` - LLM providers + pipeline modules (24 files)
+- `document/` - Ingestion, chunking (14 files)
+- `search/` - Semantic search (2 files)
+- `conversation/` - Session management (4 files)
 - `domain/` - Entities, value objects (4 files)
 
 ---
@@ -137,12 +137,28 @@ pytest
 
 ## TECHNICAL DEBT
 
-**High Priority:**
+**Resolved (2026-10):**
 
-- **Inline Python** in `scripts/generate-sbom.sh` - extract to `.py` module
-- **Duplicate tests** - ✅ RESOLVED: Removed `tests/test_integration/` directory (consolidated into `tests/integration/mocked/`)
+- **Inline Python** in `scripts/generate-sbom.sh` - ✅ RESOLVED: the script is now a bash wrapper
+  delegating to `scripts/sbom_converter.py`
+- **Duplicate tests** - ✅ RESOLVED: Removed `tests/test_integration/` directory (consolidated
+  into `tests/integration/mocked/`)
+- **RAG pipeline monoliths** - ✅ RESOLVED: the 4560-line `_mixins.py` was split into focused
+  modules under `src/secondbrain/rag/pipeline/` (`_fallback_mixin`, `_structure_mixin`,
+  `_routing_mixin`, `_text_quality`, `_leak_scrub`, `_streaming`, `_formatting_mixin`), and the
+  2451-line `pipeline/__init__.py` was split into `_pipeline.py` + `_orchestration.py` behind a
+  thin facade. `_iterative_query` (~1400 lines) remains the largest single function by design.
 
-**Single TODO marker** remains at `src/secondbrain/document/chunker.py:33` (`element_type-migration`); no FIXME markers.
+**Markers:** 0 TODO/FIXME/HACK/XXX/WORKAROUND markers in `src/` and `scripts/`. The former
+`chunker.py:33` marker is now the `_LABEL_TO_ELEMENT_TYPE` dict; the only `XXX` grep hit is
+`mktemp`'s required template in `scripts/install.sh`.
+
+**Intentional non-adoption - strict complexity/arg-count ruff rules:** `C901`, `PLR0911`,
+`PLR0912`, `PLR0913`, `PLR0915` are deliberately not enabled in `[tool.ruff]`. At the audit
+threshold (>15 cyclomatic complexity) only two functions exceeded and were refactored; at ruff
+defaults these rules flag 105 sites, dominated by `PLR0913` (>5 args), which conflicts with this
+codebase's CLI/config surface. Complexity is enforced by periodic audit review instead.
+Re-evaluate before adding new long-branch business logic.
 
 <!-- CODEGRAPH_START -->
 ## CodeGraph

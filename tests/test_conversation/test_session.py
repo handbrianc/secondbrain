@@ -407,9 +407,10 @@ class TestConversationSessionErrorPaths:
         """
         import time
 
-        # Make storage take a long time
+        # Make storage take a long time (short real wait: the assertion only
+        # bounds elapsed at 1s, so 10ms still exercises the slow-storage path)
         def slow_save(*args, **kwargs):
-            time.sleep(0.1)
+            time.sleep(0.01)
             return None
 
         mock_storage.save_message.side_effect = slow_save

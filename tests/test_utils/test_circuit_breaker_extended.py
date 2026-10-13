@@ -208,11 +208,11 @@ class TestConcurrentStateTransitions:
 class TestRecoveryTimeoutPrecision:
     """Test recovery timeout timing accuracy."""
 
-    def test_recovery_timeout_precision(self):
+    def test_recovery_timeout_precision(self, monkeypatch):
         """Test exact timeout behavior with sub-second precision."""
-        config = CircuitBreakerConfig(
-            recovery_timeout=0.12
-        )  # 120ms — margin against scheduling jitter
+        clock = FakeClock()
+        monkeypatch.setattr(time, "monotonic", clock)
+        config = CircuitBreakerConfig(recovery_timeout=0.12)  # 120ms
         cb = CircuitBreaker(config)
 
         # Open the circuit
@@ -224,24 +224,27 @@ class TestRecoveryTimeoutPrecision:
         # Record the exact time of failure
         failure_time = time.monotonic()
 
-        # Test at various intervals. Margins are generous so that scheduling
-        # jitter on a loaded machine cannot flip a state check (which made
-        # this test flaky with tight 100ms/80ms margins).
-        time.sleep(0.05)  # 50ms - should still be OPEN
+        # Advance at the same intervals the former real-time waits covered, so
+        # the boundary checks (50ms/85ms still OPEN, 145ms HALF_OPEN) are
+        # exercised deterministically instead of racing the scheduler.
+        clock.advance(0.05)  # 50ms - should still be OPEN
         assert cb.state == CircuitState.OPEN
 
-        time.sleep(0.035)  # 85ms total - should still be OPEN
+        clock.advance(0.035)  # 85ms total - should still be OPEN
         assert cb.state == CircuitState.OPEN
 
-        time.sleep(0.06)  # 145ms total - should be HALF_OPEN
+        clock.advance(0.06)  # 145ms total - should be HALF_OPEN
         assert cb.state == CircuitState.HALF_OPEN
 
-        # Verify timing accuracy (allow 25ms tolerance for scheduling jitter)
+        # Verify timing accuracy: the fake clock advances exactly what it is
+        # told, so elapsed is precise and needs no jitter tolerance.
         elapsed = time.monotonic() - failure_time
-        assert elapsed >= 0.095  # Should have passed timeout (+/- jitter)
+        assert elapsed >= 0.095
 
-    def test_sub_second_precision(self):
+    def test_sub_second_precision(self, monkeypatch):
         """Test sub-second timeout precision."""
+        clock = FakeClock()
+        monkeypatch.setattr(time, "monotonic", clock)
         config = CircuitBreakerConfig(recovery_timeout=0.01)  # 10ms
         cb = CircuitBreaker(config)
 
@@ -251,8 +254,8 @@ class TestRecoveryTimeoutPrecision:
 
         assert cb.state == CircuitState.OPEN
 
-        # Wait just enough
-        time.sleep(0.015)  # 15ms > 10ms
+        # Advance just enough
+        clock.advance(0.015)  # 15ms > 10ms
 
         assert cb.state == CircuitState.HALF_OPEN
 

@@ -129,6 +129,8 @@ class TestTimingDecorator:
 
         @timing("test_operation")
         def slow_function():
+            # Real sleep IS the measured work: the assertion checks the
+            # recorded duration falls in a band around it (not a poll).
             time.sleep(0.1)
             return "done"
 
@@ -149,6 +151,7 @@ class TestTimingDecorator:
 
         @timing("failing_operation")
         def failing_function():
+            # Measured work (see note in test_timing_decorator_records_duration).
             time.sleep(0.05)
             raise ValueError("Test error")
 
@@ -173,11 +176,13 @@ class TestPerformanceLogging:
 
         @timing("document.ingest")
         def ingest_document():
+            # Measured work (see note in test_timing_decorator_records_duration).
             time.sleep(0.05)
             return {"status": "ingested"}
 
         @timing("semantic.search")
         def search_documents():
+            # Measured work (see note in test_timing_decorator_records_duration).
             time.sleep(0.03)
             return [{"chunk": "result"}]
 

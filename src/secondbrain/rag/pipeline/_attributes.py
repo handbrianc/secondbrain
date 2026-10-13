@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:  # pragma: no cover - import cycle avoided at runtime
     from secondbrain.config import Config as _Config
+    from secondbrain.conversation import ConversationSession as _ConversationSession
     from secondbrain.conversation import QueryRewriter as _QueryRewriter
     from secondbrain.document.scoped_retriever import (
         ScopedRetriever as _ScopedRetriever,
@@ -94,6 +95,13 @@ class _RAGPipelineState:
             conversation_history: list[dict[str, Any]] | None = None,
         ) -> str: ...
 
+        async def _handle_no_results_async(
+            self,
+            query: str,
+            allow_llm_fallback: bool = True,
+            conversation_history: list[dict[str, Any]] | None = None,
+        ) -> str: ...
+
         def _generate(self, prompt: str) -> str: ...
 
         async def _agenerate(self, prompt: str) -> str: ...
@@ -109,3 +117,56 @@ class _RAGPipelineState:
         def _stream_generate(
             self, prompt: str, prefix: str = ""
         ) -> tuple[str, bool]: ...
+
+        def _iterative_query(
+            self,
+            query: str,
+            top_k: int,
+            show_sources: bool,
+            source_filter: str | None = None,
+        ) -> dict[str, Any]: ...
+
+        def _answer_page_query(self, query: str) -> dict[str, Any] | None: ...
+
+        async def _answer_page_query_async(
+            self, query: str
+        ) -> dict[str, Any] | None: ...
+
+        def _create_error_response(
+            self,
+            error: str,
+            query: str,
+        ) -> dict[str, Any]: ...
+
+        def _grounded_context_retry(
+            self,
+            query: str,
+            conversation_history: list[dict[str, Any]] | None,
+            top_k: int,
+            show_sources: bool,
+        ) -> dict[str, Any] | None: ...
+
+        async def _grounded_context_retry_async(
+            self,
+            query: str,
+            conversation_history: list[dict[str, Any]] | None,
+            top_k: int,
+            show_sources: bool,
+        ) -> dict[str, Any] | None: ...
+
+        def _list_sources_result(self, query: str) -> dict[str, Any]: ...
+
+        def _resolve_source_filter(self, query: str) -> str | None: ...
+
+        def _rewrite_query_with_history(
+            self,
+            query: str,
+            session: _ConversationSession,
+        ) -> str: ...
+
+        def _save_turn(
+            self,
+            session: _ConversationSession,
+            query: str,
+            answer: str,
+        ) -> None: ...

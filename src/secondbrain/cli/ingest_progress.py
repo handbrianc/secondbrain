@@ -37,6 +37,8 @@ from rich.progress import (
 )
 from rich.text import Text
 
+logger = logging.getLogger(__name__)
+
 PHASE_LABELS: dict[str, str] = {
     "extract": "extracting",
     "chunk": "chunking",
@@ -329,6 +331,11 @@ class IngestProgressUI:
             try:
                 logging.getLogger(record.name).handle(record)
             except Exception:
+                logger.debug(
+                    "deferred-record replay failed for %s; skipping record",
+                    record.name,
+                    exc_info=True,
+                )
                 # Skip a bad record; still replay the rest.
                 continue
         self._deferred_records.clear()
