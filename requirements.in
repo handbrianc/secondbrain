@@ -1,7 +1,7 @@
 # Runtime dependencies (pinned for reproducibility)
 # Generated from pyproject.toml dependencies section
 click>=8.5.0
-docling>=2.130.0
+docling>=2.132.0  # 8 vulns (PYSEC-2026-4189..4195, CVE-2026-105748) fixed in 2.131.0/2.132.0 (was 2.130.0)
 docling-core>=2.98.1
 httpx>=0.28.1
 pydantic>=2.13.5

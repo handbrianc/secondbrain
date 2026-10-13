@@ -57,6 +57,7 @@ nav:
       - Architecture: architecture/index.md
       - Data Flow: architecture/DATA_FLOW.md
       - Schema Reference: architecture/SCHEMA.md
+      - 12-Factor Compliance: architecture/12-FACTOR.md
   - API Reference:
       - API Reference: api/index.md
       - CLI: api/cli.md
@@ -73,6 +74,7 @@ nav:
       - Domain: api/domain.md
   - Security:
       - Security Guide: security/index.md
+      - Third-Party Licenses: security/third-party-licenses.md
   - Migration: migration.md
   - License: license.md
 

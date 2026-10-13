@@ -1158,7 +1158,7 @@ class TestRAGPipelineTracing:
 
         # Patch trace_operation to return our mock span
         monkeypatch.setattr(
-            "secondbrain.rag.pipeline.trace_operation",
+            "secondbrain.rag.pipeline._orchestration.trace_operation",
             lambda op: mock_context_manager,
         )
 
@@ -1232,7 +1232,7 @@ class TestRAGPipelineTracing:
 
         # Patch trace_operation to return our mock span
         monkeypatch.setattr(
-            "secondbrain.rag.pipeline.trace_operation",
+            "secondbrain.rag.pipeline._orchestration.trace_operation",
             lambda op: mock_context_manager,
         )
 
@@ -1306,7 +1306,7 @@ class TestRAGPipelineTracing:
 
         # Patch trace_operation
         monkeypatch.setattr(
-            "secondbrain.rag.pipeline.trace_operation",
+            "secondbrain.rag.pipeline._orchestration.trace_operation",
             lambda op: mock_context_manager,
         )
 
@@ -1374,7 +1374,7 @@ class TestRAGPipelineTracing:
 
         # Patch trace_operation
         monkeypatch.setattr(
-            "secondbrain.rag.pipeline.trace_operation",
+            "secondbrain.rag.pipeline._orchestration.trace_operation",
             lambda op: mock_context_manager,
         )
 

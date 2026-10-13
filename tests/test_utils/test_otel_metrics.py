@@ -80,7 +80,10 @@ class TestOTELMetricsIntegration:
         )
 
         start_time = time.time()
-        time.sleep(0.05)
+        # Small but nonzero wait: the duration only feeds the histogram sample
+        # (count/attributes are what the assertions check), so this stays far
+        # below any assertion threshold by design.
+        time.sleep(0.001)
         duration_ms = (time.time() - start_time) * 1000
 
         counter.add(1, {"operation": "ingest"})

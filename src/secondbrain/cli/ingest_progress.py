@@ -332,6 +332,11 @@ class IngestProgressUI:
             try:
                 logging.getLogger(record.name).handle(record)
             except Exception:
+                logger.debug(
+                    "deferred-record replay failed for %s; skipping record",
+                    record.name,
+                    exc_info=True,
+                )
                 # Skip a bad record; still replay the rest.
                 logger.debug(
                     "Failed to replay deferred log record from %s",

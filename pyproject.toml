@@ -131,7 +131,7 @@ bundled = [
     "msgpack>=1.2.2",  # GHSA-6v7p-g79w-8964 (was 1.1.2)
     "starlette>=1.7.0",  # PYSEC-2026-248, PYSEC-2026-249 (was 1.2.1)
     "pymdown-extensions>=12.1",  # CVE-2026-61632 (was 10.21.3)
-    "urllib3>=2.6.0",
+    "urllib3>=2.8.0",  # PYSEC-2026-4175/4176/4177 (was 2.6.0)
     "cryptography>=50.0.1",
     "pillow>=11.3.0",
     "paramiko>=5.0.0",
@@ -144,7 +144,6 @@ bundled = [
     "setuptools>=84.0.0",
     "fpdf2>=2.8.8",
     "reportlab>=5.0.0",
-    "python-docx>=1.0.0",
     # Bundled extras (depends on mutation)
     "mutmut>=3.7.0",
 ]

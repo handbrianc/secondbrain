@@ -639,6 +639,8 @@ class TestResourceExhaustionScenarios:
         def inject_and_check(failure_id):
             with injector.inject_timeout(duration=1.0):
                 results.append(failure_id)
+                # Real short sleep: this IS the simulated work-in-flight the
+                # concurrency assertions observe (overlap windows); not a poll.
                 time.sleep(0.1)
 
         # Run concurrent injections
@@ -751,6 +753,7 @@ class TestThreadSafety:
         def worker(worker_id):
             with injector.inject_timeout(duration=0.5):
                 results.append(worker_id)
+                # Simulated work-in-flight (see note in test_concurrent_failure_injection).
                 time.sleep(0.1)
 
         threads = [threading.Thread(target=worker, args=(i,)) for i in range(3)]
@@ -798,6 +801,7 @@ class TestIntegrationScenarios:
                 except ConnectionError:
                     if attempt == max_attempts - 1:
                         raise
+                    # Brief real backoff between retry attempts under test.
                     time.sleep(0.01)
 
         with pytest.raises(ConnectionError):
@@ -875,6 +879,8 @@ class TestIntegrationScenarios:
                     current_concurrent += 1
                     max_observed = max(max_observed, current_concurrent)
 
+                # Simulated work-in-flight: the bulkhead assertion measures
+                # max_observed concurrency over this window; not a poll.
                 time.sleep(0.1)
 
                 with lock:
@@ -1548,6 +1554,8 @@ class TestEdgeCasesAndBoundaries:
         def inject_failure(failure_type, duration):
             try:
                 with injector.inject_timeout(duration=duration):
+                    # Simulated work-in-flight (see note in
+                    # test_concurrent_failure_injection); not a poll.
                     time.sleep(0.01)
                     results.append(True)
             except Exception as e:

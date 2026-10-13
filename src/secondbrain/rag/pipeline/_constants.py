@@ -66,3 +66,19 @@ ENUMERATE_CHAPTER_SIGNALS: frozenset[str] = frozenset(
         "enumerate",
     ]
 )
+
+
+_FILENAME_SUFFIX_RE = re.compile(
+    r"\S*\.(?:pdf|docx?|pptx?|xlsx?|html?|md|txt|epub|m4a|m4b|mp3|wav|aac|ogg|opus|flac)\b",
+    re.IGNORECASE,
+)
+
+
+def strip_document_filenames(query: str) -> str:
+    """Remove document-name tokens ("pve-admin-guide-9.1.pdf") from a query.
+
+    A dotted version suffix inside a filename masquerades as a section number
+    ("9.1") and silently narrows a whole-book summary request to that one
+    chapter; filename mentions never carry section targets.
+    """
+    return _FILENAME_SUFFIX_RE.sub(" ", query)

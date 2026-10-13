@@ -20,6 +20,12 @@ Security considerations for deploying and using SecondBrain.
 - Social engineering attacks
 - Qdrant本身的未加密传输 (unencrypted transit)
 
+## Licensing
+
+For third-party dependency licensing (copyleft libraries, proprietary accelerator runtime
+wheels) and the `pip-audit` blind spot for XPU builds, see
+[Third-Party Licenses](third-party-licenses.md).
+
 ## Data Sensitivity
 
 ### Local Processing Guarantees
