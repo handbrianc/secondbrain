@@ -55,7 +55,7 @@ test = [
     "pytest-xdist>=3.0.0",  # Parallel tests - 18 workers for speed
     "pytest-timeout>=2.2.0",  # Test timeouts - prevent hangs
     "pytest-rerunfailures>=16.7",  # Retry flaky tests - concurrent test stability
-    "hypothesis>=6.167.1",  # Property-based testing - edge case discovery
+    "hypothesis>=6.168.5",  # Property-based testing - edge case discovery
     "factory-boy>=3.3.3",  # Test factories - factory_boy for test data
 ]
 
@@ -105,7 +105,7 @@ bundled = [
     "pytest-xdist>=3.0.0",
     "pytest-timeout>=2.2.0",
     "pytest-rerunfailures>=16.7",
-    "hypothesis>=6.167.1",
+    "hypothesis>=6.168.5",
     "factory-boy>=3.3.3",
     # All security deps
     "bandit>=1.7.0",
