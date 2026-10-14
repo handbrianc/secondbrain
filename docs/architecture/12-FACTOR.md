@@ -10,17 +10,17 @@ for a local CLI, with two **documented deviations** — both deliberate, with re
 | VI — Processes  | Documented deviation | Local SQLite conversation/session state — see below     |
 | XI — Logs       | Documented deviation | Opt-in rotating file logging — see below                |
 
-## V — Build, Release, Run: tag-based releases with CI gates
+## V — Build, Release, Run: tag-based releases with branch/PR validation
 
 12-Factor wants a strict split between build, release and run stages, with releases as
-immutable, numbered artifacts that can be rolled back. SecondBrain implements this with
-tag-triggered CI builds and three gating workflows (`.github/workflows/`):
+immutable, numbered artifacts that can be rolled back. SecondBrain publishes tag-triggered
+releases and runs separate branch/PR validation workflows (`.github/workflows/`):
 
 | Workflow                 | Trigger                    | Role                                            |
 | ------------------------ | -------------------------- | ----------------------------------------------- |
 | `release.yml`            | push of a `v*` git tag     | Builds and publishes the release artifact       |
-| `security.yml`           | push / pull request        | Security gates (pip-audit, bandit, SBOM)        |
-| `test-quality-gates.yml` | push to main/develop, PRs  | Test suite and quality gates                    |
+| `security.yml`           | push / pull request        | Security validation (pip-audit, bandit, safety, pipdeptree) |
+| `test-quality-gates.yml` | push to main/develop, PRs  | Test suite and quality validation               |
 
 **Build stage.** The single source of truth is `pyproject.toml`; the package is built with
 `python -m build` (sdist + wheel). There is no bespoke build step: any checkout of the same
@@ -37,9 +37,9 @@ environment-driven (see [Configuration](../getting-started/configuration.md)).
 
 **Rollback.** Because releases are immutable tagged artifacts, rollback is reinstalling the
 previous tag's artifact (`pip install secondbrain==<previous-version>`), or redeploying from the
-previous `v*` tag — no state migration is required for the CLI itself (local SQLite stores are
-forward-compatible across patch releases; see [Migrations](../developer-guide/migrations.md)
-before downgrading across schema changes).
+previous `v*` tag. Before downgrading, back up the local SQLite database and check that the
+previous version can read its schema; previous versions may not read newer schemas. See
+[Migrations](../developer-guide/migrations.md) for migration and restoration guidance.
 
 ## VI — Processes: local conversation state
 
