@@ -18,7 +18,7 @@ secondbrain/
 ├── tests/                 # Test suite (23 directories)
 ├── scripts/               # Build/deployment utilities (16: 10 sh + 6 py)
 ├── docs/                  # MkDocs documentation
-├── openspec/              # Capability specs; verification archived 2026-10 (55/55 implemented)
+├── openspec/              # Capability specs; 2026-10 verification: 34 compliant, 19 partial, 2 non-compliant
 ├── docker-compose.yml     # Production services
 └── docker-compose.test.yml # Test services (Qdrant + Ollama)
 ```
@@ -57,7 +57,8 @@ secondbrain/
 - `search/` - Semantic search (2 files)
 - `conversation/` - Session management (4 files)
 - `domain/` - Entities, value objects (4 files)
-- `logging/`, `management/` - Single-module placeholder packages
+- `logging/` - Logging configuration, request-ID context, and service health checks
+- `management/` - Document listing, deletion, and storage status operations
 - `cli/` also carries the interactive chat surface: `chat.py` + `chat_helpers.py`
 
 ---
@@ -126,7 +127,7 @@ pre-commit install
 # Quality checks
 ruff check . && ruff format .
 mypy .
-pytest -m "not integration"      # Fast tests (chaos still excluded via default addopts)
+pytest -m "not integration and not chaos"  # Fast tests, explicitly excluding integration and chaos
 pytest -m "chaos or not chaos"   # Everything (CLI -m overrides the default 'not chaos')
 
 # Security
