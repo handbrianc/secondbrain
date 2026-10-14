@@ -45,13 +45,44 @@ class TestOTELConfig:
         monkeypatch.setenv("OTEL_METRICS_ENABLED", "false")
         assert not tracing_module.is_metrics_enabled()
 
-    def test_exporter_endpoint_configurable(self, monkeypatch, caplog):
+    def test_exporter_endpoint_configurable(self, monkeypatch):
         monkeypatch.setenv("SECONDBRAIN_TRACING_ENABLED", "true")
         monkeypatch.setenv(
             "SECONDBRAIN_OTEL_EXPORTER_ENDPOINT", "http://custom-otel:4317"
         )
+
+        captured: dict[str, str | None] = {}
+
+        class EndpointCapturingExporter:
+            """Stand-in for OTLPSpanExporter that records its endpoint."""
+
+            def __init__(
+                self,
+                *args: object,
+                endpoint: str | None = None,
+                **kwargs: object,
+            ) -> None:
+                captured["endpoint"] = endpoint
+
+            def shutdown(self) -> None:
+                """No-op: satisfy SpanExporter protocol on global shutdown."""
+
+            def force_flush(self, timeout_millis: int = 30000) -> bool:
+                """No-op: satisfy SpanExporter protocol on flushes."""
+                return True
+
+        # Point the module's exporter factory at the capturing class and skip
+        # the cached resolution, so setup_tracing constructs it with the
+        # endpoint read from the environment.
+        monkeypatch.setattr(tracing_module, "_otlp_checked", True)
+        monkeypatch.setattr(
+            tracing_module, "_otlp_exporter_cls", EndpointCapturingExporter
+        )
+
         tracing_module.setup_tracing(service_name="test-service")
-        assert "custom-otel:4317" in str(caplog.text) or True
+
+        # The configured endpoint actually reaches the OTLP span exporter.
+        assert captured["endpoint"] == "http://custom-otel:4317"
 
     def test_sampling_rate_configurable(self, monkeypatch, caplog):
         monkeypatch.setenv("SECONDBRAIN_TRACING_ENABLED", "true")

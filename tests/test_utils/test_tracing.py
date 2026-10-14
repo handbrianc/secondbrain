@@ -113,6 +113,45 @@ class TestSetupTracing:
             )
 
 
+class TestCliStartupWiring:
+    """setup_tracing is wired into CLI startup when tracing is enabled."""
+
+    @staticmethod
+    def _run_group_callback() -> None:
+        """Run the ``cli`` group callback exactly as a CLI invocation would."""
+        import click
+
+        from secondbrain.cli import cli
+
+        with click.Context(cli):
+            cli.callback(verbose=False)
+
+    def test_setup_tracing_wired_when_tracing_enabled(self, monkeypatch):
+        """CLI startup calls setup_tracing when tracing is enabled."""
+        calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+        monkeypatch.setattr("secondbrain.cli.is_tracing_enabled", lambda: True)
+        monkeypatch.setattr(
+            "secondbrain.cli.setup_tracing",
+            lambda *args, **kwargs: calls.append((args, kwargs)),
+        )
+
+        self._run_group_callback()
+
+        assert calls == [((), {})]
+
+    def test_setup_tracing_skipped_when_tracing_disabled(self, monkeypatch):
+        """CLI startup never calls setup_tracing for default (disabled) runs."""
+        calls: list[object] = []
+        monkeypatch.setattr("secondbrain.cli.is_tracing_enabled", lambda: False)
+        monkeypatch.setattr(
+            "secondbrain.cli.setup_tracing", lambda *a, **k: calls.append(1)
+        )
+
+        self._run_group_callback()
+
+        assert calls == []
+
+
 class TestGetTracer:
     """Tests for get_tracer function."""
 

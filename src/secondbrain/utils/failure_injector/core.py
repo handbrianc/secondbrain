@@ -30,7 +30,7 @@ class FailureInjectorCore:
         _lock: Reentrant lock guarding the active-failure registry.
     """
 
-    _instance: "Self | None" = None
+    _instance: Self | None = None
     _lock = (
         threading.RLock()
     )  # RLock for reentrant locking (reset can be called within locked context)

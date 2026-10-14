@@ -14,6 +14,7 @@ from rich.console import Console
 
 from secondbrain.config import config
 from secondbrain.logging import setup_logging
+from secondbrain.utils.tracing import is_tracing_enabled, setup_tracing
 
 # Suppress HF-hub progress bars before any docling/transformers import.
 os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
@@ -40,6 +41,11 @@ def cli(ctx: click.Context, verbose: bool) -> None:
     # honored by setup_logging below.
     config()
     setup_logging(verbose=verbose, level_name=os.environ.get("SECONDBRAIN_LOG_LEVEL"))
+    # Initialize OpenTelemetry at startup when tracing is enabled so the tracer
+    # provider/OTLP exporter exist before the first traced operation. Default
+    # (tracing disabled) runs skip this entirely — zero added dependencies.
+    if is_tracing_enabled():
+        setup_tracing()
 
 
 # This ensures commands are properly decorated and registered

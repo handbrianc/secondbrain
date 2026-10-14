@@ -251,6 +251,72 @@ class TestDisplayStatus:
             assert "1000000" in output_str
             assert "500" in output_str
 
+    def test_display_status_with_connection_and_size(
+        self, console_mock: MagicMock
+    ) -> None:
+        """Test the extended status output (connection + approximate size)."""
+        stats = {
+            "total_chunks": 100,
+            "unique_sources": 5,
+            "database": "test_db",
+            "collection": "test_collection",
+        }
+
+        with patch("secondbrain.cli.display.console", console_mock):
+            display_status(
+                stats,
+                connection_status="reachable",
+                storage_size_bytes=10 * 1024 * 1024,
+            )
+
+            # console_mock receives the raw markup string (rendered later).
+            output_str = str(console_mock.print.call_args_list)
+            assert "Connection:" in output_str
+            assert "reachable" in output_str
+            assert "Storage size (approx.): 10.0 MB" in output_str
+
+    def test_display_status_unreachable_connection(
+        self, console_mock: MagicMock
+    ) -> None:
+        """Test the connection indicator renders unreachable distinctly."""
+        stats = {
+            "total_chunks": 0,
+            "unique_sources": 0,
+            "database": "test_db",
+            "collection": "test_collection",
+        }
+
+        with patch("secondbrain.cli.display.console", console_mock):
+            display_status(stats, connection_status="unreachable")
+
+            output_str = str(console_mock.print.call_args_list)
+            assert "Connection:" in output_str
+            assert "unreachable" in output_str
+
+    def test_display_status_without_stats(self, console_mock: MagicMock) -> None:
+        """Test the offline branch: no stats, connection indicator only."""
+        with patch("secondbrain.cli.display.console", console_mock):
+            display_status(None, connection_status="unreachable")
+
+            output_str = str(console_mock.print.call_args_list)
+            assert "Database Status" in output_str
+            assert "Statistics unavailable" in output_str
+            assert "unreachable" in output_str
+            assert "Storage size" not in output_str
+
+    def test_format_bytes_units(self) -> None:
+        """Test the byte formatter's unit scaling."""
+        from secondbrain.cli.display import _format_bytes
+
+        assert _format_bytes(0) == "0.0 B"
+        assert _format_bytes(512) == "512.0 B"
+        assert _format_bytes(1024) == "1.0 KB"
+        assert _format_bytes(10 * 1024 * 1024) == "10.0 MB"
+        assert _format_bytes(3 * 1024**3) == "3.0 GB"
+        assert _format_bytes(2 * 1024**4) == "2.0 TB"
+        # Beyond TB saturates at the largest unit instead of erroring.
+        assert _format_bytes(5 * 1024**5).endswith("TB")
+
 
 class TestDisplayHealthStatus:
     """Tests for display_health_status function."""

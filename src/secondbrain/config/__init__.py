@@ -20,6 +20,7 @@ from secondbrain.config.llm import LLMMixin
 from secondbrain.config.processing import ProcessingStorageMixin
 from secondbrain.config.qdrant import QdrantMixin
 from secondbrain.config.rag import RagMixin
+from secondbrain.config.resilience import ResilienceMixin
 from secondbrain.config.sqlite import SqliteMixin
 
 __all__ = ["Config", "config", "get_config"]
@@ -33,6 +34,7 @@ class Config(
     ProcessingStorageMixin,
     QdrantMixin,
     SqliteMixin,
+    ResilienceMixin,
     BaseSettings,
 ):
     """Configuration for secondbrain CLI.
@@ -95,7 +97,7 @@ class Config(
         return values
 
     @model_validator(mode="after")
-    def validate_config_values(self) -> "Config":
+    def validate_config_values(self) -> Config:
         """Validate configuration values.
 
         Returns

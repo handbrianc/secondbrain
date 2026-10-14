@@ -41,6 +41,10 @@
 - [x] 5.1 Integrate OpenAI-compatible API client
 - [x] 5.2 Implement embedding generation for text
 - [x] 5.3 Add model pull on first use
+
+  > **Note (2026-10-08):** Obsolete after the MongoDB/ollama → Qdrant/OpenAI-compatible migration — there is no
+  > local model runtime anymore, so nothing auto-pulls a local model; the embedding model is served by the
+  > configured OpenAI-compatible API.
 - [x] 5.4 Implement connection validation
 - [x] 5.5 Handle OpenAI-compatible API service unavailable
 - [x] 5.6 Write tests for embedding module

@@ -58,9 +58,17 @@ jobs:
         run: |
           pytest -m "integration" -v --tb=short
 
-      - name: Coverage gate (full suite)
+      - name: Coverage gate (full suite, chaos included)
+        # -m override: pyproject addopts defaults to "not chaos" (chaos is
+        # opt-in), so the full-suite coverage run must re-select chaos tests
+        # explicitly or the 88% gate under-counts them.
+        # COVERAGE_CORE=sysmon: PEP 669 monitoring core (coverage >= 7.10);
+        # measurably faster collection on 3.14 with identical data.
+        env:
+          COVERAGE_CORE: sysmon
         run: |
           pytest -q \
+            -m "chaos or not chaos" \
             --cov=secondbrain \
             --cov-report=term-missing \
             --cov-report=xml \
@@ -90,9 +98,12 @@ jobs:
           pip install -e ".[dev]"
 
       - name: Run stability suites with retry tracking
+        # -m override: re-select chaos tests deselected by the addopts
+        # "not chaos" default; this suite explicitly opts in.
         run: |
           set -o pipefail
           pytest tests/test_concurrency tests/test_chaos \
+            -m "chaos or not chaos" \
             --reruns=3 --reruns-delay=1 -q --tb=short 2>&1 | tee pytest-flaky.log
 
       - name: Fail on any rerun (flaky test detected)
@@ -103,6 +114,30 @@ jobs:
             exit 1
           fi
           echo "No reruns: all stability tests passed on first attempt."
+
+  chaos-testing:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Run chaos and concurrency suites (explicit opt-in)
+        # -m override: addopts defaults to "not chaos", so this opt-in run
+        # must re-select chaos tests or pytest would deselect the entire
+        # chaos suite and exit 5.
+        run: |
+          python -m pytest tests/test_chaos tests/test_concurrency \
+            -m "chaos or not chaos" \
+            -q --no-cov -p no:cacheprovider
 
   performance-baseline:
     runs-on: ubuntu-latest

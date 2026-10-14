@@ -19,6 +19,8 @@ from secondbrain.document import MAX_MEMORY_BATCH_SIZE, _extract_and_chunk_file
 
 def _slow_process_file(path):
     """Module-level function for multiprocessing (must be picklable)."""
+    # Real sleep IS the simulated I/O load: the test asserts the parallel
+    # speedup over the sequential baseline measured from these waits.
     time.sleep(0.1)
     return True
 
@@ -113,6 +115,7 @@ class TestParallelPerformance:
         results_parallel = []
 
         def io_task(x):
+            # Simulated I/O load for the parallel-speedup assertion (not a poll).
             time.sleep(0.02)
             return x * 2
 
@@ -207,6 +210,7 @@ class TestWorkerPoolManagement:
         import time
 
         def io_task(x):
+            # Simulated I/O load for the parallel-speedup assertion (not a poll).
             time.sleep(0.05)
             return x * 2
 

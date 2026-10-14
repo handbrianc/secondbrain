@@ -19,7 +19,7 @@ def filter_chapters_by_target(
                 (m, s, t) for m, s, t in chapters_to_cover if m == target_num
             ]
             good_title_nums = {n for n in good_title_nums if n == target_num}
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             logger.warning(
                 "Invalid chapter target '%s' — falling back to full enumeration",
                 target,
@@ -66,3 +66,19 @@ ENUMERATE_CHAPTER_SIGNALS: frozenset[str] = frozenset(
         "enumerate",
     ]
 )
+
+
+_FILENAME_SUFFIX_RE = re.compile(
+    r"\S*\.(?:pdf|docx?|pptx?|xlsx?|html?|md|txt|epub|m4a|m4b|mp3|wav|aac|ogg|opus|flac)\b",
+    re.IGNORECASE,
+)
+
+
+def strip_document_filenames(query: str) -> str:
+    """Remove document-name tokens ("pve-admin-guide-9.1.pdf") from a query.
+
+    A dotted version suffix inside a filename masquerades as a section number
+    ("9.1") and silently narrows a whole-book summary request to that one
+    chapter; filename mentions never carry section targets.
+    """
+    return _FILENAME_SUFFIX_RE.sub(" ", query)

@@ -1584,7 +1584,7 @@ class TestMultiChapterMapReduce:
         # Forces the map-reduce fallback: the default single-pass path would
         # summarize this small source in one call (see test_single_pass_*).
         monkeypatch.setattr(
-            "secondbrain.rag.pipeline._mixins._SINGLE_PASS_MAX_CHARS", 10
+            "secondbrain.rag.pipeline._fallback_mixin._SINGLE_PASS_MAX_CHARS", 10
         )
         provider = _SequenceProvider(
             by_key={
@@ -1618,7 +1618,7 @@ class TestMultiChapterMapReduce:
         # Forces the map-reduce fallback: the default single-pass path would
         # summarize this small source in one call (see test_single_pass_*).
         monkeypatch.setattr(
-            "secondbrain.rag.pipeline._mixins._SINGLE_PASS_MAX_CHARS", 10
+            "secondbrain.rag.pipeline._fallback_mixin._SINGLE_PASS_MAX_CHARS", 10
         )
         provider = _SequenceProvider(
             by_key={
@@ -1696,7 +1696,7 @@ class TestMultiChapterMapReduce:
         # Forces the map-reduce fallback: the default single-pass path would
         # summarize this small source in one call (see test_single_pass_*).
         monkeypatch.setattr(
-            "secondbrain.rag.pipeline._mixins._SINGLE_PASS_MAX_CHARS", 10
+            "secondbrain.rag.pipeline._fallback_mixin._SINGLE_PASS_MAX_CHARS", 10
         )
 
         class _MixStreamProvider(_SequenceProvider):
@@ -1757,7 +1757,7 @@ class TestMultiChapterMapReduce:
         # Forces the map-reduce fallback: the default single-pass path would
         # summarize this small source in one call (see test_single_pass_*).
         monkeypatch.setattr(
-            "secondbrain.rag.pipeline._mixins._SINGLE_PASS_MAX_CHARS", 10
+            "secondbrain.rag.pipeline._fallback_mixin._SINGLE_PASS_MAX_CHARS", 10
         )
         emitted: list[str] = []
         prompts: list[str] = []
@@ -2554,7 +2554,7 @@ class TestMultiChapterMapReduce:
         # Forces the map-reduce fallback: the default single-pass path would
         # summarize this small source in one call (see test_single_pass_*).
         monkeypatch.setattr(
-            "secondbrain.rag.pipeline._mixins._SINGLE_PASS_MAX_CHARS", 10
+            "secondbrain.rag.pipeline._fallback_mixin._SINGLE_PASS_MAX_CHARS", 10
         )
         provider = _SequenceProvider(
             by_key={
@@ -2716,7 +2716,7 @@ class TestMultiChapterMapReduce:
         # Forces the map-reduce fallback: the default single-pass path would
         # summarize this small source in one call (see test_single_pass_*).
         monkeypatch.setattr(
-            "secondbrain.rag.pipeline._mixins._SINGLE_PASS_MAX_CHARS", 10
+            "secondbrain.rag.pipeline._fallback_mixin._SINGLE_PASS_MAX_CHARS", 10
         )
         events: list[tuple[str, str | None]] = []
 
@@ -2839,7 +2839,7 @@ class TestMultiChapterMapReduce:
         # Forces the map-reduce fallback: the default single-pass path would
         # summarize this small source in one call (see test_single_pass_*).
         monkeypatch.setattr(
-            "secondbrain.rag.pipeline._mixins._SINGLE_PASS_MAX_CHARS", 10
+            "secondbrain.rag.pipeline._fallback_mixin._SINGLE_PASS_MAX_CHARS", 10
         )
         stream_prompts: list[str] = []
 
@@ -2918,7 +2918,7 @@ class TestMultiChapterMapReduce:
         # Forces the map-reduce fallback: the default single-pass path would
         # summarize this small source in one call (see test_single_pass_*).
         monkeypatch.setattr(
-            "secondbrain.rag.pipeline._mixins._SINGLE_PASS_MAX_CHARS", 10
+            "secondbrain.rag.pipeline._fallback_mixin._SINGLE_PASS_MAX_CHARS", 10
         )
         stream_prompts: list[str] = []
         group_prompts: list[str] = []
@@ -3014,7 +3014,7 @@ class TestMultiChapterMapReduce:
         # Forces the map-reduce fallback: the default single-pass path would
         # summarize this small source in one call (see test_single_pass_*).
         monkeypatch.setattr(
-            "secondbrain.rag.pipeline._mixins._SINGLE_PASS_MAX_CHARS", 10
+            "secondbrain.rag.pipeline._fallback_mixin._SINGLE_PASS_MAX_CHARS", 10
         )
         prompts.clear()
         p2 = self._make_pipeline(_RecordingProvider())

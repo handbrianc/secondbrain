@@ -13,9 +13,9 @@ for using OpenAI API as an LLM backend.
 #  kwargs-dict passed to embeddings.create in the embedding provider's twin
 #  module, which has the same stub-gap shape.)
 
-import logging
 import os
 import re
+from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 
 import httpx2
@@ -28,10 +28,11 @@ from openai import (
 )
 
 from secondbrain.exceptions import ServiceUnavailableError
+from secondbrain.logging import get_logger
 
 from ..interfaces import LocalLLMProvider, StreamingCallback
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Degenerate-loop guard: a trailing window that nearly exactly repeats an earlier
 # one means the model is re-uttering itself, not progressing. Applied to both the
@@ -57,6 +58,181 @@ def _is_repeat_window(window: str, seen: list[str], ratio: float) -> bool:
     return bool(window) and any(
         SequenceMatcher(None, w, window).ratio() > ratio for w in seen
     )
+
+
+def _log_token_usage(operation: str, usage: object, model: str) -> None:
+    """Emit one structured token-usage log line when a response carries usage.
+
+    OpenAI-compatible responses report ``usage.prompt_tokens``,
+    ``usage.completion_tokens`` and ``usage.total_tokens``; the fields are
+    logged verbatim (``None`` when the server omitted them) so the record can
+    be asserted or parsed downstream. Streaming endpoints that do not include
+    usage chunks simply produce no log line.
+    """
+    if usage is None:
+        return
+    logger.info(
+        "%s token usage: model=%s prompt_tokens=%s completion_tokens=%s "
+        "total_tokens=%s",
+        operation,
+        model,
+        getattr(usage, "prompt_tokens", None),
+        getattr(usage, "completion_tokens", None),
+        getattr(usage, "total_tokens", None),
+    )
+
+
+@dataclass
+class _RepeatGuard:
+    """Repetition detector for one streamed text channel.
+
+    Accumulates chunk text and, every ``interval`` characters past
+    ``min_chars``, normalizes the trailing ``window`` characters and
+    compares it against previously seen windows. A near-exact repeat of an
+    earlier window means the model is re-uttering itself, not progressing.
+
+    Accumulation (``accumulate``) is separate from judgement (``check``) so
+    callers can interleave other length-based halts between the two steps
+    with the same observable ordering as before the split.
+    """
+
+    min_chars: int
+    interval: int
+    window: int
+    ratio: float
+
+    chars: int = 0
+    last_clean_text: str = ""
+    _chunks: list[str] = field(default_factory=list)
+    _seen: list[str] = field(default_factory=list)
+    _last_check: int = 0
+
+    def accumulate(self, text: str) -> None:
+        """Record one non-empty chunk of this channel."""
+        self.chars += len(text)
+        self._chunks.append(text)
+
+    def check(self) -> bool:
+        """Judge the accumulated text; return True on a degenerate repeat.
+
+        Judgement is deferred until the stream is substantial (``min_chars``)
+        and then repeated every ``interval`` characters. Each clean check
+        records the accumulated text so a later halt can keep the last
+        known-good content.
+        """
+        if self.chars < self.min_chars or self.chars - self._last_check < self.interval:
+            return False
+        self._last_check = self.chars
+        window = _normalize_reasoning("".join(self._chunks)[-self.window :])
+        if _is_repeat_window(window, self._seen, self.ratio):
+            return True
+        self._seen.append(window)
+        self.last_clean_text = "".join(self._chunks)
+        return False
+
+    @property
+    def text(self) -> str:
+        """The full accumulated text of this channel."""
+        return "".join(self._chunks)
+
+
+@dataclass
+class _StreamAccumulator:
+    """Mutable state for one streamed chat response.
+
+    Owns the reasoning-channel and content-channel repetition guards, the
+    accumulated answer chunks, and the halt reason. ``consume`` processes a
+    single streamed chunk in the original order (reasoning channel, then
+    content channel with its answer-length bound before its loop check) and
+    reports whether the stream must stop; ``resolve`` produces the final
+    answer text once the stream has ended.
+    """
+
+    max_answer_chars: int
+    reasoning: _RepeatGuard = field(
+        default_factory=lambda: _RepeatGuard(
+            min_chars=_REASON_LOOP_MIN_CHARS,
+            interval=_REASON_LOOP_INTERVAL,
+            window=_REASON_LOOP_WINDOW,
+            ratio=_REASON_LOOP_RATIO,
+        )
+    )
+    content: _RepeatGuard = field(
+        default_factory=lambda: _RepeatGuard(
+            min_chars=_CONTENT_LOOP_MIN_CHARS,
+            interval=_CONTENT_LOOP_INTERVAL,
+            window=_CONTENT_LOOP_WINDOW,
+            ratio=_CONTENT_LOOP_RATIO,
+        )
+    )
+    accumulated: list[str] = field(default_factory=list)
+    capped: bool = False
+    capped_reason: str = ""
+
+    def consume(self, chunk: object, on_chunk: StreamingCallback) -> bool:
+        """Absorb one streamed chunk; return True when the stream must stop.
+
+        Forwards every non-empty channel to ``on_chunk`` exactly once, in the
+        same order the chunks arrived, before any halt is reported.
+        """
+        if not (chunk.choices and len(chunk.choices) > 0):
+            return False
+        delta = chunk.choices[0].delta
+        reasoning = getattr(delta, "reasoning_content", None)
+        if reasoning is None:
+            reasoning = getattr(delta, "reasoning", None)
+        content = delta.content or ""
+        if reasoning:
+            self.reasoning.accumulate(reasoning)
+            # Halt a genuine reasoning loop (near-exact repeated window).
+            if self.reasoning.check():
+                self.capped = True
+                self.capped_reason = "degenerate loop"
+                return True
+        if content:
+            self.content.accumulate(content)
+            # Bound answer length regardless of repetition pattern: a
+            # runaway generator emitting varied output is cut here too.
+            if self.max_answer_chars and self.content.chars > self.max_answer_chars:
+                self.capped = True
+                self.capped_reason = "answer limit"
+                return True
+            # Halt a content-phase spiral (the model re-drafting and
+            # self-correcting its prose in a loop), keeping the clean
+            # summary accumulated before the spiral began.
+            if self.content.check():
+                self.capped = True
+                self.capped_reason = "content loop"
+                return True
+        if content or reasoning:
+            on_chunk(content, reasoning)
+        if content:
+            self.accumulated.append(content)
+        return False
+
+    def resolve(self) -> str:
+        """Build the final answer text from the accumulated stream state."""
+        if self.capped and self.capped_reason == "content loop":
+            # Keep the clean summary accumulated before the spiral began.
+            return self.content.last_clean_text
+        if self.capped and self.capped_reason == "answer limit":
+            prefix = "".join(self.accumulated)[: self.max_answer_chars]
+            return _cut_at_sentence_boundary(prefix)
+        return "".join(self.accumulated)
+
+
+def _cut_at_sentence_boundary(prefix: str) -> str:
+    """Cut a capped answer at its last sentence or line end.
+
+    A capped answer must never stop mid-word; the cut falls back to the
+    last space and then to the raw prefix when no boundary exists.
+    """
+    term = list(re.finditer(r"[.!?]\s|\n", prefix))
+    cut = term[-1].end() if term else -1
+    if cut <= 0:
+        sp = prefix.rfind(" ")
+        cut = sp if sp > 0 else -1
+    return (prefix[:cut] if cut > 0 else prefix).rstrip()
 
 
 class OpenAILLMProvider(LocalLLMProvider):
@@ -208,6 +384,9 @@ class OpenAILLMProvider(LocalLLMProvider):
                 extra_body=self._extra_body(),
             )
 
+            _log_token_usage(
+                "completion", getattr(response, "usage", None), self._model
+            )
             return response.choices[0].message.content or ""
 
         except APITimeoutError as e:
@@ -256,6 +435,9 @@ class OpenAILLMProvider(LocalLLMProvider):
                 extra_body=self._extra_body(),
             )
 
+            _log_token_usage(
+                "completion", getattr(response, "usage", None), self._model
+            )
             return response.choices[0].message.content or ""
 
         except APITimeoutError as e:
@@ -352,103 +534,26 @@ class OpenAILLMProvider(LocalLLMProvider):
                 extra_body=self._extra_body(),
             )
 
-            accumulated: list[str] = []
-            reasoning_chars = 0
-            reasoning_log: list[str] = []
-            seen_windows: list[str] = []
-            last_loop_check = 0
-            content_chars = 0
-            content_log: list[str] = []
-            content_seen_windows: list[str] = []
-            last_content_check = 0
-            good_content = ""
-            capped = False
-            capped_reason = ""
+            state = _StreamAccumulator(max_answer_chars=self._max_answer_chars)
+            stream_usage: object = None
             for chunk in response:
-                if chunk.choices and len(chunk.choices) > 0:
-                    delta = chunk.choices[0].delta
-                    reasoning = getattr(delta, "reasoning_content", None)
-                    if reasoning is None:
-                        reasoning = getattr(delta, "reasoning", None)
-                    content = delta.content or ""
-                    if reasoning:
-                        reasoning_chars += len(reasoning)
-                        reasoning_log.append(reasoning)
-                        # Halt a genuine reasoning loop (near-exact repeated window).
-                        if (
-                            reasoning_chars >= _REASON_LOOP_MIN_CHARS
-                            and reasoning_chars - last_loop_check
-                            >= _REASON_LOOP_INTERVAL
-                        ):
-                            last_loop_check = reasoning_chars
-                            window = _normalize_reasoning(
-                                "".join(reasoning_log)[-_REASON_LOOP_WINDOW:]
-                            )
-                            if _is_repeat_window(
-                                window, seen_windows, _REASON_LOOP_RATIO
-                            ):
-                                capped = True
-                                capped_reason = "degenerate loop"
-                                break
-                            seen_windows.append(window)
-                    if content:
-                        content_chars += len(content)
-                        content_log.append(content)
-                        # Bound answer length regardless of repetition pattern: a
-                        # runaway generator emitting varied output is cut here too.
-                        if (
-                            self._max_answer_chars
-                            and content_chars > self._max_answer_chars
-                        ):
-                            capped = True
-                            capped_reason = "answer limit"
-                            break
-                        # Halt a content-phase spiral (the model re-drafting and
-                        # self-correcting its prose in a loop), keeping the clean
-                        # summary accumulated before the spiral began.
-                        if (
-                            content_chars >= _CONTENT_LOOP_MIN_CHARS
-                            and content_chars - last_content_check
-                            >= _CONTENT_LOOP_INTERVAL
-                        ):
-                            last_content_check = content_chars
-                            window = _normalize_reasoning(
-                                "".join(content_log)[-_CONTENT_LOOP_WINDOW:]
-                            )
-                            if _is_repeat_window(
-                                window, content_seen_windows, _CONTENT_LOOP_RATIO
-                            ):
-                                capped = True
-                                capped_reason = "content loop"
-                                break
-                            content_seen_windows.append(window)
-                            good_content = "".join(content_log)
-                    if content or reasoning:
-                        on_chunk(content, reasoning)
-                    if content:
-                        accumulated.append(content)
+                # Some OpenAI-compatible servers append a usage-bearing final
+                # chunk even without ``stream_options``; capture it when present
+                # so streaming responses log token usage too.
+                chunk_usage = getattr(chunk, "usage", None)
+                if chunk_usage is not None:
+                    stream_usage = chunk_usage
+                if state.consume(chunk, on_chunk):
+                    break
 
-            if capped and capped_reason == "content loop":
-                answer = good_content
-            elif capped and capped_reason == "answer limit":
-                full = "".join(accumulated)
-                prefix = full[: self._max_answer_chars]
-                # Cut at the last sentence/line end so a capped answer never stops
-                # mid-word; fall back to the last space, then to the raw prefix.
-                term = list(re.finditer(r"[.!?]\s|\n", prefix))
-                cut = term[-1].end() if term else -1
-                if cut <= 0:
-                    sp = prefix.rfind(" ")
-                    cut = sp if sp > 0 else -1
-                answer = (prefix[:cut] if cut > 0 else prefix).rstrip()
-            else:
-                answer = "".join(accumulated)
-            if capped:
+            answer = state.resolve()
+            _log_token_usage("streaming completion", stream_usage, self._model)
+            if state.capped:
                 logger.warning(
                     "Stream halted (%s) reasoning=%s content=%s",
-                    capped_reason,
-                    reasoning_chars,
-                    content_chars,
+                    state.capped_reason,
+                    state.reasoning.chars,
+                    state.content.chars,
                 )
                 if not answer.strip():
                     answer = (

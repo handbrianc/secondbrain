@@ -337,6 +337,31 @@ class TestMockVectorStorageLenAndContains:
         assert "nonexistent" not in storage
 
 
+class TestMockVectorStorageValidateConnection:
+    """D1: the startup-wait probe kwargs must be accepted by the mock."""
+
+    def test_validate_connection_accepts_docker_probe_kwargs(self):
+        """Startup probes pass force + bypass_circuit_breaker; no TypeError."""
+        storage = MockVectorStorage()
+
+        assert (
+            storage.validate_connection(force=True, bypass_circuit_breaker=True) is True
+        )
+
+    def test_protocols_declare_docker_probe_kwargs(self):
+        """Both protocol surfaces declare the startup-probe kwargs."""
+        import inspect
+
+        from secondbrain.embedding.interfaces import EmbeddingProvider
+        from secondbrain.storage.protocol import VectorStorageProtocol
+
+        for protocol in (VectorStorageProtocol, EmbeddingProvider):
+            params = inspect.signature(protocol.validate_connection).parameters
+            assert "force" in params
+            assert "bypass_circuit_breaker" in params
+            assert params["bypass_circuit_breaker"].default is False
+
+
 class TestMockVectorStorageAsync:
     """Test MockVectorStorage async methods."""
 
@@ -346,6 +371,17 @@ class TestMockVectorStorageAsync:
         storage = MockVectorStorage()
 
         result = await storage.validate_connection_async()
+
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_validate_connection_async_accepts_docker_probe_kwargs(self):
+        """Async twin accepts the startup-probe kwargs; no TypeError."""
+        storage = MockVectorStorage()
+
+        result = await storage.validate_connection_async(
+            force=True, bypass_circuit_breaker=True
+        )
 
         assert result is True
 

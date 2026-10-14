@@ -129,7 +129,7 @@ class Searcher:
         if hasattr(self.storage, "aclose"):
             await self.storage.aclose()  # pyright: ignore[reportAttributeAccessIssue]
 
-    def __enter__(self) -> "Searcher":
+    def __enter__(self) -> Searcher:
         """Enter runtime context manager."""
         return self
 
@@ -142,7 +142,7 @@ class Searcher:
         """Exit runtime context manager."""
         self.close()
 
-    async def __aenter__(self) -> "Searcher":
+    async def __aenter__(self) -> Searcher:
         """Async context manager entry."""
         return self
 

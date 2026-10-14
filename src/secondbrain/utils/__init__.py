@@ -3,7 +3,6 @@
 from .circuit_breaker import (
     CircuitBreaker,
     CircuitBreakerConfig,
-    CircuitBreakerEnabledService,
     CircuitBreakerError,
     CircuitState,
 )
@@ -14,7 +13,6 @@ from .tracing import shutdown_tracing as shutdown_tracing
 __all__ = [
     "CircuitBreaker",
     "CircuitBreakerConfig",
-    "CircuitBreakerEnabledService",
     "CircuitBreakerError",
     "CircuitState",
     "EmbeddingCache",

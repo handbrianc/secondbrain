@@ -129,6 +129,17 @@ class TestCoresAndBatchSize:
         forwarded = ingestor.ingest.call_args[1]
         assert forwarded["batch_size"] == 7
 
+    def test_batch_size_20_reaches_ingestor(self, tmp_path: Path) -> None:
+        """--batch-size 20 flows through to the ingestor as an int kwarg."""
+        (tmp_path / "doc.txt").write_text("hello")
+        ingestor, ingestor_class = _mock_ingestor({"success": 1, "failed": 0})
+
+        result = _invoke(ingestor_class, tmp_path, "--batch-size", "20")
+
+        assert result.exit_code == 0
+        forwarded = ingestor.ingest.call_args[1]
+        assert forwarded["batch_size"] == 20
+
     def test_batch_size_zero_rejected(self, tmp_path: Path) -> None:
         (tmp_path / "doc.txt").write_text("hello")
         _, ingestor_class = _mock_ingestor({"success": 1, "failed": 0})

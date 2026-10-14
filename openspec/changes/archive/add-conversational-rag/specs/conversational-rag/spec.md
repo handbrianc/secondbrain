@@ -6,6 +6,14 @@
 
 The system SHALL create a new conversation session with a unique identifier when the user initiates a chat.
 
+> **Note (2026-10-11):** Session storage is SQLite, not MongoDB: sessions live in the SQLite conversation store
+> (`SECONDBRAIN_SQLITE_PATH`; `src/secondbrain/conversation/storage_sqlite.py`). Every MongoDB reference in this
+> spec — including "session is stored in MongoDB `conversations` collection" below, "full history remains stored
+> in MongoDB", the delete-session scenario, the "MongoDB connection failure" error scenario, and "async MongoDB
+> operations for session storage" — reads as the SQLite session store in the shipped code. Also renamed:
+> `SECONDBRAIN_CONVERSATION_DB` (custom MongoDB URI) → `SECONDBRAIN_SQLITE_PATH` (SQLite database path). The
+> historical scenario text is retained unchanged.
+
 #### Scenario: Create new session
 
 - **WHEN** user runs `secondbrain chat` without specifying a session ID
@@ -32,6 +40,8 @@ The system SHALL preserve conversation context across multiple user queries with
 
 #### Scenario: Context window limit
 
+> **Note (2026-10-08):** Shipped with context window = 5 turns.
+
 - **WHEN** conversation exceeds configured context window (default: 5 turns)
 - **THEN** system uses only the most recent N turns for context
 - **AND** full history remains stored in MongoDB
@@ -55,6 +65,13 @@ The system SHALL rewrite user queries to include conversation context for better
 ### Requirement: Display conversation sources
 
 The system SHALL show retrieved document sources used for generating answers.
+
+> **Note (2026-10-12):** Amended (supersedes this requirement's earlier 2026-10-11 note, which claimed the
+> opposite): a 2026-10-11 remediation added similarity scores to the `--show-sources` listing on both chat
+> paths — single-turn (`src/secondbrain/cli/chat_helpers.py:266-273`) and interactive (`:403-409`) — each
+> rendering `score: <value>` to 4 decimals (asserted as `score: 0.9417` / `score: 0.5123` in
+> `tests/test_cli/test_chat_helpers.py`). The "shows similarity scores for each chunk" bullet below IS
+> satisfied as of that remediation. The historical scenario text is retained unchanged.
 
 #### Scenario: Show sources flag enabled
 
@@ -118,6 +135,13 @@ The system SHALL support interactive multi-turn conversation in a single CLI inv
 
 The system SHALL support configuration via environment variables and CLI flags following 12-factor principles.
 
+> **Note (2026-10-11):** The Ollama/local-LLM defaults were dropped. Shipped: `SECONDBRAIN_LLM_PROVIDER`
+> accepts `openai`/`anthropic` (default `openai`), default model `gpt-4o-mini`, default temperature 0.3
+> (`src/secondbrain/config/llm.py`). There is no `SECONDBRAIN_LLM_ENDPOINT` environment variable —
+> self-hosted/OpenAI-compatible endpoints are configured via the `openai_base_url` setting instead. The "Set
+> local LLM provider", "Set custom LLM endpoint", and "Set LLM model" scenarios below record the Ollama-era
+> behavior and are retained as history.
+
 #### Scenario: Set local LLM provider
 
 - **WHEN** user sets `SECONDBRAIN_LLM_PROVIDER=ollama`
@@ -150,6 +174,9 @@ The system SHALL support configuration via environment variables and CLI flags f
 
 #### Scenario: Set LLM generation parameters
 
+> **Note (2026-10-08):** Shipped defaults differ: temperature config default is 0.3 (CLI `--temperature` flag
+> defaults to 0.1); max_tokens is 384000.
+
 - **WHEN** user sets `SECONDBRAIN_LLM_TEMPERATURE=0.8`
 - **AND** `SECONDBRAIN_LLM_MAX_TOKENS=2048`
 - **THEN** system uses these parameters for generation
@@ -158,6 +185,11 @@ The system SHALL support configuration via environment variables and CLI flags f
 ### Requirement: Error handling
 
 The system SHALL handle errors gracefully and provide actionable feedback.
+
+> **Note (2026-10-11):** With the Ollama/local-LLM defaults dropped, the Ollama-specific guidance quoted in the
+> "Local LLM server unavailable" and "Model not found" scenarios below (e.g. 'ollama serve', 'ollama pull',
+> `SECONDBRAIN_LLM_ENDPOINT`) does not apply to the shipped OpenAI/Anthropic providers; provider errors surface
+> from the configured provider client. The scenarios are retained as history.
 
 #### Scenario: Invalid session ID
 
@@ -202,6 +234,10 @@ The system SHALL orchestrate retrieval and generation in a single pipeline.
 ### Requirement: Pluggable LLM provider
 
 The system SHALL support multiple LLM providers through a common interface.
+
+> **Note (2026-10-11):** The Anthropic default model shipped as `claude-3-sonnet-20240229`
+> (`src/secondbrain/rag/providers/anthropic.py`), not `claude-3-haiku` as in the scenario below. Retained as
+> history.
 
 #### Scenario: Use OpenAI provider
 
@@ -249,6 +285,12 @@ The system SHALL reuse existing semantic search infrastructure for document retr
 ### Requirement: Answer generation
 
 The system SHALL generate answers based on retrieved context and conversation history.
+
+> **Note (2026-10-11):** The "Handle ambiguous queries" scenario is an intentional omission: no
+> ambiguity-detection or clarifying-question mechanism shipped. Only the LLM-judge fixtures reference a
+> "clarification" response type (the response_type enum in `tests/data/qualitative/llm_judge_prompts.json`);
+> the pipeline itself never routes ambiguous queries to a clarifying question. The scenario is retained as
+> history.
 
 #### Scenario: Generate grounded answer
 

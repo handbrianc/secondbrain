@@ -11,9 +11,12 @@ unless that opt-in is present.
 import json
 import logging
 import os
+import socket
 import time
 import uuid
 from contextvars import ContextVar
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _package_version
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import TypedDict
@@ -23,6 +26,7 @@ from rich.logging import RichHandler
 
 __all__ = [
     "HealthStatus",
+    "JSONFormatter",
     "get_health_status",
     "get_logger",
     "get_request_id",
@@ -44,6 +48,17 @@ class HealthStatus(TypedDict):
 
 
 _request_id: ContextVar[str] = ContextVar("request_id", default="")
+
+
+def _get_package_version() -> str:
+    """Return the installed package version, falling back to "unknown"."""
+    try:
+        return _package_version("secondbrain")
+    except PackageNotFoundError:  # pragma: no cover - source checkout fallback
+        return "unknown"
+
+
+_PACKAGE_VERSION: str = _get_package_version()
 
 
 def get_request_id() -> str:
@@ -192,6 +207,41 @@ def setup_rich_logging(
     )
 
 
+class JSONFormatter(logging.Formatter):
+    """Format log records as single-line JSON objects.
+
+    Emits the standard fields required by the structured-logging spec
+    (timestamp, level, logger, message, module, function, line, request_id)
+    plus operational context fields (service, hostname, pid, version).
+    """
+
+    def format(self, record: logging.LogRecord) -> str:
+        """Render a log record as a JSON string.
+
+        Args:
+            record: The log record to format.
+
+        Returns
+        -------
+            A JSON string containing the structured log entry.
+        """
+        log_entry = {
+            "timestamp": self.formatTime(record, self.datefmt),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+            "module": record.module,
+            "function": record.funcName,
+            "line": record.lineno,
+            "request_id": get_request_id() or "",
+            "service": "secondbrain",
+            "hostname": socket.gethostname(),
+            "pid": os.getpid(),
+            "version": _PACKAGE_VERSION,
+        }
+        return json.dumps(log_entry)
+
+
 def setup_json_logging(
     level: int,
     log_file: str | None = None,
@@ -206,21 +256,6 @@ def setup_json_logging(
         max_bytes: Max log file size before rotation (default 10MB).
         backup_count: Number of backup files to keep (default 5).
     """
-
-    class JSONFormatter(logging.Formatter):
-        def format(self, record: logging.LogRecord) -> str:
-            log_entry = {
-                "timestamp": self.formatTime(record, self.datefmt),
-                "level": record.levelname,
-                "logger": record.name,
-                "message": record.getMessage(),
-                "module": record.module,
-                "function": record.funcName,
-                "line": record.lineno,
-                "request_id": get_request_id() or "",
-            }
-            return json.dumps(log_entry)
-
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(JSONFormatter())
     handlers: list[logging.Handler] = [console_handler]

@@ -129,6 +129,8 @@ class TestTimingDecorator:
 
         @timing("test_operation")
         def slow_function():
+            # Real sleep IS the measured work: the assertion checks the
+            # recorded duration falls in a band around it (not a poll).
             time.sleep(0.1)
             return "done"
 
@@ -149,6 +151,7 @@ class TestTimingDecorator:
 
         @timing("failing_operation")
         def failing_function():
+            # Measured work (see note in test_timing_decorator_records_duration).
             time.sleep(0.05)
             raise ValueError("Test error")
 
@@ -173,11 +176,13 @@ class TestPerformanceLogging:
 
         @timing("document.ingest")
         def ingest_document():
+            # Measured work (see note in test_timing_decorator_records_duration).
             time.sleep(0.05)
             return {"status": "ingested"}
 
         @timing("semantic.search")
         def search_documents():
+            # Measured work (see note in test_timing_decorator_records_duration).
             time.sleep(0.03)
             return [{"chunk": "result"}]
 
@@ -206,3 +211,95 @@ class TestPerformanceLogging:
         assert (
             0.025 <= search_stats["avg_seconds"] <= 0.045
         )  # 20% tolerance below, 50% above for system variance
+
+
+class TestSearchLatencySLO:
+    """Search-path latency benchmark against the archived semantic-search SLO.
+
+    Spec requirement: search "returns results within 1 second for <10k chunks"
+    (openspec/changes/archive/2026-03-06-secondbrain/specs/semantic-search/
+    spec.md). ~10k chunks are indexed into Qdrant's in-process local mode —
+    the same approach as tests/test_storage/test_qdrant_storage.py — and the
+    real Searcher path runs end to end (sanitize -> embedding cache ->
+    storage query), with only the embedding provider stubbed (deterministic
+    seeded vectors, no API calls).
+    """
+
+    @pytest.mark.slow
+    def test_search_returns_within_one_second_for_10k_chunks(self):
+        import zlib
+        from unittest.mock import patch
+
+        from qdrant_client import QdrantClient
+
+        from secondbrain.search import Searcher
+        from secondbrain.storage.qdrant import QdrantVectorStorage
+
+        # Compact vectors keep the 10k-point index cheap to build; the SLO is
+        # about corpus size, not embedding width.
+        dim = 64
+        storage = QdrantVectorStorage(collection_name="slo_probe")
+        storage._client = QdrantClient(":memory:")
+        storage._dimensions = dim
+
+        rng = np.random.default_rng(2026)
+        docs = []
+        for i in range(10_000):
+            vec = rng.standard_normal(dim)
+            vec /= np.linalg.norm(vec)
+            docs.append(
+                {
+                    "chunk_id": f"slo-{i:05d}",
+                    "source_file": f"doc_{i % 10}.pdf",
+                    "page_number": (i % 300) + 1,
+                    "chunk_text": f"chunk {i} about machine learning and retrieval",
+                    "element_type": "paragraph",
+                    "chunk_role": "body",
+                    "file_type": "pdf",
+                    "text_hash": f"hash-{i}",
+                    "embedding": vec.tolist(),
+                }
+            )
+        for start in range(0, len(docs), 1000):
+            storage.store_batch(docs[start : start + 1000])
+
+        class _StubEmbedder:
+            """Deterministic embedding stand-in (seeded from the query text)."""
+
+            dimensions = dim
+
+            def generate(self, text: str) -> list[float]:
+                vec = np.random.default_rng(
+                    zlib.crc32(text.encode("utf-8"))
+                ).standard_normal(dim)
+                return (vec / np.linalg.norm(vec)).tolist()
+
+            def close(self) -> None:
+                pass
+
+        with (
+            patch(
+                "secondbrain.search.StorageFactory.create_from_config",
+                return_value=storage,
+            ),
+            patch(
+                "secondbrain.search.EmbeddingProviderFactory.create_from_config",
+                return_value=_StubEmbedder(),
+            ),
+        ):
+            searcher = Searcher(verbose=False)
+            slo_metrics = PerfMetrics()
+            for _ in range(5):
+                started = time.perf_counter()
+                results = searcher.search("machine learning retrieval embeddings")
+                elapsed = time.perf_counter() - started
+                slo_metrics.record("semantic_search_slo", elapsed)
+                assert results, "search returned no results against the 10k index"
+                assert (results[0].get("score") or 0) > 0
+
+        stats = slo_metrics.get_stats("semantic_search_slo")
+        assert stats is not None
+        # Archived semantic-search spec: results within 1 second for <10k chunks.
+        assert stats["p50_seconds"] < 1.0, f"p50={stats['p50_seconds']}s exceeds 1s SLO"
+        assert stats["p95_seconds"] < 1.0, f"p95={stats['p95_seconds']}s exceeds 1s SLO"
+        assert stats["p99_seconds"] < 1.0, f"p99={stats['p99_seconds']}s exceeds 1s SLO"

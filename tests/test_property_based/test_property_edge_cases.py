@@ -5,6 +5,8 @@ Consolidated from:
 - test_config_validation_edge_cases.py: Config validation property tests
 """
 
+import string
+
 import pytest
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
@@ -12,30 +14,89 @@ from hypothesis import strategies as st
 from secondbrain.config import Config
 from secondbrain.document import _chunk_segments
 
+# --- Generative text strategies replacing the former degenerate st.just(X) ---
+# inputs (each previously drew the same constant on every example, which made
+# the tests parametrized-by-nothing rather than property-based).
+
+
+def _letters(min_size: int = 1, max_size: int = 10) -> st.SearchStrategy[str]:
+    """Non-empty alphabetic words."""
+    return st.text(alphabet=string.ascii_letters, min_size=min_size, max_size=max_size)
+
+
+def _unbroken_word() -> st.SearchStrategy[str]:
+    """A single long word of arbitrary length (no whitespace)."""
+    return st.integers(min_value=1, max_value=1000).map(lambda n: "A" * n)
+
+
+def _short_multi_word_text() -> st.SearchStrategy[str]:
+    """Whitespace-separated words, lengths crossing the chunk boundary."""
+    return st.lists(_letters(max_size=12), min_size=1, max_size=40).map(" ".join)
+
+
+def _repeated_pattern_text() -> st.SearchStrategy[str]:
+    """Variable-length 'A...A B...B C...C' pattern text."""
+    return st.integers(min_value=1, max_value=30).map(
+        lambda n: "A " * n + "B " * n + "C " * n
+    )
+
+
+def _text_with_newline_runs() -> st.SearchStrategy[str]:
+    """Words separated by runs of newlines/other whitespace."""
+    separators = st.text(alphabet="\n\t\r ", min_size=1, max_size=8)
+    return st.lists(
+        st.tuples(_letters(min_size=2), separators), min_size=1, max_size=8
+    ).map(lambda pairs: "".join(word + sep for word, sep in pairs))
+
+
+def _text_with_tab_runs() -> st.SearchStrategy[str]:
+    """Words separated by runs of tabs/other whitespace."""
+    separators = st.text(alphabet="\t\n\r ", min_size=1, max_size=8)
+    return st.lists(
+        st.tuples(_letters(min_size=2), separators), min_size=1, max_size=8
+    ).map(lambda pairs: "".join(word + sep for word, sep in pairs))
+
+
+def _long_single_line_text() -> st.SearchStrategy[str]:
+    """A long single-line text of 'Test'-repetitions with varying length."""
+    return st.integers(min_value=12, max_value=400).map(lambda n: "Test " * n)
+
+
+def _two_long_words_text() -> st.SearchStrategy[str]:
+    """Two long unbroken words separated by exactly one space."""
+    return st.tuples(
+        st.integers(min_value=1, max_value=1500),
+        st.integers(min_value=1, max_value=1500),
+    ).map(lambda t: "A" * t[0] + " " + "B" * t[1])
+
 
 @pytest.mark.hypothesis
 class TestChunkingEdgeCases:
     """Boundary-condition tests for _chunk_segments."""
 
-    @given(st.just("A" * 100))
+    @given(text=_unbroken_word())
     @settings(max_examples=100)
     def test_single_word_chunking(self, text: str):
+        """A single unbroken word of any length splits into bounded chunks."""
         segments = [{"text": text, "page": 0}]
         chunks = _chunk_segments(segments, chunk_size=50, chunk_overlap=10)
         assert chunks
         for chunk in chunks:
             assert len(chunk["text"]) <= 60
 
-    @given(st.just("A B C D E"))
+    @given(text=_short_multi_word_text())
     @settings(max_examples=100)
     def test_very_short_text(self, text: str):
+        """Short multi-word text always yields at least one non-empty chunk."""
         segments = [{"text": text, "page": 0}]
         chunks = _chunk_segments(segments, chunk_size=100, chunk_overlap=10)
         assert len(chunks) >= 1
+        assert all(chunk["text"].strip() for chunk in chunks)
 
-    @given(st.just("A " * 10 + "B " * 10 + "C " * 10))
+    @given(text=_repeated_pattern_text())
     @settings(max_examples=100)
     def test_repeated_pattern_chunking(self, text: str):
+        """Chunking an overlapped pattern text loses at most one chunk_size."""
         segments = [{"text": text, "page": 0}]
         chunks = _chunk_segments(segments, chunk_size=20, chunk_overlap=5)
         assert chunks
@@ -50,35 +111,47 @@ class TestChunkingEdgeCases:
         chunks = _chunk_segments(segments, chunk_size=20, chunk_overlap=5)
         assert chunks
 
-    @given(st.just("Test\n\n\n\nTest"))
+    @given(text=_text_with_newline_runs())
     @settings(max_examples=100)
     def test_multiple_newlines_chunking(self, text: str):
+        """Any text containing newline runs still chunks non-empty pieces."""
+        assume(text.strip())
+        assume("\n" in text)
         segments = [{"text": text, "page": 0}]
         chunks = _chunk_segments(segments, chunk_size=20, chunk_overlap=5)
         assert chunks
+        assert all(chunk["text"].strip() for chunk in chunks)
 
-    @given(st.just("\t\t\tTest\t\t\t"))
+    @given(text=_text_with_tab_runs())
     @settings(max_examples=100)
     def test_tab_characters_chunking(self, text: str):
+        """Any text containing tab runs still chunks non-empty pieces."""
+        assume(text.strip())
+        assume("\t" in text)
         segments = [{"text": text, "page": 0}]
         chunks = _chunk_segments(segments, chunk_size=20, chunk_overlap=5)
         assert chunks
+        assert all(chunk["text"].strip() for chunk in chunks)
 
-    @given(st.just("Test " * 100))
+    @given(text=_long_single_line_text())
     @settings(max_examples=100)
     def test_very_long_single_line(self, text: str):
+        """A long single-line text splits into more than one bounded chunk."""
         segments = [{"text": text, "page": 0}]
         chunks = _chunk_segments(segments, chunk_size=50, chunk_overlap=10)
         assert len(chunks) > 1
         for chunk in chunks:
             assert len(chunk["text"]) <= 60
 
-    @given(st.just("A" * 1000 + " " + "B" * 1000))
+    @given(text=_two_long_words_text())
     @settings(max_examples=100)
     def test_very_long_words_chunking(self, text: str):
+        """Two very long words chunk into pieces bounded by chunk_size."""
         segments = [{"text": text, "page": 0}]
         chunks = _chunk_segments(segments, chunk_size=100, chunk_overlap=10)
         assert chunks
+        for chunk in chunks:
+            assert len(chunk["text"]) <= 100
 
     @given(
         st.text(min_size=100, max_size=1000).filter(lambda t: " " in t),

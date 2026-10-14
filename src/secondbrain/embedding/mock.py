@@ -92,11 +92,17 @@ class MockEmbeddingProvider(EmbeddingProvider):
         """
         return self.generate_batch(texts)
 
-    def validate_connection(self, force: bool = False) -> bool:
+    def validate_connection(
+        self, force: bool = False, bypass_circuit_breaker: bool = False
+    ) -> bool:
         """Mock connection validation (always returns True).
+
+        Both flags are accepted for protocol compatibility and ignored: the
+        mock has no validation cache and no circuit breaker.
 
         Args:
             force: Ignored for mock provider.
+            bypass_circuit_breaker: Ignored for mock provider.
 
         Returns:
             Always True (mock is always available).

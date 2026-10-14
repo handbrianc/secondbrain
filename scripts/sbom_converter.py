@@ -6,6 +6,45 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
+# PyPI trove classifiers resolved to SPDX identifiers only when they identify
+# an exact license. Family-level classifiers remain NOASSERTION.
+CLASSIFIER_TO_SPDX: dict[str, str] = {
+    "Apache Software License": "NOASSERTION",
+    "BSD License": "NOASSERTION",
+    "ISC License": "ISC",
+    "MIT License": "MIT",
+    "Mozilla Public License 2.0 (MPL 2.0)": "MPL-2.0",
+    "GNU General Public License v2 (GPLv2)": "NOASSERTION",
+    "GNU General Public License v3 (GPLv3)": "NOASSERTION",
+    "GNU Lesser General Public License v2 (LGPLv2)": "NOASSERTION",
+    "GNU Lesser General Public License v2.1 (LGPLv2.1)": "NOASSERTION",
+    "GNU Lesser General Public License v3 (LGPLv3)": "NOASSERTION",
+    "Python Software Foundation License": "Python-2.0",
+    "Other/Proprietary License": "NOASSERTION",
+}
+
+
+def _classifier_to_spdx(value: str) -> str:
+    """Resolve a PyPI trove classifier license string to an SPDX identifier.
+
+    Args:
+        value: Raw license value from the CycloneDX SBOM
+
+    Returns:
+        SPDX identifier when the value is a recognized exact classifier,
+        NOASSERTION for ambiguous classifiers, otherwise the value unchanged
+    """
+    stripped = value.strip()
+    if stripped.startswith("License ::"):
+        # The final "::"-separated segment carries the license phrase,
+        # e.g. "License :: OSI Approved :: MIT License" -> "MIT License".
+        phrase = stripped.rsplit("::", 1)[-1].strip()
+    else:
+        phrase = stripped
+    if stripped.startswith("License ::"):
+        return CLASSIFIER_TO_SPDX.get(phrase, "NOASSERTION")
+    return CLASSIFIER_TO_SPDX.get(phrase, value)
+
 
 def convert_cyclonedx_to_spdx(cyclonedx_path: str, spdx_path: str) -> None:
     """Convert CycloneDX JSON SBOM to SPDX format.
@@ -25,9 +64,13 @@ def convert_cyclonedx_to_spdx(cyclonedx_path: str, spdx_path: str) -> None:
             license_info = "NOASSERTION"
             if comp.get("licenses"):
                 license_data = comp["licenses"][0].get("license", {})
-                license_info = license_data.get("id") or license_data.get(
-                    "name", "NOASSERTION"
+                license_info = (
+                    license_data.get("id")
+                    or license_data.get("name")
+                    or comp["licenses"][0].get("expression")
+                    or "NOASSERTION"
                 )
+                license_info = _classifier_to_spdx(license_info)
 
             packages.append(
                 {
@@ -42,7 +85,7 @@ def convert_cyclonedx_to_spdx(cyclonedx_path: str, spdx_path: str) -> None:
                 {
                     "Name": pkg.get("name", "unknown"),
                     "Version": pkg.get("version", "unknown"),
-                    "License": pkg.get("license", "NOASSERTION"),
+                    "License": _classifier_to_spdx(pkg.get("license", "NOASSERTION")),
                 }
             )
 

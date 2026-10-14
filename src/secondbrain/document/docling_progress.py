@@ -36,6 +36,8 @@ import re
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 
+logger = logging.getLogger(__name__)
+
 # The exact line docling's base pipeline emits per page batch (verified against
 # the installed docling package: base_pipeline.py
 # ``_log.debug(f"Finished converting pages {total_pages_processed}/"
@@ -137,4 +139,7 @@ def scraped_page_progress(
             log.setLevel(previous_level)
             log.propagate = previous_propagate
         except Exception:
-            pass
+            logger.debug(
+                "Failed to restore docling logger state after conversion",
+                exc_info=True,
+            )

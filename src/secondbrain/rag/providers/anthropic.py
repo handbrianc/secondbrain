@@ -19,8 +19,54 @@ from anthropic import (
 )
 
 from secondbrain.exceptions import ServiceUnavailableError
+from secondbrain.logging import get_logger
 
 from ..interfaces import LocalLLMProvider, StreamingCallback
+
+logger = get_logger(__name__)
+
+
+def _log_token_usage(
+    operation: str,
+    usage: object,
+    model: str,
+    *,
+    extra_output: int | None = None,
+) -> None:
+    """Emit one structured token-usage log line when usage data is available.
+
+    Anthropic reports ``usage.input_tokens`` / ``usage.output_tokens`` (no
+    total); ``total_tokens`` is derived as their sum. Streaming responses
+    report output tokens incrementally via ``message_delta`` events, so the
+    accumulated output can be supplied through *extra_output* instead of
+    reading ``usage.output_tokens`` directly.
+    """
+    if usage is None and extra_output is None:
+        return
+    prompt = getattr(usage, "input_tokens", None) if usage is not None else None
+    # Streaming: the message_start usage reports output_tokens=0 and the real
+    # count arrives via message_delta events — prefer the accumulated value.
+    completion = (
+        extra_output
+        if extra_output is not None
+        else getattr(usage, "output_tokens", None)
+        if usage is not None
+        else None
+    )
+    total = (
+        prompt + completion
+        if isinstance(prompt, int) and isinstance(completion, int)
+        else None
+    )
+    logger.info(
+        "%s token usage: model=%s prompt_tokens=%s completion_tokens=%s "
+        "total_tokens=%s",
+        operation,
+        model,
+        prompt,
+        completion,
+        total,
+    )
 
 
 class AnthropicLLMProvider(LocalLLMProvider):
@@ -118,6 +164,9 @@ class AnthropicLLMProvider(LocalLLMProvider):
                 max_tokens=tokens,
             )
 
+            _log_token_usage(
+                "completion", getattr(response, "usage", None), self._model
+            )
             return response.content[0].text if response.content else ""
 
         except APIConnectionError as e:
@@ -163,6 +212,9 @@ class AnthropicLLMProvider(LocalLLMProvider):
                 max_tokens=tokens,
             )
 
+            _log_token_usage(
+                "completion", getattr(response, "usage", None), self._model
+            )
             return response.content[0].text if response.content else ""
 
         except APIConnectionError as e:
@@ -231,9 +283,20 @@ class AnthropicLLMProvider(LocalLLMProvider):
 
             full_content = ""
             full_reasoning = ""
+            start_usage: object = None
+            output_tokens: int | None = None
 
             for event in response:
-                if event.type == "content_block_delta":
+                if event.type == "message_start":
+                    start_usage = getattr(
+                        getattr(event, "message", None), "usage", None
+                    )
+                elif event.type == "message_delta":
+                    delta_usage = getattr(event, "usage", None)
+                    delta_out = getattr(delta_usage, "output_tokens", None)
+                    if isinstance(delta_out, int):
+                        output_tokens = delta_out
+                elif event.type == "content_block_delta":
                     if hasattr(event.delta, "text") and event.delta.text:
                         full_content += event.delta.text
                         on_chunk(event.delta.text, None)
@@ -242,6 +305,12 @@ class AnthropicLLMProvider(LocalLLMProvider):
                         full_reasoning += event.delta.thinking
                         on_chunk("", event.delta.thinking)
 
+            _log_token_usage(
+                "streaming completion",
+                start_usage,
+                self._model,
+                extra_output=output_tokens,
+            )
             return full_content
 
         except APIConnectionError as e:
@@ -275,9 +344,20 @@ class AnthropicLLMProvider(LocalLLMProvider):
             )
 
             full_content = ""
+            start_usage: object = None
+            output_tokens: int | None = None
 
             async for event in response:
-                if event.type == "content_block_delta":
+                if event.type == "message_start":
+                    start_usage = getattr(
+                        getattr(event, "message", None), "usage", None
+                    )
+                elif event.type == "message_delta":
+                    delta_usage = getattr(event, "usage", None)
+                    delta_out = getattr(delta_usage, "output_tokens", None)
+                    if isinstance(delta_out, int):
+                        output_tokens = delta_out
+                elif event.type == "content_block_delta":
                     if hasattr(event.delta, "text") and event.delta.text:
                         full_content += event.delta.text
                         on_chunk(event.delta.text, None)
@@ -285,6 +365,12 @@ class AnthropicLLMProvider(LocalLLMProvider):
                     if hasattr(event.delta, "thinking") and event.delta.thinking:
                         on_chunk("", event.delta.thinking)
 
+            _log_token_usage(
+                "streaming completion",
+                start_usage,
+                self._model,
+                extra_output=output_tokens,
+            )
             return full_content
 
         except APIConnectionError as e:

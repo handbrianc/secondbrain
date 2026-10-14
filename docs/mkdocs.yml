@@ -51,6 +51,7 @@ nav:
       - Contributing: developer-guide/contributing.md
       - Migrations: developer-guide/migrations.md
       - Security: developer-guide/security.md
+      - Changelog: changelog.md
   - Architecture:
       - Architecture: architecture/index.md
       - Data Flow: architecture/DATA_FLOW.md
@@ -60,6 +61,7 @@ nav:
   - Security:
       - Security Guide: security/index.md
   - Migration: migration.md
+  - License: license.md
   - Examples:
       - Examples: examples/index.md
       - Basic Usage: examples/basic-usage.md

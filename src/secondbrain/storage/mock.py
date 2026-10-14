@@ -416,16 +416,35 @@ class MockVectorStorage:
             and (chunk_role is None or c.get("chunk_role") == chunk_role)
         )
 
-    def validate_connection(self, force: bool = False) -> bool:
+    def validate_connection(
+        self, force: bool = False, bypass_circuit_breaker: bool = False
+    ) -> bool:
         """Validate storage connection (always True for mock).
+
+        Both flags are accepted for protocol compatibility and ignored: the
+        mock has no connection cache and no circuit breaker, so it is always
+        available.
+
+        Args:
+            force: Ignored (no connection cache to bypass).
+            bypass_circuit_breaker: Ignored (no breaker is wired).
 
         Returns:
             True (mock storage is always available).
         """
         return True
 
-    async def validate_connection_async(self, force: bool = False) -> bool:
+    async def validate_connection_async(
+        self, force: bool = False, bypass_circuit_breaker: bool = False
+    ) -> bool:
         """Async validation (always True for mock).
+
+        Both flags are accepted for protocol compatibility and ignored (no
+        cache, no breaker).
+
+        Args:
+            force: Ignored (no connection cache to bypass).
+            bypass_circuit_breaker: Ignored (no breaker is wired).
 
         Returns:
             True (mock storage is always available).

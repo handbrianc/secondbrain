@@ -40,7 +40,7 @@ def _get_timestamp() -> datetime:
             ts = int(git_date.split()[0])
             _deterministic_timestamp = datetime.fromtimestamp(ts)
             return _deterministic_timestamp
-        except (ValueError, IndexError):
+        except ValueError, IndexError:
             pass
 
     _deterministic_timestamp = datetime.now()

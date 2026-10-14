@@ -25,8 +25,19 @@ def status(ctx: click.Context) -> None:
         console.status("[cyan]Loading status...", spinner="dots"),
         StatusChecker(verbose=ctx.obj.get("verbose", False)) as status_checker,
     ):
-        stats = status_checker.get_status()
-    display_status(stats)
+        try:
+            stats = status_checker.get_status()
+        except Exception:
+            # Offline backend or unreadable collection: report the connectivity
+            # indicator gracefully instead of crashing the status command.
+            stats = None
+        connection = status_checker.connection_status()
+        size_bytes = (
+            status_checker.estimate_storage_size(stats["total_chunks"])
+            if stats is not None
+            else None
+        )
+    display_status(stats, connection_status=connection, storage_size_bytes=size_bytes)
 
 
 @handle_cli_errors

@@ -154,9 +154,10 @@ class DocumentRouter:
         """Initialize the DocumentRouter.
 
         Args:
-            storage: Optional VectorStorage/AsyncVectorStorage instance for
-                querying source files from the vector store. Required unless
-                ``known_names`` is provided (for testing).
+            storage: Optional vector-storage backend (any implementation of
+                ``VectorStorageProtocol``) for querying source files from
+                the vector store. Required unless ``known_names`` is
+                provided (for testing).
             known_names: Pre-built name→source_file mapping for testing
                 or when storage is not available.
         """

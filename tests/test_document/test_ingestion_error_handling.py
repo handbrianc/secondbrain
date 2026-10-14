@@ -42,6 +42,30 @@ def _use_thread_pool(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(config(), "ingest_pool", "thread")
 
 
+class _RecordingStorage:
+    """Storage double that records ``store_batch`` payloads in memory.
+
+    Fails with :class:`StorageConnectionError` on the Nth ``store_batch``
+    call, so a mid-batch storage outage can be simulated while everything
+    stored before the failure stays observable.
+    """
+
+    def __init__(self, fail_on_call: int) -> None:
+        self.stored: list[dict[str, Any]] = []
+        self.calls = 0
+        self._fail_on_call = fail_on_call
+
+    def has_existing_hashes(self, hashes: list[str]) -> set[str]:
+        return set()
+
+    def store_batch(self, documents: list[dict[str, Any]]) -> int:
+        self.calls += 1
+        if self.calls == self._fail_on_call:
+            raise StorageConnectionError("Storage connection failed")
+        self.stored.extend(documents)
+        return len(documents)
+
+
 class TestEmbeddingFailureScenarios:
     """Tests for embedding generation failure handling."""
 
@@ -442,6 +466,52 @@ class TestDatabaseConnectionFailures:
             result = ingestor.ingest(str(tmp_path), recursive=False)
 
         assert "failed" in result
+
+    @patch(
+        "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"
+    )
+    def test_mid_batch_failure_preserves_partially_stored_results(
+        self, mock_factory: MagicMock, tmp_path: Path
+    ) -> None:
+        """A storage failure mid-batch must not lose already-stored chunks.
+
+        Two files are ingested; the second ``store_batch`` call raises. The
+        first file's chunks must still be in the store afterwards (partial
+        results preserved), and only the failing file shows up in
+        ``result["failures"]``.
+        """
+        mock_embedding = MagicMock()
+        mock_embedding.generate_batch = MagicMock(
+            side_effect=lambda texts: [[0.1] * 384 for _ in texts]
+        )
+        mock_embedding.generate = MagicMock(return_value=[0.1] * 384)
+        mock_factory.return_value = mock_embedding
+
+        (tmp_path / "a_first.txt").write_text("first file content for ingestion")
+        (tmp_path / "b_second.txt").write_text("second file content for ingestion")
+
+        storage = _RecordingStorage(fail_on_call=2)
+        with (
+            patch(
+                "secondbrain.storage.StorageFactory.create_from_config",
+                return_value=storage,
+            ),
+            patch("time.sleep", return_value=None),
+        ):
+            ingestor = DocumentIngestor(verbose=True)
+            result = ingestor.ingest(str(tmp_path), recursive=False, cores=1)
+
+        # One file stored, the mid-batch failure marked the other failed.
+        assert result["success"] == 1
+        assert result["failed"] == 1
+        assert storage.calls == 2
+
+        failed_paths = {path for path, _reason in result["failures"]}
+        # Chunks stored before the failure are preserved...
+        assert len(storage.stored) >= 1
+        stored_sources = {doc["source_file"] for doc in storage.stored}
+        # ...and belong exclusively to the file that did not fail.
+        assert stored_sources.isdisjoint(failed_paths)
 
     @patch(
         "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config"

@@ -1,0 +1,6 @@
+security:
+  ignore-vulnerabilities:
+    SFTY-20260902-58666:
+      reason: NLTK is a development-only transitive dependency and has no fixed release yet.
+    SFTY-20260120-40557:
+      reason: CUDA Toolkit is a development-only transitive dependency; SecondBrain does not invoke the vulnerable Nsight Systems helper.
