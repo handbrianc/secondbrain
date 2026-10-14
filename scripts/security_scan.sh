@@ -120,14 +120,15 @@ scan_sbom() {
 }
 
 # Function to check the dependency tree for conflicts
-# pipdeptree -w fail: print dependency problems (cycles, duplicates,
-# conflicting requirements) and exit non-zero when any are found.
+# pip check fails on broken installed requirements. pipdeptree's silence mode
+# still prints the summary without failing on unrelated metadata cycles.
 run_pipdeptree() {
     echo -e "${GREEN}Running pipdeptree dependency tree check...${NC}"
     echo ""
 
     if command -v pipdeptree &> /dev/null; then
-        pipdeptree --summary -w fail
+        python -m pip check
+        pipdeptree --summary -w silence
         echo ""
         echo -e "${GREEN}pipdeptree completed${NC}"
     else
