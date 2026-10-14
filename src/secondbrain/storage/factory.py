@@ -8,6 +8,7 @@ backend, so the 9 production construction sites swap to this one call.
 from typing import Any, cast
 
 from secondbrain.config import config as get_config
+from secondbrain.config.resilience import circuit_breaker_config_from_config
 from secondbrain.storage.protocol import VectorStorageProtocol
 from secondbrain.storage.qdrant import QdrantVectorStorage
 
@@ -42,6 +43,7 @@ class StorageFactory:
                 url=cfg.qdrant_url,
                 api_key=cfg.qdrant_api_key,
                 collection_name=cfg.qdrant_collection,
+                circuit_breaker_config=circuit_breaker_config_from_config(cfg),
             )
         if backend == "mock":
             from secondbrain.storage.mock import MockVectorStorage

@@ -131,7 +131,7 @@ bundled = [
     "msgpack>=1.2.2",  # GHSA-6v7p-g79w-8964 (was 1.1.2)
     "starlette>=1.7.0",  # PYSEC-2026-248, PYSEC-2026-249 (was 1.2.1)
     "pymdown-extensions>=12.1",  # CVE-2026-61632 (was 10.21.3)
-    "urllib3>=2.8.0",
+    "urllib3>=2.8.0",  # PYSEC-2026-4175/4176/4177 (was 2.6.0)
     "cryptography>=50.0.2",
     "pillow>=11.3.0",
     "paramiko>=5.0.0",
@@ -144,7 +144,6 @@ bundled = [
     "setuptools>=84.0.0",
     "fpdf2>=2.8.9",
     "reportlab>=5.0.0",
-    "python-docx>=1.0.0",
     # Bundled extras (depends on mutation)
     "mutmut>=3.8.0",
 ]
@@ -187,7 +186,7 @@ where = ["src"]
 
 [tool.ruff]
 line-length = 88
-target-version = "py313"
+target-version = "py314"  # matches requires-python/mypy (ruff 0.16.8 supports py314; verified via `ruff check --target-version py314`)
 
 [tool.ruff.format]
 quote-style = "double"
@@ -283,7 +282,8 @@ ignore = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--timeout=120 -p no:warnings --dist=loadfile -n auto --cov=secondbrain --cov-report=term-missing --cov-report=html --reruns=0 --cov-config=.coveragerc"
+pythonpath = ["src"]
+addopts = "--timeout=120 -p no:warnings --dist=loadfile -n auto --reruns=0 -m 'not chaos'"  # chaos tests are opt-in (run with -m chaos); a CLI -m overrides this default. Coverage is intentionally NOT in addopts: it is a CI gate (test-quality-gates.yml supplies --cov* flags), and per-run coverage tracing costs ~5s — pass --cov explicitly when needed.
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 markers = [

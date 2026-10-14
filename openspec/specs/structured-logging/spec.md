@@ -66,6 +66,12 @@ The log format SHALL be configurable via environment variable.
 
 The logging system SHALL use standard log levels consistently.
 
+> **Note (2026-10-11):** Amended (user decision D1): the shipped default log level is WARNING, not INFO.
+> `setup_logging()` in `src/secondbrain/logging/__init__.py` defaults to WARNING (warnings and above) for a
+> quiet console, and the CLI (`src/secondbrain/cli/__init__.py`) passes `SECONDBRAIN_LOG_LEVEL` / `--verbose`
+> through without raising the default to INFO. The INFO scenario below was amended in place accordingly; the
+> `--verbose` → DEBUG scenarios are unchanged and match shipped behavior.
+
 #### Scenario: DEBUG level for detailed debugging
 
 - **WHEN** verbose mode is enabled
@@ -75,8 +81,9 @@ The logging system SHALL use standard log levels consistently.
 #### Scenario: INFO level for normal operations
 
 - **WHEN** normal operations occur
-- **THEN** INFO level logs SHALL be shown by default
-- **AND** they SHALL include key events (ingestion, search)
+- **THEN** INFO level logs SHALL be recorded for key events (ingestion, search)
+- **AND** they SHALL NOT be shown on the console by default (default level: WARNING)
+- **AND** they SHALL become visible when the level is raised (e.g., SECONDBRAIN_LOG_LEVEL=INFO or --verbose)
 
 #### Scenario: WARNING level for non-critical issues
 

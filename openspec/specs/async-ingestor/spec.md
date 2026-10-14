@@ -35,19 +35,25 @@ The AsyncDocumentIngestor SHALL use native async embedding generation instead of
 
 ### Requirement: Async storage integration
 
-The AsyncDocumentIngestor SHALL integrate with AsyncVectorStorage for async database operations.
+The AsyncDocumentIngestor SHALL integrate with the vector storage protocol's async batch surface
+(`store_batch_async`, backed by `QdrantVectorStorage`) for async database operations.
 
-#### Scenario: Store operations are async
+> **Note (2026-10-12):** Amended: the requirement header originally named class "AsyncVectorStorage",
+> which does not exist in the shipped code. The real surface is the storage protocol's
+> `store_batch_async` (`src/secondbrain/storage/protocol.py:19-56`), implemented by
+> `QdrantVectorStorage` (`src/secondbrain/storage/qdrant.py`). Header wording corrected in place above;
+> the 2026-10-11 note below is retained unchanged.
 
-- **WHEN** storing documents
-- **THEN** store_async() SHALL be used
-- **AND** SHALL NOT use asyncio.to_thread() wrapper
+> **Note (2026-10-11):** Amended (user decision D3): storage is batch-only. No single-document `store_async()`
+> method exists in the shipped code — `src/secondbrain/storage/qdrant.py` and the storage protocol provide
+> `store_batch_async()` only, and the async ingestor uses it exclusively. The former "Store operations are
+> async" scenario naming `store_async()` has been removed; this requirement now covers batch storage only.
 
 #### Scenario: Batch store operations are async
 
 - **WHEN** storing multiple documents
 - **THEN** store_batch_async() SHALL be used
-- **AND** SHALL use Motor's bulk write operations
+- **AND** it SHALL delegate to the Qdrant-backed store_batch() via asyncio.to_thread (src/secondbrain/storage/qdrant.py), remaining non-blocking from the caller's perspective
 
 ### Requirement: Async context manager support
 

@@ -11,6 +11,9 @@
 ## 2. CLI Interface Updates
 
 - [x] 2.1 Add `--cores` / `-c` option to `ingest` command in `src/secondbrain/cli/commands.py`
+
+  > **Note (2026-10-11):** Stale path: the `ingest` command (with `--cores`/`-c`) now lives in
+  > `src/secondbrain/cli/ingest.py`; `cli/commands.py` only imports and registers commands.
 - [x] 2.2 Update `ingest` function signature to accept `cores: int | None` parameter
 - [x] 2.3 Add help text explaining multicore usage: "Number of CPU cores to use for parallel processing (default:
   auto-detect)"
@@ -20,8 +23,22 @@
 ## 3. Worker Functions for Multiprocessing
 
 - [x] 3.1 Create module-level worker function `_extract_and_chunk_file()` in `src/secondbrain/document/__init__.py`
+
+  > **Note (2026-10-11):** Stale path/name: worker functions now live in `src/secondbrain/document/processor.py`
+  > (`document/__init__.py` only re-exports the public API). The shipped worker is
+  > `_extract_chunk_and_embed_file` — a fused extract + chunk + embed worker — not the extract-and-chunk-only
+  > `_extract_and_chunk_file` described here.
 - [x] 3.2 Worker function SHALL accept file_path, chunk_size, chunk_overlap as parameters
 - [x] 3.3 Worker function SHALL return dict with keys: `success`, `file_path`, `chunks`, `error`
+
+  > **Note (2026-10-12):** Stale return keys: the shipped workers return no `chunks` key. The
+  > extract-and-chunk worker `_extract_and_chunk_file` returns `success`, `file_path`, `segments`,
+  > `error` (`src/secondbrain/document/processor.py:274-292`); the fused worker
+  > `_extract_chunk_and_embed_file` (see 3.1) returns `success`, `file_path`, `documents`, `error` —
+  > plus `skipped` and `extracted_chunks` when a re-ingest is skipped
+  > (`src/secondbrain/document/processor.py:505-509`). The 3.1 note covers the worker rename but not
+  > the keys; task text retained as history.
+
 - [x] 3.4 Worker function SHALL handle all exceptions and return error info instead of raising
 - [x] 3.5 Add proper type hints to worker function signature
 
@@ -29,6 +46,9 @@
 
 - [x] 4.1 Import `ProcessPoolExecutor` and `as_completed` from `concurrent.futures` in
   `src/secondbrain/document/__init__.py`
+
+  > **Note (2026-10-11):** Same stale path as 3.1 — the pool loop and workers now live in
+  > `src/secondbrain/document/processor.py` and `src/secondbrain/document/ingestor/_sync.py`.
 - [x] 4.2 Import `os` module for CPU count detection
 - [x] 4.3 Update `ingest()` method signature to accept `cores: int | None = None` parameter
 - [x] 4.4 Add core count resolution logic: `cores or config.max_workers or os.cpu_count()`
@@ -37,6 +57,13 @@
 - [x] 4.7 Process results from `as_completed()` and collect successful/failed counts
 - [x] 4.8 Add progress tracking: display "Processing file X/Y" during execution
 - [x] 4.9 Keep embedding generation and storage in ThreadPoolExecutor (I/O-bound)
+
+  > **Note (2026-10-11):** The shipped architecture differs: extraction, chunking, and embedding are fused
+  > inside the pool workers (`_extract_chunk_and_embed_file`,
+  > `src/secondbrain/document/processor.py:457-509`), and storage always runs in the main thread
+  > (`src/secondbrain/document/ingestor/_sync.py:784-786` — the main thread consumes futures and stores
+  > batches, single-writer for both thread and process pools). There is no separate "embedding + storage in
+  > ThreadPoolExecutor" phase.
 - [x] 4.10 Ensure worker function is picklable (module-level, no closures)
 
 ## 5. Memory Management
@@ -52,6 +79,7 @@
 - [x] 6.2 Log detailed error messages for failed files (include stack trace in verbose mode)
 - [x] 6.3 Ensure accurate success/failure counts returned from `ingest()` method
 - [x] 6.4 Add handling for `BrokenProcessPool` exceptions
+  > **Annotation (2026-10-08):** This claim was previously false (no handling existed). Now implemented: BrokenProcessPool caught in the pool loop with clean failure accounting (src/secondbrain/document/ingestor/_sync.py; tests/test_document/test_broken_process_pool.py).
 - [x] 6.5 Test error scenarios: corrupted files, permission errors, unsupported formats
 
 ## 7. Rate Limiting Integration
@@ -59,6 +87,7 @@
 - [x] 7.1 Verify rate limiter is thread-safe and works across process boundaries (threading.Lock, embedding phase runs
   in main process)
 - [x] 7.2 Test that multiple workers don't exceed rate limit threshold (covered by existing rate limiter tests)
+  > **Annotation (2026-10-08):** SharedRateLimiter was previously dead code (never wired). Now wired into embedding generation from config (rate_limit_enabled/rate_limit_max_requests/rate_limit_window_seconds); sharing is thread-level — per-process instances under ProcessPool (tests/test_utils/test_rate_limiter.py).
 - [x] 7.3 Add rate limit queue logging in verbose mode
 
 ## 8. Testing
@@ -73,6 +102,10 @@
 - [x] 8.8 Test progress tracking output
 - [x] 8.9 Test backward compatibility: no `--cores` flag uses existing behavior
 - [x] 8.10 Test Windows compatibility (if available): verify spawn method works
+
+  > **Note (2026-10-11):** Validated on Linux only: worker pickling is covered by
+  > `tests/test_document/test_multicore_edge_cases.py::TestWorkerPickling`, but there is no OS-matrix CI, so
+  > the Windows spawn path is spawn-safe by design rather than CI-proven.
 
 ## 9. Documentation
 
@@ -90,5 +123,9 @@
 - [x] 10.4 Run `pytest -m "not integration"` to verify fast tests pass
 - [x] 10.5 Run integration tests with actual documents to verify performance improvement
 - [x] 10.6 Measure performance: compare single-core vs 4-core ingestion time
+
+  > **Note (2026-10-11):** No recorded measurement exists in the repo for this task. The multicore test suite
+  > asserts functional correctness and a parallel-vs-sequential regression guard
+  > (`tests/test_document/test_multicore_performance.py:107-146`), not a measured speedup figure.
 - [x] 10.7 Verify no memory leaks during long ingestion sessions
 - [x] 10.8 Clean up any temporary files or resources

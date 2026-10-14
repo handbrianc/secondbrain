@@ -49,7 +49,7 @@ def _load_otlp_exporter() -> Any:
             spec = importlib.util.find_spec(
                 "opentelemetry.exporter.otlp.proto.grpc.trace_exporter"
             )
-        except (ImportError, ModuleNotFoundError, ValueError):
+        except ImportError, ModuleNotFoundError, ValueError:
             spec = None
         if spec is not None:
             module = importlib.import_module(
@@ -112,6 +112,45 @@ def inject_trace_context(headers: dict[str, str]) -> dict[str, str]:
 def get_current_trace_context() -> dict[str, str] | None:
     """Get the current trace context from thread-local storage."""
     return _trace_context_var.get()
+
+
+def _trace_propagation_request_hook(request: Any) -> None:
+    """Httpx request event hook: inject trace context into outgoing headers."""
+    injected = inject_trace_context({})
+    request.headers["traceparent"] = injected["traceparent"]
+    if "tracestate" in injected:
+        request.headers["tracestate"] = injected["tracestate"]
+
+
+async def _trace_propagation_async_request_hook(request: Any) -> None:
+    """Httpx async request event hook: inject trace context into outgoing headers."""
+    _trace_propagation_request_hook(request)
+
+
+def create_trace_propagation_hooks() -> (
+    dict[str, dict[str, list[Callable[[Any], Any]]]] | None
+):
+    """Create httpx event hooks that propagate trace context on outgoing requests.
+
+    httpx invokes sync request hooks on its sync client and awaits async
+    request hooks on its async client, so two flavours are returned: use
+    ``hooks["sync"]`` with ``httpx.Client(event_hooks=...)`` and
+    ``hooks["async"]`` with ``httpx.AsyncClient(event_hooks=...)``. Each hook
+    calls :func:`inject_trace_context` on the outgoing request headers,
+    attaching ``traceparent`` (and ``tracestate`` when present).
+
+    Returns
+    -------
+        ``{"sync": {...}, "async": {...}}`` event-hook mappings, or None when
+        tracing is disabled so the HTTP client is built exactly as before
+        (zero overhead).
+    """
+    if not is_tracing_enabled():
+        return None
+    return {
+        "sync": {"request": [_trace_propagation_request_hook]},
+        "async": {"request": [_trace_propagation_async_request_hook]},
+    }
 
 
 @contextmanager

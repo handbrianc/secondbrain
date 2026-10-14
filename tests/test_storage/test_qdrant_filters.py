@@ -37,6 +37,7 @@ def _doc(
     section: str = "2.1",
     printed: int | str | None = None,
     section_id_missing: bool = False,
+    file_type: str = "pdf",
 ) -> dict[str, Any]:
     doc: dict[str, Any] = {
         "chunk_id": chunk_id,
@@ -47,7 +48,7 @@ def _doc(
         "chunk_role": role,
         "section_label": f"Section {section}",
         "section_id": None if section_id_missing else section,
-        "file_type": "pdf",
+        "file_type": file_type,
         "embedding": [0.1, 0.2, 0.3, 0.4],
     }
     if printed is not None:
@@ -278,6 +279,17 @@ def test_get_stats_shape(storage: QdrantVectorStorage) -> None:
     assert stats["unique_sources"] == 2
     assert stats["database"] == "qdrant"
     assert stats["collection"] == "filter_tests"
+
+
+def test_search_respects_file_type_filter(storage: QdrantVectorStorage) -> None:
+    """Search applies the file_type payload filter (exact keyword match)."""
+    storage.store_batch([_doc("c1", file_type="pdf"), _doc("c2", file_type="txt")])
+
+    results = list(
+        storage.search([0.1, 0.2, 0.3, 0.4], top_k=5, file_type_filter="txt")
+    )
+
+    assert [r["chunk_id"] for r in results] == ["c2"]
 
 
 def test_validate_connection_ttl_cache(storage: QdrantVectorStorage) -> None:

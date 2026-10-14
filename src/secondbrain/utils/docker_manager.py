@@ -335,7 +335,13 @@ class DockerManager:
     ) -> tuple[bool, str | None]:
         """Attempt one Qdrant readiness probe; report whether Qdrant is ready."""
         try:
-            ready = storage.validate_connection()
+            # Startup-wait probe: force a fresh probe every poll (the
+            # storage's connection cache would otherwise pin the first failed
+            # result for its whole TTL) and bypass the circuit breaker so
+            # repeated startup failures cannot open the circuit and starve
+            # later polls. The breaker stays fully active for post-startup
+            # health/connection paths.
+            ready = storage.validate_connection(force=True, bypass_circuit_breaker=True)
             if not ready:
                 return False, "Connection failed"
             wait_index = getattr(storage, "_wait_for_index_ready", None)

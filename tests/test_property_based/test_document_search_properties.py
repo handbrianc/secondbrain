@@ -1024,7 +1024,9 @@ class TestDataValidationProperties:
         assert chunk.chunk_id == chunk_id
 
     @given(
-        chunk_text=st.just("") | st.just("   ") | st.just("\n\t"),
+        # Generative whitespace-only strings (empty, blank, any mix of spaces,
+        # tabs and newlines) — replaces the former fixed 3-value st.just union.
+        chunk_text=st.text(alphabet=" \t\n\r", min_size=0, max_size=20),
     )
     @settings(max_examples=200)
     def test_document_chunk_rejects_empty_text(self, chunk_text: str):

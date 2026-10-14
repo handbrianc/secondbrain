@@ -11,7 +11,9 @@ MAX_LIST_LIMIT = 100000  # Maximum number of results for list command
 DEFAULT_MIN_SIMILARITY_THRESHOLD = (
     0.46  # Minimum score for search results (lowered for better recall)
 )
-DEFAULT_TOP_K = 5  # Default number of search results
+# NOTE: The default number of search results is NOT defined here — the single
+# source of truth is Config.default_top_k (secondbrain.config.embedding,
+# default 50, env var SECONDBRAIN_DEFAULT_TOP_K).
 
 # Document Processing Constants
 DEFAULT_CHUNK_SIZE = 4096  # Default chunk size in characters
@@ -20,7 +22,9 @@ DEFAULT_BATCH_SIZE = 30  # Default batch size for ThreadPoolExecutor
 MAX_MEMORY_BATCH_SIZE = 100  # Maximum chunks to process in memory (~150MB RAM)
 
 # Embedding Constants
-DEFAULT_EMBEDDING_DIMENSIONS = 384  # Default embedding dimensions (all-MiniLM-L6-v2)
+# NOTE: The default embedding dimensionality is NOT defined here — the single
+# source of truth is Config.embedding_dimensions (secondbrain.config.embedding,
+# default 1536 for text-embedding-3-small, env var SECONDBRAIN_EMBEDDING_DIMENSIONS).
 DEFAULT_EMBEDDING_CACHE_SIZE = 1000  # Default embedding cache size
 DEFAULT_EMBEDDING_BATCH_SIZE = 100  # Default batch size for embedding generation
 MIN_EMBEDDING_BATCH_SIZE = 1  # Minimum embedding batch size

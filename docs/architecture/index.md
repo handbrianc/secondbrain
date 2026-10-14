@@ -67,6 +67,9 @@ All settings via environment variables following 12-factor app principles:
 - Pydantic validation at startup
 - Test-aware configuration switching
 
+See [12-Factor Compliance](12-FACTOR.md) for the factor-by-factor notes and the two documented
+deviations (VI Processes, XI Logs).
+
 ### 4. Local-First Privacy
 
 Core processing always happens on-host:

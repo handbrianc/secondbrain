@@ -76,6 +76,9 @@ def wait_for_services() -> Generator[None]:
             print("Qdrant is healthy")
             break
         print(".", end="", flush=True)
+        # Bounded real-network polling interval: waiting for an external
+        # service to become healthy has no event to await; sleep is the
+        # correct primitive here (never a busy-wait).
         time.sleep(0.5)  # Reduced from 1s for faster feedback
     else:
         pytest.skip(

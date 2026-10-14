@@ -4,13 +4,23 @@ The transformers RT-DETR v2 model's ``build_2d_sinusoidal_position_embedding``
 uses ``torch.float64`` for intermediate arithmetic, which crashes on Apple
 MPS (no float64 support) and is unnecessarily expensive on CUDA/CPU.
 
-Solution: Monkey-patch the function at import time to use ``float32``
-throughout.  The patch is applied unconditionally because float32 is safe
-on every device and the precision loss (1e-7 on a 0-1 range) is negligible
-for position embeddings.
+Solution: Monkey-patch the function to use ``float32`` throughout.  The patch
+is applied unconditionally because float32 is safe on every device and the
+precision loss (1e-7 on a 0-1 range) is negligible for position embeddings.
 
 Also clears the `@lru_cache` on the class-level static method so any
 pre-patch cached results are invalidated.
+
+Application timing
+------------------
+The patch is applied lazily, from the docling factory's first-pipeline-init
+hook (``docling_factory._install_pdf_conversion_hooks``), *not* at converter
+build time: importing torch + transformers here costs multiple seconds, and
+processes that build converters without ever converting (every ingestor
+construction in a test suite) must not pay it. The hook fires on the
+converter's first ``_get_pipeline`` call, which is always before the RT-DETR
+layout model initializes, so the guarantee — patch in place before the model
+runs — is unchanged.
 """
 
 import logging
@@ -35,8 +45,11 @@ def _clear_lru_cache_on_static_method(klass: type, method_name: str) -> None:
 def patch_transformers_for_mps() -> None:
     """Patch transformers RT-DETR to use float32 instead of float64 for position embeddings.
 
-    Safe to call multiple times (idempotent).  Must be called before any
-    docling imports that trigger the RT-DETR layout model.
+    Safe to call multiple times (idempotent).  Must be applied before the
+    RT-DETR layout pipeline initializes; ``docling_factory`` invokes this from
+    the converter's first ``_get_pipeline`` call, which is always earlier.
+    Environments without torch/transformers no-op with a debug log (the
+    imports below raise ``ImportError``, which is swallowed).
     """
     global _patch_applied
     if _patch_applied:

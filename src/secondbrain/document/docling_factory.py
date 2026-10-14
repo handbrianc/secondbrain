@@ -51,6 +51,7 @@ call, preserving the repo's "avoid 2+ second import overhead" guarantee.
 from __future__ import annotations
 
 import os
+import platform
 import threading
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -85,6 +86,11 @@ def _disable_torch_model_compilation_on_mps() -> None:
     remains correct). On torch >= 2.12 or non-MPS devices it's a no-op, so the
     compile speedup is preserved where it is safe.
     """
+    if platform.system() != "Darwin":
+        # The guard is purely an Apple-Silicon torch-compile concern; skipping
+        # it off-macOS avoids paying a multi-second torch import at converter
+        # build time for a check that would always be a no-op there anyway.
+        return
     try:
         import torch
     except ImportError:
@@ -113,6 +119,9 @@ def _rapidocr_use_mps_available() -> bool:
     construction and raises when MPS is absent (e.g. Intel/CUDA hosts), so the
     accelerator hint must only be emitted where MPS actually exists.
     """
+    if platform.system() != "Darwin":
+        # Pure Apple-Silicon concern; skip the torch import on other platforms.
+        return False
     try:
         import torch
     except ImportError:
@@ -348,28 +357,59 @@ def _build_pdf_format_option(*, do_ocr: bool, do_table_structure: bool) -> Any:
     return PdfFormatOption(pipeline_options=pipe_cls(**pipeline_kwargs))
 
 
+def _install_pdf_conversion_hooks(converter: DocumentConverter) -> None:
+    """Apply RT-DETR safety patches on the converter's first pipeline init.
+
+    Wraps the converter instance's ``_get_pipeline`` so the transformers
+    monkey-patches (MPS float32 position embeddings; XPU CPU post-process)
+    are applied exactly once, right before the first pipeline is built —
+    which is always before the RT-DETR layout model initializes, so the
+    patches' guarantees hold. Doing this at first pipeline init instead of
+    converter build keeps torch/transformers (multiple seconds of imports)
+    out of every path that builds a converter without ever converting
+    (e.g. every ``DocumentIngestor`` construction in the test suite).
+    """
+    original_get_pipeline = converter._get_pipeline
+    hooks_installed = False
+
+    def _get_pipeline_with_patches(*args: Any, **kwargs: Any) -> Any:
+        nonlocal hooks_installed
+        if not hooks_installed:
+            hooks_installed = True
+            from secondbrain.utils.mps_patch import patch_transformers_for_mps
+
+            # RT-DETR position-embedding patch must be in place before the
+            # layout pipeline initializes — this hook runs on the first
+            # _get_pipeline call, which is exactly that moment.
+            patch_transformers_for_mps()
+
+            # torch 2.14 XPU on Xe2 GPUs crashes in the detection post-process
+            # (masked-select); keep that stage on CPU when layout resolves to
+            # XPU. Same moment, same rationale.
+            _patch_rt_detr_postprocess_for_xpu()
+        return original_get_pipeline(*args, **kwargs)
+
+    converter._get_pipeline = _get_pipeline_with_patches  # type: ignore[method-assign]
+
+
 def _build_docling_converter(
     *, do_ocr: bool, do_table_structure: bool
 ) -> DocumentConverter:
-    """Build a docling converter configured for PDFs (lazy)."""
-    from secondbrain.utils.mps_patch import patch_transformers_for_mps
+    """Build a docling converter configured for PDFs (lazy).
 
-    # RT-DETR position-embedding patch must be in place before the layout
-    # pipeline initializes (first _get_pipeline call), not at import time —
-    # applying it here keeps torch/transformers out of the import path.
-    patch_transformers_for_mps()
-
-    # torch 2.14 XPU on Xe2 GPUs crashes in the detection post-process
-    # (masked-select); keep that stage on CPU when layout resolves to XPU.
-    _patch_rt_detr_postprocess_for_xpu()
-
+    The heavyweight torch/transformers patches are deferred to the converter's
+    first pipeline initialization (see ``_install_pdf_conversion_hooks``) so
+    building a converter never imports torch or transformers.
+    """
     from docling.datamodel.base_models import InputFormat
     from docling.document_converter import DocumentConverter
 
     pdf_options = _build_pdf_format_option(
         do_ocr=do_ocr, do_table_structure=do_table_structure
     )
-    return DocumentConverter(format_options={InputFormat.PDF: pdf_options})
+    converter = DocumentConverter(format_options={InputFormat.PDF: pdf_options})
+    _install_pdf_conversion_hooks(converter)
+    return converter
 
 
 def _build_converter() -> DocumentConverter:

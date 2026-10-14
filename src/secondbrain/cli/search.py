@@ -2,6 +2,7 @@
 
 import sys
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Any
 
 import click
@@ -21,6 +22,28 @@ from .display import display_list_results, display_search_results
 from .errors import handle_cli_errors
 
 console = Console(markup=True)
+
+
+def _normalize_file_type(value: str) -> str:
+    """Map an extension-style ``--file-type`` value to its stored category.
+
+    Stored ``file_type`` payload values are categories (``'pdf'``,
+    ``'markdown'``, ``'image'``, ...), derived from the source path's
+    extension at ingest time. Category values pass through unchanged (same
+    filter semantics as the ``search --file-type`` option); an extension
+    alias (``'md'``/``'.md'``) is resolved to its category via the same
+    mapping used at ingest time.
+    """
+    from secondbrain.document.ingestor._constants import (
+        SUPPORTED_EXTENSIONS,
+        get_file_type,
+    )
+
+    lowered = value.strip().lower()
+    ext = lowered if lowered.startswith(".") else f".{lowered}"
+    if ext in SUPPORTED_EXTENSIONS:
+        return get_file_type(Path(f"file{ext}"))
+    return lowered
 
 
 @handle_cli_errors
@@ -136,6 +159,14 @@ def ls(
 @cli.command()
 @click.option("--source", type=str, help="Filter by source file")
 @click.option("--chunk-id", type=str, help="Filter by specific chunk ID")
+@click.option(
+    "--file-type",
+    type=str,
+    help=(
+        "Delete all chunks of a file type (e.g., 'pdf', 'docx', 'markdown', "
+        "'image', 'audio'); extension aliases like 'md' are accepted"
+    ),
+)
 @click.option("--all", "-a", is_flag=True, help="Delete all documents")
 @click.option("--yes", "-y", is_flag=True, help="Skip confirmation prompt")
 @click.pass_context
@@ -143,19 +174,26 @@ def delete(
     ctx: click.Context,
     source: str | None,
     chunk_id: str | None,
+    file_type: str | None,
     all: bool,
     yes: bool,
 ) -> None:
     """Delete documents from the vector database."""
     from secondbrain.management import Deleter
 
-    if not any([source, chunk_id, all]):
-        console.print("[red]Error: Must specify --source, --chunk-id, or --all[/red]")
+    if file_type is not None:
+        file_type = _normalize_file_type(file_type)
+
+    if not any([source, chunk_id, all, file_type]):
+        console.print(
+            "[red]Error: Must specify --source, --chunk-id, --file-type, or --all[/red]"
+        )
         sys.exit(1)
 
-    if sum([bool(source), bool(chunk_id), all]) > 1:
+    if sum([bool(source), bool(chunk_id), all, bool(file_type)]) > 1:
         console.print(
-            "[red]Error: Specify only one of --source, --chunk-id, or --all[/red]"
+            "[red]Error: Specify only one of --source, --chunk-id, --file-type, "
+            "or --all[/red]"
         )
         sys.exit(1)
 
@@ -174,7 +212,9 @@ def delete(
         Deleter(verbose=ctx.obj.get("verbose", False)) as deleter,
     ):
         try:
-            count = deleter.delete(source=source, chunk_id=chunk_id, all=all)
+            count = deleter.delete(
+                source=source, chunk_id=chunk_id, all=all, file_type=file_type
+            )
             console.print(f"[green]Deleted {count} document(s)[/green]")
         except (
             ServiceUnavailableError,

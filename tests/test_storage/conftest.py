@@ -12,6 +12,7 @@ import pytest
 from qdrant_client import QdrantClient
 
 from secondbrain.storage.qdrant import QdrantVectorStorage
+from secondbrain.utils.failure_injector import FailureInjector
 
 EMBEDDING_DIMENSIONS = 384
 
@@ -40,3 +41,19 @@ def storage() -> Generator[QdrantVectorStorage]:
     instance._dimensions = EMBEDDING_DIMENSIONS
     yield instance
     instance.close()
+
+
+@pytest.fixture
+def failure_injector() -> Generator[FailureInjector]:
+    """Fresh FailureInjector with automatic cleanup for storage fault tests.
+
+    Mirrors the chaos-suite fixture: yields the process-wide singleton and
+    resets every active injection afterwards so no failure state leaks into
+    other tests on the same xdist worker.
+    """
+    injector = FailureInjector.get_instance()
+    try:
+        yield injector
+    finally:
+        injector.reset()
+        FailureInjector.reset_instance()

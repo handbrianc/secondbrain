@@ -1,5 +1,9 @@
 # RAG Pipeline
 
+> **Note (2026-10-08):** This change is a superseded duplicate of `openspec/changes/archive/add-conversational-rag`
+> (its RAG section). The local-LLM defaults described below (Ollama as default provider, `llama3.2` default model)
+> were dropped — the shipped RAG pipeline uses OpenAI-compatible remote providers.
+
 ## ADDED Requirements
 
 ### Requirement: RAG pipeline orchestration

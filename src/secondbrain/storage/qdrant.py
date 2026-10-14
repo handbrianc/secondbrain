@@ -18,7 +18,8 @@ import re
 import threading
 import time
 import uuid
-from collections.abc import Sequence
+from collections.abc import Generator, Sequence
+from contextlib import contextmanager
 from typing import Any
 
 from qdrant_client import QdrantClient
@@ -32,6 +33,12 @@ from secondbrain.types import (
     _validate_chunk_info,
     _validate_search_result,
 )
+from secondbrain.utils.circuit_breaker import (
+    CircuitBreaker,
+    CircuitBreakerConfig,
+    CircuitBreakerError,
+)
+from secondbrain.utils.tracing import trace_operation
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +67,31 @@ _OUTPUT_KEYS = (
 _CONNECTION_TTL = 60.0
 
 
+@contextmanager
+def _traced_qdrant_operation(
+    collection: str, operation: str, **attributes: Any
+) -> Generator[Any]:
+    """Span for a Qdrant client operation.
+
+    Emits a ``qdrant_<operation>`` span carrying the collection name and the
+    operation type (``qdrant.collection`` / ``qdrant.operation``), so slow or
+    failing Qdrant work is identifiable per collection in traces. Extra
+    *attributes* are stamped on the span when tracing is enabled.
+
+    When tracing is disabled ``trace_operation`` yields ``None`` and the span
+    degenerates to plain execution (zero overhead), mirroring the
+    ``if span:`` pattern used in :mod:`secondbrain.search`.
+    """
+    with trace_operation(f"qdrant_{operation}") as span:
+        if span is not None:
+            span.set_attribute("qdrant.collection", collection)
+            span.set_attribute("qdrant.operation", operation)
+            for key, value in attributes.items():
+                if value is not None:
+                    span.set_attribute(f"qdrant.{key}", value)
+        yield span
+
+
 class QdrantVectorStorage:
     """Production vector/metadata storage backed by Qdrant.
 
@@ -73,6 +105,7 @@ class QdrantVectorStorage:
         url: str | None = None,
         api_key: str | None = None,
         collection_name: str | None = None,
+        circuit_breaker_config: CircuitBreakerConfig | None = None,
     ) -> None:
         cfg = config()
         self.url = url or cfg.qdrant_url
@@ -84,6 +117,16 @@ class QdrantVectorStorage:
         self._collection_lock = threading.Lock()
         self._conn_valid: bool | None = None
         self._conn_checked_at: float = 0.0
+        # Circuit breaker for the connection-validation path. Constructed with
+        # a config (``StorageFactory``) → enabled; ``None`` → disabled, which
+        # leaves ``validate_connection`` behaving exactly as before.
+        self._circuit_breaker_enabled = circuit_breaker_config is not None
+        self._circuit_breaker: CircuitBreaker | None = None
+        if self._circuit_breaker_enabled and circuit_breaker_config is not None:
+            self._circuit_breaker = CircuitBreaker(
+                config=circuit_breaker_config,
+                service_name=self.__class__.__name__,
+            )
 
     # ------------------------------------------------------------------
     # Client / collection management (lazy)
@@ -195,24 +238,25 @@ class QdrantVectorStorage:
         scroll_filter: models.Filter | None,
         limit: int | None,
     ) -> list[Any]:
-        records: list[Any] = []
-        next_offset: Any = None
-        while True:
-            remaining = None if limit is None else limit - len(records)
-            if remaining is not None and remaining <= 0:
-                break
-            page_size = min(remaining, 256) if remaining is not None else 256
-            points, next_offset = self._get_client().scroll(
-                collection_name=self.collection_name,
-                scroll_filter=scroll_filter,
-                limit=page_size,
-                offset=next_offset,
-                with_payload=True,
-            )
-            records.extend(points)
-            if not points or next_offset is None:
-                break
-        return records
+        with _traced_qdrant_operation(self.collection_name, "scroll", limit=limit):
+            records: list[Any] = []
+            next_offset: Any = None
+            while True:
+                remaining = None if limit is None else limit - len(records)
+                if remaining is not None and remaining <= 0:
+                    break
+                page_size = min(remaining, 256) if remaining is not None else 256
+                points, next_offset = self._get_client().scroll(
+                    collection_name=self.collection_name,
+                    scroll_filter=scroll_filter,
+                    limit=page_size,
+                    offset=next_offset,
+                    with_payload=True,
+                )
+                records.extend(points)
+                if not points or next_offset is None:
+                    break
+            return records
 
     # ------------------------------------------------------------------
     # Vector search
@@ -228,13 +272,14 @@ class QdrantVectorStorage:
         """Search for similar chunks; apply a payload filter when given."""
         self._ensure_collection()
         query_filter = self._build_search_filter(source_filter, file_type_filter)
-        resp = self._get_client().query_points(
-            collection_name=self.collection_name,
-            query=embedding,
-            query_filter=query_filter,
-            limit=top_k,
-            with_payload=True,
-        )
+        with _traced_qdrant_operation(self.collection_name, "search", top_k=top_k):
+            resp = self._get_client().query_points(
+                collection_name=self.collection_name,
+                query=embedding,
+                query_filter=query_filter,
+                limit=top_k,
+                with_payload=True,
+            )
         results: list[SearchResult] = []
         for point in resp.points:
             payload = dict(point.payload or {})
@@ -286,10 +331,11 @@ class QdrantVectorStorage:
         """Upsert a single point; return its id."""
         self._ensure_collection()
         point = self._point_from_document(document)
-        self._get_client().upsert(
-            collection_name=self.collection_name,
-            points=[point],
-        )
+        with _traced_qdrant_operation(self.collection_name, "upsert"):
+            self._get_client().upsert(
+                collection_name=self.collection_name,
+                points=[point],
+            )
         return str(point.id)
 
     def store_batch(self, documents: list[dict[str, Any]]) -> int:
@@ -298,10 +344,13 @@ class QdrantVectorStorage:
             return 0
         self._ensure_collection()
         points = [self._point_from_document(doc) for doc in documents]
-        self._get_client().upsert(
-            collection_name=self.collection_name,
-            points=points,
-        )
+        with _traced_qdrant_operation(
+            self.collection_name, "upsert", points=len(documents)
+        ):
+            self._get_client().upsert(
+                collection_name=self.collection_name,
+                points=points,
+            )
         return len(documents)
 
     async def store_batch_async(self, documents: list[dict[str, Any]]) -> int:
@@ -343,18 +392,19 @@ class QdrantVectorStorage:
         """Distinct ``source_file`` values (facet, else scroll-and-dedupe)."""
         self._ensure_collection()
         try:
-            resp = self._get_client().facet(
-                collection_name=self.collection_name,
-                key="source_file",
-                limit=MAX_LIST_LIMIT,
-            )
+            with _traced_qdrant_operation(self.collection_name, "facet"):
+                resp = self._get_client().facet(
+                    collection_name=self.collection_name,
+                    key="source_file",
+                    limit=MAX_LIST_LIMIT,
+                )
             seen: set[str] = set()
             for bucket in resp.hits:
                 value = bucket.value
                 if isinstance(value, str) and value not in seen:
                     seen.add(value)
             return sorted(seen)
-        except (AttributeError, TypeError):
+        except AttributeError, TypeError:
             seen = set()
             for record in self._scroll_records(None, None):
                 src = (record.payload or {}).get("source_file")
@@ -583,15 +633,19 @@ class QdrantVectorStorage:
         if chunk_role:
             conditions.append(self._match_value_condition("chunk_role", chunk_role))
         scroll_filter = models.Filter(must=conditions) if conditions else None
-        return int(
-            self._get_client()
-            .count(
-                collection_name=self.collection_name,
-                count_filter=scroll_filter,
-                exact=True,
+        with _traced_qdrant_operation(
+            self.collection_name, "count", role=chunk_role or "all"
+        ):
+            total = int(
+                self._get_client()
+                .count(
+                    collection_name=self.collection_name,
+                    count_filter=scroll_filter,
+                    exact=True,
+                )
+                .count
             )
-            .count
-        )
+        return total
 
     # ------------------------------------------------------------------
     # Delete
@@ -601,19 +655,20 @@ class QdrantVectorStorage:
         self._ensure_collection()
         if scroll_filter is None:
             scroll_filter = models.Filter(must=[])
-        count = (
-            self._get_client()
-            .count(
-                collection_name=self.collection_name,
-                count_filter=scroll_filter,
-                exact=True,
+        with _traced_qdrant_operation(self.collection_name, "delete"):
+            count = (
+                self._get_client()
+                .count(
+                    collection_name=self.collection_name,
+                    count_filter=scroll_filter,
+                    exact=True,
+                )
+                .count
             )
-            .count
-        )
-        self._get_client().delete(
-            collection_name=self.collection_name,
-            points_selector=models.FilterSelector(filter=scroll_filter),
-        )
+            self._get_client().delete(
+                collection_name=self.collection_name,
+                points_selector=models.FilterSelector(filter=scroll_filter),
+            )
         return int(count)
 
     def delete_by_source(self, source: str) -> int:
@@ -639,14 +694,15 @@ class QdrantVectorStorage:
     def get_stats(self) -> dict[str, Any]:
         """Stats matching the legacy ``get_stats`` shape for the ``status`` CLI."""
         self._ensure_collection()
-        total = (
-            self._get_client()
-            .count(
-                collection_name=self.collection_name,
-                exact=True,
+        with _traced_qdrant_operation(self.collection_name, "count"):
+            total = (
+                self._get_client()
+                .count(
+                    collection_name=self.collection_name,
+                    exact=True,
+                )
+                .count
             )
-            .count
-        )
         return {
             "total_chunks": total,
             "unique_sources": len(self.list_source_files()),
@@ -654,8 +710,32 @@ class QdrantVectorStorage:
             "collection": self.collection_name,
         }
 
-    def validate_connection(self, force: bool = False) -> bool:
-        """TTL-cached reachability probe; returns False on failure, never raises."""
+    def validate_connection(
+        self, force: bool = False, bypass_circuit_breaker: bool = False
+    ) -> bool:
+        """TTL-cached reachability probe; returns False on failure, never raises.
+
+        When a circuit breaker is configured, the raw probe runs through it
+        (``CircuitBreaker.call``): while the circuit is OPEN the probe is
+        skipped entirely and the method degrades gracefully to ``False`` —
+        the same signal callers already handle for an unreachable server —
+        without any network call. The connection cache is left untouched on
+        that path so the probe re-runs as soon as the circuit half-opens.
+
+        With ``bypass_circuit_breaker=True`` (startup-wait probes) the raw
+        probe runs directly and the breaker is neither consulted nor updated
+        — success or failure — so transient startup failures cannot open the
+        circuit while waiting for the server to come up.
+
+        Args:
+            force: If True, bypass the connection cache and re-probe.
+            bypass_circuit_breaker: Run the probe without consulting or
+                updating the circuit breaker.
+
+        Returns
+        -------
+            True if the Qdrant server answered, False otherwise.
+        """
         now = time.monotonic()
         if (
             not force
@@ -663,17 +743,42 @@ class QdrantVectorStorage:
             and (now - self._conn_checked_at) < _CONNECTION_TTL
         ):
             return self._conn_valid
-        try:
-            self._get_client().get_collections()
-            self._conn_valid = True
-        except Exception:
-            self._conn_valid = False
+
+        if self._circuit_breaker is not None and not bypass_circuit_breaker:
+            try:
+                self._conn_valid = self._circuit_breaker.call(self._probe_connection)
+            except CircuitBreakerError:
+                logger.warning(
+                    "Circuit breaker open for %s; skipping Qdrant reachability probe",
+                    self.__class__.__name__,
+                )
+                return False
+        else:
+            self._conn_valid = self._probe_connection()
         self._conn_checked_at = now
         return self._conn_valid
 
-    async def validate_connection_async(self, force: bool = False) -> bool:
+    def _probe_connection(self) -> bool:
+        """One raw Qdrant reachability probe (no caching, no circuit breaker).
+
+        Returns
+        -------
+            True if the Qdrant server answered ``get_collections()``.
+        """
+        try:
+            with _traced_qdrant_operation(self.collection_name, "ping"):
+                self._get_client().get_collections()
+        except Exception:
+            return False
+        return True
+
+    async def validate_connection_async(
+        self, force: bool = False, bypass_circuit_breaker: bool = False
+    ) -> bool:
         """Async wrapper over :meth:`validate_connection`."""
-        return await asyncio.to_thread(self.validate_connection, force)
+        return await asyncio.to_thread(
+            self.validate_connection, force, bypass_circuit_breaker
+        )
 
     def _wait_for_index_ready(self, *args: Any, **kwargs: Any) -> None:
         """No-op: Qdrant creates indexes synchronously (docker_manager calls this)."""

@@ -169,7 +169,7 @@ class TestFactVerification:
                             f"actual {dep_name}>={actual_version}"
                         )
                         return
-            except (InvalidVersion, ValueError, ImportError):
+            except InvalidVersion, ValueError, ImportError:
                 pass
 
         # Fallback: exact substring match for simpler constraints

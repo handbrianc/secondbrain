@@ -20,7 +20,6 @@ logger = logging.getLogger(__name__)
 __all__ = [
     "CircuitBreaker",
     "CircuitBreakerConfig",
-    "CircuitBreakerEnabledService",
     "CircuitBreakerError",
     "CircuitState",
 ]
@@ -291,6 +290,31 @@ class CircuitBreaker:
             self.record_failure()
             raise
 
+    def get_state(self) -> CircuitState:
+        """Get the current circuit state.
+
+        Spec-conformant accessor delegating to the :attr:`state` property.
+        Applies timeout-based transitions (e.g. OPEN -> HALF_OPEN) before
+        reporting, exactly like :attr:`state`.
+
+        Returns
+        -------
+            The current :class:`CircuitState`.
+        """
+        return self.state
+
+    def get_failure_count(self) -> int:
+        """Get the current consecutive failure count.
+
+        Spec-conformant accessor delegating to the :attr:`failure_count`
+        property.
+
+        Returns
+        -------
+            Number of consecutive failures recorded in the current state.
+        """
+        return self.failure_count
+
     def get_state_info(self) -> dict[str, Any]:
         """Get detailed state information for debugging and monitoring.
 
@@ -311,138 +335,3 @@ class CircuitBreaker:
                 "backoff_multiplier": self._backoff_multiplier,
                 "half_open_max_calls": self.config.half_open_max_calls,
             }
-
-
-class CircuitBreakerEnabledService:
-    """Mixin/base class for services with circuit breaker support.
-
-    This class provides optional circuit breaker integration for services
-    that extend ValidatableService. The circuit breaker is disabled by default
-    and must be explicitly enabled with a configuration.
-
-    Usage:
-        class MyService(CircuitBreakerEnabledService, ValidatableService):
-            def __init__(self):
-                # Enable circuit breaker with custom config
-                super().__init__(
-                    cache_ttl=60.0,
-                    circuit_breaker_config=CircuitBreakerConfig(
-                        failure_threshold=5,
-                        recovery_timeout=30.0,
-                    )
-                )
-
-            def _do_validate(self) -> bool:
-                # Your validation logic
-                return True
-    """
-
-    def __init__(
-        self,
-        cache_ttl: float = 60.0,
-        circuit_breaker_config: CircuitBreakerConfig | None = None,
-        service_name: str | None = None,
-    ) -> None:
-        """Initialize circuit breaker enabled service.
-
-        Args:
-            cache_ttl: Time-to-live for connection cache in seconds.
-            circuit_breaker_config: Circuit breaker config. If None, circuit breaker is disabled.
-            service_name: Optional service name for circuit breaker logging.
-        """
-        # Initialize parent class (ValidatableService)
-        # Note: This is designed to work with multiple inheritance
-        # The actual initialization depends on the MRO
-
-        self._circuit_breaker: CircuitBreaker | None = None
-        self._circuit_breaker_enabled = circuit_breaker_config is not None
-
-        if self._circuit_breaker_enabled:
-            self._circuit_breaker = CircuitBreaker(
-                config=circuit_breaker_config,
-                service_name=service_name or self.__class__.__name__,
-            )
-
-    @property
-    def circuit_breaker(self) -> CircuitBreaker | None:
-        """Get the circuit breaker instance (if enabled)."""
-        return self._circuit_breaker
-
-    @property
-    def is_circuit_breaker_enabled(self) -> bool:
-        """Check if circuit breaker is enabled for this service."""
-        return self._circuit_breaker_enabled
-
-    def validate_connection_with_circuit_breaker(self, force: bool = False) -> bool:
-        """Validate connection with circuit breaker protection.
-
-        Args:
-            force: Force revalidation even if cached.
-
-        Returns:
-            True if connection is valid, False otherwise.
-
-        Raises:
-            CircuitBreakerError: If circuit breaker is open.
-        """
-        if (
-            self._circuit_breaker_enabled
-            and self._circuit_breaker is not None
-            and not self._circuit_breaker.is_allowed()
-        ):
-            logger.warning(
-                "Circuit breaker open for service %s, failing fast",
-                self.__class__.__name__,
-            )
-            raise CircuitBreakerError(
-                "Circuit breaker is open",
-                service_name=self.__class__.__name__,
-            )
-
-        result: bool = self.validate_connection(force=force)  # type: ignore[attr-defined]
-
-        if self._circuit_breaker_enabled and self._circuit_breaker is not None:
-            if result:
-                self._circuit_breaker.record_success()
-            else:
-                self._circuit_breaker.record_failure()
-
-        return result
-
-    async def validate_connection_async_with_circuit_breaker(
-        self, force: bool = False
-    ) -> bool:
-        """Validate connection asynchronously with circuit breaker protection.
-
-        Args:
-            force: Force revalidation even if cached.
-
-        Returns:
-            True if connection is valid, False otherwise.
-
-        Raises:
-            CircuitBreakerError: If circuit breaker is open.
-        """
-        if (
-            self._circuit_breaker_enabled
-            and self._circuit_breaker is not None
-            and not self._circuit_breaker.is_allowed()
-        ):
-            logger.warning(
-                "Circuit breaker open for service %s, failing fast",
-                self.__class__.__name__,
-            )
-            raise CircuitBreakerError(
-                "Circuit breaker is open",
-                service_name=self.__class__.__name__,
-            )
-
-        result: bool = await self.validate_connection_async(force=force)  # type: ignore[attr-defined]
-
-        if self._circuit_breaker_enabled and self._circuit_breaker is not None:
-            if result:
-                self._circuit_breaker.record_success()
-            else:
-                self._circuit_breaker.record_failure()
-
-        return result

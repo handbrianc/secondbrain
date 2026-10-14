@@ -263,10 +263,13 @@ def _single_turn_chat(
         for i, chunk in enumerate(result["sources"], 1):
             source_file = chunk.get("source_file", chunk.get("source", "unknown"))
             page = chunk.get("page", chunk.get("page_number", "unknown"))
+            score = chunk.get("score", 0)
             chunk_text = chunk.get("chunk_text", chunk.get("text", ""))
             if len(chunk_text) > 200:
                 chunk_text = chunk_text[:200] + "..."
-            console.print(f"  [{i}] {source_file} (page {page}): {chunk_text}")
+            console.print(
+                f"  [{i}] {source_file} (page {page}, score: {score:.4f}): {chunk_text}"
+            )
 
 
 def _interactive_chat(
@@ -331,7 +334,7 @@ def _interactive_chat(
         try:
             try:
                 user_input = input("\n[you] ").strip()
-            except (KeyboardInterrupt, EOFError):
+            except KeyboardInterrupt, EOFError:
                 console.print("\n[dim]Goodbye![/dim]")
                 break
 
@@ -397,10 +400,14 @@ def _interactive_chat(
                         "source_file", chunk.get("source", "unknown")
                     )
                     page = chunk.get("page", chunk.get("page_number", "unknown"))
+                    score = chunk.get("score", 0)
                     chunk_text = chunk.get("chunk_text", chunk.get("text", ""))
                     if len(chunk_text) > 200:
                         chunk_text = chunk_text[:200] + "..."
-                    console.print(f"  [{i}] {source_file} (page {page}): {chunk_text}")
+                    console.print(
+                        f"  [{i}] {source_file} (page {page}, "
+                        f"score: {score:.4f}): {chunk_text}"
+                    )
 
             # Save to history
             chat_history.append(user_input)

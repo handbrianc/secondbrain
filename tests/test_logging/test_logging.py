@@ -1,8 +1,12 @@
+import asyncio
 import io
 import json
 import logging
 import os
+import socket
 from collections.abc import Iterator
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as get_package_version
 from pathlib import Path
 from unittest.mock import patch
 
@@ -11,6 +15,7 @@ from rich.logging import RichHandler
 
 from secondbrain.logging import (
     HealthStatus,
+    JSONFormatter,
     check_services,
     get_health_status,
     get_logger,
@@ -79,7 +84,7 @@ class TestJsonLogging:
         stream = io.StringIO()
         handler = logging.StreamHandler(stream)
 
-        formatter = JsonFormatter()
+        formatter = JSONFormatter()
         handler.setFormatter(formatter)
         handler.setLevel(logging.DEBUG)
 
@@ -99,7 +104,7 @@ class TestJsonLogging:
         stream = io.StringIO()
         handler = logging.StreamHandler(stream)
 
-        formatter = JsonFormatter()
+        formatter = JSONFormatter()
         handler.setFormatter(formatter)
 
         logger = logging.getLogger("test_metadata")
@@ -115,20 +120,6 @@ class TestJsonLogging:
         assert "line" in json_data
 
         logger.removeHandler(handler)
-
-
-class JsonFormatter(logging.Formatter):
-    def format(self, record: logging.LogRecord) -> str:
-        log_entry = {
-            "timestamp": self.formatTime(record, self.datefmt),
-            "level": record.levelname,
-            "logger": record.name,
-            "message": record.getMessage(),
-            "module": record.module,
-            "function": record.funcName,
-            "line": record.lineno,
-        }
-        return json.dumps(log_entry)
 
 
 class TestRequestContext:
@@ -157,6 +148,76 @@ class TestRequestContext:
     def test_request_id_isolation(self) -> None:
         assert isinstance(get_request_id(), str)
 
+    @pytest.mark.asyncio
+    async def test_request_id_propagates_to_child_tasks(self) -> None:
+        """request_id contextvar is visible inside gather/create_task children."""
+        request_id = set_request_id("parent-req-789")
+        observed: list[tuple[str, str]] = []
+
+        async def child(tag: str) -> None:
+            observed.append((tag, get_request_id()))
+
+        await asyncio.gather(child("gather"), child("gather2"))
+        task = asyncio.create_task(child("create_task"))
+        await task
+
+        assert observed == [
+            ("gather", request_id),
+            ("gather2", request_id),
+            ("create_task", request_id),
+        ]
+
+    @pytest.mark.asyncio
+    async def test_logs_in_child_tasks_carry_parent_request_id(self) -> None:
+        """Log records emitted inside child tasks parse with the parent request_id."""
+        request_id = set_request_id("parent-req-async-logs")
+        streams: dict[str, io.StringIO] = {}
+
+        def make_tagged_logger(tag: str) -> logging.Logger:
+            stream = io.StringIO()
+            handler = logging.StreamHandler(stream)
+            handler.setFormatter(JSONFormatter())
+            logger = logging.getLogger(f"test_async_req_{tag}")
+            logger.handlers.clear()
+            logger.addHandler(handler)
+            logger.setLevel(logging.INFO)
+            logger.propagate = False
+            streams[tag] = stream
+            return logger
+
+        gather_logger = make_tagged_logger("gather")
+        task_logger = make_tagged_logger("task")
+
+        async def child(tag: str, logger: logging.Logger) -> None:
+            logger.info("Message from %s", tag)
+
+        await asyncio.gather(child("gather", gather_logger))
+        await asyncio.create_task(child("task", task_logger))
+
+        for tag in ("gather", "task"):
+            json_data = json.loads(streams[tag].getvalue())
+            assert json_data["request_id"] == request_id, tag
+
+    @pytest.mark.asyncio
+    async def test_child_task_request_id_isolated_from_sibling_overwrite(self) -> None:
+        """A request_id set inside one child does not leak into its siblings."""
+        parent_id = set_request_id("parent-iso-req")
+        observed: list[str] = []
+
+        async def overwriter() -> None:
+            set_request_id("sibling-own-req")
+            observed.append(get_request_id())
+
+        async def reader() -> None:
+            await asyncio.sleep(0.01)
+            observed.append(get_request_id())
+
+        await asyncio.gather(overwriter(), reader())
+
+        assert observed[0] == "sibling-own-req"
+        assert observed[1] == parent_id
+        assert get_request_id() == parent_id
+
 
 class TestSetupJsonLogging:
     def test_setup_json_logging_creates_formatter(self) -> None:
@@ -179,22 +240,7 @@ class TestSetupJsonLogging:
         stream = io.StringIO()
         handler = logging.StreamHandler(stream)
 
-        class TestJSONFormatter(logging.Formatter):
-            def format(self, record: logging.LogRecord) -> str:
-                return json.dumps(
-                    {
-                        "timestamp": self.formatTime(record, self.datefmt),
-                        "level": record.levelname,
-                        "logger": record.name,
-                        "message": record.getMessage(),
-                        "module": record.module,
-                        "function": record.funcName,
-                        "line": record.lineno,
-                        "request_id": get_request_id() or "",
-                    }
-                )
-
-        formatter = TestJSONFormatter()
+        formatter = JSONFormatter()
         handler.setFormatter(formatter)
 
         logger = logging.getLogger("test_request_id")
@@ -223,6 +269,126 @@ class TestSetupJsonLogging:
         assert json_data["message"] == "Test message for JSON output"
         assert json_data["request_id"] == "test-request-id"
         assert len(root_logger.handlers) > 0
+
+    def test_json_formatter_includes_context_fields(self) -> None:
+        """JSON output includes service, hostname, pid, and version fields."""
+        stream = io.StringIO()
+        handler = logging.StreamHandler(stream)
+        handler.setFormatter(JSONFormatter())
+
+        logger = logging.getLogger("test_context_fields")
+        logger.addHandler(handler)
+        logger.setLevel(logging.INFO)
+
+        logger.info("Context field message")
+
+        json_data = json.loads(stream.getvalue())
+        assert json_data["service"] == "secondbrain"
+        assert json_data["hostname"] == socket.gethostname()
+        assert json_data["pid"] == os.getpid()
+        assert json_data["version"] == get_package_version("secondbrain")
+
+        logger.removeHandler(handler)
+
+    def test_json_formatter_version_falls_back_to_unknown(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Missing package metadata yields version "unknown" instead of raising."""
+        from secondbrain.logging import _get_package_version
+
+        def raise_missing(name: str) -> str:
+            raise PackageNotFoundError(name)
+
+        monkeypatch.setattr("secondbrain.logging._package_version", raise_missing)
+        assert _get_package_version() == "unknown"
+
+    def test_setup_json_logging_output_has_all_fields(self) -> None:
+        """Real setup_json_logging output carries the full standard field set."""
+        root_logger = logging.getLogger()
+        root_logger.handlers.clear()
+
+        setup_json_logging(logging.DEBUG)
+        stream = io.StringIO()
+        root_logger.handlers[0].setStream(stream)
+        set_request_id("field-check-req")
+        get_logger("test_json_full_fields").info("Field completeness message")
+
+        json_data = json.loads(stream.getvalue().strip())
+        assert json_data["level"] == "INFO"
+        assert json_data["logger"] == "test_json_full_fields"
+        assert json_data["module"]
+        assert json_data["function"]
+        assert isinstance(json_data["line"], int)
+        assert json_data["timestamp"]
+        assert json_data["service"] == "secondbrain"
+        assert json_data["hostname"] == socket.gethostname()
+        assert json_data["pid"] == os.getpid()
+        assert json_data["version"] == get_package_version("secondbrain")
+        assert json_data["request_id"] == "field-check-req"
+
+
+class TestSetupLoggingEnvFormat:
+    """SECONDBRAIN_LOG_FORMAT env var auto-selects the JSON transport.
+
+    setup_logging() consults the env var only when ``json_format`` was not
+    passed explicitly; accepted values (case-insensitive) are
+    json/true/1/yes, anything else keeps the default rich transport.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _restore_root_logger_handlers(self) -> Iterator[None]:
+        """Restore root handlers so JSON handlers don't leak into other tests."""
+        root_logger = logging.getLogger()
+        snapshot = list(root_logger.handlers)
+        yield
+        root_logger.handlers = snapshot
+
+    @pytest.mark.parametrize("value", ["json", "JSON", "true", "1", "yes"])
+    def test_env_var_selects_json_handlers(self, monkeypatch, value) -> None:
+        monkeypatch.setenv("SECONDBRAIN_LOG_FORMAT", value)
+        monkeypatch.delenv("SECONDBRAIN_LOG_FILE", raising=False)
+        root_logger = logging.getLogger()
+        root_logger.handlers.clear()
+
+        setup_logging(verbose=True)  # json_format not passed: env branch decides
+
+        assert len(root_logger.handlers) >= 1
+        console_handler = root_logger.handlers[0]
+        assert isinstance(console_handler, logging.StreamHandler)
+        assert not isinstance(console_handler, RichHandler)
+        assert isinstance(console_handler.formatter, JSONFormatter)
+
+    def test_unrecognized_env_value_keeps_rich_default(self, monkeypatch) -> None:
+        monkeypatch.setenv("SECONDBRAIN_LOG_FORMAT", "plain")
+        monkeypatch.delenv("SECONDBRAIN_LOG_FILE", raising=False)
+        root_logger = logging.getLogger()
+        root_logger.handlers.clear()
+
+        setup_logging(verbose=True)
+
+        assert any(isinstance(h, RichHandler) for h in root_logger.handlers)
+        assert not any(
+            isinstance(h.formatter, JSONFormatter)
+            for h in root_logger.handlers
+            if h.formatter is not None
+        )
+
+    def test_env_var_json_output_parses_as_json(self, monkeypatch) -> None:
+        """Records logged through the env-selected transport parse as JSON."""
+        monkeypatch.setenv("SECONDBRAIN_LOG_FORMAT", "json")
+        monkeypatch.delenv("SECONDBRAIN_LOG_FILE", raising=False)
+        root_logger = logging.getLogger()
+        root_logger.handlers.clear()
+
+        setup_logging(verbose=True)
+        stream = io.StringIO()
+        root_logger.handlers[0].setStream(stream)
+        set_request_id("env-format-req")
+        get_logger("env_format_probe").info("Env format message")
+
+        json_data = json.loads(stream.getvalue().strip())
+        assert json_data["message"] == "Env format message"
+        assert json_data["request_id"] == "env-format-req"
 
 
 class TestGetHealthStatus:

@@ -1,10 +1,25 @@
-"""Tests for concurrent search scenarios."""
+"""Concurrent search tests against REAL shared components.
+
+The former versions of these tests spun threads around local closures (own
+locks, own result lists) — races that could never fail. Every test here drives
+a real ``src/secondbrain`` component concurrently and asserts on its
+post-state:
+
+- :class:`secondbrain.storage.mock.MockVectorStorage` — real similarity search
+  over a shared chunk dict, exercised while writers mutate it concurrently;
+- :class:`secondbrain.utils.circuit_breaker.CircuitBreaker` — lock-protected
+  state machine (these tests already targeted real code and are preserved).
+
+Runtime is kept bounded: few workers, small vector dimensions, no sleeps.
+"""
 
 import asyncio
-from unittest.mock import MagicMock
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
+from secondbrain.storage.mock import MockVectorStorage
 from secondbrain.utils.circuit_breaker import (
     CircuitBreaker,
     CircuitBreakerConfig,
@@ -12,193 +27,213 @@ from secondbrain.utils.circuit_breaker import (
 )
 
 
+def _chunk(chunk_id: str, embedding: list[float]) -> dict:
+    """Minimal chunk dict accepted by MockVectorStorage.store."""
+    return {
+        "chunk_id": chunk_id,
+        "chunk_text": f"text for {chunk_id}",
+        "embedding": embedding,
+        "source_file": f"{chunk_id}.md",
+        "page_number": 1,
+    }
+
+
+def _seeded_storage(workers: int = 4, per_worker: int = 10) -> MockVectorStorage:
+    """Storage with per-worker vector groups plus one decoy far away.
+
+    Chunk ids are ``t{worker}-c{i}`` so tests can delete by per-worker prefix.
+    """
+    storage = MockVectorStorage()
+    storage.initialize()
+    for worker in range(workers):
+        storage.store_batch(
+            [_chunk(f"t{worker}-c{i}", [0.99, 0.1, 0.0]) for i in range(per_worker)]
+        )
+    storage.store(_chunk("decoy", [0.0, 0.0, 1.0]))
+    return storage
+
+
+_QUERY = [1.0, 0.0, 0.0]
+
+
 @pytest.mark.concurrent
 @pytest.mark.slow
 @pytest.mark.xdist_group("concurrent")  # Isolate concurrent tests on same worker
 class TestConcurrentSearch:
-    """Test concurrent search operations."""
+    """Concurrent searches on the real MockVectorStorage."""
 
-    @pytest.mark.asyncio
-    async def test_concurrent_search_queries(self):
-        """Test multiple concurrent search queries."""
-        results = []
-        lock = asyncio.Lock()
-        completed = asyncio.Event()
+    def test_concurrent_queries_return_identical_results(self):
+        """20 threads running the same query get the same deterministic hits."""
+        storage = _seeded_storage()
+        barrier = threading.Barrier(20)
+        results: list[list[str]] = []
+        results_lock = threading.Lock()
 
-        async def mock_search(query):
-            result = [{"doc_id": f"doc-{i}", "score": 0.9 - i * 0.1} for i in range(5)]
-            async with lock:
-                results.append(result)
-            # Use Event-based completion tracking instead of sleep
-            if len(results) == 10:
-                completed.set()
+        def search() -> None:
+            barrier.wait()
+            hits = storage.search(_QUERY, top_k=5)
+            ids = [hit["chunk_id"] for hit in hits]
+            with results_lock:
+                results.append(ids)
 
-        tasks = [mock_search(f"query-{i}") for i in range(10)]
-        await asyncio.gather(*tasks)
+        threads = [threading.Thread(target=search) for _ in range(20)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
 
-        # Wait for completion signal instead of relying on timing
-        try:
-            await asyncio.wait_for(completed.wait(), timeout=1.0)
-        except TimeoutError:
-            pass  # Timeout is OK if all tasks completed via gather
+        assert len(results) == 20
+        # Same query, same data -> identical result ranking for every thread.
+        assert all(ids == results[0] for ids in results)
+        assert "decoy" not in results[0]
+        assert len(results[0]) == 5
 
-        assert len(results) == 10
+    def test_search_results_sorted_by_similarity(self):
+        """Concurrent searches always return similarity-sorted results."""
+        storage = _seeded_storage()
 
-    @pytest.mark.asyncio
-    async def test_concurrent_search_and_ingest(self):
-        """Test concurrent search and ingestion operations."""
-        mock_collection = MagicMock()
+        def search(_worker_id: int) -> list[dict]:
+            return storage.search(_QUERY, top_k=10)
 
-        async def search_operation():
-            await asyncio.sleep(0)
-            return [{"doc_id": "result", "score": 0.9}]
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            batches = [
+                future.result()
+                for future in [executor.submit(search, w) for w in range(40)]
+            ]
 
-        async def ingest_operation(doc_id):
-            mock_collection.insert_one({"doc_id": doc_id})
-            await asyncio.sleep(0)
+        for hits in batches:
+            scores = [hit["similarity"] for hit in hits]
+            assert scores == sorted(scores, reverse=True)
+            assert len(hits) == 10
 
-        operations = [
-            search_operation(),
-            ingest_operation("new-doc-1"),
-            search_operation(),
-            ingest_operation("new-doc-2"),
-            search_operation(),
-        ]
+    def test_search_while_ingesting_never_loses_queries(self):
+        """Searches succeed (and stay well-formed) while chunks stream in."""
 
-        await asyncio.gather(*operations)
+        def write_batch(writer_id: int) -> None:
+            for i in range(10):
+                storage.store(_chunk(f"new-{writer_id}-{i}", [0.98, 0.15, 0.0]))
 
-        assert mock_collection.insert_one.call_count == 2
+        def search(_worker_id: int) -> list[dict]:
+            return storage.search(_QUERY, top_k=5)
 
-    @pytest.mark.asyncio
-    async def test_concurrent_search_different_collections(self):
-        """Test concurrent searches on different collections."""
+        storage = _seeded_storage()
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            writer_futures = [
+                executor.submit(write_batch, writer) for writer in range(2)
+            ]
+            reader_futures = [executor.submit(search, worker) for worker in range(30)]
+            for future in writer_futures + reader_futures:
+                future.result()
 
-        async def search_collection(collection_name):
-            await asyncio.sleep(0)
-            return [{"doc_id": "result", "score": 0.9}]
+        # Every query got a full, well-formed result page.
+        for future in reader_futures:
+            hits = future.result()
+            assert len(hits) == 5
+            for hit in hits:
+                assert hit["chunk_id"]
+                assert -1.0 <= hit["similarity"] <= 1.0
 
-        results = await asyncio.gather(
-            *[search_collection(f"collection-{i}") for i in range(5)]
-        )
+        # All 20 concurrent writes landed on top of the 41 seeded chunks.
+        assert storage.count() == 41 + 20
 
-        assert len(results) == 5
+    def test_concurrent_deletes_leave_consistent_counts(self):
+        """Disjoint concurrent deletions remove exactly their own chunks."""
+        storage = _seeded_storage(workers=4, per_worker=10)
 
+        def delete_slice(worker_id: int) -> int:
+            return storage.delete_by_prefix(f"t{worker_id}-")
 
-@pytest.mark.concurrent
-@pytest.mark.slow
-class TestSearchRaceConditions:
-    """Test race conditions in search operations."""
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            deleted = [
+                future.result()
+                for future in [
+                    executor.submit(delete_slice, worker) for worker in range(4)
+                ]
+            ]
 
-    @pytest.mark.asyncio
-    async def test_search_during_ingestion(self):
-        """Test search behavior during concurrent ingestion."""
-        ingestion_complete = asyncio.Event()
-
-        async def simulate_ingestion():
-            await asyncio.sleep(0)
-            ingestion_complete.set()
-
-        async def simulate_search():
-            await asyncio.sleep(0)
-            return [{"doc_id": "result", "score": 0.9}]
-
-        ingest_task = asyncio.create_task(simulate_ingestion())
-        search_result = await simulate_search()
-        await ingest_task
-
-        assert search_result is not None
-
-    @pytest.mark.asyncio
-    async def test_concurrent_index_creation_and_search(self):
-        """Test search behavior during index creation."""
-
-        async def create_index():
-            await asyncio.sleep(0)
-            return True
-
-        async def search_with_index():
-            await asyncio.sleep(0)
-            return [{"doc_id": "result", "score": 0.9}]
-
-        results = await asyncio.gather(
-            create_index(),
-            search_with_index(),
-        )
-
-        assert results[0] is True
-        assert results[1] is not None
+        assert deleted == [10, 10, 10, 10]
+        assert storage.count() == 1  # only the decoy remains
 
 
 @pytest.mark.concurrent
 @pytest.mark.slow
-class TestSearchPerformanceUnderLoad:
-    """Test search performance under concurrent load."""
+@pytest.mark.xdist_group("concurrent")
+class TestAsyncSearchOperations:
+    """Async twins of the storage API driven concurrently."""
 
-    @pytest.mark.asyncio
-    async def test_search_latency_under_concurrency(self):
-        """Test search latency with concurrent queries."""
-        search_times = []
+    def test_concurrent_async_validation(self):
+        """Concurrent validate_connection_async calls all report healthy."""
 
-        async def slow_search():
-            start = asyncio.get_event_loop().time()
-            await asyncio.sleep(0)
-            end = asyncio.get_event_loop().time()
-            search_times.append(end - start)
-            return [{"doc_id": "result", "score": 0.9}]
+        async def run() -> None:
+            storage = _seeded_storage()
+            results = await asyncio.gather(
+                *[storage.validate_connection_async() for _ in range(10)]
+            )
+            assert results == [True] * 10
 
-        await asyncio.gather(*[slow_search() for _ in range(20)])
+        asyncio.run(run())
 
-        for latency in search_times:
-            assert latency < 0.1
+    def test_async_search_batch_consistency(self):
+        """A single asyncio batch of searches matches the serial result."""
 
-    @pytest.mark.asyncio
-    async def test_search_throughput_under_load(self):
-        """Test search throughput under concurrent load."""
-        completed = 0
+        async def run() -> None:
+            storage = _seeded_storage()
+            expected = [hit["chunk_id"] for hit in storage.search(_QUERY, top_k=5)]
+            results = await asyncio.gather(
+                *[asyncio.to_thread(storage.search, _QUERY, 5) for _ in range(10)]
+            )
+            for hits in results:
+                assert [hit["chunk_id"] for hit in hits] == expected
 
-        async def count_search():
-            nonlocal completed
-            await asyncio.sleep(0)
-            completed += 1
-
-        await asyncio.gather(*[count_search() for _ in range(50)])
-
-        assert completed == 50
+        asyncio.run(run())
 
 
 @pytest.mark.concurrent
 @pytest.mark.slow
+@pytest.mark.xdist_group("concurrent")
 class TestSearchWithCircuitBreaker:
-    """Test search behavior with circuit breaker."""
+    """Circuit-breaker gating of search under concurrency (real component)."""
 
-    @pytest.mark.asyncio
-    async def test_search_blocked_when_circuit_open(self):
-        """Test that search is blocked when circuit is open."""
-        cb = CircuitBreaker(CircuitBreakerConfig(failure_threshold=3))
+    def test_search_blocked_when_circuit_open(self):
+        """A tripped breaker blocks the search call and counts the failure."""
+        cb = CircuitBreaker(
+            CircuitBreakerConfig(failure_threshold=2),
+            service_name="search",
+        )
 
-        for _ in range(4):
+        for _ in range(2):
             cb.record_failure()
 
         assert cb.state == CircuitState.OPEN
-        assert cb.is_allowed() is False
 
-    @pytest.mark.asyncio
-    async def test_search_allowed_when_circuit_closed(self):
-        """Test that search is allowed when circuit is closed."""
-        cb = CircuitBreaker(CircuitBreakerConfig(failure_threshold=3))
+        with pytest.raises(Exception) as exc_info:
+            cb.call(lambda: True)  # any call while open must fail fast
+
+        assert "Circuit breaker is open" in str(exc_info.value)
+
+    def test_search_allowed_when_circuit_closed(self):
+        """A healthy breaker admits searches and records successes."""
+        cb = CircuitBreaker(
+            CircuitBreakerConfig(failure_threshold=2),
+            service_name="search",
+        )
 
         assert cb.state == CircuitState.CLOSED
         assert cb.is_allowed() is True
 
-    @pytest.mark.asyncio
-    async def test_concurrent_search_during_circuit_recovery(self, fake_clock):
-        """Test concurrent searches during circuit recovery."""
+        result = cb.call(lambda: True)
+
+        assert result is True
+        assert cb.success_count == 0  # CLOSED successes reset the counter
+
+    def test_concurrent_search_during_circuit_recovery(self, fake_clock):
+        """Successes during HALF_OPEN close the circuit (real transitions)."""
         config = CircuitBreakerConfig(
             failure_threshold=3,
             recovery_timeout=0.1,
             success_threshold=2,
         )
-        cb = CircuitBreaker(config)
+        cb = CircuitBreaker(config, service_name="search")
 
         for _ in range(3):
             cb.record_failure()
@@ -211,100 +246,3 @@ class TestSearchWithCircuitBreaker:
         cb.record_success()
 
         assert cb.state == CircuitState.CLOSED
-
-
-@pytest.mark.concurrent
-@pytest.mark.slow
-class TestSearchConsistency:
-    """Test search consistency under concurrent modifications."""
-
-    @pytest.mark.asyncio
-    async def test_search_sees_consistent_results(self):
-        """Test that search returns consistent results."""
-
-        async def mock_search():
-            await asyncio.sleep(0)
-            return [{"doc_id": "doc-1", "score": 0.9}]
-
-        results = await asyncio.gather(*[mock_search() for _ in range(5)])
-
-        for result in results:
-            assert len(result) == 1
-            assert result[0]["doc_id"] == "doc-1"
-
-    @pytest.mark.asyncio
-    async def test_search_after_concurrent_deletion(self):
-        """Test search behavior after concurrent deletion."""
-        mock_collection = MagicMock()
-
-        async def delete_document(doc_id):
-            mock_collection.delete_one({"doc_id": doc_id})
-            await asyncio.sleep(0)
-
-        await delete_document("doc-1")
-
-        assert mock_collection.delete_one.call_count == 1
-
-    @pytest.mark.asyncio
-    async def test_concurrent_deletions_no_race_conditions(self):
-        """Test that concurrent deletions don't cause race conditions."""
-        mock_collection = MagicMock()
-        deletion_results = []
-        lock = asyncio.Lock()
-
-        async def delete_document(doc_id):
-            """Simulate document deletion with potential race conditions."""
-            # Simulate some async work
-            await asyncio.sleep(0)
-
-            # Perform deletion
-            mock_collection.delete_one({"doc_id": doc_id})
-
-            # Record result
-            async with lock:
-                deletion_results.append({"doc_id": doc_id, "success": True})
-
-        # Create 10 concurrent deletion tasks for different documents
-        doc_ids = [f"doc-{i}" for i in range(10)]
-        tasks = [delete_document(doc_id) for doc_id in doc_ids]
-
-        # Execute all deletions concurrently
-        await asyncio.gather(*tasks)
-
-        # Verify all deletions completed successfully
-        assert len(deletion_results) == 10
-        assert all(result["success"] for result in deletion_results)
-
-        # Verify each document was deleted exactly once (no duplicates)
-        deleted_doc_ids = [result["doc_id"] for result in deletion_results]
-        assert len(set(deleted_doc_ids)) == 10  # All unique
-
-        # Verify mock was called exactly 10 times
-        assert mock_collection.delete_one.call_count == 10
-
-    @pytest.mark.asyncio
-    async def test_concurrent_deletions_same_document(self):
-        """Test concurrent deletions of the same document (race condition test)."""
-        mock_collection = MagicMock()
-        deletion_count = 0
-        lock = asyncio.Lock()
-
-        async def delete_same_document():
-            """Multiple deletions of the same document."""
-            nonlocal deletion_count
-
-            await asyncio.sleep(0)
-
-            async with lock:
-                deletion_count += 1
-                mock_collection.delete_one({"doc_id": "shared-doc"})
-
-        # Create 10 concurrent deletion tasks for the same document
-        tasks = [delete_same_document() for _ in range(10)]
-
-        # Execute all deletions concurrently
-        await asyncio.gather(*tasks)
-
-        # Verify all deletion attempts were made
-        assert deletion_count == 10
-        assert mock_collection.delete_one.call_count == 10
