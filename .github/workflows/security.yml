@@ -35,6 +35,7 @@ jobs:
           command -v pip-audit
           command -v safety
           command -v pipdeptree
+          command -v libyear
 
       - name: Bandit static analysis (fails on high severity)
         run: ./scripts/security_scan.sh bandit
@@ -47,3 +48,28 @@ jobs:
 
       - name: pipdeptree dependency tree and conflict check (fails on conflicts)
         run: ./scripts/security_scan.sh pipdeptree
+
+      # Libyear dependency freshness (informational): publishes totals and the
+      # five oldest dependencies to the run summary so staleness is visible as
+      # code and third-party libraries change. Not a gate by default;
+      # scripts/libyear.sh accepts --fail-over N to enforce a threshold.
+      - name: libyear dependency freshness
+        run: ./scripts/libyear.sh all
+
+      - name: Publish libyear summary
+        if: always()
+        run: |
+          {
+            echo "### Libyear dependency freshness"
+            echo ""
+            for report in libyear.json libyear-locked.json; do
+              if [ -f "$report" ]; then
+                echo "**$report** — total libyears behind: \`$(jq -r '.total_libyears_behind' "$report")\`"
+                echo ""
+                echo "| library | current | latest | libyears |"
+                echo "| ------- | ------- | ------ | -------- |"
+                jq -r '.libraries | sort_by(.libyears_behind | tonumber) | reverse | .[0:5][] | "| \(.library) | \(.current_version) | \(.latest_version) | \(.libyears_behind) |"' "$report"
+                echo ""
+              fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"

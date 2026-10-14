@@ -19,7 +19,7 @@ releases and runs separate branch/PR validation workflows (`.github/workflows/`)
 | Workflow                 | Trigger                    | Role                                            |
 | ------------------------ | -------------------------- | ----------------------------------------------- |
 | `release.yml`            | push of a `v*` git tag     | Builds and publishes the release artifact       |
-| `security.yml`           | push / pull request        | Security validation (pip-audit, bandit, safety, pipdeptree) |
+| `security.yml`           | push / pull request        | Security validation (pip-audit, bandit, safety, pipdeptree, libyear) |
 | `test-quality-gates.yml` | push to main/develop, PRs  | Test suite and quality validation               |
 
 **Build stage.** The single source of truth is `pyproject.toml`; the package is built with

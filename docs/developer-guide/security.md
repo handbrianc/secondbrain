@@ -158,6 +158,37 @@ cyclonedx-bom -o sbom.json
 
 Required for supply chain security compliance.
 
+### Dependency Freshness (Libyear)
+
+Vulnerability scans catch known CVEs; the **libyear** metric shows how stale
+the dependency set is before it becomes a problem. One libyear is the release
+lag between the version in use and the latest release, summed across
+dependencies (see [libyear.com](https://libyear.com/)); a smaller total means
+fresher dependencies.
+
+Two views are measured: declared dependency floors (`pyproject.toml`, direct
+dependencies and optional extras) and the resolved lock tree
+(`requirements.txt`, includes transitives):
+
+```bash
+# Both views, with JSON reports (libyear.json, libyear-locked.json)
+./scripts/libyear.sh all
+
+# Declared floors only
+./scripts/libyear.sh pyproject
+
+# Locked tree only
+./scripts/libyear.sh requirements
+
+# Optional gate: exit non-zero when the total exceeds N libyears
+./scripts/libyear.sh all --fail-over 20
+```
+
+The Security Gates workflow (`.github/workflows/security.yml`) reports the
+totals and the five oldest dependencies in the run summary on every push and
+pull request, so freshness stays visible as code and third-party libraries
+change.
+
 ### Bandit Security Analysis
 
 Static analysis for Python security issues:
