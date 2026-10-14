@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Libyear dependency freshness** (`scripts/libyear.sh`): measures the
+  libyear metric (summed release lag between used and latest dependency
+  versions, [libyear.com](https://libyear.com/)) for the declared dependency
+  floors (`pyproject.toml`) and the resolved lock tree (`requirements.txt`)
+  via `pylibyear`, writing `libyear.json` / `libyear-locked.json`. The
+  Security Gates workflow reports totals and the five oldest dependencies in
+  the run summary on every push/PR; `--fail-over N` turns the report into a
+  threshold gate. See `docs/developer-guide/security.md`.
+
 - **Hardware-aware installer** (`scripts/install.sh`): detects the host
   accelerator (NVIDIA CUDA, Intel XPU, Apple MPS, CPU-only) and installs a
   matching torch build from the correct index before the editable install.
@@ -34,6 +43,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `xpu`/`auto` — no-op elsewhere. See pytorch/pytorch#199157 and #172934.
 
 ### Changed
+
+- **Dependency floors refreshed to latest releases (libyear-driven)**: every
+  declared dependency with nonzero libyears was bumped in `pyproject.toml`
+  and mirrored in `requirements-dev.txt`: bandit 1.7.0→1.9.4, pytest-cov
+  4.1.0→7.1.0, safety 3.0.0→3.8.1, pytest-timeout 2.2.0→2.4.0,
+  cyclonedx-bom 7.0.0→7.5.0, pyopenssl 25.1.0→26.4.0, pillow 11.3.0→12.3.0,
+  mkdocs 1.6.0→1.6.1, fastapi 0.141.1→0.143.1, pre-commit 4.6.2→4.7.0,
+  reportlab 5.0.0→5.0.1, mypy 2.3.1→2.4.0, ctranslate2 4.8.2→4.8.3, msgpack
+  1.2.2→1.2.3, pymdown-extensions 12.1→12.2, starlette 1.7.0→1.8.0,
+  hypothesis 6.168.5→6.169.1 (`docling-core` floor was already current; env
+  upgraded to the floor). Full test suite executed after each individual
+  bump — 3423 passed / 3 skipped every time. The pip lock (`requirements.txt`)
+  and `uv.lock` were regenerated in the same pass: torch/torchvision 2.14.1 /
+  0.29.1 (with their nvidia/cuda pin set), docling 2.139.0 (dropping the
+  antlr4 dependency), pydantic 2.14.1, openai 3.31.0, anthropic 1.14.0,
+  opentelemetry 1.45.1, opencv-python-headless 5.0.0, filelock 4.1.2,
+  huggingface-hub/semchunk/typer/websockets held at docling-slim /
+  docling-core caps, mpmath held at the sympy `mpmath<1.4` cap. Locked-tree
+  libyears fell 50.89 → 17.41; every update group was followed by a full
+  green test run. See `docs/developer-guide/security.md` (Dependency
+  Freshness).
 
 - **2026-08 / MongoDB → Qdrant + SQLite migration**: vector storage moved to Qdrant (`QdrantVectorStorage` +
   `StorageFactory`; chunk metadata in Qdrant payload), conversation sessions moved to SQLite (`ConversationStorage`),

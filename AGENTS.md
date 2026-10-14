@@ -16,7 +16,7 @@ conversation storage) and OpenAI-compatible embedding APIs.
 secondbrain/
 ├── src/secondbrain/       # Main package (101 files, 12 packages)
 ├── tests/                 # Test suite (20+ directories)
-├── scripts/               # Build/deployment utilities (15: 9 sh + 6 py)
+├── scripts/               # Build/deployment utilities (16: 10 sh + 6 py)
 ├── docs/                  # MkDocs documentation
 ├── docker-compose.yml     # Production services
 └── docker-compose.test.yml # Test services (Qdrant + Ollama)
@@ -127,6 +127,7 @@ pytest                         # All tests
 ./scripts/security_scan.sh all
 ./scripts/security_scan.sh audit
 ./scripts/security_scan.sh bandit
+./scripts/libyear.sh all
 
 # Test environment
 docker-compose -f docker-compose.test.yml up -d
