@@ -19,19 +19,19 @@ classifiers = [
 
 dependencies = [
     "click>=8.5.0",  # CLI framework - stable API, minor updates only
-    "docling>=2.132.0,<3.0.0",  # First release forcing docling-parse >=7.22.1 (space regression fixed)
-    "docling-core>=2.99.0,<3.0.0",  # Core types - required by docling-parse 7.22.x
-    "docling-parse>=7.22.1,<8.0.0",  # Floor excludes 7.21.x-7.22.0 word/space-loss regression (docling-parse #355/#359, fixed by PR #361)
+    "docling>=2.137.0,<3.0.0",  # First release forcing docling-parse >=7.22.1 (space regression fixed)
+    "docling-core>=2.101.1,<3.0.0",  # Core types - required by docling-parse 7.22.x
+    "docling-parse>=7.22.2,<8.0.0",  # Floor excludes 7.21.x-7.22.0 word/space-loss regression (docling-parse #355/#359, fixed by PR #361)
     "qdrant-client>=1.19.1",  # Qdrant vector DB client - production storage backend
     "httpx>=0.28.1",  # HTTP client - async support for LLM calls
-    "pydantic>=2.13.5",  # Data validation - pydantic v2 compatible
+    "pydantic>=2.14.0",  # Data validation - pydantic v2 compatible
     "pydantic-settings>=2.15.0",  # Settings management - pydantic v2 compatible
     "rich>=15.0.0",  # CLI formatting - modern terminal output
     "numpy>=2.5.2",  # Numerical computing - array API compatibility
-    "opentelemetry-api>=1.45.0",  # Telemetry - stable tracing API
-    "opentelemetry-sdk>=1.45.0",  # Telemetry - tracing implementation
-    "openai>=3.19.2",  # LLM provider - v1 SDK required
-    "anthropic>=1.8.0",  # LLM provider - Claude models support
+    "opentelemetry-api>=1.45.1",  # Telemetry - stable tracing API
+    "opentelemetry-sdk>=1.45.1",  # Telemetry - tracing implementation
+    "openai>=3.28.0",  # LLM provider - v1 SDK required
+    "anthropic>=1.11.0",  # LLM provider - Claude models support
     "typing_extensions>=4.16.0",  # Type hints - backport new features
     "pyobjc-core>=12.2.2; sys_platform == 'darwin'",  # MacOS Objective-C bridge - required for ocrmac
     "pyobjc-framework-cocoa>=12.2.2; sys_platform == 'darwin'",  # MacOS Cocoa framework - required for ocrmac
@@ -43,7 +43,7 @@ dependencies = [
 [project.optional-dependencies]
 # Core linting and formatting only
 lint = [
-    "ruff>=0.16.4",  # Linting/formatting - fast Rust-based tool
+    "ruff>=0.17.0",  # Linting/formatting - fast Rust-based tool
     "mypy>=2.3.1",  # Type checking - static analysis
 ]
 
@@ -55,7 +55,7 @@ test = [
     "pytest-xdist>=3.0.0",  # Parallel tests - 18 workers for speed
     "pytest-timeout>=2.2.0",  # Test timeouts - prevent hangs
     "pytest-rerunfailures>=16.7",  # Retry flaky tests - concurrent test stability
-    "hypothesis>=6.167.1",  # Property-based testing - edge case discovery
+    "hypothesis>=6.168.5",  # Property-based testing - edge case discovery
     "factory-boy>=3.3.3",  # Test factories - factory_boy for test data
 ]
 
@@ -70,7 +70,7 @@ security = [
 # Documentation generation
 docs = [
     "mkdocs>=1.6.0",  # Documentation - static site generator
-    "mkdocstrings>=1.0.6",  # API docs - auto-generate from docstrings
+    "mkdocstrings>=1.0.7",  # API docs - auto-generate from docstrings
     "mkdocstrings-python>=2.0.9",  # Python plugin - mkdocstrings support
     "mkdocs-material>=9.7.7",  # Theme - professional documentation (GHSA-xvg9-69gf-fjrf fixed in 9.7.7)
     "jinja2>=3.1.6",  # Templating - security patch required
@@ -78,7 +78,7 @@ docs = [
 
 # Mutation testing
 mutation = [
-    "mutmut>=3.7.0",  # Mutation testing - verify test quality
+    "mutmut>=3.8.0",  # Mutation testing - verify test quality
 ]
 
 # Pre-commit hooks
@@ -96,7 +96,7 @@ web = [
 # Bundled extras (combines all dev tools - backward compatible with [dev])
 bundled = [
     # All lint deps
-    "ruff>=0.16.4",
+    "ruff>=0.17.0",
     "mypy>=2.3.1",
     # All test deps
     "pytest>=9.1.1",
@@ -105,7 +105,7 @@ bundled = [
     "pytest-xdist>=3.0.0",
     "pytest-timeout>=2.2.0",
     "pytest-rerunfailures>=16.7",
-    "hypothesis>=6.167.1",
+    "hypothesis>=6.168.5",
     "factory-boy>=3.3.3",
     # All security deps
     "bandit>=1.7.0",
@@ -116,10 +116,10 @@ bundled = [
     "pre-commit>=4.6.2",
     "pyinstaller>=6.22.3",
     "vulture>=2.16",
-    "pipdeptree>=4.2.5",
+    "pipdeptree>=4.2.6",
     # All docs deps
     "mkdocs>=1.6.0",
-    "mkdocstrings>=1.0.6",
+    "mkdocstrings>=1.0.7",
     "mkdocstrings-python>=2.0.9",
     "mkdocs-material>=9.7.7",
     "jinja2>=3.1.6",
@@ -132,20 +132,20 @@ bundled = [
     "starlette>=1.7.0",  # PYSEC-2026-248, PYSEC-2026-249 (was 1.2.1)
     "pymdown-extensions>=12.1",  # CVE-2026-61632 (was 10.21.3)
     "urllib3>=2.8.0",  # PYSEC-2026-4175/4176/4177 (was 2.6.0)
-    "cryptography>=50.0.1",
+    "cryptography>=50.0.2",
     "pillow>=11.3.0",
     "paramiko>=5.0.0",
-    "PyJWT>=2.15.0",
+    "PyJWT>=2.15.1",
     "pyasn1>=0.6.4",
     "pyopenssl>=25.1.0",
     "twisted>=26.4.0",
     "idna>=3.20",
     "wheel>=0.48.0",
     "setuptools>=84.0.0",
-    "fpdf2>=2.8.8",
+    "fpdf2>=2.8.9",
     "reportlab>=5.0.0",
     # Bundled extras (depends on mutation)
-    "mutmut>=3.7.0",
+    "mutmut>=3.8.0",
 ]
 
 # Alias [dev] to [bundled] for backward compatibility
@@ -154,24 +154,24 @@ dev = [
 ]
 
 qualitative = [
-    "llama-cpp-python>=0.3.35",  # Local LLM - CPU inference support
-    "transformers>=5.17.0",  # HuggingFace - model loading
+    "llama-cpp-python>=0.3.36",  # Local LLM - CPU inference support
+    "transformers>=5.19.0",  # HuggingFace - model loading
     "accelerate>=1.15.0",  # Model optimization - GPU/CPU distribution
 ]
 
 rag = [
-    "llama-cpp-python>=0.3.35",  # Local LLM inference for RAG pipeline
+    "llama-cpp-python>=0.3.36",  # Local LLM inference for RAG pipeline
     "accelerate>=1.15.0",  # Model optimization for local LLM
 ]
 
 opentelemetry = [
-    "opentelemetry-exporter-otlp>=1.45.0",  # OTLP exporter - remote tracing
+    "opentelemetry-exporter-otlp>=1.45.1",  # OTLP exporter - remote tracing
 ]
 
 # Audio transcription (docling ASR via WhisperS2T/CTranslate2 - no openai-whisper import, Python 3.14 safe)
 asr = [
-    "whisper-s2t-reborn[pyav]>=1.7.1",  # WhisperS2T backend - CTranslate2 transcription runner
-    "ctranslate2>=4.5.0",  # Inference engine - quantized WhisperS2T execution
+    "whisper-s2t-reborn[pyav]>=1.7.2",  # WhisperS2T backend - CTranslate2 transcription runner
+    "ctranslate2>=4.8.2",  # Inference engine - quantized WhisperS2T execution
 ]
 
 [project.scripts]
