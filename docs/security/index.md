@@ -201,7 +201,15 @@ bandit -r src/secondbrain/
 
 # Generate SBOM for supply chain review
 cyclonedx-bom -o sbom.json
+
+# Measure dependency freshness in libyears (declared + locked views)
+./scripts/libyear.sh all
 ```
+
+Vulnerability checks catch known CVEs; `libyear` additionally tracks how far
+the dependency set lags behind latest releases (smaller totals = fresher). See
+[Dependency Freshness (Libyear)](../developer-guide/security.md#dependency-freshness-libyear)
+for the metric definition and CI integration.
 
 ### CI/CD Integration
 

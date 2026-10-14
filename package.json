@@ -1,9 +1,7 @@
 {
   "name": "secondbrain-dev-tooling",
   "private": true,
-  "dependencies": {
-    "oh-my-openagent": "^4.5.12"
-  },
+  "dependencies": {},
   "overrides": {
     "fast-uri": "^3.1.8",
     "js-yaml": "^4.3.2",

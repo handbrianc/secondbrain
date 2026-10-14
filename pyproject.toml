@@ -44,32 +44,33 @@ dependencies = [
 # Core linting and formatting only
 lint = [
     "ruff>=0.17.0",  # Linting/formatting - fast Rust-based tool
-    "mypy>=2.3.1",  # Type checking - static analysis
+    "mypy>=2.4.0",  # Type checking - static analysis
 ]
 
 # Core pytest and test infrastructure
 test = [
     "pytest>=9.1.1",  # Test framework - v9 for performance
     "pytest-asyncio>=1.4.0",  # Async test support - modern async patterns
-    "pytest-cov>=4.1.0",  # Coverage reporting - test quality
+    "pytest-cov>=7.1.0",  # Coverage reporting - test quality
     "pytest-xdist>=3.0.0",  # Parallel tests - 18 workers for speed
-    "pytest-timeout>=2.2.0",  # Test timeouts - prevent hangs
+    "pytest-timeout>=2.4.0",  # Test timeouts - prevent hangs
     "pytest-rerunfailures>=16.7",  # Retry flaky tests - concurrent test stability
-    "hypothesis>=6.168.5",  # Property-based testing - edge case discovery
+    "hypothesis>=6.169.1",  # Property-based testing - edge case discovery
     "factory-boy>=3.3.3",  # Test factories - factory_boy for test data
 ]
 
 # Security scanning tools
 security = [
-    "bandit>=1.7.0",  # Security scanning - Python security issues
-    "safety>=3.0.0",  # Vulnerability check - dependency audits
+    "bandit>=1.9.4",  # Security scanning - Python security issues
+    "safety>=3.8.1",  # Vulnerability check - dependency audits
     "pip-audit>=2.10.1",  # Security audit - PyPI vulnerability check
-    "cyclonedx-bom>=7.0.0",  # SBOM generation - supply chain security
+    "cyclonedx-bom>=7.5.0",  # SBOM generation - supply chain security
+    "pylibyear>=0.5.0",  # Dependency freshness - libyear metric (libyear.com)
 ]
 
 # Documentation generation
 docs = [
-    "mkdocs>=1.6.0",  # Documentation - static site generator
+    "mkdocs>=1.6.1",  # Documentation - static site generator
     "mkdocstrings>=1.0.7",  # API docs - auto-generate from docstrings
     "mkdocstrings-python>=2.0.9",  # Python plugin - mkdocstrings support
     "mkdocs-material>=9.7.7",  # Theme - professional documentation (GHSA-xvg9-69gf-fjrf fixed in 9.7.7)
@@ -83,12 +84,12 @@ mutation = [
 
 # Pre-commit hooks
 precommit = [
-    "pre-commit>=4.6.2",  # Git hooks - automated quality checks
+    "pre-commit>=4.7.0",  # Git hooks - automated quality checks
 ]
 
 # Web frameworks and serving
 web = [
-    "fastapi>=0.141.1",  # API framework - future REST API support
+    "fastapi>=0.143.1",  # API framework - future REST API support
     "uvicorn>=0.54.0",  # ASGI server - async HTTP server
     "flask>=3.1.3",  # Web framework - alternative API option
 ]
@@ -97,53 +98,54 @@ web = [
 bundled = [
     # All lint deps
     "ruff>=0.17.0",
-    "mypy>=2.3.1",
+    "mypy>=2.4.0",
     # All test deps
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
-    "pytest-cov>=4.1.0",
+    "pytest-cov>=7.1.0",
     "pytest-xdist>=3.0.0",
-    "pytest-timeout>=2.2.0",
+    "pytest-timeout>=2.4.0",
     "pytest-rerunfailures>=16.7",
-    "hypothesis>=6.168.5",
+    "hypothesis>=6.169.1",
     "factory-boy>=3.3.3",
     # All security deps
-    "bandit>=1.7.0",
-    "safety>=3.0.0",
+    "bandit>=1.9.4",
+    "safety>=3.8.1",
     "pip-audit>=2.10.1",
-    "cyclonedx-bom>=7.0.0",
+    "cyclonedx-bom>=7.5.0",
+    "pylibyear>=0.5.0",
     # Misc dev tools
-    "pre-commit>=4.6.2",
+    "pre-commit>=4.7.0",
     "pyinstaller>=6.22.3",
     "vulture>=2.16",
     "pipdeptree>=4.2.6",
     # All docs deps
-    "mkdocs>=1.6.0",
+    "mkdocs>=1.6.1",
     "mkdocstrings>=1.0.7",
     "mkdocstrings-python>=2.0.9",
     "mkdocs-material>=9.7.7",
     "jinja2>=3.1.6",
     # All web deps
-    "fastapi>=0.141.1",
+    "fastapi>=0.143.1",
     "uvicorn>=0.54.0",
     "flask>=3.1.3",
     # Transitive/util deps (with CVE fixes)
-    "msgpack>=1.2.2",  # GHSA-6v7p-g79w-8964 (was 1.1.2)
-    "starlette>=1.7.0",  # PYSEC-2026-248, PYSEC-2026-249 (was 1.2.1)
-    "pymdown-extensions>=12.1",  # CVE-2026-61632 (was 10.21.3)
+    "msgpack>=1.2.3",  # GHSA-6v7p-g79w-8964 (was 1.1.2)
+    "starlette>=1.8.0",  # PYSEC-2026-248, PYSEC-2026-249 (was 1.2.1)
+    "pymdown-extensions>=12.2",  # CVE-2026-61632 (was 10.21.3)
     "urllib3>=2.8.0",  # PYSEC-2026-4175/4176/4177 (was 2.6.0)
     "cryptography>=50.0.2",
-    "pillow>=11.3.0",
+    "pillow>=12.3.0",
     "paramiko>=5.0.0",
     "PyJWT>=2.15.1",
     "pyasn1>=0.6.4",
-    "pyopenssl>=25.1.0",
+    "pyopenssl>=26.4.0",
     "twisted>=26.4.0",
     "idna>=3.20",
     "wheel>=0.48.0",
     "setuptools>=84.0.0",
     "fpdf2>=2.8.9",
-    "reportlab>=5.0.0",
+    "reportlab>=5.0.1",
     # Bundled extras (depends on mutation)
     "mutmut>=3.8.0",
 ]
@@ -171,7 +173,7 @@ opentelemetry = [
 # Audio transcription (docling ASR via WhisperS2T/CTranslate2 - no openai-whisper import, Python 3.14 safe)
 asr = [
     "whisper-s2t-reborn[pyav]>=1.7.2",  # WhisperS2T backend - CTranslate2 transcription runner
-    "ctranslate2>=4.8.2",  # Inference engine - quantized WhisperS2T execution
+    "ctranslate2>=4.8.3",  # Inference engine - quantized WhisperS2T execution
 ]
 
 [project.scripts]
@@ -255,12 +257,17 @@ exclude_dirs = ["tests"]
 
 [tool.safety]
 ignore = [
-    # NLTK vulnerabilities - dev only, not used in production code
-    "CVE-2026-33230",
-    "CVE-2026-33231",
-    "GHSA-rf74-v2fm-23pw",
-    "PYSEC-2026-597",  # NLTK 3.9.4 path traversal - no fix available yet
-    "PYSEC-2026-3740",  # CVE-2026-81726; NLTK 3.10.3 is latest, no fixed release exists
+    # NLTK advisories - dev-only transitive (installed via 'safety'), not used
+    # in production code; nltk 3.10.3 is the latest release (OSV-verified
+    # 2026-10-14).
+    "PYSEC-2026-3740",  # CVE-2026-81726 - re-opened by OSV on 2026-10-14:
+                        # fixed=None against nltk 3.10.3 (a 2026-09-01 DB
+                        # amendment had briefly marked it fixed in 3.10.3)
+    "CVE-2026-33230",  # nltk XSS - not returned by pip-audit for nltk 3.10.3
+                       # as of 2026-10-14 (withdrawn or consolidated); kept
+                       # for the safety tool, unverified in this environment
+    "CVE-2026-33231",  # wordnet_app remote shutdown - same status as above
+    "PYSEC-2026-597",  # NLTK path traversal - same status as above
 
     # Transitive dependencies - mitigated by context
     "54843",

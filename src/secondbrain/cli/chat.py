@@ -1,5 +1,7 @@
 """Chat command."""
 
+from typing import Any
+
 import click
 from rich.console import Console
 
@@ -64,84 +66,22 @@ def chat(
         secondbrain chat --check-llm
     --------
     """
-    from secondbrain.conversation import ConversationStorage
-    from secondbrain.rag.providers import LLMProviderFactory
-
     cfg = config()
 
     if list_sessions:
-        with ConversationStorage() as storage:
-            sessions = storage.list_sessions(limit=100)
-        if not sessions:
-            console.print("[yellow]No sessions found.[/yellow]")
-        else:
-            console.print("[bold]Conversation Sessions[/bold]")
-            console.print("=" * 60)
-            for sess in sessions:
-                status = (
-                    f"[green]{sess['message_count']} messages[/green]"
-                    if sess["message_count"] > 0
-                    else "[dim]empty[/dim]"
-                )
-                console.print(
-                    f"  {sess['session_id']}: {status} (created: {sess['created_at']})"
-                )
+        _list_sessions()
         return
 
     if delete_session:
-        confirm = console.input(
-            f"Are you sure you want to delete session '{delete_session}'? [y/N]: "
-        )
-        if confirm.lower() != "y":
-            console.print("[dim]Deletion cancelled.[/dim]")
-            return
-
-        with ConversationStorage() as storage:
-            deleted = storage.delete_session(delete_session)
-        if deleted:
-            console.print(f"[green]Deleted session: {delete_session}[/green]")
-        else:
-            console.print(f"[red]Session not found: {delete_session}[/red]")
+        _delete_session(delete_session)
         return
 
     if check_llm:
-        try:
-            llm_provider = LLMProviderFactory.create_from_config(cfg)
-            if llm_provider.health_check():
-                console.print(
-                    f"[green]✓ LLM provider ({cfg.llm_provider}) is healthy[/green]"
-                )
-            else:
-                console.print(
-                    f"[red]✗ LLM provider ({cfg.llm_provider}) health check failed[/red]"
-                )
-        except Exception as e:
-            console.print(f"[red]✗ LLM provider error: {e!s}[/red]")
+        _check_llm(cfg)
         return
 
     if history:
-        if not session:
-            console.print(
-                "[red]Error: --history requires --session to be specified[/red]"
-            )
-            return
-        with ConversationStorage() as storage:
-            history_msgs = storage.get_history(session, limit=20)
-        if not history_msgs:
-            console.print(f"[yellow]No history for session: {session}[/yellow]")
-        else:
-            console.print(f"[bold]Session History: {session}[/bold]")
-            console.print("=" * 60)
-            for msg in history_msgs:
-                role = msg.get("role", "unknown")
-                content = msg.get("content", "")
-                timestamp = msg.get("timestamp", "")
-                role_color = (
-                    "[cyan]User[/cyan]"
-                    if role == "user"
-                    else "[green]Assistant[/green]"
-                )
-                console.print(f"{role_color} ({timestamp}): {content}")
+        _print_session_history(session)
         return
 
     if create:
@@ -167,3 +107,99 @@ def chat(
         model=model,
         show_sources=show_sources,
     )
+
+
+def _list_sessions() -> None:
+    """Print all conversation sessions with their message counts."""
+    from secondbrain.conversation import ConversationStorage
+
+    with ConversationStorage() as storage:
+        sessions = storage.list_sessions(limit=100)
+    if not sessions:
+        console.print("[yellow]No sessions found.[/yellow]")
+    else:
+        console.print("[bold]Conversation Sessions[/bold]")
+        console.print("=" * 60)
+        for sess in sessions:
+            status = (
+                f"[green]{sess['message_count']} messages[/green]"
+                if sess["message_count"] > 0
+                else "[dim]empty[/dim]"
+            )
+            console.print(
+                f"  {sess['session_id']}: {status} (created: {sess['created_at']})"
+            )
+
+
+def _delete_session(delete_session: str) -> None:
+    """Delete a conversation session after an interactive confirmation.
+
+    Args:
+        delete_session: Session ID to delete.
+    """
+    from secondbrain.conversation import ConversationStorage
+
+    confirm = console.input(
+        f"Are you sure you want to delete session '{delete_session}'? [y/N]: "
+    )
+    if confirm.lower() != "y":
+        console.print("[dim]Deletion cancelled.[/dim]")
+        return
+
+    with ConversationStorage() as storage:
+        deleted = storage.delete_session(delete_session)
+    if deleted:
+        console.print(f"[green]Deleted session: {delete_session}[/green]")
+    else:
+        console.print(f"[red]Session not found: {delete_session}[/red]")
+
+
+def _check_llm(cfg: Any) -> None:
+    """Check the configured LLM provider's health and print the result.
+
+    Args:
+        cfg: Application configuration used to build the provider.
+    """
+    from secondbrain.rag.providers import LLMProviderFactory
+
+    try:
+        llm_provider = LLMProviderFactory.create_from_config(cfg)
+        if llm_provider.health_check():
+            console.print(
+                f"[green]✓ LLM provider ({cfg.llm_provider}) is healthy[/green]"
+            )
+        else:
+            console.print(
+                f"[red]✗ LLM provider ({cfg.llm_provider}) health check failed[/red]"
+            )
+    except Exception as e:
+        console.print(f"[red]✗ LLM provider error: {e!s}[/red]")
+
+
+def _print_session_history(session: str | None) -> None:
+    """Print recent messages of a conversation session.
+
+    Args:
+        session: Session ID whose history is printed; an error is printed
+            when it is missing.
+    """
+    from secondbrain.conversation import ConversationStorage
+
+    if not session:
+        console.print("[red]Error: --history requires --session to be specified[/red]")
+        return
+    with ConversationStorage() as storage:
+        history_msgs = storage.get_history(session, limit=20)
+    if not history_msgs:
+        console.print(f"[yellow]No history for session: {session}[/yellow]")
+    else:
+        console.print(f"[bold]Session History: {session}[/bold]")
+        console.print("=" * 60)
+        for msg in history_msgs:
+            role = msg.get("role", "unknown")
+            content = msg.get("content", "")
+            timestamp = msg.get("timestamp", "")
+            role_color = (
+                "[cyan]User[/cyan]" if role == "user" else "[green]Assistant[/green]"
+            )
+            console.print(f"{role_color} ({timestamp}): {content}")

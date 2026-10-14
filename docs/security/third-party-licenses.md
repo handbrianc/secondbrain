@@ -13,8 +13,10 @@ dependency upgrades — re-check wheel metadata after bumping dependencies.
 
 ### fpdf2 — LGPL-3.0-only
 
-`fpdf2==2.8.8` is pulled via the `bundled` extra (`secondbrain[bundled]`) and is licensed
-`LGPL-3.0-only` (weak copyleft).
+`fpdf2` (2.8.9 in `uv.lock`; `>=2.8.9` in `requirements-dev.txt`, a lower bound rather than a
+pin) is licensed `LGPL-3.0-only` (weak copyleft). Its only repository imports are in PDF test
+fixtures (`tests/conftest.py` and `tests/test_document/conftest.py`); it is never imported by
+`src/`. Selecting the umbrella `bundled` extra (`secondbrain[bundled]`) still installs it.
 
 - **Linking is permitted.** SecondBrain uses fpdf2 as an unmodified library, which the LGPL
   explicitly allows, including in commercial products.
@@ -27,6 +29,29 @@ dependency upgrades — re-check wheel metadata after bumping dependencies.
   LGPL requires publishing those modifications under the LGPL.
 - **Exit ramp.** fpdf2 is only present with the `bundled` extra. If these obligations are
   unacceptable for your packaging, install without that extra.
+
+### MPL-2.0 — file-level copyleft (transitive)
+
+Four installed packages carry `MPL-2.0` (Mozilla Public License 2.0) and one is dual-licensed:
+
+| Package                  | Role                              | License            |
+| ------------------------ | --------------------------------- | ------------------ |
+| `certifi`                | runtime transitive (CA bundle)    | `MPL-2.0`          |
+| `fqdn`                   | runtime transitive (jsonschema)   | `MPL-2.0`          |
+| `hypothesis`             | dev/test (property-based testing) | `MPL-2.0`          |
+| `pytest-rerunfailures`   | dev/test (pytest plugin)          | `MPL-2.0`          |
+| `tqdm`                   | runtime transitive (progress bars)| `MPL-2.0 AND MIT`  |
+
+- **Why this is acceptable.** MPL-2.0 is file-level copyleft: its obligations attach only to
+  files of the MPL-licensed work itself. SecondBrain uses all five as unmodified libraries
+  (linked or executed), which MPL-2.0 explicitly permits without extending the license to
+  larger work — including in commercial products.
+- **Distribution obligations.** When distributing these packages, retain their MPL notices and
+  provide recipients access to the MPL-covered source. If distributing modifications to
+  MPL-licensed files, make those files' source available under MPL-2.0; these obligations do not
+  extend to the surrounding work.
+- **tqdm's license expression** is `MPL-2.0 AND MIT`, requiring compliance with both licenses;
+  it does not offer a choice between them.
 
 ## Proprietary accelerator runtime wheels
 
