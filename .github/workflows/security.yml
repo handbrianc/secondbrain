@@ -23,8 +23,8 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          # Safety 3.8.1's timeout handling is incompatible with Authlib 1.8's httpx2 transport.
-          pip install -e ".[dev]" "httpx2==2.12.0" "authlib==1.7.0"
+          # Keep Authlib on the patched 1.7 line; 1.8 is incompatible with Safety 3.8.1's httpx2 transport.
+          pip install -e ".[dev]" "httpx2==2.12.0" "authlib==1.7.2"
 
       # Guard against vacuous passes: scripts/security_scan.sh skips a stage
       # (exit 0) when its tool is missing, which is fine locally but must
@@ -42,7 +42,7 @@ jobs:
       - name: pip-audit dependency vulnerabilities (PYSEC-2026-3740 documented ignore)
         run: ./scripts/security_scan.sh audit
 
-      - name: safety vulnerability check ([tool.safety] ignore list from pyproject.toml)
+      - name: Safety vulnerability check (.safety-policy.yml)
         run: ./scripts/security_scan.sh safety
 
       - name: pipdeptree dependency tree and conflict check (fails on conflicts)
