@@ -1,6 +1,6 @@
 # AGENTS.md - Agent Coding Guidelines
 
-**Last Updated:** 2026-10-14  
+**Last Updated:** 2026-10-14
 **Commit:** 386ddc8
 
 SecondBrain is a local document intelligence CLI for semantic search using Qdrant vector search (with SQLite for
