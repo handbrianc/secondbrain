@@ -28,8 +28,9 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # PYSEC-2026-3740 (CVE-2026-81726): nltk is a dev-only transitive dep of
-# safety; nltk 3.10.3 is the newest release and no fixed version exists.
-# Mirrors the documented ignore in pyproject.toml [tool.safety].
+# safety; no fixed release exists (OSV re-opened 2026-10-14, fixed=None
+# against nltk 3.10.3). Mirrors the documented ignore in pyproject.toml
+# [tool.safety].
 PIP_AUDIT_IGNORE_ARGS=(--ignore-vuln PYSEC-2026-3740)
 
 # Check if virtual environment is activated

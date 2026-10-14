@@ -257,6 +257,6 @@ export SECONDBRAIN_MAX_WORKERS=2
 
 If you encounter issues not covered here:
 
-1. Check the [GitHub Issues](https://github.com/your-username/secondbrain/issues)
+1. Check the [GitHub Issues](https://github.com/handbrianc/secondbrain/issues)
 2. Review existing discussions
 3. File a new issue with relevant logs and system information
