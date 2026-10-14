@@ -58,6 +58,10 @@ run_libyear() {
     echo ""
 
     if ! command -v libyear &> /dev/null; then
+        if [ "$FAIL_OVER_REQUESTED" = true ]; then
+            echo "Error: libyear (pylibyear) is required when --fail-over is used." >&2
+            return 1
+        fi
         echo -e "${YELLOW}libyear (pylibyear) not installed. Skipping...${NC}"
         echo "Install with: pip install -e \".[security]\""
         echo ""
@@ -65,6 +69,10 @@ run_libyear() {
     fi
 
     if [ ! -f "$target" ]; then
+        if [ "$FAIL_OVER_REQUESTED" = true ]; then
+            echo "Error: $target is required when --fail-over is used." >&2
+            return 1
+        fi
         echo -e "${YELLOW}$target not found. Skipping...${NC}"
         echo ""
         return 0
@@ -101,6 +109,12 @@ if [ "$#" -gt 0 ]; then
     shift
     EXTRA_ARGS=("$@")
 fi
+FAIL_OVER_REQUESTED=false
+for arg in "${EXTRA_ARGS[@]}"; do
+    case "$arg" in
+        --fail-over|--fail-over=*) FAIL_OVER_REQUESTED=true ;;
+    esac
+done
 
 case "$MODE" in
     pyproject)
