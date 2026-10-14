@@ -13,8 +13,10 @@ dependency upgrades — re-check wheel metadata after bumping dependencies.
 
 ### fpdf2 — LGPL-3.0-only
 
-`fpdf2==2.8.8` is pulled via the `bundled` extra (`secondbrain[bundled]`) and is licensed
-`LGPL-3.0-only` (weak copyleft).
+`fpdf2` (2.8.9 in `uv.lock`, pinned `>=2.8.9` in `requirements-dev.txt`) is pulled via the
+`bundled` extra (`secondbrain[bundled]`) and is licensed `LGPL-3.0-only` (weak copyleft).
+It is a development-only dependency in practice: it is used by tests and the `[bundled]`
+extra's bundled-PDF tooling, never imported by `src/`.
 
 - **Linking is permitted.** SecondBrain uses fpdf2 as an unmodified library, which the LGPL
   explicitly allows, including in commercial products.
@@ -27,6 +29,27 @@ dependency upgrades — re-check wheel metadata after bumping dependencies.
   LGPL requires publishing those modifications under the LGPL.
 - **Exit ramp.** fpdf2 is only present with the `bundled` extra. If these obligations are
   unacceptable for your packaging, install without that extra.
+
+### MPL-2.0 — file-level copyleft (transitive)
+
+Four installed packages carry `MPL-2.0` (Mozilla Public License 2.0) and one is dual-licensed:
+
+| Package                  | Role                              | License            |
+| ------------------------ | --------------------------------- | ------------------ |
+| `certifi`                | runtime transitive (CA bundle)    | `MPL-2.0`          |
+| `fqdn`                   | runtime transitive (jsonschema)   | `MPL-2.0`          |
+| `hypothesis`             | dev/test (property-based testing) | `MPL-2.0`          |
+| `pytest-rerunfailures`   | dev/test (pytest plugin)          | `MPL-2.0`          |
+| `tqdm`                   | runtime transitive (progress bars)| `MPL-2.0 AND MIT`  |
+
+- **Why this is acceptable.** MPL-2.0 is file-level copyleft: its obligations attach only to
+  files of the MPL-licensed work itself. SecondBrain uses all five as unmodified libraries
+  (linked or executed), which MPL-2.0 explicitly permits without extending the license to
+  larger work — including in commercial products.
+- **Obligations.** None for unmodified use. Only if a SecondBrain fork modifies an
+  MPL-licensed file must that file (not the surrounding work) be made available under MPL-2.0.
+- **tqdm's dual license** offers a permissive choice: the MIT option applies, which carries no
+  copyleft obligations at all.
 
 ## Proprietary accelerator runtime wheels
 

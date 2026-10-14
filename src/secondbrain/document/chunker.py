@@ -187,6 +187,123 @@ def _flush_accumulation(text: str, page: int, label: str | None) -> _Segment:
     return segment
 
 
+def _is_section_numbered(text: str) -> bool:
+    """Return whether the text is a section-number-prefixed heading.
+
+    Args:
+        text: Stripped text to test.
+
+    Returns
+    -------
+        True when the text starts with a dotted section number followed by
+        whitespace (e.g. "11.18 Configuring the Autostart Service").
+    """
+    return bool(re.match(r"\d+\.\d+(\.\d+)?\s", text))
+
+
+def _is_likely_title(text: str) -> bool:
+    """Return whether a stripped fragment looks like a section title.
+
+    Short fragments without sentence punctuation are titles.  Section-number
+    prefixed headings always count as titles: their section number contains a
+    dot, which the punctuation heuristic alone would reject, causing them to
+    merge with body content.
+
+    Args:
+        text: Stripped text to test.
+
+    Returns
+    -------
+        True when the fragment should be treated as a title.
+    """
+    if _is_section_numbered(text):
+        return True
+    return (
+        len(text) < 100
+        and not any(p in text for p in [".", ":", "-", "—"])
+        and not text.endswith(".")
+    )
+
+
+def _merge_segments(segments: Sequence[Segment]) -> list[_Segment]:
+    """Merge raw extraction segments into chunkable segments.
+
+    Design decisions mirror those documented in the original _chunk_segments
+    (document/__init__.py): MIN_SEGMENT_SIZE merges tiny docling extractions
+    before chunking, and title detection lets short punctuation-free
+    fragments join the following content.
+
+    Args:
+        segments: List of extracted text segments.
+
+    Returns
+    -------
+        Merged segment list ready for size-bound chunking.
+    """
+    merged_segments: list[_Segment] = []
+    current_text = ""
+    current_page = 0
+    current_label: str | None = None
+
+    for _i, segment in enumerate(segments):
+        text = segment["text"]
+        page = segment.get("page", 0)
+
+        if not text.strip():
+            continue
+
+        stripped = text.strip()
+
+        label = segment.get("label")
+        if label is not None:
+            labeled_role = label_to_element_type(label)
+            if labeled_role is not None and labeled_role in _STRUCTURAL_ROLES:
+                if current_text:
+                    merged_segments.append(
+                        _flush_accumulation(current_text, current_page, current_label)
+                    )
+                merged_segments.append({"text": stripped, "page": page, "label": label})
+                current_text = ""
+                current_label = None
+                continue
+
+        is_likely_title = _is_likely_title(stripped)
+
+        # Section-number-prefixed titles must START a new chunk rather than
+        # merge into the previous accumulation (the default title behaviour
+        # appends via the "if len(current_text) < MIN" branch below).
+        if is_likely_title and _is_section_numbered(stripped) and current_text:
+            merged_segments.append(
+                _flush_accumulation(current_text, current_page, current_label)
+            )
+            current_text = stripped
+            current_page = page
+            current_label = label
+            continue
+
+        if len(current_text) < DEFAULT_MIN_SEGMENT_SIZE or is_likely_title:
+            if current_text:
+                current_text += " " + stripped
+            else:
+                current_text = stripped
+                current_label = label
+            current_page = page
+        else:
+            merged_segments.append(
+                _flush_accumulation(current_text, current_page, current_label)
+            )
+            current_text = stripped
+            current_page = page
+            current_label = label
+
+    if current_text:
+        merged_segments.append(
+            _flush_accumulation(current_text, current_page, current_label)
+        )
+
+    return merged_segments
+
+
 def chunk_segments(
     segments: Sequence[Segment], chunk_size: int, chunk_overlap: int
 ) -> list[_Chunk]:
@@ -209,84 +326,7 @@ def chunk_segments(
     -------
         List of chunked segments.
     """
-    merged_segments: list[_Segment] = []
-    current_text = ""
-    current_page = 0
-    current_label: str | None = None
-    seg_counter = 0
-
-    for _i, segment in enumerate(segments):
-        text = segment["text"]
-        page = segment.get("page", 0)
-
-        if not text.strip():
-            continue
-
-        stripped = text.strip()
-
-        label = segment.get("label")
-        if label is not None:
-            labeled_role = label_to_element_type(label)
-            if labeled_role is not None and labeled_role in _STRUCTURAL_ROLES:
-                if current_text:
-                    merged_segments.append(
-                        _flush_accumulation(current_text, current_page, current_label)
-                    )
-                    seg_counter += 1
-                merged_segments.append({"text": stripped, "page": page, "label": label})
-                current_text = ""
-                current_label = None
-                continue
-
-        is_likely_title = (
-            len(stripped) < 100
-            and not any(p in stripped for p in [".", ":", "-", "—"])
-            and not stripped.endswith(".")
-        )
-        # Section-number-prefixed headings like "11.18 Configuring the Autostart
-        # Service" contain a dot in the section number and would be rejected by
-        # the "." check above, causing them to merge with body content.
-        if not is_likely_title and re.match(r"\d+\.\d+(\.\d+)?\s", stripped):
-            is_likely_title = True
-
-        # Section-number-prefixed titles must START a new chunk rather than
-        # merge into the previous accumulation (the default title behaviour
-        # appends via the "if is_likely_title" branch below).
-        if (
-            is_likely_title
-            and re.match(r"\d+\.\d+(\.\d+)?\s", stripped)
-            and current_text
-        ):
-            merged_segments.append(
-                _flush_accumulation(current_text, current_page, current_label)
-            )
-            seg_counter += 1
-            current_text = stripped
-            current_page = page
-            current_label = label
-            continue
-
-        if len(current_text) < DEFAULT_MIN_SEGMENT_SIZE or is_likely_title:
-            if current_text:
-                current_text += " " + stripped
-            else:
-                current_text = stripped
-                current_label = label
-            current_page = page
-        else:
-            merged_segments.append(
-                _flush_accumulation(current_text, current_page, current_label)
-            )
-            seg_counter += 1
-            current_text = stripped
-            current_page = page
-            current_label = label
-
-    if current_text:
-        merged_segments.append(
-            _flush_accumulation(current_text, current_page, current_label)
-        )
-        seg_counter += 1
+    merged_segments = _merge_segments(segments)
 
     total_segs = len(merged_segments)
     seg_counter = 0
