@@ -6,27 +6,21 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-# PyPI trove classifier phrases resolved to SPDX license identifiers.
-# cyclonedx-py emits these classifier strings verbatim when a distribution
-# declares only a classifier instead of an SPDX expression. Classifiers name
-# a license family, not an exact text: "BSD License" maps to the dominant
-# 3-clause form on PyPI, and "Other/Proprietary License" maps to a LicenseRef
-# so it stays flagged for manual review. Non-identifying classifiers
-# ("License :: OSI Approved", "License :: DFSG approved") are intentionally
-# absent and remain as-is.
+# PyPI trove classifiers resolved to SPDX identifiers only when they identify
+# an exact license. Family-level classifiers remain NOASSERTION.
 CLASSIFIER_TO_SPDX: dict[str, str] = {
-    "Apache Software License": "Apache-2.0",
-    "BSD License": "BSD-3-Clause",
+    "Apache Software License": "NOASSERTION",
+    "BSD License": "NOASSERTION",
     "ISC License": "ISC",
     "MIT License": "MIT",
     "Mozilla Public License 2.0 (MPL 2.0)": "MPL-2.0",
-    "GNU General Public License v2 (GPLv2)": "GPL-2.0-only",
-    "GNU General Public License v3 (GPLv3)": "GPL-3.0-only",
-    "GNU Lesser General Public License v2 (LGPLv2)": "LGPL-2.1-only",
-    "GNU Lesser General Public License v2.1 (LGPLv2.1)": "LGPL-2.1-only",
-    "GNU Lesser General Public License v3 (LGPLv3)": "LGPL-3.0-only",
+    "GNU General Public License v2 (GPLv2)": "NOASSERTION",
+    "GNU General Public License v3 (GPLv3)": "NOASSERTION",
+    "GNU Lesser General Public License v2 (LGPLv2)": "NOASSERTION",
+    "GNU Lesser General Public License v2.1 (LGPLv2.1)": "NOASSERTION",
+    "GNU Lesser General Public License v3 (LGPLv3)": "NOASSERTION",
     "Python Software Foundation License": "Python-2.0",
-    "Other/Proprietary License": "LicenseRef-Proprietary",
+    "Other/Proprietary License": "NOASSERTION",
 }
 
 
@@ -37,9 +31,8 @@ def _classifier_to_spdx(value: str) -> str:
         value: Raw license value from the CycloneDX SBOM
 
     Returns:
-        SPDX identifier when the value is a classifier string (starting
-        with "License ::") or a bare known classifier phrase, otherwise
-        the value unchanged
+        SPDX identifier when the value is a recognized exact classifier,
+        NOASSERTION for ambiguous classifiers, otherwise the value unchanged
     """
     stripped = value.strip()
     if stripped.startswith("License ::"):
@@ -48,6 +41,8 @@ def _classifier_to_spdx(value: str) -> str:
         phrase = stripped.rsplit("::", 1)[-1].strip()
     else:
         phrase = stripped
+    if stripped.startswith("License ::"):
+        return CLASSIFIER_TO_SPDX.get(phrase, "NOASSERTION")
     return CLASSIFIER_TO_SPDX.get(phrase, value)
 
 
