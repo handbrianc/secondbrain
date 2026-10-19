@@ -132,7 +132,7 @@ bundled = [
     # Transitive/util deps (with CVE fixes)
     "msgpack>=1.2.3",  # GHSA-6v7p-g79w-8964 (was 1.1.2)
     "starlette>=1.8.0",  # PYSEC-2026-248, PYSEC-2026-249 (was 1.2.1)
-    "pymdown-extensions>=12.2",  # CVE-2026-61632 (was 10.21.3)
+    "pymdown-extensions>=12.3",  # CVE-2026-61632 (was 10.21.3)
     "urllib3>=2.8.0",  # PYSEC-2026-4175/4176/4177 (was 2.6.0)
     "cryptography>=50.0.2",
     "pillow>=12.3.0",
