@@ -1,7 +1,7 @@
 # Runtime dependencies (pinned for reproducibility)
 # Generated from pyproject.toml dependencies section
 click>=8.5.0
-docling>=2.137.0
+docling>=2.140.0
 docling-core>=2.101.1
 httpx>=0.28.1
 pydantic>=2.14.0
