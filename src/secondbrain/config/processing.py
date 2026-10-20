@@ -73,8 +73,20 @@ class ProcessingStorageMixin:
 
     embedding_dtype: str = Field(
         default="float32",
-        description="Embedding data type: 'float32' (50% smaller) or 'float64'",
+        description="Embedding data type: 'float32' (only supported value for now)",
     )
+
+    @field_validator("embedding_dtype")
+    @classmethod
+    def validate_embedding_dtype(cls, v: str) -> str:
+        """Validate the embedding dtype; only 'float32' is supported for now."""
+        v = v.lower()
+        if v != "float32":
+            raise ValueError(
+                "embedding_dtype must be 'float32' (only supported value for now)"
+            )
+        return v
+
     embedding_storage_format: str = Field(
         default="array",
         description=(
@@ -133,6 +145,26 @@ class ProcessingStorageMixin:
         default="auto",
         description="Docling accelerator device: 'auto' | 'cpu' | 'mps' | 'cuda'.",
     )
+    accelerator_min_free_ram_mib: int = Field(
+        default=2048,
+        ge=0,
+        description=(
+            "Warn at converter preflight when the accelerator shares system RAM "
+            "and free memory is below this many MiB (0 disables the warning)."
+        ),
+    )
+    pdf_backend: str = Field(
+        default="pypdfium",
+        description="Docling PDF parsing backend: 'pypdfium' | 'docling-parse'.",
+    )
+    pdf_max_pages_per_convert: int = Field(
+        default=200,
+        ge=0,
+        description=(
+            "Convert PDFs larger than this many pages in sequential page-range "
+            "windows (0 = whole-document conversion)."
+        ),
+    )
     pdf_num_threads: int = Field(
         default=4,
         description="Threads for docling inference.",
@@ -149,6 +181,14 @@ class ProcessingStorageMixin:
         description=(
             "Use docling's threaded/batched PDF pipeline (ThreadedPdfPipelineOptions) "
             "instead of the default."
+        ),
+    )
+    pdf_pipeline_queue_max_size: int = Field(
+        default=16,
+        ge=1,
+        description=(
+            "Max pages buffered between docling pipeline stages (bounds in-flight "
+            "conversion memory)."
         ),
     )
     pdf_layout_batch_size: int = Field(
@@ -194,6 +234,14 @@ class ProcessingStorageMixin:
                 "pdf_accelerator_device must be one of "
                 "{'auto', 'cpu', 'mps', 'cuda', 'xpu'}"
             )
+        return v.lower()
+
+    @field_validator("pdf_backend")
+    @classmethod
+    def validate_pdf_backend(cls, v: str) -> str:
+        """Validate the PDF parsing backend is one of the supported values."""
+        if v.lower() not in {"pypdfium", "docling-parse"}:
+            raise ValueError("pdf_backend must be one of {'pypdfium', 'docling-parse'}")
         return v.lower()
 
     @field_validator("pdf_num_threads")

@@ -1,0 +1,3 @@
+Placeholder file: exists in the workspace so a call can reach the stub, but
+the stub treats this sentinel path as a CLI failure (non-zero exit with
+diagnostics), for the "CLI failure maps to a tool error" test.

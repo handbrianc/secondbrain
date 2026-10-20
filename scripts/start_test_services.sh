@@ -1,5 +1,5 @@
 #!/bin/bash
-# Start test services (Qdrant)
+# Start test services (Qdrant + test MCP server)
 # Usage: ./scripts/start_test_services.sh
 
 set -e
@@ -9,6 +9,8 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 COMPOSE_FILE="$PROJECT_ROOT/docker-compose.test.yml"
 # Test Qdrant publishes on port 6334 (host) -> 6333 (container)
 QDRANT_HEALTH_URL="${QDRANT_HEALTH_URL:-http://localhost:6334/healthz}"
+# Test MCP server publishes on port 8081 (host) -> 8080 (container)
+MCP_HEALTH_URL="${MCP_HEALTH_URL:-http://localhost:8081/healthz}"
 
 echo "=========================================="
 echo "Starting Test Services"
@@ -52,6 +54,11 @@ check_qdrant() {
     curl -s -o /dev/null --fail --max-time 2 "$QDRANT_HEALTH_URL"
 }
 
+# Function to check the test MCP server's health endpoint
+check_mcp_server() {
+    curl -s -o /dev/null --fail --max-time 2 "$MCP_HEALTH_URL"
+}
+
 # Wait for Qdrant
 echo "Checking Qdrant (http://localhost:6334)..."
 while [ $ELAPSED -lt $MAX_WAIT ]; do
@@ -74,6 +81,30 @@ if [ $ELAPSED -ge $MAX_WAIT ]; then
     exit 1
 fi
 
+# Wait for the test MCP server (compose already gates it on Qdrant health)
+echo ""
+echo "Checking MCP server (http://localhost:8081)..."
+ELAPSED=0
+while [ $ELAPSED -lt $MAX_WAIT ]; do
+    if check_mcp_server; then
+        echo "✓ MCP server is healthy"
+        break
+    fi
+    echo -n "."
+    sleep $WAIT_INTERVAL
+    ELAPSED=$((ELAPSED + WAIT_INTERVAL))
+done
+
+if [ $ELAPSED -ge $MAX_WAIT ]; then
+    echo ""
+    echo "ERROR: MCP server failed to become healthy within ${MAX_WAIT}s"
+    echo ""
+    echo "Service logs:"
+    docker logs secondbrain-mcp-server-test --tail 20
+    ./scripts/stop_test_services.sh
+    exit 1
+fi
+
 echo ""
 echo "=========================================="
 echo "All Services Started Successfully"
@@ -81,6 +112,7 @@ echo "=========================================="
 echo ""
 echo "Connection Info:"
 echo "  Qdrant:      http://localhost:6334"
+echo "  MCP server:  http://localhost:8081 (healthz) / http://localhost:8081/mcp"
 echo ""
 echo "Run integration tests with:"
 echo "  SECONDBRAIN_QDRANT_URL=http://localhost:6334 pytest tests/integration/ -v"

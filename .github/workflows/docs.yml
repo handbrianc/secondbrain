@@ -1,0 +1,43 @@
+name: Docs
+
+# The docs gate (add-mcp-docs-site-integration): `mkdocs build --strict`
+# must pass — with the MCP pages included and no broken links — on every
+# change that can affect the built site. mkdocstrings documents the Python
+# package from source, so `src/secondbrain/**` changes count too.
+
+on:
+  push:
+    branches: [main, master, develop]
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+      - "src/secondbrain/**"
+      - "pyproject.toml"
+      - ".github/workflows/docs.yml"
+  pull_request:
+    branches: [main, master, develop]
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+      - "src/secondbrain/**"
+      - "pyproject.toml"
+      - ".github/workflows/docs.yml"
+
+jobs:
+  docs-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - name: Install the package and the docs toolchain
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[docs]"
+
+      - name: Build the docs strictly
+        run: mkdocs build --strict

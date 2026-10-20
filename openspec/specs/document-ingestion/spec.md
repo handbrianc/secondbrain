@@ -1,0 +1,117 @@
+# Document Ingestion
+
+## Purpose
+
+Ingest documents from the local filesystem: Docling-based parsing and chunking, embedding
+generation, and storage in the vector database, with batch/recursive processing, progress reporting,
+and file-type detection.
+
+> **Provenance (2026-10-15):** Promoted from the archived change delta
+> `openspec/changes/archive/2026-03-06-secondbrain/specs/document-ingestion/spec.md` — the delta marker
+> `## ADDED Requirements` became `## Requirements`; content is otherwise
+> unchanged.
+
+
+> **Note (2026-10-11):** Staleness pass — this archived spec records the MongoDB-era design; the shipped
+> backend is Qdrant vector storage with SQLite conversation storage. The requirement text below is preserved
+> as history; shipped behavior differs as follows:
+>
+> - **Storage:** MongoDB → Qdrant (`SECONDBRAIN_QDRANT_URL`; backend override `SECONDBRAIN_STORAGE_BACKEND`);
+>   conversations → SQLite (`SECONDBRAIN_SQLITE_PATH`). All `SECONDBRAIN_MONGO_*` variables are gone.
+> - **Defaults drift:** chunk size 512 → 4096 chars (overlap stays 50); embeddings embeddinggemma:latest/384-dim
+>   → `text-embedding-3-small`/1536-dim; LLM Ollama/`llama3.2`/0.7/4096 → OpenAI-compatible/`gpt-4o-mini`/0.3;
+>   search default top-k 5 → 50 with a minimum-similarity threshold filter applied by default.
+> - **Renames:** `list` → `ls`; `--workers` → `--cores`; `--force` → `--yes`; `SECONDBRAIN_MONGO_*` →
+>   `SECONDBRAIN_QDRANT_URL`/`SECONDBRAIN_STORAGE_BACKEND`; `SECONDBRAIN_MODEL` → `SECONDBRAIN_EMBEDDING_MODEL`;
+>   `SECONDBRAIN_SENTENCE_TRANSFORMERS_URL` → `SECONDBRAIN_EMBEDDING_API_BASE`;
+>   `SECONDBRAIN_CONVERSATION_DB` → `SECONDBRAIN_SQLITE_PATH`.
+> - **Behavior inversions:** re-ingest skip is now the default (the flag inverted to `--no-skip-existing`);
+>   duplicates are deduplicated by SHA256 `text_hash` by default (no `--replace` opt-in); an embedding cache is
+>   implemented (was "no cache for now").
+> - **Display drift:** result text preview truncation 200 → 100 chars; search result rendering lives in
+>   `src/secondbrain/cli/display.py`.
+>
+> Most relevant here: the storage target (Qdrant), the chunk-size default, `--workers` → `--cores`, and the
+> skip-existing inversion.
+
+## Requirements
+
+### Requirement: Document Ingestion
+
+The system SHALL allow users to ingest documents from local filesystem paths and generate embeddings stored in MongoDB.
+
+#### Scenario: Ingest single document
+
+- **WHEN** user runs `secondbrain ingest document.pdf`
+- **THEN** the system parses the document using Docling
+- **AND** extracts text content in chunks
+- **AND** generates embeddings using OpenAI-compatible API
+- **AND** stores vectors in MongoDB with metadata
+
+#### Scenario: Ingest multiple documents recursively
+
+- **WHEN** user runs `secondbrain ingest /path/to/docs/ --recursive`
+- **THEN** the system discovers all supported files in the directory tree
+- **AND** processes each document sequentially
+- **AND** reports progress for each file
+- **AND** handles errors gracefully per file without stopping batch
+
+#### Scenario: Ingest with custom chunk size
+
+- **WHEN** user runs `secondbrain ingest document.pdf --chunk-size 1024`
+- **THEN** the system chunks text into 1024-character segments
+- **AND** uses 50-character overlap by default (configurable)
+
+#### Scenario: Skip already ingested files
+
+- **WHEN** user runs `secondbrain ingest /path/ --skip-existing`
+- **THEN** the system checks if file hash exists in database
+- **AND** skips files that have already been ingested
+- **AND** reports skipped file count
+
+#### Scenario: Supported document types
+
+- **WHEN** user provides a document file
+- **THEN** the system accepts: PDF, DOCX, PPTX, XLSX, HTML, Markdown, AsciiDoc, LaTeX, CSV, Images (PNG, JPEG, TIFF,
+  BMP, WEBP), Audio (WAV, MP3), WebVTT, XML, Docling JSON
+- **AND** rejects unsupported formats with clear error message
+
+#### Scenario: Document parsing failure
+
+- **WHEN** user attempts to ingest a corrupted or unreadable file
+- **THEN** the system logs the error
+- **AND** reports failure to user
+- **AND** continues with next file if batch
+
+### Requirement: Batch Processing
+
+The system SHALL process multiple documents in batch mode with progress reporting.
+
+#### Scenario: Progress reporting during batch
+
+- **WHEN** user runs `secondbrain ingest /path/` with 10 files
+- **THEN** the system shows progress bar or file count
+- **AND** reports completion percentage
+- **AND** shows time estimate for remaining files
+
+#### Scenario: Concurrent processing
+
+- **WHEN** user runs `secondbrain ingest /path/ --workers 4`
+- **THEN** the system processes up to 4 documents in parallel
+- **AND** respects memory constraints
+
+### Requirement: File Type Detection
+
+The system SHALL automatically detect document file types by extension and MIME type.
+
+#### Scenario: Automatic format detection
+
+- **WHEN** user provides file with .pdf extension
+- **THEN** system treats it as PDF document
+- **AND** uses appropriate Docling converter
+
+#### Scenario: Unknown file type
+
+- **WHEN** user provides file with unknown extension
+- **THEN** system rejects with helpful error message
+- **AND** lists supported file extensions

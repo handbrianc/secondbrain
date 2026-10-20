@@ -104,12 +104,12 @@ class TestCrossFieldValidation:
 
         assert config.streaming_chunk_batch_size == batch_size
 
-    @pytest.mark.parametrize("dtype", ["float16", "int8", "double"])
+    @pytest.mark.parametrize("dtype", ["float16", "int8", "double", "float64"])
     def test_embedding_dtype_invalid_rejected(self, dtype):
         with pytest.raises(ValueError, match="embedding_dtype must be"):
             make_config(embedding_dtype=dtype)
 
-    @pytest.mark.parametrize("dtype", ["float32", "float64"])
+    @pytest.mark.parametrize("dtype", ["float32"])
     def test_embedding_dtype_valid_accepted(self, dtype):
         config = make_config(embedding_dtype=dtype)
 
@@ -346,6 +346,63 @@ class TestProcessingValidators:
 
         assert config.pdf_accelerator_device == "xpu"
 
+    @pytest.mark.parametrize("backend", ["pdfium", "docling", ""])
+    def test_pdf_backend_invalid_rejected(self, backend):
+        with pytest.raises(
+            ValueError,
+            match=r"pdf_backend must be one of \{'pypdfium', 'docling-parse'\}",
+        ):
+            make_config(pdf_backend=backend)
+
+    @pytest.mark.parametrize(
+        "backend", ["pypdfium", "docling-parse", "PYPDFIUM", "Docling-Parse"]
+    )
+    def test_pdf_backend_valid_accepted_and_normalized(self, backend):
+        config = make_config(pdf_backend=backend)
+
+        assert config.pdf_backend == backend.lower()
+
+    @pytest.mark.parametrize("pages", [-1, -200])
+    def test_pdf_max_pages_per_convert_negative_rejected(self, pages):
+        with pytest.raises(ValidationError, match="greater than or equal to 0"):
+            make_config(pdf_max_pages_per_convert=pages)
+
+    @pytest.mark.parametrize("pages", [0, 1, 200, 1200])
+    def test_pdf_max_pages_per_convert_boundaries_accepted(self, pages):
+        config = make_config(pdf_max_pages_per_convert=pages)
+
+        assert config.pdf_max_pages_per_convert == pages
+
+    @pytest.mark.parametrize("size", [0, -3])
+    def test_pdf_pipeline_queue_max_size_must_be_at_least_one(self, size):
+        with pytest.raises(ValidationError, match="greater than or equal to 1"):
+            make_config(pdf_pipeline_queue_max_size=size)
+
+    def test_pdf_pipeline_queue_max_size_one_accepted(self):
+        config = make_config(pdf_pipeline_queue_max_size=1)
+
+        assert config.pdf_pipeline_queue_max_size == 1
+
+    @pytest.mark.parametrize("mib", [-1, -2048])
+    def test_accelerator_min_free_ram_mib_negative_rejected(self, mib):
+        with pytest.raises(ValidationError, match="greater than or equal to 0"):
+            make_config(accelerator_min_free_ram_mib=mib)
+
+    @pytest.mark.parametrize("mib", [0, 2048])
+    def test_accelerator_min_free_ram_mib_boundaries_accepted(self, mib):
+        config = make_config(accelerator_min_free_ram_mib=mib)
+
+        assert config.accelerator_min_free_ram_mib == mib
+
+    def test_pdf_ingest_memory_bounds_defaults(self):
+        """New bounded-memory defaults: pypdfium / 200-page window / 16 / 2048."""
+        config = make_config()
+
+        assert config.pdf_backend == "pypdfium"
+        assert config.pdf_max_pages_per_convert == 200
+        assert config.pdf_pipeline_queue_max_size == 16
+        assert config.accelerator_min_free_ram_mib == 2048
+
     @pytest.mark.parametrize("processes", [-1, -100])
     def test_max_ingest_processes_negative_rejected(self, processes):
         with pytest.raises(ValueError, match="max_ingest_processes must be >= 0"):
@@ -503,3 +560,64 @@ class TestRagValidators:
         )
 
         assert config.rag_scoped_min_similarity_threshold == 0.0
+
+
+class TestPdfMemoryBoundsEnvironmentLoading:
+    """SECONDBRAIN_* env forms of the bounded-memory PDF settings.
+
+    Constructor kwargs are covered above; these tests prove the 12-factor
+    env-var path loads (and validates) the same fields, matching how the
+    reference deployment toggles them (e.g. ``SECONDBRAIN_PDF_MAX_PAGES_PER_CONVERT=0``
+    to restore whole-document conversion).
+    """
+
+    def test_pdf_backend_env_loads_docling_parse(self, monkeypatch):
+        monkeypatch.setenv("SECONDBRAIN_PDF_BACKEND", "docling-parse")
+
+        config = make_config()
+
+        assert config.pdf_backend == "docling-parse"
+
+    def test_pdf_backend_env_invalid_rejected(self, monkeypatch):
+        monkeypatch.setenv("SECONDBRAIN_PDF_BACKEND", "foo")
+
+        with pytest.raises(
+            ValidationError,
+            match=r"pdf_backend must be one of \{'pypdfium', 'docling-parse'\}",
+        ):
+            make_config()
+
+    def test_pdf_max_pages_per_convert_env_zero_disables_windowing(self, monkeypatch):
+        """SECONDBRAIN_PDF_MAX_PAGES_PER_CONVERT=0 is a valid (disabling) value."""
+        monkeypatch.setenv("SECONDBRAIN_PDF_MAX_PAGES_PER_CONVERT", "0")
+
+        config = make_config()
+
+        assert config.pdf_max_pages_per_convert == 0
+
+    def test_pdf_max_pages_per_convert_env_positive_loads(self, monkeypatch):
+        monkeypatch.setenv("SECONDBRAIN_PDF_MAX_PAGES_PER_CONVERT", "50")
+
+        config = make_config()
+
+        assert config.pdf_max_pages_per_convert == 50
+
+    def test_pdf_max_pages_per_convert_env_negative_rejected(self, monkeypatch):
+        monkeypatch.setenv("SECONDBRAIN_PDF_MAX_PAGES_PER_CONVERT", "-1")
+
+        with pytest.raises(ValidationError, match="greater than or equal to 0"):
+            make_config()
+
+    def test_pdf_pipeline_queue_max_size_env_loads(self, monkeypatch):
+        monkeypatch.setenv("SECONDBRAIN_PDF_PIPELINE_QUEUE_MAX_SIZE", "8")
+
+        config = make_config()
+
+        assert config.pdf_pipeline_queue_max_size == 8
+
+    def test_accelerator_min_free_ram_mib_env_loads(self, monkeypatch):
+        monkeypatch.setenv("SECONDBRAIN_ACCELERATOR_MIN_FREE_RAM_MIB", "1024")
+
+        config = make_config()
+
+        assert config.accelerator_min_free_ram_mib == 1024

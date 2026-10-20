@@ -1,0 +1,2 @@
+A nested document inside the fixture workspace's docs directory, for
+recursive-directory ingest tests.

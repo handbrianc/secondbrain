@@ -230,7 +230,6 @@ class ScopedRetriever:
         *,
         top_k: int = 5,
         scope: str | None = None,
-        recency_boost_hours: int = 168,
         **kwargs: Any,
     ) -> list[dict[str, Any]]:
         """Search with optional section bounding.
@@ -243,8 +242,6 @@ class ScopedRetriever:
             Maximum number of results to return after scoping.
         scope :
             Optional section constraint - see :func:`_build_section_filter`.
-        recency_boost_hours :
-            Reserved for future use; currently ignored.
         **kwargs :
             Additional forward kwargs passed to the inner searcher.
 
@@ -269,7 +266,6 @@ class ScopedRetriever:
         *,
         top_k: int = 5,
         scope: str | None = None,
-        recency_boost_hours: int = 168,
         **kwargs: Any,
     ) -> list[dict[str, Any]]:
         """Async search with optional section bounding.
