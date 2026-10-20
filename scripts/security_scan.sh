@@ -27,11 +27,17 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# PYSEC-2026-3740 (CVE-2026-81726): nltk is a dev-only transitive dep of
-# safety; no fixed release exists (OSV re-opened 2026-10-14, fixed=None
-# against nltk 3.10.3). Mirrors the documented ignore in pyproject.toml
+# PYSEC-2026-3740 (CVE-2026-81726; grype/GHSA id GHSA-8mgp-746c-j5xp): nltk is
+# a dev-only transitive dep of safety; no fixed release exists (OSV re-opened
+# 2026-10-14, fixed=None against nltk 3.10.3 — the latest release). Mirrors
+# the documented ignore in pyproject.toml [tool.safety].
+#
+# CVE-2025-69872 (GHSA-w8v5-vhqr-4h9v): diskcache unsafe pickle
+# deserialization; no fixed release exists (5.6.3 is the latest release).
+# Transitive of the optional llama-cpp-python extras, not imported by
+# secondbrain code. Mirrors the documented ignore in pyproject.toml
 # [tool.safety].
-PIP_AUDIT_IGNORE_ARGS=(--ignore-vuln PYSEC-2026-3740)
+PIP_AUDIT_IGNORE_ARGS=(--ignore-vuln PYSEC-2026-3740 --ignore-vuln CVE-2025-69872)
 
 # Check if virtual environment is activated
 if [ -z "$VIRTUAL_ENV" ]; then
