@@ -114,6 +114,82 @@ ls -la /path/to/file
 chmod 644 /path/to/file
 ```
 
+### PDF Ingestion Uses Too Much Memory
+
+**Symptom**: Ingesting a large PDF (hundreds of pages or more) balloons RAM,
+swap starts thrashing, or the ingest process is OOM-killed on small hosts.
+
+**Possible Causes**:
+
+1. PDF backend: docling's default threaded docling-parse backend retains
+   parsed pages natively — tens of MB per page on text-dense,
+   word-fragmented PDFs (upstream docling issues #4705, #2209, #2779).
+2. Whole-document conversion: the PDF converts as one unit with no page
+   windowing, so peak memory grows with page count.
+3. Worker retention: the ingest worker holds the conversion result and
+   accumulates all chunks and embeddings before the parent stores anything.
+4. Accelerator: `pdf_accelerator_device=auto` resolves to XPU on Intel GPUs
+   whose memory is shared system RAM (~1.3 GB measured overhead), with an
+   unbounded in-RAM SYCL JIT cache.
+
+**Solutions**:
+
+The defaults below already bound memory; change them only if a large PDF
+still exceeds your host's budget.
+
+1. Use the pypdfium PDF backend. This is the default; set `docling-parse`
+   only to restore the legacy backend's behavior:
+
+```bash
+export SECONDBRAIN_PDF_BACKEND=pypdfium  # or docling-parse for legacy behavior
+```
+
+2. Convert oversized PDFs in page windows instead of as one unit. Default
+   200 pages per conversion; `0` disables windowing; lower for tighter
+   memory:
+
+```bash
+export SECONDBRAIN_PDF_MAX_PAGES_PER_CONVERT=200
+```
+
+3. Cap the pages docling buffers between conversion stages. Default 16:
+
+```bash
+export SECONDBRAIN_PDF_PIPELINE_QUEUE_MAX_SIZE=16
+```
+
+4. Pin the accelerator to CPU on small hosts to remove the XPU
+   shared-memory overhead. Keep `auto` (the default) when the host has
+   headroom — the GPU speeds up the layout model:
+
+```bash
+export SECONDBRAIN_PDF_ACCELERATOR_DEVICE=cpu
+```
+
+5. Tune the low-memory warning threshold (default 2048 MiB). Warning only —
+   it never fails ingestion:
+
+```bash
+export SECONDBRAIN_ACCELERATOR_MIN_FREE_RAM_MIB=2048
+```
+
+**Measured reference numbers** (6 GB RAM host with an Intel Arc iGPU,
+docling 2.138.0, 1200-page / 9.6 MB text-layer PDF):
+
+| Conversion path | Peak RSS | Outcome |
+| --- | --- | --- |
+| docling-parse backend (`SECONDBRAIN_PDF_BACKEND=docling-parse`), `SECONDBRAIN_PDF_ACCELERATOR_DEVICE=auto` (XPU) | >3.7 GB within ~10–30 s, before finishing its first 4-page batch | grows unbounded; swap thrash / OOM on a 6 GB host |
+| docling-parse backend, `SECONDBRAIN_PDF_ACCELERATOR_DEVICE=cpu` | >3.6 GB at ~4–6 s | same explosion — the backend, not the device, dominates |
+| pypdfium backend, `cpu`, 50-page window | 2296 MiB | completed |
+| pypdfium backend, `auto` (XPU), 50-page window | >3.6 GB at ~4 s | killed — XPU adds ≥1.3 GB (iGPU shares system RAM 1:1) |
+| pypdfium backend, `cpu`, whole 1200-page document (`SECONDBRAIN_PDF_MAX_PAGES_PER_CONVERT=0`) | 2749 MiB peak, 2.2–2.7 GB plateau | completed in 968 s — bounded |
+
+Book-like PDFs can skip docling entirely:
+`SECONDBRAIN_PDF_STRUCTURE_PROBE_ENABLED=false` keeps every text-layer PDF
+on the fast native text-extraction path (~1 s and ~300 MB for the reference
+PDF), at the cost of structure-aware parsing. This trade-off knob already
+exists and applies independently of the settings above.
+
 ## Search Issues
 
 ### No Results Returned
