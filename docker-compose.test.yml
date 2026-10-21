@@ -46,17 +46,19 @@ services:
       SECONDBRAIN_QDRANT_URL: "http://qdrant:6333"
       SECONDBRAIN_QDRANT_COLLECTION: "embeddings_test"
       SECONDBRAIN_SQLITE_PATH: "/data/secondbrain/secondbrain-test.db"
-      # --- Embedding settings mirrored from .env.test ------------------------
-      # 384 dimensions match the mock embedding vectors used by the Python
-      # test suite. NOTE: the mock embedding provider itself is injected by
-      # pytest fixtures and cannot be selected via environment — for real
-      # ingest/search through the server, uncomment and point these at an
-      # OpenAI-compatible endpoint:
-      SECONDBRAIN_EMBEDDING_DIMENSIONS: "384"
-      # SECONDBRAIN_EMBEDDING_PROVIDER: "openai"
-      # SECONDBRAIN_EMBEDDING_MODEL: "mock-embedding"
-      # SECONDBRAIN_EMBEDDING_API_BASE: "http://host.docker.internal:11434/v1"
-      # SECONDBRAIN_EMBEDDING_API_KEY: ""
+      # --- Embedding: real endpoint for the MCP smoke (add-mcp-e2e-smoke) ------
+      # The pytest mock embedding provider is injected by fixtures and cannot
+      # be selected via environment, so the smoke needs a real OpenAI-compatible
+      # endpoint here. Fill these from your deployment's working values, kept in
+      # an uncommitted local copy (redacted from the repository; the same
+      # entries live in .env.docker). DIMENSIONS must match the endpoint's
+      # model; the pytest suite keeps its own 384-dim mock via .env.test
+      # fixtures.
+      SECONDBRAIN_EMBEDDING_PROVIDER: "openai"
+      SECONDBRAIN_EMBEDDING_API_BASE: "http://litellm.internal.example.com:4000"
+      SECONDBRAIN_EMBEDDING_API_KEY: ""
+      SECONDBRAIN_EMBEDDING_MODEL: "embeddinggemma-300m.f16"
+      SECONDBRAIN_EMBEDDING_DIMENSIONS: "768"
       # --- Test toggles mirrored from .env.test -------------------------------
       SECONDBRAIN_LOG_LEVEL: "DEBUG"
       OTEL_TRACING_ENABLED: "false"

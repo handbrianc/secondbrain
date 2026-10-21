@@ -27,13 +27,20 @@ and which also ships the `secondbrain` CLI tooling that the server drives (both 
 
 ### Requirement: Container runtime hygiene
 
-The image SHALL run as a non-root user, expose the server port, declare a HEALTHCHECK against `/healthz`, and use
-`/data/workspace` as the working directory.
+The image SHALL run commands as the non-root `app` user via the entrypoint's
+privilege handover — the image's configured user stays root so the entrypoint
+can prepare the writable staging directory and then `gosu` down to `app`
+(revise-compose-writable-uploads) — SHALL expose the server port, declare a
+HEALTHCHECK against `/healthz`, and use `/data/workspace` as the working
+directory.
 
 #### Scenario: Non-root execution
 
-- **WHEN** a command is executed in the container
-- **THEN** it runs as the non-root `app` user
+- **WHEN** a command is executed in the container through the image's default
+  entrypoint
+- **THEN** it runs as the non-root `app` user (the entrypoint hands privileges
+  down after preparing the staging directory; the image's configured user
+  stays root by design)
 
 #### Scenario: Healthcheck wired
 

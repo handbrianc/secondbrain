@@ -8,6 +8,7 @@
 #   including failure.
 #
 # Usage: ./scripts/mcp_e2e_smoke.sh --stack <test|prod>
+#         [SMOKE_PROJECT_ROOT=/path/to/other/checkout]
 #
 # Service assumptions (documented, not configured by this script):
 #   - Ingest and search drive the REAL secondbrain CLI, which embeds through
@@ -25,6 +26,10 @@
 #   - Scheme follows the stack's configuration: https when the container env
 #     has SECONDBRAIN_MCP_HTTP_TLS_ENABLED=true (self-signed certs are
 #     accepted with curl -k), plaintext http otherwise.
+#   - Host allowlist: when the stack env sets SECONDBRAIN_MCP_HTTP_ALLOWED_HOSTS,
+#     the MCP endpoint rejects requests whose Host header is not allowlisted
+#     (a plain 127.0.0.1 request gets 403); the MCP calls then carry the first
+#     allowlisted host as the Host header while the TCP target stays local.
 #   - Teardown runs `docker compose down` on exit (failure included) but
 #     KEEPS the named volumes, so smoke runs are idempotent (ingest skips
 #     already-ingested chunks) and the shared test data survives.
@@ -33,6 +38,11 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+# Optional cross-checkout override: drive ANOTHER checkout's stack (e.g. the
+# deployed production checkout) with this script's logic. The compose files,
+# env, and project identity come from SMOKE_PROJECT_ROOT; the driver code
+# (health wait, gates, JSON-RPC calls) comes from this script.
+PROJECT_ROOT="${SMOKE_PROJECT_ROOT:-$PROJECT_ROOT}"
 
 STACK=""
 SMOKE_TIMEOUT_SECONDS=120   # wait-for-health budget after compose up returns
@@ -151,11 +161,24 @@ if [ -z "$embed_key" ] && [ -z "$embed_base" ]; then
     warn "$COMPOSE_FILE to run the full cycle."
 fi
 
+# --- Host allowlist: follow the stack's allowed-hosts configuration ------------
+# SECONDBRAIN_MCP_HTTP_ALLOWED_HOSTS gates the MCP endpoint (not /healthz): a
+# 127.0.0.1 request against a stack that sets it is rejected with 403. When
+# set, send the first allowlisted host as the Host header; the TCP target
+# stays 127.0.0.1:PORT.
+allowed_hosts_value="$(env_value SECONDBRAIN_MCP_HTTP_ALLOWED_HOSTS)"
+HOST_CURL_FLAG=()
+if [ -n "$allowed_hosts_value" ]; then
+    first_allowed="${allowed_hosts_value%%,*}"
+    log "Stack allowlists MCP hosts ('${allowed_hosts_value}'); sending Host: ${first_allowed}"
+    HOST_CURL_FLAG=(-H "Host: ${first_allowed}")
+fi
+
 # --- MCP JSON-RPC driver (curl; stateless mode, no initialize needed) ----------
 mcp_post() { # <id> <method> <params-json>
     local body
     body="$(printf '{"jsonrpc":"2.0","id":%s,"method":"%s","params":%s}' "$1" "$2" "$3")"
-    curl -fsS $TLS_CURL_FLAG --max-time "$MCP_CALL_TIMEOUT" \
+    curl -fsS $TLS_CURL_FLAG "${HOST_CURL_FLAG[@]}" --max-time "$MCP_CALL_TIMEOUT" \
         -H 'Content-Type: application/json' \
         -H 'Accept: application/json, text/event-stream' \
         -d "$body" "${BASE_URL}/mcp"
@@ -194,9 +217,13 @@ if [ "$LLM_USABLE" = true ]; then
     log "LLM is configured; running the chat_send step..."
     CHAT_RESPONSE="$(mcp_post 4 "tools/call" '{"name":"chat_send","arguments":{"query":"What does the sample document say about semantic search?"}}')" \
         || fail "chat_send request failed"
-    assert_contains "chat_send returned a session id" "$CHAT_RESPONSE" '"session_id"'
+    # Tool results are wrapped as a JSON string inside content[].text, so the
+    # payload's quotes arrive escaped (\"session_id\"); normalize before the
+    # assertions so both raw and wrapped forms match.
+    CHAT_TEXT="$(printf '%s' "$CHAT_RESPONSE" | sed 's/\\"/"/g')"
+    assert_contains "chat_send returned a session id" "$CHAT_TEXT" '"session_id"'
     # A non-empty answer: at least one character inside the JSON string value.
-    if ! printf '%s' "$CHAT_RESPONSE" | grep -qE '"answer":"[^"]+"'; then
+    if ! printf '%s' "$CHAT_TEXT" | grep -qE '"answer":"[^"]+"'; then
         echo "[mcp-e2e-smoke] ERROR: chat_send answer is empty" >&2
         echo "[mcp-e2e-smoke] Response was: $CHAT_RESPONSE" >&2
         exit 1

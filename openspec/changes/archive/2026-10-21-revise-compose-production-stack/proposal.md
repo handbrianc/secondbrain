@@ -19,7 +19,12 @@ dependency wiring.
   `SECONDBRAIN_ANTHROPIC_API_KEY`, `SECONDBRAIN_LLM_MODEL`, ...), SQLite path, and the server's `SECONDBRAIN_MCP_*`
   settings (bind, TLS, auth, CLI binary, workspace root, subprocess timeout, log level) — so the stack can target
   external infrastructure with no image rebuild.
-- **`.env.docker` revised** with every variable present, documented inline, and safe commented placeholders.
+- **`.env.docker` revised** with every variable present and documented inline.
+  (2026-10-21 amendment: values were initially committed as this deployment's
+  documented working entries; redacted to safe placeholders the same day
+  after the push exposed them — fill the real endpoint/key from your
+  uncommitted local copy. The missing `SECONDBRAIN_ANTHROPIC_API_KEY` slot
+  is present as a commented line.)
 
 ## Capabilities
 

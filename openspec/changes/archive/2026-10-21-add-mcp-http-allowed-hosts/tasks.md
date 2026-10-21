@@ -16,6 +16,12 @@
 - [x] 3.1 `mcp-server/README.md`: `SECONDBRAIN_MCP_HTTP_ALLOWED_HOSTS` row in the `SECONDBRAIN_MCP_*` reference table (DNS-rebinding purpose, replace-not-merge, port semantics) + one sentence after the table
 - [x] 3.2 `docs/developer-guide/mcp.md`: troubleshooting row mapping `403 Forbidden: Host header is not allowed` on `/mcp` to this variable or localhost; server-settings sentence names the host allow-list
 - [x] 3.3 `.env.docker`: commented `SECONDBRAIN_MCP_HTTP_ALLOWED_HOSTS` entry with a style-matching note
+  *Amended 2026-10-21 (deployment decision): the entry ships ACTIVE for this
+  deployment's LAN hostname (redacted from the repository — placeholder
+  `mcp.internal.example.com` in the committed file, real hostname in the
+  uncommitted local copy) so remote MCP clients can call /mcp; the
+  explanatory note above it remains commented as written. The variable's
+  semantics are unchanged.*
 
 ## 4. Verification
 
