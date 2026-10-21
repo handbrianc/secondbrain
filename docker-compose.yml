@@ -3,6 +3,7 @@ services:
     image: qdrant/qdrant:latest
     container_name: secondbrain-qdrant
     hostname: qdrant
+    restart: unless-stopped
     # The qdrant image ships neither curl nor wget, so probe its native
     # /healthz endpoint with bash's built-in /dev/tcp: open the socket, send a
     # minimal HTTP request, and require an HTTP 200 response.
