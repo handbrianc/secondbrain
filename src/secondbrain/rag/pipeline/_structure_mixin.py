@@ -87,6 +87,32 @@ _TOC_CHAPTER_MENTION_RE = re.compile(r"Chapter\s+(\d{1,2})\s*[:.\-]")
 _TOC_MIN_COVERAGE = 0.6
 
 
+# Section-heading evidence pins: a chapter's own first numbered section
+# ("7.1 Introductory Topics", or a deeper "7.1.2 ...") is the strongest
+# structural chapter-start signal in heading-role output — docling keeps the
+# ``N.1`` heading on (or next to) the chapter's opening page even when the
+# banner/title heading itself is dropped.  Anchored at the first line so
+# mid-prose section references never match; the captured group names the
+# chapter and is capped at 30 by the caller (same bound as the section scan).
+_SECTION_PIN_RE = re.compile(r"^(\d{1,2})\.1(?:\.\d+)?\s+")
+
+
+# ToC-like page classification (see :meth:`_dot_leader_page`): a flattened
+# printed ToC is dominated by lines ending in a page serial ("12 Bayesian
+# Deep Learning 310") or carrying dot leaders ("Chapter 8 ....... 223").
+_DOT_LEADER_TAIL_RE = re.compile(r"\d{1,4}$")
+_DOT_LEADER_RUN_RE = re.compile(r"\.{2,}")
+# Share of a page's non-empty lines that must look like ToC rows before the
+# page is classified ToC-like; 60% keeps prose pages that merely end a few
+# lines with a year or figure from being misclassified.
+_DOT_LEADER_MIN_SHARE = 0.6
+
+
+# Version-number tokens for heading-anchor token matching ("7" vs "7.2"):
+# digits and dots only, so word tokens can never prefix-match each other.
+_VERSION_TOKEN_RE = re.compile(r"\d+(?:\.\d+)*")
+
+
 # Boilerplate caption detection: end-of-book license/colophon headings
 # ("GNU Free Documentation License", GFDL numbered sections such as
 # "6. COLLECTIONS OF DOCUMENTS") are tagged `heading` by docling, and their
@@ -1319,6 +1345,19 @@ class _StructureMixin(_RAGPipelineState):
         title is recorded into ``titles_out[ch_num]`` (raw first line,
         whitespace-normalized, before casefold/prefix stripping) so the
         caller can repair glued roster titles for display.
+
+        A squashed-PREFIX match (heading extends the title) is additionally
+        token-checked (:meth:`_heading_tokens_admit_suffix`): every title
+        token must appear as a whole token in the heading with at most a
+        two-token slack, so "REFERENCES" cannot anchor "Reference" and
+        "Change logs are also available at:" cannot anchor "Change Log",
+        while genuine extensions ("...Release 7.2" for "…Release 7") and
+        subtitle continuations still anchor. Exact squashed matches (the
+        glued/spaced corruption paths) are exempt by construction. When the
+        title's trailing token is page-serial-shaped, the walk runs against
+        the un-truncated spelling whenever the heading extends past it, so a
+        version title ("Release 7") keeps its own token for the dot-segment
+        rule instead of being truncated to "Release".
         """
         anchors: dict[int, int] = {}
         blocked_map = blocked_pages or {}
@@ -1329,8 +1368,17 @@ class _StructureMixin(_RAGPipelineState):
         for ch_num, ch_src, title in chapters:
             if ch_src != src:
                 continue
-            tt = re.sub(r"\s+\d{1,4}\s*$", "", title)
-            tt = re.split(r"\s+\d{1,4}\s+", tt)[0]
+            # The listing-cleanup strips are ordered so the full (un-truncated)
+            # spelling survives: ``full_tt`` only cuts embedded "Title 147 How
+            # ma" artifacts, while ``tt`` additionally drops a trailing page
+            # serial.  A trailing token can also be a version number
+            # ("Networking Release 7"), so the token walk below runs against
+            # ``full_tt`` whenever the heading extends past it — admitting the
+            # dot-segment extension ("…Release 7.2") while refusing longer
+            # continuations ("…Release 7.2 subnets") that the truncated
+            # needle would wrongly admit with two-token slack.
+            full_tt = re.split(r"\s+\d{1,4}\s+", title)[0]
+            tt = re.sub(r"\s+\d{1,4}\s*$", "", full_tt)
             needle = (
                 re.sub(r"\s+", " ", re.sub(r"[-\u2013\u2014:]", " ", tt))
                 .strip()
@@ -1339,6 +1387,12 @@ class _StructureMixin(_RAGPipelineState):
             if len(needle) < 4:
                 continue
             needle_sq = re.sub(r"\s+", "", needle)
+            full_needle = (
+                re.sub(r"\s+", " ", re.sub(r"[-\u2013\u2014:]", " ", full_tt))
+                .strip()
+                .casefold()
+            )
+            full_needle_sq = re.sub(r"\s+", "", full_needle)
             blocked = blocked_map.get(ch_num)
             for hc in heading_chunks:
                 page = int(hc.get("page_number") or 0)
@@ -1367,7 +1421,20 @@ class _StructureMixin(_RAGPipelineState):
                     r"^(?:chapter\s*\d+[\s:.\-]*)?(?:\d+[\s.:\-]+)?", "", head_line
                 )
                 head_sq = re.sub(r"\s+", "", head_line)
-                if head_sq == needle_sq or head_sq.startswith(needle_sq):
+                if full_needle_sq != needle_sq and head_sq.startswith(full_needle_sq):
+                    # Heading carries the title's own trailing token: walk the
+                    # un-truncated title (version semantics, see above).
+                    walk_needle = full_needle
+                elif head_sq.startswith(needle_sq):
+                    walk_needle = needle
+                else:
+                    walk_needle = None
+                if head_sq in (needle_sq, full_needle_sq) or (
+                    walk_needle is not None
+                    and _StructureMixin._heading_tokens_admit_suffix(
+                        head_line, walk_needle
+                    )
+                ):
                     anchors[ch_num] = page
                     if titles_out is not None:
                         # Record the opener page's own spelling (spaced when
@@ -1379,6 +1446,215 @@ class _StructureMixin(_RAGPipelineState):
                         ).strip()
                     break
         return anchors
+
+    @staticmethod
+    def _heading_tokens_admit_suffix(
+        head_line: str, needle: str, max_extra: int = 2
+    ) -> bool:
+        """Token-level admission for a squashed-prefix heading match.
+
+        The squashed comparison (``head_sq.startswith(needle_sq)``) cannot
+        tell a genuine extension ("…Release 7.2" for roster "…Release 7")
+        from a sub-word accident ("REFERENCES" for "Reference").  Both
+        sides walk their whitespace tokens as one squashed character
+        stream — so the docling space regression's glued spellings match
+        their spaced forms in either direction — and the walk must END on
+        a token boundary of the heading: after the last needle character,
+        the heading may keep at most ``max_extra`` whole tokens (bounded
+        slack for version suffixes and short subtitle continuations).
+        Ending mid-heading-token is admitted only at a dot-segment
+        boundary of a version-shaped token pair ("7" ≈ "7.2"), so
+        "reference" never matches "references".
+
+        Parameters
+        ----------
+        head_line:
+            Case-folded heading text (whitespace already normalized).
+        needle:
+            Case-folded roster title to admit.
+        max_extra:
+            Maximum number of heading tokens beyond the match.
+
+        Returns
+        -------
+        bool
+            True when the heading's token sequence admits the title.
+        """
+        head_tokens = head_line.split()
+        needle_tokens = needle.split()
+        if not needle_tokens or not head_tokens:
+            return False
+        if len(head_tokens) - len(needle_tokens) > max_extra:
+            return False
+        hi = 0
+        ho = 0
+        for tok in needle_tokens:
+            for ch in tok:
+                if hi >= len(head_tokens):
+                    # Needle text outruns the heading: the squash-prefix
+                    # pre-check above should have refused this already.
+                    return False
+                head_tok = head_tokens[hi]
+                if ho >= len(head_tok):
+                    hi += 1
+                    ho = 0
+                    if hi >= len(head_tokens):
+                        return False
+                    head_tok = head_tokens[hi]
+                if head_tok[ho] != ch:
+                    return False
+                ho += 1
+                if ho == len(head_tok):
+                    hi += 1
+                    ho = 0
+        if hi < len(head_tokens) and ho > 0:
+            # Ended mid-token: only a version-token dot-segment boundary
+            # may split a head token mid-word ("Release 7" roster vs
+            # "Release 7.2 …" heading); anything else is a sub-word
+            # accident ("Reference" inside "References").
+            head_tok = head_tokens[hi]
+            if head_tok[ho] != ".":
+                return False
+            if (
+                _VERSION_TOKEN_RE.fullmatch(head_tok) is None
+                or _VERSION_TOKEN_RE.fullmatch(needle_tokens[-1]) is None
+            ):
+                return False
+            while ho < len(head_tok) and head_tok[ho] == ".":
+                ho += 1
+        leftover = len(head_tokens) - hi + (1 if ho > 0 else 0)
+        return leftover <= max_extra
+
+    @staticmethod
+    def _dot_leader_page(chunks_on_page: list[dict[str, Any]]) -> bool:
+        """Return True when a page's chunk lines look like a printed ToC.
+
+        A flattened ToC page is dominated by lines ending in a page serial
+        ("12 Bayesian Deep Learning 310") or carrying dot leaders ("Chapter
+        8 ....... 223"); real body pages are prose.  A page classifies as
+        ToC-like when at least ``_DOT_LEADER_MIN_SHARE`` (60%) of its
+        non-empty chunk lines end in 1-4 digits or contain a ``..``+ leader
+        run — the guard the section-heading evidence tier and the
+        section-number / loose-digit scans apply so ToC rows (whatever role
+        docling stamped them with) never anchor a chapter.
+
+        Parameters
+        ----------
+        chunks_on_page:
+            The chunk dicts stored on the page (any roles the caller
+            scanned; callers pass exactly the stream they are about to pin
+            from).
+
+        Returns
+        -------
+        bool
+            True when the page is dot-leader/serial dense (ToC-like).
+        """
+        lines = [
+            stripped
+            for chunk in chunks_on_page
+            for line in (chunk.get("chunk_text") or "").split("\n")
+            if (stripped := line.strip())
+        ]
+        if not lines:
+            return False
+        toc_like = sum(
+            1
+            for line in lines
+            if _DOT_LEADER_TAIL_RE.search(line) or _DOT_LEADER_RUN_RE.search(line)
+        )
+        return toc_like / len(lines) >= _DOT_LEADER_MIN_SHARE
+
+    @staticmethod
+    def _section_heading_pins(
+        chapters: list[tuple[int, str, str]],
+        src: str,
+        heading_chunks: list[dict[str, Any]],
+        boiler_pages: set[int] | None = None,
+        body_chunks_by_page: dict[int, list[dict[str, Any]]] | None = None,
+    ) -> dict[int, int]:
+        """Pin roster chapters provisionally at their first ``N.1`` heading page.
+
+        Every chapter's first numbered section heading (``N.1``, heading
+        role) sits on or beside the chapter's true opening page even when
+        the banner/title heading itself is dropped, so it is the strongest
+        chapter-start evidence available to the enumeration pipeline.  For
+        each roster chapter the FIRST heading chunk shaped ``N.1`` /
+        ``N.1.m`` (pages walked in order) on a page at or above the
+        front-matter floor (10), outside license/colophon boilerplate, and
+        on a page that does not classify as ToC-like
+        (:meth:`_dot_leader_page` — a dot-leader-dense page is a printed
+        ToC whose rows can carry ``N.1`` shapes, and must never pin) wins
+        the pin.
+
+        The pin is provisional at ±1-page precision: when the heading's
+        page also carries body chunks the section heading sits below the
+        page top (opener intro above it), so the chapter is pinned one page
+        earlier; a page carrying only the heading chunk is a bare opener
+        page and pins at the heading's own page.  Exact ToC evidence
+        (listing rows / recovered run-on rows resolved through a validated
+        printed→stored offset) may REPLACE these pins; fuzzy anchors and
+        digit scans may not.
+
+        Parameters
+        ----------
+        chapters:
+            Roster entries as ``(chapter_number, source, title)``.
+        src:
+            Source document the pins must belong to.
+        heading_chunks:
+            Heading-role chunks for the source (any order).
+        boiler_pages:
+            License/colophon pages excluded from pinning.
+        body_chunks_by_page:
+            Body chunks grouped by page number for ``src``; drives both the
+            ±1 adjustment and the ToC-like page classification.  When
+            omitted, no page is considered to carry body chunks.
+
+        Returns
+        -------
+        dict[int, int]
+            Chapter number -> provisionally pinned page (within one page of
+            the chapter's true opener).
+        """
+        pins: dict[int, int] = {}
+        boiler = boiler_pages or set()
+        body_by_page = body_chunks_by_page or {}
+        wanted = {
+            ch_num
+            for ch_num, ch_src, _title in chapters
+            if ch_src == src and 1 <= ch_num <= 30
+        }
+        if not wanted:
+            return pins
+        headings_by_page: dict[int, list[dict[str, Any]]] = {}
+        for heading in heading_chunks:
+            headings_by_page.setdefault(
+                int(heading.get("page_number") or 0), []
+            ).append(heading)
+        for page in sorted(headings_by_page):
+            if page < 10 or page in boiler:
+                continue
+            page_chunks = body_by_page.get(page, []) + headings_by_page[page]
+            if _StructureMixin._dot_leader_page(page_chunks):
+                continue
+            # ±1 contract: body chunks on the heading's page mean the
+            # heading sits below the page top (opener intro above it) —
+            # pin one page earlier; a heading-only page is the opener
+            # itself and pins exactly.
+            pin = page - 1 if body_by_page.get(page) else page
+            for heading in headings_by_page[page]:
+                match = _SECTION_PIN_RE.match(
+                    (heading.get("chunk_text") or "").split("\n")[0].strip()
+                )
+                if match is None:
+                    continue
+                ch_num = int(match.group(1))
+                if ch_num in wanted and ch_num not in pins:
+                    pins[ch_num] = pin
+            if len(pins) == len(wanted):
+                break
+        return pins
 
     @staticmethod
     def _select_monotone_pins(pins: dict[int, int]) -> dict[int, int]:

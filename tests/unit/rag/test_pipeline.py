@@ -4244,18 +4244,25 @@ class TestChapterPinWindowResolution:
         pipeline = self._make(monkeypatch, toc, body)
         captured = self._capture(monkeypatch, pipeline)
         answer = self._run(pipeline)
-        assert captured["keys"] == [1, 3], (
+        # Sentinel-range semantics (task 6.1): ch2 gets no pin (the one-page
+        # gap refuses interpolation) but is still enumerated through its
+        # empty sentinel range — placeholder note instead of vanishing.
+        assert captured["keys"] == [1, 2, 3], (
             "the degenerate midpoint must not interpolate a ch2 pin, while "
-            "ch3's real pin survives the run filter with its own bucket"
+            "ch2 is still enumerated via its empty sentinel range and ch3's "
+            "real pin survives the run filter with its own bucket"
         )
-        assert captured["pages"] == {1: [20], 3: [21, 24]}, (
-            "ch3's pages must stay in ch3's bucket, not leak into ch1's "
-            "range as they did before the run filter kept both runs"
+        assert captured["pages"] == {1: [20], 2: [], 3: [21, 24]}, (
+            "ch2's sentinel bucket must stay empty, and ch3's pages must "
+            "stay in ch3's bucket, not leak into ch1's range as they did "
+            "before the run filter kept both runs"
         )
         assert answer.count("(approx pages 20+)") == 1, (
             "the degenerate midpoint must not duplicate chapter 1's pin"
         )
-        assert "Chapter 2 — Metrics Ordering Systems" not in answer
+        assert "Chapter 2 — Metrics Ordering Systems (approx pages" not in answer, (
+            "the sentinel chapter is enumerated without a page claim"
+        )
 
     def test_repinned_real_opener_refused_spans_to_interpolation(
         self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
@@ -4547,6 +4554,13 @@ class TestToCListingResolution:
     def test_toc_pin_respects_heading_anchor_precedence(
         self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
+        """Anchored pins are never overridden by the ToC listing tier.
+
+        Guards the stable half of the task-3.2 precedence change: the listing
+        tier may replace PROVISIONAL section-heading pins only (companion test
+        below); a heading-anchored pin is anchor-grade and stays put even
+        when the listing's printed page disagrees with it.
+        """
         toc = [
             *self._toc([(n, self.TITLES[n]) for n in range(1, 13)]),
             self._listing_chunk(self._listing_rows(list(range(1, 13)))),
@@ -4566,6 +4580,39 @@ class TestToCListingResolution:
         assert "approx pages 154+" not in answer, "anchor must not be overridden"
         assert "Chapter 12 — Bayesian Deep Learning (approx pages 350+)" in answer, (
             answer
+        )
+        assert "median=30" in caplog.text
+
+    def test_toc_listing_replaces_provisional_evidence_pin(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Exact ToC printed-page evidence replaces a ±1 section-heading pin.
+
+        Chapter 5's "5.1 Overview" heading provisionally pins @140 (its page
+        carries no body chunks, so the bare-page contract pins the heading's
+        own page).  The listing tier's exact row (printed 124 + median offset
+        30 -> 154) replaces the provisional pin, while the title-shaped
+        heading anchor @154 never fires — the chapter is already pinned when
+        the anchor tier runs — so 154 in the answer can only come from the
+        listing replacement, and 140 (the provisional pin) must be gone.
+        """
+        toc = [
+            *self._toc([(n, self.TITLES[n]) for n in range(1, 13)]),
+            self._listing_chunk(self._listing_rows(list(range(1, 13)))),
+            self._desc_chunk(),
+        ]
+        headings = [
+            *self._anchors(list(range(1, 12))),
+            self._heading("5.1 Overview", 140),
+        ]
+        pipeline = self._make(monkeypatch, toc, headings=headings)
+        with caplog.at_level(logging.DEBUG, logger="secondbrain.rag.pipeline"):
+            answer = self._run(pipeline)
+        assert (
+            "Chapter 5 — Epsilon Attention Mechanisms (approx pages 154+)" in answer
+        ), answer
+        assert "approx pages 140+" not in answer, (
+            "the provisional evidence pin must be replaced by the exact row"
         )
         assert "median=30" in caplog.text
 
@@ -6577,3 +6624,919 @@ class TestGluedTitleAnchoringEndToEnd:
         answer = self.H._run(pipeline)
 
         assert "approx pages 139+" not in answer, answer
+
+
+class _EvidenceArchetypeHarness:
+    """Storage double + pipeline builder for the section-heading archetypes.
+
+    Reuses TestChapterPinWindowResolution's stub storage, probe-row builder
+    and roster-fallback runner; adds navigation / run-on chunk builders and a
+    flattened-ToC row builder so the multi-document archetype fixtures
+    (tasks 7.2-7.9) share one construction path.  The scripted provider
+    returns no usable chapter summaries, so the answer falls back to the
+    chapter roster whose "approx pages N+" lines double as pin assertions.
+    """
+
+    SRC = "book.pdf"
+    QUERY = TestChapterPinWindowResolution.QUERY
+
+    TITLES: ClassVar[dict[int, str]] = {
+        1: "Alpha Foundational Frameworks",
+        2: "Beta Optimization Landscapes",
+        3: "Gamma Convolution Pipelines",
+    }
+
+    _StubStorage = TestChapterPinWindowResolution._StubStorage
+    _toc = staticmethod(TestChapterPinWindowResolution._toc)
+    _body = staticmethod(TestChapterPinWindowResolution._body)
+    _heading = staticmethod(TestChapterPinWindowResolution._heading)
+
+    @staticmethod
+    def _nav(text: str, page: int) -> dict[str, Any]:
+        """Navigation footer chunk (bare "29" or "78 / 634")."""
+        return {
+            "chunk_text": text,
+            "page_number": page,
+            "chunk_role": "navigation",
+            "source_file": _EvidenceArchetypeHarness.SRC,
+        }
+
+    @staticmethod
+    def _runon_chunk(text: str, page: int = 8) -> dict[str, Any]:
+        """Roleless flattened-ToC chunk in the structure probe (docling shape)."""
+        return {
+            "chunk_text": text,
+            "page_number": page,
+            "source_file": _EvidenceArchetypeHarness.SRC,
+        }
+
+    @classmethod
+    def _flattened_toc(cls, chapters: list[tuple[int, str, int]]) -> str:
+        """Flattened ToC text: per chapter "N Title printed" then "N.1 Overview . . . p".
+
+        The dot leaders die in the run-on recovery's dot-run strip, leaving
+        the "printed serial + dotted section" row boundaries the splitter
+        needs; every chapter row is followed by its own first section row so
+        the last chapter's row has a boundary too.
+        """
+        parts: list[str] = []
+        for num, title, printed in chapters:
+            parts.append(f"{num} {title} {printed}")
+            parts.append(f"{num}.1 Overview . . . {printed}")
+        return " ".join(parts)
+
+    @classmethod
+    def _make(
+        cls,
+        monkeypatch: pytest.MonkeyPatch,
+        toc: list[dict[str, Any]],
+        body: list[dict[str, Any]],
+        headings: list[dict[str, Any]] | None = None,
+    ) -> RAGPipeline:
+        from secondbrain.rag.intent_parser import IntentDecision, QueryIntent
+
+        searcher = _make_mock_searcher()
+        searcher.storage = cls._StubStorage(body, headings)
+        pipeline = RAGPipeline(
+            searcher=searcher,
+            llm_provider=_SequenceProvider(by_key={"Chapter": ""}),  # type: ignore
+            top_k=5,
+            context_window=5,
+        )
+        pipeline._config.streaming_enabled = False
+        monkeypatch.setattr(
+            pipeline,
+            "_probe_document_structure",
+            lambda top_k, source_filter=None: toc,
+        )
+        monkeypatch.setattr(
+            pipeline._intent_parser,
+            "parse",
+            lambda q: IntentDecision(
+                intent=QueryIntent.BROAD_COVERAGE,
+                confidence=0.5,
+                target=None,
+                reason="test",
+                suggested_pipeline="structural",
+            ),
+        )
+        return pipeline
+
+    @classmethod
+    def _run(cls, pipeline: RAGPipeline) -> str:
+        result = pipeline._iterative_query(
+            cls.QUERY, top_k=5, show_sources=False, source_filter=cls.SRC
+        )
+        return result["answer"]
+
+    @classmethod
+    def _capture(
+        cls, monkeypatch: pytest.MonkeyPatch, pipeline: RAGPipeline
+    ) -> dict[str, Any]:
+        """Record the chapter keys and bucket pages handed to the summarizer.
+
+        The spy returns "" so the chapter roster fallback renders the answer,
+        whose "approx pages N+" lines double as pin-page assertions.
+        """
+        captured: dict[str, Any] = {}
+
+        def _spy(
+            chapter_keys: list[int],
+            chapter_buckets: dict[int, list[dict[str, Any]]],
+            _ch_titles: dict[int, str],
+        ) -> str:
+            captured["keys"] = list(chapter_keys)
+            captured["pages"] = {
+                ch: sorted(int(c.get("page_number") or 0) for c in chapter_buckets[ch])
+                for ch in chapter_keys
+            }
+            return ""
+
+        monkeypatch.setattr(pipeline, "_generate_multi_chapter_summary", _spy)
+        return captured
+
+
+class TestOffsetZeroBareFootersArchetype:
+    """Task 7.2 archetype: bare footers, banner-less openers, flattened ToC rows.
+
+    A manual whose printed index equals its physical page ("29" footers),
+    whose chapter banners were dropped by extraction (only "N.1" section
+    headings mark the openers), and whose printed ToC survives as one
+    flattened run-on chunk.  The evidence tier pins each chapter ±1 from its
+    "N.1" heading; the recovered ToC rows resolved through the offset-0
+    footer vote replace those pins with the exact opener pages; the
+    cross-reference sentence and the ToC-like body page pin nothing.
+    """
+
+    H = _EvidenceArchetypeHarness
+    pytestmark = pytest.mark.unit
+
+    @classmethod
+    def _fixtures(
+        cls,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+        toc = [
+            *cls.H._toc([(n, cls.H.TITLES[n]) for n in (1, 2, 3)]),
+            cls.H._runon_chunk(
+                cls.H._flattened_toc(
+                    [(n, cls.H.TITLES[n], 10 * n + 10) for n in (1, 2, 3)]
+                )
+            ),
+        ]
+        headings = [
+            cls.H._heading("1.1 Kernel Foundations", 20),
+            cls.H._heading("2.1 Convexity Baselines", 30),
+            cls.H._heading("3.1 Aberration Baselines", 41),
+        ]
+        body = [
+            # ToC-like body page (dot-leader dense): never anchors a chapter.
+            cls.H._body(
+                "1 Alpha Foundational Frameworks 20 .. 2.1 Kernel Foundations 21",
+                8,
+            ),
+            # Cross-reference sentence trap: "on page 30" refuses the match.
+            cls.H._body(
+                "\n2 Beta Optimization Landscapes on page 30 explains the "
+                "tuning workflow calmly",
+                12,
+            ),
+            # Bare footers: printed index == physical page -> offset 0.
+            cls.H._nav("20", 20),
+            cls.H._body("prose deriving wavelet bases", 21),
+            cls.H._nav("30", 30),
+            cls.H._body("prose mapping convexity regimes alongside", 31),
+            cls.H._nav("40", 40),
+            cls.H._body("prose pacing coherence schedules onward", 41),
+        ]
+        return toc, body, headings
+
+    def test_evidence_pins_refined_by_offset_zero_rows(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        toc, body, headings = self._fixtures()
+        pipeline = self.H._make(monkeypatch, toc, body, headings)
+        captured = self.H._capture(monkeypatch, pipeline)
+        with caplog.at_level(logging.DEBUG, logger="secondbrain.rag.pipeline"):
+            answer = self.H._run(pipeline)
+        assert (
+            "Chapter 1 — Alpha Foundational Frameworks (approx pages 20+)" in answer
+        ), answer
+        assert (
+            "Chapter 2 — Beta Optimization Landscapes (approx pages 30+)" in answer
+        ), answer
+        assert "Chapter 3 — Gamma Convolution Pipelines (approx pages 40+)" in answer, (
+            answer
+        )
+        # The ±1 evidence pins (19 / 29 / 40) were refined by the exact rows.
+        assert "approx pages 19+" not in answer, answer
+        assert "approx pages 29+" not in answer, answer
+        # Traps never pin.
+        assert "approx pages 12+" not in answer, answer
+        assert "approx pages 8+" not in answer, answer
+        assert "Provisional evidence pin for chapter 1 at page 19" in caplog.text
+        assert "via run-on ToC row (printed 20 + offset 0)" in caplog.text
+        # Ranges are disjoint and ordered; buckets carry each chapter's own
+        # pages (the stub serves nav chunks through the body stream too).
+        assert captured["keys"] == [1, 2, 3]
+        assert captured["pages"] == {1: [20, 21], 2: [30, 31], 3: [40, 41]}
+
+
+class TestPrintedOffsetFootersArchetype:
+    """Task 7.3 archetype: "N / M" footers with printed != physical.
+
+    Physical = printed + 78.  The evidence tier's ±1 pins sit one page off
+    the printed openers; the recovered ToC rows resolved through the footer
+    offset land exactly on them (exact-evidence override verified).
+    """
+
+    H = _EvidenceArchetypeHarness
+    pytestmark = pytest.mark.unit
+
+    @classmethod
+    def _fixtures(
+        cls,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+        toc = [
+            *cls.H._toc([(n, cls.H.TITLES[n]) for n in (1, 2, 3)]),
+            cls.H._runon_chunk(
+                cls.H._flattened_toc(
+                    [(n, cls.H.TITLES[n], 10 * n + 10) for n in (1, 2, 3)]
+                )
+            ),
+        ]
+        headings = [
+            cls.H._heading("1.1 Kernel Foundations", 98),
+            cls.H._heading("2.1 Convexity Baselines", 108),
+            cls.H._heading("3.1 Aberration Baselines", 119),
+        ]
+        body = [
+            cls.H._body(
+                "1 Alpha Foundational Frameworks 98 .. 2.1 Kernel Foundations 99",
+                12,
+            ),
+            cls.H._body(
+                "\n2 Beta Optimization Landscapes on page 108 explains the "
+                "tuning workflow calmly",
+                16,
+            ),
+            cls.H._nav("20 / 634", 98),
+            cls.H._body("prose deriving wavelet bases", 99),
+            cls.H._nav("30 / 634", 108),
+            cls.H._body("prose mapping convexity regimes alongside", 109),
+            cls.H._nav("40 / 634", 118),
+            cls.H._body("prose pacing coherence schedules onward", 119),
+        ]
+        return toc, body, headings
+
+    def test_row_evidence_lands_on_printed_openers(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        toc, body, headings = self._fixtures()
+        pipeline = self.H._make(monkeypatch, toc, body, headings)
+        captured = self.H._capture(monkeypatch, pipeline)
+        with caplog.at_level(logging.DEBUG, logger="secondbrain.rag.pipeline"):
+            answer = self.H._run(pipeline)
+        assert (
+            "Chapter 1 — Alpha Foundational Frameworks (approx pages 98+)" in answer
+        ), answer
+        assert (
+            "Chapter 2 — Beta Optimization Landscapes (approx pages 108+)" in answer
+        ), answer
+        assert (
+            "Chapter 3 — Gamma Convolution Pipelines (approx pages 118+)" in answer
+        ), answer
+        # The ±1 evidence pins (97 / 107) were refined by the exact rows.
+        assert "approx pages 97+" not in answer, answer
+        assert "approx pages 107+" not in answer, answer
+        # Traps never pin.
+        assert "approx pages 16+" not in answer, answer
+        assert "approx pages 12+" not in answer, answer
+        assert "via run-on ToC row (printed 30 + offset 78)" in caplog.text
+        assert captured["keys"] == [1, 2, 3]
+        assert captured["pages"] == {1: [98, 99], 2: [108, 109], 3: [118, 119]}
+
+
+class TestFooterlessEvidenceArchetype:
+    """Task 7.4 archetype: no nav chunks; recovered rows + N.1 headings vote.
+
+    Without footers the run-on offset comes from the strict-majority vote of
+    (standing evidence pin - printed) over the recovered rows: agreeing pins
+    resolve the rows to exact openers, a tied vote refuses the fallback and
+    the ±1 evidence pins survive untouched.
+    """
+
+    H = _EvidenceArchetypeHarness
+    pytestmark = pytest.mark.unit
+
+    def test_agreeing_pins_vote_constant_offset(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        toc = [
+            *self.H._toc([(n, self.H.TITLES[n]) for n in (1, 2, 3)]),
+            self.H._runon_chunk(
+                self.H._flattened_toc(
+                    [(n, self.H.TITLES[n], 10 * n + 10) for n in (1, 2, 3)]
+                )
+            ),
+        ]
+        headings = [
+            self.H._heading("1.1 Kernel Foundations", 21),  # bare -> pin 21 (vote +1)
+            # w/ body -> pin 30 (vote 0)
+            self.H._heading("2.1 Convexity Baselines", 31),
+            self.H._heading("3.1 Aberration Baselines", 41),  # bare -> pin 41 (vote +1)
+        ]
+        body = [
+            self.H._body("prose deriving wavelet bases", 22),
+            self.H._body("prose mapping convexity regimes alongside", 31),
+            self.H._body("prose pacing coherence schedules onward", 42),
+        ]
+        pipeline = self.H._make(monkeypatch, toc, body, headings)
+        with caplog.at_level(logging.DEBUG, logger="secondbrain.rag.pipeline"):
+            answer = self.H._run(pipeline)
+        assert (
+            "Chapter 1 — Alpha Foundational Frameworks (approx pages 21+)" in answer
+        ), answer
+        assert (
+            "Chapter 2 — Beta Optimization Landscapes (approx pages 31+)" in answer
+        ), answer
+        assert "Chapter 3 — Gamma Convolution Pipelines (approx pages 41+)" in answer, (
+            answer
+        )
+        assert "approx pages 30+" not in answer, "the row evidence refined the ±1 pin"
+        assert (
+            "Run-on ToC offset fallback for book.pdf: 1 (2 agreeing evidence rows)"
+            in caplog.text
+        )
+
+    def test_conflicting_offsets_refuse_fallback_keep_pins(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        toc = [
+            *self.H._toc([(n, self.H.TITLES[n]) for n in (1, 2)]),
+            self.H._runon_chunk(
+                self.H._flattened_toc(
+                    [(n, self.H.TITLES[n], 10 * n + 10) for n in (1, 2)]
+                )
+            ),
+        ]
+        headings = [
+            self.H._heading("1.1 Kernel Foundations", 21),  # bare -> pin 21 (vote +1)
+            # w/ body -> pin 29 (vote -1)
+            self.H._heading("2.1 Convexity Baselines", 30),
+        ]
+        body = [
+            self.H._body("prose deriving wavelet bases", 22),
+            self.H._body("prose mapping convexity regimes alongside", 30),
+        ]
+        pipeline = self.H._make(monkeypatch, toc, body, headings)
+        captured = self.H._capture(monkeypatch, pipeline)
+        answer = self.H._run(pipeline)
+        assert (
+            "Chapter 1 — Alpha Foundational Frameworks (approx pages 21+)" in answer
+        ), answer
+        assert (
+            "Chapter 2 — Beta Optimization Landscapes (approx pages 29+)" in answer
+        ), answer
+        assert "approx pages 31+" not in answer, "the tied vote must not pin"
+        assert captured["keys"] == [1, 2]
+        assert captured["pages"] == {1: [22], 2: [30]}
+
+
+class TestMagazineOpeningsWithEvidenceTier:
+    r"""Task 7.6 archetype: magazine-style "[ N ]" body openings + evidence tier.
+
+    The ML4T shape flattened onto one line: chapter openings are body chunks
+    ("[ 591 ] 2\\nTitle") invisible to the heading probe.  Chapter 1 rides
+    the evidence tier ("1.1 Overview" heading on a bare page); chapters 2-3
+    ride the openings scan; the ranges stay disjoint and ordered.
+    """
+
+    H = _EvidenceArchetypeHarness
+    pytestmark = pytest.mark.unit
+
+    def test_openings_fill_unsignaled_chapters(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        toc = self.H._toc([(n, self.H.TITLES[n]) for n in (1, 2, 3)])
+        headings = [self.H._heading("1.1 Overview", 20)]
+        body = [
+            self.H._body("prose deriving wavelet bases", 21),
+            self.H._body(
+                "[ 30 ] 2\nBeta Optimization Landscapes\n"
+                "prose recasting basin metrics calmly",
+                30,
+            ),
+            self.H._body("prose mapping convexity regimes alongside", 31),
+            self.H._body(
+                "[ 60 ] 3\nGamma Convolution Pipelines\n"
+                "prose pacing coherence schedules onward",
+                60,
+            ),
+            self.H._body("prose narrowing shrinkage penalties", 61),
+        ]
+        pipeline = self.H._make(monkeypatch, toc, body, headings)
+        captured = self.H._capture(monkeypatch, pipeline)
+        answer = self.H._run(pipeline)
+        assert (
+            "Chapter 1 — Alpha Foundational Frameworks (approx pages 20+)" in answer
+        ), answer
+        assert (
+            "Chapter 2 — Beta Optimization Landscapes (approx pages 30+)" in answer
+        ), answer
+        assert "Chapter 3 — Gamma Convolution Pipelines (approx pages 60+)" in answer, (
+            answer
+        )
+        assert captured["keys"] == [1, 2, 3]
+        assert captured["pages"] == {1: [21], 2: [30, 31], 3: [60, 61]}
+
+
+class TestGluedRunOnWithEvidenceTier:
+    """Task 7.7 archetype: glued PVE run-on rows still recover with the tier.
+
+    The docling space regression glues the ToC row ("6 ProxmoxClusterFileSystem
+    (pmxcfs) 136"); pass 2 of the run-on recovery reads it.  With the evidence
+    tier present, the "6.1 POSIX Compatibility" heading provisionally pins
+    chapter 6 one page early (@157); the recovered row resolved through the
+    footer offset (printed 136 + 22) replaces it with the exact opener @158,
+    and the in-chapter "6.2" bait page never pins.
+    """
+
+    H = _GluedBookHarness
+    SRC = _GluedBookHarness.SRC
+    pytestmark = pytest.mark.unit
+
+    def test_evidence_pin_replaced_by_exact_glued_row(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        toc_probe = [
+            {
+                "chunk_text": "5 ClusterManager 58",
+                "chunk_role": "toc_entry",
+                "page_number": 4,
+                "source_file": self.SRC,
+            },
+            {
+                "chunk_text": "6 ProxmoxClusterFileSystem(pmxcfs) 136",
+                "chunk_role": "toc_entry",
+                "page_number": 4,
+                "source_file": self.SRC,
+            },
+            # Fully-glued run-on (live pg-8 shape): pass 1 finds no split
+            # boundary, pass 2 recovers 6 -> ("ProxmoxClusterFileSystem
+            # (pmxcfs)", 136).
+            {
+                "chunk_text": (
+                    "5.14.1MigrationType . . . 133 5.14.2MigrationNetwork . . . 134 "
+                    "6 ProxmoxClusterFileSystem(pmxcfs) 136"
+                ),
+                "source_file": self.SRC,
+                "page_number": 8,
+            },
+        ]
+        headings = [self.H._heading("6.1 POSIX Compatibility", 158)]
+        body = [
+            self.H._body(
+                "5 Cluster Manager\nprose describing cluster manager duties calmly",
+                80,
+            ),
+            # The loose-digit bait that pinned ch6@134 live (Phase-2 rescue
+            # scanning a "6" inside chapter-5 prose).
+            self.H._body("Proxmox VE 6.2 supports up to 8 fallback links calmly", 90),
+            self.H._body("prose detailing the cluster file system layout calmly", 158),
+            self.H._body("prose filling chapter 7's opening page quietly", 300),
+        ]
+        pipeline = self.H._make(monkeypatch, toc_probe, body, headings)
+        footers = [
+            self.H._body(f"{pg - self.H.FOOTER_OFFSET} / 634", pg, role="navigation")
+            for pg in (23, 24, 160)
+        ]
+        pipeline._searcher.storage._body = [*body, *footers]
+        captured = _EvidenceArchetypeHarness._capture(monkeypatch, pipeline)
+        with caplog.at_level(logging.DEBUG, logger="secondbrain.rag.pipeline"):
+            answer = self.H._run(pipeline)
+        assert (
+            "Chapter 6 — Proxmox Cluster File System (pmxcfs) (approx pages 158+)"
+            in answer
+        ), answer
+        assert "approx pages 157+" not in answer, "the ±1 pin must be refined"
+        assert "approx pages 90+" not in answer, answer
+        assert "via run-on ToC row (printed 136 + offset 22)" in caplog.text
+        assert captured["keys"] == [5, 6]
+        # Chapter 6 is the last pinned chapter, so its sentinel range
+        # (158, ∞) also absorbs the unpinned chapter-7 page.
+        assert captured["pages"] == {5: [80, 90], 6: [158, 160, 300]}
+
+
+class TestUnnumberedTailChaptersEnumeration:
+    """Task 7.8 archetype: chapters without N.1 sections ride interpolation.
+
+    Chapter 2 has no section headings, no title heading and no scan signal —
+    the one-page gap refuses interpolation, so it keeps no pin and ships as
+    an empty sentinel range: the roster still enumerates it (without a bogus
+    page claim) and the real run answers with its placeholder note.
+    """
+
+    H = _EvidenceArchetypeHarness
+    pytestmark = pytest.mark.unit
+
+    TITLES5: ClassVar[dict[int, str]] = {
+        1: "Alpha Foundational Frameworks",
+        2: "Beta Optimization Landscapes",
+        3: "Gamma Convolution Pipelines",
+        4: "Delta Recurrent Architectures",
+        5: "Epsilon Attention Mechanisms",
+    }
+
+    @classmethod
+    def _fixtures(
+        cls,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+        toc = cls.H._toc([(n, cls.TITLES5[n]) for n in range(1, 6)])
+        headings = [
+            cls.H._heading("1.1 Kernel Foundations", 21),
+            cls.H._heading("3.1 Convexity Baselines", 22),
+            cls.H._heading("Delta Recurrent Architectures", 40),
+        ]
+        body = [
+            cls.H._body(
+                "1 Alpha Foundational Frameworks\nprose deriving wavelet bases",
+                20,
+            ),
+            cls.H._body("prose buffering stream windows between phases", 21),
+            cls.H._body("prose pacing coherence schedules onward", 22),
+            cls.H._body("prose narrowing shrinkage penalties", 40),
+            cls.H._body("prose expanding bench instrumentation baselines", 41),
+        ]
+        return toc, body, headings
+
+    def test_sentinel_range_enumerates_the_unsignaled_chapter(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        toc, body, headings = self._fixtures()
+        pipeline = self.H._make(monkeypatch, toc, body, headings)
+        captured = self.H._capture(monkeypatch, pipeline)
+        answer = self.H._run(pipeline)
+        assert captured["keys"] == [1, 2, 3, 4, 5], (
+            "every roster chapter is enumerated, including the unsignaled one"
+        )
+        assert captured["pages"] == {1: [20], 2: [], 3: [21, 22], 4: [40], 5: [41]}
+        assert (
+            "Chapter 1 — Alpha Foundational Frameworks (approx pages 20+)" in answer
+        ), answer
+        assert "Chapter 3 — Gamma Convolution Pipelines (approx pages 21+)" in answer, (
+            answer
+        )
+        assert (
+            "Chapter 4 — Delta Recurrent Architectures (approx pages 40+)" in answer
+        ), answer
+        assert (
+            "Chapter 5 — Epsilon Attention Mechanisms (approx pages 41+)" in answer
+        ), answer
+        # The sentinel chapter's roster line carries no page claim.
+        assert "Chapter 2 — Beta Optimization Landscapes (approx pages" not in answer
+
+    def test_real_run_answers_with_placeholder_note(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        toc, body, headings = self._fixtures()
+        pipeline = self.H._make(monkeypatch, toc, body, headings)
+        answer = self.H._run(pipeline)
+        assert "Chapter 2 — Beta Optimization Landscapes" in answer, answer
+        assert "No document content was retrieved for this chapter" in answer, answer
+        assert "Chapter 2 — Beta Optimization Landscapes (approx pages" not in answer
+        # The scripted provider returns "" per chapter, so only the
+        # placeholder note survives — the roster fallback never fires.
+        assert "Chapter 1 —" not in answer, answer
+
+
+class TestScanTocLikePageGuards:
+    """Task 7.9 guard tests, end to end: ToC-like pages and cross-references.
+
+    A flattened-ToC body page (section rows with printed serials) must never
+    anchor a chapter through the section-number or loose-digit scans, and a
+    body-title match naming "on page N" must be refused — the genuine openers
+    still pin 20/30/40, the empty chapter-2 range is still enumerated, and no
+    pin ever lands on the ToC-like page itself.
+    """
+
+    H = _EvidenceArchetypeHarness
+    pytestmark = pytest.mark.unit
+
+    def test_toc_like_body_page_never_pins(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        toc = self.H._toc([(n, self.H.TITLES[n]) for n in (1, 2, 3)])
+        body = [
+            self.H._body(
+                "1.1 Kernel Foundations 20 .. 2.1 Convexity Baselines 30 .. "
+                "3.1 Aberration Baselines 40 .. 2 Beta Optimization Landscapes 30",
+                12,
+            ),
+            self.H._body(
+                "1 Alpha Foundational Frameworks\nprose deriving wavelet bases",
+                20,
+            ),
+            self.H._body("prose buffering stream windows between phases", 26),
+            self.H._body(
+                "3 Gamma Convolution Pipelines\nprose mapping convexity regimes",
+                40,
+            ),
+            self.H._body("prose pacing coherence schedules onward", 46),
+        ]
+        pipeline = self.H._make(monkeypatch, toc, body)
+        captured = self.H._capture(monkeypatch, pipeline)
+        answer = self.H._run(pipeline)
+        assert "approx pages 12+" not in answer, answer
+        assert (
+            "Chapter 1 — Alpha Foundational Frameworks (approx pages 20+)" in answer
+        ), answer
+        assert (
+            "Chapter 2 — Beta Optimization Landscapes (approx pages 30+)" in answer
+        ), answer
+        assert "Chapter 3 — Gamma Convolution Pipelines (approx pages 40+)" in answer, (
+            answer
+        )
+        # The ToC-like page 12 sits before chapter 1's range and appears in
+        # no bucket; chapter 2's range (30-39) genuinely holds no body text,
+        # yet the roster still enumerates it at its detected page.
+        assert captured["keys"] == [1, 2, 3]
+        assert captured["pages"] == {1: [20, 26], 2: [], 3: [40, 46]}
+
+    def test_body_title_on_page_cross_reference_refused(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        toc = self.H._toc([(n, self.H.TITLES[n]) for n in (1, 2, 3)])
+        body = [
+            self.H._body(
+                "\n2 Beta Optimization Landscapes on page 30 explains the "
+                "tuning workflow calmly",
+                12,
+            ),
+            self.H._body(
+                "1 Alpha Foundational Frameworks\nprose deriving wavelet bases",
+                20,
+            ),
+            self.H._body(
+                "2 Beta Optimization Landscapes\nprose recasting basin metrics",
+                30,
+            ),
+            self.H._body("prose mapping convexity regimes alongside", 34),
+            self.H._body(
+                "3 Gamma Convolution Pipelines\nprose pacing coherence schedules onward",
+                40,
+            ),
+        ]
+        pipeline = self.H._make(monkeypatch, toc, body)
+        answer = self.H._run(pipeline)
+        assert "approx pages 12+" not in answer, answer
+        assert (
+            "Chapter 2 — Beta Optimization Landscapes (approx pages 30+)" in answer
+        ), answer
+        assert (
+            "Chapter 1 — Alpha Foundational Frameworks (approx pages 20+)" in answer
+        ), answer
+        assert "Chapter 3 — Gamma Convolution Pipelines (approx pages 40+)" in answer, (
+            answer
+        )
+
+
+class TestHeadingAnchorTokenGranularity:
+    """Task 7.5: token-granular admission for squashed-prefix anchor matches.
+
+    Every roster title token must appear as a whole token in the heading
+    (case-folded, whitespace-squashed; glued spellings walk through in either
+    direction) with at most two-token slack; sub-word accidents, sentence
+    continuations and license headings never anchor.
+    """
+
+    pytestmark = pytest.mark.unit
+
+    @pytest.mark.parametrize(
+        ("roster_title", "heading_text", "admitted"),
+        [
+            pytest.param(
+                "Alpha Foundational Frameworks",
+                "ALPHA FOUNDATIONAL FRAMEWORKS",
+                True,
+                id="all-caps-opener-matches",
+            ),
+            pytest.param(
+                "Reference",
+                "REFERENCES",
+                False,
+                id="sub-word-accident-refused",
+            ),
+            pytest.param(
+                "Beta Optimization Landscapes",
+                "Beta optimization landscapes shape the modern tuner family",
+                False,
+                id="sentence-continuation-refused",
+            ),
+            pytest.param(
+                "Networking Release 7",
+                "Networking release 7.2",
+                True,
+                id="version-dot-segment-admitted",
+            ),
+            pytest.param(
+                "Networking Release 7",
+                "Networking release 7.2 subnets",
+                False,
+                id="version-plus-3-extras-refused",
+            ),
+            pytest.param(
+                "GraphicalUser Interface",
+                "Graphical User Interface Overview",
+                True,
+                id="glued-vs-spaced-prefix-admitted",
+            ),
+        ],
+    )
+    def test_prefix_admission_granularity(
+        self, roster_title: str, heading_text: str, admitted: bool
+    ) -> None:
+        anchors = RAGPipeline._heading_title_anchors(
+            [(1, "book.pdf", roster_title)],
+            "book.pdf",
+            [
+                {
+                    "chunk_text": heading_text,
+                    "page_number": 40,
+                    "chunk_role": "heading",
+                    "source_file": "book.pdf",
+                }
+            ],
+        )
+        assert anchors == ({1: 40} if admitted else {})
+
+
+class TestSectionHeadingEvidencePins:
+    """Direct tests for the section-heading evidence tier (tasks 2.1/7.9)."""
+
+    pytestmark = pytest.mark.unit
+
+    @staticmethod
+    def _h(text: str, page: int, src: str = "book.pdf") -> dict[str, Any]:
+        return {
+            "chunk_text": text,
+            "page_number": page,
+            "chunk_role": "heading",
+            "source_file": src,
+        }
+
+    @staticmethod
+    def _b(text: str, page: int, src: str = "book.pdf") -> dict[str, Any]:
+        return {"chunk_text": text, "page_number": page, "source_file": src}
+
+    @staticmethod
+    def _chapters(nums: list[int], src: str = "book.pdf") -> list[tuple[int, str, str]]:
+        titles = _EvidenceArchetypeHarness.TITLES
+        return [(n, src, titles.get(n, f"Title {n}")) for n in nums]
+
+    def test_pm_one_contract_bare_and_body_pages(self) -> None:
+        """A body chunk on the heading's page pins one page earlier."""
+        pins = RAGPipeline._section_heading_pins(
+            self._chapters([1, 2, 3]),
+            "book.pdf",
+            [
+                self._h("1.1 Kernel Foundations", 20),
+                self._h("2.1 Convexity Baselines", 30),
+                self._h("3.1 Aberration Baselines", 41),
+            ],
+            body_chunks_by_page={
+                20: [self._b("20", 20)],
+                41: [self._b("prose pacing coherence schedules onward", 41)],
+            },
+        )
+        assert pins == {1: 19, 2: 30, 3: 40}
+
+    def test_front_matter_floor_and_boiler_pages_refused(self) -> None:
+        pins = RAGPipeline._section_heading_pins(
+            self._chapters([1]),
+            "book.pdf",
+            [
+                self._h("1.1 Kernel Foundations", 9),  # below the front-matter floor
+                self._h("1.1 Kernel Foundations", 20),  # license/colophon page
+                self._h("1.1 Kernel Foundations", 30),
+            ],
+            boiler_pages={20},
+        )
+        assert pins == {1: 30}
+
+    def test_dot_leader_dense_page_refused(self) -> None:
+        """A printed ToC page carrying N.1 row shapes never pins."""
+        pins = RAGPipeline._section_heading_pins(
+            self._chapters([1, 2]),
+            "book.pdf",
+            [
+                self._h("1.1 Kernel Foundations", 20),
+                self._h("2.1 Convexity Baselines", 30),
+            ],
+            body_chunks_by_page={
+                20: [
+                    self._b(
+                        "1 Alpha Foundational Frameworks 20\n1.1 Kernel Foundations 21",
+                        20,
+                    )
+                ],
+            },
+        )
+        assert pins == {2: 30}
+
+    def test_first_match_in_page_order_wins(self) -> None:
+        pins = RAGPipeline._section_heading_pins(
+            self._chapters([1]),
+            "book.pdf",
+            [
+                self._h("1.1 Later Section", 25),
+                self._h("1.1 Kernel Foundations", 20),
+            ],
+        )
+        assert pins == {1: 20}
+
+    def test_chapter_number_cap_and_roster_scope(self) -> None:
+        pins = RAGPipeline._section_heading_pins(
+            [*self._chapters([1, 31]), (7, "other.pdf", "Foreign Chapter")],
+            "book.pdf",
+            [
+                self._h("31.1 Beyond The Cap", 40),  # roster cap: 31 > 30
+                # Foreign-source heading never pins this book's roster.
+                self._h("7.1 Foreign Source Section", 50, src="other.pdf"),
+                self._h("9.1 Not In The Roster", 60),  # not a roster chapter
+                self._h("1.1 Kernel Foundations", 20),
+            ],
+        )
+        assert pins == {1: 20}
+
+
+class TestDotLeaderPageClassification:
+    """Task 4.1/7.9: the 60% ToC-like share threshold edges."""
+
+    pytestmark = pytest.mark.unit
+
+    @pytest.mark.parametrize(
+        ("lines", "expected"),
+        [
+            pytest.param(
+                [
+                    "1 Alpha Foundational Frameworks 20",
+                    "1.1 Kernel Foundations 21",
+                    "2 Beta Optimization Landscapes 30",
+                    "The meadow unfolds quietly",
+                    "Another prose line continues",
+                ],
+                True,
+                id="exactly-60-percent",
+            ),
+            pytest.param(
+                [
+                    "1 Alpha Foundational Frameworks 20",
+                    "1.1 Kernel Foundations 21",
+                    "The meadow unfolds quietly",
+                    "Another prose line continues",
+                    "A third prose line closes",
+                ],
+                False,
+                id="below-60-percent",
+            ),
+            pytest.param(
+                ["1 Alpha .. 20", "2 Beta .. 30", "3 Gamma .. 40"],
+                True,
+                id="dot-runs",
+            ),
+            pytest.param(
+                ["12 Bayesian Deep Learning 310"],
+                True,
+                id="single-serial-line",
+            ),
+            pytest.param([], False, id="empty-page"),
+        ],
+    )
+    def test_share_threshold(self, lines: list[str], expected: bool) -> None:
+        chunks = [{"chunk_text": "\n".join(lines), "page_number": 5}]
+        assert RAGPipeline._dot_leader_page(chunks) is expected
+
+
+class TestEnumerationPromptRule:
+    """Task 6.2/7.10: rule 12 enumerates every chapter without a count."""
+
+    pytestmark = pytest.mark.unit
+
+    def test_rule_12_has_no_hard_coded_chapter_count(self) -> None:
+        from secondbrain.config import config
+
+        normalized = " ".join(config().rag_system_prompt.split())
+        # The old rule hard-coded the reference manual's chapter total.
+        assert "must name all 21" not in normalized
+        assert "Enumerate all 21" not in normalized
+        assert (
+            "Enumerate every chapter present, whatever the total count." in normalized
+        ), normalized

@@ -231,6 +231,38 @@ class RAGPipeline(
                 # License/colophon pages (GFDL/GNU) carry numbered all-caps
                 # headings that mimic chapter openers — no scan may anchor on them.
                 boiler_pages_ = self._boilerplate_pages(structure_chunks)
+                # Body chunks grouped by page feed two consumers: the
+                # section-heading evidence tier below (its ±1 pin adjustment
+                # and its ToC-like page classification) and the ToC-like
+                # page set the digit scans skip.  Fetched once here instead
+                # of after the anchor pass so the evidence tier — which must
+                # run FIRST — can use it.
+                dot_leader_ = re.compile(r"\.{2,}")
+                body_all_ = cast(
+                    list[dict[str, Any]],
+                    list(
+                        storage.get_body_chunks(
+                            src,
+                            limit=None,
+                        )
+                    ),
+                )
+                body_by_page_: dict[int, list[dict[str, Any]]] = {}
+                for body_c_ in body_all_:
+                    body_by_page_.setdefault(
+                        int(body_c_.get("page_number") or 0), []
+                    ).append(body_c_)
+                # Dot-leader-dense body pages are printed ToCs: the
+                # section-number and loose-digit scans below must never pin
+                # from them (defense in depth — the evidence tier performs
+                # the same classification with the page's heading chunks
+                # included).  Classified from body chunks only, matching
+                # what these scans see.
+                toc_like_pages_ = {
+                    pg_
+                    for pg_, pg_chunks_ in body_by_page_.items()
+                    if self._dot_leader_page(pg_chunks_)
+                }
                 # Labeled-docling books (element_type migration): docling drops
                 # the "Chapter N" banner, strips section numbers from headings,
                 # and leaves ToC/covers pages as body chunks — the scans below
@@ -259,6 +291,37 @@ class RAGPipeline(
                         exc_info=True,
                     )
                     heading_all_ = []
+                # Tier 0 — section-heading evidence pins.  Each chapter's
+                # first numbered section heading (``N.1``) is the strongest
+                # start-page signal: it survives even when the banner/title
+                # heading was dropped, and it sits on (or one page beside)
+                # the true opener.  These pins are PROVISIONAL (±1 page):
+                # exact ToC evidence — listing rows or recovered run-on rows
+                # resolved through a validated printed→stored offset — may
+                # replace them; the fuzzy anchors and every later digit scan
+                # keep their fill-only semantics and never override.
+                provisional_pins_: set[int] = set()
+                evidence_pin_pg_: dict[int, int] = {}
+                for ev_ch_, ev_pg_ in sorted(
+                    self._section_heading_pins(
+                        full_chapters,
+                        src,
+                        heading_all_,
+                        boiler_pages=boiler_pages_,
+                        body_chunks_by_page=body_by_page_,
+                    ).items()
+                ):
+                    if not self._pin_fits_window(chapter_first_pg, ev_ch_, ev_pg_):
+                        continue
+                    chapter_first_pg[ev_ch_] = ev_pg_
+                    provisional_pins_.add(ev_ch_)
+                    evidence_pin_pg_[ev_ch_] = ev_pg_
+                    logger.debug(
+                        "Provisional evidence pin for chapter %d at page %d "
+                        "via its N.1 section heading",
+                        ev_ch_,
+                        ev_pg_,
+                    )
                 anchor_titles_: dict[int, str] = {}
                 for an_ch, an_pg in self._heading_title_anchors(
                     full_chapters,
@@ -279,13 +342,6 @@ class RAGPipeline(
                 # (so they are invisible to CHAPTER_N_RE).  Find each chapter's
                 # title heading on a body page (skipping TOC dot-leader lines) and
                 # pre-populate, so the noisy scans cannot override it.
-                dot_leader_ = re.compile(r"\.{2,}")
-                body_all_ = list(
-                    storage.get_body_chunks(
-                        src,
-                        limit=None,
-                    )
-                )
                 for tn_ in full_chapters:
                     tn, ts_, tt_ = tn_
                     # Detected titles often carry a printed-page artifact,
@@ -330,6 +386,16 @@ class RAGPipeline(
                         brest_lead_ = brest_.strip()
                         if dot_leader_.search(brest_) or (
                             brest_lead_ and brest_lead_[0].isdigit()
+                        ):
+                            continue
+                        # Cross-reference prose ("... Working with VMs on
+                        # page 89") names a chapter from a foreign page —
+                        # mirror the section scan's on-page refusal so the
+                        # body-title pass cannot anchor there either.
+                        if re.search(
+                            r"\bon\s+page\s+\d+",
+                            btext_[bm_.end() : bm_.end() + 60],
+                            re.IGNORECASE,
                         ):
                             continue
                         if tn not in chapter_first_pg:
@@ -471,7 +537,12 @@ class RAGPipeline(
                         for toc_ch_, (toc_title_, toc_printed_) in sorted(
                             toc_listings_.items()
                         ):
-                            if toc_ch_ in chapter_first_pg:
+                            # Exact printed-page evidence replaces a
+                            # provisional section-heading pin (±1); pins from
+                            # anchors/scans stay untouchable.
+                            if toc_ch_ in chapter_first_pg and (
+                                toc_ch_ not in provisional_pins_
+                            ):
                                 continue
                             if toc_ch_ not in good_title_nums:
                                 continue
@@ -541,7 +612,9 @@ class RAGPipeline(
                 # the docling space regression glues a roster title without
                 # deleting it (PVE ch6 "QEMU/KVM Virtual Machines" came
                 # through glued), so an empty-title probe misses the very
-                # chapter the recovery exists for.
+                # chapter the recovery exists for — and chapters carrying a
+                # provisional evidence pin, whose exact ToC row can refine
+                # the ±1 pin to the printed opener page.
                 runon_rows_: dict[int, tuple[str, int]] = {}
                 titleless_now_ = {
                     ct[0] for ct in chapters_to_cover if ct[1] == src and not ct[2]
@@ -553,7 +626,7 @@ class RAGPipeline(
                     and ct[0] in good_title_nums
                     and ct[0] not in chapter_first_pg
                 }
-                if titleless_now_ or unpinned_roster_:
+                if titleless_now_ or unpinned_roster_ or provisional_pins_:
                     runon_rows_ = self._recovered_runon_toc_rows(structure_chunks, src)
                 if runon_rows_:
                     # Fill roster titles first (display correctness), then
@@ -621,14 +694,58 @@ class RAGPipeline(
                         footer_offset_ = footer_page_offset(nav_texts_)
                     except Exception:
                         footer_offset_ = None
+                    # Evidence-validated offset fallback (footer-less books):
+                    # when the nav footers cannot vote, recovered ToC rows
+                    # still carry exact printed pages and the section-heading
+                    # evidence pins locate the same chapters.  The offset is
+                    # the strict-majority vote of (pin - printed) over rows
+                    # whose evidence pin still stands — using the pin page,
+                    # not the raw heading page, so the ±1 rule folds into
+                    # the offset.  No strict majority → no pins from this
+                    # fallback.
+                    runon_offset_ = footer_offset_
+                    if runon_offset_ is None:
+                        standing_ev_ = {
+                            ev_ch_: ev_pg_
+                            for ev_ch_, ev_pg_ in evidence_pin_pg_.items()
+                            if chapter_first_pg.get(ev_ch_) == ev_pg_
+                        }
+                        offset_votes_: dict[int, int] = {}
+                        for v_ch_, (_v_title, v_printed_) in runon_rows_.items():
+                            if v_ch_ in standing_ev_:
+                                v_off_ = standing_ev_[v_ch_] - v_printed_
+                                offset_votes_[v_off_] = offset_votes_.get(v_off_, 0) + 1
+                        if offset_votes_:
+                            top_votes_ = max(offset_votes_.values())
+                            leaders_ = [
+                                v_off_
+                                for v_off_, v_cnt_ in offset_votes_.items()
+                                if v_cnt_ == top_votes_
+                            ]
+                            # Strict majority: at least two agreeing rows and
+                            # no other offset tying the leader.
+                            if top_votes_ >= 2 and len(leaders_) == 1:
+                                runon_offset_ = leaders_[0]
+                                logger.debug(
+                                    "Run-on ToC offset fallback for %s: %d "
+                                    "(%d agreeing evidence rows)",
+                                    src,
+                                    runon_offset_,
+                                    top_votes_,
+                                )
                     for ch, (title, printed) in sorted(runon_rows_.items()):
-                        if ch in chapter_first_pg or ch not in (
-                            titleless_now_ | unpinned_roster_
+                        # Exact ToC evidence may replace a provisional
+                        # section-heading pin; anchor/scan pins keep
+                        # fill-only semantics.
+                        if ch in chapter_first_pg and ch not in provisional_pins_:
+                            continue
+                        if ch not in (
+                            titleless_now_ | unpinned_roster_ | provisional_pins_
                         ):
                             continue
-                        if footer_offset_ is None:
+                        if runon_offset_ is None:
                             continue
-                        physical = printed + footer_offset_
+                        physical = printed + runon_offset_
                         if physical < 10:
                             continue
                         if not self._pin_fits_window(chapter_first_pg, ch, physical):
@@ -636,12 +753,12 @@ class RAGPipeline(
                         chapter_first_pg[ch] = physical
                         logger.debug(
                             "Pinned chapter %d (%s) at page %d via run-on "
-                            "ToC row (printed %d + footer offset %d)",
+                            "ToC row (printed %d + offset %d)",
                             ch,
                             title,
                             physical,
                             printed,
-                            footer_offset_,
+                            runon_offset_,
                         )
                 ch_n = re.compile(
                     r"(?:Chapter\s+(\d+)\s*[:\-]?\s*|(?:Module|Lesson)\s+(\d+)"
@@ -729,6 +846,10 @@ class RAGPipeline(
                     page = chunk.get("page_number") or 0
                     if page in boiler_pages_:
                         continue
+                    if page in toc_like_pages_:
+                        # Dot-leader ToC pages list every chapter's sections;
+                        # their "N.1" shapes are references, never openers.
+                        continue
 
                     # Detect appendix labels from body section numbering
                     am = appendix_sec_re.search(txt)
@@ -780,6 +901,10 @@ class RAGPipeline(
                         txt = chunk.get("chunk_text", "")[:150]
                         pg2 = int(chunk.get("page_number") or 0)
                         if pg2 in boiler_pages_:
+                            continue
+                        if pg2 in toc_like_pages_:
+                            # Same defense as the section scan: printed-ToC
+                            # pages carry every chapter's number somewhere.
                             continue
                         # Ordering note: this tier runs AFTER the run-on ToC
                         # row recovery above, whose `ch not in chapter_first_pg`
@@ -972,12 +1097,30 @@ class RAGPipeline(
                     return self._generic_one_shot(
                         query, top_k, show_sources, source_filter=source_filter
                     )
+                # Enumeration completeness: a target roster chapter no tier
+                # pinned still belongs in the answer.  Give it an empty
+                # sentinel range — its bucket stays empty and the existing
+                # placeholder-note path speaks for it, instead of the chapter
+                # silently vanishing from the enumeration.  Scoped to the
+                # selected source: a foreign-source roster entry (another
+                # book's chapter row surviving the phantom kill) must not
+                # gain a placeholder from THIS book's summary.  Boundary
+                # computation above already ran on chapter_first_pg, so
+                # sentinel ranges cannot shift any real chapter's end page.
+                tgt_src_nums_ = {ct[0] for ct in chapters_to_cover if ct[1] == src}
+                for tgt_ch_ in sorted(tgt_src_nums_):
+                    if tgt_ch_ not in chapter_ranges_:
+                        chapter_ranges_[tgt_ch_] = (0, -1)
                 logger.debug(
                     "Chapter page ranges for %s: %s",
                     src,
                     chapter_ranges_,
                 )
+                # Fetch mode counts real ranges only: sentinel ranges must
+                # not flip a small book's single-section full fetch into
+                # round-robin sampling.
                 single_section_mode = len(chapter_keys) <= 2
+                chapter_keys = sorted(chapter_ranges_.keys())
                 # Per-chapter fetch budget for multi-chapter overviews.  Each
                 # chapter is summarized independently via _summarize_bounded
                 # (single-pass budget 320k chars), so 8 chunks stay within one
@@ -1200,15 +1343,21 @@ class RAGPipeline(
                         ch_titles[ct[0]] = ct[2]
                 chapter_roster_lines = []
                 for ch_num in sorted(chapter_ranges_.keys()):
-                    pg_start = chapter_ranges_[ch_num][0]
+                    pg_start, pg_end = chapter_ranges_[ch_num]
                     title = self._display_chapter_title(ch_titles.get(ch_num, ""))
+                    # An unpinned chapter's sentinel range has no page to
+                    # advertise; "(approx pages 0+)" would read as a bogus
+                    # claim, so its roster line omits the page suffix.
+                    pg_note = (
+                        "" if pg_end < pg_start else f" (approx pages {pg_start}+)"
+                    )
                     if title:
                         chapter_roster_lines.append(
-                            f"Chapter {ch_num} — {title} (approx pages {pg_start}+)"
+                            f"Chapter {ch_num} — {title}{pg_note}"
                         )
                     else:
                         chapter_roster_lines.append(
-                            f"Chapter {ch_num} — No official title (approx pages {pg_start}+)"
+                            f"Chapter {ch_num} — No official title{pg_note}"
                         )
                 chapter_roster = "\n".join(chapter_roster_lines)
 
