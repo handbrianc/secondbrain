@@ -47,7 +47,7 @@ mongomock==4.3.0
 typing-extensions==4.16.0
 
 # FastAPI examples and testing
-fastapi>=0.143.1
+fastapi>=0.143.2
 uvicorn>=0.54.0
 
 # Flask examples and testing
