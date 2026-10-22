@@ -25,6 +25,7 @@ from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, NotRequired
 
+import numpy as np
 from typing_extensions import TypedDict
 
 from secondbrain.exceptions import DocumentExtractionError
@@ -187,6 +188,48 @@ def _fallback_text_or_raise(file_path: Path) -> str:
     )
 
 
+def _extend_segments_from_document(content: Any, segments: list[_Segment]) -> None:
+    """Extend *segments* with the text items of a docling document.
+
+    Appends one window's (or the whole document's) text items in document
+    order, skipping empty items — the exact loop the historical
+    single-conversion path inlined, so windowed and whole-document
+    conversions produce identical segment streams.
+
+    Args:
+        content: A docling ``DoclingDocument`` (``result.document``).
+        segments: Segment list to extend; each entry carries ``"text"``,
+            ``"page"``, and optionally ``"label"``.
+    """
+    if not (hasattr(content, "texts") and content.texts):
+        return
+    for text_item in content.texts:
+        if not hasattr(text_item, "text") or not text_item.text:
+            continue
+        page_num = 1
+        if hasattr(text_item, "prov") and text_item.prov:
+            prov = text_item.prov[0]
+            if hasattr(prov, "page_no"):
+                page_num = prov.page_no
+        # prov.page_no is the ABSOLUTE 1-based PDF page index, also under
+        # page_range windowing — verified against docling 2.138.0:
+        # get_expected_page_nos enumerates
+        # range(max(1, start), min(page_count, end) + 1)
+        # (docling/pipeline/base_pipeline.py:45-53); iter_pdf_page_backends
+        # yields page backends "identified by absolute one-based page number"
+        # via load_page(page_no - 1) (docling/backend/pdf_backend.py:166-176);
+        # PyPdfiumPageBackend.page_no returns its 0-based absolute index + 1
+        # (docling/backend/pypdfium2_backend.py:294-295); the pipeline keys
+        # its Page objects by those absolute numbers
+        # (docling/pipeline/standard_pdf_pipeline.py:829-834). No
+        # window-relative remap is needed.
+        segment: _Segment = {"text": text_item.text, "page": page_num}
+        label = docling_item_label(text_item)
+        if label is not None:
+            segment["label"] = label
+        segments.append(segment)
+
+
 # ---------------------------------------------------------------------------
 # Converter factory
 # ---------------------------------------------------------------------------
@@ -344,13 +387,35 @@ def _extract_and_chunk_file(
         }
 
 
+def _as_embedding_row(values: Any, dtype: np.dtype[Any]) -> np.ndarray:
+    """Coerce one embedding vector into a fixed-width numpy row.
+
+    Embeddings accumulate and travel as fixed-width arrays (per
+    ``cfg.embedding_dtype``) instead of Python-float-object lists, bounding
+    the worker's accumulation, the worker→parent pickle, and the parent's
+    live copy to ~6 KB per 1536-dim chunk instead of ~49 KB. Stored vector
+    values are the provider's floats at *dtype* precision.
+
+    Args:
+        values: One embedding vector — a sequence of floats (provider batch
+            item or embedding-cache hit) or an ndarray.
+        dtype: Target numpy dtype derived from ``cfg.embedding_dtype``.
+
+    Returns
+    -------
+        1-D ndarray of *dtype*; an already-compatible array is returned
+        as-is without a copy.
+    """
+    return np.asarray(values, dtype=dtype)
+
+
 def _embed_unique_chunks(
     embedding_model: Any,
     unique_chunks: list[dict[str, Any]],
     embedding_cache: EmbeddingCache | None = None,
     batch_size: int | None = None,
     progress_callback: Callable[[int, int], None] | None = None,
-) -> list[list[float]]:
+) -> list[np.ndarray]:
     """Embed a list of unique chunk dicts in batches, optionally reusing a cache.
 
     Processes ``unique_chunks`` in slices of ``batch_size`` (defaulting to the
@@ -358,6 +423,11 @@ def _embed_unique_chunks(
     once per slice. When ``embedding_cache`` is provided, per-text cache hits are
     reused so the embedder is only invoked for cache misses. The returned list is
     aligned 1:1 (same order, same length) with ``unique_chunks``.
+
+    Every vector is converted to a fixed-width array (``cfg.embedding_dtype``,
+    float32) as its batch returns, so the worker's accumulation and the
+    worker→parent transport stay compact. The embedding cache keeps storing the
+    provider's raw batch items, so cache keys and stored values are unchanged.
 
     Args:
         embedding_model: Object exposing a ``generate_batch(texts)`` method that
@@ -372,15 +442,24 @@ def _embed_unique_chunks(
 
     Returns
     -------
-        List of embedding vectors, one per element of ``unique_chunks``.
+        List of fixed-width numpy arrays of ``cfg.embedding_dtype``, one per
+        element of ``unique_chunks``.
     """
-    if batch_size is None:
-        from secondbrain.config import config
+    from secondbrain.config import config
 
-        batch_size = config().embedding_batch_size
+    cfg = config()
+    if batch_size is None:
+        batch_size = cfg.embedding_batch_size
+    # Fixed-width transport dtype: cfg.embedding_dtype ("float32") maps to the
+    # numpy dtype used for accumulation, transport, and storage. A missing or
+    # unrecognized value falls back to float32 — config validation is the gate
+    # for accepted values.
+    dtype = {"float32": np.dtype("float32")}.get(
+        str(getattr(cfg, "embedding_dtype", "float32")), np.dtype("float32")
+    )
 
     texts = [c["text"] for c in unique_chunks]
-    embeddings: list[list[float]] = []
+    embeddings: list[np.ndarray] = []
     processed = 0
     total = len(texts)
 
@@ -388,16 +467,19 @@ def _embed_unique_chunks(
         slice_texts = texts[start : start + batch_size]
 
         if embedding_cache is None:
-            embeddings.extend(embedding_model.generate_batch(slice_texts))
+            embeddings.extend(
+                _as_embedding_row(vec, dtype)
+                for vec in embedding_model.generate_batch(slice_texts)
+            )
         else:
-            batch_results: list[list[float] | None] = [None] * len(slice_texts)
+            batch_results: list[np.ndarray | None] = [None] * len(slice_texts)
             missing_texts: list[str] = []
             missing_slots: list[int] = []
 
             for index, text in enumerate(slice_texts):
                 cached = embedding_cache.get(text)
                 if cached is not None:
-                    batch_results[index] = cached
+                    batch_results[index] = _as_embedding_row(cached, dtype)
                 else:
                     missing_slots.append(index)
                     missing_texts.append(text)
@@ -407,7 +489,10 @@ def _embed_unique_chunks(
                 for slot, text, emb in zip(
                     missing_slots, missing_texts, missing_embeddings, strict=True
                 ):
-                    batch_results[slot] = emb
+                    batch_results[slot] = _as_embedding_row(emb, dtype)
+                    # Cache the provider's raw item: keys and stored values
+                    # stay unchanged; only the worker's accumulation and
+                    # transport switch to the compact array form.
                     embedding_cache.set(text, emb)
 
             for result in batch_results:
@@ -476,7 +561,9 @@ def _extract_chunk_and_embed_file(
 
     - ``"extract"``: ``(0, 0)`` at worker start (indeterminate), then page
       ticks with a known total for PDFs (fast native extraction and, when
-      ``scrape_docling_pages`` is set, scraped docling page batches).
+      ``scrape_docling_pages`` is set, scraped docling page batches; under
+      page-window conversion the scraped ticks are rebased per window so
+      they advance continuously across window boundaries).
     - ``"chunk"``: ``(0, 1)`` just before, ``(1, 1)`` right after chunking.
     - ``"embed"``: per embedding batch with ``total = len(unique_chunks)``.
 
@@ -508,6 +595,7 @@ def _extract_chunk_and_embed_file(
         a failed extraction with no text at all (reported as success=False).
     """
     import contextlib
+    import gc
     from datetime import UTC, datetime
     from uuid import uuid4
 
@@ -562,41 +650,87 @@ def _extract_chunk_and_embed_file(
                     )
                 converter = get_converter_for_path(file_path)
 
+                # One page count, shared by windowing and — when enabled —
+                # the docling DEBUG page-batch scraper. 0 means unknown
+                # (non-PDF or unreadable), which keeps the whole-document
+                # conversion.
+                is_pdf = file_path.suffix.lower() == ".pdf"
+                total_pages = pdf_page_count(file_path) if is_pdf else 0
+                # Window setting from config (0 disables windowing); the
+                # getattr default mirrors the config default (200) so stub
+                # configs without the field keep working.
+                max_convert_pages = int(
+                    getattr(config(), "pdf_max_pages_per_convert", 200)
+                )
+                use_windows = 0 < max_convert_pages < total_pages
+
+                # Sequential, non-overlapping 1-based inclusive page ranges
+                # covering every page exactly once (window count =
+                # ceil(pages / window)); a whole-document conversion is the
+                # single-element case, exactly the historical path.
+                windows: list[tuple[int, int] | None] = [None]
+                if use_windows:
+                    windows = [
+                        (start, min(start + max_convert_pages - 1, total_pages))
+                        for start in range(1, total_pages + 1, max_convert_pages)
+                    ]
+
+                segments = []
+
+                def _convert_one(window: tuple[int, int] | None) -> None:
+                    """Convert one page window (or the whole file) and release it.
+
+                    Extends *segments* from the conversion result, then
+                    releases all conversion artifacts. Mirrors docling's own
+                    release pattern (``DocumentConverter._unload_input_document``,
+                    docling #2209): the backend page state is unloaded and the
+                    ``ConversionResult``/``DoclingDocument`` references are
+                    dropped before the next window, so peak memory no longer
+                    grows with page count. Release failures never fail the
+                    extraction.
+                    """
+                    result = (
+                        converter.convert(file_path, page_range=window)
+                        if window is not None
+                        else converter.convert(file_path)
+                    )
+                    _extend_segments_from_document(result.document, segments)
+                    backend = getattr(getattr(result, "input", None), "_backend", None)
+                    if backend is not None and hasattr(backend, "unload"):
+                        with contextlib.suppress(Exception):
+                            backend.unload()
+                    del result
+                    gc.collect()
+
                 if scrape_docling_pages and progress_queue is not None:
                     # Docling has no progress callback API; the per-page-batch
                     # DEBUG log on base_pipeline is the only in-band signal.
                     # see secondbrain.document.docling_progress for the why.
-                    total_pages = (
-                        pdf_page_count(file_path)
-                        if file_path.suffix.lower() == ".pdf"
-                        else 0
-                    )
                     if total_pages:
                         _emit_extract(0, total_pages)
-                    with scraped_page_progress(_emit_extract):
-                        result = converter.convert(file_path)
-                else:
-                    result = converter.convert(file_path)
-                content = result.document
+                    window_offset = [0]
 
-                segments = []
-                if hasattr(content, "texts") and content.texts:
-                    for text_item in content.texts:
-                        if not hasattr(text_item, "text") or not text_item.text:
-                            continue
-                        page_num = 1
-                        if hasattr(text_item, "prov") and text_item.prov:
-                            prov = text_item.prov[0]
-                            if hasattr(prov, "page_no"):
-                                page_num = prov.page_no
-                        segment: _Segment = {
-                            "text": text_item.text,
-                            "page": page_num,
-                        }
-                        label = docling_item_label(text_item)
-                        if label is not None:
-                            segment["label"] = label
-                        segments.append(segment)
+                    def _scraped_page_tick(done: int, total: int) -> None:
+                        # The scraper's counters are per convert() call: done
+                        # counts pages inside the current conversion and
+                        # total is that conversion's page count only. Rebase
+                        # done against the pages already converted in earlier
+                        # windows and report against the real page count so
+                        # the CLI progress bar advances continuously across
+                        # window boundaries.
+                        _emit_extract(done + window_offset[0], total_pages)
+
+                    on_page_batch: Callable[[int, int], None] = (
+                        _scraped_page_tick if use_windows else _emit_extract
+                    )
+                    with scraped_page_progress(on_page_batch):
+                        for window in windows:
+                            if window is not None:
+                                window_offset[0] = window[0] - 1
+                            _convert_one(window)
+                else:
+                    for window in windows:
+                        _convert_one(window)
 
                 if not _segments_have_text(segments):
                     segments = [{"text": _fallback_text_or_raise(file_path), "page": 1}]

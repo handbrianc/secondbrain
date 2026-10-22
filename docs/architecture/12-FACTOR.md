@@ -4,11 +4,11 @@ SecondBrain is evaluated against the [Twelve-Factor App](https://12factor.net) m
 of the repository's periodic 12-factor scan. Every factor is either satisfied or not applicable
 for a local CLI, with two **documented deviations** — both deliberate, with recorded rationale.
 
-| Factor          | Status               | Evidence                                                |
-| --------------- | -------------------- | ------------------------------------------------------- |
-| V — Build/Release/Run | Satisfied      | Tag-based release build via CI — see below              |
-| VI — Processes  | Documented deviation | Local SQLite conversation/session state — see below     |
-| XI — Logs       | Documented deviation | Opt-in rotating file logging — see below                |
+| Factor                | Status               | Evidence                                            |
+| --------------------- | -------------------- | --------------------------------------------------- |
+| V — Build/Release/Run | Satisfied            | Tag-based release build via CI — see below          |
+| VI — Processes        | Documented deviation | Local SQLite conversation/session state — see below |
+| XI — Logs             | Documented deviation | Opt-in rotating file logging — see below            |
 
 ## V — Build, Release, Run: tag-based releases with branch/PR validation
 
@@ -16,11 +16,11 @@ for a local CLI, with two **documented deviations** — both deliberate, with re
 immutable, numbered artifacts that can be rolled back. SecondBrain publishes tag-triggered
 releases and runs separate branch/PR validation workflows (`.github/workflows/`):
 
-| Workflow                 | Trigger                    | Role                                            |
-| ------------------------ | -------------------------- | ----------------------------------------------- |
-| `release.yml`            | push of a `v*` git tag     | Builds and publishes the release artifact       |
-| `security.yml`           | push / pull request        | Security validation (pip-audit, bandit, safety, pipdeptree, libyear) |
-| `test-quality-gates.yml` | push to main/develop, PRs  | Test suite and quality validation               |
+| Workflow                 | Trigger                   | Role                                                                     |
+| ------------------------ | ------------------------- | ------------------------------------------------------------------------ |
+| `release.yml`            | push of a `v*` git tag    | Builds and publishes the release artifact                                |
+| `security.yml`           | push / pull request       | Security validation (pip-audit, bandit, safety, pipdeptree, libyear)     |
+| `test-quality-gates.yml` | push to main/develop, PRs | Test suite and quality validation                                        |
 
 **Build stage.** The single source of truth is `pyproject.toml`; the package is built with
 `python -m build` (sdist + wheel). There is no bespoke build step: any checkout of the same
