@@ -98,6 +98,10 @@ or behavior change:
   model forward still runs on the GPU.
 - `pdf_threaded_pipeline` / `pdf_layout_batch_size` — use docling's threaded/batched
   PDF pipeline instead of the default, and set the layout-model batch size.
+- `pdf_backend` / `pdf_max_pages_per_convert` / `pdf_pipeline_queue_max_size` —
+  unlike the opt-in levers above, these are on by default to bound memory on
+  large PDFs: choose the PDF parsing backend, convert oversized PDFs in page
+  windows, and cap the pages buffered between pipeline stages.
 - `pdf_generate_page_images` / `pdf_generate_picture_images` / `pdf_images_scale` —
   render page/picture images during parsing (unused for storage; disabled for speed).
 
@@ -107,13 +111,17 @@ or behavior change:
 |`SECONDBRAIN_CHUNK_OVERLAP`                |`50`                |Overlap between chunks                                                                                                                                                                                                                                                                           |
 |`SECONDBRAIN_SUPPORTED_EXTENSIONS`         |(comprehensive list)|Comma-separated file extensions                                                                                                                                                                                                                                                                  |
 |`SECONDBRAIN_MAX_FILE_SIZE_BYTES`          |`104857600`         |Maximum file size (100MB)                                                                                                                                                                                                                                                                        |
+|`SECONDBRAIN_PDF_BACKEND`                  |`pypdfium`          |PDF parsing backend: `pypdfium` \| `docling-parse` (`pdf_backend`). `pypdfium` bounds memory on large PDFs; set `docling-parse` to restore the legacy backend                                                                                                                                    |
+|`SECONDBRAIN_PDF_MAX_PAGES_PER_CONVERT`    |`200`               |Convert PDFs with more pages than this in sequential page windows, releasing conversion artifacts between windows (`pdf_max_pages_per_convert`). `0` disables windowing (whole-document conversion); lower for tighter memory on small hosts. Chunking and stored results are unchanged          |
 |`SECONDBRAIN_PDF_OCR_ENABLED`              |`false`             |Run OCR on PDFs (`pdf_ocr_enabled`). `false` = OCR only when the PDF has no embedded text layer (scanned); `true` = always OCR all PDFs                                                                                                                                                          |
 |`SECONDBRAIN_PDF_FAST_TEXT_ENABLED`        |`true`              |Skip docling's layout/OCR models for PDFs that have a native text layer, extracting text with pypdfium2 directly (`pdf_fast_text_enabled`). Falls back to the full docling pipeline when the PDF has no/insufficient native text (scanned/empty). Ignored when `SECONDBRAIN_PDF_OCR_ENABLED=true`|
 |`SECONDBRAIN_PDF_STRUCTURE_PROBE_ENABLED`  |`true`              |Route text-layer PDFs that look like structured books (line-start "Chapter N" openers or dotted ToC entries in the leading pages) through the full docling pipeline to capture per-item structural labels (`pdf_structure_probe_enabled`). `false` keeps every text-layer PDF on the fast path   |
 |`SECONDBRAIN_PDF_TABLE_STRUCTURE_ENABLED`  |`false`             |Detect table structure in PDFs (`pdf_table_structure_enabled`). Disabled by default for speed; set `true` to enable                                                                                                                                                                              |
 |`SECONDBRAIN_PDF_TABLE_FAST_MODE`          |`true`              |When table structure is enabled, use TableFormer 'fast' mode instead of the slower, more accurate mode (`pdf_table_fast_mode`)                                                                                                                                                                   |
 |`SECONDBRAIN_PDF_TABLE_CELL_MATCHING`      |`false`             |Enable docling table cell matching (post-processing); disabled by default for speed and OCR compatibility (`pdf_table_cell_matching`)                                                                                                                                                            |
-|`SECONDBRAIN_PDF_ACCELERATOR_DEVICE`       |`auto`              |Docling accelerator device: `auto` \| `cpu` \| `mps` \| `cuda` \| `xpu` — Intel iGPU/dGPU (`pdf_accelerator_device`)                                                                                                                                                                             |
+|`SECONDBRAIN_PDF_PIPELINE_QUEUE_MAX_SIZE`  |`16`                |Bound on pages docling buffers between conversion stages, must be >= 1 (`pdf_pipeline_queue_max_size`)                                                                                                                                                                                           |
+|`SECONDBRAIN_PDF_ACCELERATOR_DEVICE`       |`auto`              |Docling accelerator device: `auto` \| `cpu` \| `mps` \| `cuda` \| `xpu` — Intel iGPU/dGPU (`pdf_accelerator_device`). When the device shares system RAM, the SYCL JIT cache persists to disk and low free memory triggers a preflight warning naming the `cpu` fallback                          |
+|`SECONDBRAIN_ACCELERATOR_MIN_FREE_RAM_MIB` |`2048`              |Warning threshold only: preflight warns when the resolved accelerator device shares system RAM and free memory is below this many MiB, naming `SECONDBRAIN_PDF_ACCELERATOR_DEVICE=cpu` as the fallback (`accelerator_min_free_ram_mib`)                                                          |
 |`SECONDBRAIN_PDF_NUM_THREADS`              |`4`                 |Threads for docling inference, must be >= 1 (`pdf_num_threads`)                                                                                                                                                                                                                                  |
 |`SECONDBRAIN_PDF_THREADED_PIPELINE`        |`false`             |Use docling's threaded/batched PDF pipeline instead of the default (`pdf_threaded_pipeline`)                                                                                                                                                                                                     |
 |`SECONDBRAIN_PDF_LAYOUT_BATCH_SIZE`        |`4`                 |Layout-model batch size for the threaded pipeline, must be >= 1; only used when `pdf_threaded_pipeline` is true (`pdf_layout_batch_size`)                                                                                                                                                        |
@@ -164,8 +172,12 @@ or behavior change:
 |`SECONDBRAIN_STORAGE_COMPRESSION_ENABLED`|`true`   |Enable zstd compression           |
 |`SECONDBRAIN_TEXT_COMPRESSION_ENABLED`   |`false`  |Enable text compression           |
 |`SECONDBRAIN_TEXT_COMPRESSION_ALGORITHM` |`gzip`   |Algorithm: gzip, brotli, zstd     |
-|`SECONDBRAIN_EMBEDDING_DTYPE`            |`float32`|Storage precision                 |
+|`SECONDBRAIN_EMBEDDING_DTYPE`            |`float32`|Storage precision (`float32` only)|
 |`SECONDBRAIN_EMBEDDING_STORAGE_FORMAT`   |`array`  |Storage format (array recommended)|
+
+`embedding_dtype` is now used end-to-end: embeddings are produced, accumulated, transported across
+the ingest process boundary, and stored in this dtype. Stored vectors are numerically unchanged; only
+`float32` is currently supported.
 
 ## Logging
 

@@ -43,6 +43,7 @@ nav:
       - Developer Guide: developer-guide/index.md
       - Development Setup: developer-guide/development.md
       - Docker Setup: developer-guide/docker.md
+      - MCP Server: developer-guide/mcp.md
       - Configuration Reference: developer-guide/configuration.md
       - Building & Distribution: developer-guide/building.md
       - Async API Guide: developer-guide/async-api.md

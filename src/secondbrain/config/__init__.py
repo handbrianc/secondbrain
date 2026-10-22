@@ -125,8 +125,10 @@ class Config(
             or self.streaming_chunk_batch_size > 200
         ):
             raise ValueError("streaming_chunk_batch_size must be between 1 and 200")
-        if self.embedding_dtype not in ("float32", "float64"):
-            raise ValueError("embedding_dtype must be 'float32' or 'float64'")
+        if self.embedding_dtype != "float32":
+            raise ValueError(
+                "embedding_dtype must be 'float32' (only supported value for now)"
+            )
         if self.embedding_storage_format not in ("binary", "array"):
             raise ValueError("embedding_storage_format must be 'binary' or 'array'")
         if self.text_compression_algorithm not in ("gzip", "brotli", "zstd"):

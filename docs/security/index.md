@@ -269,7 +269,7 @@ build):
 | ---------- | ------------------- | --------------- |
 | `gitpython` | 15 | Transitive via docling-git; pin update conflicts with docling's dependency graph |
 | `pyasn1` | 4 | Transitive (cryptography-related); fix version conflicts with pinned constraints |
-| `nltk`, `aiohttp`, `twisted`, `docling`, `soupsieve`, `joserfc`, `paramiko`, `msgpack`, `h2`, `pymdown-extensions`, `torch` | 4-1 each | Heavy/transitive; forced upgrade is risky or unresolved against the pinned lock |
+| `nltk`, `aiohttp`, `docling`, `soupsieve`, `joserfc`, `paramiko`, `msgpack`, `h2`, `pymdown-extensions`, `torch` | 4-1 each | Heavy/transitive; forced upgrade is risky or unresolved against the pinned lock |
 
 **Tracking:** These are monitored on every release via the regenerated `sbom.json` / `sbom.spdx`
 and the CI security scan. They are not exploitable through the application's HTTP/CLI surface
