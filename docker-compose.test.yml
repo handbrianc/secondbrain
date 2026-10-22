@@ -6,6 +6,24 @@ services:
     image: qdrant/qdrant:latest
     container_name: secondbrain-qdrant-test
     hostname: qdrant
+    # Healthcheck mirrors the production hardening
+    # (harden-compose-qdrant-service): the qdrant image ships neither curl nor
+    # wget, so probe its native /healthz endpoint with bash's built-in
+    # /dev/tcp: open the socket, send a minimal HTTP request, and require an
+    # HTTP 200 response.
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -c
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/6333 &&
+          printf "GET /healthz HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n" >&3 &&
+          grep -q "HTTP/1.1 200" <&3
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     ports:
       - "6334:6333"  # Different from dev port (6333)
     volumes:
@@ -13,8 +31,70 @@ services:
     networks:
       - secondbrain-test-network
 
+  # Test MCP server, mirroring the production stack (revise-compose-test-stack):
+  # MCP clients → secondbrain-mcp → secondbrain CLI → test Qdrant. Host port
+  # 8081 avoids colliding with a running production stack. The test Qdrant and
+  # the fixture workspace are reached in-network / inside the container.
+  mcp-server:
+    build: .
+    container_name: secondbrain-mcp-server-test
+    ports:
+      - "8081:8080"
+    environment:
+      # --- Storage: the bundled test Qdrant + isolated SQLite volume ---------
+      SECONDBRAIN_STORAGE_BACKEND: "qdrant"
+      SECONDBRAIN_QDRANT_URL: "http://qdrant:6333"
+      SECONDBRAIN_QDRANT_COLLECTION: "embeddings_test"
+      SECONDBRAIN_SQLITE_PATH: "/data/secondbrain/secondbrain-test.db"
+      # --- Embedding settings mirrored from .env.test ------------------------
+      # 384 dimensions match the mock embedding vectors used by the Python
+      # test suite. NOTE: the mock embedding provider itself is injected by
+      # pytest fixtures and cannot be selected via environment — for real
+      # ingest/search through the server, uncomment and point these at an
+      # OpenAI-compatible endpoint:
+      SECONDBRAIN_EMBEDDING_DIMENSIONS: "384"
+      # SECONDBRAIN_EMBEDDING_PROVIDER: "openai"
+      # SECONDBRAIN_EMBEDDING_MODEL: "mock-embedding"
+      # SECONDBRAIN_EMBEDDING_API_BASE: "http://host.docker.internal:11434/v1"
+      # SECONDBRAIN_EMBEDDING_API_KEY: ""
+      # --- Test toggles mirrored from .env.test -------------------------------
+      SECONDBRAIN_LOG_LEVEL: "DEBUG"
+      OTEL_TRACING_ENABLED: "false"
+      OTEL_METRICS_ENABLED: "false"
+      SECONDBRAIN_CIRCUIT_BREAKER_ENABLED: "false"
+      SECONDBRAIN_RATE_LIMIT_ENABLED: "false"
+      SECONDBRAIN_STREAMING_ENABLED: "false"
+      # --- MCP server settings -------------------------------------------------
+      SECONDBRAIN_MCP_HTTP_BIND_ADDR: "0.0.0.0:8080"
+      SECONDBRAIN_MCP_WORKSPACE_ROOT: "/data/workspace"
+      SECONDBRAIN_MCP_LOG_LEVEL: "debug"
+    volumes:
+      # Fixture workspace (deterministic documents) mounted read-only at the
+      # configured workspace root. The upload staging directory is layered
+      # read-write so `upload_document` can store files in the test stack
+      # too (add-mcp-upload-tool); the image entrypoint hands the directory
+      # to the runtime user at startup, so ownership never blocks uploads.
+      - ./tests/fixtures/mcp_workspace:/data/workspace:ro
+      - ./tests/fixtures/mcp_workspace/uploads:/data/workspace/uploads:rw
+      # Isolated test SQLite storage; the image pre-creates /data/secondbrain
+      # owned by the runtime user so a fresh volume inherits that ownership.
+      - sqlite_test_data:/data/secondbrain
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    # PID 1 hygiene, mirroring the production stack: the entrypoint execs into
+    # the server, making it the container's init process — orphaned
+    # grandchildren of each CLI call reparent there and are never reaped by
+    # the server itself. docker-init (tini) takes the PID 1 seat and reaps
+    # them (same rationale as docker-compose.yml).
+    init: true
+    networks:
+      - secondbrain-test-network
+
 volumes:
   qdrant_test_data:
+    driver: local
+  sqlite_test_data:
     driver: local
 
 networks:

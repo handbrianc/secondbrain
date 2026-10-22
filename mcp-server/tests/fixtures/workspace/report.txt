@@ -1,0 +1,4 @@
+Sample document for the ingest tool tests.
+
+The Qdrant vector store connection URL is configured via the
+SECONDBRAIN_QDRANT_URL environment variable.

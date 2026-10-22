@@ -27,11 +27,44 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# PYSEC-2026-3740 (CVE-2026-81726): nltk is a dev-only transitive dep of
-# safety; no fixed release exists (OSV re-opened 2026-10-14, fixed=None
-# against nltk 3.10.3). Mirrors the documented ignore in pyproject.toml
+# PYSEC-2026-3740 (CVE-2026-81726; grype/GHSA id GHSA-8mgp-746c-j5xp): nltk is
+# a dev-only transitive dep of safety; no fixed release exists (OSV re-opened
+# 2026-10-14, fixed=None against nltk 3.10.3 — the latest release). Mirrors
+# the documented ignore in pyproject.toml [tool.safety].
+#
+# CVE-2025-69872 (GHSA-w8v5-vhqr-4h9v): diskcache unsafe pickle
+# deserialization; no fixed release exists (5.6.3 is the latest release).
+# Transitive of the optional llama-cpp-python extras, not imported by
+# secondbrain code. Mirrors the documented ignore in pyproject.toml
 # [tool.safety].
-PIP_AUDIT_IGNORE_ARGS=(--ignore-vuln PYSEC-2026-3740)
+#
+# Pillow 12.3.0 - 2026-10 advisory cluster (CVE-2026-112390..112406,
+# 112891..112901; 24 advisories total): TIFF encode/decode memory-safety
+# issues, APNG/PDF-parser DoS paths, etc. All are fixed in 13.0.0, and all
+# are upstream-blocked: every docling-slim release caps pillow>=10,<13, so
+# no resolvable environment can take the fix (uv lock and pip both fail).
+# Pillow is transitive via docling (no PIL imports in secondbrain code);
+# no TIFF-save path exists in the codebase and the image-open paths are
+# bounded by the docker memory caps on ingestion workers (DoS-only, no
+# RCE/data exposure from this codebase's usage). Mirrors the documented
+# ignore in pyproject.toml [tool.safety]. Revisit when docling-slim lifts
+# the pillow<13 cap; new 12.3.0 advisories will need adding here too.
+PIP_AUDIT_IGNORE_ARGS=(
+    --ignore-vuln PYSEC-2026-3740 --ignore-vuln CVE-2025-69872
+    # pillow 12.3.0 2026-10 advisory cluster (fixed 13.0.0, upstream-blocked)
+    --ignore-vuln CVE-2026-112390 --ignore-vuln CVE-2026-112391
+    --ignore-vuln CVE-2026-112392 --ignore-vuln CVE-2026-112393
+    --ignore-vuln CVE-2026-112395 --ignore-vuln CVE-2026-112396
+    --ignore-vuln CVE-2026-112397 --ignore-vuln CVE-2026-112399
+    --ignore-vuln CVE-2026-112400 --ignore-vuln CVE-2026-112401
+    --ignore-vuln CVE-2026-112402 --ignore-vuln CVE-2026-112404
+    --ignore-vuln CVE-2026-112405 --ignore-vuln CVE-2026-112406
+    --ignore-vuln CVE-2026-112891 --ignore-vuln CVE-2026-112892
+    --ignore-vuln CVE-2026-112893 --ignore-vuln CVE-2026-112894
+    --ignore-vuln CVE-2026-112895 --ignore-vuln CVE-2026-112896
+    --ignore-vuln CVE-2026-112897 --ignore-vuln CVE-2026-112899
+    --ignore-vuln CVE-2026-112900 --ignore-vuln CVE-2026-112901
+)
 
 # Check if virtual environment is activated
 if [ -z "$VIRTUAL_ENV" ]; then

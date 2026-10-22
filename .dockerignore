@@ -1,0 +1,36 @@
+# Build-context hygiene for the Secondbrain image: keep the context small and
+# keep secrets, local state, and host-side tooling out of the image.
+
+# Version control
+.git
+.gitignore
+
+# Secrets and local env files — never ship into an image
+.env
+.env.*
+
+# Rust build artifacts
+mcp-server/target
+
+# Host-side tooling not used by the image build. The container entrypoint is
+# the exception — the Dockerfile COPYs it into the image.
+scripts/*
+!scripts/docker_entrypoint.sh
+secondbrain.spec
+uv.lock
+requirements.in
+requirements.txt
+requirements-dev.txt
+mutmut_config.py
+package.json
+mkdocs.yml
+
+# Python environments and caches
+.venv
+**/__pycache__
+*.py[cod]
+.pytest_cache
+.ruff_cache
+.mypy_cache
+.coverage
+htmlcov

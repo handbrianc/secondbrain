@@ -25,7 +25,7 @@ class HeadingDetector:
         """
         self._min_weight = min_weight
 
-    def is_heading(self, chunk_text: str, font_size: float | None = None) -> bool:
+    def is_heading(self, chunk_text: str) -> bool:
         """
         Return True if *chunk_text* looks like a heading.
 

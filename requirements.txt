@@ -53,7 +53,7 @@ dill==0.4.1
     # via multiprocess
 doclang==0.7.3
     # via docling-core
-docling==2.139.0
+docling==2.141.0
     # via -r requirements.in
 docling-core[chunking]==2.101.1
     # via
@@ -64,7 +64,7 @@ docling-ibm-models==4.0.3
     # via docling-slim
 docling-parse==7.22.3
     # via docling-slim
-docling-slim[standard]==2.139.0
+docling-slim[standard]==2.141.0
     # via docling
 docstring-parser==0.18.0
     # via anthropic
@@ -368,7 +368,7 @@ tqdm==4.70.1
     #   rapidocr
     #   semchunk
     #   transformers
-transformers==5.19.0
+transformers==5.20.2
     # via
     #   -r requirements.in
     #   docling-core

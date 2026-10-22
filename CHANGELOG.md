@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **MCP server** (`mcp-server/`): a `secondbrain-mcp` Rust crate exposing the
+  CLI to MCP clients over the Streamable HTTP transport (`/mcp`, stateless
+  mode) plus a `/healthz` endpoint — tools `search`, `ingest_documents`,
+  `chat_send`, `chat_list_sessions`, `chat_get_history`; optional bearer-token
+  auth (`SECONDBRAIN_MCP_AUTH_TOKEN`) and TLS, structured stderr logging,
+  SIGINT/SIGTERM graceful shutdown, per-call CLI timeouts, and ingestion path
+  confinement. Compose services for the bundled stack are included. See
+  `mcp-server/README.md` and `docs/developer-guide/mcp.md`.
+
 - **Libyear dependency freshness** (`scripts/libyear.sh`): measures the
   libyear metric (summed release lag between used and latest dependency
   versions, [libyear.com](https://libyear.com/)) for the declared dependency
