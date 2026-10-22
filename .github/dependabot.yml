@@ -23,26 +23,42 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "sentence-transformers"
         update-types: ["version-update:semver-major"]
+    # Groups mirror pyproject.toml [project] dependencies, grouped by role so
+    # minor/patch bumps arrive as small, reviewable PRs. Stale entries
+    # (pymongo, motor, python-dotenv, sentence-transformers, torch) that are
+    # not declared in pyproject.toml were removed and anthropic was added
+    # (2026-10-22 spec-verification audit).
     groups:
-      production-dependencies:
+      cli-and-display:
         patterns:
           - "click"
+          - "rich"
+      document-processing:
+        patterns:
           - "docling"
           - "docling-core"
-          - "pymongo"
-          - "motor"
-          - "httpx"
+          - "docling-parse"
+      data-and-validation:
+        patterns:
           - "pydantic"
           - "pydantic-settings"
-          - "rich"
-          - "python-dotenv"
-          - "sentence-transformers"
+          - "typing_extensions"
           - "numpy"
-          - "torch"
+      storage-and-http:
+        patterns:
+          - "qdrant-client"
+          - "httpx"
+      llm-providers:
+        patterns:
+          - "openai"
+          - "anthropic"
+      telemetry:
+        patterns:
           - "opentelemetry-api"
           - "opentelemetry-sdk"
-          - "openai"
-          - "typing_extensions"
+      macos-platform:
+        patterns:
+          - "pyobjc*"
 
   # GitHub Actions
   - package-ecosystem: "github-actions"

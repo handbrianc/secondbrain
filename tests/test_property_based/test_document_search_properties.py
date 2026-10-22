@@ -508,36 +508,6 @@ def recombine_chunks_preserving_overlap(chunks: list[dict], max_overlap: int) ->
     return result
 
 
-def get_overlap_between_chunks(
-    chunk1: str, chunk2: str, expected_overlap: int = 0
-) -> int:
-    """Calculate the actual overlap between two consecutive chunks.
-
-    Returns the number of characters from the end of chunk1 that appear
-    at the start of chunk2. Uses expected_overlap as a hint to avoid
-    false positives when chunks have similar content by coincidence.
-    """
-    # If expected_overlap is provided and matches, use it
-    if (
-        expected_overlap > 0
-        and len(chunk1) >= expected_overlap
-        and len(chunk2) >= expected_overlap
-        and chunk1[-expected_overlap:] == chunk2[:expected_overlap]
-    ):
-        return expected_overlap
-
-    # Otherwise, find the maximum overlap by string matching
-    max_possible_overlap = min(
-        len(chunk1),
-        len(chunk2),
-        expected_overlap if expected_overlap > 0 else max(len(chunk1), len(chunk2)),
-    )
-    for overlap_len in range(max_possible_overlap, 0, -1):
-        if chunk1[-overlap_len:] == chunk2[:overlap_len]:
-            return overlap_len
-    return 0
-
-
 @pytest.mark.hypothesis
 class TestChunkingProperties:
     """Property-based tests for the chunking algorithm."""
@@ -550,8 +520,8 @@ class TestChunkingProperties:
         chunk_overlap=st.integers(min_value=0, max_value=50).filter(lambda o: o < 50),
     )
     @settings(
-        max_examples=30,
-        deadline=200,
+        max_examples=100,
+        deadline=500,
         suppress_health_check=[HealthCheck.filter_too_much],
     )
     def test_chunking_preserves_text(
@@ -593,8 +563,8 @@ class TestChunkingProperties:
         chunk_overlap=st.integers(min_value=0, max_value=50).filter(lambda o: o < 50),
     )
     @settings(
-        max_examples=10,
-        deadline=100,
+        max_examples=100,
+        deadline=500,
         suppress_health_check=[HealthCheck.filter_too_much],
     )
     def test_chunking_respects_size_limit(
@@ -655,42 +625,83 @@ class TestChunkingProperties:
             )
 
     @given(
-        text=st.text(min_size=100, max_size=5000).filter(lambda t: len(t) > 20),
-        chunk_size=st.integers(min_value=20, max_value=500),
-        chunk_overlap=st.integers(min_value=1, max_value=100).filter(
-            lambda o: 1 <= o < 50
-        ),
+        text=st.text(
+            alphabet="abcdefghijklmnopqrstuvwxyz ",
+            min_size=200,
+            max_size=2000,
+        ).filter(lambda t: "  " not in t and t.strip()),
+        chunk_size=st.integers(min_value=20, max_value=300),
+        chunk_overlap=st.integers(min_value=0, max_value=40),
     )
-    @settings(max_examples=30, deadline=200)
+    @settings(
+        max_examples=100,
+        deadline=500,
+        suppress_health_check=[HealthCheck.filter_too_much],
+    )
     def test_chunking_overlap_consistent(
         self, text: str, chunk_size: int, chunk_overlap: int
     ):
-        if chunk_overlap >= chunk_size:
-            chunk_overlap = chunk_size - 1
+        """Adjacent chunks from one segment share exactly chunk_overlap characters.
 
-        if len(text.strip()) < 20:
-            return
+        The chunker rewinds the next chunk start by exactly ``chunk_overlap``
+        characters past the current chunk end (chunker.py:401-402), so for
+        every chunk whose raw slice is longer than ``chunk_overlap``, the
+        following chunk begins with that chunk's final ``chunk_overlap``
+        characters verbatim. The one boundary exception is a short chunk:
+        when the word-boundary search (``rfind(" ", start, chunk_end)``,
+        chunker.py:378-380) lands within ``chunk_overlap`` characters of the
+        window start, the slice is not longer than the configured overlap,
+        the rewind would not move forward (``new_start <= start``), and the
+        next chunk abuts it with zero overlap (chunker.py:402). Both cases
+        are asserted exactly below, together with the exact-reconstruction
+        inverse of the same contract — no fuzzy tolerance and no skipping.
+
+        The alphabet is lowercase letters plus isolated single spaces, so no
+        chunk slice can be whitespace-only and get skipped (chunker.py:383)
+        and the merged segment text is exactly ``text.strip()``
+        (chunker.py:255, chunker.py:288), with the final chunk's ``rstrip``
+        a no-op (chunker.py:353). That keeps every consecutive pair of
+        appended chunks governed by the contract above.
+        """
+        assume(chunk_overlap < chunk_size)
 
         segments = [{"text": text, "page": 0}]
         chunks = _chunk_segments(segments, chunk_size, chunk_overlap)
 
-        if len(chunks) < 2:
-            return
+        # A single chunk has no adjacent pair, so the overlap contract cannot
+        # be observed; anything else must satisfy it exactly.
+        assume(len(chunks) >= 2)
 
         for i in range(1, len(chunks)):
-            prev_chunk = chunks[i - 1]["text"]
-            curr_chunk = chunks[i]["text"]
+            prev_text = chunks[i - 1]["text"]
+            curr_text = chunks[i]["text"]
 
-            actual_overlap = get_overlap_between_chunks(prev_chunk, curr_chunk)
+            if chunk_overlap and len(prev_text) > chunk_overlap:
+                # Exact configured overlap: the next chunk re-opens the last
+                # chunk_overlap characters of the previous chunk. (Guarded on
+                # chunk_overlap > 0 only because a 0-length slice compares
+                # the whole string against "" in Python.)
+                assert prev_text[-chunk_overlap:] == curr_text[:chunk_overlap], (
+                    f"Chunks {i - 1}/{i} must share exactly {chunk_overlap} "
+                    f"characters: prev tail={prev_text[-chunk_overlap:]!r} "
+                    f"curr head={curr_text[:chunk_overlap]!r}"
+                )
+            # else: zero-overlap configuration or a short previous chunk
+            # abuts the next one — pinned by the exact reconstruction below.
 
-            if len(curr_chunk) <= chunk_overlap:
-                continue
+        # Exact reconstruction of the contract: after a longer-than-overlap
+        # predecessor, drop the first chunk_overlap characters of the chunk;
+        # after a short one, keep the chunk whole.
+        reconstructed = chunks[0]["text"]
+        for i in range(1, len(chunks)):
+            prev_text = chunks[i - 1]["text"]
+            curr_text = chunks[i]["text"]
+            if len(prev_text) > chunk_overlap:
+                reconstructed += curr_text[chunk_overlap:]
+            else:
+                reconstructed += curr_text
 
-            if actual_overlap < chunk_overlap - 10:
-                continue
-
-            assert actual_overlap <= len(prev_chunk)
-            assert actual_overlap <= len(curr_chunk)
+        assert reconstructed == text.strip()
 
 
 @pytest.mark.hypothesis

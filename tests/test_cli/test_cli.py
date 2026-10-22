@@ -1,7 +1,10 @@
 """Tests for CLI module."""
 
+import logging
+from collections.abc import Iterator
 from unittest.mock import MagicMock, patch
 
+import pytest
 from click.testing import CliRunner
 
 from secondbrain.cli import cli
@@ -179,3 +182,70 @@ class TestCLI:
             assert result.exit_code == 0
             assert "All metrics reset" in result.output
             mock_reset.assert_called_once()
+
+
+class TestCLILoggingWiring:
+    """Test the CLI --verbose flag wiring into logging levels.
+
+    Spec (structured-logging, Integration with CLI): --verbose SHALL set the
+    log level to DEBUG; a default run keeps the WARNING default. The group
+    callback runs setup_logging before any subcommand, so --help on a
+    subcommand exercises the wiring.
+
+    SECONDBRAIN_LOG_LEVEL is pinned to WARNING because the CLI honors that
+    env var and config() loads .env.test (SECONDBRAIN_LOG_LEVEL=DEBUG) in the
+    test environment; production default (no env override) is WARNING, which
+    the direct setup_logging tests cover.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _restore_root_logging(self) -> Iterator[None]:
+        """Restore root handlers (with their levels) and the root level."""
+        root_logger = logging.getLogger()
+        handlers = list(root_logger.handlers)
+        handler_levels = [(handler, handler.level) for handler in handlers]
+        root_level = root_logger.level
+        yield
+        root_logger.handlers = handlers
+        for handler, level in handler_levels:
+            handler.setLevel(level)
+        root_logger.setLevel(root_level)
+
+    def test_verbose_flag_sets_debug_level(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """--verbose wires the effective level to DEBUG."""
+        monkeypatch.setenv("SECONDBRAIN_LOG_LEVEL", "WARNING")
+        runner = CliRunner()
+
+        result = runner.invoke(cli, ["--verbose", "ingest", "--help"])
+
+        assert result.exit_code == 0
+        assert logging.getLogger().getEffectiveLevel() == logging.DEBUG
+
+    def test_default_run_keeps_warning_level(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A run without --verbose keeps the WARNING default."""
+        monkeypatch.setenv("SECONDBRAIN_LOG_LEVEL", "WARNING")
+        runner = CliRunner()
+
+        result = runner.invoke(cli, ["ingest", "--help"])
+
+        assert result.exit_code == 0
+        assert logging.getLogger().getEffectiveLevel() == logging.WARNING
+
+    def test_level_toggles_back_after_verbose_run(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A later default run downgrades the level again (reconfiguration)."""
+        monkeypatch.setenv("SECONDBRAIN_LOG_LEVEL", "WARNING")
+        runner = CliRunner()
+
+        verbose_result = runner.invoke(cli, ["--verbose", "ingest", "--help"])
+        assert verbose_result.exit_code == 0
+        assert logging.getLogger().getEffectiveLevel() == logging.DEBUG
+
+        default_result = runner.invoke(cli, ["ingest", "--help"])
+        assert default_result.exit_code == 0
+        assert logging.getLogger().getEffectiveLevel() == logging.WARNING

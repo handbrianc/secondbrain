@@ -180,10 +180,11 @@ class TestChaosAdvanced:
             assert not injector.should_fail(FailureType.GENERAL_FAILURE)
 
 
+@pytest.mark.chaos
 class TestChaosResilienceMetrics:
     """Tests for resilience metrics in chaos test reports."""
 
-    def test_resilience_metrics_in_report(self, fake_clock):
+    def test_resilience_metrics_in_report(self, fake_clock, register_chaos_result):
         """Test that chaos tests include resilience metrics in reports."""
         import time
 
@@ -229,7 +230,12 @@ class TestChaosResilienceMetrics:
         assert metrics["state_transitions"] >= 2
         assert metrics["error_rate"] > 0
 
-    def test_circuit_breaker_triggers_logged(self, fake_clock):
+        register_chaos_result(
+            failure_type="circuit_breaker",
+            circuit_breaker_tripped=True,
+        )
+
+    def test_circuit_breaker_triggers_logged(self, fake_clock, register_chaos_result):
         """Test that circuit breaker triggers are logged in chaos tests."""
         from secondbrain.utils.circuit_breaker import (
             CircuitBreaker,
@@ -263,7 +269,12 @@ class TestChaosResilienceMetrics:
         assert transitions[1][1] == CircuitState.OPEN
         assert transitions[2][1] == CircuitState.HALF_OPEN
 
-    def test_recovery_time_measurement(self, fake_clock):
+        register_chaos_result(
+            failure_type="circuit_breaker",
+            circuit_breaker_tripped=True,
+        )
+
+    def test_recovery_time_measurement(self, fake_clock, register_chaos_result):
         """Test that recovery time is accurately measured in chaos tests."""
         import time
 
@@ -298,7 +309,12 @@ class TestChaosResilienceMetrics:
             f"Recovery time {actual_recovery_time} should be < 0.5s"
         )
 
-    def test_error_rate_calculation(self):
+        register_chaos_result(
+            failure_type="circuit_breaker",
+            circuit_breaker_tripped=True,
+        )
+
+    def test_error_rate_calculation(self, register_chaos_result):
         """Test that error rates are correctly calculated in chaos scenarios."""
         from secondbrain.utils.circuit_breaker import (
             CircuitBreaker,
@@ -331,3 +347,10 @@ class TestChaosResilienceMetrics:
         # (all calls failed, circuit hasn't opened yet)
         error_rate = failures / failures  # 1.0 for consecutive failures
         assert error_rate == 1.0
+
+        # The breaker never tripped here (threshold 100 > 5 failures) —
+        # register the observed error rate without a breaker trip.
+        register_chaos_result(
+            failure_type="circuit_breaker",
+            circuit_breaker_tripped=False,
+        )

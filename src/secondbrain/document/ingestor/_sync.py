@@ -918,21 +918,43 @@ class DocumentIngestor:
                         scrape_ok,
                     )
 
-                try:
-                    futures = {
-                        executor.submit(
+                completed = 0
+                pending_futures: dict[Any, Path] = {}
+                # Submit one file at a time so a failure to enqueue a
+                # single task — e.g. a serialization error on unpicklable
+                # worker arguments — fails exactly that file and the loop
+                # keeps ingesting the remaining ones, mirroring the
+                # deferred-failure accounting below. BrokenProcessPool
+                # keeps its dedicated pool-level handling.
+                for f in files:
+                    try:
+                        future = executor.submit(
                             _extract_chunk_and_embed_file,
                             *worker_args(f),
-                        ): f
-                        for f in files
-                    }
-                except BrokenProcessPool as exc:
-                    # Pool already dead when submitting: nothing can run. Skip
-                    # the drain loop; the pool-level handler below accounts for
-                    # every file with one clear reason.
-                    pool_broken = exc
-
-                completed = 0
+                        )
+                    except BrokenProcessPool as exc:
+                        # Pool already dead while submitting: nothing
+                        # further can run. Skip the drain loop; the
+                        # pool-level handler below accounts for every
+                        # still-unaccounted file with one clear reason.
+                        pool_broken = exc
+                        break
+                    except Exception as exc:
+                        self._drain_progress_queue(progress_queue)
+                        error_msg = f"{type(exc).__name__}: {exc}"
+                        logger.error(
+                            "Failed to submit %s to the worker pool: %s",
+                            f,
+                            error_msg,
+                        )
+                        failed_files += 1
+                        failure_reasons.append((str(f), error_msg))
+                        completed += 1
+                        processed_files.add(str(f))
+                        if self.progress_callback:
+                            self.progress_callback(f, False)
+                        continue
+                    futures[future] = f
                 pending_futures = dict(futures)
 
                 while pending_futures:

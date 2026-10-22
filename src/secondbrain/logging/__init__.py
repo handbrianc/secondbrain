@@ -27,6 +27,7 @@ from rich.logging import RichHandler
 __all__ = [
     "HealthStatus",
     "JSONFormatter",
+    "RichRequestFormatter",
     "get_health_status",
     "get_logger",
     "get_request_id",
@@ -172,6 +173,34 @@ def setup_logging(
         setup_rich_logging(level, log_file, max_bytes, backup_count)
 
 
+class RichRequestFormatter(logging.Formatter):
+    """Formatter for the Rich console transport that carries the request ID.
+
+    The JSON transport records ``request_id`` as a structured field (see
+    :class:`JSONFormatter`); the human-readable Rich transport has no extra
+    fields, so the request ID is appended to the rendered message instead
+    (e.g. ``message [request_id=<id>]``). Nothing is appended when no
+    request ID is set in the current context, keeping the output clean.
+    """
+
+    def format(self, record: logging.LogRecord) -> str:
+        """Render a log record, appending the request ID when one is set.
+
+        Args:
+            record: The log record to format.
+
+        Returns
+        -------
+            The formatted message, suffixed with `` [request_id=<id>]`` only
+            when a request ID is set in the current context.
+        """
+        message = super().format(record)
+        request_id = get_request_id()
+        if request_id:
+            return f"{message} [request_id={request_id}]"
+        return message
+
+
 def setup_rich_logging(
     level: int,
     log_file: str | None = None,
@@ -186,9 +215,9 @@ def setup_rich_logging(
         max_bytes: Max log file size before rotation (default 10MB).
         backup_count: Number of backup files to keep (default 5).
     """
-    handlers: list[logging.Handler] = [
-        RichHandler(console=Console(stderr=True), rich_tracebacks=True)
-    ]
+    rich_handler = RichHandler(console=Console(stderr=True), rich_tracebacks=True)
+    rich_handler.setFormatter(RichRequestFormatter(fmt="%(message)s", datefmt="[%X]"))
+    handlers: list[logging.Handler] = [rich_handler]
 
     # Add file handler if log file is specified
     if log_file:

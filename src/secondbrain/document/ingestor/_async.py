@@ -26,6 +26,39 @@ from secondbrain.utils.tracing import trace_operation
 logger = logging.getLogger(__name__)
 
 
+def _query_existing_hashes(storage: Any, text_hashes: list[str]) -> set[str]:
+    """Return which of *text_hashes* already exist in storage, degrading safely.
+
+    Mirrors the sync worker's ``processor._existing_text_hashes`` contract: on
+    any storage failure the warning is logged and an empty set is returned so
+    the caller re-embeds everything instead of aborting the ingest. Unlike the
+    sync worker (which builds a throwaway storage per worker task), the async
+    pipeline queries through the storage instance it already owns, so no extra
+    connection is created per file.
+
+    Args:
+        storage: VectorStorage instance exposing ``has_existing_hashes``.
+        text_hashes: Chunk text hashes to look up.
+
+    Returns
+    -------
+        The subset of *text_hashes* already present in storage; empty when
+        the lookup is unnecessary or fails.
+    """
+    if not text_hashes:
+        return set()
+    try:
+        return set(storage.has_existing_hashes(text_hashes))
+    except Exception as e:
+        logger.warning(
+            "Could not query existing text hashes for re-ingest skip (%s: %s); "
+            "proceeding to embed all chunks.",
+            type(e).__name__,
+            e,
+        )
+        return set()
+
+
 class AsyncDocumentIngestor(DocumentIngestor):
     """Async version of DocumentIngestor for non-blocking document ingestion.
 
@@ -59,9 +92,37 @@ class AsyncDocumentIngestor(DocumentIngestor):
             chunk_overlap=chunk_overlap,
             verbose=verbose,
         )
+        # Resource pair created by ``__aenter__`` for ``async with`` usage.
+        # ``None`` whenever the ingestor is used without the context manager,
+        # in which case ``ingest_async`` creates (and closes) its own pair.
+        self._context_embedding_gen: Any | None = None
+        self._context_storage: Any | None = None
 
     async def __aenter__(self) -> AsyncDocumentIngestor:
-        """Enter async context manager."""
+        """Enter the async context, initializing the shared ingestion resources.
+
+        Builds the same embedding generator and vector storage pair that
+        :meth:`ingest_async` uses, so an ``async with`` block ingests through
+        one connection pair that :meth:`__aexit__` closes. Any leftover pair
+        from a previous enter is closed first, so re-entering cannot leak; if
+        the storage factory fails after the generator was created, the
+        half-built pair is closed before the error propagates.
+        """
+        self._close_context_resources()
+
+        from secondbrain.embedding import EmbeddingProviderFactory
+        from secondbrain.storage import StorageFactory
+
+        cfg = config()
+        embedding_gen = EmbeddingProviderFactory.create_from_config(cfg)
+        try:
+            storage = StorageFactory.create_from_config(cfg)
+        except BaseException:
+            with contextlib.suppress(Exception):
+                embedding_gen.close()
+            raise
+        self._context_embedding_gen = embedding_gen
+        self._context_storage = storage
         return self
 
     async def __aexit__(
@@ -70,8 +131,28 @@ class AsyncDocumentIngestor(DocumentIngestor):
         exc_val: BaseException | None,
         exc_tb: Any,
     ) -> None:
-        """Exit async context manager."""
-        pass
+        """Exit the async context, closing the resources ``__aenter__`` created.
+
+        Closing is idempotent — each close is suppressed and its reference
+        reset first — so an exit after ``ingest_async`` already cleaned up
+        (or any repeated close) is a safe no-op instead of a double close.
+        """
+        self._close_context_resources()
+
+    def _close_context_resources(self) -> None:
+        """Close the context-owned provider pair; idempotent and leak-safe.
+
+        Each resource's reference is reset to ``None`` before its ``close()``
+        runs inside ``contextlib.suppress(Exception)``, so repeated calls
+        (a second ``__aenter__``, ``__aexit__`` after an explicit cleanup) are
+        no-ops and a raising ``close()`` cannot leave a stale reference.
+        """
+        for attr_name in ("_context_embedding_gen", "_context_storage"):
+            resource = getattr(self, attr_name, None)
+            setattr(self, attr_name, None)
+            if resource is not None:
+                with contextlib.suppress(Exception):
+                    resource.close()
 
     async def ingest_async(
         self,
@@ -79,6 +160,7 @@ class AsyncDocumentIngestor(DocumentIngestor):
         recursive: bool = False,
         batch_size: int = 30,
         max_concurrent: int = 5,
+        skip_existing: bool | None = None,
     ) -> dict[str, int | list[tuple[str, str]]]:
         """Ingest documents asynchronously from a file or directory.
 
@@ -87,25 +169,43 @@ class AsyncDocumentIngestor(DocumentIngestor):
             recursive: Recursively process subdirectories.
             batch_size: Number of files to process in parallel.
             max_concurrent: Maximum concurrent file processing tasks (semaphore).
+            skip_existing: If True, skip re-embedding/re-storing chunks whose
+                text_hash already exists in storage. If None, uses
+                config().skip_existing_on_reingest — the same default surface
+                as the sync ``ingest()``.
 
         Returns
         -------
             dict with 'success' and 'failed' counts, 'failures' list of
             (path, reason) tuples for every failed file, and 'skipped'
-            (already-stored re-ingest skips) counts — the same shape as the
-            sync ``ingest()``. The async pipeline does not currently detect
-            re-ingest skips, so 'skipped' is always 0. Failure reasons carry
-            the real cause when one was captured — ``"ExceptionType: message"``,
-            the same format the sync worker records — while files that fail
-            without a raised error (no text extracted, or every embedding
-            attempt failed) fall back to the generic no-documents reason.
+            (already-stored re-ingest skips) counts — the same shape and skip
+            semantics as the sync ``ingest()``: with skip_existing enabled,
+            chunks whose text_hash already exists in storage are neither
+            re-embedded nor re-stored, and a file whose every chunk is already
+            stored is counted once in both 'success' and 'skipped' (never in
+            'failed'/'failures'). Failure reasons carry the real cause when
+            one was captured — ``"ExceptionType: message"``, the same format
+            the sync worker records — while files that fail without a raised
+            error (no text extracted, or every embedding attempt failed) fall
+            back to the generic no-documents reason.
         """
         from secondbrain.embedding import EmbeddingProviderFactory
         from secondbrain.storage import StorageFactory
 
         cfg = config()
-        embedding_gen = EmbeddingProviderFactory.create_from_config(cfg)
-        storage = StorageFactory.create_from_config(cfg)
+        # Inside ``async with``, reuse the pair __aenter__ initialized (the
+        # context owns and closes it). Plain usage creates a fresh pair that
+        # this call owns and closes in its finally — and any leftover partial
+        # pair is dropped first so nothing leaks.
+        embedding_gen: Any = self._context_embedding_gen
+        storage: Any = self._context_storage
+        owns_resources = embedding_gen is None or storage is None
+        if owns_resources:
+            self._close_context_resources()
+            embedding_gen = EmbeddingProviderFactory.create_from_config(cfg)
+            storage = StorageFactory.create_from_config(cfg)
+
+        skipped_files: set[str] = set()
 
         try:
             with trace_operation("ingest_collect_files") as span:
@@ -123,7 +223,9 @@ class AsyncDocumentIngestor(DocumentIngestor):
 
             # ``process_file_async`` records the real per-file error here as
             # "ExceptionType: message" (the sync worker's reason format) so
-            # the failures list below can name the true cause.
+            # the failures list below can name the true cause, and records
+            # fully-skipped re-ingests in ``skipped_files`` the way the sync
+            # pool loop counts them.
             captured_reasons: dict[str, str] = {}
 
             async def process_with_semaphore(file_path: Path) -> bool:
@@ -134,6 +236,8 @@ class AsyncDocumentIngestor(DocumentIngestor):
                         embedding_gen,
                         storage,
                         failure_reasons=captured_reasons,
+                        skip_existing=skip_existing,
+                        skipped_files=skipped_files,
                     )
 
             tasks = [process_with_semaphore(f) for f in files]
@@ -149,7 +253,8 @@ class AsyncDocumentIngestor(DocumentIngestor):
             # same generic no-documents reason the sync worker uses.
             # Exceptions that escaped the worker (e.g. cancellation) carry
             # their type and message and are never masked with the generic
-            # reason.
+            # reason. A skipped file returns True (the sync loop counts a
+            # skip as success too) and is reported via 'skipped' only.
             failures: list[tuple[str, str]] = []
             for file_path, result in zip(files, results, strict=True):
                 if result is True:
@@ -167,14 +272,18 @@ class AsyncDocumentIngestor(DocumentIngestor):
                 "success": successful,
                 "failed": failed,
                 "failures": failures,
-                "skipped": 0,
+                "skipped": len(skipped_files),
             }
         finally:
-            # Clean up resources to prevent connection leaks
-            with contextlib.suppress(Exception):
-                embedding_gen.close()
-            with contextlib.suppress(Exception):
-                storage.close()
+            # Only the creator closes its resources: plain usage closes the
+            # pair it just built (idempotent-suppressed closes), while the
+            # context-owned pair stays open for the with-block and is closed
+            # by ``__aexit__``.
+            if owns_resources:
+                with contextlib.suppress(Exception):
+                    embedding_gen.close()
+                with contextlib.suppress(Exception):
+                    storage.close()
 
     async def _stream_process_chunks_async(
         self,
@@ -182,6 +291,7 @@ class AsyncDocumentIngestor(DocumentIngestor):
         segments: list[dict[str, Any]],
         embedding_gen: Any,
         storage: Any,
+        skip_hashes: set[str] | None = None,
     ) -> int:
         """Stream process chunks asynchronously for memory efficiency.
 
@@ -190,6 +300,16 @@ class AsyncDocumentIngestor(DocumentIngestor):
         Chunking (dedup + role classification) runs up front inside one
         ``ingest_worker_chunk`` span per file; embeddings and stores still
         flush per batch so memory stays bounded.
+
+        Args:
+            file_path: Source file path.
+            segments: Extracted text segments to chunk and store.
+            embedding_gen: Embedding generator instance.
+            storage: VectorStorage instance.
+            skip_hashes: Text hashes already present in storage (re-ingest
+                skip, mirroring the sync worker's ``skip_existing`` filter);
+                matching chunks are neither re-embedded nor re-stored. None
+                or empty disables filtering.
         """
         batch_size = config().streaming_chunk_batch_size
 
@@ -214,6 +334,11 @@ class AsyncDocumentIngestor(DocumentIngestor):
                 if text_hash in seen_hashes:
                     continue
                 seen_hashes.add(text_hash)
+
+                # Already stored (re-ingest skip): drop before classification
+                # so neither the embedder nor the store sees it again.
+                if skip_hashes and text_hash in skip_hashes:
+                    continue
 
                 is_likely_title_raw = (
                     len(cleaned) < 100
@@ -414,12 +539,27 @@ class AsyncDocumentIngestor(DocumentIngestor):
         file_path: Path,
         segments: list[dict[str, Any]],
         embedding_gen: Any,
+        skip_hashes: set[str] | None = None,
     ) -> list[dict[str, Any]]:
-        """Build documents with embeddings from text segments asynchronously."""
+        """Build documents with embeddings from text segments asynchronously.
+
+        Args:
+            file_path: Source file path.
+            segments: Extracted text segments to chunk and embed.
+            embedding_gen: Embedding generator instance.
+            skip_hashes: Text hashes already present in storage (re-ingest
+                skip, mirroring the sync worker's ``skip_existing`` filter);
+                matching chunks are neither re-embedded nor re-stored. None
+                or empty disables filtering.
+        """
         with trace_operation("ingest_worker_chunk") as span:
             if span is not None:
                 span.set_attribute("ingest.segments_count", len(segments))
             all_chunks = self._deduplicate_and_chunk_segments(file_path, segments)
+            if skip_hashes:
+                all_chunks = [
+                    c for c in all_chunks if c["text_hash"] not in skip_hashes
+                ]
         with trace_operation("ingest_worker_embed") as span:
             if span is not None:
                 span.set_attribute("ingest.chunks_count", len(all_chunks))
@@ -512,6 +652,8 @@ class AsyncDocumentIngestor(DocumentIngestor):
         storage: Any,
         *,
         failure_reasons: dict[str, str] | None = None,
+        skip_existing: bool | None = None,
+        skipped_files: set[str] | None = None,
     ) -> bool:
         """Process a single file asynchronously.
 
@@ -530,10 +672,21 @@ class AsyncDocumentIngestor(DocumentIngestor):
                 ``asyncio.CancelledError`` are deliberately not caught and not
                 recorded here: cancellation propagates to the caller instead
                 of being swallowed as a document failure.
+            skip_existing: If True, drop chunks whose text_hash already exists
+                in storage before embedding (the sync worker's re-ingest
+                skip); when every extracted chunk is already stored, the file
+                is reported as a skip instead of being reprocessed. If None,
+                falls back to config().skip_existing_on_reingest.
+            skipped_files: Optional set keyed by ``str(file_path)`` that
+                receives every fully-skipped file, so ``ingest_async`` can
+                report the same 'skipped' count the sync loop returns (a
+                skipped file still counts as a success, exactly as in sync).
 
         Returns
         -------
-            True if processing succeeded, False otherwise.
+            True if processing succeeded — including a fully-skipped re-ingest,
+            matching the sync worker's skip-as-success accounting — and False
+            otherwise.
         """
         try:
             with trace_operation("ingest_worker_extract") as span:
@@ -550,16 +703,50 @@ class AsyncDocumentIngestor(DocumentIngestor):
                 )
                 return False
 
-            from secondbrain.config import config
+            # Re-ingest skip detection, mirroring the sync pool worker
+            # (``processor._extract_chunk_and_embed_file``): with skip_existing
+            # enabled, chunks whose text_hash is already stored are filtered
+            # out before embedding, and a file whose every chunk is already
+            # stored is reported as a skip (counted as success) instead of
+            # being reprocessed. The lookup degrades to "nothing exists" on
+            # any storage failure, like the sync worker's.
+            cfg = config()
+            if skip_existing is None:
+                skip_existing = bool(getattr(cfg, "skip_existing_on_reingest", True))
 
-            if config().streaming_enabled:
+            skip_hashes: set[str] = set()
+            if skip_existing:
+                chunk_hashes = [
+                    c["text_hash"]
+                    for c in self._deduplicate_and_chunk_segments(file_path, segments)
+                ]
+                existing_hashes = _query_existing_hashes(storage, chunk_hashes)
+                skip_hashes = {h for h in chunk_hashes if h in existing_hashes}
+                if chunk_hashes and len(skip_hashes) == len(chunk_hashes):
+                    logger.info(
+                        "All %d chunks for %s were already stored; skipping embed/store",
+                        len(chunk_hashes),
+                        file_path,
+                    )
+                    if skipped_files is not None:
+                        skipped_files.add(str(file_path))
+                    return True
+
+            if cfg.streaming_enabled:
                 docs_count = await self._stream_process_chunks_async(
-                    file_path, segments, embedding_gen, storage
+                    file_path,
+                    segments,
+                    embedding_gen,
+                    storage,
+                    skip_hashes=skip_hashes,
                 )
                 return docs_count > 0
             else:
                 docs_to_store = await self._build_documents_with_embeddings_async(
-                    file_path, segments, embedding_gen
+                    file_path,
+                    segments,
+                    embedding_gen,
+                    skip_hashes=skip_hashes,
                 )
                 if docs_to_store:
                     with trace_operation("storage.store") as span:
