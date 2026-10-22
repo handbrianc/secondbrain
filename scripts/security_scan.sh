@@ -169,12 +169,28 @@ run_pipdeptree() {
     if command -v pipdeptree &> /dev/null; then
         python -m pip check
         # -w fail is the documented contract (archived dependency-security
-        # spec note, 2026-10-11). safetensors is excluded: its wheel
-        # metadata declares a self-referencing dependency
-        # (safetensors => safetensors), a benign upstream packaging bug
-        # pipdeptree reports as a dependency cycle; real requirement
-        # conflicts are still caught by `pip check` above.
-        pipdeptree --summary -w fail --exclude safetensors
+        # spec note, 2026-10-11). Tolerated exception: safetensors' wheel
+        # metadata declares itself as a dependency (safetensors =>
+        # safetensors), a benign upstream packaging bug pipdeptree reports
+        # as a cycle (--exclude removes it from the tree summary but the
+        # warning still trips -w fail's exit code). The stage fails on any
+        # other dependency problem; pip check above still catches real
+        # requirement conflicts on installed metadata.
+        PDEPT_OUT="$(pipdeptree --summary -w fail 2>&1)" && pdept_rc=0 || pdept_rc=$?
+        if [ "$pdept_rc" -ne 0 ]; then
+            if [ "$(printf '%s\n' "$PDEPT_OUT" | grep -c '=>')" = "1" ] \
+                && printf '%s\n' "$PDEPT_OUT" | grep -q 'safetensors => safetensors' \
+                && printf '%s\n' "$PDEPT_OUT" | grep -qE 'conflicting dependencies:[[:space:]]+0' \
+                && printf '%s\n' "$PDEPT_OUT" | grep -qE 'missing dependencies:[[:space:]]+0'; then
+                echo "pipdeptree: only the known-benign safetensors self-reference cycle found; tolerated."
+                printf '%s\n' "$PDEPT_OUT"
+            else
+                printf '%s\n' "$PDEPT_OUT"
+                exit 1
+            fi
+        else
+            printf '%s\n' "$PDEPT_OUT"
+        fi
         echo ""
         echo -e "${GREEN}pipdeptree completed${NC}"
     else
