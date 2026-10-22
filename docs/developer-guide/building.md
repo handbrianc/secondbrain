@@ -196,9 +196,14 @@ jobs:
 Releases are automated by the `Release` workflow in `.github/workflows/release.yml`:
 
 - **Trigger:** pushing a `v*` git tag (for example, `v0.5.1`) builds the package and publishes it to PyPI with `twine`.
-- **Releasing:** update the version in `pyproject.toml`, follow the [Distribution Checklist](#distribution-checklist), then create and push the tag:
-  `git tag v0.5.1 && git push origin v0.5.1`
-- **Rollback:** point users at the previous released version. Since SecondBrain is installed from PyPI or built locally rather than deployed to a server, rollback means redeploying/redistributing the previous tag's artifact (for example, `pip install secondbrain==0.5.0`) rather than re-running infrastructure.
+- **Releasing:** update the version in `pyproject.toml`, follow the
+  [Distribution Checklist](#distribution-checklist), then create and push
+  the tag: `git tag v0.5.1 && git push origin v0.5.1`
+- **Rollback:** point users at the previous released version. Since SecondBrain
+  is installed from PyPI or built locally rather than deployed to a server,
+  rollback means redeploying/redistributing the previous tag's artifact (for
+  example, `pip install secondbrain==0.5.0`) rather than re-running
+  infrastructure.
 
 ## Distribution Formats Comparison
 

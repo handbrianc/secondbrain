@@ -11,6 +11,10 @@ cd "$(dirname "$0")/.."
 
 # Activate virtual environment if not already active
 if [ -f "venv/bin/activate" ]; then
+    # The venv is created at runtime by the setup scripts and is not present
+    # in a fresh checkout, so acknowledge the dynamic source path for the
+    # linter (SC1091).
+    # shellcheck source=/dev/null
     source venv/bin/activate
 fi
 

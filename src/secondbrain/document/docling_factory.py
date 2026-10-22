@@ -50,6 +50,7 @@ call, preserving the repo's "avoid 2+ second import overhead" guarantee.
 
 from __future__ import annotations
 
+import logging
 import os
 import platform
 import threading
@@ -58,6 +59,8 @@ from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from docling.document_converter import DocumentConverter
+
+_logger = logging.getLogger(__name__)
 
 _lock = threading.Lock()
 _ocr_converter: DocumentConverter | None = None
@@ -68,6 +71,11 @@ _xpu_postprocess_patched: bool = False
 # Audio file extensions routed to the ASR converter by get_converter_for_path.
 # Docling decodes them via PyAV (or a system ffmpeg when present).
 _AUDIO_SUFFIXES = frozenset({".wav", ".mp3", ".m4a", ".aac", ".ogg", ".flac"})
+
+# On-disk cache root for native-runtime caches. Secondbrain keeps no other
+# cache directory today (the embedding cache is an in-memory LRU), so the
+# conventional ``~/.cache`` location is used.
+_CACHE_ROOT = Path.home() / ".cache" / "secondbrain"
 
 
 def _disable_torch_model_compilation_on_mps() -> None:
@@ -135,21 +143,33 @@ class AcceleratorDeviceUnavailableError(ValueError):
     """A configured accelerator pin cannot be honored on this host."""
 
 
-def _preflight_accelerator_device(device_name: str) -> None:
+def _preflight_accelerator_device(device_name: str) -> str | None:
     """Fail fast at converter-build time when a pinned device is unavailable.
 
     Docling resolves each model's device lazily during pipeline initialization,
     so an unfulfillable ``pdf_accelerator_device`` pin otherwise surfaces as one
     confusing error per extracted file. A preflight here turns that into a
     single clear error on the first converter build.
+
+    After a successful resolution, when the device shares system RAM (Intel
+    XPU on an integrated GPU) and the host's free memory is below
+    ``accelerator_min_free_ram_mib``, a WARNING is logged naming the measured
+    headroom and the CPU fallback — low headroom never fails the build.
+
+    Returns
+    -------
+        The resolved device string (e.g. ``"cpu"``, ``"xpu"``, ``"cuda:0"``),
+        or None when docling's resolver is unavailable (e.g. under the test
+        suite's docling stubs). Callers use it to gate XPU-only environment
+        setup (see :func:`_persist_sycl_jit_cache_on_xpu`).
     """
     try:
         from docling.utils.accelerator_utils import decide_device
     except ModuleNotFoundError:
-        return
+        return None
 
     try:
-        decide_device(device_name)
+        resolved = decide_device(device_name)
     except Exception as exc:
         raise AcceleratorDeviceUnavailableError(
             f"SECONDBRAIN_PDF_ACCELERATOR_DEVICE='{device_name}' is unavailable "
@@ -157,6 +177,86 @@ def _preflight_accelerator_device(device_name: str) -> None:
             "for that device (for 'xpu': an XPU-enabled torch build plus the "
             "Level-Zero runtime), or set SECONDBRAIN_PDF_ACCELERATOR_DEVICE=auto."
         ) from exc
+    _warn_on_low_xpu_headroom(resolved)
+    return resolved
+
+
+def _available_ram_mib() -> int | None:
+    """Return the host's available RAM in MiB on Linux, or None elsewhere.
+
+    Reads ``/proc/meminfo``'s ``MemAvailable`` (kB) — the kernel's estimate of
+    memory available for new work without swapping. Returns None on
+    non-Linux platforms (no portable equivalent is read here) or when the
+    file cannot be read/parsed, so callers skip the headroom warning
+    silently instead of failing converter construction.
+
+    Returns
+    -------
+        Available RAM in MiB (floored), or None when it cannot be measured.
+    """
+    try:
+        with Path("/proc/meminfo").open(encoding="ascii") as fh:
+            for line in fh:
+                if line.startswith("MemAvailable:"):
+                    return int(line.split()[1]) // 1024
+    except OSError, ValueError:
+        return None
+    return None
+
+
+def _warn_on_low_xpu_headroom(resolved_device: str) -> None:
+    """Warn when an XPU device is low on the system RAM it shares.
+
+    An Intel XPU device on an integrated GPU has no dedicated VRAM: model
+    weights, the SYCL runtime context, and the JIT program cache are all
+    charged to system RAM. When the host's available memory is below the
+    ``accelerator_min_free_ram_mib`` threshold, log a WARNING naming the
+    resolved device, the measured headroom, and the
+    ``SECONDBRAIN_PDF_ACCELERATOR_DEVICE=cpu`` fallback — but never raise,
+    since the GPU may still be usable and the trade-off is the user's call.
+    Measurement is Linux-only (``/proc/meminfo``); on other platforms, or
+    when free RAM meets the threshold, nothing is logged.
+    """
+    if resolved_device != "xpu":
+        return
+    free_mib = _available_ram_mib()
+    if free_mib is None:
+        return
+    from secondbrain.config import config
+
+    min_free_mib = config().accelerator_min_free_ram_mib
+    if free_mib >= min_free_mib:
+        return
+    _logger.warning(
+        "PDF accelerator device '%s' shares system RAM (integrated GPU), and "
+        "only %d MiB is free against the configured %d MiB minimum "
+        "(accelerator_min_free_ram_mib); conversion may exhaust host memory. "
+        "Fallback: SECONDBRAIN_PDF_ACCELERATOR_DEVICE=cpu.",
+        resolved_device,
+        free_mib,
+        min_free_mib,
+    )
+
+
+def _persist_sycl_jit_cache_on_xpu(resolved_device: str | None) -> None:
+    """Persist the SYCL JIT program cache to disk when the device is XPU.
+
+    On Intel XPU the oneAPI runtime keeps compiled JIT programs in an
+    unbounded in-memory cache charged to system RAM (an integrated GPU shares
+    system RAM 1:1), so repeated conversions grow resident memory. Setting
+    ``SYCL_CACHE_PERSISTENT=1`` with a ``SYCL_CACHE_DIR`` under secondbrain's
+    cache root moves compiled-program caching to disk instead. Both variables
+    are set with ``os.environ.setdefault`` so a user's explicit override
+    wins, and only when the device actually resolves to ``"xpu"`` — other
+    devices (CPU/CUDA/MPS) keep docling's default behavior, and a None
+    resolution (docling's resolver unavailable, e.g. under test stubs) is a
+    no-op. Called before docling/torch initialize the XPU runtime so the
+    persistent cache is honored from the first kernel compilation.
+    """
+    if resolved_device != "xpu":
+        return
+    os.environ.setdefault("SYCL_CACHE_PERSISTENT", "1")
+    os.environ.setdefault("SYCL_CACHE_DIR", str(_CACHE_ROOT / "sycl-jit-cache"))
 
 
 def _xpu_postprocess_needed() -> bool:
@@ -303,6 +403,14 @@ def _build_pdf_format_option(*, do_ocr: bool, do_table_structure: bool) -> Any:
 
     cfg = config()
 
+    # Resolve the accelerator device (fail fast on an unavailable pin, warn on
+    # low XPU headroom) and persist the SYCL JIT cache when it resolves to XPU
+    # BEFORE the docling imports below: the environment must be in place before
+    # the XPU runtime initializes and the first kernels are compiled, or the
+    # JIT program cache would grow unbounded in RAM instead of on disk.
+    resolved_device = _preflight_accelerator_device(cfg.pdf_accelerator_device)
+    _persist_sycl_jit_cache_on_xpu(resolved_device)
+
     from docling.datamodel.accelerator_options import (
         AcceleratorDevice,
         AcceleratorOptions,
@@ -317,7 +425,6 @@ def _build_pdf_format_option(*, do_ocr: bool, do_table_structure: bool) -> Any:
     from docling.document_converter import PdfFormatOption
 
     device = getattr(AcceleratorDevice, cfg.pdf_accelerator_device.upper())
-    _preflight_accelerator_device(cfg.pdf_accelerator_device)
     pipe_cls = (
         ThreadedPdfPipelineOptions if cfg.pdf_threaded_pipeline else PdfPipelineOptions
     )
@@ -344,6 +451,12 @@ def _build_pdf_format_option(*, do_ocr: bool, do_table_structure: bool) -> Any:
     if cfg.pdf_threaded_pipeline:
         pipeline_kwargs["layout_batch_size"] = cfg.pdf_layout_batch_size
 
+    # Backpressure bound for the threaded pipeline's inter-stage page queues
+    # (pages buffered between stages; docling's default is 100). Only the
+    # threaded pipeline consumes it, but the field lives on PdfPipelineOptions
+    # (inherited by ThreadedPdfPipelineOptions), so it is passed unconditionally.
+    pipeline_kwargs["queue_max_size"] = cfg.pdf_pipeline_queue_max_size
+
     if do_table_structure:
         pipeline_kwargs["table_structure_options"] = TableStructureOptions(
             mode=(
@@ -354,7 +467,32 @@ def _build_pdf_format_option(*, do_ocr: bool, do_table_structure: bool) -> Any:
             do_cell_matching=cfg.pdf_table_cell_matching,
         )
 
-    return PdfFormatOption(pipeline_options=pipe_cls(**pipeline_kwargs))
+    # Both backends share the pipeline and every option above — only the PDF
+    # parsing layer differs. "pypdfium" parses through docling's lean pypdfium2
+    # layer, whose native page memory stays bounded on large documents (the
+    # threaded docling-parse default decodes pages ahead across stage queues
+    # and releases parsed pages only every 128 pages) but yields a leaner
+    # structure; "docling-parse" is the legacy default, kept reachable for
+    # fidelity parity via pdf_backend.
+    pdf_option_kwargs: dict[str, Any] = {
+        "pipeline_options": pipe_cls(**pipeline_kwargs),
+    }
+    if cfg.pdf_backend == "pypdfium":
+        try:
+            from docling.backend.pypdfium2_backend import PyPdfiumDocumentBackend
+        except ModuleNotFoundError:
+            # Real docling always ships this module; the only environment where
+            # it is missing is the test suite's stubbed docling, where no real
+            # backend class exists to pass and docling's default is kept.
+            _logger.debug(
+                "docling.backend.pypdfium2_backend unavailable; "
+                "keeping docling's default PDF backend"
+            )
+        else:
+            pdf_option_kwargs["backend"] = PyPdfiumDocumentBackend
+    # "docling-parse": pass no backend — PdfFormatOption's default IS the
+    # threaded docling-parse backend, so today's behavior is unchanged.
+    return PdfFormatOption(**pdf_option_kwargs)
 
 
 def _install_pdf_conversion_hooks(converter: DocumentConverter) -> None:

@@ -1,0 +1,38 @@
+name: Rust Checks
+
+on:
+  push:
+    branches: [main, master, develop]
+    paths:
+      - "mcp-server/**"
+      - ".github/workflows/rust-checks.yml"
+  pull_request:
+    branches: [main, master, develop]
+    paths:
+      - "mcp-server/**"
+      - ".github/workflows/rust-checks.yml"
+
+jobs:
+  rust-checks:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mcp-server
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up pinned stable Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Lint (warnings denied)
+        run: cargo clippy -- -D warnings
+
+      - name: Run tests
+        run: cargo test
