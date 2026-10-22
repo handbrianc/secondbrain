@@ -5237,10 +5237,12 @@ class TestPrintedPageFooterStamps:
         assert resolve_printed_pages(docs) == 0
 
     def test_resolver_refuses_stamp_above_physical(self) -> None:
-        """Printed indexes trail (front matter) or equal the physical index;
-        they never lead it. Equality is valid and covered by
+        """Printed indexes must never lead the physical index.
+
+        Equality (offset-0 footers) is valid and covered by
         test_zero_offset_footers_stamp_all_covered_pages in
-        tests/test_document/test_fast_text_gaps.py."""
+        tests/test_document/test_fast_text_gaps.py.
+        """
         docs = [
             self._nav(10, "11 / 634"),
             self._nav(11, "12 / 634"),
