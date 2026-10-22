@@ -53,7 +53,7 @@ COPY src/ ./src/
 # resolves, so the image parses PDFs exactly like the locked development
 # environment instead of floating to whatever docling PyPI serves today.
 # Keep the pins in sync when uv.lock is regenerated.
-RUN printf 'docling==2.139.0\ndocling-core==2.101.1\ndocling-slim==2.139.0\ndocling-parse==7.22.3\npypdfium2==5.14.0\n' > /tmp/constraints.txt \
+RUN printf 'docling==2.141.0\ndocling-core==2.101.1\ndocling-slim==2.141.0\ndocling-parse==7.22.3\npypdfium2==5.14.0\n' > /tmp/constraints.txt \
     && pip install --no-cache-dir torch torchvision \
       --index-url https://download.pytorch.org/whl/cpu \
     && pip install --no-cache-dir -c /tmp/constraints.txt .

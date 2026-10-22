@@ -37,7 +37,17 @@ NC='\033[0m' # No Color
 # Transitive of the optional llama-cpp-python extras, not imported by
 # secondbrain code. Mirrors the documented ignore in pyproject.toml
 # [tool.safety].
-PIP_AUDIT_IGNORE_ARGS=(--ignore-vuln PYSEC-2026-3740 --ignore-vuln CVE-2025-69872)
+#
+# Pillow 12.3.0: CVE-2026-112892 (APNG Image.open OOM), CVE-2026-112393
+# (TIFF _tiffWriteProc heap overflow when saving to BytesIO) and
+# CVE-2026-112396 (TIFF save use-after-free) are all fixed in 13.0.0, but
+# every docling-slim release caps pillow>=10,<13, so no resolvable
+# environment can take the fix. Pillow is transitive via docling (no PIL
+# imports in secondbrain code); the TIFF-save paths are unreachable and
+# the APNG-open path is bounded by the docker memory caps on ingestion
+# workers (DoS-only). Mirrors the documented ignore in pyproject.toml
+# [tool.safety]. Revisit when docling-slim lifts the pillow<13 cap.
+PIP_AUDIT_IGNORE_ARGS=(--ignore-vuln PYSEC-2026-3740 --ignore-vuln CVE-2025-69872 --ignore-vuln CVE-2026-112892 --ignore-vuln CVE-2026-112393 --ignore-vuln CVE-2026-112396)
 
 # Check if virtual environment is activated
 if [ -z "$VIRTUAL_ENV" ]; then

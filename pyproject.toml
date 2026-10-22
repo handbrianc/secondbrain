@@ -19,7 +19,7 @@ classifiers = [
 
 dependencies = [
     "click>=8.5.0",  # CLI framework - stable API, minor updates only
-    "docling>=2.137.0,<3.0.0",  # First release forcing docling-parse >=7.22.1 (space regression fixed)
+    "docling>=2.140.0,<3.0.0",  # First release forcing docling-parse >=7.22.1 (space regression fixed)
     "docling-core>=2.101.1,<3.0.0",  # Core types - required by docling-parse 7.22.x
     "docling-parse>=7.22.2,<8.0.0",  # Floor excludes 7.21.x-7.22.0 word/space-loss regression (docling-parse #355/#359, fixed by PR #361)
     "qdrant-client>=1.19.1",  # Qdrant vector DB client - production storage backend
@@ -135,7 +135,7 @@ bundled = [
     "pymdown-extensions>=12.2",  # CVE-2026-61632 (was 10.21.3)
     "urllib3>=2.8.0",  # PYSEC-2026-4175/4176/4177 (was 2.6.0)
     "cryptography>=50.0.2",
-    "pillow>=12.3.0",
+    "pillow>=12.3.0",  # CVE-2026-112892/112393/112396 fix 13.0.0 is blocked: docling-slim caps pillow<13 (documented-ignored)
     "paramiko>=5.0.0",
     "PyJWT>=2.15.1",
     "pyasn1>=0.6.4",
@@ -158,7 +158,7 @@ dev = [
 
 qualitative = [
     "llama-cpp-python>=0.3.36",  # Local LLM - CPU inference support
-    "transformers>=5.19.0",  # HuggingFace - model loading
+    "transformers>=5.20.1",  # HuggingFace - model loading
     "accelerate>=1.15.0",  # Model optimization - GPU/CPU distribution
 ]
 
@@ -286,6 +286,22 @@ ignore = [
     # triage.
     "CVE-2025-69872",  # GHSA-w8v5-vhqr-4h9v - diskcache pickle deserialization
     "GHSA-w8v5-vhqr-4h9v",  # grype/GHSA id for the same advisory
+
+    # Pillow advisories - transitive via docling (no PIL imports in
+    # secondbrain code). CVE-2026-112892 (APNG Image.open OOM),
+    # CVE-2026-112393 (TIFF BytesIO-save heap overflow) and
+    # CVE-2026-112396 (TIFF save use-after-free) are all fixed in 13.0.0,
+    # but every docling-slim release caps pillow>=10,<13, so no resolvable
+    # environment can take the fix (uv lock and pip both fail). The
+    # TIFF-save paths are unreachable from this codebase and the APNG-open
+    # path is bounded by the docker memory caps on ingestion workers
+    # (DoS-only). Same visibility caveat as nltk: pip-audit and grype still
+    # report them; accepted by documented triage via
+    # PIP_AUDIT_IGNORE_ARGS in scripts/security_scan.sh until docling-slim
+    # lifts the pillow<13 cap.
+    "CVE-2026-112892",  # APNG open OOM - fixed 13.0.0, upstream-blocked
+    "CVE-2026-112393",  # TIFF save heap overflow - fixed 13.0.0, upstream-blocked
+    "CVE-2026-112396",  # TIFF save use-after-free - fixed 13.0.0, upstream-blocked
 
     # Transitive dependencies - mitigated by context
     "54843",
