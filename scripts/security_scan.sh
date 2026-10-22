@@ -168,7 +168,13 @@ run_pipdeptree() {
 
     if command -v pipdeptree &> /dev/null; then
         python -m pip check
-        pipdeptree --summary -w fail
+        # -w fail is the documented contract (archived dependency-security
+        # spec note, 2026-10-11). safetensors is excluded: its wheel
+        # metadata declares a self-referencing dependency
+        # (safetensors => safetensors), a benign upstream packaging bug
+        # pipdeptree reports as a dependency cycle; real requirement
+        # conflicts are still caught by `pip check` above.
+        pipdeptree --summary -w fail --exclude safetensors
         echo ""
         echo -e "${GREEN}pipdeptree completed${NC}"
     else
