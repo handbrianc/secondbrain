@@ -1,9 +1,9 @@
 """Tests for OpenTelemetry tracing utilities."""
 
-import contextlib
 import os
 import sys
 from types import ModuleType
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -74,6 +74,90 @@ class TestIsTracingEnabled:
         assert is_tracing_enabled() is False
 
 
+class _RecordingSpanExporter:
+    """In-memory stand-in for the OTLP span exporter (no network).
+
+    Records every exported batch so tests can prove spans actually flow
+    through the wiring ``setup_tracing`` builds.
+    """
+
+    def __init__(
+        self,
+        *args: object,
+        endpoint: str | None = None,
+        **kwargs: object,
+    ) -> None:
+        self.endpoint = endpoint
+        self.exported_spans: list[Any] = []
+
+    def export(self, spans: Any) -> Any:
+        from opentelemetry.sdk.trace.export import SpanExportResult
+
+        self.exported_spans.extend(spans)
+        return SpanExportResult.SUCCESS
+
+    def shutdown(self) -> None:
+        """No-op: satisfy SpanExporter protocol on global shutdown."""
+
+    def force_flush(self, timeout_millis: int = 30000) -> bool:
+        """No-op: satisfy SpanExporter protocol on flushes."""
+        return True
+
+
+def _setup_tracing_with_captured_provider(
+    monkeypatch: pytest.MonkeyPatch,
+    service_name: str = "test-service",
+) -> tuple[Any, Any]:
+    """Run the real ``setup_tracing`` and capture the provider it registers.
+
+    Env-gates tracing on exactly like the endpoint test in
+    test_otel_tracing.py, swaps the module's cached OTLP exporter class for
+    :class:`_RecordingSpanExporter` (in-memory, no network), and intercepts
+    the ``set_tracer_provider`` registration so the real SDK
+    ``TracerProvider`` that ``setup_tracing`` builds can be inspected.
+
+    Returns
+    -------
+        ``(provider, span_processor)``: the registered provider and its sole
+        attached span processor.
+    """
+    pytest.importorskip("opentelemetry.sdk.trace")
+
+    from opentelemetry.sdk.trace import TracerProvider as SDKTracerProvider
+
+    from secondbrain.utils import tracing
+
+    monkeypatch.setenv("SECONDBRAIN_TRACING_ENABLED", "true")
+    # Tracing-only wiring: skip the periodic console metric reader thread.
+    monkeypatch.setenv("OTEL_METRICS_ENABLED", "false")
+    monkeypatch.setattr(tracing, "_tracing_enabled", False)
+    monkeypatch.setattr(tracing, "_metrics_enabled", False)
+    monkeypatch.setattr(tracing, "_tracer", None)
+    monkeypatch.setattr(tracing, "_otlp_checked", True)
+    monkeypatch.setattr(tracing, "_otlp_exporter_cls", _RecordingSpanExporter)
+
+    registered: list[SDKTracerProvider] = []
+    monkeypatch.setattr(
+        tracing.otel_trace,
+        "set_tracer_provider",
+        registered.append,
+    )
+
+    tracing.setup_tracing(
+        service_name=service_name, service_version="2.0", environment="test"
+    )
+
+    assert registered, "setup_tracing must register its TracerProvider"
+    provider = registered[0]
+    assert isinstance(provider, SDKTracerProvider)
+
+    # The installed SDK TracerProvider keeps its processors in the active
+    # multi processor and exposes no public accessor for them.
+    processors = list(provider._active_span_processor._span_processors)
+    assert len(processors) == 1
+    return provider, processors[0]
+
+
 class TestSetupTracing:
     """Tests for setup_tracing function."""
 
@@ -98,19 +182,45 @@ class TestSetupTracing:
 
             assert any("tracing not enabled" in msg.lower() for msg in caplog.messages)
 
-    def test_sets_up_tracing_when_enabled(self):
-        """Should setup tracing when OpenTelemetry is available and enabled."""
-        os.environ["SECONDBRAIN_TRACING_ENABLED"] = "true"
+    def test_registers_provider_with_service_resource(self, monkeypatch):
+        """Should register a provider whose Resource carries the service identity."""
+        provider, _ = _setup_tracing_with_captured_provider(
+            monkeypatch, service_name="audit-service"
+        )
 
-        from secondbrain.utils import tracing
+        attributes = provider.resource.attributes
+        assert attributes["service.name"] == "audit-service"
+        assert attributes["service.version"] == "2.0"
+        assert attributes["deployment.environment"] == "test"
 
-        tracing._tracer = None
-        tracing._tracing_enabled = False
+    def test_wraps_exporter_in_batch_span_processor(self, monkeypatch):
+        """Should wire the exporter asynchronously via a BatchSpanProcessor."""
+        from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
-        with contextlib.suppress(Exception):
-            setup_tracing(
-                service_name="test-service", service_version="2.0", environment="test"
-            )
+        _, processor = _setup_tracing_with_captured_provider(monkeypatch)
+
+        # tracing.py wires the (swappable) exporter into a batching
+        # processor, never a synchronous SimpleSpanProcessor.
+        assert isinstance(processor, BatchSpanProcessor)
+        assert isinstance(processor.span_exporter, _RecordingSpanExporter)
+
+    def test_spans_flow_through_wired_batch_processor(self, monkeypatch):
+        """Should deliver ended spans to the wired exporter on force_flush."""
+        provider, processor = _setup_tracing_with_captured_provider(monkeypatch)
+        exporter = processor.span_exporter
+
+        try:
+            tracer = provider.get_tracer("tests.test_tracing.flow")
+            with tracer.start_as_current_span("setup.tracing.flow") as span:
+                span.set_attribute("flow.check", "value")
+
+            assert provider.force_flush() is True
+
+            exported = exporter.exported_spans
+            assert [s.name for s in exported] == ["setup.tracing.flow"]
+            assert exported[0].attributes["flow.check"] == "value"
+        finally:
+            provider.shutdown()
 
 
 class TestCliStartupWiring:

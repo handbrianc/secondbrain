@@ -121,14 +121,21 @@
   unbounded-growth signature as the pre-fix default (4938 MiB tree within
   8.5 s of conversion start) and was stopped by the guard — legacy knob is
   reachable and reproduces the documented pathology on this reference PDF.
-- [ ] 6.3 Spot-check retrieval quality of the ingested manual (search hits on
+- [x] 6.3 Spot-check retrieval quality of the ingested manual (search hits on
   known page content) to confirm the pypdfium backend's fidelity is
   acceptable for the corpus; document any regressions found.
-  Blocked externally (2026-10-20): the user's remote embedding provider
-  (LiteLLM proxy) was unreachable, so no semantically meaningful vectors
-  exist to search; a stub-hash provider proves transport but not retrieval
-  quality. Run after the provider is reachable: ingest with real embeddings
-  against a test collection, then 2–3 known-page-content search queries.
+  Done (2026-10-21, provider now reachable): the live `embeddings` collection
+  (the 6.1 pypdfium-backend corpus, 12,593 chunks) carries real-provider
+  vectors — three known-content queries via the host CLI returned on-point,
+  page-consistent hits: "guest additions shared folders" → "Shared Folders"
+  heading p53 / "Guest Additions" heading p22 (score 0.81–0.88);
+  "VBoxManage modifymedium resize virtual disk" → the 15.4x `modifymedium`
+  reference p397–399 with the command syntax (0.80–0.84); "iSCSI network
+  storage target" → the iSCSI target parameter text p451–453 (0.74–0.81).
+  Chunk text matches the queried content on the reported page; no
+  regressions found. Stub-hash vectors cannot produce such semantic scores,
+  so this also confirms the corpus is backed by real embeddings. Corroborated
+  by the 18/18 chapter-anchored live rerun (revise-chapter-enumeration-anchoring).
 
 ## 7. Documentation
 

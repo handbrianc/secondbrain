@@ -7,13 +7,16 @@ Consolidated from:
 """
 
 import inspect
-from concurrent.futures import ThreadPoolExecutor
+import pickle
+from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 
 from secondbrain.document import DocumentIngestor, _extract_and_chunk_file
+from secondbrain.document.ingestor import _sync
+from secondbrain.document.processor import _extract_chunk_and_embed_file
 
 
 def _slow_task(x):
@@ -48,21 +51,25 @@ class TestThreadingConfiguration:
 
 
 class TestWorkerPickling:
-    """Test that worker functions are picklable for multiprocessing."""
+    """Worker functions must round-trip through pickle for process transfer.
 
-    def test_worker_functions_are_picklable(self):
-        """Test that worker functions can be pickled for process transfer."""
+    The pool loop in ``_sync._process_parallel_with_progress`` submits
+    ``_extract_chunk_and_embed_file`` by reference (the thread-pool path also
+    knows ``_extract_and_chunk_file``), so each must pickle as the very same
+    module-level object — a plain ``assert is`` after ``dumps``/``loads``,
+    with no skip masking an actual pickling regression.
+    """
+
+    @pytest.mark.parametrize(
+        "worker", [_extract_chunk_and_embed_file, _extract_and_chunk_file]
+    )
+    def test_worker_functions_are_picklable(self, worker):
+        """Workers pickle by reference and unpickle to the same function."""
         import pickle
 
-        # Test that _extract_and_chunk_file can be pickled
-        try:
-            pickled = pickle.dumps(_extract_and_chunk_file)
-            unpickled = pickle.loads(pickled)
-            assert unpickled is not None
-        except pickle.PicklingError, AttributeError:
-            # Some functions may not be picklable depending on implementation
-            # This is a known limitation of multiprocessing
-            pytest.skip("Function pickling not supported in this environment")
+        pickled = pickle.dumps(worker)
+        unpickled = pickle.loads(pickled)
+        assert unpickled is worker
 
 
 class TestErrorHandling:
@@ -103,6 +110,147 @@ class TestErrorHandling:
         )
         assert isinstance(results, dict)
         assert "segments" in results
+
+
+def _pool_loop_ingestor(progress_callback=None) -> DocumentIngestor:
+    """A bare DocumentIngestor carrying the attributes the pool loop reads."""
+    ingestor = DocumentIngestor.__new__(DocumentIngestor)
+    ingestor.chunk_size = 100
+    ingestor.chunk_overlap = 20
+    ingestor.embedding_cache = object()
+    ingestor.progress_callback = progress_callback
+    ingestor.on_chunk_progress = None
+    ingestor.on_phase_progress = None
+    return ingestor
+
+
+def _patch_pool_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Stub the config the pool loop reads (mirrors test_process_pool)."""
+    from types import SimpleNamespace
+
+    cfg = SimpleNamespace(
+        ingest_pool="process",
+        skip_existing_on_reingest=True,
+        pdf_ocr_enabled=False,
+        embedding_model="test-model",
+    )
+    monkeypatch.setattr("secondbrain.config.config", lambda: cfg)
+
+
+class _PicklingFirstExecutor:
+    """Fake executor whose submit fails for the first file only.
+
+    Mirrors what a real pool does when worker arguments cannot be serialized:
+    the task never runs and the submission surfaces a PicklingError for that
+    file while every other file keeps flowing.
+    """
+
+    def __init__(self, max_workers, **kwargs):
+        self.max_workers = max_workers
+        self.calls = 0
+        self.submitted: list[tuple[object, tuple]] = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def submit(self, fn, *args, **kwargs):
+        self.calls += 1
+        if self.calls == 1:
+            raise pickle.PicklingError("Can't pickle local object <lambda>")
+        self.submitted.append((fn, args))
+        future = Future()
+        future.set_result(
+            {
+                "success": True,
+                "file_path": args[0],
+                "documents": [{"chunk_id": "x", "text": "kept"}],
+                "error": None,
+            }
+        )
+        return future
+
+
+class TestSerializationErrorsAreCaught:
+    """Multicore spec: serialization errors are caught and reported.
+
+    An unpicklable worker argument must fail exactly its own file (with the
+    serialization error recorded as the reason) while the rest of the batch
+    continues and the ingest completes with consistent counts.
+    """
+
+    def test_submit_time_serialization_error_fails_only_that_file(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        """A submit-raised PicklingError is caught; other files still ingest."""
+        _patch_pool_config(monkeypatch)
+        monkeypatch.setattr(_sync, "ProcessPoolExecutor", _PicklingFirstExecutor)
+        monkeypatch.setattr(_sync, "ThreadPoolExecutor", _PicklingFirstExecutor)
+
+        first = tmp_path / "unpicklable-args.txt"
+        second = tmp_path / "healthy.txt"
+        first.write_text("first")
+        second.write_text("second")
+
+        storage = MagicMock()
+        progress_calls: list[tuple[Path, bool]] = []
+        ingestor = _pool_loop_ingestor(
+            progress_callback=lambda fp, ok: progress_calls.append((fp, ok))
+        )
+
+        successful, failed, reasons, skipped = ingestor._process_parallel_with_progress(
+            [first, second], MagicMock(), storage, 1, "process"
+        )
+
+        assert (successful, failed, skipped) == (1, 1, 0)
+        assert reasons == [
+            (str(first), "PicklingError: Can't pickle local object <lambda>")
+        ]
+        # The healthy file was still processed and its documents stored.
+        assert storage.store_batch.call_count == 1
+        assert progress_calls == [(first, False), (second, True)]
+
+    @pytest.mark.xdist_group("process_pool")
+    def test_real_pool_unpicklable_args_recorded_and_batch_completes(
+        self, tmp_path: Path
+    ):
+        """A real pool keeps the batch alive on unpicklable worker args.
+
+        Every affected future surfaces the PicklingError, the owner loop
+        records each file as failed with the serialization error, and the
+        ingest completes with consistent counts.
+        """
+        first = tmp_path / "a.txt"
+        second = tmp_path / "b.txt"
+        first.write_text("first")
+        second.write_text("second")
+
+        # A local (test-scoped) object: unpicklable, exactly the shape the
+        # spec's serialization scenario describes. It travels inside the real
+        # production worker args (worker_args embeds self.chunk_size), so the
+        # real pool fails to serialize the task and the deferred PicklingError
+        # lands on the future.
+        class _Unpicklable:
+            pass
+
+        ingestor = _pool_loop_ingestor()
+        ingestor.chunk_size = _Unpicklable()
+
+        storage = MagicMock()
+
+        successful, failed, reasons, skipped = ingestor._process_parallel_with_progress(
+            [first, second], MagicMock(), storage, 1, "process"
+        )
+
+        assert (successful, failed, skipped) == (0, 2, 0)
+        assert [path for path, _reason in reasons] == [str(first), str(second)]
+        assert all(
+            reason.startswith("PicklingError: Can't pickle")
+            for _path, reason in reasons
+        ), reasons
+        storage.store_batch.assert_not_called()
 
 
 class TestGracefulShutdown:

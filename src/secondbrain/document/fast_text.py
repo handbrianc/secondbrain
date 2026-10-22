@@ -72,11 +72,14 @@ _PRINTED_PAGE_RE = re.compile(r"[ \t]*\[\s*(\d{1,4})\s*\]")
 _PRINTED_PAGE_LINE_RE = re.compile(r"\s*\[\s*(\d{1,4})\s*\]\s*")
 
 # LaTeX/manual books stamp the printed page number in a page footer shaped
-# "N / total" ("78 / 634").  Docling extracts such footers as stand-alone
-# navigation chunks, so the printed index is carried in plain text rather
-# than a bracket marker.  The full "N / total" shape is required (not a bare
-# number) so ordinary body digits can never parse as a page stamp.
-_FOOTER_PAGE_RE = re.compile(r"^\s*(\d{1,4})\s*/\s*\d{1,4}\s*$")
+# "N / total" ("78 / 634"); regenerated PDFs (and many print-to-PDF exports)
+# instead carry a BARE footer number ("29") whose printed index equals the
+# physical page.  Docling extracts such footers as stand-alone navigation
+# chunks, so the printed index is carried in plain text rather than a bracket
+# marker.  The "/total" suffix is optional, but the whole line must still be
+# nothing but the page number(s) so ordinary body digits ("Loading 42%",
+# "1 About Oracle VirtualBox") can never parse as a page stamp.
+_FOOTER_PAGE_RE = re.compile(r"^\s*(\d{1,4})(?:\s*/\s*\d{1,4})?\s*$")
 
 # Sanity bound for any parsed page stamp: values beyond this are in-text
 # citations/IDs that regex-extraction mistook for page markers (observed:
@@ -130,10 +133,13 @@ def _checked_page(value: int) -> int:
 def footer_page_offset(nav_texts: dict[int, str]) -> int | None:
     """Return the print-to-physical offset from navigation footer texts.
 
-    Keys are physical page numbers, values the footer text ("78 / 634").
-    The offset is the majority physical-minus-printed difference, trusted
-    only when it holds for at least 80 % of at least three distinct footer
-    pages (the same gates :func:`resolve_printed_pages` applies).
+    Keys are physical page numbers, values the footer text ("78 / 634", or a
+    bare "29" when the book's printed index equals its physical index).  The
+    offset is the majority physical-minus-printed difference, trusted only
+    when it holds for at least 80 % of at least three distinct footer pages
+    (the same gates :func:`resolve_printed_pages` applies).  Offset-0 books
+    (``printed == physical`` on every sampled page) are legitimate and
+    resolve to ``0``.
     """
     sampled: dict[int, int] = {}
     for physical, text in nav_texts.items():
@@ -144,7 +150,11 @@ def footer_page_offset(nav_texts: dict[int, str]) -> int | None:
             printed = _checked_page(int(m.group(1)))
         except ValueError:
             continue
-        if 0 < printed < physical:
+        # ``printed <= physical`` keeps offset-0 books (bare footers whose
+        # printed index equals the physical page) eligible; a printed index
+        # still never LEADS the physical index (front matter only shifts the
+        # other way), so printed > physical remains a non-page footer.
+        if 0 < printed <= physical:
             sampled[physical] = printed
     if len(sampled) < 3:
         return None
@@ -251,8 +261,8 @@ def resolve_printed_pages(
       index (one consistent offset, enough pages, enough span — see
       :func:`prune_untrusted_bracket_stamps`) or be cleared as citation
       noise;
-    - every footer's printed value must be below its own physical page number
-      (printed indexes trail the physical index for books with front matter);
+    - every footer's printed value must be at or below its own physical page
+      number (printed indexes trail the physical index for books with front matter);
     - the physical-minus-printed offset must agree across at least 80 % of
       footer pages and at least three distinct physical pages.
 
@@ -287,9 +297,9 @@ def resolve_printed_pages(
                 continue
             physical = int(c.get("page_number") or 0)
             # Printed indexes never lead the physical index by design (front
-            # matter shifts them the other way); a stamp at/above its page
-            # cannot belong to this book's pagination.
-            if printed < physical:
+            # matter shifts them the other way); equality is valid for books
+            # whose printed and physical indexes are identical.
+            if printed <= physical:
                 footer_pages[physical] = printed
                 nav_texts[physical] = c.get("chunk_text") or ""
     if len(footer_pages) < 3:

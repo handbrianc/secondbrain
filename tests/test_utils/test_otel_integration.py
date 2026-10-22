@@ -7,6 +7,7 @@ Consolidated tests for:
 """
 
 import asyncio
+import contextvars
 
 import pytest
 from opentelemetry import metrics, trace
@@ -591,3 +592,129 @@ class TestOTELEndToEnd:
 
         # Verify span status
         assert error_span.status.status_code == trace.StatusCode.ERROR
+
+
+class TestSecondbrainContextAcrossAsync:
+    """secondbrain's contextvar helpers propagate across async/thread boundaries.
+
+    Mirrors ``test_async_context_propagation`` above (raw OTel SDK spans) but
+    exercises secondbrain's own propagation surface — set_trace_context /
+    get_current_trace_context / inject_trace_context (spec R8 "Async tasks").
+    """
+
+    TRACE_ID = "4bf92f3577b34da6a3ce929d0e0e4736"
+    SPAN_ID = "00f067aa0ba902b7"
+
+    @staticmethod
+    def _child_work(tracer):
+        """Child work run in another task/thread: inspect context, inject, span."""
+        from secondbrain.utils.tracing import (
+            get_current_trace_context,
+            inject_trace_context,
+        )
+
+        context = get_current_trace_context()
+        headers = inject_trace_context({})
+        with tracer.start_as_current_span("ctx.child.operation") as span:
+            span.set_attribute("child.kind", "secondbrain-context")
+            return {
+                "context": context,
+                "traceparent": headers.get("traceparent"),
+                "trace_id": span.get_span_context().trace_id,
+            }
+
+    def test_helpers_propagate_across_async_and_thread_boundaries(self):
+        """Child work in tasks, threads and a pool sees the set trace context.
+
+        Proves, through secondbrain's API, that the trace context set with
+        ``set_trace_context`` reaches every child execution context and that
+        the OTel spans created there join the same trace.
+        """
+        from secondbrain.utils.tracing import (
+            get_current_trace_context,
+            set_trace_context,
+        )
+
+        tracer = trace.get_tracer(__name__)
+
+        async def read_context_async():
+            return get_current_trace_context()
+
+        async def child_async():
+            return self._child_work(tracer)
+
+        async def parent():
+            with set_trace_context(self.TRACE_ID, self.SPAN_ID, "01"):
+                with tracer.start_as_current_span("ctx.parent.operation") as span:
+                    parent_context = get_current_trace_context()
+
+                    # asyncio tasks copy the current context at creation.
+                    from_task = await asyncio.create_task(child_async())
+                    # asyncio.to_thread copies the context into the thread.
+                    from_thread = await asyncio.to_thread(self._child_work, tracer)
+                    # Pool threads do not copy contextvars implicitly;
+                    # contextvars.Context.run is the documented carrier.
+                    context = contextvars.copy_context()
+                    from_pool = await asyncio.get_running_loop().run_in_executor(
+                        None, context.run, self._child_work, tracer
+                    )
+                    return (
+                        parent_context,
+                        span.get_span_context().trace_id,
+                        {
+                            "task": from_task,
+                            "to_thread": from_thread,
+                            "pool": from_pool,
+                        },
+                    )
+
+        parent_context, parent_trace_id, results = asyncio.run(parent())
+
+        expected = {
+            "trace_id": self.TRACE_ID,
+            "span_id": self.SPAN_ID,
+            "flags": "01",
+        }
+        assert parent_context == expected
+
+        for kind, result in results.items():
+            # secondbrain contextvar layer: the child sees the parent context...
+            assert result["context"] == expected, kind
+            # ...and injects it verbatim into outgoing headers.
+            assert result["traceparent"] == f"00-{self.TRACE_ID}-{self.SPAN_ID}-01", (
+                kind
+            )
+            # OTel span layer: the child span joins the parent trace.
+            assert result["trace_id"] == parent_trace_id, kind
+
+        spans = get_spans()
+        child_spans = [s for s in spans if s.name == "ctx.child.operation"]
+        assert len(child_spans) == 3
+        assert all(
+            span.get_span_context().trace_id == parent_trace_id for span in child_spans
+        )
+        assert any(span.name == "ctx.parent.operation" for span in spans)
+
+    def test_helpers_return_not_set_sentinel_without_set_trace_context(self):
+        """Without set_trace_context the helper yields the None sentinel everywhere."""
+        from secondbrain.utils.tracing import get_current_trace_context
+
+        async def read_context_async():
+            return get_current_trace_context()
+
+        async def probe():
+            from_task = await asyncio.create_task(read_context_async())
+            from_thread = await asyncio.to_thread(get_current_trace_context)
+            # Pool threads do not copy contextvars implicitly;
+            # contextvars.Context.run is the documented carrier.
+            context = contextvars.copy_context()
+            from_pool = await asyncio.get_running_loop().run_in_executor(
+                None, context.run, get_current_trace_context
+            )
+            return from_task, from_thread, from_pool
+
+        from_task, from_thread, from_pool = asyncio.run(probe())
+
+        assert from_task is None
+        assert from_thread is None
+        assert from_pool is None

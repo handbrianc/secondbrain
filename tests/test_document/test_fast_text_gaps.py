@@ -187,9 +187,15 @@ class TestFooterPageOffset:
         }
         assert fast_text.footer_page_offset(nav) == 10
 
-    def test_printed_at_or_above_physical_skipped(self) -> None:
+    def test_printed_above_physical_skipped(self) -> None:
+        """A printed page above its physical page is never sampled.
+
+        Deliberate guard change (task 1.2): ``printed <= physical`` is now
+        sampled, so offset-0 books resolve; only printed > physical stays
+        refused as a mis-parse.
+        """
         nav = {
-            88: "88 / 634",  # printed == physical -> not sampled
+            88: "98 / 634",  # printed > physical -> not sampled
             89: "79 / 634",
             90: "80 / 634",
             91: "81 / 634",
@@ -226,6 +232,71 @@ class TestFooterPageOffset:
             92: "14 / 634",  # 4 of 5 agree on 10 (80%)
         }
         assert fast_text.footer_page_offset(nav) == 10
+
+    @pytest.mark.unit
+    def test_offset_zero_bare_footer_majority_resolves(self) -> None:
+        """Bare footers whose printed index equals the physical page -> 0.
+
+        Task 1.2: print-to-PDF exports stamp a bare number ("29") whose
+        printed index equals the physical page; ``printed <= physical`` keeps
+        those rows eligible so the offset resolves to 0 instead of None.
+        """
+        assert fast_text.footer_page_offset({25: "25", 26: "26", 27: "27"}) == 0
+
+    @pytest.mark.unit
+    def test_roman_front_matter_rows_never_parse_digit_majority_wins(self) -> None:
+        """Roman-numeral front-matter rows are non-stamps; digit rows vote.
+
+        The roman rows ("iii"/"iv"/"v") never match the stamp regex, so they
+        neither count toward the 3-sample gate nor vote an offset; the three
+        digit rows carry the majority offset 10.
+        """
+        nav = {
+            2: "iii",
+            3: "iv",
+            4: "v",
+            88: "78 / 634",
+            89: "79 / 634",
+            90: "80 / 634",
+        }
+        assert fast_text.footer_page_offset(nav) == 10
+
+
+class TestFooterPageStampShapes:
+    """_FOOTER_PAGE_RE accepts bare and "N / total" stamps, nothing else.
+
+    Task 7.1: the whole line must be nothing but the page number(s) so
+    ordinary body digits and heading text can never parse as a page stamp.
+    """
+
+    @pytest.mark.parametrize(
+        ("text", "printed"),
+        [
+            pytest.param("29", "29", id="bare"),
+            pytest.param(" 29 ", "29", id="padded-bare"),
+            pytest.param("78 / 634", "78", id="slash-total"),
+            pytest.param("78/634", "78", id="glued-slash"),
+        ],
+    )
+    @pytest.mark.unit
+    def test_page_stamp_shapes_parse(self, text: str, printed: str) -> None:
+        match = fast_text._FOOTER_PAGE_RE.match(text.strip())
+        assert match is not None, text
+        assert match.group(1) == printed
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            pytest.param("iii", id="roman-numeral"),
+            pytest.param("1 About the Admin Manual", id="heading-text"),
+            pytest.param("Loading 42%", id="body-digits"),
+            pytest.param("78 / 634 / 999", id="malformed-extra-segment"),
+            pytest.param("", id="empty"),
+        ],
+    )
+    @pytest.mark.unit
+    def test_non_stamp_text_rejected(self, text: str) -> None:
+        assert fast_text._FOOTER_PAGE_RE.match(text.strip()) is None, text
 
 
 def _nav_chunk(physical: int, printed: int, total: int = 634) -> dict[str, Any]:
@@ -289,6 +360,26 @@ class TestResolvePrintedPages:
         assert by_page[88] == 78
         assert by_page[89] == 79
         assert by_page[90] == 80
+
+    def test_zero_offset_footers_stamp_all_covered_pages(self) -> None:
+        docs = [
+            _nav_chunk(25, 25),
+            _nav_chunk(26, 26),
+            _nav_chunk(27, 27),
+            _body_chunk(25),
+            _body_chunk(26),
+            _body_chunk(27),
+        ]
+
+        stamped = fast_text.resolve_printed_pages(docs)
+
+        assert stamped == 3
+        by_page = {
+            d["page_number"]: d["printed_page"]
+            for d in docs
+            if d["element_type"] == "body"
+        }
+        assert by_page == {25: 25, 26: 26, 27: 27}
 
     def test_pages_outside_footer_coverage_keep_bracket_stamps(self) -> None:
         docs = [

@@ -16,10 +16,10 @@ IMPORTANT RULES:
     (e.g. 'summarize by chapter', 'list all sections'), you MUST enumerate
     EVERY distinct chapter/section number and title present in the context —
     do not stop early, combine related items, or omit chapters because the
-    answer feels 'long enough'. If the context contains 21 chapters, your
-    answer must name all 21.
+    answer feels 'long enough'. Enumerate every chapter present, whatever
+    the total count.
     IMPORTANT: Your answer will be judged a FAILURE if it omits any chapter
-    numbers or substitutes summaries for chapter names. Enumerate all 21.
+    numbers or substitutes summaries for chapter names.
 13. MULTI-DOCUMENT HANDLING: The context may contain content from more than
     one document. When answering, clearly indicate which document each piece
     of information comes from (e.g., 'According to the VirtualBox manual...')

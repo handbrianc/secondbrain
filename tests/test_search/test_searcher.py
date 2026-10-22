@@ -136,10 +136,8 @@ class TestSearcher:
         mock_storage_class.return_value = mock_storage
 
         searcher = Searcher()
-        try:
+        with pytest.raises(RuntimeError, match="Cannot connect to the vector store"):
             searcher.search("test query")
-        except RuntimeError as e:
-            assert "Cannot connect to the vector store" in str(e)
 
 
 class TestSemanticSearchSpecRequirements:

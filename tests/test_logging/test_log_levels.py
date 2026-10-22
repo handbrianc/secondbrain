@@ -115,3 +115,57 @@ class TestStructuredLoggingLevels:
         assert logger.getEffectiveLevel() == logging.DEBUG, (
             "Verbose mode should enable DEBUG level"
         )
+
+
+class TestDefaultLogLevel:
+    """Test the shipped default level (WARNING) hides INFO but shows WARNING.
+
+    Spec (structured-logging, amended): setup_logging() defaults to WARNING
+    (warnings and above); INFO events stay recorded-but-hidden on the console
+    until the level is raised.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _restore_logging_state(self) -> Iterator[None]:
+        """Restore root handlers (with their levels), root and logger level."""
+        root_logger = logging.getLogger()
+        test_logger = logging.getLogger(__name__)
+        handlers = list(root_logger.handlers)
+        handler_levels = [(handler, handler.level) for handler in handlers]
+        root_level = root_logger.level
+        logger_level = test_logger.level
+        yield
+        root_logger.handlers = handlers
+        for handler, level in handler_levels:
+            handler.setLevel(level)
+        root_logger.setLevel(root_level)
+        test_logger.setLevel(logger_level)
+
+    def test_setup_logging_default_sets_warning_level(self, caplog):
+        """After setup_logging(verbose=False) the effective level is WARNING."""
+        setup_logging(verbose=False)
+
+        assert logging.getLogger().getEffectiveLevel() == logging.WARNING
+
+    def test_default_configures_all_handlers_to_warning(self, caplog):
+        """All root handlers (console and captured) sit at WARNING."""
+        setup_logging(verbose=False)
+
+        handlers = logging.getLogger().handlers
+        assert handlers, "setup_logging should leave root handlers configured"
+        assert all(handler.level == logging.WARNING for handler in handlers)
+
+    def test_info_hidden_and_warning_shown_at_default_level(self, caplog):
+        """INFO is recorded-but-hidden; WARNING passes to the captured handler."""
+        setup_logging(verbose=False)
+
+        # Lower the emitting logger so INFO records are actually created and
+        # reach the root handlers; the configured WARNING level must hide them.
+        logger = get_logger(__name__)
+        logger.setLevel(logging.DEBUG)
+        logger.info("info event hidden by default level")
+        logger.warning("warning event visible at default level")
+
+        messages = [record.getMessage() for record in caplog.records]
+        assert "info event hidden by default level" not in messages
+        assert "warning event visible at default level" in messages

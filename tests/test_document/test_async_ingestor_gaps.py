@@ -19,7 +19,13 @@ Targets the uncovered branches reported by coverage for
 - fallback single-embedding path when batch embedding fails and the
   ``generate_async`` fallback is present;
 - batch-embedding TypeError branches when the generator lacks native async
-  batch support and has no single fallback either.
+  batch support and has no single fallback either;
+- re-ingest skip detection (``skip_existing``): full-file skip without any
+  embed/store work, partial skip embedding only new chunks, graceful
+  degradation when the storage lookup fails, skip disabled by explicit
+  ``skip_existing=False``, and the ``ingest_async`` result reporting skipped
+  files exactly like the sync ``ingest()`` (skip counted once in success and
+  skipped, never in failed).
 
 Mocking style matches ``tests/test_document/test_async_ingestion.py``:
 AsyncMock storage/LLM plus a MagicMock embedding generator.
@@ -65,9 +71,16 @@ def _embedding_gen(
 
 
 def _storage(docs_ok: bool = True) -> MagicMock:
-    st = MagicMock(spec=["store_batch_async", "close"])
+    """Storage with a ``has_existing_hashes`` lookup that finds nothing.
+
+    The empty default keeps every pre-existing test on the "no re-ingest
+    skip" path: the skip query runs (config enables it by default) but no
+    chunk is ever reported as already stored, so nothing is filtered.
+    """
+    st = MagicMock(spec=["store_batch_async", "close", "has_existing_hashes"])
     st.store_batch_async = AsyncMock(return_value=["id1"] if docs_ok else [])
     st.close = MagicMock()
+    st.has_existing_hashes = MagicMock(return_value=set())
     return st
 
 
@@ -879,3 +892,403 @@ class TestContextManagerAndDuplicates:
 
         stored = st.store_batch_async.await_args[0][0]
         assert [d["page_pos"] for d in stored] == [0, 1, 0]
+
+
+class _TextItem:
+    """Minimal docling-format text item for the sync worker's fake converter."""
+
+    def __init__(self, text: str, page_no: int = 1) -> None:
+        self.text = text
+        self.prov = [type("_Prov", (), {"page_no": page_no})()]
+
+
+class _Content:
+    def __init__(self, texts: list[_TextItem]) -> None:
+        self.texts = texts
+
+
+class _Result:
+    def __init__(self, document: _Content) -> None:
+        self.document = document
+
+
+class _FakeConverter:
+    def __init__(self, texts: list[_TextItem]) -> None:
+        self._texts = texts
+
+    def convert(self, file_path: Path) -> _Result:
+        return _Result(_Content(self._texts))
+
+
+class _CountingEmbeddingModel:
+    """Sync embedding model counting every embed call (must stay at zero)."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def generate_batch(self, texts: list[str]) -> list[list[float]]:
+        self.calls += 1
+        return [[0.1] * 4 for _ in texts]
+
+
+class TestIngestAsyncSkipDetection:
+    """process_file_async / ingest_async re-ingest skip detection (skip_existing).
+
+    Mirrors the sync pool worker's semantics (see
+    ``tests/test_document/test_skip_existing_worker.py``): chunks whose
+    text_hash is already stored are neither re-embedded nor re-stored, a file
+    whose every chunk is stored is a skip counted as success, and a failing
+    storage lookup degrades to embedding everything.
+    """
+
+    @staticmethod
+    def _skip_storage(
+        existing_fn: Any,
+    ) -> MagicMock:
+        """Storage fake whose ``has_existing_hashes`` is fully controlled."""
+        st = MagicMock(spec=["store_batch_async", "close", "has_existing_hashes"])
+        st.store_batch_async = AsyncMock(return_value=["id1"])
+        st.close = MagicMock()
+        st.has_existing_hashes = MagicMock(side_effect=existing_fn)
+        return st
+
+    @staticmethod
+    def _patch_factories(monkeypatch: pytest.MonkeyPatch, gen: Any, st: Any) -> None:
+        import secondbrain.embedding as emb_mod
+        import secondbrain.storage as storage_mod
+
+        monkeypatch.setattr(
+            emb_mod.EmbeddingProviderFactory,
+            "create_from_config",
+            staticmethod(lambda cfg: gen),
+        )
+        monkeypatch.setattr(
+            storage_mod.StorageFactory,
+            "create_from_config",
+            staticmethod(lambda cfg: st),
+        )
+
+    @pytest.mark.asyncio
+    async def test_fully_existing_file_skips_embed_and_store(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Every chunk already stored -> success, zero embed/store work."""
+        cfg = config_obj()
+        monkeypatch.setattr(cfg, "streaming_enabled", False, raising=False)
+
+        ingestor = AsyncDocumentIngestor()
+        f = tmp_path / "doc.txt"
+        f.write_text("already stored")
+
+        texts = ["alpha segment body", "beta segment body", "gamma segment body"]
+
+        def extract(_p: Path) -> list[dict[str, Any]]:
+            return [{"text": t, "page": 1} for t in texts]
+
+        monkeypatch.setattr(ingestor, "_extract_text", extract)
+        gen = _embedding_gen(batch_result=[[0.1] * 8])
+        st = self._skip_storage(lambda hashes: set(hashes))
+
+        with caplog.at_level("INFO"):
+            skipped: set[str] = set()
+            ok = await ingestor.process_file_async(f, gen, st, skipped_files=skipped)
+
+        assert ok is True
+        assert skipped == {str(f)}
+        assert st.has_existing_hashes.call_count == 1
+        assert len(st.has_existing_hashes.call_args[0][0]) == len(texts)
+        gen.generate_batch_async.assert_not_called()
+        st.store_batch_async.assert_not_called()
+        assert "were already stored" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_partial_skip_embeds_only_new_chunks(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Only chunks missing from storage are embedded and stored."""
+        cfg = config_obj()
+        monkeypatch.setattr(cfg, "streaming_enabled", False, raising=False)
+
+        ingestor = AsyncDocumentIngestor()
+        f = tmp_path / "doc.txt"
+        f.write_text("partially stored")
+
+        texts = ["alpha segment body", "beta segment body", "gamma segment body"]
+
+        def extract(_p: Path) -> list[dict[str, Any]]:
+            return [{"text": t, "page": 1} for t in texts]
+
+        monkeypatch.setattr(ingestor, "_extract_text", extract)
+        gen = _embedding_gen(batch_result=[[0.1] * 8, [0.2] * 8])
+        st = self._skip_storage(lambda hashes: {hashes[0]})
+
+        skipped: set[str] = set()
+        ok = await ingestor.process_file_async(f, gen, st, skipped_files=skipped)
+
+        assert ok is True
+        assert skipped == set()
+        embedded: list[str] = []
+        for call in gen.generate_batch_async.await_args_list:
+            embedded.extend(call.args[0])
+        assert embedded == texts[1:]
+        stored = st.store_batch_async.await_args[0][0]
+        assert [d["chunk_text"] for d in stored] == texts[1:]
+
+    @pytest.mark.asyncio
+    async def test_streaming_path_skips_already_stored_chunks(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """The streaming chunk loop drops already-stored hashes pre-batch."""
+        import hashlib
+
+        cfg = config_obj()
+        monkeypatch.setattr(cfg, "streaming_chunk_batch_size", 10, raising=False)
+
+        ingestor = AsyncDocumentIngestor()
+        texts = ["alpha segment", "beta segment", "gamma segment"]
+        segments = [{"text": t, "page": 1} for t in texts]
+        normalized = " ".join(texts[1].lower().split())
+        skip_hash = hashlib.sha256(normalized.encode()).hexdigest()
+
+        captured: list[list[dict[str, Any]]] = []
+
+        async def fake_store(
+            _fp: Path, batch: list[dict[str, Any]], _gen: Any, _st: Any
+        ) -> int:
+            captured.append(list(batch))
+            return len(batch)
+
+        monkeypatch.setattr(ingestor, "_store_embedding_batch_async", fake_store)
+
+        docs = await ingestor._stream_process_chunks_async(
+            tmp_path / "doc.txt",
+            segments,
+            MagicMock(),
+            MagicMock(),
+            skip_hashes={skip_hash},
+        )
+
+        assert docs == 2
+        assert [c["text"] for c in captured[0]] == [texts[0], texts[2]]
+
+    @pytest.mark.asyncio
+    async def test_storage_lookup_failure_degrades_to_embed_all(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A failing storage lookup warns and embeds everything (no skip)."""
+        import logging
+
+        cfg = config_obj()
+        monkeypatch.setattr(cfg, "streaming_enabled", False, raising=False)
+
+        ingestor = AsyncDocumentIngestor()
+        f = tmp_path / "doc.txt"
+        f.write_text("degraded lookup")
+
+        texts = ["alpha segment body", "beta segment body", "gamma segment body"]
+
+        def extract(_p: Path) -> list[dict[str, Any]]:
+            return [{"text": t, "page": 1} for t in texts]
+
+        monkeypatch.setattr(ingestor, "_extract_text", extract)
+        gen = _embedding_gen(batch_result=[[0.1] * 8, [0.2] * 8, [0.3] * 8])
+        st = self._skip_storage(
+            lambda _hashes: (_ for _ in ()).throw(RuntimeError("db down"))
+        )
+
+        with caplog.at_level(logging.WARNING):
+            ok = await ingestor.process_file_async(f, gen, st)
+
+        assert ok is True
+        assert "Could not query existing text hashes" in caplog.text
+        embedded: list[str] = []
+        for call in gen.generate_batch_async.await_args_list:
+            embedded.extend(call.args[0])
+        assert embedded == texts
+        stored = st.store_batch_async.await_args[0][0]
+        assert [d["chunk_text"] for d in stored] == texts
+
+    @pytest.mark.asyncio
+    async def test_skip_existing_false_never_queries_storage(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Explicit skip_existing=False bypasses the storage lookup entirely."""
+        cfg = config_obj()
+        monkeypatch.setattr(cfg, "streaming_enabled", False, raising=False)
+
+        ingestor = AsyncDocumentIngestor()
+        f = tmp_path / "doc.txt"
+        f.write_text("no skip requested")
+
+        texts = ["alpha segment body", "beta segment body"]
+
+        def extract(_p: Path) -> list[dict[str, Any]]:
+            return [{"text": t, "page": 1} for t in texts]
+
+        monkeypatch.setattr(ingestor, "_extract_text", extract)
+        gen = _embedding_gen(batch_result=[[0.1] * 8, [0.2] * 8])
+        st = self._skip_storage(lambda hashes: set(hashes))
+
+        ok = await ingestor.process_file_async(f, gen, st, skip_existing=False)
+
+        assert ok is True
+        st.has_existing_hashes.assert_not_called()
+        embedded: list[str] = []
+        for call in gen.generate_batch_async.await_args_list:
+            embedded.extend(call.args[0])
+        assert embedded == texts
+        assert st.store_batch_async.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_full_skip_matches_sync_worker_contract(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Async skip detection mirrors the sync worker's observable contract.
+
+        The sync pool worker (``processor._extract_chunk_and_embed_file``)
+        and ``process_file_async`` are driven over the same content with a
+        storage that already holds every chunk: both must report the file as
+        a successful skip and invoke the embedder zero times.
+        """
+        import secondbrain.document.docling_factory as docling_factory
+        import secondbrain.document.processor as processor
+        import secondbrain.embedding as embedding_module
+
+        texts = ["alpha segment body", "beta segment body"]
+        file_path = tmp_path / "sample.txt"
+        file_path.write_text("\n".join(texts), encoding="utf-8")
+
+        model = _CountingEmbeddingModel()
+        converter = _FakeConverter([_TextItem(t, page_no=1) for t in texts])
+        monkeypatch.setattr(
+            docling_factory, "get_converter_for_path", lambda _p: converter
+        )
+        monkeypatch.setattr(
+            embedding_module.EmbeddingProviderFactory,
+            "create_from_config",
+            lambda _cfg: model,
+        )
+        monkeypatch.setattr(
+            processor, "_existing_text_hashes", lambda hashes: set(hashes)
+        )
+
+        sync_result = processor._extract_chunk_and_embed_file(
+            str(file_path),
+            chunk_size=512,
+            chunk_overlap=50,
+            progress_queue=None,
+            embedding_model_name="test-model",
+            skip_existing=True,
+        )
+        assert sync_result["success"] is True
+        assert sync_result["skipped"] is True
+        assert sync_result["documents"] == []
+        assert model.calls == 0
+
+        ingestor = AsyncDocumentIngestor()
+        gen = _embedding_gen(batch_result=[[0.1] * 8])
+        st = self._skip_storage(lambda hashes: set(hashes))
+
+        def extract(_p: Path) -> list[dict[str, Any]]:
+            return [{"text": t, "page": 1} for t in texts]
+
+        monkeypatch.setattr(ingestor, "_extract_text", extract)
+
+        skipped: set[str] = set()
+        ok = await ingestor.process_file_async(
+            file_path, gen, st, skipped_files=skipped
+        )
+
+        assert ok is True
+        assert skipped == {str(file_path)}
+        gen.generate_batch_async.assert_not_called()
+        st.store_batch_async.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_ingest_async_counts_fully_skipped_file(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """ingest_async reports a fully-stored file once in success+skipped.
+
+        Same result shape and skip semantics the sync ``ingest()`` returns:
+        skipped: 1, success: 1, and no failure entry.
+        """
+        f = tmp_path / "doc.txt"
+        f.write_text("stored body")
+
+        ingestor = AsyncDocumentIngestor()
+        gen = _embedding_gen(batch_result=[[0.1] * 8])
+        st = self._skip_storage(lambda hashes: set(hashes))
+        self._patch_factories(monkeypatch, gen, st)
+
+        def extract(_p: Path) -> list[dict[str, Any]]:
+            return [{"text": "stored body", "page": 1}]
+
+        monkeypatch.setattr(ingestor, "_extract_text", extract)
+
+        result = await ingestor.ingest_async(str(tmp_path))
+
+        assert result == {
+            "success": 1,
+            "failed": 0,
+            "failures": [],
+            "skipped": 1,
+        }
+        gen.generate_batch_async.assert_not_called()
+        st.store_batch_async.assert_not_called()
+        st.has_existing_hashes.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_ingest_async_skip_existing_param_overrides_config(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The skip_existing argument wins over config on both sides.
+
+        With config disabled, an explicit ``skip_existing=True`` still runs
+        the skip lookup (both files fully skipped), and the default (config
+        disabled) never queries storage.
+        """
+        cfg = config_obj()
+        monkeypatch.setattr(cfg, "skip_existing_on_reingest", False, raising=False)
+
+        (tmp_path / "one.txt").write_text("first stored body")
+        (tmp_path / "two.txt").write_text("second stored body")
+
+        ingestor = AsyncDocumentIngestor()
+
+        def extract(p: Path) -> list[dict[str, Any]]:
+            return [{"text": f"{p.stem} body", "page": 1}]
+
+        monkeypatch.setattr(ingestor, "_extract_text", extract)
+
+        gen = _embedding_gen(batch_result=[[0.1] * 8])
+        st = self._skip_storage(lambda hashes: set(hashes))
+        self._patch_factories(monkeypatch, gen, st)
+
+        override = await ingestor.ingest_async(str(tmp_path), skip_existing=True)
+        assert override == {
+            "success": 2,
+            "failed": 0,
+            "failures": [],
+            "skipped": 2,
+        }
+        gen.generate_batch_async.assert_not_called()
+        st.store_batch_async.assert_not_called()
+
+        # Default path (config disabled): no lookup, everything embedded.
+        gen2 = _embedding_gen(batch_result=[[0.1] * 8])
+        st2 = self._skip_storage(lambda hashes: set(hashes))
+        self._patch_factories(monkeypatch, gen2, st2)
+
+        default = await ingestor.ingest_async(str(tmp_path))
+        assert default["skipped"] == 0
+        assert default["success"] == 2
+        st2.has_existing_hashes.assert_not_called()
+        assert gen2.generate_batch_async.await_count == 2
+        assert st2.store_batch_async.await_count == 2

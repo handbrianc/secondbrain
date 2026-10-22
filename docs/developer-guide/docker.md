@@ -72,10 +72,15 @@ path lives in the [MCP Server](mcp.md) guide.
 ## Configuration (env file)
 
 The stack is configured through `.env.docker`, loaded into the
-`mcp-server` service via `env_file`:
+`mcp-server` service via `env_file`. The template ships as
+`.env.docker.example` — copy it and fill in your deployment's values:
 
-- The shipped file contains **safe placeholders only** — keep real secrets
-  out of version control and edit your local copy instead.
+```console
+$ cp .env.docker.example .env.docker
+```
+
+- The template contains **safe placeholders only** — real secrets stay in
+  your local, untracked `.env.docker`; keep them out of version control.
 - Every value is runtime-injectable: retargeting Qdrant, the embedding API,
   or the LLM requires only an env change and `docker compose up -d`, no
   rebuild.

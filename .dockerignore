@@ -25,6 +25,10 @@ mutmut_config.py
 package.json
 mkdocs.yml
 
+# Host-side tests and documentation sources are not used by the image build.
+tests
+docs
+
 # Python environments and caches
 .venv
 **/__pycache__

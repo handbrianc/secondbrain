@@ -6,6 +6,11 @@ set -e
 
 # Get script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Absolute artifact paths so the script works from any working directory.
+SBOM_PATH="$PROJECT_ROOT/sbom.json"
+SBOM_BASELINE_PATH="$PROJECT_ROOT/sbom.baseline.json"
 
 echo "=========================================="
 echo "SecondBrain Security Scan"
@@ -124,12 +129,38 @@ generate_sbom() {
     echo ""
     
     if command -v cyclonedx-py &> /dev/null; then
-        cyclonedx-py env -o sbom.json
+        cyclonedx-py env -o "$SBOM_PATH"
         echo ""
-        echo -e "${GREEN}SBOM generated: sbom.json${NC}"
-        echo "SBOM format: SPDX JSON"
+        echo -e "${GREEN}SBOM generated: $SBOM_PATH${NC}"
+        echo "SBOM format: CycloneDX JSON"
+        compare_sbom
     else
         echo -e "${YELLOW}cyclonedx-py not installed. Skipping...${NC}"
+    fi
+    echo ""
+}
+
+# Function to compare the generated SBOM against the committed baseline
+# (dependency-security spec: "SBOM SHALL be compared for unexpected changes").
+# scripts/sbom_compare.py exits non-zero on added/removed components; with
+# set -e that fails the scan. Without a committed baseline it prints a notice
+# and exits 0 so CI stays green until sbom.baseline.json is committed.
+compare_sbom() {
+    echo -e "${GREEN}Comparing SBOM against baseline...${NC}"
+    echo ""
+
+    if [ ! -f "$SBOM_PATH" ]; then
+        echo -e "${YELLOW}SBOM not found at $SBOM_PATH. Run the sbom command first.${NC}"
+        return 0
+    fi
+
+    if [ -f "$SBOM_BASELINE_PATH" ]; then
+        python3 "$SCRIPT_DIR/sbom_compare.py" --sbom "$SBOM_PATH" --baseline "$SBOM_BASELINE_PATH"
+    else
+        echo -e "${YELLOW}Notice: no SBOM baseline committed yet ($SBOM_BASELINE_PATH).${NC}"
+        echo "Comparison is skipped (exit 0) until the baseline is committed."
+        echo "Record one after reviewing the current SBOM with:"
+        echo "  python3 $SCRIPT_DIR/sbom_compare.py --update-baseline"
     fi
     echo ""
 }
@@ -139,9 +170,9 @@ scan_sbom() {
     echo -e "${GREEN}Scanning SBOM for vulnerabilities...${NC}"
     echo ""
     
-    if [ -f "sbom.json" ]; then
+    if [ -f "$SBOM_PATH" ]; then
         if command -v pip-audit &> /dev/null; then
-            pip-audit --requirement sbom.json "${PIP_AUDIT_IGNORE_ARGS[@]}"
+            pip-audit --requirement "$SBOM_PATH" "${PIP_AUDIT_IGNORE_ARGS[@]}"
             echo ""
             echo -e "${GREEN}SBOM scan completed${NC}"
         else
@@ -153,16 +184,40 @@ scan_sbom() {
     echo ""
 }
 
-# Function to check the dependency tree for conflicts
-# pip check fails on broken installed requirements. pipdeptree's silence mode
-# still prints the summary without failing on unrelated metadata cycles.
+# Function to check the dependency tree for conflicts.
+# pipdeptree's fail warning mode (-w fail) exits non-zero when dependency
+# problems (mismatched requirements, cycles) are found, per the
+# dependency-security spec note ("pipdeptree --summary -w fail"). pip check is
+# kept as an additional conflict check on installed requirements.
 run_pipdeptree() {
     echo -e "${GREEN}Running pipdeptree dependency tree check...${NC}"
     echo ""
 
     if command -v pipdeptree &> /dev/null; then
         python -m pip check
-        pipdeptree --summary -w silence
+        # -w fail is the documented contract (archived dependency-security
+        # spec note, 2026-10-11). Tolerated exception: safetensors' wheel
+        # metadata declares itself as a dependency (safetensors =>
+        # safetensors), a benign upstream packaging bug pipdeptree reports
+        # as a cycle (--exclude removes it from the tree summary but the
+        # warning still trips -w fail's exit code). The stage fails on any
+        # other dependency problem; pip check above still catches real
+        # requirement conflicts on installed metadata.
+        PDEPT_OUT="$(pipdeptree --summary -w fail 2>&1)" && pdept_rc=0 || pdept_rc=$?
+        if [ "$pdept_rc" -ne 0 ]; then
+            if [ "$(printf '%s\n' "$PDEPT_OUT" | grep -c '=>')" = "1" ] \
+                && printf '%s\n' "$PDEPT_OUT" | grep -q 'safetensors => safetensors' \
+                && printf '%s\n' "$PDEPT_OUT" | grep -qE 'conflicting dependencies:[[:space:]]+0' \
+                && printf '%s\n' "$PDEPT_OUT" | grep -qE 'missing dependencies:[[:space:]]+0'; then
+                echo "pipdeptree: only the known-benign safetensors self-reference cycle found; tolerated."
+                printf '%s\n' "$PDEPT_OUT"
+            else
+                printf '%s\n' "$PDEPT_OUT"
+                exit 1
+            fi
+        else
+            printf '%s\n' "$PDEPT_OUT"
+        fi
         echo ""
         echo -e "${GREEN}pipdeptree completed${NC}"
     else
@@ -220,8 +275,8 @@ case "${1:-all}" in
         echo "  audit     Run pip-audit dependency scan"
         echo "  safety    Run safety vulnerability check"
         echo "  bandit    Run bandit security linter"
-        echo "  pipdeptree Check dependency tree for conflicts"
-        echo "  sbom      Generate Software Bill of Materials"
+        echo "  pipdeptree Check dependency tree for conflicts (fails on dependency problems)"
+        echo "  sbom      Generate SBOM (CycloneDX JSON) and compare against baseline"
         echo "  scan-sbom Scan SBOM for vulnerabilities"
         echo "  all       Run all security checks (default)"
         echo "  help      Show this help message"
