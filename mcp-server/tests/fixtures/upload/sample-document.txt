@@ -1,0 +1,9 @@
+Secondbrain sample upload document.
+
+This text file is the `upload_document` tool's integration-test payload. Its
+base64 encoding sits next to it (`sample-document.txt.b64`), byte-for-byte
+what the tool receives, so a test can compare what lands in the upload
+directory against the original.
+
+It mentions semantic search, embedding vectors, and Qdrant so a real-CLI
+ingest of the uploaded file has something to chunk.

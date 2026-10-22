@@ -12,7 +12,7 @@ For each question the pipeline:
 
 1. Detects the structural intent of the query (printed to stderr).
 2. Rewrites follow-up questions into standalone form using recent history
-   ("what about page 2?" → "what is on page 2 of <document>?").
+   ("what about page 2?" → "what is on page 2 of `<document>`?").
 3. Retrieves the top-k chunks from the vector store, with a minimum
    similarity threshold (default 0.46).
 4. Builds a prompt from the retrieved context plus the last few messages
