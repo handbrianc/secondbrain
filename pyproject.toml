@@ -288,20 +288,40 @@ ignore = [
     "GHSA-w8v5-vhqr-4h9v",  # grype/GHSA id for the same advisory
 
     # Pillow advisories - transitive via docling (no PIL imports in
-    # secondbrain code). CVE-2026-112892 (APNG Image.open OOM),
-    # CVE-2026-112393 (TIFF BytesIO-save heap overflow) and
-    # CVE-2026-112396 (TIFF save use-after-free) are all fixed in 13.0.0,
-    # but every docling-slim release caps pillow>=10,<13, so no resolvable
-    # environment can take the fix (uv lock and pip both fail). The
-    # TIFF-save paths are unreachable from this codebase and the APNG-open
-    # path is bounded by the docker memory caps on ingestion workers
-    # (DoS-only). Same visibility caveat as nltk: pip-audit and grype still
-    # report them; accepted by documented triage via
-    # PIP_AUDIT_IGNORE_ARGS in scripts/security_scan.sh until docling-slim
-    # lifts the pillow<13 cap.
-    "CVE-2026-112892",  # APNG open OOM - fixed 13.0.0, upstream-blocked
-    "CVE-2026-112393",  # TIFF save heap overflow - fixed 13.0.0, upstream-blocked
-    "CVE-2026-112396",  # TIFF save use-after-free - fixed 13.0.0, upstream-blocked
+    # secondbrain code). The 2026-10 pillow advisory cluster (CVE-2026-112390
+    # ..112406, 112891..112901; 24 advisories: TIFF encode/decode
+    # memory-safety, APNG/PDF-parser DoS paths) is fixed in 13.0.0, but
+    # every docling-slim release caps pillow>=10,<13, so no resolvable
+    # environment can take the fix (uv lock and pip both fail). No
+    # TIFF-save path exists in this codebase and the image-open paths are
+    # bounded by the docker memory caps on ingestion workers (DoS-only).
+    # Same visibility caveat as nltk: pip-audit and grype still report
+    # them; accepted by documented triage via PIP_AUDIT_IGNORE_ARGS in
+    # scripts/security_scan.sh until docling-slim lifts the pillow<13 cap.
+    "CVE-2026-112390",
+    "CVE-2026-112391",
+    "CVE-2026-112392",
+    "CVE-2026-112393",
+    "CVE-2026-112395",
+    "CVE-2026-112396",
+    "CVE-2026-112397",
+    "CVE-2026-112399",
+    "CVE-2026-112400",
+    "CVE-2026-112401",
+    "CVE-2026-112402",
+    "CVE-2026-112404",
+    "CVE-2026-112405",
+    "CVE-2026-112406",
+    "CVE-2026-112891",
+    "CVE-2026-112892",
+    "CVE-2026-112893",
+    "CVE-2026-112894",
+    "CVE-2026-112895",
+    "CVE-2026-112896",
+    "CVE-2026-112897",
+    "CVE-2026-112899",
+    "CVE-2026-112900",
+    "CVE-2026-112901",
 
     # Transitive dependencies - mitigated by context
     "54843",
