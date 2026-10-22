@@ -1,6 +1,6 @@
 # AGENTS.md - Agent Coding Guidelines
 
-**Last Updated:** 2026-10-14
+**Last Updated:** 2026-10-15
 **Commit:** 386ddc8
 
 SecondBrain is a local document intelligence CLI for semantic search using Qdrant vector search (with SQLite for
@@ -98,9 +98,13 @@ secondbrain/
 **Testing:**
 
 - Parallel execution with `pytest-xdist` (`-n auto --dist=loadfile`, 120s timeout per test)
-- Extensive test markers (21 registered): `integration`, `unit`, `slow`, `fast`, `medium`, `chaos`, `qualitative`, `safety`, `factual`, `hallucination`, `robustness`, `llm_judge`, `performance`, `flaky`, `xdist_group`, ...
+- Extensive test markers (21 registered): `integration`, `unit`, `slow`, `fast`,
+  `medium`, `chaos`, `qualitative`, `safety`, `factual`, `hallucination`,
+  `robustness`, `llm_judge`, `performance`, `flaky`, `xdist_group`, ...
 - Chaos tests are opt-in: default addopts carry `-m 'not chaos'`; a CLI `-m` overrides it (run `pytest -m chaos`)
-- Coverage is intentionally NOT in addopts — it is a CI gate (`test-quality-gates.yml` supplies `--cov*` flags); pass `--cov` explicitly when needed
+- Coverage is intentionally NOT in addopts — it is a CI gate
+  (`test-quality-gates.yml` supplies `--cov*` flags); pass `--cov` explicitly
+  when needed
 - Property-based testing with Hypothesis (100 examples, 500ms deadline)
 
 **Security:**
@@ -173,6 +177,41 @@ headlined by `_iterative_query` (complexity 167), `_derive_chapter_numbers` (66)
 `PLR0913` (>5 args) conflicts with this codebase's CLI/config surface. Complexity is
 enforced by periodic audit review instead. Re-evaluate before adding new long-branch
 business logic.
+
+**Accepted documented debt (2026-10-15 audit):** structural findings recorded as
+accepted, with rationale — each needs a design-judgment refactor that must not be
+rushed inside an audit loop. None are regressions; re-examine at the next audit.
+
+- **Async/sync ingestor duplication** — `document/ingestor/_async.py` and
+  `_sync.py` duplicate the parallel-ingestion logic (one 51-line clone at
+  `_async.py:354`/`_sync.py:678`, plus ~6 smaller clones of 9-31 lines). Accepted:
+  consolidation requires a shared sync/async core refactor across both ingestors
+  while keeping the 3445-test suite green; deferred to a dedicated change
+  proposal rather than a mechanical in-loop edit.
+- **God modules (>=20 imports)** — `rag/pipeline/_mixins.py` (61, documented
+  compatibility shim above), `document/docling_factory.py` (45),
+  `document/ingestor/_sync.py` (39), `document/processor.py` (32),
+  `cli/chat_helpers.py` (25), `rag/pipeline/_pipeline.py` (23),
+  `utils/tracing.py` (22), `document/ingestor/_async.py` (20). Accepted: import
+  fan-in here is dominated by re-exports and hot-path wiring; splitting them is
+  incremental work tied to the ingestor/RAG refactors above, not a safe
+  mechanical fix. 0 circular dependencies.
+- **Cognitive complexity (>8), 100 functions** — tracked under the intentional
+  non-adoption paragraph above (C901/PLR0911/PLR0912/PLR0913/PLR0915); the
+  worst offenders are `_process_parallel_with_progress` (33),
+  `_store_embedding_batch` (17), `_generate_embeddings_with_cache_async` (12).
+- **Test smells (89)** — 41 sleep-based tests and 48 over-mocked files (worst:
+  `tests/test_conversation/test_session.py`, 99 mock/stub/spy refs). Accepted:
+  sleeps live in async/timing-sensitive tests where real-wait replacements need
+  per-test judgment; de-mocking is per-file editorial work with behavioral
+  risk. Suite stays healthy (1.60 test:production ratio, ~60s wall time).
+- **Dependency-usage audit tooling** — `audit-dependency-usage.sh` mis-detects
+  npm (the repo's `package.json` is commitlint/hooks-only, no node_modules), so
+  no automated Python dep-usage audit runs; the 2026-10-15 manual AST
+  cross-check found every declared dependency plausibly used (pyobjc_*=darwin
+  extras, docling_core/parse+httpx+opentelemetry runtime deps). Bandit on
+  `tests/` yields 6741 fixture-noise findings — `[tool.bandit]` correctly
+  excludes tests (src run = 0).
 
 <!-- CODEGRAPH_START -->
 ## CodeGraph

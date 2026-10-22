@@ -194,6 +194,22 @@ Key components:
 - **Vector Storage** - Qdrant vector search for similarity retrieval; chunk metadata stored in the Qdrant payload
 - **Chat** (`secondbrain chat`) - RAG pipeline for conversational Q&A
 
+## MCP Server
+
+SecondBrain ships an MCP (Model Context Protocol) server — `secondbrain-mcp`,
+a hardened Rust wrapper around the CLI — so MCP clients (IDEs, agents,
+assistant apps) can drive ingestion, semantic search, and conversational Q&A
+over HTTP(S). It exposes `search`, `ingest_documents`, `chat_send`,
+`chat_list_sessions`, and `chat_get_history` tools, with optional bearer-token
+auth and TLS, structured logging, per-call timeouts, path-confined ingestion,
+and a graceful-shutdown lifecycle. Compose services for the bundled stack are
+included.
+
+- Server reference: [mcp-server/README.md](mcp-server/README.md) — tool
+  reference, `SECONDBRAIN_MCP_*` configuration, auth/TLS, wire examples
+- Onboarding guide: [MCP Server](docs/developer-guide/mcp.md) — quick start
+  and integration walkthrough
+
 ## Documentation
 
 - [Getting Started](docs/getting-started/index.md) - Installation, setup, and first steps
@@ -201,6 +217,7 @@ Key components:
 - [CLI Reference](docs/user-guide/cli-reference.md) - All commands and options
 - [Configuration](docs/getting-started/configuration.md) - Full configuration reference
 - [Developer Guide](docs/developer-guide/index.md) - Dev setup and contributing
+- [MCP Server](docs/developer-guide/mcp.md) - MCP server guide (reference: [mcp-server/README.md](mcp-server/README.md))
 - [Architecture](docs/architecture/index.md) - System design
 
 ## License

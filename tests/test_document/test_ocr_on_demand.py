@@ -65,6 +65,10 @@ class _FakeCfg:
         self.pdf_generate_page_images = False
         self.pdf_generate_picture_images = False
         self.pdf_images_scale = 1.0
+        # Memory-bounds fields (add-pdf-ingest-memory-bounds) — defaults match
+        # the real config: bounded backend, windowing on, queue bound 16.
+        self.pdf_backend = "pypdfium"
+        self.pdf_pipeline_queue_max_size = 16
 
 
 @pytest.fixture

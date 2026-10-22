@@ -1,0 +1,12 @@
+# MCP Server README Feature Documentation — Tasks
+
+## 1. README (feature set)
+
+- [x] 1.1 Write `mcp-server/README.md`: overview + architecture one-paragraph (wraps the CLI; see the scaffold design doc), tool reference tables (all five tools: name, params, defaults, result shape, errors), `SECONDBRAIN_MCP_*` reference, Python `SECONDBRAIN_*` passthrough reference (grouped: storage/Qdrant, embedding, LLM, behavior), HTTPS setup (self-signed + CA examples), auth usage, build (`cargo`), container/compose usage, JSON-RPC wire examples over HTTPS
+- [x] 1.2 Cross-link the design doc (`openspec/changes/add-mcp-server-scaffold/design.md`) and the e2e smoke (`scripts/mcp_e2e_smoke.sh`) as the verification entry point
+
+## 2. Tests proving the unit of work
+
+- [x] 2.1 Create `tests/test_docs/test_mcp_docs.py`: parse `mcp-server/src/tools/*.rs` for registered tool names and `mcp-server/src/config.rs` for `SECONDBRAIN_MCP_*` variables; assert each appears in `mcp-server/README.md` (fails on drift)
+- [x] 2.2 Verify the README's wire example against the test stack: run `scripts/mcp_e2e_smoke.sh --stack test` and confirm the documented request/response shapes match what the smoke observed
+  *Verification 2026-10-15: smoke ran against the test stack (blocked at ingest/search by the missing embedding endpoint — see add-mcp-e2e-smoke 2.1) and the wire shapes were additionally replayed verbatim against the live server. All observable shapes match `mcp-server/README.md` exactly: stateless single-application/json replies; tools/list envelope and the five tool entries (`name`/`description`/`inputSchema`); ingest response text beginning `ingest summary (from the secondbrain CLI):` with `isError:false`; tool-level errors as HTTP 200 + `isError:true` with the documented "CLI failed with exit code N + truncated stdout/stderr" text (observed for both the 401 embedding failure and a workspace path failure); `/healthz` → `{"status":"ok"}`. Not observable in this environment (no embedding endpoint, no LLM credentials): the documented success bodies of `search` (JSON chunk array) and `chat_send` (`{"session_id","answer"}`) and the `-32602` protocol error example — nothing observed contradicts them, and the server's own live tool descriptions (observed via tools/list) state the same success shapes. Non-divergence note: the README's tools/list example lists tools search-first while the server returns them alphabetically; the example is ellipsized/illustrative and the tool set and per-tool shape match.*

@@ -3,6 +3,25 @@ services:
     image: qdrant/qdrant:latest
     container_name: secondbrain-qdrant
     hostname: qdrant
+    # The qdrant image ships neither curl nor wget, so probe its native
+    # /healthz endpoint with bash's built-in /dev/tcp: open the socket, send a
+    # minimal HTTP request, and require an HTTP 200 response.
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -c
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/6333 &&
+          printf "GET /healthz HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n" >&3 &&
+          grep -q "HTTP/1.1 200" <&3
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    # Stack services reach Qdrant in-network at http://qdrant:6333. The port
+    # publish below exposes it on localhost for host-side CLI tooling (e.g.
+    # curl or qdrant-client); comment it out to make Qdrant internal-only.
     ports:
       - "6333:6333"
     volumes:
@@ -10,8 +29,54 @@ services:
     networks:
       - secondbrain-network
 
+  # Primary application service: MCP clients → secondbrain-mcp → secondbrain
+  # CLI → Qdrant. Configuration comes from .env.docker (see it for every
+  # integration point: Qdrant, embedding API, LLM API, SQLite, and the
+  # server's SECONDBRAIN_MCP_* settings). All of it is runtime-injectable —
+  # no image rebuild is needed to target external infrastructure.
+  mcp-server:
+    build: .
+    container_name: secondbrain-mcp-server
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env.docker
+    volumes:
+      # Ingest workspace, read-only at the configured workspace root: the
+      # served corpus stays immutable. The single writable exception is the
+      # upload staging directory (add-mcp-upload-tool), layered read-write
+      # below. The image entrypoint hands the staging directory to the
+      # runtime user at startup, so a compose-auto-created (root-owned) host
+      # directory works without manual setup.
+      - ./workspace:/data/workspace:ro
+      # Upload staging for `upload_document`, read-write at the configured
+      # upload directory (default: <workspace root>/uploads).
+      - ./workspace/uploads:/data/workspace/uploads:rw
+      # SQLite conversation storage on a persistent volume; the image
+      # pre-creates /data/secondbrain owned by the runtime user so a fresh
+      # volume inherits that ownership.
+      - secondbrain-sqlite:/data/secondbrain
+      # Optional TLS material, read-only. Uncomment together with the
+      # SECONDBRAIN_MCP_HTTP_TLS_* block in .env.docker, and override the
+      # image's plaintext-HTTP healthcheck in compose when TLS is on.
+      # - ./certs:/certs:ro
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    # PID 1 hygiene: the entrypoint execs into the server, so the server IS the
+    # container's init process. Orphaned grandchildren of each CLI call (the
+    # Python CLI's forkserver + resource tracker) reparent to the namespace
+    # init, and the server (tokio) only reaps children it spawned itself —
+    # without docker-init here, two defunct python processes accumulate per
+    # CLI call. docker-init (tini) takes the PID 1 seat and reaps them.
+    init: true
+    restart: unless-stopped
+    networks:
+      - secondbrain-network
+
 volumes:
   qdrant-data:
+  secondbrain-sqlite:
 
 networks:
   secondbrain-network:

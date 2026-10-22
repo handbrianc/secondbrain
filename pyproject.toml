@@ -19,7 +19,7 @@ classifiers = [
 
 dependencies = [
     "click>=8.5.0",  # CLI framework - stable API, minor updates only
-    "docling>=2.137.0,<3.0.0",  # First release forcing docling-parse >=7.22.1 (space regression fixed)
+    "docling>=2.140.0,<3.0.0",  # First release forcing docling-parse >=7.22.1 (space regression fixed)
     "docling-core>=2.101.1,<3.0.0",  # Core types - required by docling-parse 7.22.x
     "docling-parse>=7.22.2,<8.0.0",  # Floor excludes 7.21.x-7.22.0 word/space-loss regression (docling-parse #355/#359, fixed by PR #361)
     "qdrant-client>=1.19.1",  # Qdrant vector DB client - production storage backend
@@ -135,15 +135,16 @@ bundled = [
     "pymdown-extensions>=12.2",  # CVE-2026-61632 (was 10.21.3)
     "urllib3>=2.8.0",  # PYSEC-2026-4175/4176/4177 (was 2.6.0)
     "cryptography>=50.0.2",
-    "pillow>=12.3.0",
+    "pillow>=12.3.0",  # CVE-2026-112892/112393/112396 fix 13.0.0 is blocked: docling-slim caps pillow<13 (documented-ignored)
     "paramiko>=5.0.0",
     "PyJWT>=2.15.1",
     "pyasn1>=0.6.4",
     "pyopenssl>=26.4.0",
-    "twisted>=26.4.0",
     "idna>=3.20",
     "wheel>=0.48.0",
     "setuptools>=84.0.0",
+    "virtualenv>=21.7.13",  # GHSA-9h9j-4vrj-gf7g (fix 21.7.11), GHSA-94p9-xgh2-xp45 + GHSA-x78j-v8h9-3j2q (fix 21.7.12), GHSA-p58f-9548-mpm2 (fix 21.7.13) — was 21.7.9 via pre-commit
+    "werkzeug>=3.1.9",  # GHSA-g6x2-hccm-hh4m (was 3.1.8)
     "fpdf2>=2.8.9",
     "reportlab>=5.0.1",
     # Bundled extras (depends on mutation)
@@ -157,7 +158,7 @@ dev = [
 
 qualitative = [
     "llama-cpp-python>=0.3.36",  # Local LLM - CPU inference support
-    "transformers>=5.19.0",  # HuggingFace - model loading
+    "transformers>=5.20.1",  # HuggingFace - model loading
     "accelerate>=1.15.0",  # Model optimization - GPU/CPU distribution
 ]
 
@@ -263,11 +264,64 @@ ignore = [
     "PYSEC-2026-3740",  # CVE-2026-81726 - re-opened by OSV on 2026-10-14:
                         # fixed=None against nltk 3.10.3 (a 2026-09-01 DB
                         # amendment had briefly marked it fixed in 3.10.3)
+    "GHSA-8mgp-746c-j5xp",  # grype/GHSA id for the same advisory
+                            # (PYSEC-2026-3740 / CVE-2026-81726). pip-audit
+                            # and grype do not read this ignore list, so the
+                            # advisory stays visible in their output and is
+                            # accepted here by documented triage until an
+                            # nltk release above 3.10 ships the fix.
     "CVE-2026-33230",  # nltk XSS - not returned by pip-audit for nltk 3.10.3
                        # as of 2026-10-14 (withdrawn or consolidated); kept
                        # for the safety tool, unverified in this environment
     "CVE-2026-33231",  # wordnet_app remote shutdown - same status as above
     "PYSEC-2026-597",  # NLTK path traversal - same status as above
+
+    # Diskcache advisory - transitive of the optional llama-cpp-python extras
+    # (qualitative/rag local-LLM stack); not imported by secondbrain code.
+    # CVE-2025-69872 / GHSA-w8v5-vhqr-4h9v (unsafe pickle deserialization)
+    # requires attacker write access to the cache directory, which the
+    # local-first CLI threat model does not expose; diskcache 5.6.3 is the
+    # latest release with no fixed version published. Same visibility caveat
+    # as nltk: pip-audit and grype still report it; accepted by documented
+    # triage.
+    "CVE-2025-69872",  # GHSA-w8v5-vhqr-4h9v - diskcache pickle deserialization
+    "GHSA-w8v5-vhqr-4h9v",  # grype/GHSA id for the same advisory
+
+    # Pillow advisories - transitive via docling (no PIL imports in
+    # secondbrain code). The 2026-10 pillow advisory cluster (CVE-2026-112390
+    # ..112406, 112891..112901; 24 advisories: TIFF encode/decode
+    # memory-safety, APNG/PDF-parser DoS paths) is fixed in 13.0.0, but
+    # every docling-slim release caps pillow>=10,<13, so no resolvable
+    # environment can take the fix (uv lock and pip both fail). No
+    # TIFF-save path exists in this codebase and the image-open paths are
+    # bounded by the docker memory caps on ingestion workers (DoS-only).
+    # Same visibility caveat as nltk: pip-audit and grype still report
+    # them; accepted by documented triage via PIP_AUDIT_IGNORE_ARGS in
+    # scripts/security_scan.sh until docling-slim lifts the pillow<13 cap.
+    "CVE-2026-112390",
+    "CVE-2026-112391",
+    "CVE-2026-112392",
+    "CVE-2026-112393",
+    "CVE-2026-112395",
+    "CVE-2026-112396",
+    "CVE-2026-112397",
+    "CVE-2026-112399",
+    "CVE-2026-112400",
+    "CVE-2026-112401",
+    "CVE-2026-112402",
+    "CVE-2026-112404",
+    "CVE-2026-112405",
+    "CVE-2026-112406",
+    "CVE-2026-112891",
+    "CVE-2026-112892",
+    "CVE-2026-112893",
+    "CVE-2026-112894",
+    "CVE-2026-112895",
+    "CVE-2026-112896",
+    "CVE-2026-112897",
+    "CVE-2026-112899",
+    "CVE-2026-112900",
+    "CVE-2026-112901",
 
     # Transitive dependencies - mitigated by context
     "54843",
@@ -366,6 +420,11 @@ ignore_names = [
     "info",
     "description",
     "attributes",
+    # Intentional pre-import chain (docling_factory._build_audio_converter):
+    # importing whisper_s2t eagerly loads the CTranslate2 backend modules
+    # docling's transcriber resolves later; the bound name itself is never
+    # referenced. See docling_factory.py around the redirect_stdout block.
+    "whisper_s2t",
 ]
 min_confidence = 80
 exclude = ["venv/*", ".git/*", "tests/*", "scripts/*"]
