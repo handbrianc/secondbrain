@@ -173,7 +173,7 @@ opentelemetry = [
 
 # Audio transcription (docling ASR via WhisperS2T/CTranslate2 - no openai-whisper import, Python 3.14 safe)
 asr = [
-    "whisper-s2t-reborn[pyav]>=1.7.2",  # WhisperS2T backend - CTranslate2 transcription runner
+    "whisper-s2t-reborn[pyav]>=1.8.0",  # WhisperS2T backend - CTranslate2 transcription runner
     "ctranslate2>=4.8.3",  # Inference engine - quantized WhisperS2T execution
 ]
 
