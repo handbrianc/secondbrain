@@ -261,8 +261,8 @@ def resolve_printed_pages(
       index (one consistent offset, enough pages, enough span — see
       :func:`prune_untrusted_bracket_stamps`) or be cleared as citation
       noise;
-    - every footer's printed value must be below its own physical page number
-      (printed indexes trail the physical index for books with front matter);
+    - every footer's printed value must be at or below its own physical page
+      number (printed indexes trail the physical index for books with front matter);
     - the physical-minus-printed offset must agree across at least 80 % of
       footer pages and at least three distinct physical pages.
 
@@ -297,9 +297,9 @@ def resolve_printed_pages(
                 continue
             physical = int(c.get("page_number") or 0)
             # Printed indexes never lead the physical index by design (front
-            # matter shifts them the other way); a stamp at/above its page
-            # cannot belong to this book's pagination.
-            if printed < physical:
+            # matter shifts them the other way); equality is valid for books
+            # whose printed and physical indexes are identical.
+            if printed <= physical:
                 footer_pages[physical] = printed
                 nav_texts[physical] = c.get("chunk_text") or ""
     if len(footer_pages) < 3:

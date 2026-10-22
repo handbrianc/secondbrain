@@ -44,7 +44,7 @@ services:
       # --- Storage: the bundled test Qdrant + isolated SQLite volume ---------
       SECONDBRAIN_STORAGE_BACKEND: "qdrant"
       SECONDBRAIN_QDRANT_URL: "http://qdrant:6333"
-      SECONDBRAIN_QDRANT_COLLECTION: "embeddings_test"
+      SECONDBRAIN_QDRANT_COLLECTION: "embeddings_mcp_smoke"
       SECONDBRAIN_SQLITE_PATH: "/data/secondbrain/secondbrain-test.db"
       # --- Embedding: real endpoint for the MCP smoke (add-mcp-e2e-smoke) ------
       # The pytest mock embedding provider is injected by fixtures and cannot

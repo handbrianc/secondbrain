@@ -361,6 +361,26 @@ class TestResolvePrintedPages:
         assert by_page[89] == 79
         assert by_page[90] == 80
 
+    def test_zero_offset_footers_stamp_all_covered_pages(self) -> None:
+        docs = [
+            _nav_chunk(25, 25),
+            _nav_chunk(26, 26),
+            _nav_chunk(27, 27),
+            _body_chunk(25),
+            _body_chunk(26),
+            _body_chunk(27),
+        ]
+
+        stamped = fast_text.resolve_printed_pages(docs)
+
+        assert stamped == 3
+        by_page = {
+            d["page_number"]: d["printed_page"]
+            for d in docs
+            if d["element_type"] == "body"
+        }
+        assert by_page == {25: 25, 26: 26, 27: 27}
+
     def test_pages_outside_footer_coverage_keep_bracket_stamps(self) -> None:
         docs = [
             _nav_chunk(88, 78),

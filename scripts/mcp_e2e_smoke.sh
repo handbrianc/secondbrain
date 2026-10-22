@@ -169,7 +169,17 @@ fi
 allowed_hosts_value="$(env_value SECONDBRAIN_MCP_HTTP_ALLOWED_HOSTS)"
 HOST_CURL_FLAG=()
 if [ -n "$allowed_hosts_value" ]; then
-    first_allowed="${allowed_hosts_value%%,*}"
+    first_allowed=""
+    IFS=, read -r -a allowed_hosts <<< "$allowed_hosts_value"
+    for allowed_host in "${allowed_hosts[@]}"; do
+        allowed_host="${allowed_host#"${allowed_host%%[![:space:]]*}"}"
+        allowed_host="${allowed_host%"${allowed_host##*[![:space:]]}"}"
+        if [ -n "$allowed_host" ]; then
+            first_allowed="$allowed_host"
+            break
+        fi
+    done
+    [ -n "$first_allowed" ] || fail "SECONDBRAIN_MCP_HTTP_ALLOWED_HOSTS contains no non-empty host"
     log "Stack allowlists MCP hosts ('${allowed_hosts_value}'); sending Host: ${first_allowed}"
     HOST_CURL_FLAG=(-H "Host: ${first_allowed}")
 fi
