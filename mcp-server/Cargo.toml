@@ -1,0 +1,46 @@
+[package]
+name = "secondbrain-mcp"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "MCP server exposing secondbrain's file ingestion, semantic search, and chat capabilities"
+license = "MIT"
+publish = false
+
+[dependencies]
+axum = "0.8"
+axum-server = { version = "0.8", features = ["tls-rustls"] }
+# Upload payloads arrive base64-encoded; the upload tool decodes them strictly
+# (canonical padding, standard alphabet) before anything is stored.
+base64 = "0.23"
+rmcp = { version = "3", features = ["server", "transport-streamable-http-server"] }
+# Tool parameter schemas are derived with schemars (rmcp re-exports the same
+# version; this direct dependency makes the derive's paths resolvable).
+schemars = "1"
+# The tools parse and re-serialize the CLI's JSON output at runtime.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+subtle = "2"
+thiserror = "2"
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = "0.3"
+# Chat session ids are generated server-side (UUID v4).
+uuid = { version = "1", features = ["v4"] }
+
+[dev-dependencies]
+# The client side of the same rmcp crate powers the interop test; its features
+# unify with the server features above, and the reqwest-based HTTP client it
+# pulls in stays a test-only dependency (the server itself does not link it).
+rmcp = { version = "3", features = ["client", "transport-streamable-http-client-reqwest"] }
+
+# The HTTPS integration tests need an HTTPS client (self-signed test certs)
+# and test certificates.
+reqwest = { version = "0.13", default-features = false, features = ["rustls"] }
+rcgen = "0.14"
+
+# POSIX bits for the runtime and CLI adapter: the graceful-shutdown tests
+# send POSIX signals to the server process, and the CLI adapter kills the
+# CLI's whole process group on deadline expiry.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

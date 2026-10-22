@@ -28,6 +28,7 @@ import hashlib
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pytest
 
 import secondbrain.embedding as embedding_module
@@ -435,7 +436,12 @@ class TestExtractChunkAndEmbedErrors:
         assert result["skipped"] is False
         assert result["documents"], "documents must be produced"
         for doc in result["documents"]:
-            assert doc["embedding"] == [0.1] * 4
+            embedding = doc["embedding"]
+            # Compact transport: fixed-width float32 row equal to the
+            # provider's floats at float32 precision (not a float list).
+            assert isinstance(embedding, np.ndarray)
+            assert embedding.dtype == np.float32
+            assert np.array_equal(embedding, np.asarray([0.1] * 4, dtype=np.float32))
             assert doc["file_type"] == "text"
             assert doc["source_file"] == str(f)
         assert cache.hits + cache.misses >= 1
@@ -938,8 +944,12 @@ class TestEmbedUniqueChunks:
             model, chunks, embedding_cache=cache, batch_size=8
         )
 
-        assert embeddings[0] == [0.9, 0.9, 0.9, 0.9]
-        assert embeddings[1] == [0.1] * 4
+        assert embeddings[0].dtype == np.float32
+        assert embeddings[1].dtype == np.float32
+        # Cache hit (list stored in the cache) is coerced to float32; the
+        # miss equals the provider's floats at float32 precision.
+        assert np.array_equal(embeddings[0], np.asarray([0.9] * 4, dtype=np.float32))
+        assert np.array_equal(embeddings[1], np.asarray([0.1] * 4, dtype=np.float32))
         assert model.batches == [["fresh text"]]
 
     def test_default_batch_size_comes_from_config(

@@ -27,6 +27,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+import numpy as np
 import pytest
 
 from secondbrain.document import DocumentIngestor
@@ -414,6 +415,137 @@ class TestIntegrationDataFlow:
             assert "page" in chunk
             assert isinstance(chunk["text"], str)
             assert isinstance(chunk["page"], int)
+
+
+class TestWindowedMultipageIngest:
+    """Single large-PDF ingest through the real ingest path, windowing active.
+
+    Extends the end-to-end coverage for ``add-pdf-ingest-memory-bounds``
+    (task 5.5): a multipage PDF larger than ``pdf_max_pages_per_convert``
+    flows through ``DocumentIngestor.ingest`` (thread pool, real windowed
+    worker) with the storage/embedding providers mocked, and the ingest
+    outcome is unchanged while the converter observes sequential page ranges.
+    """
+
+    @pytest.mark.integration
+    @pytest.mark.slow
+    def test_multipage_pdf_ingests_in_windows(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A 7-page PDF with window=3 ingests in 3 sequential windows."""
+        storage = MockVectorStorage()
+        pdf = tmp_path / "manual.pdf"
+        pdf.write_bytes(b"%PDF-1.4 minimal")
+        total_pages = 7
+
+        def page_text(page: int) -> str:
+            return (
+                f"Chapter {page} introduction for page {page} of the manual. "
+                "SecondBrain test content about machine learning, deep "
+                "learning, and neural networks fills this page with unique "
+                "prose. " * 8
+            )
+
+        convert_calls: list[tuple[Path, object]] = []
+        unload_calls: list[int] = []
+
+        def fake_convert(file_path: Path, page_range: object = None) -> SimpleNamespace:
+            convert_calls.append((file_path, page_range))
+            if page_range is None:
+                span = range(1, total_pages + 1)
+            else:
+                start, end = page_range
+                span = range(start, end + 1)
+            texts = [
+                SimpleNamespace(
+                    text=page_text(page),
+                    prov=[SimpleNamespace(page_no=page)],
+                    label="text",
+                )
+                for page in span
+            ]
+            return SimpleNamespace(
+                document=SimpleNamespace(texts=texts),
+                input=SimpleNamespace(
+                    _backend=SimpleNamespace(unload=lambda: unload_calls.append(1))
+                ),
+            )
+
+        converter = MagicMock()
+        converter.convert.side_effect = fake_convert
+
+        import random
+
+        random.seed(0)
+
+        def make_emb(text: str) -> list[float]:
+            random.seed(hash(text.lower()))
+            return [random.random() for _ in range(384)]
+
+        mock_embed = MagicMock()
+        mock_embed.generate.side_effect = make_emb
+        mock_embed.generate_batch.side_effect = lambda texts: [
+            make_emb(t) for t in texts
+        ]
+        mock_embed.validate_connection.return_value = True
+
+        # Windowing activates through the 12-factor env form, exactly as the
+        # reference deployment sets it (SECONDBRAIN_PDF_MAX_PAGES_PER_CONVERT).
+        monkeypatch.setenv("SECONDBRAIN_PDF_MAX_PAGES_PER_CONVERT", "3")
+        from secondbrain.config import config, get_config
+
+        get_config.cache_clear()
+        cfg = config()
+        assert cfg.pdf_max_pages_per_convert == 3
+
+        ingestor = DocumentIngestor(chunk_size=500, chunk_overlap=50, verbose=False)
+
+        with (
+            patch(
+                "secondbrain.document.fast_text.try_fast_pdf_extraction",
+                return_value=None,
+            ),
+            patch(
+                "secondbrain.document.docling_factory.get_converter_for_path",
+                return_value=converter,
+            ),
+            patch(
+                "secondbrain.document.processor.pdf_page_count",
+                return_value=total_pages,
+            ),
+            patch(
+                "secondbrain.embedding.providers.factory.EmbeddingProviderFactory.create_from_config",
+                return_value=mock_embed,
+            ),
+            patch(
+                "secondbrain.storage.factory.StorageFactory.create_from_config",
+                return_value=storage,
+            ),
+        ):
+            result = ingestor.ingest(str(pdf), pool="thread", skip_existing=False)
+
+        # Success counts unchanged: the multipage file ingests exactly once.
+        assert result["success"] == 1
+        assert result["failed"] == 0
+        assert result["failures"] == []
+
+        # Windowing was active: sequential, non-overlapping 1-based ranges
+        # covering every page exactly once, artifacts unloaded once per window.
+        assert convert_calls == [
+            (pdf, (1, 3)),
+            (pdf, (4, 6)),
+            (pdf, (7, 7)),
+        ]
+        assert unload_calls == [1, 1, 1]
+
+        stored = list(storage.list_chunks())
+        assert stored, "chunks must be stored"
+        page_numbers = {chunk["page_number"] for chunk in stored}
+        assert page_numbers == set(range(1, total_pages + 1))
+        # Compact transport reaches the store boundary as float32 arrays.
+        for chunk in stored:
+            assert isinstance(chunk["embedding"], np.ndarray)
+            assert chunk["embedding"].dtype == np.float32
 
 
 if __name__ == "__main__":
