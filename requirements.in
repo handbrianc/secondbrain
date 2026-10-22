@@ -2,7 +2,7 @@
 # Generated from pyproject.toml dependencies section
 click>=8.5.0
 docling>=2.140.0
-docling-core>=2.101.1
+docling-core>=2.102.0
 httpx>=0.28.1
 pydantic>=2.14.0
 pydantic-settings>=2.15.0
@@ -10,7 +10,7 @@ rich>=15.0.0
 numpy>=2.5.2
 opentelemetry-api>=1.45.1
 opentelemetry-sdk>=1.45.1
-openai>=3.28.0
+openai>=3.35.1
 anthropic>=1.11.0  # httpx2-based SDK (migrated from 0.125.0)
 typing_extensions>=4.16.0
 transformers>=5.20.1  # CVE-2026-9856, PYSEC-2025-217, PYSEC-2026-2288/2289/2290 (was 4.57.6)

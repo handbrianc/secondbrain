@@ -55,7 +55,7 @@ doclang==0.7.3
     # via docling-core
 docling==2.141.0
     # via -r requirements.in
-docling-core[chunking]==2.101.1
+docling-core[chunking]==2.103.1
     # via
     #   -r requirements.in
     #   docling-parse
@@ -212,7 +212,7 @@ olefile==0.47
     # via python-oxmsg
 omegaconf==2.4.0
     # via rapidocr
-openai==3.31.0
+openai==3.36.0
     # via -r requirements.in
 opencv-python-headless==5.0.0.93
     # via rapidocr
