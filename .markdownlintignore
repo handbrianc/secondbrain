@@ -1,0 +1,5 @@
+# OpenSpec artifacts (changes/, archive/): long task lines, spec prose and
+# dense requirement tables are inherent to spec files. markdownlint-cli2
+# scopes MD013/MD060 away via .markdownlint-cli2.jsonc overrides; this file
+# excludes the tree for plain markdownlint-cli runs (glob mode).
+openspec/

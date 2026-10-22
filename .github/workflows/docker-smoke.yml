@@ -1,0 +1,30 @@
+name: Docker Smoke
+
+on:
+  push:
+    branches: [main, master, develop]
+    paths:
+      - "Dockerfile"
+      - ".dockerignore"
+      - "mcp-server/**"
+      - "pyproject.toml"
+      - "scripts/docker-smoke.sh"
+      - ".github/workflows/docker-smoke.yml"
+  pull_request:
+    branches: [main, master, develop]
+    paths:
+      - "Dockerfile"
+      - ".dockerignore"
+      - "mcp-server/**"
+      - "pyproject.toml"
+      - "scripts/docker-smoke.sh"
+      - ".github/workflows/docker-smoke.yml"
+
+jobs:
+  docker-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build image and smoke the MCP server + CLI
+        run: ./scripts/docker-smoke.sh

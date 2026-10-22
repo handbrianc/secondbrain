@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import math
 
+import numpy as np
+
 from secondbrain.document.processor import _embed_unique_chunks
 from secondbrain.utils.embedding_cache import EmbeddingCache
 
@@ -86,7 +88,12 @@ class TestEmbedUniqueChunksBatching:
 
         assert len(embeddings) == len(texts)
         for chunk, embedding in zip(chunks, embeddings, strict=True):
-            assert embedding == embedder._embed(chunk["text"])  # type: ignore[arg-type]
+            expected = np.asarray(embedder._embed(chunk["text"]), dtype=np.float32)
+            assert isinstance(embedding, np.ndarray)
+            # Compact transport: fixed-width float32 rows equal to the
+            # provider's floats at float32 precision (not float-object lists).
+            assert embedding.dtype == np.float32
+            assert np.array_equal(embedding, expected)
 
     def test_empty_input_returns_no_embeddings(self) -> None:
         embedder = CountingEmbedder()
@@ -122,7 +129,9 @@ class TestEmbedUniqueChunksCaching:
 
         assert len(embedder.batch_calls) == 0
         assert first_call_count > 0
-        assert second == first
+        assert len(second) == len(first)
+        for first_row, second_row in zip(first, second, strict=True):
+            assert np.array_equal(first_row, second_row)
 
     def test_mixed_cache_hits_and_misses_only_embeds_misses(self) -> None:
         cache = EmbeddingCache(max_size=1000)
@@ -145,7 +154,9 @@ class TestEmbedUniqueChunksCaching:
         )
         # subset is 3 items, all cached -> no embedder calls.
         assert len(second_embedder.batch_calls) == 0
-        assert second == first[0:3]
+        assert len(second) == 3
+        for second_row, first_row in zip(second, first[0:3], strict=True):
+            assert np.array_equal(second_row, first_row)
 
     def test_cache_none_always_embeds(self) -> None:
         texts = [f"no cache chunk {i}" for i in range(5)]
@@ -164,7 +175,9 @@ class TestEmbedUniqueChunksCaching:
 
         assert first_call_count == 1
         assert len(embedder.batch_calls) == 1
-        assert second == first
+        assert len(second) == len(first)
+        for first_row, second_row in zip(first, second, strict=True):
+            assert np.array_equal(first_row, second_row)
 
 
 class TestEmbedUniqueChunksProgress:
