@@ -207,9 +207,7 @@ class _RAGPipelineState:
             src: str,
         ) -> bool: ...
 
-        def _generate_anthology_summary(
-            self, parts: list[dict[str, Any]]
-        ) -> str: ...
+        def _generate_anthology_summary(self, parts: list[dict[str, Any]]) -> str: ...
 
         def _generate_whole_document_overview(
             self, chunks: list[dict[str, Any]]

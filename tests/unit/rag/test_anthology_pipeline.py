@@ -201,9 +201,9 @@ class TestCompilationAnthologyPath:
 
         answer = pipeline._generate_anthology_summary([part])
 
-        assert "I.1 — Alpha (pages 1–2)" in answer
+        assert "I.1 — Alpha (pages 1\u20132)" in answer
         assert "A summary could not be generated for this part." in answer
-        assert "I.1 — Alpha (pages 1–2)" in "".join(streamed)
+        assert "I.1 — Alpha (pages 1\u20132)" in "".join(streamed)
         assert "A summary could not be generated for this part." in "".join(streamed)
 
 

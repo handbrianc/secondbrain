@@ -1656,7 +1656,7 @@ class RAGPipeline(
                 if not answer or not answer.strip():
                     answer = llm_fallback_roster
 
-                result: dict[str, Any] = {"answer": answer, "query": query}
+                result = {"answer": answer, "query": query}
                 if show_sources:
                     result["sources"] = final_chunks
                 return result

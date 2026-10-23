@@ -79,16 +79,16 @@ Contract between modules (both lanes implement against it):
 # _pipeline.py builds, _fallback_mixin.py consumes
 parts = [
     {
-        "label": "I.1",            # part label as printed ("I.1", "II.12")
+        "label": "I.1",  # part label as printed ("I.1", "II.12")
         "title": "From Vague Requirements to Well-Defined Epics",
         "start_page": 3,
         "end_page": 13,
-        "sections": [...],          # per-part section map (for prompt context)
-        "chunks": [...],            # sampled body chunks for the part
+        "sections": [...],  # per-part section map (for prompt context)
+        "chunks": [...],  # sampled body chunks for the part
     },
-    ...
+    ...,
 ]
-answer = self._generate_anthology_summary(parts)   # streams via self._on_chunk
+answer = self._generate_anthology_summary(parts)  # streams via self._on_chunk
 ```
 
 Fallback when the detector misses an anthology (gate fires, §3): the legacy
