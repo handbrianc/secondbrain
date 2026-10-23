@@ -142,7 +142,7 @@ bundled = [
     "pyopenssl>=26.4.0",
     "idna>=3.20",
     "wheel>=0.48.0",
-    "setuptools>=84.0.0",
+    "setuptools>=84.2.0",
     "virtualenv>=21.7.13",  # GHSA-9h9j-4vrj-gf7g (fix 21.7.11), GHSA-94p9-xgh2-xp45 + GHSA-x78j-v8h9-3j2q (fix 21.7.12), GHSA-p58f-9548-mpm2 (fix 21.7.13) — was 21.7.9 via pre-commit
     "werkzeug>=3.1.9",  # GHSA-g6x2-hccm-hh4m (was 3.1.8)
     "fpdf2>=2.8.9",
@@ -181,7 +181,7 @@ asr = [
 secondbrain = "secondbrain.cli:main"
 
 [build-system]
-requires = ["setuptools>=84.0.0", "wheel"]  # setuptools v83+ required for pyproject.toml build backend support + CVE fix
+requires = ["setuptools>=84.2.0", "wheel"]  # setuptools v83+ required for pyproject.toml build backend support + CVE fix
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
