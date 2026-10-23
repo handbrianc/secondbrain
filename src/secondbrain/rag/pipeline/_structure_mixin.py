@@ -142,6 +142,104 @@ _BOILERPLATE_TITLE_RE = re.compile(
 )
 
 
+# --- Anthology-aware chapter summarization ----------------------------------
+# (add-anthology-aware-chapter-summarization.)  Compilations that concatenate
+# several sub-reports — each restarting its own section numbering at 1 — break
+# every assumption of the single monotone chapter sequence the legacy
+# machinery below models, so such documents are detected up front and
+# enumerated per part (routing in ``_pipeline.py``), with an agreement gate
+# behind the legacy path so unknown shapes degrade to a whole-document
+# overview instead of confident wrong-page summaries.
+
+# Part-opener heading shapes, matched at the START of a heading chunk's text:
+# a dotted roman-numeral part label followed by a separator — the corpus
+# compilation's openers read "I.1 · From Vague Requirements to Well-Defined
+# Epics" and "II.12 · Volume 11 — Frontend & Web UI Engineering" — or an
+# explicit "Part N" word label ("Part I", "Part 2", "Part A").
+_ANTHOLOGY_PART_OPENER_RE = re.compile(
+    r"^(?P<label>[IVXLCDM]+\.\d+)\s*[\u00b7\u2013\u2014-]\s*(?P<title>\S.*)$"
+)
+_ANTHOLOGY_PART_WORD_RE = re.compile(
+    r"^(?P<label>Part\s+(?:[IVX]+|\d+|[A-Z]))\b[.:\u00b7\u2013\u2014-]?\s*"
+    r"(?P<title>\S.*)$"
+)
+
+
+# Numbered section heading inside a part — "1 Why Requirements Start Vague —
+# and Why That Is Normal", "1.1 The nature of the problem", "2.2.1 ..." — the
+# same start-of-heading digit-label shape the legacy section scans rely on
+# (_SECTION_PIN_RE, section_re), generalized to any leading N(.M)* label.
+# The detector's restart signal reads the part number (num.split(".")[0]);
+# the per-part roster keeps the full dotted label with the heading's own page.
+_ANTHOLOGY_SECTION_RE = re.compile(
+    r"^(?P<num>\d{1,2}(?:\.\d{1,2})*)[.:]?\s+(?P<title>\S.*)$"
+)
+
+
+# Detector signal thresholds (design.md §1): a document is an anthology only
+# with ≥3 part-opener headings AND ≥2 parts whose first numbered section
+# restarts at 1.  Single-book shapes (chapter banners, straight 1..N
+# numbering) carry no part-labeled headings and cannot satisfy the opener
+# signal at all.
+_ANTHOLOGY_MIN_OPENERS = 3
+_ANTHOLOGY_MIN_RESTARTS = 2
+
+
+# Per-part body-bucket sampling: exactly the legacy multi-chapter round-robin
+# constants (_pipeline.py — per_chapter_limit = 8, page_cap = 3) so anthology
+# part buckets sample like legacy chapter buckets, including the
+# section-header promotion of capped pages.
+_ANTHOLOGY_PART_CHUNK_LIMIT = 8
+_ANTHOLOGY_PART_PAGE_CAP = 3
+# Dotted "N.M" section-header shape used to promote a capped page's header
+# chunk over footers/captions collected first.  The legacy rule keys on the
+# bucket chapter's own number ("\b{ch_num}\.\d+(?:\.\d+)?\s"); per part the
+# major is the part's own numbering namespace, so the shape stays dotted but
+# number-agnostic.
+_ANTHOLOGY_BUCKET_SECTION_RE = re.compile(r"\b\d{1,2}\.\d+(?:\.\d+)?\s")
+
+
+# Scale gate (design.md §1 signal 3): a part spanning fewer than this many
+# body-bearing pages is not a real sub-report — the enrichment then declines
+# and the caller takes the legacy path.
+_ANTHOLOGY_MIN_PART_BODY_PAGES = 2
+
+
+# Chapter-range agreement gate calibration (design.md §3; recorded in
+# tests/fixtures/chapter_map/baselines.json "gate_divergence"): the final
+# range starts of the known-good corpus books agree with their provisional
+# N.1 evidence pins for every chapter (user-manual 1.00 = 18/18 within ±2
+# pages, pve-admin-guide 1.00 = 19/19), while the compilation's wrong global
+# map agrees on only 2 of 8 comparable chapters (0.25).  A map is vetoed
+# below 0.7 agreement, and the gate is skipped entirely when fewer than 4
+# chapters are comparable — absence of evidence is not disagreement (the HCD
+# report carries 0 evidence pins and keeps the legacy path).
+_CHAPTER_GATE_MAX_PIN_DRIFT = 2
+_CHAPTER_GATE_MIN_COMPARED = 4
+_CHAPTER_GATE_MIN_SCORE = 0.7
+
+
+def _anthology_is_heading_chunk(chunk: dict[str, Any]) -> bool:
+    """Return True when a chunk is heading-role (role or element_type).
+
+    The anthology scans receive the heading-chunk stream, but defensively
+    accept either role marker so a caller passing role-or-element-matched
+    chunks (find_structural_chunks ORs them) cannot slip a body chunk in.
+    """
+    role = chunk.get("chunk_role")
+    if role is None or role == "heading":
+        return True
+    return chunk.get("element_type") == "heading"
+
+
+def _anthology_heading_sort_key(chunk: dict[str, Any]) -> tuple[int, int]:
+    """Document-order sort key for chunk streams: (page, position on page)."""
+    return (
+        int(chunk.get("page_number") or 0),
+        int(chunk.get("page_pos") or 0),
+    )
+
+
 class _StructureMixin(_RAGPipelineState):
     """Chapter/section detection and structural helpers."""
 
@@ -758,8 +856,15 @@ class _StructureMixin(_RAGPipelineState):
             r"[A-Za-z0-9 ,'\-():/+\s.\u2013\u2014]){2,120})",
             re.IGNORECASE,
         )
+        # The title class includes straight and typographic double quotes so
+        # quoted phrases inside a heading survive capture whole ("2 First
+        # Principles: What "Well-Defined" Actually Means" used to truncate at
+        # the quote, rosters reading "First Principles: What").  Display-only:
+        # no pin logic reads quotes (add-anthology-aware-chapter-
+        # summarization rider).
         bare_chapter_re = re.compile(
-            r"(?:^|\n)\s*(\d{1,2})\.?\s+([A-Za-z0-9][A-Za-z0-9\s\-\(\),'/:.\u2013\u2014]{4,80})",
+            r"(?:^|\n)\s*(\d{1,2})\.?\s+([A-Za-z0-9]"
+            r"[A-Za-z0-9\s\-\(\),'/:.\u2013\u2014\"\u201c\u201d]{4,80})",
             re.MULTILINE,
         )
         # Patterns for appendix detection
@@ -1738,3 +1843,339 @@ class _StructureMixin(_RAGPipelineState):
         lo_pg = max((p for n, p in first_pg.items() if n < ch), default=None)
         hi_pg = min((p for n, p in first_pg.items() if n > ch), default=None)
         return (lo_pg is None or pg > lo_pg) and (hi_pg is None or pg < hi_pg)
+
+    # -- Anthology-aware chapter summarization --------------------------------
+    # (add-anthology-aware-chapter-summarization.  Contracts declared in
+    # _attributes.py; routing in _pipeline.py._iterative_query; the per-part
+    # and whole-document summaries live on _FallbackMixin — this mixin only
+    # detects the shape, builds per-part maps, and vets legacy maps.)
+
+    @staticmethod
+    def _detect_anthology_parts(
+        heading_chunks: list[dict[str, Any]],
+        source: str,
+    ) -> list[dict[str, Any]] | None:
+        """Detect an anthology document and return its part openers.
+
+        An anthology concatenates several sub-reports that each restart their
+        own section numbering, so the single monotone chapter sequence the
+        legacy machinery models does not exist.  The document is claimed only
+        on multiple independent signals (design.md §1):
+
+        1. part openers — ≥3 heading-role chunks starting with a
+           part-opener shape (_ANTHOLOGY_PART_OPENER_RE / _WORD_RE);
+        2. numbering restarts — ≥2 parts whose first numbered section
+           heading inside the part is numbered 1 (_ANTHOLOGY_SECTION_RE);
+        3. scale — ≥3 parts; the ≥2-body-bearing-pages check lives in
+           :meth:`_enrich_anthology_parts` (it needs the body stream).
+
+        Single-book documents (chapter banners, straight 1..N numbering)
+        carry no part-labeled headings, so signal 1 fails and the legacy
+        path runs unchanged.
+
+        Returns ``[{"label": ..., "title": ..., "start_page": ...}, ...]`` in
+        document order, or ``None`` when the document is not an anthology.
+        """
+        # One opener occurrence per label, LAST in document order: a
+        # front-matter master index that lists the openers as heading-role
+        # rows repeats every label on its 1-3 front-matter pages, while the
+        # real opener heading sits later in the document — the last
+        # occurrence is the real one.  (Verified on the corpus compilation:
+        # its pp. 1-2 master topic index is body-role, so the heading stream
+        # holds exactly one occurrence per label; this dedupe is defense for
+        # documents that do emit heading-role index rows.  Index-row
+        # occurrences cluster on the front-matter pages and can therefore
+        # never displace a later real opener.)
+        openers_by_label: dict[str, tuple[int, int, str]] = {}
+        ordered = sorted(heading_chunks, key=_anthology_heading_sort_key)
+        for chunk in ordered:
+            if not _anthology_is_heading_chunk(chunk):
+                continue
+            chunk_source = chunk.get("source_file")
+            if source and chunk_source and not str(chunk_source).startswith(source):
+                continue
+            text = (chunk.get("chunk_text") or "").lstrip()
+            opener = _ANTHOLOGY_PART_OPENER_RE.match(text)
+            word = None if opener is not None else _ANTHOLOGY_PART_WORD_RE.match(text)
+            if opener is not None:
+                label = opener.group("label")
+                title = opener.group("title").strip()
+            elif word is not None:
+                label = word.group("label")
+                title = (word.group("title") or "").strip()
+            else:
+                continue
+            openers_by_label[label] = (
+                int(chunk.get("page_number") or 0),
+                int(chunk.get("page_pos") or 0),
+                title,
+            )
+        parts = sorted(
+            (page, pos, label, title)
+            for label, (page, pos, title) in openers_by_label.items()
+        )
+        if len(parts) < _ANTHOLOGY_MIN_OPENERS:
+            return None
+        # Signal 2 — numbering restarts: the first numbered section heading
+        # inside each part's page range must be numbered 1 in ≥2 parts.
+        restarts = 0
+        for i, (page, pos, _label, _title) in enumerate(parts):
+            end_page = parts[i + 1][0] - 1 if i + 1 < len(parts) else None
+            for chunk in ordered:
+                chunk_page, chunk_pos = _anthology_heading_sort_key(chunk)
+                if chunk_page < page or (
+                    end_page is not None and chunk_page > end_page
+                ):
+                    continue
+                if chunk_page == page and chunk_pos < pos:
+                    # The previous part's trailing section headings can share
+                    # the opener's page (document tail layout); only headings
+                    # at/after the opener belong to this part.
+                    continue
+                if not _anthology_is_heading_chunk(chunk):
+                    continue
+                section = _ANTHOLOGY_SECTION_RE.match(
+                    (chunk.get("chunk_text") or "").lstrip()
+                )
+                if section is None:
+                    continue
+                if int(section.group("num").split(".")[0]) == 1:
+                    restarts += 1
+                break
+        if restarts < _ANTHOLOGY_MIN_RESTARTS:
+            return None
+        logger.debug(
+            "Anthology shape detected for %s: %d parts, %d restart at 1",
+            source,
+            len(parts),
+            restarts,
+        )
+        return [
+            {"label": label, "title": title, "start_page": page}
+            for page, _pos, label, title in parts
+        ]
+
+    def _anthology_opener_pos(
+        self,
+        headings: list[dict[str, Any]],
+        page: int,
+        label: str,
+    ) -> int:
+        """Position on ``page`` of the opener heading carrying ``label``.
+
+        The detector's part dicts carry label/title/start_page only, so the
+        enrichment re-locates the opener among the heading chunks to know
+        where on the opener page the part actually starts — the previous
+        part's trailing section headings can share that page and must not
+        enter this part's roster.  Returns 0 (no position filter) when the
+        opener is not found.
+        """
+        opener_pos = 0
+        for chunk in sorted(headings, key=_anthology_heading_sort_key):
+            if int(chunk.get("page_number") or 0) != page:
+                continue
+            if not _anthology_is_heading_chunk(chunk):
+                continue
+            text = (chunk.get("chunk_text") or "").lstrip()
+            opener = _ANTHOLOGY_PART_OPENER_RE.match(text)
+            word = None if opener is not None else _ANTHOLOGY_PART_WORD_RE.match(text)
+            matched = opener if opener is not None else word
+            if matched is not None and matched.group("label") == label:
+                # Keep the LAST match so the dedupe rule in
+                # _detect_anthology_parts (last occurrence wins) stays
+                # consistent when a label repeats on the same page.
+                opener_pos = int(chunk.get("page_pos") or 0)
+        return opener_pos
+
+    def _anthology_part_sections(
+        self,
+        headings: list[dict[str, Any]],
+        start: int,
+        end: int,
+        opener_pos: int,
+    ) -> list[dict[str, Any]]:
+        """Roster the numbered sections of one part from its heading chunks.
+
+        A section pins at its own heading page (heading chunks are the
+        reliable anchor in this shape); dotted ``N.M`` headings keep their
+        full label so they group under their parent ``N`` lexically.  Kept
+        small on purpose: label, page, title.
+        """
+        sections: list[dict[str, Any]] = []
+        for chunk in sorted(headings, key=_anthology_heading_sort_key):
+            page, pos = _anthology_heading_sort_key(chunk)
+            if page < start or page > end:
+                continue
+            if page == start and pos < opener_pos:
+                continue
+            if not _anthology_is_heading_chunk(chunk):
+                continue
+            section = _ANTHOLOGY_SECTION_RE.match(
+                (chunk.get("chunk_text") or "").lstrip()
+            )
+            if section is None:
+                continue
+            sections.append(
+                {
+                    "label": section.group("num"),
+                    "page": page,
+                    "title": re.sub(r"\s+", " ", section.group("title")).strip(),
+                }
+            )
+        return sections
+
+    def _anthology_part_bucket(
+        self,
+        body_chunks_by_page: dict[int, list[dict[str, Any]]],
+        start: int,
+        end: int,
+    ) -> list[dict[str, Any]]:
+        """Sample one part's body chunks exactly like a legacy chapter bucket.
+
+        Same constants and rules as the legacy multi-chapter round-robin in
+        ``_pipeline.py`` (_ANTHOLOGY_PART_CHUNK_LIMIT per part,
+        _ANTHOLOGY_PART_PAGE_CAP per page, header-over-footer promotion on
+        capped pages with extra slots for section-header-dense pages).  An
+        empty part keeps an empty bucket — its summary carries the existing
+        placeholder note.
+        """
+        candidates: list[dict[str, Any]] = []
+        for page in range(start, end + 1):
+            candidates.extend(body_chunks_by_page.get(page, ()))
+        candidates.sort(key=_anthology_heading_sort_key)
+        bucket: list[dict[str, Any]] = []
+        per_page: dict[int, int] = {}
+        for chunk in candidates:
+            if len(bucket) >= _ANTHOLOGY_PART_CHUNK_LIMIT:
+                break
+            page = int(chunk.get("page_number") or 0)
+            if per_page.get(page, 0) < _ANTHOLOGY_PART_PAGE_CAP:
+                per_page[page] = per_page.get(page, 0) + 1
+                chunk["score"] = 0.5
+                bucket.append(chunk)
+                continue
+            # Page at cap — promote header chunks over footers/captions that
+            # were collected first (legacy promotion rule).
+            if not _ANTHOLOGY_BUCKET_SECTION_RE.search(chunk.get("chunk_text", "")):
+                continue
+            replaced = False
+            for i, existing in enumerate(bucket):
+                if existing.get("page_number") == page and not (
+                    _ANTHOLOGY_BUCKET_SECTION_RE.search(existing.get("chunk_text", ""))
+                ):
+                    chunk["score"] = 0.5
+                    bucket[i] = chunk
+                    replaced = True
+                    break
+            if not replaced and per_page.get(page, 0) < (_ANTHOLOGY_PART_PAGE_CAP + 2):
+                per_page[page] = per_page.get(page, 0) + 1
+                chunk["score"] = 0.5
+                bucket.append(chunk)
+        return bucket
+
+    def _enrich_anthology_parts(
+        self,
+        parts: list[dict[str, Any]],
+        body_chunks_by_page: dict[int, list[dict[str, Any]]],
+        headings: list[dict[str, Any]],
+        total_pages: int,
+    ) -> list[dict[str, Any]] | None:
+        """Extend detected anthology parts with ranges, sections, buckets.
+
+        Adds per part: "end_page" (the next opener's page minus 1; the last
+        part runs to ``total_pages``), "sections" (the part's own numbered
+        section roster, each pinned at its heading's page) and "chunks" (the
+        part's sampled body bucket, filled exactly like the legacy
+        multi-chapter buckets).  Returns None when the scale check fails —
+        any part spanning fewer than _ANTHOLOGY_MIN_PART_BODY_PAGES
+        body-bearing pages is not a real sub-report — and the caller then
+        takes the legacy path.  The check runs before any enrichment so a
+        declined document leaves no partial work behind.
+        """
+        ordered = sorted(parts, key=lambda p: int(p.get("start_page") or 0))
+        bounds = [
+            (
+                int(part.get("start_page") or 0),
+                (
+                    int(ordered[i + 1].get("start_page") or 0) - 1
+                    if i + 1 < len(ordered)
+                    else total_pages
+                ),
+            )
+            for i, part in enumerate(ordered)
+        ]
+        for (start, end), part in zip(bounds, ordered, strict=True):
+            body_pages = sum(1 for page in body_chunks_by_page if start <= page <= end)
+            if body_pages < _ANTHOLOGY_MIN_PART_BODY_PAGES:
+                logger.debug(
+                    "Anthology enrichment declined for %s: part %s spans %d "
+                    "body-bearing pages (< %d)",
+                    part.get("label"),
+                    start,
+                    body_pages,
+                    _ANTHOLOGY_MIN_PART_BODY_PAGES,
+                )
+                return None
+        enriched: list[dict[str, Any]] = []
+        for (start, end), part in zip(bounds, ordered, strict=True):
+            label = str(part.get("label") or "")
+            opener_pos = self._anthology_opener_pos(headings, start, label)
+            enriched.append(
+                {
+                    **part,
+                    "end_page": end,
+                    "sections": self._anthology_part_sections(
+                        headings, start, end, opener_pos
+                    ),
+                    "chunks": self._anthology_part_bucket(
+                        body_chunks_by_page, start, end
+                    ),
+                }
+            )
+        return enriched
+
+    def _chapter_range_gate(
+        self,
+        chapter_ranges_: dict[int, tuple[int, int]],
+        evidence_pin_pg_: dict[int, int],
+        src: str,
+    ) -> bool:
+        """Veto a legacy chapter map that disagrees with its own evidence.
+
+        The legacy machinery assumes one monotone chapter sequence; on shapes
+        it was never tuned for (anthologies, flattened front matter) it can
+        derive a confidently wrong map.  Every chapter with a real range
+        (start > 0; sentinel ``(0, -1)`` ranges have no derived start to
+        compare) whose provisional ``N.1`` evidence pin exists is compared:
+        it agrees when the final range start stays within
+        _CHAPTER_GATE_MAX_PIN_DRIFT pages of the pin.  The gate skips when
+        fewer than _CHAPTER_GATE_MIN_COMPARED chapters are comparable —
+        absence of evidence is not disagreement (the HCD report carries 0
+        evidence pins and keeps the legacy path) — and vetoes below
+        _CHAPTER_GATE_MIN_SCORE agreement (calibration in the constants'
+        comment; baseline scores recorded in
+        tests/fixtures/chapter_map/baselines.json).  The gate never modifies
+        pins or ranges; a passing map proceeds byte-identically.
+        """
+        agreements: list[bool] = []
+        for ch_num, page_range in chapter_ranges_.items():
+            if page_range[0] <= 0:
+                continue
+            pin_page = evidence_pin_pg_.get(ch_num)
+            if pin_page is None:
+                continue
+            agreements.append(
+                abs(page_range[0] - pin_page) <= _CHAPTER_GATE_MAX_PIN_DRIFT
+            )
+        if len(agreements) < _CHAPTER_GATE_MIN_COMPARED:
+            return True
+        score = sum(agreements) / len(agreements)
+        if score < _CHAPTER_GATE_MIN_SCORE:
+            logger.warning(
+                "chapter range agreement gate vetoed the derived map for %s "
+                "(score %.2f)",
+                src,
+                score,
+            )
+            return False
+        return True

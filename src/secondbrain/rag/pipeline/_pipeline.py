@@ -37,6 +37,17 @@ from secondbrain.utils.tracing import trace_operation
 
 logger = logging.getLogger(__name__)
 
+# An explicit structural target in the query ("chapter 5", "section 2.3",
+# "part 1") keeps the legacy chapter path even for anthology-shaped
+# documents: per-part routing answers target-less broad-coverage summaries
+# only (add-anthology-aware-chapter-summarization; targeted drill-down inside
+# an anthology is a follow-up, and targeted queries stay protected by the
+# chapter-range agreement gate).
+_QUERY_TARGET_RE = re.compile(
+    r"\b(?:chapter|section|part)\s+\d+\b|\b\d+\.\d+\b",
+    re.IGNORECASE,
+)
+
 
 class RAGPipeline(
     _FormattingMixin,
@@ -291,6 +302,47 @@ class RAGPipeline(
                         exc_info=True,
                     )
                     heading_all_ = []
+                # Anthology routing (add-anthology-aware-chapter-
+                # summarization): a compilation of sub-reports that each
+                # restart their own section numbering cannot be represented
+                # by the single monotone chapter map the machinery below
+                # derives — every stage misfires on it (see the change's
+                # design.md forensic record).  When the multi-signal detector
+                # claims this document and the query carries no explicit
+                # structural target, enumerate the document PER PART and
+                # return before any roster/pinning work; a targeted query
+                # keeps the legacy path and its gate protection.  Detection
+                # that fails the per-part scale check continues to the legacy
+                # path silently (debug-logged inside the enrichment).
+                if _QUERY_TARGET_RE.search(query) is None:
+                    detected_parts_ = self._detect_anthology_parts(heading_all_, src)
+                    if detected_parts_ is not None:
+                        total_pages_ = max(body_by_page_, default=0)
+                        anthology_parts_ = self._enrich_anthology_parts(
+                            detected_parts_,
+                            body_by_page_,
+                            heading_all_,
+                            total_pages_,
+                        )
+                        if anthology_parts_ is not None:
+                            with trace_operation("rag_generation_iterative") as span:
+                                if span:
+                                    span.set_attribute("rag.iterative_mode", True)
+                                    span.set_attribute("rag.enumeration_mode", True)
+                                    span.set_attribute(
+                                        "rag.anthology_parts",
+                                        len(anthology_parts_),
+                                    )
+                                answer = self._generate_anthology_summary(
+                                    anthology_parts_
+                                )
+                            return {"answer": answer, "query": query}
+                        logger.debug(
+                            "Anthology detection fired for %s but the "
+                            "per-part scale check failed; continuing with "
+                            "the legacy chapter path",
+                            src,
+                        )
                 # Tier 0 — section-heading evidence pins.  Each chapter's
                 # first numbered section heading (``N.1``) is the strongest
                 # start-page signal: it survives even when the banner/title
@@ -302,15 +354,28 @@ class RAGPipeline(
                 # keep their fill-only semantics and never override.
                 provisional_pins_: set[int] = set()
                 evidence_pin_pg_: dict[int, int] = {}
-                for ev_ch_, ev_pg_ in sorted(
-                    self._section_heading_pins(
-                        full_chapters,
-                        src,
-                        heading_all_,
-                        boiler_pages=boiler_pages_,
-                        body_chunks_by_page=body_by_page_,
-                    ).items()
-                ):
+                # RAW first-section evidence, kept unfiltered for the
+                # chapter-range agreement gate below: evidence_pin_pg_ only
+                # keeps pins that fit the monotone window, and on an
+                # anthology the window is exactly the wrong model — the
+                # cross-namespace pins (part I.1's §1 heading pinning global
+                # ch1, part I.2's §1 pinning global ch2, …) collide and the
+                # filter collapses them to a single survivor, leaving the
+                # gate nothing to compare.  The calibrated metric
+                # (baselines.json "gate_divergence", design.md §3) is computed
+                # from this raw _section_heading_pins output — 18/18 and
+                # 19/19 for the corpus books, 2/8 for the compilation.
+                # Legacy behavior is untouched: only the gate reads the raw
+                # map; evidence_pin_pg_ keeps its window-filtered semantics
+                # for the ToC-override/runon-offset logic below.
+                evidence_pins_all_: dict[int, int] = self._section_heading_pins(
+                    full_chapters,
+                    src,
+                    heading_all_,
+                    boiler_pages=boiler_pages_,
+                    body_chunks_by_page=body_by_page_,
+                )
+                for ev_ch_, ev_pg_ in sorted(evidence_pins_all_.items()):
                     if not self._pin_fits_window(chapter_first_pg, ev_ch_, ev_pg_):
                         continue
                     chapter_first_pg[ev_ch_] = ev_pg_
@@ -1116,6 +1181,25 @@ class RAGPipeline(
                     src,
                     chapter_ranges_,
                 )
+                # Chapter-range agreement gate (add-anthology-aware-chapter-
+                # summarization): the map above assumes one monotone chapter
+                # sequence; on shapes it was never tuned for it can be
+                # confidently wrong.  Cross-check each final range start
+                # against the RAW provisional N.1 evidence pins (±2 pages —
+                # the unfiltered map, see evidence_pins_all_ above: the
+                # window-filtered evidence_pin_pg_ keeps too few pins on
+                # anthology shapes to compare); below the calibrated
+                # agreement threshold, refuse per-chapter enumeration and
+                # degrade to a whole-document overview instead of emitting
+                # wrong-page chapter summaries.  The gate never modifies pins
+                # or ranges; passing documents proceed byte-identically.
+                if not self._chapter_range_gate(
+                    chapter_ranges_, evidence_pins_all_, src
+                ):
+                    return {
+                        "answer": self._generate_whole_document_overview(body_all_),
+                        "query": query,
+                    }
                 # Fetch mode counts real ranges only: sentinel ranges must
                 # not flip a small book's single-section full fetch into
                 # round-robin sampling.

@@ -201,6 +201,97 @@ _CHAPTER_OVERVIEW_INSTRUCTION = (
 )
 
 
+# Honest-fallback note streamed ahead of the whole-document overview when the
+# chapter-range agreement gate vetoes the legacy chapter map: the reader is
+# told per-chapter mapping failed instead of being shown confident wrong-page
+# chapters.
+_WHOLE_DOCUMENT_OVERVIEW_NOTE = (
+    "Per-chapter page mapping was unavailable for this document; "
+    "here is a whole-document overview."
+)
+
+
+# Upper bound on the page-spread sample that feeds the whole-document overview
+# fallback.  Sized inside the 24-32 chunk budget tuned for the bounded-window
+# summarizer: enough spread to cover a large document end to end (the sample
+# is taken evenly across the full page range) while keeping the overview call
+# small and fast.
+_OVERVIEW_SAMPLE_MAX_CHUNKS = 28
+
+
+# Whole-document overview instruction for the gate-veto fallback.  Mirrors the
+# chapter overview instruction's voice; the source is a page-spread sample, so
+# the model is told to treat it as the document's content rather than muse
+# about sampling.
+_WHOLE_DOCUMENT_OVERVIEW_INSTRUCTION = (
+    "Write a whole-document overview of the document from which the "
+    "content below is sampled. Use ONLY the document content below. Write "
+    "a flowing prose overview in six to ten short paragraphs, one topic "
+    "per paragraph, keeping each paragraph tight -- do not exhaust every "
+    "detail, select the document's major topics and their key supporting "
+    "facts only, in the order the content presents them. Then STOP -- do "
+    "not fill extra space or restate. Quote any numbers, years, "
+    "statistics, and metrics EXACTLY as they appear in the content below; "
+    "never invent, estimate, round, or 'correct' a figure the source does "
+    "not state -- if a specific number is not clearly present, omit it "
+    "rather than guessing. State each figure once and move on; do not "
+    "hedge, second-guess, or correct figures. Do NOT use headings, "
+    "sub-headers, or bullet lists. Do NOT open with meta-framing such as "
+    "'This document covers...' -- begin directly with the substance. Do "
+    "not mention page numbers and do not comment on the text below being "
+    "a sample or an excerpt; treat it as the document's content. Do not "
+    "reproduce code details or function arguments (e.g. "
+    "list(range(...))) verbatim. Do not print any notes, disclaimers, or "
+    "headings such as 'Note', 'Important', or 'Not in this document'. "
+    "Write the overview exactly once: treat your first complete draft as "
+    "final -- do not produce a preliminary draft and then a second, "
+    "tightened version of the same overview, and do not re-verify the "
+    "quoted figures after drafting. Keep internal planning to brief "
+    "selection and structure decisions only."
+)
+
+
+# Per-part summary instruction for anthology documents (one generation per
+# part via the bounded-window machinery).  The static prompt is kept as a
+# plain named constant with the part identification substituted with
+# .format() at call time, so the long text stays a single testable literal
+# (same pattern as _CHAPTER_OVERVIEW_INSTRUCTION).
+_ANTHOLOGY_PART_INSTRUCTION = (
+    "Summarize part {part_id} of this compiled document as a standalone "
+    "report section. Use ONLY the document content below. Write a flowing "
+    "prose overview in four to eight short paragraphs, one topic per "
+    "paragraph, keeping each paragraph tight -- do not exhaust every "
+    "subsection detail, select the part's major topics and their key "
+    "supporting facts only, in the order the content presents them. Then "
+    "STOP -- do not fill extra space or restate. Cover the part's key "
+    "points and structure. Do NOT use headings, sub-headers, or bullet "
+    "lists. Do NOT open with meta-framing such as 'This part covers...' "
+    "-- begin directly with the substance. Quote any numbers, years, "
+    "statistics, and metrics EXACTLY as they appear in the content below; "
+    "never invent, estimate, round, or 'correct' a figure the source does "
+    "not state -- if a specific number is not clearly present, omit it "
+    "rather than guessing. State each figure once and move on; do not "
+    "hedge, second-guess, or correct figures. Do not reproduce code "
+    "details or function arguments (e.g. list(range(...))) verbatim. Do "
+    "not print any notes, disclaimers, or headings such as 'Note', "
+    "'Important', or 'Not in this part'. Write the overview exactly once: "
+    "treat your first complete draft as final -- do not produce a "
+    "preliminary draft and then a second, tightened version of the same "
+    "overview, and do not re-verify the quoted figures after drafting. "
+    "Keep internal planning to brief selection and structure decisions "
+    "only. If some content below does not belong to this part, summarize "
+    "only the content that does and never add general knowledge or "
+    "commentary about other parts."
+)
+
+
+# Upper bound on section titles quoted into one part's prompt context.  The
+# list only orients the model (it shows the part's internal structure); a
+# full roster of a 20-section part would bloat every window call for little
+# benefit.
+_ANTHOLOGY_PART_SECTION_CONTEXT_MAX = 12
+
+
 class _FallbackMixin(_RAGPipelineState):
     """No-results fallback, grounded re-retrieval, and relevance helpers."""
 
@@ -556,6 +647,208 @@ class _FallbackMixin(_RAGPipelineState):
         if not body.strip():
             return ""
         return f"{heading}:\n\n{body}"
+
+    def _generate_anthology_summary(self, parts: list[dict[str, Any]]) -> str:
+        """Produce a part-by-part overview for an anthology document.
+
+        One streamed section per part: the part heading
+        (``I.1 — <title> (pages 3\u201313)``) followed by that part's summary
+        from the bounded-window machinery, with the part's section roster
+        quoted into the prompt as structure-only context.  A part whose
+        bucket is empty (its detected page range contained no body text) is
+        still listed, with an explicit placeholder note, so a partial
+        overview is visible to the reader instead of silently omitting
+        parts -- mirroring the legacy multi-chapter generator's behaviour.
+
+        Args:
+            parts: Parts in document order, each carrying ``label``,
+                ``title``, ``start_page``, ``end_page``, an optional
+                ``sections`` roster (prompt context only) and ``chunks``
+                (the sampled body chunks for the part).
+
+        Returns:
+            The full concatenated answer (one section per part, blocks
+            joined with blank lines).
+        """
+        all_parts: list[str] = []
+        for part in parts:
+            label = str(part.get("label", "") or "").strip() or "Part"
+            # The title is rendered verbatim (stripped only): it comes from a
+            # clean opener heading, and ``_display_chapter_title``'s run-on
+            # cleanup would truncate legitimate titles that carry short digit
+            # tokens (e.g. "Volume 1 — ...").
+            title = str(part.get("title", "") or "").strip()
+            start_page = part.get("start_page")
+            end_page = part.get("end_page")
+            heading = label
+            if title:
+                heading += f" — {title}"
+            if start_page is not None and end_page is not None:
+                # En dash (U+2013) between the pages, per the design
+                # contract's part heading format.
+                heading += f" (pages {start_page}–{end_page})"  # noqa: RUF001
+            chunks = part.get("chunks") or []
+            if not chunks:
+                # An empty part means the part's page range contained no
+                # body chunks.  Emit an explicit placeholder: silently
+                # omitting parts made a partial overview look complete
+                # (same rationale as the legacy empty-chapter note).
+                note = (
+                    "No document content was retrieved for this part (its "
+                    "detected page range contains no body text), so no "
+                    "summary could be generated."
+                )
+                if self._on_chunk:
+                    # The returned text joins blocks with "\n\n"; the live
+                    # stream needs its own separators or parts glue together.
+                    self._on_chunk(
+                        (f"{heading}\n\n" if not all_parts else f"\n\n{heading}\n\n")
+                        + note,
+                        None,
+                    )
+                all_parts.append(f"{heading}\n\n{note}")
+                continue
+            if self._on_chunk:
+                self._on_chunk(
+                    f"{heading}\n\n" if not all_parts else f"\n\n{heading}\n\n",
+                    None,
+                )
+            part_id = f"{label} ({title})" if title else label
+            instruction = _ANTHOLOGY_PART_INSTRUCTION.format(part_id=part_id)
+            section_context = self._render_part_sections(part.get("sections"))
+            if section_context:
+                instruction += "\n\n" + section_context
+            summary = self._summarize_bounded(
+                heading=heading,
+                windows=self._split_bounded(chunks),
+                instruction=instruction,
+            )
+            if summary.strip():
+                all_parts.append(f"{heading}\n\n{summary}")
+        return "\n\n".join(all_parts)
+
+    @staticmethod
+    def _render_part_sections(sections: Any) -> str:
+        """Render a part's section roster as short prompt context, or ''.
+
+        The section list is orientation only -- it shows the model the
+        part's internal structure so the overview can follow it; it must
+        stay short, so at most ``_ANTHOLOGY_PART_SECTION_CONTEXT_MAX``
+        entries are quoted, with a trailing count when the roster was cut.
+        Entries are defensively read as ``{label/number, title}`` dicts;
+        anything else contributes nothing.
+
+        Args:
+            sections: The part's ``sections`` value as built by the
+                per-part map (a list of section dicts), or anything else.
+
+        Returns:
+            A one-sentence section list for the prompt, or ``""`` when
+            nothing usable was supplied.
+        """
+        if not isinstance(sections, (list, tuple)):
+            return ""
+        lines: list[str] = []
+        rendered = 0
+        for section in sections:
+            if len(lines) >= _ANTHOLOGY_PART_SECTION_CONTEXT_MAX:
+                break
+            rendered += 1
+            if not isinstance(section, dict):
+                continue
+            label = str(section.get("label", section.get("number", "")) or "").strip()
+            title = str(section.get("title", "") or "").strip()
+            if label and title:
+                lines.append(f"{label} {title}")
+            elif title or label:
+                lines.append(title or label)
+        if not lines:
+            return ""
+        listed = "; ".join(lines)
+        remaining = len(sections) - rendered
+        if remaining > 0:
+            listed += f"; and {remaining} more sections"
+        return (
+            "For structure only, the part contains these sections: "
+            f"{listed}. Use this list to orient the overview's coverage "
+            "and order; do not summarize the section list itself item by "
+            "item."
+        )
+
+    def _generate_whole_document_overview(self, chunks: list[dict[str, Any]]) -> str:
+        """Produce an honest whole-document overview from a page-spread sample.
+
+        The fallback for documents whose per-chapter mapping is
+        untrustworthy (the chapter-range agreement gate vetoed the legacy
+        chapter map): instead of confident wrong-page chapters, the reader
+        first gets a short note that per-chapter mapping was unavailable,
+        then one whole-document overview built from an evenly spaced sample
+        of the body chunks via the bounded-window machinery.
+
+        Args:
+            chunks: Body chunks of the scoped document.
+
+        Returns:
+            The note line followed by the overview text (or just the note
+            when the overview could not be generated).
+        """
+        note = _WHOLE_DOCUMENT_OVERVIEW_NOTE
+        if self._on_chunk:
+            self._on_chunk(f"{note}\n\n", None)
+        sampled = self._page_spread_sample(chunks)
+        summary = self._summarize_bounded(
+            heading="this document",
+            windows=self._split_bounded(sampled),
+            instruction=_WHOLE_DOCUMENT_OVERVIEW_INSTRUCTION,
+        )
+        if not summary.strip():
+            return note
+        return f"{note}\n\n{summary}"
+
+    @staticmethod
+    def _page_spread_sample(
+        chunks: list[dict[str, Any]],
+        limit: int = _OVERVIEW_SAMPLE_MAX_CHUNKS,
+    ) -> list[dict[str, Any]]:
+        """Return an evenly spaced, page-ordered sample of *chunks*.
+
+        The overview fallback must cover the whole document even when the
+        full body exceeds the summarizer's budget, so the chunks are sorted
+        into document order (page, then within-page position) and an evenly
+        spaced subset is taken across that sequence -- deterministic, with
+        no randomness, and always including the document's first and last
+        chunks.  Inputs at or under *limit* are returned whole.
+
+        Args:
+            chunks: Body chunks (each carrying ``page_number``/``page``,
+                optionally ``page_pos``).
+            limit: Maximum number of chunks to return.
+
+        Returns:
+            The sampled chunks in document order.
+        """
+        if not chunks or limit <= 0:
+            return []
+        ordered = sorted(
+            chunks,
+            key=lambda c: (
+                c.get("page_number", c.get("page", 0)) or 0,
+                c.get("page_pos", 0) or 0,
+            ),
+        )
+        if len(ordered) <= limit:
+            return ordered
+        if limit == 1:
+            return ordered[:1]
+        step = (len(ordered) - 1) / (limit - 1)
+        picked: list[dict[str, Any]] = []
+        seen: set[int] = set()
+        for i in range(limit):
+            index = round(i * step)
+            if index not in seen:
+                seen.add(index)
+                picked.append(ordered[index])
+        return picked
 
     def _split_bounded(
         self,
