@@ -723,8 +723,12 @@ class _FallbackMixin(_RAGPipelineState):
                 windows=self._split_bounded(chunks),
                 instruction=instruction,
             )
-            if summary.strip():
-                all_parts.append(f"{heading}\n\n{summary}")
+            if not summary.strip():
+                note = "A summary could not be generated for this part."
+                if self._on_chunk:
+                    self._on_chunk(note, None)
+                summary = note
+            all_parts.append(f"{heading}\n\n{summary}")
         return "\n\n".join(all_parts)
 
     @staticmethod

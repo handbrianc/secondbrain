@@ -95,20 +95,30 @@ class _RangesCapture(logging.Handler):
 def _make_fixture_pipeline(
     storage: ChapterFixtureStorage,
     provider: Any,
+    on_chunk: Any = None,
 ) -> RAGPipeline:
     """Pipeline wired to the fixture storage exactly like the baseline script."""
     pipeline = RAGPipeline(
-        searcher=_StubSearcher(storage), llm_provider=provider, top_k=8
+        searcher=_StubSearcher(storage),
+        llm_provider=provider,
+        top_k=8,
+        on_chunk=on_chunk,
     )
     pipeline._config.streaming_enabled = False
     return pipeline
 
 
-def _run_iterative(pipeline: RAGPipeline, query: str, source: str) -> dict[str, Any]:
+def _run_iterative(
+    pipeline: RAGPipeline,
+    query: str,
+    source: str,
+    *,
+    show_sources: bool = False,
+) -> dict[str, Any]:
     return pipeline._iterative_query(
         query,
         top_k=8,
-        show_sources=False,
+        show_sources=show_sources,
         source_filter=source,
     )
 
@@ -148,6 +158,53 @@ class TestCompilationAnthologyPath:
         assert _VETO_NOTE not in answer, (
             "a detected anthology must not fall back to the whole-document overview"
         )
+
+    def test_versioned_filename_does_not_suppress_anthology_routing(self) -> None:
+        source = _fixture_source(_COMPILATION)
+        storage = ChapterFixtureStorage.from_fixture(_COMPILATION)
+        pipeline = _make_fixture_pipeline(storage, _CannedProvider())
+
+        result = _run_iterative(pipeline, "summarize compilation-2.0.pdf", source)
+
+        assert len(_PART_HEADING_RE.findall(result["answer"])) == 16
+
+    def test_sources_include_the_chunks_used_for_part_summaries(self) -> None:
+        source = _fixture_source(_COMPILATION)
+        storage = ChapterFixtureStorage.from_fixture(_COMPILATION)
+        pipeline = _make_fixture_pipeline(storage, _CannedProvider())
+
+        result = _run_iterative(
+            pipeline,
+            "summarize knowledge_compilation.pdf",
+            source,
+            show_sources=True,
+        )
+
+        assert result["sources"]
+        assert all(chunk["source_file"] == source for chunk in result["sources"])
+
+    def test_failed_part_summary_keeps_heading_and_streams_failure_note(self) -> None:
+        streamed: list[str] = []
+        pipeline = _make_fixture_pipeline(
+            ChapterFixtureStorage([]),
+            _NullProvider(),
+            on_chunk=lambda content, _reasoning: streamed.append(content),
+        )
+        pipeline._summarize_bounded = lambda **_kwargs: ""
+        part = {
+            "label": "I.1",
+            "title": "Alpha",
+            "start_page": 1,
+            "end_page": 2,
+            "chunks": [{"chunk_text": "content", "page_number": 1}],
+        }
+
+        answer = pipeline._generate_anthology_summary([part])
+
+        assert "I.1 — Alpha (pages 1–2)" in answer
+        assert "A summary could not be generated for this part." in answer
+        assert "I.1 — Alpha (pages 1–2)" in "".join(streamed)
+        assert "A summary could not be generated for this part." in "".join(streamed)
 
 
 class TestLegacyCharacterization:
@@ -236,7 +293,12 @@ class TestGateVetoEndToEnd:
             staticmethod(lambda heading_chunks, source: None),
         )
 
-        result = _run_iterative(pipeline, "summarize knowledge_compilation.pdf", source)
+        result = _run_iterative(
+            pipeline,
+            "summarize knowledge_compilation.pdf",
+            source,
+            show_sources=True,
+        )
         answer = result["answer"]
 
         assert _VETO_NOTE in answer, (
@@ -252,6 +314,25 @@ class TestGateVetoEndToEnd:
         assert _PLACEHOLDER_NOTE not in answer, (
             "the whole-document overview must summarize, not placeholder"
         )
+        assert result["sources"] == pipeline._page_spread_sample(
+            list(storage.get_body_chunks(source, limit=None))
+        )
+
+    def test_targeted_request_still_gates_the_full_source_map(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        source = _fixture_source(_COMPILATION)
+        storage = ChapterFixtureStorage.from_fixture(_COMPILATION)
+        pipeline = _make_fixture_pipeline(storage, _CannedProvider())
+        monkeypatch.setattr(
+            RAGPipeline,
+            "_detect_anthology_parts",
+            staticmethod(lambda heading_chunks, source: None),
+        )
+        result = _run_iterative(pipeline, "summarize chapter 1", source)
+
+        assert _VETO_NOTE in result["answer"]
+        assert not _LEGACY_CHAPTER_HEADING_RE.search(result["answer"])
 
     def test_hidden_openers_veto_the_garbage_map(self) -> None:
         # Build a modified compilation fixture IN-TEST: the 16 part-opener

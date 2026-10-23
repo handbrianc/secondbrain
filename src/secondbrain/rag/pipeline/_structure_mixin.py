@@ -2029,6 +2029,7 @@ class _StructureMixin(_RAGPipelineState):
         body_chunks_by_page: dict[int, list[dict[str, Any]]],
         start: int,
         end: int,
+        opener_pos: int,
     ) -> list[dict[str, Any]]:
         """Sample one part's body chunks exactly like a legacy chapter bucket.
 
@@ -2041,7 +2042,14 @@ class _StructureMixin(_RAGPipelineState):
         """
         candidates: list[dict[str, Any]] = []
         for page in range(start, end + 1):
-            candidates.extend(body_chunks_by_page.get(page, ()))
+            page_chunks = body_chunks_by_page.get(page, ())
+            if page == start and opener_pos:
+                page_chunks = [
+                    chunk
+                    for chunk in page_chunks
+                    if int(chunk.get("page_pos") or 0) >= opener_pos
+                ]
+            candidates.extend(page_chunks)
         candidates.sort(key=_anthology_heading_sort_key)
         bucket: list[dict[str, Any]] = []
         per_page: dict[int, int] = {}
@@ -2128,7 +2136,7 @@ class _StructureMixin(_RAGPipelineState):
                         headings, start, end, opener_pos
                     ),
                     "chunks": self._anthology_part_bucket(
-                        body_chunks_by_page, start, end
+                        body_chunks_by_page, start, end, opener_pos
                     ),
                 }
             )

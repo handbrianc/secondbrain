@@ -201,6 +201,52 @@ class TestCompilationPartContent:
             f"the Story Mapping section must be pinned at page 7: {story_entry!r}"
         )
 
+    def test_shared_opening_page_excludes_pre_opener_body_chunks(self) -> None:
+        pipeline = _make_pipeline()
+        parts = [
+            {"label": "I.1", "title": "Alpha", "start_page": 1},
+            {"label": "I.2", "title": "Beta", "start_page": 5},
+        ]
+        body_by_page = {
+            page: [{"chunk_text": f"part one page {page}", "page_number": page}]
+            for page in range(1, 5)
+        }
+        body_by_page[5] = [
+            {
+                "chunk_text": "previous part trailing content",
+                "page_number": 5,
+                "page_pos": 4,
+            },
+            {
+                "chunk_text": "new part opening content",
+                "page_number": 5,
+                "page_pos": 12,
+            },
+        ]
+        body_by_page.update(
+            {
+                page: [{"chunk_text": f"part two page {page}", "page_number": page}]
+                for page in range(6, 9)
+            }
+        )
+        headings = [
+            {
+                "chunk_text": "I.2 · Beta",
+                "page_number": 5,
+                "page_pos": 10,
+                "chunk_role": "heading",
+            }
+        ]
+
+        enriched = pipeline._enrich_anthology_parts(
+            parts, body_by_page, headings, total_pages=8
+        )
+
+        assert enriched is not None
+        part_two_text = [chunk["chunk_text"] for chunk in enriched[1]["chunks"]]
+        assert "new part opening content" in part_two_text
+        assert "previous part trailing content" not in part_two_text
+
 
 class TestScaleGuard:
     """``_enrich_anthology_parts`` refuses documents without body support."""
