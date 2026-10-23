@@ -1,0 +1,1214 @@
+{
+  "user-manual": {
+    "source_file": "/home/bchand/UserManual.pdf",
+    "n_chunks": 12593,
+    "pages": [
+      1,
+      1200
+    ],
+    "ranges": {
+      "1": [
+        20,
+        28
+      ],
+      "2": [
+        29,
+        42
+      ],
+      "3": [
+        43,
+        45
+      ],
+      "4": [
+        46,
+        49
+      ],
+      "5": [
+        50,
+        87
+      ],
+      "6": [
+        88,
+        102
+      ],
+      "7": [
+        103,
+        124
+      ],
+      "8": [
+        125,
+        142
+      ],
+      "9": [
+        143,
+        160
+      ],
+      "10": [
+        161,
+        174
+      ],
+      "11": [
+        175,
+        234
+      ],
+      "12": [
+        235,
+        235
+      ],
+      "13": [
+        236,
+        262
+      ],
+      "14": [
+        263,
+        270
+      ],
+      "15": [
+        271,
+        467
+      ],
+      "16": [
+        468,
+        474
+      ],
+      "17": [
+        475,
+        479
+      ],
+      "18": [
+        480,
+        1000000
+      ]
+    },
+    "evidence_pins": {
+      "1": 20,
+      "2": 28,
+      "3": 42,
+      "4": 46,
+      "5": 50,
+      "6": 88,
+      "7": 102,
+      "8": 124,
+      "9": 142,
+      "10": 160,
+      "11": 174,
+      "12": 234,
+      "13": 236,
+      "14": 262,
+      "15": 270,
+      "16": 468,
+      "17": 474,
+      "18": 480
+    },
+    "multi": {
+      "keys": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18
+      ],
+      "bucket_pages": {
+        "1": [
+          21,
+          21,
+          21,
+          22,
+          22,
+          22,
+          23,
+          23
+        ],
+        "2": [
+          29,
+          29,
+          29,
+          30,
+          30,
+          30,
+          31,
+          31
+        ],
+        "3": [
+          43,
+          43,
+          43,
+          44,
+          44,
+          44,
+          45,
+          45
+        ],
+        "4": [
+          47,
+          47,
+          47,
+          48,
+          48,
+          48,
+          49,
+          49
+        ],
+        "5": [
+          50,
+          51,
+          51,
+          51,
+          52,
+          52,
+          52,
+          52
+        ],
+        "6": [
+          89,
+          89,
+          89,
+          90,
+          90,
+          90,
+          91,
+          91
+        ],
+        "7": [
+          103,
+          103,
+          103,
+          104,
+          104,
+          104,
+          105,
+          105
+        ],
+        "8": [
+          125,
+          125,
+          125,
+          126,
+          126,
+          126,
+          127,
+          127
+        ],
+        "9": [
+          143,
+          143,
+          143,
+          144,
+          144,
+          144,
+          145,
+          145
+        ],
+        "10": [
+          161,
+          161,
+          161,
+          162,
+          162,
+          162,
+          163,
+          163
+        ],
+        "11": [
+          175,
+          175,
+          175,
+          176,
+          176,
+          176,
+          177,
+          177
+        ],
+        "12": [
+          235,
+          235
+        ],
+        "13": [
+          237,
+          237,
+          237,
+          238,
+          238,
+          238,
+          239,
+          239
+        ],
+        "14": [
+          263,
+          263,
+          263,
+          264,
+          264,
+          264,
+          265,
+          265
+        ],
+        "15": [
+          271,
+          271,
+          271,
+          272,
+          272,
+          272,
+          273,
+          273
+        ],
+        "16": [
+          468,
+          468,
+          468,
+          469,
+          469,
+          469,
+          469,
+          469
+        ],
+        "17": [
+          475,
+          475,
+          475,
+          476,
+          476,
+          476,
+          477,
+          477
+        ],
+        "18": [
+          480,
+          481,
+          481,
+          481,
+          482,
+          482,
+          482,
+          483
+        ]
+      },
+      "titles": {
+        "1": "About Oracle VirtualBox",
+        "2": "Installing VirtualBox",
+        "3": "Configuring Oracle VirtualBox",
+        "4": "Creating a New Virtual Machine",
+        "5": "Working with Virtual Machines",
+        "6": "Integrating with Oracle Cloud Infrastructure",
+        "7": "Guest Additions",
+        "8": "Virtual Storage",
+        "9": "Virtual Networking",
+        "10": "Remote Virtual Machines",
+        "11": "Advanced Topics",
+        "12": "Customizing Oracle VirtualBox",
+        "13": "Troubleshooting",
+        "14": "Security Guide",
+        "15": "VBoxManage",
+        "16": "Reference",
+        "17": "Change Log",
+        "18": "Licensing Information User Manual for Release 7"
+      }
+    },
+    "single_chapter_called": false,
+    "gate_divergence": {
+      "score": 1.0,
+      "within": 18,
+      "compared": 18,
+      "divs": {
+        "1": 0,
+        "2": 1,
+        "3": 1,
+        "4": 0,
+        "5": 0,
+        "6": 0,
+        "7": 1,
+        "8": 1,
+        "9": 1,
+        "10": 1,
+        "11": 1,
+        "12": 1,
+        "13": 0,
+        "14": 1,
+        "15": 1,
+        "16": 0,
+        "17": 1,
+        "18": 0
+      }
+    }
+  },
+  "pve-admin-guide": {
+    "source_file": "/home/bchand/pve-admin-guide-9.1.pdf",
+    "n_chunks": 7804,
+    "pages": [
+      1,
+      656
+    ],
+    "ranges": {
+      "1": [
+        23,
+        31
+      ],
+      "2": [
+        32,
+        48
+      ],
+      "3": [
+        49,
+        118
+      ],
+      "4": [
+        119,
+        131
+      ],
+      "5": [
+        132,
+        157
+      ],
+      "6": [
+        158,
+        161
+      ],
+      "7": [
+        162,
+        194
+      ],
+      "8": [
+        195,
+        220
+      ],
+      "9": [
+        221,
+        224
+      ],
+      "10": [
+        225,
+        308
+      ],
+      "11": [
+        309,
+        339
+      ],
+      "12": [
+        340,
+        366
+      ],
+      "13": [
+        367,
+        385
+      ],
+      "14": [
+        386,
+        408
+      ],
+      "15": [
+        409,
+        432
+      ],
+      "16": [
+        433,
+        448
+      ],
+      "17": [
+        449,
+        460
+      ],
+      "18": [
+        461,
+        466
+      ],
+      "19": [
+        467,
+        468
+      ],
+      "20": [
+        469,
+        1000000
+      ]
+    },
+    "evidence_pins": {
+      "1": 23,
+      "2": 31,
+      "3": 48,
+      "4": 118,
+      "5": 131,
+      "6": 157,
+      "7": 162,
+      "8": 194,
+      "9": 220,
+      "10": 224,
+      "11": 309,
+      "12": 339,
+      "13": 366,
+      "14": 385,
+      "15": 409,
+      "16": 433,
+      "17": 449,
+      "18": 460,
+      "19": 466
+    },
+    "multi": {
+      "keys": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20
+      ],
+      "bucket_pages": {
+        "1": [
+          23,
+          23,
+          23,
+          24,
+          24,
+          24,
+          25,
+          25
+        ],
+        "2": [
+          32,
+          32,
+          32,
+          33,
+          33,
+          33,
+          34,
+          34
+        ],
+        "3": [
+          49,
+          49,
+          49,
+          50,
+          50,
+          50,
+          51,
+          51
+        ],
+        "4": [
+          119,
+          119,
+          119,
+          120,
+          120,
+          121,
+          121,
+          121
+        ],
+        "5": [
+          132,
+          132,
+          132,
+          133,
+          133,
+          133,
+          134,
+          134
+        ],
+        "6": [
+          158,
+          158,
+          158,
+          159,
+          159,
+          159,
+          160,
+          160
+        ],
+        "7": [
+          162,
+          162,
+          162,
+          163,
+          163,
+          163,
+          164,
+          164
+        ],
+        "8": [
+          195,
+          195,
+          195,
+          196,
+          196,
+          196,
+          197,
+          197
+        ],
+        "9": [
+          221,
+          221,
+          221,
+          222,
+          222,
+          222,
+          223,
+          223
+        ],
+        "10": [
+          225,
+          225,
+          225,
+          226,
+          226,
+          226,
+          227,
+          227
+        ],
+        "11": [
+          309,
+          309,
+          309,
+          310,
+          310,
+          310,
+          311,
+          311
+        ],
+        "12": [
+          340,
+          340,
+          340,
+          341,
+          341,
+          341,
+          342,
+          342
+        ],
+        "13": [
+          367,
+          367,
+          367,
+          368,
+          368,
+          368,
+          369,
+          369
+        ],
+        "14": [
+          386,
+          386,
+          386,
+          387,
+          387,
+          387,
+          388,
+          388
+        ],
+        "15": [
+          409,
+          409,
+          409,
+          410,
+          410,
+          410,
+          411,
+          411
+        ],
+        "16": [
+          433,
+          433,
+          433,
+          434,
+          434,
+          434,
+          435,
+          435
+        ],
+        "17": [
+          449,
+          449,
+          449,
+          450,
+          450,
+          450,
+          451,
+          451
+        ],
+        "18": [
+          461,
+          461,
+          461,
+          462,
+          462,
+          462,
+          463,
+          463
+        ],
+        "19": [
+          467,
+          467,
+          467,
+          468,
+          468,
+          468
+        ],
+        "20": [
+          469,
+          469,
+          469,
+          470,
+          470,
+          470,
+          471,
+          471
+        ]
+      },
+      "titles": {
+        "1": "Introduction",
+        "2": "Installing Proxmox VE",
+        "3": "Host System Administration",
+        "4": "Graphical User Interface",
+        "5": "Cluster Manager",
+        "6": "Proxmox Cluster File System (pmxcfs)",
+        "7": "Proxmox VE Storage",
+        "8": "Deploy Hyper-Converged Ceph Cluster",
+        "9": "Storage Replication",
+        "10": "QEMU/KVM Virtual Machines",
+        "11": "Proxmox Container Toolkit",
+        "12": "Software-Defined Network",
+        "13": "Proxmox VE Firewall",
+        "14": "User Management",
+        "15": "High Availability",
+        "16": "Backup and Restore",
+        "17": "Notifications",
+        "18": "Important Service Daemons",
+        "19": "Useful Command-line Tools",
+        "20": "Frequently Asked Questions"
+      }
+    },
+    "single_chapter_called": false,
+    "gate_divergence": {
+      "score": 1.0,
+      "within": 19,
+      "compared": 19,
+      "divs": {
+        "1": 0,
+        "2": 1,
+        "3": 1,
+        "4": 1,
+        "5": 1,
+        "6": 1,
+        "7": 0,
+        "8": 1,
+        "9": 1,
+        "10": 1,
+        "11": 0,
+        "12": 1,
+        "13": 1,
+        "14": 1,
+        "15": 0,
+        "16": 0,
+        "17": 0,
+        "18": 1,
+        "19": 1
+      }
+    }
+  },
+  "hcd-report": {
+    "source_file": "/data/workspace/uploads/hcd_best_practices_report.pdf",
+    "n_chunks": 160,
+    "pages": [
+      1,
+      25
+    ],
+    "ranges": {
+      "6": [
+        5,
+        5
+      ],
+      "7": [
+        6,
+        8
+      ],
+      "8": [
+        9,
+        9
+      ],
+      "9": [
+        10,
+        10
+      ],
+      "11": [
+        11,
+        11
+      ],
+      "12": [
+        12,
+        12
+      ],
+      "14": [
+        13,
+        13
+      ],
+      "16": [
+        14,
+        15
+      ],
+      "17": [
+        16,
+        18
+      ],
+      "18": [
+        19,
+        19
+      ],
+      "19": [
+        20,
+        21
+      ],
+      "20": [
+        22,
+        22
+      ],
+      "21": [
+        23,
+        1000000
+      ],
+      "10": [
+        0,
+        -1
+      ],
+      "13": [
+        0,
+        -1
+      ],
+      "15": [
+        0,
+        -1
+      ]
+    },
+    "evidence_pins": {},
+    "multi": {
+      "keys": [
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21
+      ],
+      "bucket_pages": {
+        "6": [
+          5,
+          5,
+          5
+        ],
+        "7": [
+          6,
+          6,
+          6,
+          7,
+          7,
+          7,
+          7,
+          8
+        ],
+        "8": [
+          9,
+          9,
+          9
+        ],
+        "9": [
+          10,
+          10,
+          10
+        ],
+        "10": [],
+        "11": [
+          11,
+          11,
+          11
+        ],
+        "12": [
+          12,
+          12,
+          12
+        ],
+        "13": [],
+        "14": [
+          13,
+          13,
+          13
+        ],
+        "15": [],
+        "16": [
+          14,
+          14,
+          14,
+          15,
+          15,
+          15
+        ],
+        "17": [
+          16,
+          16,
+          16,
+          17,
+          17,
+          17,
+          18,
+          18
+        ],
+        "18": [
+          19,
+          19,
+          19
+        ],
+        "19": [
+          20,
+          20,
+          20,
+          21,
+          21,
+          21
+        ],
+        "20": [
+          22,
+          22,
+          22
+        ],
+        "21": [
+          23,
+          23,
+          23,
+          24,
+          24,
+          24,
+          25,
+          25
+        ]
+      },
+      "titles": {
+        "6": "Phase-by-Phase Working Table and Common Failures The most operationally useful",
+        "7": "Wikipedia — The Design of Everyday Things (D. Norman, 1988/2013) Premise and r",
+        "8": "Norman's Design Foundations: Affordances, Gulfs, and Four Principles Donald Nor",
+        "9": "Krippendorff's Semantic Turn: Designing for Meaning Klaus Krippendorff's The Se",
+        "10": "Co-Creation: From Designing for Users to Designing With Them Sanders and Stappe",
+        "11": "Method Deep-Dives 11.1 Contextual inquiry and ethnographic methods Ethnographic",
+        "12": "Running Usability Testing Well Usability testing means observing users as they a",
+        "13": "Where HCD Pays Off — and Where It Doesn't HCD pays off where the cost of the wro",
+        "14": "Research Fundamentals: Recruiting, Privacy, Compensation, Bias The 18F Fundamen",
+        "15": "Governance: Telling Real HCD from HCD Theater Because",
+        "16": "Quick-Reference Checklist Before research (Fundamentals) Recruiting plan define",
+        "17": "Agentic HCD Authoring: Producing Artifacts with",
+        "18": "OpenDesign: Agentic UI Prototyping and Design-System Creation OpenDesign is an",
+        "19": "Agentic API-Contract Documentation (OpenAPI",
+        "20": "Bridging to Story Mapping (Companion Report) HCD and agile delivery are compleme",
+        "21": "Source Register ID Source Contribution 1 digital.gov — Human-centered design g"
+      }
+    },
+    "single_chapter_called": false,
+    "gate_divergence": null
+  },
+  "knowledge-compilation": {
+    "source_file": "/data/workspace/uploads/Consolidated_Knowledge_Compilation.pdf",
+    "n_chunks": 2341,
+    "pages": [
+      1,
+      120
+    ],
+    "ranges": {
+      "5": [
+        1,
+        1
+      ],
+      "6": [
+        2,
+        6
+      ],
+      "7": [
+        7,
+        12
+      ],
+      "8": [
+        13,
+        17
+      ],
+      "9": [
+        18,
+        18
+      ],
+      "11": [
+        19,
+        19
+      ],
+      "13": [
+        20,
+        20
+      ],
+      "15": [
+        21,
+        25
+      ],
+      "16": [
+        26,
+        30
+      ],
+      "17": [
+        31,
+        32
+      ],
+      "18": [
+        33,
+        1000000
+      ],
+      "1": [
+        0,
+        -1
+      ],
+      "2": [
+        0,
+        -1
+      ],
+      "3": [
+        0,
+        -1
+      ],
+      "4": [
+        0,
+        -1
+      ],
+      "10": [
+        0,
+        -1
+      ],
+      "12": [
+        0,
+        -1
+      ],
+      "14": [
+        0,
+        -1
+      ],
+      "19": [
+        0,
+        -1
+      ],
+      "20": [
+        0,
+        -1
+      ],
+      "21": [
+        0,
+        -1
+      ]
+    },
+    "evidence_pins": {
+      "1": 60,
+      "2": 13,
+      "3": 38,
+      "4": 39,
+      "5": 40,
+      "6": 15,
+      "7": 16,
+      "8": 9,
+      "9": 50,
+      "10": 53,
+      "11": 27,
+      "12": 56,
+      "14": 19,
+      "17": 30,
+      "18": 32,
+      "19": 33
+    },
+    "multi": {
+      "keys": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21
+      ],
+      "bucket_pages": {
+        "1": [],
+        "2": [],
+        "3": [],
+        "4": [],
+        "5": [
+          1,
+          1,
+          1
+        ],
+        "6": [
+          2,
+          2,
+          2,
+          3,
+          3,
+          3,
+          4,
+          4
+        ],
+        "7": [
+          7,
+          7,
+          7,
+          8,
+          8,
+          8,
+          9,
+          9
+        ],
+        "8": [
+          13,
+          13,
+          13,
+          14,
+          14,
+          14,
+          15,
+          15
+        ],
+        "9": [
+          18,
+          18,
+          18
+        ],
+        "10": [],
+        "11": [
+          19,
+          19,
+          19
+        ],
+        "12": [],
+        "13": [
+          20,
+          20,
+          20
+        ],
+        "14": [],
+        "15": [
+          21,
+          21,
+          21,
+          22,
+          22,
+          22,
+          23,
+          23
+        ],
+        "16": [
+          26,
+          26,
+          26,
+          27,
+          27,
+          27,
+          28,
+          28
+        ],
+        "17": [
+          31,
+          31,
+          31,
+          32,
+          32,
+          32
+        ],
+        "18": [
+          33,
+          33,
+          33,
+          34,
+          34,
+          34,
+          35,
+          35
+        ],
+        "19": [],
+        "20": [],
+        "21": []
+      },
+      "titles": {
+        "1": "Why Requirements Start Vague — and Why That Is Normal",
+        "2": "First Principles: What",
+        "3": "Step 1 — Frame the Outcome Before Touching the Backlog",
+        "4": "Step 2 — Discover the Epic Set",
+        "5": "Step 3 — Story Mapping: The Engine That Removes Vagueness",
+        "6": "Step 4 — Slicing Toolkit: From Big Epics to Small Stories",
+        "7": "Step 5 — Example Mapping: Killing the Residual Vagueness",
+        "8": "Step 6 — Match the Decomposition Effort to the Complexity (Cynefin)",
+        "9": "Common Pitfalls and Anti-Patterns",
+        "10": "Success Metrics and Indicators",
+        "11": "Worked Micro-Example",
+        "12": "Sources and Further Reading",
+        "13": "Bridging Discovery to Delivery: The HCD Connection",
+        "14": "From Atomic User Stories to OpenSpec Proposals",
+        "15": "Source Register",
+        "16": "Quick-Reference Checklist",
+        "17": "Agentic HCD Authoring: Producing Artifacts with draw.io via MCP",
+        "18": "OpenDesign: Agentic UI Prototyping and Design-System Creation",
+        "19": "Agentic API-Contract Documentation (OpenAPI-First Tooling)",
+        "20": "Bridging to Story Mapping (Companion Report)",
+        "21": "Source Register"
+      }
+    },
+    "single_chapter_called": false,
+    "gate_divergence": {
+      "score": 0.25,
+      "within": 2,
+      "compared": 8,
+      "divs": {
+        "5": -39,
+        "6": -13,
+        "7": -9,
+        "8": 4,
+        "9": -32,
+        "11": -8,
+        "17": 1,
+        "18": 1
+      }
+    }
+  }
+}

@@ -180,3 +180,35 @@ class _RAGPipelineState:
             query: str,
             answer: str,
         ) -> None: ...
+
+        # Anthology-aware chapter summarization
+        # (add-anthology-aware-chapter-summarization).  Defined on
+        # ``_StructureMixin`` / ``_FallbackMixin``, called from
+        # ``_pipeline.py``.
+
+        @staticmethod
+        def _detect_anthology_parts(
+            heading_chunks: list[dict[str, Any]],
+            source: str,
+        ) -> list[dict[str, Any]] | None: ...
+
+        def _enrich_anthology_parts(
+            self,
+            parts: list[dict[str, Any]],
+            body_chunks_by_page: dict[int, list[dict[str, Any]]],
+            headings: list[dict[str, Any]],
+            total_pages: int,
+        ) -> list[dict[str, Any]] | None: ...
+
+        def _chapter_range_gate(
+            self,
+            chapter_ranges_: dict[int, tuple[int, int]],
+            evidence_pin_pg_: dict[int, int],
+            src: str,
+        ) -> bool: ...
+
+        def _generate_anthology_summary(self, parts: list[dict[str, Any]]) -> str: ...
+
+        def _generate_whole_document_overview(
+            self, chunks: list[dict[str, Any]]
+        ) -> str: ...

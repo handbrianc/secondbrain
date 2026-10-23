@@ -37,6 +37,17 @@ from secondbrain.utils.tracing import trace_operation
 
 logger = logging.getLogger(__name__)
 
+# An explicit structural target in the query ("chapter 5", "section 2.3",
+# "part 1") keeps the legacy chapter path even for anthology-shaped
+# documents: per-part routing answers target-less broad-coverage summaries
+# only (add-anthology-aware-chapter-summarization; targeted drill-down inside
+# an anthology is a follow-up, and targeted queries stay protected by the
+# chapter-range agreement gate).
+_QUERY_TARGET_RE = re.compile(
+    r"\b(?:chapter|section|part)\s+\d+\b|\b\d+\.\d+\b",
+    re.IGNORECASE,
+)
+
 
 class RAGPipeline(
     _FormattingMixin,
@@ -291,6 +302,54 @@ class RAGPipeline(
                         exc_info=True,
                     )
                     heading_all_ = []
+                # Anthology routing (add-anthology-aware-chapter-
+                # summarization): a compilation of sub-reports that each
+                # restart their own section numbering cannot be represented
+                # by the single monotone chapter map the machinery below
+                # derives — every stage misfires on it (see the change's
+                # design.md forensic record).  When the multi-signal detector
+                # claims this document and the query carries no explicit
+                # structural target, enumerate the document PER PART and
+                # return before any roster/pinning work; a targeted query
+                # keeps the legacy path and its gate protection.  Detection
+                # that fails the per-part scale check continues to the legacy
+                # path silently (debug-logged inside the enrichment).
+                if _QUERY_TARGET_RE.search(strip_document_filenames(query)) is None:
+                    detected_parts_ = self._detect_anthology_parts(heading_all_, src)
+                    if detected_parts_ is not None:
+                        total_pages_ = max(body_by_page_, default=0)
+                        anthology_parts_ = self._enrich_anthology_parts(
+                            detected_parts_,
+                            body_by_page_,
+                            heading_all_,
+                            total_pages_,
+                        )
+                        if anthology_parts_ is not None:
+                            with trace_operation("rag_generation_iterative") as span:
+                                if span:
+                                    span.set_attribute("rag.iterative_mode", True)
+                                    span.set_attribute("rag.enumeration_mode", True)
+                                    span.set_attribute(
+                                        "rag.anthology_parts",
+                                        len(anthology_parts_),
+                                    )
+                                answer = self._generate_anthology_summary(
+                                    anthology_parts_
+                                )
+                            result: dict[str, Any] = {"answer": answer, "query": query}
+                            if show_sources:
+                                result["sources"] = [
+                                    chunk
+                                    for part in anthology_parts_
+                                    for chunk in part.get("chunks", [])
+                                ]
+                            return result
+                        logger.debug(
+                            "Anthology detection fired for %s but the "
+                            "per-part scale check failed; continuing with "
+                            "the legacy chapter path",
+                            src,
+                        )
                 # Tier 0 — section-heading evidence pins.  Each chapter's
                 # first numbered section heading (``N.1``) is the strongest
                 # start-page signal: it survives even when the banner/title
@@ -302,15 +361,28 @@ class RAGPipeline(
                 # keep their fill-only semantics and never override.
                 provisional_pins_: set[int] = set()
                 evidence_pin_pg_: dict[int, int] = {}
-                for ev_ch_, ev_pg_ in sorted(
-                    self._section_heading_pins(
-                        full_chapters,
-                        src,
-                        heading_all_,
-                        boiler_pages=boiler_pages_,
-                        body_chunks_by_page=body_by_page_,
-                    ).items()
-                ):
+                # RAW first-section evidence, kept unfiltered for the
+                # chapter-range agreement gate below: evidence_pin_pg_ only
+                # keeps pins that fit the monotone window, and on an
+                # anthology the window is exactly the wrong model — the
+                # cross-namespace pins (part I.1's §1 heading pinning global
+                # ch1, part I.2's §1 pinning global ch2, …) collide and the
+                # filter collapses them to a single survivor, leaving the
+                # gate nothing to compare.  The calibrated metric
+                # (baselines.json "gate_divergence", design.md §3) is computed
+                # from this raw _section_heading_pins output — 18/18 and
+                # 19/19 for the corpus books, 2/8 for the compilation.
+                # Legacy behavior is untouched: only the gate reads the raw
+                # map; evidence_pin_pg_ keeps its window-filtered semantics
+                # for the ToC-override/runon-offset logic below.
+                evidence_pins_all_: dict[int, int] = self._section_heading_pins(
+                    full_chapters,
+                    src,
+                    heading_all_,
+                    boiler_pages=boiler_pages_,
+                    body_chunks_by_page=body_by_page_,
+                )
+                for ev_ch_, ev_pg_ in sorted(evidence_pins_all_.items()):
                     if not self._pin_fits_window(chapter_first_pg, ev_ch_, ev_pg_):
                         continue
                     chapter_first_pg[ev_ch_] = ev_pg_
@@ -1057,7 +1129,7 @@ class RAGPipeline(
 
                 # Build sorted page ranges from ALL boundary chapters
                 sorted_pgs = sorted(chapter_first_pg.items(), key=lambda x: x[1])
-                chapter_ranges_: dict[int, tuple[int, int]] = {}
+                source_chapter_ranges_: dict[int, tuple[int, int]] = {}
                 # Build boundary page mapping for end-page computation.
                 # Keep ALL chapter boundaries so that end-page calculation for a
                 # target chapter can see the next non-target chapter boundary.
@@ -1067,9 +1139,6 @@ class RAGPipeline(
                 boundary_pgs = dict(chapter_first_pg)
                 max_ch_ = max(boundary_pgs) if boundary_pgs else 0
                 for ch_, start_pg_ in sorted_pgs:
-                    # Only build ranges for target chapters
-                    if ch_ not in target_ch_nums:
-                        continue
                     # Find the next chapter IN SEQUENCE (ch+1, ch+2, ...) in the
                     # boundary map — NOT the next entry in page-sorted order.
                     # Otherwise interleaved page numbers produce wrong end pages
@@ -1084,16 +1153,42 @@ class RAGPipeline(
                         if nxt in boundary_pgs and boundary_pgs[nxt] > start_pg_:
                             end_pg_ = boundary_pgs[nxt] - 1
                             break
-                    chapter_ranges_[ch_] = (start_pg_, end_pg_)
-
-                chapter_keys = sorted(chapter_ranges_.keys())
-                if not chapter_keys:
+                    source_chapter_ranges_[ch_] = (start_pg_, end_pg_)
+                if not source_chapter_ranges_:
                     logger.warning(
                         "No chapter page ranges derived for %s; "
                         "falling back to generic search",
                         src,
                     )
                     logger.debug("chapter_first_pg was empty: %s", chapter_first_pg)
+                    return self._generic_one_shot(
+                        query, top_k, show_sources, source_filter=source_filter
+                    )
+                # Validate the complete source map before narrowing it to a
+                # targeted request; a single target cannot satisfy the gate's
+                # minimum evidence floor on its own.
+                if not self._chapter_range_gate(
+                    source_chapter_ranges_, evidence_pins_all_, src
+                ):
+                    result = {
+                        "answer": self._generate_whole_document_overview(body_all_),
+                        "query": query,
+                    }
+                    if show_sources:
+                        result["sources"] = self._page_spread_sample(body_all_)
+                    return result
+                chapter_ranges_ = {
+                    ch: page_range
+                    for ch, page_range in source_chapter_ranges_.items()
+                    if ch in target_ch_nums
+                }
+                chapter_keys = sorted(chapter_ranges_)
+                if not chapter_keys:
+                    logger.warning(
+                        "No target chapter page ranges derived for %s; "
+                        "falling back to generic search",
+                        src,
+                    )
                     return self._generic_one_shot(
                         query, top_k, show_sources, source_filter=source_filter
                     )
@@ -1561,7 +1656,7 @@ class RAGPipeline(
                 if not answer or not answer.strip():
                     answer = llm_fallback_roster
 
-                result: dict[str, Any] = {"answer": answer, "query": query}
+                result = {"answer": answer, "query": query}
                 if show_sources:
                     result["sources"] = final_chunks
                 return result
