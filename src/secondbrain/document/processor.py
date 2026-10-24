@@ -23,6 +23,7 @@ import os
 import warnings
 from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, NotRequired
 
 import numpy as np
@@ -31,6 +32,7 @@ from typing_extensions import TypedDict
 from secondbrain.exceptions import DocumentExtractionError
 
 if TYPE_CHECKING:
+    from secondbrain.storage.structure_sqlite import DocumentStructure
     from secondbrain.utils.embedding_cache import EmbeddingCache
 
 # Apply MPS patch before any docling import
@@ -40,6 +42,10 @@ from secondbrain.document.fast_text import (
     extract_printed_page,
     pdf_page_count,
     resolve_printed_pages,
+)
+from secondbrain.document.structure_annotate import (
+    ANNOTATION_PAYLOAD_KEYS,
+    annotate_chunks,
 )
 from secondbrain.utils.tracing import trace_operation
 
@@ -228,6 +234,53 @@ def _extend_segments_from_document(content: Any, segments: list[_Segment]) -> No
         if label is not None:
             segment["label"] = label
         segments.append(segment)
+
+
+def _asr_capture_shape(docling_doc: Any) -> Any:
+    """Extract the lightweight object audio structure capture reads.
+
+    Audio structure capture (:func:`secondbrain.document.structure_capture.
+    capture_audio_structure`) reads only each ``texts`` item's ``text`` and
+    the numeric ``start_time``/``end_time`` bounds of its ``source`` entries
+    (verified against docling 2.138.0's ``asr_transcriber`` output). An ASR
+    docling document may be large, and the pdf-conversion memory-bounds
+    convention is read → extract → unload: this builds a minimal stand-in
+    carrying exactly those fields so the document itself can be released
+    right after conversion while the dispatcher's audio branch
+    (``docling_doc`` is deliberately ``Any``) still captures the tree from
+    the extracted shape.
+
+    Args:
+        docling_doc: A docling ASR document (``result.document``) or any
+            object exposing a ``texts`` item list.
+
+    Returns
+    -------
+        The extracted capture shape, or ``None`` when extraction failed.
+        Never raises.
+    """
+    try:
+        items: list[Any] = []
+        for item in getattr(docling_doc, "texts", None) or []:
+            sources: list[Any] = []
+            for source in getattr(item, "source", None) or []:
+                start = getattr(source, "start_time", None)
+                end = getattr(source, "end_time", None)
+                if isinstance(start, (int, float)) and isinstance(end, (int, float)):
+                    sources.append(
+                        SimpleNamespace(start_time=float(start), end_time=float(end))
+                    )
+            items.append(
+                SimpleNamespace(
+                    text=str(getattr(item, "text", "") or ""), source=sources
+                )
+            )
+        return SimpleNamespace(texts=items)
+    except Exception as e:
+        logger.warning(
+            "ASR structure-shape extraction failed (%s: %s)", type(e).__name__, e
+        )
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -589,10 +642,13 @@ def _extract_chunk_and_embed_file(
     Returns
     -------
         Dict with keys: 'success' (bool), 'file_path' (str),
-        'documents' (list[dict]), 'error' (str | None). When nothing is
-        stored, 'skipped' distinguishes a legitimate re-ingest skip (True,
-        with 'extracted_chunks' counting the chunks that were extracted) from
-        a failed extraction with no text at all (reported as success=False).
+        'documents' (list[dict]), 'error' (str | None), and 'structure'
+        (the captured ``DocumentStructure`` tree, or None when the document
+        has no tree; the ingestor persists it once per file regardless of
+        the outcome). When nothing is stored, 'skipped' distinguishes a
+        legitimate re-ingest skip (True, with 'extracted_chunks' counting
+        the chunks that were extracted) from a failed extraction with no
+        text at all (reported as success=False).
     """
     import contextlib
     import gc
@@ -603,6 +659,21 @@ def _extract_chunk_and_embed_file(
     from secondbrain.embedding import EmbeddingProviderFactory
 
     file_path = Path(file_path_str)
+    # Captured document structure (design §6, openspec
+    # add-structure-aware-ingestion): captured during parsing, attached to
+    # every return payload below, and persisted by the ingestor once per
+    # file — including skip/failure outcomes, so re-ingests of already-stored
+    # documents still gain their tree. Workers never open SQLite themselves.
+    structure: DocumentStructure | None = None
+    docling_structure_parts: list[DocumentStructure] = []
+    # Audio (design §5, openspec add-structure-aware-ingestion): set only on
+    # the docling conversion path — the ASR result document is the audio
+    # structure source, so its timestamp-bearing texts are extracted into
+    # *asr_shape* before the document is released, and the capture point
+    # below hands the shape to the dispatcher's audio branch. The fast path
+    # is PDF-only and leaves both untouched.
+    asr_shape: Any | None = None
+    is_audio = False
     try:
         import logging as _logging
 
@@ -611,6 +682,8 @@ def _extract_chunk_and_embed_file(
 
         from secondbrain.document.docling_factory import get_converter_for_path
         from secondbrain.document.fast_text import try_fast_pdf_extraction
+        from secondbrain.document.ingestor._constants import get_file_type
+        from secondbrain.document.structure_capture import capture_structure
 
         def _emit_phase(phase: str, done: int, total: int) -> None:
             """Queue one ("phase", ...) tuple; never raises.
@@ -649,12 +722,19 @@ def _extract_chunk_and_embed_file(
                         "ingest.filesize_bytes", file_path.stat().st_size
                     )
                 converter = get_converter_for_path(file_path)
+                from secondbrain.document.structure_capture import (
+                    capture_docling_headings,
+                )
 
                 # One page count, shared by windowing and — when enabled —
                 # the docling DEBUG page-batch scraper. 0 means unknown
                 # (non-PDF or unreadable), which keeps the whole-document
                 # conversion.
                 is_pdf = file_path.suffix.lower() == ".pdf"
+                # Audio files run through docling's ASR pipeline; the ASR
+                # result document is their structure source (design §5) —
+                # see the extraction in _convert_one below.
+                is_audio = get_file_type(file_path) == "audio"
                 total_pages = pdf_page_count(file_path) if is_pdf else 0
                 # Window setting from config (0 disables windowing); the
                 # getattr default mirrors the config default (200) so stub
@@ -680,8 +760,11 @@ def _extract_chunk_and_embed_file(
                 def _convert_one(window: tuple[int, int] | None) -> None:
                     """Convert one page window (or the whole file) and release it.
 
-                    Extends *segments* from the conversion result, then
-                    releases all conversion artifacts. Mirrors docling's own
+                    Extends *segments* from the conversion result, captures the
+                    window's docling heading-structure part (for audio, the
+                    timestamp-bearing ASR texts — design §5 — since the ASR
+                    document is the audio structure source), then releases all
+                    conversion artifacts. Mirrors docling's own
                     release pattern (``DocumentConverter._unload_input_document``,
                     docling #2209): the backend page state is unloaded and the
                     ``ConversionResult``/``DoclingDocument`` references are
@@ -689,12 +772,33 @@ def _extract_chunk_and_embed_file(
                     grows with page count. Release failures never fail the
                     extraction.
                     """
+                    nonlocal asr_shape
+
                     result = (
                         converter.convert(file_path, page_range=window)
                         if window is not None
                         else converter.convert(file_path)
                     )
                     _extend_segments_from_document(result.document, segments)
+                    # Structure capture (design §6) must read the docling
+                    # document BEFORE it is released below — after unload/del
+                    # it is dead memory. Each window contributes one heading
+                    # part; merge_structures joins them at capture time.
+                    structure_part = capture_docling_headings(
+                        result.document, file_path
+                    )
+                    if structure_part is not None:
+                        docling_structure_parts.append(structure_part)
+                    if is_audio:
+                        # Audio (design §5, task 10): the ASR result document
+                        # itself is the structure source — heading parts are
+                        # meaningless for a transcript. Extract the
+                        # timestamp-bearing texts into the lightweight shape
+                        # capture_audio_structure reads BEFORE the document
+                        # is released below (read → extract → unload, like
+                        # the PDF window path); the single capture point
+                        # reads the shape after the document is gone.
+                        asr_shape = _asr_capture_shape(result.document)
                     backend = getattr(getattr(result, "input", None), "_backend", None)
                     if backend is not None and hasattr(backend, "unload"):
                         with contextlib.suppress(Exception):
@@ -734,6 +838,21 @@ def _extract_chunk_and_embed_file(
 
                 if not _segments_have_text(segments):
                     segments = [{"text": _fallback_text_or_raise(file_path), "page": 1}]
+
+        # Structure capture (design §6): one tree per file, from the PDF
+        # outline (+ /PageLabels) merged with the docling heading parts
+        # captured per conversion window above; audio files get their tree
+        # from the ASR shape extracted in _convert_one before the document
+        # was released (design §5 — heading parts are meaningless for a
+        # transcript). Fast-path PDFs carry no docling document and still
+        # get outline + labels; treeless files simply yield None. Never
+        # raises (warn + None on failure).
+        file_type = get_file_type(file_path)
+        structure = capture_structure(
+            file_path,
+            docling_doc=asr_shape if is_audio else (docling_structure_parts or None),
+            file_type=file_type,
+        )
 
         from secondbrain.document.ingestor._sync import _warn_if_glued_text
 
@@ -796,6 +915,7 @@ def _extract_chunk_and_embed_file(
                         "(empty file or failed extraction/transcription)"
                     ),
                     "skipped": False,
+                    "structure": structure,
                 }
             # Chunks were extracted but all deduplicated away (whitespace-only
             # chunks, duplicates, or all already stored) — a legitimate skip.
@@ -806,7 +926,26 @@ def _extract_chunk_and_embed_file(
                 "error": None,
                 "skipped": True,
                 "extracted_chunks": extracted_chunk_count,
+                "structure": structure,
             }
+
+        # Structural annotation (design §7, task 8): runs after the dedup and
+        # re-ingest-skip filtering above — both rebuild chunk dicts and would
+        # drop unknown keys — so the added payload keys survive. Only keys are
+        # added (text/hashes untouched, keeping stored text_hash identities
+        # valid); a treeless document keeps the plain list. annotate_chunks
+        # never raises by contract, but degrade to the unannotated list anyway
+        # so a broken annotation cannot fail the file.
+        annotated_chunks: list[Mapping[str, Any]] = list(unique_chunks)
+        if structure is not None:
+            try:
+                annotated_chunks = annotate_chunks(unique_chunks, structure)
+            except Exception:
+                logger.warning(
+                    "Structural annotation failed for %s; storing unannotated chunks",
+                    file_path,
+                    exc_info=True,
+                )
 
         # Signal ingestion of this file has begun (with its total chunk count) so
         # the CLI can render a determinate per-file progress bar.
@@ -841,45 +980,11 @@ def _extract_chunk_and_embed_file(
 
         documents = []
 
-        # Determine file_type from extension (mirrors document/__init__.py:get_file_type)
-        ext = file_path.suffix.lower()
-        _type_map: dict[str, str] = {
-            ".pdf": "pdf",
-            ".docx": "docx",
-            ".pptx": "pptx",
-            ".xlsx": "xlsx",
-            ".html": "html",
-            ".htm": "html",
-            ".md": "markdown",
-            ".txt": "text",
-            ".asciidoc": "asciidoc",
-            ".adoc": "asciidoc",
-            ".tex": "latex",
-            ".csv": "csv",
-            ".png": "image",
-            ".jpg": "image",
-            ".jpeg": "image",
-            ".tiff": "image",
-            ".tif": "image",
-            ".bmp": "image",
-            ".webp": "image",
-            ".wav": "audio",
-            ".mp3": "audio",
-            ".m4a": "audio",
-            ".aac": "audio",
-            ".ogg": "audio",
-            ".flac": "audio",
-            ".vtt": "webvtt",
-            ".xml": "xml",
-            ".json": "docling-json",
-        }
-        file_type = _type_map.get(ext, "unknown")
-
         ingested_at = datetime.now(UTC).isoformat()
 
         page_pos = 0
         last_page: int | None = None
-        for chunk_item, embedding in zip(unique_chunks, embeddings, strict=True):
+        for chunk_item, embedding in zip(annotated_chunks, embeddings, strict=True):
             page = chunk_item["page"]
             if page != last_page:
                 page_pos = 0
@@ -898,6 +1003,11 @@ def _extract_chunk_and_embed_file(
                 "chunk_role": chunk_item.get("chunk_role", "body"),
                 "element_type": chunk_item.get("element_type", "body"),
             }
+            # Structural annotation payload (design §7): carried through so
+            # _point_from_document writes the keys into the qdrant payload.
+            for ann_key in ANNOTATION_PAYLOAD_KEYS:
+                if ann_key in chunk_item:
+                    doc[ann_key] = chunk_item[ann_key]
             documents.append(doc)
             page_pos += 1
 
@@ -919,6 +1029,7 @@ def _extract_chunk_and_embed_file(
             "documents": documents,
             "error": None,
             "skipped": False,
+            "structure": structure,
         }
     except Exception as e:
         if progress_queue is not None:
@@ -929,4 +1040,5 @@ def _extract_chunk_and_embed_file(
             "file_path": file_path,
             "documents": [],
             "error": f"{type(e).__name__}: {e}",
+            "structure": structure,
         }

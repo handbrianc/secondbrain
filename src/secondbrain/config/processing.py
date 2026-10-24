@@ -224,6 +224,15 @@ class ProcessingStorageMixin:
             "whisper_base_s2t, whisper_large_v3_turbo_s2t."
         ),
     )
+    audio_topic_segmentation_enabled: bool = Field(
+        default=True,
+        description=(
+            "Run LLM topic segmentation over timestamped ASR segments after a "
+            "document tree is persisted, filling audio_segments titles "
+            "(bounded to 20 windows per design; any failure degrades to "
+            "untitled segments and ingest continues)."
+        ),
+    )
 
     @field_validator("pdf_accelerator_device")
     @classmethod

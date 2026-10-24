@@ -90,6 +90,14 @@ Choose one criterion per operation:
 | Source file | `--source` | Remove all chunks from a file |
 | Specific chunk | `--chunk-id` | Remove single chunk |
 | Everything | `--all` | Complete database reset |
+| File type | `--file-type` | Remove all chunks of a type (e.g. `pdf`, `markdown`) |
+
+Document-level deletes (`--source`, `--file-type`, `--all`) also remove the
+stored structure trees of the documents they delete (see the
+[Document Structure guide](document-structure.md)); a failure while cleaning
+up structure trees is logged as a warning and never fails the delete.
+Deleting a single chunk (`--chunk-id`) leaves the document and its tree
+intact.
 
 ### By Source
 
@@ -134,6 +142,20 @@ secondbrain delete --source "./file.pdf"
 secondbrain delete --source "./file.pdf" --yes
 # Executes immediately
 ```
+
+## Inspecting Document Structure
+
+Structure-aware ingestion persists a per-document tree (chapters, sections,
+printed page labels, audio segments) at ingest time. Inspect it with:
+
+```bash
+secondbrain structure "./report.pdf"
+```
+
+Documents ingested before the feature carry no tree; the command prints
+re-ingest guidance instead. See the
+[Document Structure guide](document-structure.md) for the full command
+reference and the `--no-skip-existing` backfill semantics.
 
 ## Viewing Statistics
 

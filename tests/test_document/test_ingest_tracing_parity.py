@@ -163,7 +163,9 @@ class TestAsyncWorkerSpans:
 
         ingestor = AsyncDocumentIngestor()
 
-        def one_seg(_p: Any) -> list[dict[str, Any]]:
+        def one_seg(
+            _p: Any, _structure_sink: list[Any] | None = None
+        ) -> list[dict[str, Any]]:
             return [{"text": "body text", "page": 1}]
 
         monkeypatch.setattr(ingestor, "_extract_text", one_seg)
@@ -211,7 +213,9 @@ class TestAsyncWorkerSpans:
 
         ingestor = AsyncDocumentIngestor()
 
-        def segs(_p: Any) -> list[dict[str, Any]]:
+        def segs(
+            _p: Any, _structure_sink: list[Any] | None = None
+        ) -> list[dict[str, Any]]:
             return [{"text": f"segment {n} text", "page": 1} for n in range(3)]
 
         monkeypatch.setattr(ingestor, "_extract_text", segs)

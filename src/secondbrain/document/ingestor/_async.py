@@ -7,9 +7,10 @@ import contextlib
 import hashlib
 import logging
 import time
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from secondbrain.config import config
@@ -20,8 +21,12 @@ from secondbrain.document.chunker import (
 from secondbrain.document.fast_text import extract_printed_page, resolve_printed_pages
 from secondbrain.document.ingestor._constants import get_file_type
 from secondbrain.document.ingestor._sync import DocumentIngestor
+from secondbrain.document.structure_capture import capture_structure
 from secondbrain.exceptions import DocumentExtractionError
 from secondbrain.utils.tracing import trace_operation
+
+if TYPE_CHECKING:
+    from secondbrain.storage.structure_sqlite import DocumentStructure
 
 logger = logging.getLogger(__name__)
 
@@ -694,7 +699,23 @@ class AsyncDocumentIngestor(DocumentIngestor):
                     span.set_attribute(
                         "ingest.filesize_bytes", file_path.stat().st_size
                     )
-                segments = await asyncio.to_thread(self._extract_text, file_path)
+                structure_sink: list[Any] = []
+                segments = await asyncio.to_thread(
+                    self._extract_text, file_path, structure_sink
+                )
+                # Capture + persist the document's structure tree once per
+                # file (design §6). The async path self-extracts via
+                # _extract_text — it never consumes processor worker
+                # payloads — so the sink filled above is this file's only
+                # capture chance (the docling heading part for parseable
+                # documents, the extracted ASR capture shape for audio —
+                # design §5); it must be consumed before the outcome
+                # branches below (skip included). The returned tree feeds
+                # the payload refresh (design §6.4) and the audio
+                # topic-segmentation hook (design §5) below.
+                structure = await self._capture_and_persist_structure_async(
+                    file_path, structure_sink
+                )
 
             if not segments:
                 logger.warning(
@@ -702,6 +723,12 @@ class AsyncDocumentIngestor(DocumentIngestor):
                     file_path,
                 )
                 return False
+
+            # Audio topic segmentation (design §5): fills audio segment
+            # titles in the parent process after the tree is persisted.
+            # Runs ahead of the outcome branches so a fully-skipped
+            # re-ingest also gains titles; never raises.
+            await self._segment_audio_topics_async(file_path, structure, segments)
 
             # Re-ingest skip detection, mirroring the sync pool worker
             # (``processor._extract_chunk_and_embed_file``): with skip_existing
@@ -730,6 +757,9 @@ class AsyncDocumentIngestor(DocumentIngestor):
                     )
                     if skipped_files is not None:
                         skipped_files.add(str(file_path))
+                    # Full skip: nothing was stored fresh, but legacy points
+                    # still gain their structural payload (design §6.4).
+                    await self._refresh_structure_payload_async(structure, storage)
                     return True
 
             if cfg.streaming_enabled:
@@ -740,6 +770,7 @@ class AsyncDocumentIngestor(DocumentIngestor):
                     storage,
                     skip_hashes=skip_hashes,
                 )
+                await self._refresh_structure_payload_async(structure, storage)
                 return docs_count > 0
             else:
                 docs_to_store = await self._build_documents_with_embeddings_async(
@@ -760,6 +791,11 @@ class AsyncDocumentIngestor(DocumentIngestor):
                         elapsed_ms = (time.time() - start) * 1000
                         if span is not None:
                             span.set_attribute("storage.duration_ms", elapsed_ms)
+                    # Freshly stored async points carry no structural keys
+                    # (chunk builders treat segments as chunks), so the
+                    # refresh annotates them alongside legacy points
+                    # (design §6.4).
+                    await self._refresh_structure_payload_async(structure, storage)
                     return True
                 return False
 
@@ -778,3 +814,172 @@ class AsyncDocumentIngestor(DocumentIngestor):
             if failure_reasons is not None:
                 failure_reasons[str(file_path)] = f"{type(e).__name__}: {e}"
             return False
+
+    async def _capture_and_persist_structure_async(
+        self,
+        file_path: Path,
+        structure_sink: list[Any],
+    ) -> DocumentStructure | None:
+        """Capture and persist one file's structure tree (never raises).
+
+        The async twin of the sync pool path's per-file persist (design §6):
+        captures the full tree from the capture inputs ``_extract_text``
+        collected into the *structure_sink* — the docling heading part for
+        parseable documents (PDFs also read the outline and /PageLabels) —
+        and saves it through the ingestor's structure store. For audio files
+        (design §5) the sink carries the extracted ASR capture shape instead,
+        which is handed to the dispatcher's audio branch directly: the ASR
+        document itself is already released and heading parts are
+        meaningless for a transcript. Any failure is swallowed with a
+        warning so ingest continues treeless rather than failing.
+
+        Args:
+            file_path: Path to the source file (``str(file_path)`` becomes
+                the tree key and MUST equal the qdrant payload
+                ``source_file``).
+            structure_sink: Capture inputs collected during extraction — the
+                docling heading part, or the extracted ASR capture shape for
+                audio files (see :meth:`DocumentIngestor._extract_text`);
+                possibly empty when the fast path skipped docling.
+
+        Returns
+        -------
+            The persisted :class:`DocumentStructure`, or None when nothing
+            was captured or the structure store is unavailable. The caller
+            passes it to the payload refresh (design §6.4) and the audio
+            topic-segmentation hook (design §5).
+        """
+        try:
+            file_type = get_file_type(file_path)
+            docling_doc: Any = (
+                structure_sink[0]
+                if file_type == "audio" and structure_sink
+                else (structure_sink or None)
+            )
+            structure = await asyncio.to_thread(
+                capture_structure,
+                file_path,
+                docling_doc,
+                file_type,
+            )
+            if structure is None:
+                return None
+            store = self._get_structure_store()
+            if store is None:
+                return None
+            await store.save_structure_async(structure)
+            return structure
+        except Exception as e:
+            logger.warning(
+                "Failed to persist structure tree for %s: %s: %s",
+                file_path,
+                type(e).__name__,
+                e,
+            )
+            return None
+
+    async def _refresh_structure_payload_async(
+        self, structure: DocumentStructure | None, storage: Any
+    ) -> None:
+        """Refresh structural payload fields on stored points (never raises).
+
+        Async twin of the sync pool path's refresh (design §6.4): runs after
+        this file's points are stored (or on the full-skip return), so
+        freshly stored async points — built without inline annotation — and
+        legacy dedup-skipped points alike gain their structural payload keys
+        from the just-captured tree. A storage without the refresh
+        capability is a no-op.
+
+        Args:
+            structure: The persisted tree (None → no-op).
+            storage: The vector storage instance used for this ingest.
+        """
+        if structure is None:
+            return
+        refresh = getattr(storage, "refresh_structural_payload", None)
+        if not callable(refresh):
+            return
+        try:
+            refreshed = await asyncio.to_thread(
+                refresh, structure.source_file, structure
+            )
+        except Exception as e:
+            logger.warning(
+                "Structural payload refresh failed for %s: %s: %s",
+                structure.source_file,
+                type(e).__name__,
+                e,
+            )
+            return
+        if refreshed:
+            logger.info(
+                "Refreshed structural payload on %d stored points for %s",
+                refreshed,
+                structure.source_file,
+            )
+
+    async def _segment_audio_topics_async(
+        self,
+        file_path: Path,
+        structure: DocumentStructure | None,
+        segments: Sequence[Mapping[str, Any]],
+    ) -> None:
+        """Fill audio segment titles via LLM topic segmentation (never raises).
+
+        Async twin of the sync ingestor's hook (design §5): gated by the
+        ``audio_topic_segmentation_enabled`` config flag, bounded to ≤20
+        windows, run only for trees carrying audio segment nodes, using the
+        extracted segment texts. Produced ``AudioSegment`` rows replace
+        ``structure.audio_segments`` and the tree is re-saved; any failure
+        degrades to untitled segments.
+        """
+        if structure is None or not structure.nodes:
+            return
+        if not any(node.kind == "segment" for node in structure.nodes):
+            return
+        cfg = config()
+        if not getattr(cfg, "audio_topic_segmentation_enabled", True):
+            return
+        texts = [str(segment.get("text", "")) for segment in segments]
+        if not any(texts):
+            return
+        store = self._get_structure_store()
+        if store is None:
+            return
+        try:
+            from secondbrain.rag.providers.factory import LLMProviderFactory
+
+            llm = await asyncio.to_thread(LLMProviderFactory.create_from_config, cfg)
+        except Exception as e:
+            logger.warning(
+                "LLM provider unavailable for audio topic segmentation (%s: %s)",
+                type(e).__name__,
+                e,
+            )
+            return
+        try:
+            from secondbrain.document.structure_capture import audio_topic_segments
+
+            audio_segments = await asyncio.to_thread(
+                audio_topic_segments, structure, texts, llm=llm
+            )
+        except Exception as e:
+            logger.warning(
+                "Audio topic segmentation failed for %s: %s: %s",
+                file_path,
+                type(e).__name__,
+                e,
+            )
+            return
+        if not audio_segments:
+            return
+        structure.audio_segments = audio_segments
+        try:
+            await store.save_structure_async(structure)
+        except Exception as e:
+            logger.warning(
+                "Failed to persist audio segment titles for %s: %s: %s",
+                file_path,
+                type(e).__name__,
+                e,
+            )

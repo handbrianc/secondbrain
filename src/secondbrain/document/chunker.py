@@ -116,28 +116,56 @@ def label_to_element_type(label: str | None) -> ElementTypeLiteral | None:
 
 
 def classify_chunk_role(
-    text: str, seg_count: int, total_segs: int, is_likely_title: bool
+    text: str,
+    seg_count: int,
+    total_segs: int,
+    is_likely_title: bool,
+    *,
+    is_merged_segment: bool = False,
 ) -> ElementTypeLiteral:
     """
     Classify chunk by structural role using only statistical signals.
 
     Thresholds are document-universal (char density, whitespace ratio, dot-chain density).
+
+    Section-number-prefixed text (e.g. "11.18 Configuring the Autostart
+    Service") classifies as ``heading`` only while the chunk is a single
+    segment: the former blanket ``body`` downgrade is gone (openspec
+    add-structure-aware-ingestion task 7, design §9 trap 1), but merged
+    multi-segment openers (title + body accumulated by the merge policy)
+    keep ``body`` so chapter-content consumers (e.g. summarizer.py's
+    ``chunk_role in ("body", "caption")`` filter) lose no content — merged
+    chunks fall through to the statistical signals below. The chunker's
+    merge path passes the provenance recorded by ``_merge_segments``; the
+    streaming ingestor paths classify raw single segments, so the default
+    (``False``) is correct there. Roles never affect the merge policy, so
+    chunk text streams stay byte-identical (design §7 hard constraint).
+
+    Args:
+        text: Chunk text (already stripped).
+        seg_count: Zero-based position of the chunk's source segment in the
+            segment list (drives the leading-sliver navigation heuristic;
+            NOT a merge count).
+        total_segs: Total number of segments in the list.
+        is_likely_title: Whether the caller's inline heuristic considers the
+            text a title (dotted text never qualifies there).
+        is_merged_segment: Whether the chunk's source segment was produced by
+            merging ≥2 raw extraction segments (``_merge_segments`` joins
+            them with a space). ``True`` disables the dotted→``heading``
+            guard so merged openers keep ``body``.
     """
     if is_likely_title:
         pos = seg_count / max(total_segs, 1)
         if pos < 0.025:
             return "navigation"
-        # Section-number-prefixed headers (e.g. "11.18 Configuring the Autostart
-        # Service") are inline section markers within chapters, not document-level
-        # headings.  Classify as body so the retrieval pipeline can match them
-        # via SEC_HEADER_RE during bucket collection.
-        if re.match(r"\d+\.\d+(\.\d+)?\s", text):
-            return "body"
         return "heading"
 
     pos = seg_count / max(total_segs, 1)
     if pos < 0.025:
         return "navigation"
+
+    if not is_merged_segment and _is_section_numbered(text):
+        return "heading"
 
     total = len(text)
     if total == 0:
@@ -166,6 +194,7 @@ class _Segment(TypedDict):
     chunk_role: NotRequired[str]
     element_type: NotRequired[str]
     label: NotRequired[str]
+    merged: NotRequired[bool]
 
 
 class _Chunk(TypedDict):
@@ -180,8 +209,10 @@ _STRUCTURAL_ROLES: frozenset[ElementTypeLiteral] = frozenset(
 )
 
 
-def _flush_accumulation(text: str, page: int, label: str | None) -> _Segment:
-    segment: _Segment = {"text": text, "page": page}
+def _flush_accumulation(
+    text: str, page: int, label: str | None, merged: bool = False
+) -> _Segment:
+    segment: _Segment = {"text": text, "page": page, "merged": merged}
     if label is not None:
         segment["label"] = label
     return segment
@@ -238,12 +269,18 @@ def _merge_segments(segments: Sequence[Segment]) -> list[_Segment]:
 
     Returns
     -------
-        Merged segment list ready for size-bound chunking.
+        Merged segment list ready for size-bound chunking. Each segment
+        records ``merged`` — whether ≥2 raw segments were joined into it —
+        which :func:`classify_chunk_role` uses to keep merged openers in
+        ``body`` (single-segment gate on the dotted→heading guard).
     """
     merged_segments: list[_Segment] = []
     current_text = ""
     current_page = 0
     current_label: str | None = None
+    # Whether the current accumulation joined ≥2 raw segments (merge
+    # provenance, consumed by classify_chunk_role's single-segment gate).
+    current_merged = False
 
     for _i, segment in enumerate(segments):
         text = segment["text"]
@@ -260,11 +297,16 @@ def _merge_segments(segments: Sequence[Segment]) -> list[_Segment]:
             if labeled_role is not None and labeled_role in _STRUCTURAL_ROLES:
                 if current_text:
                     merged_segments.append(
-                        _flush_accumulation(current_text, current_page, current_label)
+                        _flush_accumulation(
+                            current_text, current_page, current_label, current_merged
+                        )
                     )
-                merged_segments.append({"text": stripped, "page": page, "label": label})
+                merged_segments.append(
+                    {"text": stripped, "page": page, "label": label, "merged": False}
+                )
                 current_text = ""
                 current_label = None
+                current_merged = False
                 continue
 
         is_likely_title = _is_likely_title(stripped)
@@ -274,31 +316,41 @@ def _merge_segments(segments: Sequence[Segment]) -> list[_Segment]:
         # appends via the "if len(current_text) < MIN" branch below).
         if is_likely_title and _is_section_numbered(stripped) and current_text:
             merged_segments.append(
-                _flush_accumulation(current_text, current_page, current_label)
+                _flush_accumulation(
+                    current_text, current_page, current_label, current_merged
+                )
             )
             current_text = stripped
             current_page = page
             current_label = label
+            current_merged = False
             continue
 
         if len(current_text) < DEFAULT_MIN_SEGMENT_SIZE or is_likely_title:
             if current_text:
                 current_text += " " + stripped
+                current_merged = True
             else:
                 current_text = stripped
                 current_label = label
+                current_merged = False
             current_page = page
         else:
             merged_segments.append(
-                _flush_accumulation(current_text, current_page, current_label)
+                _flush_accumulation(
+                    current_text, current_page, current_label, current_merged
+                )
             )
             current_text = stripped
             current_page = page
             current_label = label
+            current_merged = False
 
     if current_text:
         merged_segments.append(
-            _flush_accumulation(current_text, current_page, current_label)
+            _flush_accumulation(
+                current_text, current_page, current_label, current_merged
+            )
         )
 
     return merged_segments
@@ -360,6 +412,7 @@ def chunk_segments(
                             seg_counter,
                             total_segs,
                             is_likely_title_for_seg,
+                            is_merged_segment=segment.get("merged", False),
                         )
                     )
                     chunks.append(
@@ -385,7 +438,11 @@ def chunk_segments(
                     labeled_role
                     if labeled_role is not None
                     else classify_chunk_role(
-                        chunk_text, seg_counter, total_segs, is_likely_title_for_seg
+                        chunk_text,
+                        seg_counter,
+                        total_segs,
+                        is_likely_title_for_seg,
+                        is_merged_segment=segment.get("merged", False),
                     )
                 )
                 chunks.append(

@@ -36,6 +36,8 @@ from secondbrain.utils.tracing import trace_operation
 if TYPE_CHECKING:
     from docling.document_converter import DocumentConverter
 
+    from secondbrain.storage.structure_sqlite import StructureStore
+
 logger = logging.getLogger(__name__)
 
 
@@ -130,6 +132,14 @@ class DocumentIngestor:
         # never convert anything. Config/docling errors therefore surface at
         # first access instead of __init__.
         self._converter: DocumentConverter | None = None
+
+        # Structure persistence (design §6, openspec
+        # add-structure-aware-ingestion): the structure store shares the
+        # conversation SQLite file and is built lazily on first persist, so
+        # construction stays cheap and a broken store can never fail ingest
+        # (a warning is logged instead; see _get_structure_store).
+        self._structure_store: StructureStore | None = None
+        self._structure_store_broken = False
 
     @property
     def converter(self) -> DocumentConverter:
@@ -768,6 +778,175 @@ class DocumentIngestor:
 
         return cores
 
+    def _get_structure_store(self) -> StructureStore | None:
+        """Return the lazily-built structure store, or None when unavailable.
+
+        Shares the conversation SQLite file (``cfg.sqlite_path``) per design
+        §4. Once construction fails the store is marked broken for the
+        ingestor's lifetime — ingest proceeds treeless rather than failing
+        (design §5's failure posture for storage availability).
+
+        Returns
+        -------
+            The cached :class:`StructureStore`, or None when construction
+            keeps failing.
+        """
+        if self._structure_store_broken:
+            return None
+        if self._structure_store is None:
+            from secondbrain.storage.structure_sqlite import StructureStore
+
+            try:
+                self._structure_store = StructureStore()
+            except Exception as e:
+                self._structure_store_broken = True
+                logger.warning(
+                    "Structure store unavailable (%s: %s); ingested documents "
+                    "will have no persisted tree",
+                    type(e).__name__,
+                    e,
+                )
+                return None
+        return self._structure_store
+
+    def _persist_worker_structure(self, result: Mapping[str, Any]) -> None:
+        """Persist one worker's captured structure tree (never raises).
+
+        Called exactly once per file right after the worker future resolves,
+        before the success/skip/failure accounting: a tree is persisted for
+        every outcome, so re-ingesting an already-stored document (or one
+        that fails later in the pipeline) still records its tree — an orphan
+        tree is inert (structure queries only surface documents that also
+        have qdrant points) and the next ingest of the same file overwrites
+        it (save is delete+insert, idempotent).
+
+        Args:
+            result: The worker's return payload; the tree is read from
+                ``result.get("structure")`` (a ``DocumentStructure`` or
+                None).
+        """
+        structure = result.get("structure")
+        if structure is None:
+            return
+        store = self._get_structure_store()
+        if store is None:
+            return
+        try:
+            store.save_structure(structure)
+        except Exception as e:
+            logger.warning(
+                "Failed to persist structure tree for %s: %s: %s",
+                structure.source_file,
+                type(e).__name__,
+                e,
+            )
+
+    def _refresh_structural_payload(
+        self, result: Mapping[str, Any], storage: Any
+    ) -> None:
+        """Refresh structural payload fields on dedup-skipped points (never raises).
+
+        Runs for every worker outcome, right after the tree is persisted
+        (design §6.4): whether or not this file's fresh points were stored,
+        points still missing ``node_id`` — legacy points that dedup skipped —
+        are annotated from the freshly captured tree. A storage without the
+        refresh capability (mocks, ``None`` in tests) is a no-op.
+
+        Args:
+            result: The worker's return payload; the tree is read from
+                ``result.get("structure")``.
+            storage: The vector storage instance used for this ingest (may
+                lack the refresh method).
+        """
+        structure = result.get("structure")
+        if structure is None:
+            return
+        refresh = getattr(storage, "refresh_structural_payload", None)
+        if not callable(refresh):
+            return
+        try:
+            refreshed = refresh(structure.source_file, structure)
+        except Exception as e:
+            logger.warning(
+                "Structural payload refresh failed for %s: %s: %s",
+                structure.source_file,
+                type(e).__name__,
+                e,
+            )
+            return
+        if refreshed:
+            logger.info(
+                "Refreshed structural payload on %d stored points for %s",
+                refreshed,
+                structure.source_file,
+            )
+
+    def _segment_audio_topics(self, result: Mapping[str, Any]) -> None:
+        """Fill audio segment titles via LLM topic segmentation (never raises).
+
+        Design §5: topic segmentation runs in the parent process after the
+        tree is persisted, bounded to ≤20 windows, and gated by the
+        ``audio_topic_segmentation_enabled`` config flag. Only documents
+        whose tree carries audio segment nodes reach the LLM; the produced
+        ``AudioSegment`` rows replace ``structure.audio_segments`` and the
+        tree is re-saved. Any failure (no LLM provider, LLM errors, store
+        errors) degrades to untitled segments — ingest never fails here.
+        Segmentation needs chunk texts, so outcomes without documents
+        (skip/failure) simply leave the tree as persisted.
+        """
+        structure = result.get("structure")
+        if structure is None or not structure.nodes:
+            return
+        if not any(node.kind == "segment" for node in structure.nodes):
+            return
+        cfg = config()
+        if not getattr(cfg, "audio_topic_segmentation_enabled", True):
+            return
+        texts = [
+            str(document.get("chunk_text", ""))
+            for document in result.get("documents", [])
+        ]
+        if not any(texts):
+            return
+        store = self._get_structure_store()
+        if store is None:
+            return
+        try:
+            from secondbrain.rag.providers.factory import LLMProviderFactory
+
+            llm = LLMProviderFactory.create_from_config(cfg)
+        except Exception as e:
+            logger.warning(
+                "LLM provider unavailable for audio topic segmentation (%s: %s)",
+                type(e).__name__,
+                e,
+            )
+            return
+        try:
+            from secondbrain.document.structure_capture import audio_topic_segments
+
+            audio_segments = audio_topic_segments(structure, texts, llm=llm)
+        except Exception as e:
+            logger.warning(
+                "Audio topic segmentation failed for %s: %s: %s",
+                structure.source_file,
+                type(e).__name__,
+                e,
+            )
+            return
+        if not audio_segments:
+            return
+        structure.audio_segments = audio_segments
+        try:
+            store.save_structure(structure)
+        except Exception as e:
+            logger.warning(
+                "Failed to persist audio segment titles for %s: %s: %s",
+                structure.source_file,
+                type(e).__name__,
+                e,
+            )
+
     def _process_parallel_with_progress(
         self,
         files: list[Path],
@@ -967,6 +1146,16 @@ class DocumentIngestor:
                             try:
                                 result = future.result(timeout=300)
                                 self._drain_progress_queue(progress_queue)
+                                # Persist the worker's captured structure tree
+                                # once per file (design §6) — regardless of
+                                # the success/skip/failure outcome below —
+                                # then refresh structural payload fields on
+                                # dedup-skipped points (design §6.4) and fill
+                                # audio segment titles (design §5). Both run
+                                # for every outcome and never raise.
+                                self._persist_worker_structure(result)
+                                self._refresh_structural_payload(result, storage)
+                                self._segment_audio_topics(result)
 
                                 if not result["success"]:
                                     error_msg = result.get("error", "Unknown error")
@@ -1246,8 +1435,30 @@ class DocumentIngestor:
             "skipped": skipped,
         }
 
-    def _extract_text(self, file_path: Path) -> list[dict[str, Any]]:
-        """Extract text content from a file."""
+    def _extract_text(
+        self,
+        file_path: Path,
+        structure_sink: list[Any] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Extract text content from a file.
+
+        Args:
+            file_path: Path to the file to extract text from.
+            structure_sink: Optional list the async ingestor passes so the
+                capture inputs collected while the docling document is alive
+                reach the dispatcher (design §6: the async path self-extracts
+                and never consumes processor worker payloads, so it must
+                capture here). For parseable documents the sink receives the
+                captured heading-structure part
+                (:func:`~secondbrain.document.structure_capture.
+                capture_docling_headings`); for audio files (design §5) it
+                receives the extracted ASR capture shape — the timestamp-
+                bearing texts of the ASR result document — so the ASR
+                document itself is released when this branch returns and the
+                dispatcher's audio branch still captures the tree. The
+                fast-path branch (embedded PDF text layer) leaves the sink
+                empty — no docling document exists to capture from.
+        """
         try:
             from secondbrain.document.fast_text import try_fast_pdf_extraction
 
@@ -1286,6 +1497,37 @@ class DocumentIngestor:
                             if label is not None:
                                 segment["label"] = label
                             segments.append(segment)
+
+                    if structure_sink is not None:
+                        if get_file_type(file_path) == "audio":
+                            # Audio (design §5): the ASR result document
+                            # itself is the structure source — heading parts
+                            # are meaningless for a transcript. Extract the
+                            # timestamp-bearing texts into the lightweight
+                            # shape capture_audio_structure reads while the
+                            # docling document is alive (read → extract →
+                            # unload); the document is released when this
+                            # branch returns and the dispatcher's audio
+                            # branch captures from the shape. Never fails
+                            # the extraction.
+                            from secondbrain.document.processor import (
+                                _asr_capture_shape,
+                            )
+
+                            structure_sink.append(_asr_capture_shape(content))
+                        else:
+                            # Capture the heading part while the docling
+                            # document is alive (design §6); persisted by the
+                            # async ingestor right after this returns.
+                            from secondbrain.document.structure_capture import (
+                                capture_docling_headings,
+                            )
+
+                            structure_part = capture_docling_headings(
+                                content, file_path
+                            )
+                            if structure_part is not None:
+                                structure_sink.append(structure_part)
 
                     if not _segments_have_text(segments):
                         segments = [
