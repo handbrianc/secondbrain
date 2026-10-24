@@ -103,6 +103,8 @@ class _Segment(TypedDict):
     text: str
     page: int
     label: NotRequired[str]
+    t_start: NotRequired[float]
+    t_end: NotRequired[float]
 
 
 # Suffixes whose raw bytes are faithfully readable as UTF-8 text when docling
@@ -209,6 +211,8 @@ def _extend_segments_from_document(content: Any, segments: list[_Segment]) -> No
     """
     if not (hasattr(content, "texts") and content.texts):
         return
+    from secondbrain.document.structure_capture import _item_time_span
+
     for text_item in content.texts:
         if not hasattr(text_item, "text") or not text_item.text:
             continue
@@ -233,6 +237,9 @@ def _extend_segments_from_document(content: Any, segments: list[_Segment]) -> No
         label = docling_item_label(text_item)
         if label is not None:
             segment["label"] = label
+        time_span = _item_time_span(text_item)
+        if time_span is not None:
+            segment["t_start"], segment["t_end"] = time_span
         segments.append(segment)
 
 
@@ -665,6 +672,7 @@ def _extract_chunk_and_embed_file(
     # file — including skip/failure outcomes, so re-ingests of already-stored
     # documents still gain their tree. Workers never open SQLite themselves.
     structure: DocumentStructure | None = None
+    audio_transcript: list[str] = []
     docling_structure_parts: list[DocumentStructure] = []
     # Audio (design §5, openspec add-structure-aware-ingestion): set only on
     # the docling conversion path — the ASR result document is the audio
@@ -853,6 +861,9 @@ def _extract_chunk_and_embed_file(
             docling_doc=asr_shape if is_audio else (docling_structure_parts or None),
             file_type=file_type,
         )
+        audio_transcript = (
+            [segment["text"] for segment in segments] if file_type == "audio" else []
+        )
 
         from secondbrain.document.ingestor._sync import _warn_if_glued_text
 
@@ -885,6 +896,11 @@ def _extract_chunk_and_embed_file(
                         "text_hash": text_hash,
                         "chunk_role": chunk.get("chunk_role", "body"),
                         "element_type": chunk.get("element_type", "body"),
+                        **{
+                            key: chunk[key]
+                            for key in ("t_start", "t_end")
+                            if key in chunk
+                        },
                     }
                 )
 
@@ -916,6 +932,7 @@ def _extract_chunk_and_embed_file(
                     ),
                     "skipped": False,
                     "structure": structure,
+                    "audio_transcript": audio_transcript,
                 }
             # Chunks were extracted but all deduplicated away (whitespace-only
             # chunks, duplicates, or all already stored) — a legitimate skip.
@@ -927,6 +944,7 @@ def _extract_chunk_and_embed_file(
                 "skipped": True,
                 "extracted_chunks": extracted_chunk_count,
                 "structure": structure,
+                "audio_transcript": audio_transcript,
             }
 
         # Structural annotation (design §7, task 8): runs after the dedup and
@@ -1030,6 +1048,7 @@ def _extract_chunk_and_embed_file(
             "error": None,
             "skipped": False,
             "structure": structure,
+            "audio_transcript": audio_transcript,
         }
     except Exception as e:
         if progress_queue is not None:
@@ -1041,4 +1060,5 @@ def _extract_chunk_and_embed_file(
             "documents": [],
             "error": f"{type(e).__name__}: {e}",
             "structure": structure,
+            "audio_transcript": audio_transcript,
         }

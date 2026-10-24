@@ -70,6 +70,12 @@ _OUTPUT_KEYS = (
     "element_type",
     "chunk_role",
     "section_label",
+    "node_id",
+    "chapter_id",
+    "section_id",
+    "heading_path",
+    "t_start",
+    "t_end",
 )
 
 _CONNECTION_TTL = 60.0
@@ -495,6 +501,11 @@ class QdrantVectorStorage:
                 {
                     "page": payload.get("page_number"),
                     "text": payload.get("chunk_text", ""),
+                    **{
+                        key: payload[key]
+                        for key in ("t_start", "t_end")
+                        if key in payload
+                    },
                 }
             )
         annotated = annotate_chunks(chunks, structure)

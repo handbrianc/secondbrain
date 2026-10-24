@@ -155,7 +155,7 @@ secondbrain structure "./report.pdf"
 Documents ingested before the feature carry no tree; the command prints
 re-ingest guidance instead. See the
 [Document Structure guide](document-structure.md) for the full command
-reference and the `--no-skip-existing` backfill semantics.
+reference and the default hash-skipping backfill semantics.
 
 ## Viewing Statistics
 

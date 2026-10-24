@@ -74,7 +74,7 @@ get explicit re-ingest guidance; unknown sources SHALL error.
 
 ### Requirement: Backfill via re-ingest
 
-Re-ingesting an ingested file (`ingest --no-skip-existing`) SHALL recapture
+Re-ingesting an ingested file (`ingest <path>`, with default hash skipping) SHALL recapture
 and persist its tree and refresh structural payload fields on already-stored
 points without regenerating embeddings for chunks whose text is unchanged
 (text-hash dedup preserved).

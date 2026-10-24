@@ -265,9 +265,9 @@ on treeless fixtures.
 
 ## 10. Backfill
 
-`secondbrain ingest <path> --no-skip-existing`: re-parse (docling), capture +
-persist tree, re-chunk (identical text → same hashes), annotate, upsert fresh
-points with full payload, refresh `is_empty` legacy points. Embedding
+`secondbrain ingest <path>` with default hash skipping: re-parse (docling), capture +
+persist tree, re-chunk (identical text → same hashes), annotate, upsert only new
+chunks with full payload, refresh `is_empty` legacy points. Embedding
 generation is skipped for unchanged hashes (existing dedup). Docs state the
 per-document cost: parse + (only changed chunks) embeddings + one batched
 payload pass.

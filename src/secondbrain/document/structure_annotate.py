@@ -25,7 +25,8 @@ Matching model
   node. Range containment is decided on the chunk's position: ``page`` for
   page-based trees, the chunk dict's optional ``t_start``/``t_end`` keys for
   audio (time-based) trees. A chunk with no usable position (``page`` < 1
-  and no time keys) is left un-annotated so it stays refreshable.
+  and no time keys), or ambiguous ownership across same-page branches, is
+  left un-annotated so it stays refreshable.
 * **Payload keys** — ``node_id``/``heading_path``/``chapter_id`` are always
   added once a node is found; ``section_id``/``section_label`` only when the
   target has a numbered non-part ancestor-or-self; ``t_start``/``t_end``
@@ -294,9 +295,16 @@ def _annotate_chunk(
                 key=lambda i: (index.sorted_nodes[i].level, i),
             )
     if target_index is None:
-        # Inherit the deepest containing node: nested ranges make it the
-        # highest-level (last-pushed) candidate.
         target_index = max(candidates, key=lambda i: (index.sorted_nodes[i].level, i))
+        if not index.time_mode:
+            # Page ranges cannot locate unanchored prose relative to two
+            # same-page sibling headings. Do not invent reliable ownership.
+            chain_ids = {
+                node.node_id
+                for node in _walk_chain(index.sorted_nodes[target_index], index)
+            }
+            if any(index.sorted_nodes[i].node_id not in chain_ids for i in candidates):
+                return out
 
     target = index.sorted_nodes[target_index]
     _apply_annotation(out, target, index)
@@ -322,9 +330,9 @@ def _apply_annotation(
         out["section_id"] = section.number
         out["section_label"] = section.title
     if target.t_start is not None:
-        out["t_start"] = target.t_start
+        out.setdefault("t_start", target.t_start)
     if target.t_end is not None:
-        out["t_end"] = target.t_end
+        out.setdefault("t_end", target.t_end)
 
 
 def _walk_chain(target: StructureNode, index: _TreeIndex) -> list[StructureNode]:

@@ -36,7 +36,11 @@ from secondbrain.utils.tracing import trace_operation
 if TYPE_CHECKING:
     from docling.document_converter import DocumentConverter
 
-    from secondbrain.storage.structure_sqlite import StructureStore
+    from secondbrain.storage.structure_sqlite import (
+        AudioSegment,
+        DocumentStructure,
+        StructureStore,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -341,6 +345,11 @@ class DocumentIngestor:
                         "text_hash": text_hash,
                         "chunk_role": dedup_role,
                         "element_type": dedup_role,
+                        **{
+                            key: segment[key]
+                            for key in ("t_start", "t_end")
+                            if key in segment
+                        },
                     }
                 )
 
@@ -471,6 +480,11 @@ class DocumentIngestor:
                 "embedding": embedding,
                 "file_type": file_type,
                 "ingested_at": ingested_at,
+                **{
+                    key: chunk_item[key]
+                    for key in ("t_start", "t_end")
+                    if key in chunk_item
+                },
             }
             docs_to_store.append(doc)
             page_pos += 1
@@ -603,6 +617,11 @@ class DocumentIngestor:
                     "text_hash": text_hash,
                     "chunk_role": chunk_role,
                     "element_type": chunk_role,
+                    **{
+                        key: segment[key]
+                        for key in ("t_start", "t_end")
+                        if key in segment
+                    },
                 }
             )
 
@@ -719,6 +738,11 @@ class DocumentIngestor:
                 "embedding": embedding,
                 "file_type": file_type,
                 "ingested_at": ingested_at,
+                **{
+                    key: chunk_item[key]
+                    for key in ("t_start", "t_end")
+                    if key in chunk_item
+                },
             }
             docs_to_store.append(doc)
             page_pos += 1
@@ -832,6 +856,7 @@ class DocumentIngestor:
         if store is None:
             return
         try:
+            self._preserve_audio_topics(structure, store)
             store.save_structure(structure)
         except Exception as e:
             logger.warning(
@@ -890,9 +915,8 @@ class DocumentIngestor:
         whose tree carries audio segment nodes reach the LLM; the produced
         ``AudioSegment`` rows replace ``structure.audio_segments`` and the
         tree is re-saved. Any failure (no LLM provider, LLM errors, store
-        errors) degrades to untitled segments — ingest never fails here.
-        Segmentation needs chunk texts, so outcomes without documents
-        (skip/failure) simply leave the tree as persisted.
+        errors) preserves compatible prior titles — ingest never fails here.
+        The full extracted transcript is independent of embedding deduplication.
         """
         structure = result.get("structure")
         if structure is None or not structure.nodes:
@@ -902,10 +926,12 @@ class DocumentIngestor:
         cfg = config()
         if not getattr(cfg, "audio_topic_segmentation_enabled", True):
             return
-        texts = [
-            str(document.get("chunk_text", ""))
-            for document in result.get("documents", [])
-        ]
+        texts = result.get("audio_transcript")
+        if texts is None:
+            texts = [
+                str(document.get("chunk_text", ""))
+                for document in result.get("documents", [])
+            ]
         if not any(texts):
             return
         store = self._get_structure_store()
@@ -936,7 +962,7 @@ class DocumentIngestor:
             return
         if not audio_segments:
             return
-        structure.audio_segments = audio_segments
+        self._replace_audio_topics(structure, audio_segments)
         try:
             store.save_structure(structure)
         except Exception as e:
@@ -946,6 +972,60 @@ class DocumentIngestor:
                 type(e).__name__,
                 e,
             )
+
+    @staticmethod
+    def _preserve_audio_topics(
+        structure: DocumentStructure, store: StructureStore
+    ) -> None:
+        """Retain prior topics only when the captured audio segments match."""
+        if structure.audio_segments or not any(
+            node.kind == "segment" for node in structure.nodes
+        ):
+            return
+        load_tree = getattr(store, "load_tree", None)
+        if not callable(load_tree):
+            return
+        try:
+            previous = load_tree(structure.source_file)
+        except Exception:
+            logger.warning(
+                "Could not load prior audio topics for %s",
+                structure.source_file,
+                exc_info=True,
+            )
+            return
+        if previous is None:
+            return
+        current_spans = [
+            (node.node_id, node.t_start, node.t_end)
+            for node in structure.nodes
+            if node.kind == "segment"
+        ]
+        previous_spans = [
+            (node.node_id, node.t_start, node.t_end)
+            for node in previous.nodes
+            if node.kind == "segment"
+        ]
+        current_titles = [node.title for node in structure.nodes]
+        previous_titles = [node.title for node in previous.nodes]
+        if current_spans == previous_spans and current_titles == previous_titles:
+            structure.audio_segments = list(previous.audio_segments)
+
+    @staticmethod
+    def _replace_audio_topics(
+        structure: DocumentStructure, segments: list[AudioSegment]
+    ) -> None:
+        """Keep compatible titles when an individual topic request failed."""
+        previous = {
+            (segment.seg_id, segment.t_start, segment.t_end): segment.title
+            for segment in structure.audio_segments
+        }
+        for segment in segments:
+            if not segment.title:
+                segment.title = previous.get(
+                    (segment.seg_id, segment.t_start, segment.t_end)
+                )
+        structure.audio_segments = segments
 
     def _process_parallel_with_progress(
         self,
@@ -1472,6 +1552,7 @@ class DocumentIngestor:
                         _fallback_text_or_raise,
                         _segments_have_text,
                     )
+                    from secondbrain.document.structure_capture import _item_time_span
 
                     converter = get_converter_for_path(file_path)
                     result = converter.convert(file_path)
@@ -1496,6 +1577,9 @@ class DocumentIngestor:
                             label = docling_item_label(text_item)
                             if label is not None:
                                 segment["label"] = label
+                            time_span = _item_time_span(text_item)
+                            if time_span is not None:
+                                segment["t_start"], segment["t_end"] = time_span
                             segments.append(segment)
 
                     if structure_sink is not None:
@@ -1595,7 +1679,17 @@ class DocumentIngestor:
                     chunk_end = last_space
                 chunk_text = text[start:chunk_end].strip()
                 if chunk_text:
-                    chunks.append({"text": chunk_text, "page": page})
+                    chunks.append(
+                        {
+                            "text": chunk_text,
+                            "page": page,
+                            **{
+                                key: segment[key]
+                                for key in ("t_start", "t_end")
+                                if key in segment
+                            },
+                        }
+                    )
 
                 new_start = chunk_end - self.chunk_overlap
                 if new_start >= len(text) or new_start <= start:

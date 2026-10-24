@@ -63,7 +63,7 @@ machinery is retained as fallback for documents without a stored tree.
   tree (chapters/sections with page ranges and printed labels), page-label
   table, and audio segments; documents without a stored tree get explicit
   re-ingest guidance.
-- **Backfill:** re-ingest (`ingest --no-skip-existing`) is the backfill
+- **Backfill:** re-ingest (`ingest <path>`, with default hash skipping) is the backfill
   mechanism — it captures the tree and refreshes structural payload fields on
   existing points; no separate migration command.
 

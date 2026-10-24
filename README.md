@@ -86,7 +86,7 @@ secondbrain delete --all --yes                # skip confirmation
 secondbrain structure "./report.pdf"          # tree + page labels + audio segments
 secondbrain structure "./report.pdf" --json   # raw structure dump
 # Documents ingested before structure capture get re-ingest guidance:
-secondbrain ingest "./report.pdf" --no-skip-existing   # backfill the tree
+secondbrain ingest "./report.pdf"                    # backfill the tree
 
 # Show database statistics
 secondbrain status

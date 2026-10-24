@@ -163,6 +163,79 @@ def chunk(text: str, page: int = 1, **extra: Any) -> dict[str, Any]:
     return base
 
 
+class TestSharedPageOwnership:
+    @staticmethod
+    def _tree() -> DocumentStructure:
+        return DocumentStructure(
+            source_file="/books/shared-page.pdf",
+            nodes=[
+                node(
+                    "ch05",
+                    kind="chapter",
+                    level=1,
+                    number="5",
+                    title="Installing",
+                    page_start=5,
+                    page_end=11,
+                ),
+                node(
+                    "ch06",
+                    kind="chapter",
+                    level=1,
+                    number="6",
+                    title="Operations",
+                    page_start=11,
+                    page_end=20,
+                ),
+                node(
+                    "sec06.01",
+                    parent="ch06",
+                    number="6.1",
+                    title="Maintenance",
+                    page_start=11,
+                    page_end=12,
+                ),
+            ],
+        )
+
+    def test_shared_page_body_is_not_assigned_to_later_branch(self) -> None:
+        chunks = [
+            chunk("closing prose from the installation chapter", page=11),
+            chunk("Chapter 6 Operations", page=11),
+            chunk("unanchored prose after the next chapter heading", page=11),
+        ]
+
+        outputs = annotate_chunks(chunks, self._tree())
+
+        assert "node_id" not in outputs[0]
+        assert outputs[1]["node_id"] == "ch06"
+        assert "node_id" not in outputs[2]
+        assert "node_id" not in chunks[1]
+
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [
+            ("Chapter 5 Installing", "ch05"),
+            ("Chapter 6 Operations", "ch06"),
+            ("6.1 Maintenance", "sec06.01"),
+        ],
+    )
+    def test_shared_page_explicit_anchor_stays_authoritative(
+        self, text: str, expected: str
+    ) -> None:
+        [out] = annotate_chunks([chunk(text, page=11)], self._tree())
+
+        assert out["node_id"] == expected
+
+    def test_nested_containment_outside_shared_page_still_inherits(self) -> None:
+        [out] = annotate_chunks(
+            [chunk("ordinary maintenance prose", page=12)], self._tree()
+        )
+
+        assert out["node_id"] == "sec06.01"
+        assert out["chapter_id"] == "6"
+
+
 class TestAnchoring:
     """Chunks whose text starts with a node's heading forms anchor to it."""
 
@@ -309,13 +382,14 @@ class TestAudioTimeMode:
         ]
         outs = annotate_chunks(chunks, audio_tree())
         assert outs[0]["node_id"] == "seg01"
-        assert outs[0]["t_start"] == 0.0
-        assert outs[0]["t_end"] == 30.0
+        assert outs[0]["t_start"] == 1.0
+        assert outs[0]["t_end"] == 2.0
         assert outs[1]["node_id"] == "seg02"
+        assert (outs[1]["t_start"], outs[1]["t_end"]) == (40.0, 41.0)
 
     def test_chunk_without_time_keys_stays_unannotated(self) -> None:
-        # Real ingest chunks carry no t keys today: without a usable position
-        # the chunk stays refreshable instead of inheriting a wrong segment.
+        # Without a usable position, the chunk stays refreshable instead of
+        # inheriting a wrong segment.
         [out] = annotate_chunks([chunk("welcome everyone", page=0)], audio_tree())
         assert "node_id" not in out
 

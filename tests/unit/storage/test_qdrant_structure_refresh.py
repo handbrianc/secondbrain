@@ -131,6 +131,53 @@ class TestIndexProvisioning:
 
 
 class TestRefreshStructuralPayload:
+    def test_audio_refresh_uses_and_preserves_chunk_time_bounds(
+        self, storage: QdrantVectorStorage
+    ) -> None:
+        tree = DocumentStructure(
+            source_file=SOURCE,
+            nodes=[
+                StructureNode(
+                    node_id="seg01",
+                    kind="segment",
+                    level=1,
+                    title="Opening",
+                    heading_path="Segment 01",
+                    t_start=0.0,
+                    t_end=30.0,
+                ),
+                StructureNode(
+                    node_id="seg02",
+                    kind="segment",
+                    level=1,
+                    title="Discussion",
+                    heading_path="Segment 02",
+                    t_start=30.0,
+                    t_end=60.0,
+                ),
+            ],
+            sources={"audio": True},
+        )
+        storage.store_batch(
+            [
+                {
+                    **_legacy_doc("audio", 1, "discussion transcript"),
+                    "t_start": 35.0,
+                    "t_end": 45.0,
+                }
+            ]
+        )
+
+        assert storage.refresh_structural_payload(SOURCE, tree) == 1
+        payload = _payloads(storage)["audio"]
+        assert payload["node_id"] == "seg02"
+        assert payload["chapter_id"] == "seg02"
+        assert payload["heading_path"] == "Segment 02"
+        assert (payload["t_start"], payload["t_end"]) == (35.0, 45.0)
+        chunk = storage._payload_to_chunk(payload)
+        assert chunk["node_id"] == "seg02"
+        assert (chunk["t_start"], chunk["t_end"]) == (35.0, 45.0)
+
     def test_annotates_legacy_points_and_skips_annotated_ones(
         self, storage: QdrantVectorStorage
     ) -> None:

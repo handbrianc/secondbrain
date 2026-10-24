@@ -236,6 +236,27 @@ class TestResolveSourceFile:
 
         assert resolved.source_file == "/a/report.pdf"
 
+    @pytest.mark.parametrize("doc", ["/a/report.pdf", "a/report.pdf"])
+    def test_stronger_treeless_match_wins(self, structure_db, doc) -> None:
+        structure_db.save_structure(_sample_structure("/b/report.pdf"))
+
+        resolved = resolve_source_file(
+            structure_db, doc, ["/a/report.pdf", "/b/report.pdf"]
+        )
+
+        assert resolved.source_file == "/a/report.pdf"
+
+    def test_exact_treeless_key_wins_over_normalized_tree(
+        self, structure_db, tmp_path
+    ) -> None:
+        normalized = str(tmp_path / "report.pdf")
+        verbatim = str(tmp_path) + "/./report.pdf"
+        structure_db.save_structure(_sample_structure(normalized))
+
+        resolved = resolve_source_file(structure_db, verbatim, [verbatim, normalized])
+
+        assert resolved.source_file == verbatim
+
     def test_unavailable_enumeration_means_unknown(self, structure_db) -> None:
         """With enumeration unavailable, only exact/variant hits resolve."""
         structure_db.save_structure(_sample_structure(DOC_KEY))
@@ -289,7 +310,7 @@ class TestTreelessGuidance:
         assert "No stored structure tree" in result.output
         assert "secondbrain ingest" in result.output
         assert DOC_KEY in result.output
-        assert "--no-skip-existing" in result.output
+        assert "--no-skip-existing" not in result.output
 
     def test_json_flag_on_treeless_document_still_guides(
         self, structure_db, monkeypatch
@@ -429,7 +450,8 @@ class TestDocsCoverage:
             encoding="utf-8"
         )
         assert "secondbrain structure" in guide
-        assert "--no-skip-existing" in guide
+        assert "secondbrain ingest <path>" in guide
+        assert "--no-skip-existing" not in guide
 
         mkdocs = (REPO_ROOT / "mkdocs.yml").read_text(encoding="utf-8")
         assert "user-guide/document-structure.md" in mkdocs

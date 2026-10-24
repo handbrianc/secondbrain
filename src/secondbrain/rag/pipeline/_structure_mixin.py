@@ -2280,7 +2280,8 @@ class _StructureMixin(_RAGPipelineState):
         Ranges are the node's inclusive ``page_start``/``page_end``; a node
         without a usable page range gets the legacy ``(0, -1)`` sentinel so
         the existing empty-bucket placeholder note speaks for it.  The first
-        (page-ordered) node wins when numbers repeat.
+        repeated chapter number makes the map ambiguous and triggers legacy
+        fallback rather than silently dropping anthology chapters.
 
         Args:
             nodes: The tree's nodes, in stored (page-ordered) sequence.
@@ -2298,12 +2299,19 @@ class _StructureMixin(_RAGPipelineState):
         for node in nodes:
             if node.kind not in ("chapter", "section"):
                 continue
+            if node.kind == "section" and node.parent_id is not None:
+                continue
             number = (node.number or "").strip()
             if not re.fullmatch(r"\d+", number):
                 continue
             ch_num = int(number)
             if ch_num in ranges:
-                continue
+                logger.info(
+                    "Structure tree has repeated chapter number %s; "
+                    "using the legacy chapter scan",
+                    ch_num,
+                )
+                return {}, {}
             start, end = node.page_start, node.page_end
             if start is not None and end is not None and end >= start:
                 ranges[ch_num] = (start, end)
@@ -2317,6 +2325,9 @@ class _StructureMixin(_RAGPipelineState):
         storage: Any,
         source_file: str,
         chapter_ranges: dict[int, tuple[int, int]],
+        *,
+        nodes: list[StructureNode] | None = None,
+        section_target: str | None = None,
     ) -> dict[int, list[dict[str, Any]]] | None:
         """Collect per-chapter body chunks via the existing qdrant API.
 
@@ -2334,18 +2345,72 @@ class _StructureMixin(_RAGPipelineState):
             storage: The searcher's vector storage.
             source_file: Exact document key for the equality filter.
             chapter_ranges: Chapter number to inclusive page range.
+            nodes: Tree nodes used to exclude annotated chunks owned by
+                neighboring chapters on shared boundary pages.
+            section_target: Exact dotted target, including its descendants.
 
         Returns
         -------
             Chapter number to bucket (possibly empty), or ``None`` when the
             storage has no ``find_chunks`` API (legacy doubles and older
-            stores) — the caller then falls back to the legacy path.
+            stores), or chunks on overlapping node pages lack reliable
+            ownership — the caller then falls back to the legacy path.
         """
         finder = getattr(storage, "find_chunks", None)
         if not callable(finder):
             return None
+        by_id = {node.node_id: node for node in nodes or []}
+        ancestors: dict[str, set[str]] = {}
+        roots: dict[str, StructureNode] = {}
+        for node in by_id.values():
+            cursor = node
+            chain: set[str] = set()
+            while cursor.node_id not in chain:
+                chain.add(cursor.node_id)
+                if cursor.parent_id is None or cursor.parent_id not in by_id:
+                    break
+                cursor = by_id[cursor.parent_id]
+            ancestors[node.node_id] = chain
+            roots[node.node_id] = cursor
+        targets = {
+            int(node.number): node
+            for node in by_id.values()
+            if node.number is not None
+            and re.fullmatch(r"\d+", node.number.strip())
+            and (
+                node.kind == "chapter"
+                or (node.kind == "section" and node.parent_id is None)
+            )
+        }
+        section_node = next(
+            (
+                node
+                for node in by_id.values()
+                if section_target
+                and node.number == section_target
+                and node.kind in ("section", "subsection")
+            ),
+            None,
+        )
         buckets: dict[int, list[dict[str, Any]]] = {}
         for ch_num, (start_pg, end_pg) in chapter_ranges.items():
+            target = section_node if section_target else targets.get(ch_num)
+            ambiguous_pages: set[int] = set()
+            if target is not None:
+                for node in by_id.values():
+                    if (
+                        target.node_id in ancestors[node.node_id]
+                        or node.node_id in ancestors[target.node_id]
+                        or node.page_start is None
+                        or node.page_end is None
+                    ):
+                        continue
+                    ambiguous_pages.update(
+                        range(
+                            max(start_pg, node.page_start),
+                            min(end_pg, node.page_end) + 1,
+                        )
+                    )
             bucket: list[dict[str, Any]] = []
             if end_pg >= start_pg:
                 found = finder(
@@ -2355,6 +2420,43 @@ class _StructureMixin(_RAGPipelineState):
                 for chunk in cast(list[dict[str, Any]], list(found)):
                     if chunk.get("chunk_role") != "body":
                         continue
+                    if target is not None:
+                        reliable_owner = False
+                        node_id = chunk.get("node_id")
+                        if node_id in ancestors:
+                            if target.node_id not in ancestors[node_id]:
+                                continue
+                            reliable_owner = True
+                        else:
+                            root = roots[target.node_id]
+                            chapter_id = chunk.get("chapter_id")
+                            if chapter_id and chapter_id != (
+                                root.number or root.node_id
+                            ):
+                                continue
+                            reliable_owner = bool(
+                                chapter_id and root.node_id == target.node_id
+                            )
+                            section_id = chunk.get("section_id")
+                            if (
+                                section_target
+                                and section_id
+                                and section_id != section_target
+                                and not str(section_id).startswith(section_target + ".")
+                            ):
+                                continue
+                            if section_target and section_id:
+                                reliable_owner = True
+                        if (
+                            chunk.get("page_number") in ambiguous_pages
+                            and not reliable_owner
+                        ):
+                            logger.info(
+                                "Shared-page chunks for %s lack reliable structural "
+                                "ownership; using the legacy chapter scan",
+                                source_file,
+                            )
+                            return None
                     chunk["score"] = 0.5
                     bucket.append(chunk)
                 bucket.sort(

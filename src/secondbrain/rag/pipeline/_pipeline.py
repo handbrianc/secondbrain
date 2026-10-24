@@ -130,20 +130,7 @@ class RAGPipeline(
         Returns:
             dict with 'answer', 'query', 'sources' (if show_sources).
         """
-        # 1. Probe document structure for TOC/chapter chunks via chunk_role
-        structure_chunks = self._probe_document_structure(
-            top_k=400,
-            source_filter=source_filter,
-        )
-        if not structure_chunks:
-            # Fall back to generic one-shot if no structure found
-            return self._generic_one_shot(
-                query,
-                top_k,
-                show_sources,
-                source_filter=source_filter,
-            )
-
+        self._structure_source = None
         intent_decision = self._intent_parser.parse(query)
 
         # When enumerating a single chapter, boost top_k so the bucket
@@ -176,6 +163,7 @@ class RAGPipeline(
                 enum_target = sec_m.group(1)
                 raw_section_target = enum_target  # preserve before truncation
         if enum_target and "." in enum_target:
+            raw_section_target = enum_target
             enum_target = enum_target.split(".")[0]
         # Also catch broad-coverage queries with section numbers like
         # "summarize section 11.33" — route through chapter enumeration
@@ -185,11 +173,61 @@ class RAGPipeline(
             QueryIntent.BROAD_COVERAGE,
             QueryIntent.SECTION_ENUMERATE,
         )
-        if has_section_target or intent_decision.intent in (
+        structural_query = has_section_target or intent_decision.intent in (
             QueryIntent.CHAPTER_ENUMERATE,
             QueryIntent.SECTION_ENUMERATE,
             QueryIntent.BROAD_COVERAGE,
-        ):
+        )
+        if structural_query and source_filter:
+            tree_result = self._tree_chapter_query(
+                query,
+                source_filter,
+                enum_target=enum_target,
+                raw_section_target=raw_section_target,
+                has_section_target=has_section_target,
+                is_multi_chapter=(
+                    intent_decision.target is None and not has_section_target
+                ),
+                top_k=top_k,
+                show_sources=show_sources,
+            )
+            if tree_result is not None:
+                return tree_result
+
+        # Treeless documents retain the legacy probe and roster derivation.
+        structure_chunks = self._probe_document_structure(
+            top_k=400,
+            source_filter=source_filter,
+        )
+        if not structure_chunks:
+            return self._generic_one_shot(
+                query, top_k, show_sources, source_filter=source_filter
+            )
+
+        if structural_query:
+            if not source_filter:
+                try:
+                    tree_src = max(
+                        {chunk["source_file"] for chunk in structure_chunks},
+                        key=lambda s: self._searcher.storage.count_chunks(s, "body"),
+                    )
+                except Exception:
+                    tree_src = None
+                if tree_src:
+                    tree_result = self._tree_chapter_query(
+                        query,
+                        tree_src,
+                        enum_target=enum_target,
+                        raw_section_target=raw_section_target,
+                        has_section_target=has_section_target,
+                        is_multi_chapter=(
+                            intent_decision.target is None and not has_section_target
+                        ),
+                        top_k=top_k,
+                        show_sources=show_sources,
+                    )
+                    if tree_result is not None:
+                        return tree_result
             chapters_to_cover, good_title_nums, appendix_entries = (
                 self._derive_chapter_numbers(structure_chunks)
             )
@@ -230,31 +268,6 @@ class RAGPipeline(
                     return self._generic_one_shot(
                         query, top_k, show_sources, source_filter=source_filter
                     )
-
-                # Structure-tree branch (add-structure-aware-ingestion): a
-                # stored capture tree for ``src`` governs the chapter map
-                # outright — node page ranges replace the regex-derived ones,
-                # and the anthology detector plus chapter-range agreement
-                # gate never run (they keep governing the treeless legacy
-                # path below).  Anything but a tree with >=1 chapter/section
-                # node returns None here — no store, store or load errors,
-                # treeless document, zero structural nodes, or a storage
-                # without the page-list find_chunks API — and every legacy
-                # tier continues unchanged.
-                tree_result = self._tree_chapter_query(
-                    query,
-                    src,
-                    enum_target=enum_target,
-                    raw_section_target=raw_section_target,
-                    has_section_target=has_section_target,
-                    is_multi_chapter=(
-                        intent_decision.target is None and not has_section_target
-                    ),
-                    top_k=top_k,
-                    show_sources=show_sources,
-                )
-                if tree_result is not None:
-                    return tree_result
 
                 # Pre-populate chapter_first_pg from reliable CHAPTER_N_RE titles
                 # (e.g. "Chapter 5 Importing...") so SEC_HEADER_RE doesn't overwrite
@@ -1830,19 +1843,39 @@ class RAGPipeline(
         tree = self._load_document_tree(src)
         if tree is None:
             return None
-        all_ranges, all_titles = self._tree_chapter_map(tree.nodes)
-        if not all_ranges:
-            logger.info(
-                "Structure tree for %s has no chapter/section nodes; "
-                "using the legacy chapter scan",
-                src,
-            )
-            return None
+        all_ranges: dict[int, tuple[int, int]] = {}
+        all_titles: dict[int, str] = {}
+        if not raw_section_target:
+            all_ranges, all_titles = self._tree_chapter_map(tree.nodes)
+            if not all_ranges:
+                logger.info(
+                    "Structure tree for %s has no chapter/section nodes; "
+                    "using the legacy chapter scan",
+                    src,
+                )
+                return None
 
-        # A targeted query ("chapter 6", "section 6.2") narrows the map to
-        # that chapter, mirroring filter_chapters_by_target on the legacy
-        # roster; a chapter the tree does not carry falls back to legacy.
-        if enum_target is not None:
+        # Dotted targets use the exact section, not its enclosing chapter.
+        if raw_section_target:
+            section_nodes = [
+                node
+                for node in tree.nodes
+                if node.kind in ("section", "subsection")
+                and node.number == raw_section_target
+            ]
+            if len(section_nodes) != 1:
+                return None
+            section_node = section_nodes[0]
+            target_num = int(raw_section_target.split(".")[0])
+            start, end = section_node.page_start, section_node.page_end
+            chapter_ranges_: dict[int, tuple[int, int]] = {
+                target_num: (
+                    (start, end)
+                    if start is not None and end is not None and end >= start
+                    else (0, -1)
+                )
+            }
+        elif enum_target is not None:
             try:
                 target_num = int(enum_target)
             except ValueError:
@@ -1855,21 +1888,22 @@ class RAGPipeline(
                     enum_target,
                 )
                 return None
-            chapter_ranges_: dict[int, tuple[int, int]] = {
-                target_num: all_ranges[target_num]
-            }
+            chapter_ranges_ = {target_num: all_ranges[target_num]}
         else:
             chapter_ranges_ = dict(all_ranges)
         chapter_keys = sorted(chapter_ranges_)
 
         chapter_buckets = self._tree_chapter_buckets(
-            self._searcher.storage, src, chapter_ranges_
+            self._searcher.storage,
+            src,
+            chapter_ranges_,
+            nodes=tree.nodes,
+            section_target=raw_section_target,
         )
         if chapter_buckets is None:
             logger.info(
-                "Storage lacks the page-list find_chunks API required for "
-                "tree-governed buckets; using the legacy chapter scan "
-                "for %s",
+                "Tree-governed buckets unavailable or shared-page ownership "
+                "is ambiguous; using the legacy chapter scan for %s",
                 src,
             )
             return None
@@ -1884,6 +1918,8 @@ class RAGPipeline(
         logger.debug("Chapter page ranges for %s: %s", src, chapter_ranges_)
 
         ch_titles = {ch: all_titles.get(ch, "") for ch in chapter_keys}
+        if raw_section_target:
+            ch_titles[target_num] = section_node.title
 
         # Merge buckets in round-robin order, deduped by text-hash prefix —
         # the legacy bucket-merge shape the summarizers consume.
@@ -1927,12 +1963,15 @@ class RAGPipeline(
             pg_start, pg_end = chapter_ranges_[ch_num]
             title = self._display_chapter_title(ch_titles.get(ch_num, ""))
             pg_note = "" if pg_end < pg_start else f" (approx pages {pg_start}+)"
+            label = (
+                f"Section {raw_section_target}"
+                if raw_section_target
+                else f"Chapter {ch_num}"
+            )
             if title:
-                chapter_roster_lines.append(f"Chapter {ch_num} — {title}{pg_note}")
+                chapter_roster_lines.append(f"{label} — {title}{pg_note}")
             else:
-                chapter_roster_lines.append(
-                    f"Chapter {ch_num} — No official title{pg_note}"
-                )
+                chapter_roster_lines.append(f"{label} — No official title{pg_note}")
         chapter_roster = "\n".join(chapter_roster_lines) + "\n"
         llm_fallback_roster = chapter_roster
 
@@ -1942,8 +1981,8 @@ class RAGPipeline(
         if has_section_target and raw_section_target:
             section_prompt = (
                 f"The user asked for a summary of section {raw_section_target}. "
-                f"Below is the content of chapter {enum_target}, which contains "
-                f"section {raw_section_target}. Provide a detailed, focused summary "
+                f"Below is the content of section {raw_section_target}. "
+                f"Provide a detailed, focused summary "
                 f"of section {raw_section_target} specifically. Include its key "
                 f"topics, instructions, and any important details.\n"
                 + "=== BODY CONTENT ===\n"

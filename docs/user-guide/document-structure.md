@@ -63,19 +63,19 @@ the re-ingest command instead of failing:
 ```text
 No stored structure tree for ./report.pdf
 Re-ingest it to capture the structure tree:
-  secondbrain ingest ./report.pdf --no-skip-existing
+  secondbrain ingest ./report.pdf
 ```
 
 ## Backfilling Structure
 
-`secondbrain ingest <path> --no-skip-existing` is the backfill mechanism —
+`secondbrain ingest <path>` (with default hash skipping enabled) is the backfill mechanism —
 there is no separate migration command. Re-ingesting an already-stored
 document:
 
 1. Re-parses it and captures + persists the structure tree.
 2. Re-chunks it; unchanged text produces identical chunk hashes.
-3. Annotates the chunks with the structural fields and upserts fresh points
-   with the full payload.
+3. Annotates the chunks with the structural fields and embeds/stores only
+   chunks whose hashes are not already stored.
 4. Refreshes the structural payload fields on already-stored points that
    were previously dedup-skipped.
 

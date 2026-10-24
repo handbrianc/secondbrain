@@ -28,6 +28,7 @@ from typing import Any, cast
 
 import pytest
 
+from secondbrain.document.structure_annotate import annotate_chunks
 from secondbrain.rag.pipeline import RAGPipeline
 from secondbrain.storage.structure_sqlite import (
     DocumentStructure,
@@ -182,6 +183,7 @@ def _synthetic_chunks(source_file: str) -> list[dict[str, Any]]:
         text: str,
         role: str = "body",
         element: str = "paragraph",
+        owner: int | None = None,
     ) -> None:
         pos = pos_by_page.get(page, 0)
         pos_by_page[page] = pos + 1
@@ -196,16 +198,23 @@ def _synthetic_chunks(source_file: str) -> list[dict[str, Any]]:
                 "chunk_role": role,
             }
         )
+        if owner is not None:
+            chunks[-1].update(chapter_id=str(owner), node_id=f"ch-{owner}")
 
     for ch, (start, end) in _CHAPTER_PLAN.items():
         for page in range(start, end + 1):
             # Opener-style text: the legacy roster regex needs "Chapter N"
             # followed by a capitalized title run to produce a roster entry,
             # which is what keeps the flow reaching the tree seam.
-            add(page, f"Chapter {ch} Topic {ch} Overview")
-            add(page, f"Chapter {ch} continues with detail {ch} on page {page}.")
+            add(page, f"Chapter {ch} Topic {ch} Overview", owner=ch)
+            add(
+                page,
+                f"Chapter {ch} continues with detail {ch} on page {page}.",
+                owner=ch,
+            )
     # Section 5.2's closing text on the shared page 11 (chapter 6's opener).
-    add(11, "Section 5.2 closing guidance carried over from chapter 5.")
+    add(11, "Section 5.2 closing guidance carried over from chapter 5.", owner=5)
+    chunks[-1].update(node_id="sec-5.2", section_id="5.2")
     # Non-body noise inside chapter 6's range.
     add(12, "Figure 6-A: retention windows.", role="caption", element="caption")
     add(12, "Back to table of contents", role="navigation", element="navigation")
@@ -363,18 +372,15 @@ def _expected_bucket_pages(
     chunks: list[dict[str, Any]],
 ) -> dict[int, list[int]]:
     """Page lists the synthetic buckets must contain (body pages in range)."""
-    body_by_page: dict[int, int] = {}
-    for chunk in chunks:
-        if chunk.get("chunk_role") == "body":
-            page = chunk.get("page_number") or 0
-            body_by_page[page] = body_by_page.get(page, 0) + 1
     expected: dict[int, list[int]] = {}
     for ch, (start, end) in _CHAPTER_PLAN.items():
-        expected[ch] = [
-            page
-            for page in range(start, end + 1)
-            for _ in range(body_by_page.get(page, 0))
-        ]
+        expected[ch] = sorted(
+            chunk["page_number"]
+            for chunk in chunks
+            if chunk.get("chunk_role") == "body"
+            and chunk.get("chapter_id") == str(ch)
+            and start <= chunk["page_number"] <= end
+        )
     return expected
 
 
@@ -433,7 +439,11 @@ class TestTreeGovernedEnumeration:
         storage = _TreeStorage(_synthetic_chunks(source))
         pipeline = _make_pipeline(storage, _CannedProvider(), store)
 
-        buckets = pipeline._tree_chapter_buckets(storage, source, _CHAPTER_PLAN)
+        tree = store.load_tree(source)
+        assert tree is not None
+        buckets = pipeline._tree_chapter_buckets(
+            storage, source, _CHAPTER_PLAN, nodes=tree.nodes
+        )
         assert buckets is not None
 
         ch6 = buckets[6]
@@ -446,6 +456,7 @@ class TestTreeGovernedEnumeration:
         assert all(c.get("chunk_role") == "body" for c in ch6)
         assert not any("Figure 6-A" in c.get("chunk_text", "") for c in ch6)
         assert not any("table of contents" in c.get("chunk_text", "") for c in ch6)
+        assert not any("Section 5.2 closing" in c["chunk_text"] for c in ch6)
         # The 2-page overlap shape: section 5.2 spans pages 10-11 while
         # chapter 6 spans 11-12; chapter 5's bucket still owns page 10.
         ch5_pages = {c.get("page_number") for c in buckets[5]}
@@ -530,6 +541,389 @@ class TestTreeGovernedEnumeration:
         sources = result.get("sources", [])
         assert {c.get("page_number") for c in sources} == {11, 12}
         assert pipeline._structure_source == "tree"
+
+    @pytest.mark.parametrize("probe_result", [[], [{"source_file": _SYNTH}]])
+    def test_scoped_tree_does_not_require_legacy_structure(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        probe_result: list[dict[str, Any]],
+    ) -> None:
+        store = StructureStore(db_path=str(tmp_path / "structures.db"))
+        _save_tree(store, _SYNTH, chapter_ranges={1: (1, 1)}, sections={})
+        pipeline = _make_pipeline(
+            _TreeStorage(_synthetic_chunks(_SYNTH)), _CannedProvider(), store
+        )
+        calls: list[str] = []
+
+        def probe(**kwargs: Any) -> list[dict[str, Any]]:
+            calls.append("probe")
+            return probe_result
+
+        def derive(chunks: list[dict[str, Any]]) -> Any:
+            calls.append("derive")
+            raise AssertionError("legacy chapter derivation ran")
+
+        monkeypatch.setattr(pipeline, "_probe_document_structure", probe)
+        monkeypatch.setattr(pipeline, "_derive_chapter_numbers", derive)
+        result = _run_iterative(pipeline, "summarize this document", _SYNTH)
+        assert result["answer"]
+        assert calls == []
+        assert pipeline._structure_source == "tree"
+
+    def test_unscoped_tree_precedes_legacy_roster(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        store = StructureStore(db_path=str(tmp_path / "structures.db"))
+        _save_tree(store, _SYNTH, chapter_ranges={1: (1, 1)}, sections={})
+        pipeline = _make_pipeline(
+            _TreeStorage(_synthetic_chunks(_SYNTH)), _CannedProvider(), store
+        )
+        monkeypatch.setattr(
+            pipeline,
+            "_probe_document_structure",
+            lambda **kwargs: [{"source_file": _SYNTH}],
+        )
+
+        def derive(chunks: list[dict[str, Any]]) -> Any:
+            raise AssertionError("legacy chapter derivation ran")
+
+        monkeypatch.setattr(pipeline, "_derive_chapter_numbers", derive)
+        result = pipeline._iterative_query(
+            "summarize this document", top_k=8, show_sources=False
+        )
+        assert result["answer"]
+        assert pipeline._structure_source == "tree"
+
+    @pytest.mark.parametrize(
+        "query",
+        ["summarize section 5.2", "list sections in section 5.2"],
+    )
+    def test_dotted_target_retrieves_only_exact_section(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, query: str
+    ) -> None:
+        store = StructureStore(db_path=str(tmp_path / "structures.db"))
+        _save_tree(store, _SYNTH)
+        chunks = _synthetic_chunks(_SYNTH)
+        # Page 11 is shared by section 5.2 and chapter 6. Node ownership
+        # excludes the neighbor even though both physically occupy that page.
+        for chunk in chunks:
+            page = chunk["page_number"]
+            if page in (10, 11):
+                if "Chapter 6" in chunk["chunk_text"]:
+                    chunk.update(node_id="sec-6.1", chapter_id="6", section_id="6.1")
+                else:
+                    chunk.update(node_id="sec-5.2", chapter_id="5", section_id="5.2")
+        pipeline = _make_pipeline(_TreeStorage(chunks), _CannedProvider(), store)
+        prompts: list[str] = []
+
+        def generate(prompt: str) -> str:
+            prompts.append(prompt)
+            return _CANNED_ANSWER
+
+        monkeypatch.setattr(pipeline, "_generate", generate)
+        result = _run_iterative(pipeline, query, _SYNTH, show_sources=True)
+        assert pipeline._structure_source == "tree"
+        assert {c["page_number"] for c in result["sources"]} == {10, 11}
+        assert all(c["node_id"] == "sec-5.2" for c in result["sources"])
+        assert prompts
+        assert "Section 5.2 — Section 5.2" in prompts[0]
+        assert "Chapter 6" not in prompts[0]
+
+    @pytest.mark.parametrize("ownership", ["node_id", "chapter_id"])
+    def test_shared_page_ownership_filters_neighboring_chapter(
+        self, tmp_path: Path, ownership: str
+    ) -> None:
+        store = StructureStore(db_path=str(tmp_path / "structures.db"))
+        _save_tree(store, _SYNTH)
+        tree = store.load_tree(_SYNTH)
+        assert tree is not None
+        chunks = _synthetic_chunks(_SYNTH)
+        for chunk in chunks:
+            if chunk["page_number"] == 11:
+                chunk.pop("node_id", None)
+                chunk.pop("chapter_id", None)
+                owner = "6" if "Chapter 6" in chunk["chunk_text"] else "5"
+                chunk[ownership] = f"sec-{owner}.{'1' if owner == '6' else '2'}"
+                if ownership == "chapter_id":
+                    chunk[ownership] = owner
+        storage = _TreeStorage(chunks)
+        pipeline = _make_pipeline(storage, _CannedProvider(), store)
+        buckets = pipeline._tree_chapter_buckets(
+            storage, _SYNTH, _CHAPTER_PLAN, nodes=tree.nodes
+        )
+        assert buckets is not None
+        assert any(c["page_number"] == 11 for c in buckets[5])
+        assert any(c["page_number"] == 11 for c in buckets[6])
+        assert not any("Chapter 6" in c["chunk_text"] for c in buckets[5])
+        assert not any("Section 5.2 closing" in c["chunk_text"] for c in buckets[6])
+        assert any(c["page_number"] == 12 for c in buckets[6])
+
+    def test_exact_section_does_not_require_numbered_chapter(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        store = StructureStore(db_path=str(tmp_path / "structures.db"))
+        _save_tree(
+            store,
+            _SYNTH,
+            nodes_override=[
+                StructureNode(
+                    node_id="unnumbered-chapter",
+                    kind="chapter",
+                    level=1,
+                    title="Unnumbered chapter",
+                    page_start=1,
+                    page_end=4,
+                ),
+                StructureNode(
+                    node_id="sec-5.2",
+                    parent_id="unnumbered-chapter",
+                    kind="section",
+                    level=2,
+                    number="5.2",
+                    title="Exact target",
+                    page_start=2,
+                    page_end=3,
+                ),
+            ],
+        )
+        storage = _TreeStorage(
+            [
+                {
+                    "source_file": _SYNTH,
+                    "page_number": page,
+                    "chunk_role": "body",
+                    "chunk_text": f"Detailed material from page {page}.",
+                }
+                for page in range(1, 5)
+            ]
+        )
+        pipeline = _make_pipeline(storage, _CannedProvider(), store)
+
+        def must_not_derive(chunks: list[StructureNode]) -> Any:
+            raise AssertionError("exact section lookup required a chapter map")
+
+        monkeypatch.setattr(pipeline, "_tree_chapter_map", must_not_derive)
+        result = _run_iterative(
+            pipeline, "summarize section 5.2", _SYNTH, show_sources=True
+        )
+        assert pipeline._structure_source == "tree"
+        assert {chunk["page_number"] for chunk in result["sources"]} == {2, 3}
+        assert result["answer"] == _CANNED_ANSWER
+
+    @pytest.mark.parametrize("ownership", ["node_id", "section_id"])
+    def test_section_ownership_includes_descendants_not_siblings(
+        self, tmp_path: Path, ownership: str
+    ) -> None:
+        store = StructureStore(db_path=str(tmp_path / "structures.db"))
+        _save_tree(
+            store,
+            _SYNTH,
+            chapter_ranges={5: (1, 3)},
+            sections={"5.2": (2, 2), "5.20": (2, 2)},
+        )
+        tree = store.load_tree(_SYNTH)
+        assert tree is not None
+        tree.nodes.append(
+            StructureNode(
+                node_id="sub-5.2.1",
+                parent_id="sec-5.2",
+                kind="subsection",
+                level=3,
+                number="5.2.1",
+                title="Nested detail",
+                page_start=2,
+                page_end=2,
+            )
+        )
+        chunks = [
+            {
+                "source_file": _SYNTH,
+                "page_number": 2,
+                "chunk_role": "body",
+                "chunk_text": section,
+                ownership: node_id if ownership == "node_id" else section,
+            }
+            for section, node_id in (
+                ("5.2", "sec-5.2"),
+                ("5.2.1", "sub-5.2.1"),
+                ("5.20", "sec-5.20"),
+            )
+        ]
+        storage = _TreeStorage(chunks)
+        pipeline = _make_pipeline(storage, _CannedProvider(), store)
+        buckets = pipeline._tree_chapter_buckets(
+            storage, _SYNTH, {5: (2, 2)}, nodes=tree.nodes, section_target="5.2"
+        )
+        assert buckets is not None
+        assert [c["chunk_text"] for c in buckets[5]] == ["5.2", "5.2.1"]
+
+    @pytest.mark.parametrize(
+        "query",
+        ["summarize chapter 6", "summarize section 5.2"],
+    )
+    def test_unannotated_shared_pages_fall_back_instead_of_claiming_tree(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, query: str
+    ) -> None:
+        store = StructureStore(db_path=str(tmp_path / "structures.db"))
+        _save_tree(store, _SYNTH)
+        chunks = _synthetic_chunks(_SYNTH)
+        for chunk in chunks:
+            if chunk["page_number"] == 11:
+                for key in ("node_id", "chapter_id", "section_id"):
+                    chunk.pop(key, None)
+        pipeline = _make_pipeline(_TreeStorage(chunks), _CannedProvider(), store)
+        calls: list[str] = []
+
+        def probe(**kwargs: Any) -> list[dict[str, Any]]:
+            calls.append("legacy")
+            return []
+
+        monkeypatch.setattr(pipeline, "_probe_document_structure", probe)
+        _run_iterative(pipeline, query, _SYNTH)
+        assert calls == ["legacy"]
+        assert pipeline._structure_source is None
+
+    def test_chapter_annotation_alone_cannot_disambiguate_sibling_sections(
+        self, tmp_path: Path
+    ) -> None:
+        store = StructureStore(db_path=str(tmp_path / "structures.db"))
+        _save_tree(
+            store,
+            _SYNTH,
+            chapter_ranges={5: (1, 3)},
+            sections={"5.2": (2, 2), "5.3": (2, 2)},
+        )
+        tree = store.load_tree(_SYNTH)
+        assert tree is not None
+        storage = _TreeStorage(
+            [
+                {
+                    "source_file": _SYNTH,
+                    "page_number": 2,
+                    "chunk_role": "body",
+                    "chunk_text": "Unknown section within chapter five.",
+                    "chapter_id": "5",
+                }
+            ]
+        )
+        pipeline = _make_pipeline(storage, _CannedProvider(), store)
+        assert (
+            pipeline._tree_chapter_buckets(
+                storage, _SYNTH, {5: (2, 2)}, nodes=tree.nodes, section_target="5.2"
+            )
+            is None
+        )
+
+    def test_real_annotation_does_not_move_chapter5_closing_text_into_chapter6(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        store = StructureStore(db_path=str(tmp_path / "structures.db"))
+        _save_tree(store, _SYNTH)
+        tree = store.load_tree(_SYNTH)
+        assert tree is not None
+        raw_chunks = _synthetic_chunks(_SYNTH)
+        for chunk in raw_chunks:
+            for key in ("node_id", "chapter_id", "section_id"):
+                chunk.pop(key, None)
+            chunk["page"] = chunk["page_number"]
+            chunk["text"] = chunk["chunk_text"]
+        chunks = [dict(chunk) for chunk in annotate_chunks(raw_chunks, tree)]
+        closing = next(
+            chunk for chunk in chunks if "Section 5.2 closing" in chunk["chunk_text"]
+        )
+        assert closing.get("chapter_id") != "6"
+        assert closing.get("node_id") != "sec-6.1"
+        storage = _TreeStorage(chunks)
+        pipeline = _make_pipeline(storage, _CannedProvider(), store)
+        buckets = pipeline._tree_chapter_buckets(
+            storage, _SYNTH, _CHAPTER_PLAN, nodes=tree.nodes
+        )
+        # Page ranges cannot establish which side of a same-page heading
+        # unanchored prose belongs to. Refuse a tree answer rather than
+        # treating inherited ownership as a reliable within-page boundary.
+        assert buckets is None
+        monkeypatch.setattr(pipeline, "_probe_document_structure", lambda **kwargs: [])
+        _run_iterative(pipeline, "summarize chapter 6", _SYNTH)
+        assert pipeline._structure_source is None
+
+
+class TestTreeChapterMap:
+    def test_only_root_integer_sections_are_promoted(self) -> None:
+        nodes = [
+            StructureNode(
+                node_id="root",
+                kind="section",
+                number="1",
+                title="Root",
+                level=1,
+                page_start=1,
+                page_end=5,
+            ),
+            StructureNode(
+                node_id="nested",
+                parent_id="root",
+                kind="section",
+                number="2",
+                title="Nested integer",
+                level=2,
+                page_start=2,
+                page_end=3,
+            ),
+            StructureNode(
+                node_id="dotted",
+                kind="section",
+                number="3.1",
+                title="Dotted root",
+                level=1,
+                page_start=4,
+                page_end=5,
+            ),
+            StructureNode(
+                node_id="under-part",
+                parent_id="part",
+                kind="section",
+                number="4",
+                title="Section inside a part",
+                level=2,
+                page_start=6,
+                page_end=7,
+            ),
+        ]
+        assert RAGPipeline._tree_chapter_map(nodes) == ({1: (1, 5)}, {1: "Root"})
+
+    def test_duplicate_anthology_chapters_trigger_legacy_fallback(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        nodes = [
+            StructureNode(
+                node_id=f"part-{part}-ch-1",
+                parent_id=f"part-{part}",
+                kind="chapter",
+                number="1",
+                title=f"Part {part} opening",
+                level=2,
+                page_start=page,
+                page_end=page + 2,
+            )
+            for part, page in ((1, 1), (2, 10))
+        ]
+        assert RAGPipeline._tree_chapter_map(nodes) == ({}, {})
+        store = StructureStore(db_path=str(tmp_path / "structures.db"))
+        _save_tree(store, _SYNTH, nodes_override=nodes)
+        pipeline = _make_pipeline(
+            _TreeStorage(_synthetic_chunks(_SYNTH)), _CannedProvider(), store
+        )
+        calls: list[str] = []
+
+        def probe(**kwargs: Any) -> list[dict[str, Any]]:
+            calls.append("legacy")
+            return []
+
+        monkeypatch.setattr(pipeline, "_probe_document_structure", probe)
+        _run_iterative(pipeline, "summarize this document", _SYNTH)
+        assert calls == ["legacy"]
+        assert pipeline._structure_source is None
 
 
 class TestTreelessFallbackCharacterization:

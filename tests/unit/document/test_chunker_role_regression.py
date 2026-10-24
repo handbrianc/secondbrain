@@ -44,6 +44,7 @@ def legacy_classify_chunk_role(
     is_likely_title: bool,
     *,
     is_merged_segment: bool = False,
+    source_text: str | None = None,
 ) -> str:
     """The pre-task-7 classifier (downgrade + no statistical section check).
 
@@ -128,6 +129,38 @@ class TestClassifyChunkRoleSectionNumbers:
 
     def test_plain_title_still_heading(self) -> None:
         assert classify_chunk_role("Overview of services", 5, 100, True) == "heading"
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "11.18 Configuring the Autostart Service\n" + BODY_TEXT,
+            "11.18 Configuring the Autostart Service " + BODY_TEXT,
+            "11.18 This is prose, not a heading.",
+        ],
+    )
+    def test_unmerged_page_with_dotted_opener_keeps_body(self, text: str) -> None:
+        assert classify_chunk_role(text, 5, 100, False) == "body"
+
+    def test_split_page_opener_uses_full_segment_evidence(self) -> None:
+        heading = "11.18 Configuring the Autostart Service"
+        assert (
+            classify_chunk_role(
+                heading, 5, 100, False, source_text=heading + "\n" + BODY_TEXT
+            )
+            == "body"
+        )
+
+    def test_native_page_leading_chunk_keeps_body(self) -> None:
+        chunks = chunk_segments(
+            [
+                _seg(BODY_TEXT * 2),
+                _seg("11.18 Configuring the Autostart Service\n" + BODY_TEXT * 3, 2),
+            ],
+            70,
+            0,
+        )
+        opener = next(c for c in chunks if c["text"].startswith("11.18"))
+        assert opener["chunk_role"] == "body"
 
     def test_statistical_classes_unchanged_for_non_dotted_text(self) -> None:
         assert classify_chunk_role("a . b . c . " * 20, 5, 100, False) == "toc_entry"

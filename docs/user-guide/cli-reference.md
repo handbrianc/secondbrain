@@ -246,8 +246,8 @@ secondbrain structure uploads/report.pdf
 ### Notes
 
 - Documents ingested before structure-aware ingestion have no stored tree;
-  the command prints re-ingest guidance (`secondbrain ingest <path>
-  --no-skip-existing`) and exits 0.
+  the command prints re-ingest guidance (`secondbrain ingest <path>`, with
+  default hash skipping enabled) and exits 0.
 - Unknown sources fail with a non-zero exit code.
 - Document deletes (`--source`, `--file-type`, `--all`) remove the stored
   tree together with the points.

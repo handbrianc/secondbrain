@@ -372,6 +372,11 @@ class AsyncDocumentIngestor(DocumentIngestor):
                         "text_hash": text_hash,
                         "chunk_role": chunk_role,
                         "element_type": chunk_role,
+                        **{
+                            key: segment[key]
+                            for key in ("t_start", "t_end")
+                            if key in segment
+                        },
                     }
                 )
 
@@ -515,6 +520,11 @@ class AsyncDocumentIngestor(DocumentIngestor):
                 "embedding": embedding,
                 "file_type": file_type,
                 "ingested_at": ingested_at,
+                **{
+                    key: chunk_item[key]
+                    for key in ("t_start", "t_end")
+                    if key in chunk_item
+                },
             }
             docs_to_store.append(doc)
             page_pos += 1
@@ -867,6 +877,7 @@ class AsyncDocumentIngestor(DocumentIngestor):
             store = self._get_structure_store()
             if store is None:
                 return None
+            await asyncio.to_thread(self._preserve_audio_topics, structure, store)
             await store.save_structure_async(structure)
             return structure
         except Exception as e:
@@ -931,7 +942,7 @@ class AsyncDocumentIngestor(DocumentIngestor):
         windows, run only for trees carrying audio segment nodes, using the
         extracted segment texts. Produced ``AudioSegment`` rows replace
         ``structure.audio_segments`` and the tree is re-saved; any failure
-        degrades to untitled segments.
+        preserves compatible prior titles.
         """
         if structure is None or not structure.nodes:
             return
@@ -973,7 +984,7 @@ class AsyncDocumentIngestor(DocumentIngestor):
             return
         if not audio_segments:
             return
-        structure.audio_segments = audio_segments
+        self._replace_audio_topics(structure, audio_segments)
         try:
             await store.save_structure_async(structure)
         except Exception as e:

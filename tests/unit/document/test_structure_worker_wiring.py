@@ -24,6 +24,7 @@ from secondbrain.document import processor
 from secondbrain.document.ingestor._async import AsyncDocumentIngestor
 from secondbrain.document.ingestor._sync import DocumentIngestor
 from secondbrain.storage.structure_sqlite import (
+    AudioSegment,
     DocumentStructure,
     StructureNode,
     StructureStore,
@@ -223,6 +224,45 @@ class TestWorkerAttachesStructure:
         assert section.parent_id == "ch01"
         assert result["documents"], "documents must still be produced"
         assert result["documents"][0]["file_type"] == "unknown"
+
+    @pytest.mark.parametrize("skip_count", [0, 1, 2])
+    def test_transcript_and_time_bounds_survive_embedding_dedup(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        skip_count: int,
+    ) -> None:
+        import hashlib
+
+        file_path = tmp_path / "talk.m4a"
+        file_path.write_bytes(b"audio-bytes")
+        texts = ["welcome everyone to the show", "today we discuss rockets"]
+        monkeypatch.setattr(processor, "chunk_segments", lambda segments, *a: segments)
+        monkeypatch.setattr(
+            processor,
+            "_existing_text_hashes",
+            lambda hashes: {
+                hashlib.sha256(text.encode()).hexdigest() for text in texts[:skip_count]
+            },
+        )
+        result = run_worker(
+            file_path,
+            asr_document(
+                asr_item(texts[0], 0.0, 30.0),
+                asr_item(texts[1], 30.0, 60.0),
+            ),
+            monkeypatch,
+            skip_existing=True,
+        )
+
+        assert result["success"] is True
+        assert result["audio_transcript"] == texts
+        assert len(result["documents"]) == 2 - skip_count
+        for index, document in enumerate(result["documents"], start=skip_count):
+            assert document["t_start"] == index * 30.0
+            assert document["t_end"] == (index + 1) * 30.0
+            assert document["node_id"] == f"seg{index + 1:02}"
+            assert document["chapter_id"] == document["node_id"]
 
     def test_all_skipped_payload_still_carries_tree(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -689,6 +729,12 @@ class TestWorkerAudioStructureCapture:
         assert (second.t_start, second.t_end) == (30.0, 60.0)
         assert first.title == "welcome everyone to the show"
         assert result["documents"], "documents must still be produced"
+        assert len(result["documents"]) == 1
+        assert (
+            result["documents"][0]["t_start"],
+            result["documents"][0]["t_end"],
+        ) == (0.0, 60.0)
+        assert result["documents"][0]["node_id"] == "seg01"
 
     def test_capture_extracts_before_document_release(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -746,6 +792,229 @@ class TestWorkerAudioStructureCapture:
         assert result["structure"] is None
 
 
+class TestAudioTopicReingest:
+    @staticmethod
+    def _tree(source_file: str) -> DocumentStructure:
+        from secondbrain.document.structure_capture import capture_audio_structure
+
+        tree = capture_audio_structure(
+            asr_document(asr_item("full extracted transcript", 0.0, 30.0)),
+            Path(source_file),
+        )
+        assert tree is not None
+        return tree
+
+    @pytest.mark.parametrize("provider_fails", [False, True])
+    def test_preserves_compatible_topics_when_segmentation_unavailable(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        provider_fails: bool,
+    ) -> None:
+        from secondbrain.rag.providers.factory import LLMProviderFactory
+
+        store = StructureStore(db_path=str(tmp_path / "topics.db"))
+        source = str(tmp_path / "talk.m4a")
+        previous = self._tree(source)
+        previous.audio_segments = [
+            AudioSegment(seg_id=1, t_start=0.0, t_end=30.0, title="Existing topic")
+        ]
+        store.save_structure(previous)
+        ingestor = DocumentIngestor()
+        monkeypatch.setattr(ingestor, "_get_structure_store", lambda: store)
+        monkeypatch.setattr(
+            config(), "audio_topic_segmentation_enabled", provider_fails
+        )
+
+        def unavailable(cfg: Any) -> Any:
+            raise RuntimeError("offline")
+
+        monkeypatch.setattr(LLMProviderFactory, "create_from_config", unavailable)
+        result = {
+            "structure": self._tree(source),
+            "documents": [],
+            "audio_transcript": ["full extracted transcript"],
+        }
+        ingestor._persist_worker_structure(result)
+        ingestor._segment_audio_topics(result)
+
+        loaded = store.load_tree(source)
+        assert loaded is not None
+        assert loaded.audio_segments == previous.audio_segments
+
+    def test_does_not_preserve_topics_for_changed_capture(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        store = StructureStore(db_path=str(tmp_path / "topics.db"))
+        source = str(tmp_path / "talk.m4a")
+        previous = self._tree(source)
+        previous.audio_segments = [
+            AudioSegment(seg_id=1, t_start=0.0, t_end=30.0, title="Old topic")
+        ]
+        store.save_structure(previous)
+        fresh = self._tree(source)
+        fresh.nodes[0].t_end = 60.0
+        ingestor = DocumentIngestor()
+        monkeypatch.setattr(ingestor, "_get_structure_store", lambda: store)
+
+        ingestor._persist_worker_structure({"structure": fresh})
+
+        loaded = store.load_tree(source)
+        assert loaded is not None
+        assert loaded.audio_segments == []
+
+    @pytest.mark.parametrize("documents", [[], [{"chunk_text": "remaining only"}]])
+    def test_segmentation_uses_full_transcript(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        documents: list[dict[str, str]],
+    ) -> None:
+        from secondbrain.rag.providers.factory import LLMProviderFactory
+
+        store = StructureStore(db_path=str(tmp_path / "topics.db"))
+        source = str(tmp_path / "talk.m4a")
+        ingestor = DocumentIngestor()
+        monkeypatch.setattr(ingestor, "_get_structure_store", lambda: store)
+        monkeypatch.setattr(config(), "audio_topic_segmentation_enabled", True)
+        monkeypatch.setattr(
+            LLMProviderFactory, "create_from_config", lambda cfg: object()
+        )
+        seen: list[list[str]] = []
+
+        def segment(tree: Any, texts: list[str], **kwargs: Any) -> list[AudioSegment]:
+            seen.append(texts)
+            return [AudioSegment(seg_id=1, t_start=0.0, t_end=30.0, title="Full topic")]
+
+        monkeypatch.setattr(
+            "secondbrain.document.structure_capture.audio_topic_segments", segment
+        )
+        result = {
+            "structure": self._tree(source),
+            "documents": documents,
+            "audio_transcript": ["already stored words", "remaining only"],
+        }
+        ingestor._persist_worker_structure(result)
+        ingestor._segment_audio_topics(result)
+
+        assert seen == [["already stored words", "remaining only"]]
+        loaded = store.load_tree(source)
+        assert loaded is not None
+        assert loaded.audio_segments[0].title == "Full topic"
+
+    @pytest.mark.asyncio
+    async def test_async_capture_preserves_compatible_topics(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        source = tmp_path / "talk.m4a"
+        store = StructureStore(db_path=str(tmp_path / "topics.db"))
+        previous = self._tree(str(source))
+        previous.audio_segments = [
+            AudioSegment(seg_id=1, t_start=0.0, t_end=30.0, title="Existing topic")
+        ]
+        store.save_structure(previous)
+        ingestor = AsyncDocumentIngestor()
+        monkeypatch.setattr(ingestor, "_get_structure_store", lambda: store)
+
+        captured = await ingestor._capture_and_persist_structure_async(
+            source, [asr_document(asr_item("full extracted transcript", 0.0, 30.0))]
+        )
+
+        assert captured is not None
+        assert captured.audio_segments == previous.audio_segments
+        loaded = store.load_tree(str(source))
+        assert loaded is not None
+        assert loaded.audio_segments == previous.audio_segments
+
+    @pytest.mark.parametrize("streaming", [False, True])
+    def test_sync_builders_preserve_time_bounds(
+        self, tmp_path: Path, streaming: bool
+    ) -> None:
+        source = tmp_path / "talk.m4a"
+        segments = [
+            {
+                "text": "full extracted transcript",
+                "page": 1,
+                "t_start": 10.0,
+                "t_end": 30.0,
+            }
+        ]
+        ingestor = DocumentIngestor()
+        documents: list[dict[str, Any]] = []
+
+        def store_batch(batch: list[dict[str, Any]]) -> int:
+            documents.extend(batch)
+            return len(batch)
+
+        if streaming:
+            assert (
+                ingestor._stream_process_chunks(
+                    source,
+                    segments,
+                    FakeEmbeddingModel(),
+                    SimpleNamespace(store_batch=store_batch),
+                )
+                == 1
+            )
+        else:
+            documents = ingestor._build_documents_with_embeddings(
+                source, segments, FakeEmbeddingModel()
+            )
+        assert len(documents) == 1
+        assert (documents[0]["t_start"], documents[0]["t_end"]) == (10.0, 30.0)
+
+    def test_failed_topic_window_retains_previous_title(self) -> None:
+        tree = self._tree("/recordings/talk.m4a")
+        tree.audio_segments = [
+            AudioSegment(seg_id=1, t_start=0.0, t_end=30.0, title="Existing topic")
+        ]
+
+        DocumentIngestor._replace_audio_topics(
+            tree, [AudioSegment(seg_id=1, t_start=0.0, t_end=30.0)]
+        )
+
+        assert tree.audio_segments[0].title == "Existing topic"
+
+    @pytest.mark.parametrize("streaming", [False, True])
+    @pytest.mark.asyncio
+    async def test_async_ingestion_stores_time_bounds_and_structural_ids(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        streaming: bool,
+    ) -> None:
+        from qdrant_client import QdrantClient
+
+        from secondbrain.storage.qdrant import QdrantVectorStorage
+
+        source = tmp_path / "talk.m4a"
+        source.write_bytes(b"audio-bytes")
+        document = asr_document(asr_item("full extracted transcript", 10.0, 30.0))
+        TestExtractTextAudioSink._wire_docling(document, monkeypatch)
+        store = StructureStore(db_path=str(tmp_path / "topics.db"))
+        ingestor = AsyncDocumentIngestor()
+        monkeypatch.setattr(ingestor, "_get_structure_store", lambda: store)
+        monkeypatch.setattr(config(), "streaming_enabled", streaming)
+        monkeypatch.setattr(config(), "audio_topic_segmentation_enabled", False)
+        storage = QdrantVectorStorage(collection_name="audio")
+        storage._client = QdrantClient(":memory:")
+        storage._dimensions = 3
+        embeddings = SimpleNamespace(
+            generate_batch_async=AsyncMock(return_value=[[0.1, 0.2, 0.3]])
+        )
+        try:
+            assert await ingestor.process_file_async(
+                source, embeddings, storage, skip_existing=False
+            )
+            chunks = storage.get_source_chunks(str(source))
+            assert len(chunks) == 1
+            assert chunks[0]["node_id"] == "seg01"
+            assert chunks[0]["chapter_id"] == "seg01"
+            assert (chunks[0]["t_start"], chunks[0]["t_end"]) == (10.0, 30.0)
+        finally:
+            storage.close()
+
+
 class TestExtractTextAudioSink:
     """_extract_text collects the ASR capture shape for audio files.
 
@@ -783,6 +1052,8 @@ class TestExtractTextAudioSink:
         segments = ingestor._extract_text(file_path, sink)
 
         assert [s["text"] for s in segments] == ["hello world"]
+        assert segments[0]["t_start"] == 0.0
+        assert segments[0]["t_end"] == 3.5
         # ASR documents carry no headings; the extracted shape is collected
         # instead — not the live document itself.
         assert len(sink) == 1

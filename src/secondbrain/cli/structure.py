@@ -200,11 +200,16 @@ def resolve_source_file(
         ``None`` alongside the ambiguous candidate list (empty for unknown
         sources).
     """
-    if doc and store.load_tree(doc) is not None:
+    if doc and (
+        store.load_tree(doc) is not None
+        or (stored_keys is not None and doc in stored_keys)
+    ):
         return ResolvedSource(source_file=doc)
 
     for variant in _path_variants(doc):
-        if store.load_tree(variant) is not None:
+        if store.load_tree(variant) is not None or (
+            stored_keys is not None and variant in stored_keys
+        ):
             return ResolvedSource(source_file=variant)
 
     if stored_keys is None or not doc:
@@ -219,7 +224,7 @@ def resolve_source_file(
             tiers[2].append(key)
         elif Path(key).name == name:
             tiers[1].append(key)
-    candidates = [key for rank in (3, 2, 1) for key in tiers[rank]]
+    candidates = next((tiers[rank] for rank in (3, 2, 1) if tiers[rank]), [])
 
     if not candidates:
         return ResolvedSource()
@@ -428,9 +433,7 @@ def _print_treeless_guidance(source_file: str) -> None:
         "Re-ingest it to capture the structure tree — unchanged chunks keep "
         "their stored embeddings; only the structural payload is refreshed:"
     )
-    console.print(
-        f"  [cyan]secondbrain ingest {escape(source_file)} --no-skip-existing[/cyan]"
-    )
+    console.print(f"  [cyan]secondbrain ingest {escape(source_file)}[/cyan]")
 
 
 @handle_cli_errors
