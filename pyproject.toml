@@ -276,6 +276,16 @@ ignore = [
     "CVE-2026-33231",  # wordnet_app remote shutdown - same status as above
     "PYSEC-2026-597",  # NLTK path traversal - same status as above
 
+    # filelock: fixed in 4.2.1, but safety 3.8.1 requires filelock<4.0.
+    # A patched floor makes the dev environment unresolvable. These affect
+    # SQLite-backed reader/writer locks and Windows soft locks; Safety uses
+    # standard FileLock, SecondBrain does not import filelock, and the
+    # security job runs on Linux. Revisit when Safety permits >=4.2.1.
+    # pip-audit does not read this list; scripts/security_scan.sh mirrors it.
+    "CVE-2026-112940",
+    "CVE-2026-112913",
+    "CVE-2026-112907",
+
     # Diskcache advisory - transitive of the optional llama-cpp-python extras
     # (qualitative/rag local-LLM stack); not imported by secondbrain code.
     # CVE-2025-69872 / GHSA-w8v5-vhqr-4h9v (unsafe pickle deserialization)
