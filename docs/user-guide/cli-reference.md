@@ -17,6 +17,7 @@ Complete reference for all SecondBrain command-line interface commands.
 |[`search`](#search)  |Search the vector database with semantic query|
 |[`ls`](#ls)          |List ingested documents and chunks            |
 |[`delete`](#delete)  |Delete documents from the vector database     |
+|[`structure`](#structure)|Inspect a document's stored structure tree|
 |[`status`](#status)  |Show statistics about the vector database     |
 |[`health`](#health)  |Check health status of all services           |
 |[`metrics`](#metrics)|Show performance metrics and statistics       |
@@ -203,6 +204,53 @@ secondbrain delete --all --yes
 
 - Deletion is permanent and cannot be undone
 - Confirm before using `--all` without `--yes`
+
+---
+
+## structure
+
+Inspect the stored structure tree of an ingested document (chapters,
+sections, printed page labels, audio segments).
+
+### Synopsis
+
+```
+secondbrain structure DOC [--json]
+```
+
+### Arguments
+
+|Argument|Description                                                            |
+|--------|-----------------------------------------------------------------------|
+|`DOC`   |Path or source key of the document (the same string it was ingested with)|
+
+### Options
+
+|Option |Description                                                             |
+|-------|------------------------------------------------------------------------|
+|`--json`|Dump the raw stored structure as JSON instead of the rendered tree     |
+
+### Examples
+
+```bash
+# Show the stored tree, page labels and audio segments
+secondbrain structure "./report.pdf"
+
+# Raw structure dump for scripting
+secondbrain structure "./report.pdf" --json
+
+# Relative paths are reconciled with the stored key
+secondbrain structure uploads/report.pdf
+```
+
+### Notes
+
+- Documents ingested before structure-aware ingestion have no stored tree;
+  the command prints re-ingest guidance (`secondbrain ingest <path>`, with
+  default hash skipping enabled) and exits 0.
+- Unknown sources fail with a non-zero exit code.
+- Document deletes (`--source`, `--file-type`, `--all`) remove the stored
+  tree together with the points.
 
 ---
 

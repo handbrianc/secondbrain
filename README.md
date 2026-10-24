@@ -82,6 +82,12 @@ secondbrain delete --chunk-id <id>           # delete specific chunk
 secondbrain delete --all                      # delete everything
 secondbrain delete --all --yes                # skip confirmation
 
+# Inspect a document's stored structure tree (structure-aware ingestion)
+secondbrain structure "./report.pdf"          # tree + page labels + audio segments
+secondbrain structure "./report.pdf" --json   # raw structure dump
+# Documents ingested before structure capture get re-ingest guidance:
+secondbrain ingest "./report.pdf"                    # backfill the tree
+
 # Show database statistics
 secondbrain status
 

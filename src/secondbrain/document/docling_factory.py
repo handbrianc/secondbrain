@@ -467,6 +467,27 @@ def _build_pdf_format_option(*, do_ocr: bool, do_table_structure: bool) -> Any:
             do_cell_matching=cfg.pdf_table_cell_matching,
         )
 
+    # Structure-aware ingestion (openspec add-structure-aware-ingestion,
+    # design §5): docling's heading-hierarchy enrichment populates
+    # SectionHeaderItem.level values (part/chapter/section depth) that
+    # structure_capture.capture_docling_headings reads. Every other
+    # HeadingHierarchyOptions default (use_bookmarks / use_numbering /
+    # use_style / use_font_style) is kept. Imported defensively: the only
+    # environment without the class is the test suite's stubbed docling
+    # (older-than-introduced stubs), where docling's default (disabled)
+    # applies and capture degrades to no tree — never an ingest failure.
+    try:
+        from docling.datamodel.pipeline_options import HeadingHierarchyOptions
+    except ImportError, AttributeError:
+        _logger.debug(
+            "docling HeadingHierarchyOptions unavailable; "
+            "keeping docling's default heading-hierarchy behavior"
+        )
+    else:
+        pipeline_kwargs["heading_hierarchy_options"] = HeadingHierarchyOptions(
+            enabled=True
+        )
+
     # Both backends share the pipeline and every option above — only the PDF
     # parsing layer differs. "pypdfium" parses through docling's lean pypdfium2
     # layer, whose native page memory stays bounded on large documents (the

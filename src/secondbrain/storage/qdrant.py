@@ -20,7 +20,7 @@ import time
 import uuid
 from collections.abc import Generator, Sequence
 from contextlib import contextmanager
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
@@ -40,6 +40,9 @@ from secondbrain.utils.circuit_breaker import (
 )
 from secondbrain.utils.tracing import trace_operation
 
+if TYPE_CHECKING:
+    from secondbrain.storage.structure_sqlite import DocumentStructure
+
 logger = logging.getLogger(__name__)
 
 _INDEXED_FIELDS = (
@@ -49,8 +52,13 @@ _INDEXED_FIELDS = (
     "text_hash",
     "chapter_id",
     "section_id",
+    "chunk_role",
     "printed_page",
 )
+
+# Points per refresh_structural_payload scroll/upsert round (~256 dense
+# vectors ≈ 2 MB per round, design §7).
+_REFRESH_BATCH_SIZE = 256
 
 _OUTPUT_KEYS = (
     "chunk_id",
@@ -62,6 +70,12 @@ _OUTPUT_KEYS = (
     "element_type",
     "chunk_role",
     "section_label",
+    "node_id",
+    "chapter_id",
+    "section_id",
+    "heading_path",
+    "t_start",
+    "t_end",
 )
 
 _CONNECTION_TTL = 60.0
@@ -156,11 +170,24 @@ class QdrantVectorStorage:
                         ),
                     )
                 for field in _INDEXED_FIELDS:
-                    client.create_payload_index(
-                        collection_name=self.collection_name,
-                        field_name=field,
-                        field_schema=models.PayloadSchemaType.KEYWORD,
-                    )
+                    try:
+                        client.create_payload_index(
+                            collection_name=self.collection_name,
+                            field_name=field,
+                            field_schema=models.PayloadSchemaType.KEYWORD,
+                        )
+                    except Exception as index_error:
+                        # Idempotent provisioning (design §7): an index that
+                        # already exists (or is rejected by the server) must
+                        # not fail collection setup — the field still
+                        # round-trips inside payloads, only the server-side
+                        # index is skipped.
+                        logger.debug(
+                            "Payload index %r not created: %s: %s",
+                            field,
+                            type(index_error).__name__,
+                            index_error,
+                        )
                 self._collection_ready = True
             except Exception:  # pragma: no cover - server-dependent path
                 logger.debug("Qdrant collection provisioning failed", exc_info=True)
@@ -356,6 +383,163 @@ class QdrantVectorStorage:
     async def store_batch_async(self, documents: list[dict[str, Any]]) -> int:
         """Async wrapper over :meth:`store_batch`."""
         return await asyncio.to_thread(self.store_batch, documents)
+
+    # ------------------------------------------------------------------
+    # Structural payload refresh (design §7)
+    # ------------------------------------------------------------------
+
+    def refresh_structural_payload(
+        self,
+        source_file: str,
+        structure: DocumentStructure | None = None,
+    ) -> int:
+        """Annotate stored points that predate structural annotation.
+
+        Re-ingesting a document skips embedding/storing for chunks whose
+        ``text_hash`` is already stored, so those legacy points keep payload
+        without the structural keys. This method scroll-reads exactly the
+        target document's points **whose ``node_id`` is empty** — freshly
+        stored (already-annotated) points are excluded by the same filter —
+        annotates each against *structure*, and upserts the full record
+        (payload + vector) back. Per-point payloads forbid
+        ``set_payload``-by-filter (design §9 trap 5), hence read-modify-write.
+
+        Args:
+            source_file: The document key; MUST equal the payload
+                ``source_file`` string (design §9 trap 6).
+            structure: The captured tree to annotate against. When None, the
+                tree is lazily loaded from the structure store; when no tree
+                exists (or the store fails) there is nothing to annotate and
+                0 is returned.
+
+        Returns
+        -------
+            The number of points re-upserted with structural keys. Never
+            raises: qdrant failures are warned and reported as the partial
+            count so ingest continues.
+        """
+        if structure is None:
+            structure = self._load_structure_tree(source_file)
+        if structure is None:
+            return 0
+        self._ensure_collection()
+        # ``is_empty`` is a plain boolean flag on qdrant-client 1.20's
+        # ``FieldCondition`` (verified against the pinned client).
+        refresh_filter = models.Filter(
+            must=[
+                models.FieldCondition(
+                    key="source_file", match=models.MatchValue(value=source_file)
+                ),
+                models.FieldCondition(key="node_id", is_empty=True),
+            ]
+        )
+        refreshed = 0
+        seen_ids: set[str] = set()
+        offset: Any = None
+        try:
+            while True:
+                records, offset = self._get_client().scroll(
+                    collection_name=self.collection_name,
+                    scroll_filter=refresh_filter,
+                    limit=_REFRESH_BATCH_SIZE,
+                    offset=offset,
+                    with_payload=True,
+                    with_vectors=True,
+                )
+                if not records:
+                    break
+                page_ids = {str(record.id) for record in records}
+                if page_ids <= seen_ids:
+                    # Points with no matching node are skipped (never
+                    # upserted) and keep matching the is_empty filter; this
+                    # guard stops the cursor from stalling on them forever.
+                    break
+                seen_ids |= page_ids
+                points = self._annotated_refresh_points(records, structure)
+                if points:
+                    with _traced_qdrant_operation(
+                        self.collection_name, "upsert", points=len(points)
+                    ):
+                        self._get_client().upsert(
+                            collection_name=self.collection_name,
+                            points=points,
+                        )
+                    refreshed += len(points)
+                if offset is None:
+                    break
+        except Exception as e:
+            logger.warning(
+                "Structural payload refresh incomplete for %s (%s: %s)",
+                source_file,
+                type(e).__name__,
+                e,
+            )
+        return refreshed
+
+    def _annotated_refresh_points(
+        self,
+        records: Sequence[Any],
+        structure: DocumentStructure,
+    ) -> list[models.PointStruct]:
+        """Build upsert points for the scroll records that got a node.
+
+        Each record is annotated statelessly against the tree (equivalent to
+        the reading-order walk because tree ranges are nested: a child's
+        range is contained in its parent's). Records for which no node is
+        found are dropped — they stay refreshable (bounded re-read waste,
+        design §7) instead of being rewritten unchanged.
+        """
+        from secondbrain.document.structure_annotate import (
+            ANNOTATION_PAYLOAD_KEYS,
+            annotate_chunks,
+        )
+
+        chunks: list[dict[str, Any]] = []
+        for record in records:
+            payload = dict(record.payload or {})
+            chunks.append(
+                {
+                    "page": payload.get("page_number"),
+                    "text": payload.get("chunk_text", ""),
+                    **{
+                        key: payload[key]
+                        for key in ("t_start", "t_end")
+                        if key in payload
+                    },
+                }
+            )
+        annotated = annotate_chunks(chunks, structure)
+        points: list[models.PointStruct] = []
+        for record, chunk in zip(records, annotated, strict=True):
+            if "node_id" not in chunk:
+                continue
+            payload = dict(record.payload or {})
+            payload.update(
+                {key: chunk[key] for key in ANNOTATION_PAYLOAD_KEYS if key in chunk}
+            )
+            points.append(
+                models.PointStruct(
+                    id=record.id,
+                    vector=record.vector,
+                    payload=payload,
+                )
+            )
+        return points
+
+    def _load_structure_tree(self, source_file: str) -> DocumentStructure | None:
+        """Lazily load the stored tree for *source_file* (None on any failure)."""
+        try:
+            from secondbrain.storage.structure_sqlite import StructureStore
+
+            return StructureStore().load_tree(source_file)
+        except Exception as e:
+            logger.warning(
+                "Structure tree unavailable for %s (%s: %s); payload refresh skipped",
+                source_file,
+                type(e).__name__,
+                e,
+            )
+            return None
 
     # ------------------------------------------------------------------
     # Metadata reads

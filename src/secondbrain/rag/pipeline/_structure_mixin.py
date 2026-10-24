@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import re
 import unicodedata
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 from secondbrain.rag.intent_parser import QueryIntent
 from secondbrain.rag.pipeline._attributes import _RAGPipelineState
@@ -21,6 +21,11 @@ from secondbrain.rag.pipeline._leak_scrub import (
 from secondbrain.rag.pipeline._text_quality import (
     _ground_figures,
     _prune_implausible_metric_figures,
+)
+from secondbrain.storage.structure_sqlite import (
+    DocumentStructure,
+    StructureNode,
+    StructureStore,
 )
 
 logger = logging.getLogger(__name__)
@@ -242,6 +247,13 @@ def _anthology_heading_sort_key(chunk: dict[str, Any]) -> tuple[int, int]:
 
 class _StructureMixin(_RAGPipelineState):
     """Chapter/section detection and structural helpers."""
+
+    # Structure-tree query path (add-structure-aware-ingestion, tasks 12-14).
+    # Both are assigned in ``RAGPipeline.__init__``; the store object is
+    # created lazily on the first tree lookup so pipeline construction never
+    # touches SQLite (or the shared conversation database).
+    _structure_store: StructureStore | None
+    _structure_store_ready: bool
 
     def _derive_chapter_roster(self, structure_chunks: list[dict[str, Any]]) -> str:
         import re
@@ -2187,3 +2199,271 @@ class _StructureMixin(_RAGPipelineState):
             )
             return False
         return True
+
+    # ------------------------------------------------------------------
+    # Structure-tree query path (add-structure-aware-ingestion, tasks 12-14)
+    # ------------------------------------------------------------------
+    #
+    # A stored capture tree (``StructureStore.load_tree``) replaces the
+    # regex-derived chapter map outright whenever it carries at least one
+    # chapter/section node: node page ranges become the chapter ranges and
+    # node numbers/titles become the roster.  Everything here is additive —
+    # every failure mode (store unavailable, load error, treeless document,
+    # zero structural nodes, storage without the page-list ``find_chunks``
+    # API) returns ``None`` so the legacy scan continues unchanged, and the
+    # anthology detector plus the chapter-range agreement gate keep
+    # governing the legacy path only.
+
+    def _get_structure_store(self) -> StructureStore | None:
+        """Return the lazily-created, cached structure store, or ``None``.
+
+        The store opens the shared SQLite database (``cfg.sqlite_path``) on
+        first use, so it is created lazily here instead of in the pipeline
+        constructor and cached for the pipeline's lifetime.  Construction
+        failures (unreadable path, broken SQLite) are downgraded to
+        ``None`` — every caller then takes the legacy chapter path.
+
+        Returns
+        -------
+            The cached :class:`StructureStore`, or ``None`` when the store
+            cannot be created.
+        """
+        if self._structure_store_ready:
+            return self._structure_store
+        self._structure_store_ready = True
+        try:
+            self._structure_store = StructureStore()
+        except Exception:
+            logger.warning(
+                "Structure store unavailable; tree-governed chapter "
+                "enumeration disabled",
+                exc_info=True,
+            )
+            self._structure_store = None
+        return self._structure_store
+
+    def _load_document_tree(self, source_file: str) -> DocumentStructure | None:
+        """Load the stored capture tree for *source_file*.
+
+        Args:
+            source_file: The document key, exactly the string stored in the
+                qdrant payload ``source_file`` (design §9 trap 6).
+
+        Returns
+        -------
+            The stored :class:`DocumentStructure`, or ``None`` when the
+            document is treeless or the lookup failed (both send the caller
+            to the legacy chapter path; load errors are logged once here).
+        """
+        store = self._get_structure_store()
+        if store is None:
+            return None
+        try:
+            return store.load_tree(source_file)
+        except Exception:
+            logger.warning(
+                "Structure tree lookup failed for %s; using the legacy chapter scan",
+                source_file,
+                exc_info=True,
+            )
+            return None
+
+    @staticmethod
+    def _tree_chapter_map(
+        nodes: list[StructureNode],
+    ) -> tuple[dict[int, tuple[int, int]], dict[int, str]]:
+        """Build the legacy-shaped chapter map from tree nodes.
+
+        Chapter-shaped nodes are ``kind`` ``"chapter"`` or top-level
+        ``"section"`` nodes whose ``number`` is a plain integer (nested
+        sections carry dotted numbers and belong to their chapter's range).
+        Ranges are the node's inclusive ``page_start``/``page_end``; a node
+        without a usable page range gets the legacy ``(0, -1)`` sentinel so
+        the existing empty-bucket placeholder note speaks for it.  The first
+        repeated chapter number makes the map ambiguous and triggers legacy
+        fallback rather than silently dropping anthology chapters.
+
+        Args:
+            nodes: The tree's nodes, in stored (page-ordered) sequence.
+
+        Returns
+        -------
+            ``(ranges, titles)`` — chapter number to inclusive page range
+            (sentinel ``(0, -1)`` when the node carries none), and chapter
+            number to raw node title (``""`` when untitled).  Empty
+            ``ranges`` means the tree has no structural chapter nodes and
+            the caller must fall back to the legacy scan.
+        """
+        ranges: dict[int, tuple[int, int]] = {}
+        titles: dict[int, str] = {}
+        for node in nodes:
+            if node.kind not in ("chapter", "section"):
+                continue
+            if node.kind == "section" and node.parent_id is not None:
+                continue
+            number = (node.number or "").strip()
+            if not re.fullmatch(r"\d+", number):
+                continue
+            ch_num = int(number)
+            if ch_num in ranges:
+                logger.info(
+                    "Structure tree has repeated chapter number %s; "
+                    "using the legacy chapter scan",
+                    ch_num,
+                )
+                return {}, {}
+            start, end = node.page_start, node.page_end
+            if start is not None and end is not None and end >= start:
+                ranges[ch_num] = (start, end)
+            else:
+                ranges[ch_num] = (0, -1)
+            titles[ch_num] = node.title or ""
+        return ranges, titles
+
+    @staticmethod
+    def _tree_chapter_buckets(
+        storage: Any,
+        source_file: str,
+        chapter_ranges: dict[int, tuple[int, int]],
+        *,
+        nodes: list[StructureNode] | None = None,
+        section_target: str | None = None,
+    ) -> dict[int, list[dict[str, Any]]] | None:
+        """Collect per-chapter body chunks via the existing qdrant API.
+
+        One ``find_chunks`` call per chapter with the node range expanded to
+        an exact ``page_number`` list (MatchAny — design §8); no new storage
+        API is used.  The client-side ``chunk_role == "body"`` filter mirrors
+        ``get_body_chunks`` semantics, which ``find_chunks`` does not apply
+        itself, so summarizer input matches the legacy shape.  Sentinel
+        ranges skip the storage call and leave an empty bucket (the existing
+        placeholder-note path speaks for the chapter).  Chunks are ordered
+        ``(page_number, page_pos)`` because the live ``find_chunks`` scroll
+        order is unspecified within a page.
+
+        Args:
+            storage: The searcher's vector storage.
+            source_file: Exact document key for the equality filter.
+            chapter_ranges: Chapter number to inclusive page range.
+            nodes: Tree nodes used to exclude annotated chunks owned by
+                neighboring chapters on shared boundary pages.
+            section_target: Exact dotted target, including its descendants.
+
+        Returns
+        -------
+            Chapter number to bucket (possibly empty), or ``None`` when the
+            storage has no ``find_chunks`` API (legacy doubles and older
+            stores), or chunks on overlapping node pages lack reliable
+            ownership — the caller then falls back to the legacy path.
+        """
+        finder = getattr(storage, "find_chunks", None)
+        if not callable(finder):
+            return None
+        by_id = {node.node_id: node for node in nodes or []}
+        ancestors: dict[str, set[str]] = {}
+        roots: dict[str, StructureNode] = {}
+        for node in by_id.values():
+            cursor = node
+            chain: set[str] = set()
+            while cursor.node_id not in chain:
+                chain.add(cursor.node_id)
+                if cursor.parent_id is None or cursor.parent_id not in by_id:
+                    break
+                cursor = by_id[cursor.parent_id]
+            ancestors[node.node_id] = chain
+            roots[node.node_id] = cursor
+        targets = {
+            int(node.number): node
+            for node in by_id.values()
+            if node.number is not None
+            and re.fullmatch(r"\d+", node.number.strip())
+            and (
+                node.kind == "chapter"
+                or (node.kind == "section" and node.parent_id is None)
+            )
+        }
+        section_node = next(
+            (
+                node
+                for node in by_id.values()
+                if section_target
+                and node.number == section_target
+                and node.kind in ("section", "subsection")
+            ),
+            None,
+        )
+        buckets: dict[int, list[dict[str, Any]]] = {}
+        for ch_num, (start_pg, end_pg) in chapter_ranges.items():
+            target = section_node if section_target else targets.get(ch_num)
+            ambiguous_pages: set[int] = set()
+            if target is not None:
+                for node in by_id.values():
+                    if (
+                        target.node_id in ancestors[node.node_id]
+                        or node.node_id in ancestors[target.node_id]
+                        or node.page_start is None
+                        or node.page_end is None
+                    ):
+                        continue
+                    ambiguous_pages.update(
+                        range(
+                            max(start_pg, node.page_start),
+                            min(end_pg, node.page_end) + 1,
+                        )
+                    )
+            bucket: list[dict[str, Any]] = []
+            if end_pg >= start_pg:
+                found = finder(
+                    source_file=source_file,
+                    page_number=list(range(start_pg, end_pg + 1)),
+                )
+                for chunk in cast(list[dict[str, Any]], list(found)):
+                    if chunk.get("chunk_role") != "body":
+                        continue
+                    if target is not None:
+                        reliable_owner = False
+                        node_id = chunk.get("node_id")
+                        if node_id in ancestors:
+                            if target.node_id not in ancestors[node_id]:
+                                continue
+                            reliable_owner = True
+                        else:
+                            root = roots[target.node_id]
+                            chapter_id = chunk.get("chapter_id")
+                            if chapter_id and chapter_id != (
+                                root.number or root.node_id
+                            ):
+                                continue
+                            reliable_owner = bool(
+                                chapter_id and root.node_id == target.node_id
+                            )
+                            section_id = chunk.get("section_id")
+                            if (
+                                section_target
+                                and section_id
+                                and section_id != section_target
+                                and not str(section_id).startswith(section_target + ".")
+                            ):
+                                continue
+                            if section_target and section_id:
+                                reliable_owner = True
+                        if (
+                            chunk.get("page_number") in ambiguous_pages
+                            and not reliable_owner
+                        ):
+                            logger.info(
+                                "Shared-page chunks for %s lack reliable structural "
+                                "ownership; using the legacy chapter scan",
+                                source_file,
+                            )
+                            return None
+                    chunk["score"] = 0.5
+                    bucket.append(chunk)
+                bucket.sort(
+                    key=lambda c: (
+                        c.get("page_number") or 0,
+                        c.get("page_pos") or 0,
+                    )
+                )
+            buckets[ch_num] = bucket
+        return buckets

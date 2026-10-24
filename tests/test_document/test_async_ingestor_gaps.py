@@ -336,7 +336,9 @@ class TestIngestAsyncFailureReasons:
         closed: list[str] = []
         self._patch_providers(monkeypatch, gen, st, closed)
 
-        def extract_by_name(_p: Path) -> list[dict[str, Any]]:
+        def extract_by_name(
+            _p: Path, _structure_sink: list[Any] | None = None
+        ) -> list[dict[str, Any]]:
             return [{"text": "shared body text", "page": 1}]
 
         monkeypatch.setattr(ingestor, "_extract_text", extract_by_name)
@@ -364,7 +366,9 @@ class TestIngestAsyncFailureReasons:
         closed: list[str] = []
         self._patch_providers(monkeypatch, gen, st, closed)
 
-        def boom(_p: Path) -> list[dict[str, Any]]:
+        def boom(
+            _p: Path, _structure_sink: list[Any] | None = None
+        ) -> list[dict[str, Any]]:
             raise DocumentExtractionError("bad pdf")
 
         monkeypatch.setattr(ingestor, "_extract_text", boom)
@@ -394,7 +398,9 @@ class TestIngestAsyncFailureReasons:
         closed: list[str] = []
         self._patch_providers(monkeypatch, gen, st, closed)
 
-        def no_segments(_p: Path) -> list[dict[str, Any]]:
+        def no_segments(
+            _p: Path, _structure_sink: list[Any] | None = None
+        ) -> list[dict[str, Any]]:
             return []
 
         monkeypatch.setattr(ingestor, "_extract_text", no_segments)
@@ -454,7 +460,9 @@ class TestProcessFileAsyncBranches:
         f = tmp_path / "doc.txt"
         f.write_text("irrelevant")
 
-        def empty_extract(_p: Path) -> list[dict[str, Any]]:
+        def empty_extract(
+            _p: Path, _structure_sink: list[Any] | None = None
+        ) -> list[dict[str, Any]]:
             return []
 
         monkeypatch.setattr(ingestor, "_extract_text", empty_extract)
@@ -468,7 +476,9 @@ class TestProcessFileAsyncBranches:
         f = tmp_path / "doc.txt"
         reasons: dict[str, str] = {}
 
-        def boom(_p: Path) -> list[dict[str, Any]]:
+        def boom(
+            _p: Path, _structure_sink: list[Any] | None = None
+        ) -> list[dict[str, Any]]:
             raise DocumentExtractionError("bad pdf")
 
         monkeypatch.setattr(ingestor, "_extract_text", boom)
@@ -486,7 +496,9 @@ class TestProcessFileAsyncBranches:
         f = tmp_path / "doc.txt"
         reasons: dict[str, str] = {}
 
-        def boom(_p: Path) -> list[dict[str, Any]]:
+        def boom(
+            _p: Path, _structure_sink: list[Any] | None = None
+        ) -> list[dict[str, Any]]:
             raise OSError("disk unavailable")
 
         monkeypatch.setattr(ingestor, "_extract_text", boom)
@@ -504,7 +516,9 @@ class TestProcessFileAsyncBranches:
         f = tmp_path / "doc.txt"
         reasons: dict[str, str] = {}
 
-        def boom(_p: Path) -> list[dict[str, Any]]:
+        def boom(
+            _p: Path, _structure_sink: list[Any] | None = None
+        ) -> list[dict[str, Any]]:
             raise RuntimeError("something else exploded")
 
         monkeypatch.setattr(ingestor, "_extract_text", boom)
@@ -529,7 +543,9 @@ class TestProcessFileAsyncBranches:
         f = tmp_path / "doc.txt"
         f.write_text("body " * 40)
 
-        def one_seg(_p: Path) -> list[dict[str, Any]]:
+        def one_seg(
+            _p: Path, _structure_sink: list[Any] | None = None
+        ) -> list[dict[str, Any]]:
             return [{"text": "body " * 40, "page": 1}]
 
         monkeypatch.setattr(ingestor, "_extract_text", one_seg)
@@ -558,7 +574,9 @@ class TestProcessFileAsyncBranches:
         f = tmp_path / "doc.txt"
         f.write_text("body " * 40)
 
-        def one_seg(_p: Path) -> list[dict[str, Any]]:
+        def one_seg(
+            _p: Path, _structure_sink: list[Any] | None = None
+        ) -> list[dict[str, Any]]:
             return [{"text": "body " * 40, "page": 1}]
 
         monkeypatch.setattr(ingestor, "_extract_text", one_seg)
@@ -582,7 +600,9 @@ class TestProcessFileAsyncBranches:
         ingestor = AsyncDocumentIngestor()
         f = tmp_path / "doc.txt"
 
-        def segs(_p: Path) -> list[dict[str, Any]]:
+        def segs(
+            _p: Path, _structure_sink: list[Any] | None = None
+        ) -> list[dict[str, Any]]:
             return [{"text": f"segment {n} text", "page": 1} for n in range(3)]
 
         monkeypatch.setattr(ingestor, "_extract_text", segs)
@@ -604,7 +624,9 @@ class TestProcessFileAsyncBranches:
         ingestor = AsyncDocumentIngestor()
         f = tmp_path / "doc.txt"
 
-        def segs(_p: Path) -> list[dict[str, Any]]:
+        def segs(
+            _p: Path, _structure_sink: list[Any] | None = None
+        ) -> list[dict[str, Any]]:
             return [{"text": "only segment", "page": 1}]
 
         monkeypatch.setattr(ingestor, "_extract_text", segs)
@@ -798,7 +820,9 @@ class TestEmbeddingFallbacks:
 
         gen = _embedding_gen(batch_result=[[0.5] * 8])
 
-        def one_seg(_p: Path) -> list[dict[str, Any]]:
+        def one_seg(
+            _p: Path, _structure_sink: list[Any] | None = None
+        ) -> list[dict[str, Any]]:
             return [{"text": "cached body text", "page": 1}]
 
         monkeypatch.setattr(ingestor, "_extract_text", one_seg)
@@ -985,7 +1009,9 @@ class TestIngestAsyncSkipDetection:
 
         texts = ["alpha segment body", "beta segment body", "gamma segment body"]
 
-        def extract(_p: Path) -> list[dict[str, Any]]:
+        def extract(
+            _p: Path, _structure_sink: list[Any] | None = None
+        ) -> list[dict[str, Any]]:
             return [{"text": t, "page": 1} for t in texts]
 
         monkeypatch.setattr(ingestor, "_extract_text", extract)
@@ -1018,7 +1044,9 @@ class TestIngestAsyncSkipDetection:
 
         texts = ["alpha segment body", "beta segment body", "gamma segment body"]
 
-        def extract(_p: Path) -> list[dict[str, Any]]:
+        def extract(
+            _p: Path, _structure_sink: list[Any] | None = None
+        ) -> list[dict[str, Any]]:
             return [{"text": t, "page": 1} for t in texts]
 
         monkeypatch.setattr(ingestor, "_extract_text", extract)
@@ -1093,7 +1121,9 @@ class TestIngestAsyncSkipDetection:
 
         texts = ["alpha segment body", "beta segment body", "gamma segment body"]
 
-        def extract(_p: Path) -> list[dict[str, Any]]:
+        def extract(
+            _p: Path, _structure_sink: list[Any] | None = None
+        ) -> list[dict[str, Any]]:
             return [{"text": t, "page": 1} for t in texts]
 
         monkeypatch.setattr(ingestor, "_extract_text", extract)
@@ -1128,7 +1158,9 @@ class TestIngestAsyncSkipDetection:
 
         texts = ["alpha segment body", "beta segment body"]
 
-        def extract(_p: Path) -> list[dict[str, Any]]:
+        def extract(
+            _p: Path, _structure_sink: list[Any] | None = None
+        ) -> list[dict[str, Any]]:
             return [{"text": t, "page": 1} for t in texts]
 
         monkeypatch.setattr(ingestor, "_extract_text", extract)
@@ -1195,7 +1227,9 @@ class TestIngestAsyncSkipDetection:
         gen = _embedding_gen(batch_result=[[0.1] * 8])
         st = self._skip_storage(lambda hashes: set(hashes))
 
-        def extract(_p: Path) -> list[dict[str, Any]]:
+        def extract(
+            _p: Path, _structure_sink: list[Any] | None = None
+        ) -> list[dict[str, Any]]:
             return [{"text": t, "page": 1} for t in texts]
 
         monkeypatch.setattr(ingestor, "_extract_text", extract)
@@ -1227,7 +1261,9 @@ class TestIngestAsyncSkipDetection:
         st = self._skip_storage(lambda hashes: set(hashes))
         self._patch_factories(monkeypatch, gen, st)
 
-        def extract(_p: Path) -> list[dict[str, Any]]:
+        def extract(
+            _p: Path, _structure_sink: list[Any] | None = None
+        ) -> list[dict[str, Any]]:
             return [{"text": "stored body", "page": 1}]
 
         monkeypatch.setattr(ingestor, "_extract_text", extract)
@@ -1262,7 +1298,9 @@ class TestIngestAsyncSkipDetection:
 
         ingestor = AsyncDocumentIngestor()
 
-        def extract(p: Path) -> list[dict[str, Any]]:
+        def extract(
+            p: Path, _structure_sink: list[Any] | None = None
+        ) -> list[dict[str, Any]]:
             return [{"text": f"{p.stem} body", "page": 1}]
 
         monkeypatch.setattr(ingestor, "_extract_text", extract)

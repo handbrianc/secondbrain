@@ -185,11 +185,13 @@ class TestDeleter:
         mock_storage.validate_connection.return_value = True
         mock_storage.delete_by_source.return_value = 5
         mock_storage_class.return_value = mock_storage
+        mock_structure_store = MagicMock()
 
-        deleter = Deleter()
+        deleter = Deleter(structure_store=mock_structure_store)
         result = deleter.delete(source="test.pdf")
         assert result == 5
         mock_storage.delete_by_source.assert_called_once_with("test.pdf")
+        mock_structure_store.delete_structure.assert_called_once_with("test.pdf")
 
     @patch("secondbrain.management.StorageFactory.create_from_config")
     def test_delete_by_chunk_id(self, mock_storage_class: MagicMock) -> None:
@@ -284,14 +286,20 @@ class TestDeleterFileType:
         ]
         mock_storage.delete_by_source.side_effect = [10, 5]
         mock_storage_class.return_value = mock_storage
+        mock_structure_store = MagicMock()
 
-        deleter = Deleter()
+        deleter = Deleter(structure_store=mock_structure_store)
         result = deleter.delete(file_type="pdf")
 
         assert result == 15
         mock_storage.list_source_files.assert_called_once()
         deleted_calls = mock_storage.delete_by_source.call_args_list
         assert deleted_calls == [
+            (("/docs/report.pdf",),),
+            (("/docs/slides.pdf",),),
+        ]
+        # The stored trees of the deleted sources are removed with them.
+        assert mock_structure_store.delete_structure.call_args_list == [
             (("/docs/report.pdf",),),
             (("/docs/slides.pdf",),),
         ]
@@ -318,14 +326,21 @@ class TestDeleterFileType:
         mock_storage = MagicMock()
         mock_storage.validate_connection.return_value = True
         mock_storage.delete_all.return_value = 100
+        mock_storage.list_source_files.return_value = ["/docs/report.pdf"]
         mock_storage_class.return_value = mock_storage
+        mock_structure_store = MagicMock()
 
-        deleter = Deleter()
+        deleter = Deleter(structure_store=mock_structure_store)
         result = deleter.delete(all=True, file_type="pdf")
 
         assert result == 100
         mock_storage.delete_all.assert_called_once()
-        mock_storage.list_source_files.assert_not_called()
+        mock_storage.delete_by_source.assert_not_called()
+        # The affected keys are snapshotted for structure-tree cleanup even
+        # though the file-type path was not taken.
+        mock_structure_store.delete_structure.assert_called_once_with(
+            "/docs/report.pdf"
+        )
 
     @patch("secondbrain.management.StorageFactory.create_from_config")
     def test_delete_priority_source_over_file_type(
@@ -336,13 +351,15 @@ class TestDeleterFileType:
         mock_storage.validate_connection.return_value = True
         mock_storage.delete_by_source.return_value = 5
         mock_storage_class.return_value = mock_storage
+        mock_structure_store = MagicMock()
 
-        deleter = Deleter()
+        deleter = Deleter(structure_store=mock_structure_store)
         result = deleter.delete(source="test.pdf", file_type="pdf")
 
         assert result == 5
         mock_storage.delete_by_source.assert_called_once_with("test.pdf")
         mock_storage.list_source_files.assert_not_called()
+        mock_structure_store.delete_structure.assert_called_once_with("test.pdf")
 
     @patch("secondbrain.management.StorageFactory.create_from_config")
     def test_delete_no_params_still_zero(self, mock_storage_class: MagicMock) -> None:
