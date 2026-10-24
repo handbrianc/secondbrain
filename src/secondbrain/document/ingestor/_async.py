@@ -508,7 +508,7 @@ class AsyncDocumentIngestor(DocumentIngestor):
             file_type = get_file_type(chunk_item["file_path"])
             ingested_at = datetime.now(UTC).isoformat()
 
-            doc = {
+            doc: dict[str, Any] = {
                 "chunk_id": str(uuid4()),
                 "source_file": str(chunk_item["file_path"]),
                 "page_number": chunk_item["page"],

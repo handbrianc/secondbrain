@@ -2,12 +2,36 @@
 
 from pathlib import Path
 
+import pytest
+
 from secondbrain.document.chunker import (
     _merge_segments,
     chunk_segments,
     deduplicate_segments,
 )
 from secondbrain.document.protocols import Segment
+
+
+@pytest.mark.parametrize("chunk_size", [70, 1000])
+@pytest.mark.parametrize("bounds", [{}, {"t_start": 0.0}, {"t_end": 40.0}])
+def test_chunks_preserve_only_present_time_bounds(
+    chunk_size: int, bounds: dict[str, float]
+) -> None:
+    segments: list[Segment] = [
+        {
+            "text": "words from the same transcript segment " * 10,
+            "page": 1,
+            **bounds,
+        }
+    ]
+
+    chunks = chunk_segments(segments, chunk_size, 10)
+
+    assert chunks
+    for chunk in chunks:
+        assert {
+            key: chunk[key] for key in ("t_start", "t_end") if key in chunk
+        } == bounds
 
 
 def test_timed_segments_keep_merge_text_stream_and_aggregate_bounds() -> None:

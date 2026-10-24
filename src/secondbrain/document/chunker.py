@@ -463,19 +463,17 @@ def chunk_segments(
                             source_text=text,
                         )
                     )
-                    chunks.append(
-                        {
-                            "text": chunk_text,
-                            "page": page,
-                            "chunk_role": chunk_role,
-                            "element_type": chunk_role,
-                            **{
-                                key: segment[key]
-                                for key in ("t_start", "t_end")
-                                if key in segment
-                            },
-                        }
-                    )
+                    final_chunk: _Chunk = {
+                        "text": chunk_text,
+                        "page": page,
+                        "chunk_role": chunk_role,
+                        "element_type": chunk_role,
+                    }
+                    if "t_start" in segment:
+                        final_chunk["t_start"] = segment["t_start"]
+                    if "t_end" in segment:
+                        final_chunk["t_end"] = segment["t_end"]
+                    chunks.append(final_chunk)
                 seg_counter += 1
                 break
 
@@ -499,19 +497,17 @@ def chunk_segments(
                         source_text=text,
                     )
                 )
-                chunks.append(
-                    {
-                        "text": chunk_text,
-                        "page": page,
-                        "chunk_role": chunk_role,
-                        "element_type": chunk_role,
-                        **{
-                            key: segment[key]
-                            for key in ("t_start", "t_end")
-                            if key in segment
-                        },
-                    }
-                )
+                chunk: _Chunk = {
+                    "text": chunk_text,
+                    "page": page,
+                    "chunk_role": chunk_role,
+                    "element_type": chunk_role,
+                }
+                if "t_start" in segment:
+                    chunk["t_start"] = segment["t_start"]
+                if "t_end" in segment:
+                    chunk["t_end"] = segment["t_end"]
+                chunks.append(chunk)
                 seg_counter += 1
 
             new_start = chunk_end - chunk_overlap
