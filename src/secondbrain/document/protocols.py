@@ -33,11 +33,15 @@ class Segment(TypedDict):
     label : str
         Optional raw docling item label (e.g. ``"section_header"``) when the
         parser exposed one; absent for label-less paths (fast text, plain text).
+    t_start, t_end : float
+        Optional ASR source bounds in seconds.
     """
 
     text: str
     page: int
     label: NotRequired[str]
+    t_start: NotRequired[float]
+    t_end: NotRequired[float]
 
 
 class DocumentParsingProtocol:

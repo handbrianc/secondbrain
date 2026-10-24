@@ -1,6 +1,6 @@
 """Shared type definitions for secondbrain."""
 
-from typing import Any, TypedDict
+from typing import Any, NotRequired, TypedDict
 
 
 class ChunkInfo(TypedDict):
@@ -16,6 +16,13 @@ class ChunkInfo(TypedDict):
 
     section_label: str | None
     """Human-readable section path, e.g. 'Chapter 3', 'Appendix A', '3.1 Introduction'."""
+
+    node_id: NotRequired[str | None]
+    chapter_id: NotRequired[str | None]
+    section_id: NotRequired[str | None]
+    heading_path: NotRequired[str | None]
+    t_start: NotRequired[float | None]
+    t_end: NotRequired[float | None]
 
 
 class SearchResult(ChunkInfo, total=False):

@@ -4,13 +4,17 @@ This module provides classes for listing, deleting, and checking status
 of documents stored in the vector database.
 """
 
+import logging
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Self, cast
+from typing import TYPE_CHECKING, Any, Self, cast
 
 from secondbrain.document.ingestor._constants import get_file_type
 from secondbrain.storage import ChunkInfo, DatabaseStats, StorageFactory
 from secondbrain.utils.connections import ensure_service_available
+
+if TYPE_CHECKING:
+    from secondbrain.storage.structure_sqlite import StructureStore
 
 __all__ = [
     "BaseManager",
@@ -18,6 +22,8 @@ __all__ = [
     "Lister",
     "StatusChecker",
 ]
+
+logger = logging.getLogger(__name__)
 
 
 class BaseManager:
@@ -102,15 +108,104 @@ class Lister(BaseManager):
 
 
 class Deleter(BaseManager):
-    """Handles deletion of documents from storage."""
+    """Handles deletion of documents from storage.
 
-    def __init__(self, verbose: bool = False) -> None:
+    Besides the vector-store points, document-level deletes also remove the
+    per-document structure tree persisted by structure-aware ingestion
+    (``add-structure-aware-ingestion`` §6.5). A broken structure store never
+    fails a delete — it degrades to a logged warning.
+    """
+
+    def __init__(
+        self,
+        verbose: bool = False,
+        structure_store: StructureStore | None = None,
+    ) -> None:
         """Initialize deleter.
 
         Args:
             verbose: Enable verbose logging.
+            structure_store: Optional pre-built structure store (tests /
+                advanced callers). When ``None``, the store is lazily built
+                from the configured SQLite path on first tree cleanup.
         """
         super().__init__(verbose=verbose)
+        # Lazily built against the shared conversation SQLite file (same
+        # pattern as the ingestor's structure-store wiring): construction
+        # stays cheap and a broken store is marked for the deleter's
+        # lifetime so it can never fail a delete.
+        self._structure_store = structure_store
+        self._structure_store_broken = False
+
+    def _get_structure_store(self) -> StructureStore | None:
+        """Return the lazily-built structure store, or None when unavailable.
+
+        Returns
+        -------
+            The cached :class:`StructureStore`, or None when construction
+            keeps failing (a warning is logged once and deletes proceed
+            without tree cleanup).
+        """
+        if self._structure_store_broken:
+            return None
+        if self._structure_store is None:
+            from secondbrain.storage.structure_sqlite import StructureStore
+
+            try:
+                self._structure_store = StructureStore()
+            except Exception as e:
+                self._structure_store_broken = True
+                logger.warning(
+                    "Structure store unavailable (%s: %s); stored structure "
+                    "trees will not be deleted",
+                    type(e).__name__,
+                    e,
+                )
+                return None
+        return self._structure_store
+
+    def _delete_structure_trees(self, sources: Sequence[str]) -> None:
+        """Delete the stored structure trees for *sources* (never raises).
+
+        Args:
+            sources: The document keys whose trees should be removed.
+        """
+        if not sources:
+            return
+        store = self._get_structure_store()
+        if store is None:
+            return
+        for source in sources:
+            try:
+                store.delete_structure(source)
+            except Exception as e:
+                logger.warning(
+                    "Failed to delete stored structure tree for %s: %s: %s",
+                    source,
+                    type(e).__name__,
+                    e,
+                )
+
+    def _collect_source_files(self) -> list[str]:
+        """Enumerate the stored source_file keys (best-effort, never raises).
+
+        Used by the bulk ``--all`` delete to snapshot the affected keys
+        BEFORE the points are deleted (afterwards the listing is empty).
+
+        Returns
+        -------
+            The distinct source keys, or an empty list when enumeration
+            fails (a warning is logged and tree cleanup is skipped).
+        """
+        try:
+            return list(self.storage.list_source_files())
+        except Exception as e:
+            logger.warning(
+                "Could not enumerate source files for structure-tree cleanup: %s: %s",
+                type(e).__name__,
+                e,
+            )
+            return []
 
     def delete(
         self,
@@ -120,6 +215,10 @@ class Deleter(BaseManager):
         file_type: str | None = None,
     ) -> int:
         """Delete documents from storage.
+
+        Document-level deletes (``--source``, ``--all``, ``--file-type``)
+        also remove the stored structure trees of the affected source files;
+        deleting a single chunk leaves the document (and its tree) intact.
 
         Args:
             source: Delete by source file.
@@ -133,13 +232,21 @@ class Deleter(BaseManager):
             Number of deleted documents.
         """
         if all:
-            return self.storage.delete_all()
+            # Snapshot the affected keys first: after delete_all() the
+            # listing no longer shows them.
+            sources = self._collect_source_files()
+            count = self.storage.delete_all()
+            self._delete_structure_trees(sources)
+            return count
 
         if chunk_id:
             return self.storage.delete_by_chunk_id(chunk_id)
 
         if source:
-            return self.storage.delete_by_source(source)
+            count = self.storage.delete_by_source(source)
+            if count:
+                self._delete_structure_trees([source])
+            return count
 
         if file_type:
             return self._delete_by_file_type(file_type)
@@ -155,11 +262,18 @@ class Deleter(BaseManager):
         mirrors how the ``file_type`` payload is written at ingest time
         (the category is derived from the source path's extension), so
         resolving the category per source matches the stored values exactly.
+        Sources whose points were actually deleted also have their stored
+        structure trees removed.
         """
         deleted = 0
+        deleted_sources: list[str] = []
         for source in self.storage.list_source_files():
             if get_file_type(Path(source)) == file_type:
-                deleted += self.storage.delete_by_source(source)
+                removed = self.storage.delete_by_source(source)
+                if removed:
+                    deleted += removed
+                    deleted_sources.append(source)
+        self._delete_structure_trees(deleted_sources)
         return deleted
 
 

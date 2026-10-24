@@ -32,6 +32,7 @@ from secondbrain.rag.pipeline._routing_mixin import _RoutingMixin
 from secondbrain.rag.pipeline._structure_mixin import _StructureMixin
 from secondbrain.rag.security_filter import SecurityFilter
 from secondbrain.search import Searcher
+from secondbrain.storage.structure_sqlite import StructureStore
 from secondbrain.utils.perf_monitor import metrics
 from secondbrain.utils.tracing import trace_operation
 
@@ -99,6 +100,14 @@ class RAGPipeline(
         # Created on first use so that the pipeline can be constructed without
         # a running vector store connection (e.g. during CLI help / --version).
         self._document_router: DocumentRouter | None = None
+        # Structure-tree query path (add-structure-aware-ingestion).  The
+        # StructureStore is created lazily on the first tree lookup (it opens
+        # the shared SQLite database) and cached for the pipeline's lifetime;
+        # ``_structure_source`` records what built the most recent chapter
+        # map ("tree", or None for the legacy regex scan).
+        self._structure_store: StructureStore | None = None
+        self._structure_store_ready: bool = False
+        self._structure_source: str | None = None
 
     def _iterative_query(
         self,
@@ -121,20 +130,7 @@ class RAGPipeline(
         Returns:
             dict with 'answer', 'query', 'sources' (if show_sources).
         """
-        # 1. Probe document structure for TOC/chapter chunks via chunk_role
-        structure_chunks = self._probe_document_structure(
-            top_k=400,
-            source_filter=source_filter,
-        )
-        if not structure_chunks:
-            # Fall back to generic one-shot if no structure found
-            return self._generic_one_shot(
-                query,
-                top_k,
-                show_sources,
-                source_filter=source_filter,
-            )
-
+        self._structure_source = None
         intent_decision = self._intent_parser.parse(query)
 
         # When enumerating a single chapter, boost top_k so the bucket
@@ -167,6 +163,7 @@ class RAGPipeline(
                 enum_target = sec_m.group(1)
                 raw_section_target = enum_target  # preserve before truncation
         if enum_target and "." in enum_target:
+            raw_section_target = enum_target
             enum_target = enum_target.split(".")[0]
         # Also catch broad-coverage queries with section numbers like
         # "summarize section 11.33" — route through chapter enumeration
@@ -176,11 +173,61 @@ class RAGPipeline(
             QueryIntent.BROAD_COVERAGE,
             QueryIntent.SECTION_ENUMERATE,
         )
-        if has_section_target or intent_decision.intent in (
+        structural_query = has_section_target or intent_decision.intent in (
             QueryIntent.CHAPTER_ENUMERATE,
             QueryIntent.SECTION_ENUMERATE,
             QueryIntent.BROAD_COVERAGE,
-        ):
+        )
+        if structural_query and source_filter:
+            tree_result = self._tree_chapter_query(
+                query,
+                source_filter,
+                enum_target=enum_target,
+                raw_section_target=raw_section_target,
+                has_section_target=has_section_target,
+                is_multi_chapter=(
+                    intent_decision.target is None and not has_section_target
+                ),
+                top_k=top_k,
+                show_sources=show_sources,
+            )
+            if tree_result is not None:
+                return tree_result
+
+        # Treeless documents retain the legacy probe and roster derivation.
+        structure_chunks = self._probe_document_structure(
+            top_k=400,
+            source_filter=source_filter,
+        )
+        if not structure_chunks:
+            return self._generic_one_shot(
+                query, top_k, show_sources, source_filter=source_filter
+            )
+
+        if structural_query:
+            if not source_filter:
+                try:
+                    tree_src = max(
+                        {chunk["source_file"] for chunk in structure_chunks},
+                        key=lambda s: self._searcher.storage.count_chunks(s, "body"),
+                    )
+                except Exception:
+                    tree_src = None
+                if tree_src:
+                    tree_result = self._tree_chapter_query(
+                        query,
+                        tree_src,
+                        enum_target=enum_target,
+                        raw_section_target=raw_section_target,
+                        has_section_target=has_section_target,
+                        is_multi_chapter=(
+                            intent_decision.target is None and not has_section_target
+                        ),
+                        top_k=top_k,
+                        show_sources=show_sources,
+                    )
+                    if tree_result is not None:
+                        return tree_result
             chapters_to_cover, good_title_nums, appendix_entries = (
                 self._derive_chapter_numbers(structure_chunks)
             )
@@ -1747,4 +1794,303 @@ class RAGPipeline(
         if show_sources:
             result["sources"] = final_chunks
 
+        return result
+
+    def _tree_chapter_query(
+        self,
+        query: str,
+        src: str,
+        *,
+        enum_target: str | None,
+        raw_section_target: str | None,
+        has_section_target: bool,
+        is_multi_chapter: bool,
+        top_k: int,
+        show_sources: bool,
+    ) -> dict[str, Any] | None:
+        """Answer a chapter query from the stored structure tree, if one governs.
+
+        The structure-tree branch of :meth:`_iterative_query` (design §8 of
+        ``add-structure-aware-ingestion``): the stored capture tree's node
+        page ranges replace the regex-derived chapter map, buckets collect
+        through the existing ``find_chunks`` page-list API, and the legacy
+        ``_fallback_mixin`` bounded-window summarizers are reused unchanged.
+        Provenance is recorded as ``structure_source="tree"`` (attribute,
+        info log, and ``rag.structure_source`` trace attribute).
+
+        Args:
+            query: Original user query.
+            src: Selected source document key.
+            enum_target: Chapter number requested by the query (already
+                truncated to its chapter part), or None.
+            raw_section_target: Original dotted section target (e.g. "6.2"),
+                or None when the query targeted a chapter or nothing.
+            has_section_target: Whether the query targets a chapter/section.
+            is_multi_chapter: True when the query is a target-less chapter
+                overview (legacy ``is_multi_chapter`` semantics).
+            top_k: Requested result budget.
+            show_sources: Whether to include sources in the result.
+
+        Returns
+        -------
+            The result dict (``answer``/``query``/optional ``sources``) when
+            the tree governed the answer, or ``None`` when the legacy
+            chapter path must proceed: no structure store, store or load
+            errors, treeless document, a tree without chapter/section
+            nodes, a requested chapter the tree does not carry, or a
+            storage without the page-list ``find_chunks`` API.
+        """
+        tree = self._load_document_tree(src)
+        if tree is None:
+            return None
+        all_ranges: dict[int, tuple[int, int]] = {}
+        all_titles: dict[int, str] = {}
+        if not raw_section_target:
+            all_ranges, all_titles = self._tree_chapter_map(tree.nodes)
+            if not all_ranges:
+                logger.info(
+                    "Structure tree for %s has no chapter/section nodes; "
+                    "using the legacy chapter scan",
+                    src,
+                )
+                return None
+
+        # Dotted targets use the exact section, not its enclosing chapter.
+        if raw_section_target:
+            section_nodes = [
+                node
+                for node in tree.nodes
+                if node.kind in ("section", "subsection")
+                and node.number == raw_section_target
+            ]
+            if len(section_nodes) != 1:
+                return None
+            section_node = section_nodes[0]
+            target_num = int(raw_section_target.split(".")[0])
+            start, end = section_node.page_start, section_node.page_end
+            chapter_ranges_: dict[int, tuple[int, int]] = {
+                target_num: (
+                    (start, end)
+                    if start is not None and end is not None and end >= start
+                    else (0, -1)
+                )
+            }
+        elif enum_target is not None:
+            try:
+                target_num = int(enum_target)
+            except ValueError:
+                return None
+            if target_num not in all_ranges:
+                logger.info(
+                    "Structure tree for %s has no chapter %s; using the "
+                    "legacy chapter scan",
+                    src,
+                    enum_target,
+                )
+                return None
+            chapter_ranges_ = {target_num: all_ranges[target_num]}
+        else:
+            chapter_ranges_ = dict(all_ranges)
+        chapter_keys = sorted(chapter_ranges_)
+
+        chapter_buckets = self._tree_chapter_buckets(
+            self._searcher.storage,
+            src,
+            chapter_ranges_,
+            nodes=tree.nodes,
+            section_target=raw_section_target,
+        )
+        if chapter_buckets is None:
+            logger.info(
+                "Tree-governed buckets unavailable or shared-page ownership "
+                "is ambiguous; using the legacy chapter scan for %s",
+                src,
+            )
+            return None
+
+        # Provenance: the tree governed everything below.
+        self._structure_source = "tree"
+        logger.info(
+            "Structure tree governs chapter enumeration for %s: %d chapters",
+            src,
+            len(chapter_keys),
+        )
+        logger.debug("Chapter page ranges for %s: %s", src, chapter_ranges_)
+
+        ch_titles = {ch: all_titles.get(ch, "") for ch in chapter_keys}
+        if raw_section_target:
+            ch_titles[target_num] = section_node.title
+
+        # Merge buckets in round-robin order, deduped by text-hash prefix —
+        # the legacy bucket-merge shape the summarizers consume.
+        unique_by_hash: dict[int, dict[str, Any]] = {}
+        hashes_seen: set[int] = set()
+        max_bucket = max((len(b) for b in chapter_buckets.values()), default=0)
+        for slot in range(max_bucket):
+            for ch_num in chapter_keys:
+                bucket = chapter_buckets[ch_num]
+                if slot < len(bucket):
+                    chunk = bucket[slot]
+                    text_hash = hash(chunk.get("chunk_text", "")[:512])
+                    if text_hash not in hashes_seen:
+                        hashes_seen.add(text_hash)
+                        unique_by_hash[text_hash] = chunk
+        accumulated = list(unique_by_hash.values())
+        accumulated.sort(key=lambda c: c.get("score", 0.0), reverse=True)
+        if len(chapter_keys) <= 2:
+            # Deterministic full fetch: trimming here would drop real
+            # content; the summarizer bounds its own context downstream.
+            final_chunks = accumulated
+            # Interleave pages round-robin so early context spans the range.
+            pg_groups: dict[int, list[dict[str, Any]]] = {}
+            for fc in final_chunks:
+                pg_groups.setdefault(fc.get("page_number") or 0, []).append(fc)
+            interleaved: list[dict[str, Any]] = []
+            max_per_pg = max((len(g) for g in pg_groups.values()), default=0)
+            for slot in range(max_per_pg):
+                for pg in sorted(pg_groups):
+                    if slot < len(pg_groups[pg]):
+                        interleaved.append(pg_groups[pg][slot])
+            final_chunks = interleaved
+        else:
+            # Same final trim as the legacy multi-chapter merge.
+            final_chunks = accumulated[: max(top_k, 8)]
+
+        # Chapter roster in the legacy line format (tree titles, tree ranges;
+        # sentinel ranges omit the page note like the legacy builder).
+        chapter_roster_lines = []
+        for ch_num in chapter_keys:
+            pg_start, pg_end = chapter_ranges_[ch_num]
+            title = self._display_chapter_title(ch_titles.get(ch_num, ""))
+            pg_note = "" if pg_end < pg_start else f" (approx pages {pg_start}+)"
+            label = (
+                f"Section {raw_section_target}"
+                if raw_section_target
+                else f"Chapter {ch_num}"
+            )
+            if title:
+                chapter_roster_lines.append(f"{label} — {title}{pg_note}")
+            else:
+                chapter_roster_lines.append(f"{label} — No official title{pg_note}")
+        chapter_roster = "\n".join(chapter_roster_lines) + "\n"
+        llm_fallback_roster = chapter_roster
+
+        enum_max_chars = self._config.rag_max_context_chars * 3
+        body_content = self._format_context(final_chunks, max_chars=enum_max_chars)
+
+        if has_section_target and raw_section_target:
+            section_prompt = (
+                f"The user asked for a summary of section {raw_section_target}. "
+                f"Below is the content of section {raw_section_target}. "
+                f"Provide a detailed, focused summary "
+                f"of section {raw_section_target} specifically. Include its key "
+                f"topics, instructions, and any important details.\n"
+                + "=== BODY CONTENT ===\n"
+            )
+        elif has_section_target:
+            section_prompt = (
+                "__DETAILED_CHAPTER_SUMMARY_INSTRUCTIONS__\n"
+                + f"The user asked for details about chapter {enum_target}. "
+                + "Below is the content of that chapter. Provide a thorough, detailed "
+                + "summary of the chapter's content, organized by its numbered sections. "
+                + "For each section, include its number, title, and a description of its "
+                + "key topics and important details. Do NOT omit any section.\n"
+                + "=== BODY CONTENT ===\n"
+            )
+        elif is_multi_chapter:
+            section_prompt = (
+                "__CHAPTER_SUMMARY_INSTRUCTIONS__\n"
+                + "The user asked for a chapter-by-chapter overview. "
+                + "Below is the document's content organized by chapter. "
+                + "For each chapter listed in the roster above, provide "
+                + "a brief one-line summary of its key topics. "
+                + "Keep each chapter summary concise.\n"
+                + "=== BODY CONTENT ===\n"
+            )
+        else:
+            section_prompt = (
+                "Keep your answer concise. Do NOT list numbered sections or provide "
+                "a section-by-section breakdown. Instead, give a brief paragraph "
+                "summarizing the overall content of the chapter.\n"
+                + "=== BODY CONTENT ===\n"
+            )
+        context_text = chapter_roster + section_prompt + body_content
+
+        generation_start = time.perf_counter()
+        answer = ""
+        try:
+            if is_multi_chapter and chapter_buckets:
+                # Map-reduce per chapter through the unchanged legacy
+                # bounded-window summarizer (empty buckets speak via its
+                # existing placeholder note).
+                with trace_operation("rag_generation_iterative") as span:
+                    if span:
+                        span.set_attribute("rag.iterative_mode", True)
+                        span.set_attribute("rag.enumeration_mode", True)
+                        span.set_attribute("rag.top_k", top_k)
+                        span.set_attribute("rag.structure_source", "tree")
+                    answer = self._generate_multi_chapter_summary(
+                        chapter_keys, chapter_buckets, ch_titles
+                    )
+            elif has_section_target and not raw_section_target and final_chunks:
+                # Single-chapter detailed breakdown through the unchanged
+                # legacy map-reduce summarizer.
+                with trace_operation("rag_generation_iterative") as span:
+                    if span:
+                        span.set_attribute("rag.iterative_mode", True)
+                        span.set_attribute("rag.enumeration_mode", True)
+                        span.set_attribute("rag.top_k", top_k)
+                        span.set_attribute("rag.structure_source", "tree")
+                    target_num_ = int(enum_target) if enum_target is not None else 0
+                    chapter_title = ch_titles.get(target_num_, "")
+                    # Foreign titles come from the WHOLE tree map (the
+                    # narrowed map only carries the target), mirroring the
+                    # legacy single-chapter path's unfiltered roster.
+                    foreign_titles = [
+                        t for ch, t in all_titles.items() if ch != target_num_ and t
+                    ]
+                    answer = self._generate_single_chapter_summary(
+                        final_chunks,
+                        str(enum_target),
+                        chapter_title,
+                        foreign_titles=foreign_titles,
+                    )
+            else:
+                # Single-chapter overview: generate non-streaming, vet, emit
+                # once (legacy semantics, tree-sourced context).
+                prompt = self._build_prompt(query, context_text)
+                prompt += (
+                    "\n\nYou are summarizing source material. Quote figures "
+                    "(percentages, counts, years, metrics, returns) EXACTLY as "
+                    "stated in the retrieved context; never invent, estimate, "
+                    "round, or 'correct' a value the source does not state. "
+                    "This rule applies to prose statistics only -- do not "
+                    "fixate on reproducing code details or function arguments "
+                    "(e.g. list(range(...))) verbatim. State each figure once, "
+                    "confidently, and move on."
+                )
+                with trace_operation("rag_generation_iterative") as span:
+                    if span:
+                        span.set_attribute("rag.iterative_mode", True)
+                        span.set_attribute("rag.enumeration_mode", True)
+                        span.set_attribute("rag.top_k", top_k)
+                        span.set_attribute("rag.structure_source", "tree")
+                    answer = self._vet_answer(
+                        self._generate(prompt), prompt, context_text
+                    )
+                    if self._on_chunk and answer:
+                        self._on_chunk(answer, None)
+        except Exception as e:
+            logger.error("Tree-path generation failed: %s: %s", type(e).__name__, e)
+            answer = f"An error occurred during generation: {e}"
+        finally:
+            metrics.record("generation_latency", time.perf_counter() - generation_start)
+
+        # If the LLM returned empty, fall back to the chapter roster.
+        if not answer or not answer.strip():
+            answer = llm_fallback_roster
+
+        result: dict[str, Any] = {"answer": answer, "query": query}
+        if show_sources:
+            result["sources"] = final_chunks
         return result

@@ -54,8 +54,18 @@ NC='\033[0m' # No Color
 # RCE/data exposure from this codebase's usage). Mirrors the documented
 # ignore in pyproject.toml [tool.safety]. Revisit when docling-slim lifts
 # the pillow<13 cap; new 12.3.0 advisories will need adding here too.
+#
+# filelock CVE-2026-112940/112913/112907: fixed in 4.2.1, but safety 3.8.1
+# requires filelock>=3.16.1,<4.0, so upgrading makes the dev environment
+# unresolvable. These affect SQLite-backed ReadWriteLock/AsyncReadWriteLock
+# and Windows soft locks; Safety uses standard FileLock, and SecondBrain
+# does not import filelock. The security job runs on Linux. Mirrors the
+# documented ignore in pyproject.toml [tool.safety]; revisit when Safety
+# permits filelock>=4.2.1. Other filelock advisories remain blocking.
 PIP_AUDIT_IGNORE_ARGS=(
     --ignore-vuln PYSEC-2026-3740 --ignore-vuln CVE-2025-69872
+    --ignore-vuln CVE-2026-112940 --ignore-vuln CVE-2026-112913
+    --ignore-vuln CVE-2026-112907
     # pillow 12.3.0 2026-10 advisory cluster (fixed 13.0.0, upstream-blocked)
     --ignore-vuln CVE-2026-112390 --ignore-vuln CVE-2026-112391
     --ignore-vuln CVE-2026-112392 --ignore-vuln CVE-2026-112393
