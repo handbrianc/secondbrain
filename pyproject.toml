@@ -146,7 +146,7 @@ bundled = [
     "virtualenv>=21.14.11",  # GHSA-9h9j-4vrj-gf7g (fix 21.7.11), GHSA-94p9-xgh2-xp45 + GHSA-x78j-v8h9-3j2q (fix 21.7.12), GHSA-p58f-9548-mpm2 (fix 21.7.13) — was 21.7.9 via pre-commit
     "werkzeug>=3.1.9",  # GHSA-g6x2-hccm-hh4m (was 3.1.8)
     "fpdf2>=2.8.9",
-    "reportlab>=5.0.1",
+    "reportlab>=5.1.0",
     # Bundled extras (depends on mutation)
     "mutmut>=3.8.0",
 ]
