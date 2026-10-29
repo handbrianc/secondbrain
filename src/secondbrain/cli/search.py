@@ -215,7 +215,7 @@ def delete(
             count = deleter.delete(
                 source=source, chunk_id=chunk_id, all=all, file_type=file_type
             )
-            console.print(f"[green]Deleted {count} document(s)[/green]")
+            console.print(f"[green]Deleted {count} chunk(s)[/green]")
         except (
             ServiceUnavailableError,
             StorageConnectionError,

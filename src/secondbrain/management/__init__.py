@@ -229,7 +229,7 @@ class Deleter(BaseManager):
 
         Returns
         -------
-            Number of deleted documents.
+            Number of deleted chunks.
         """
         if all:
             # Snapshot the affected keys first: after delete_all() the

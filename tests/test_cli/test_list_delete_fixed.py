@@ -238,7 +238,7 @@ class TestDeleteConfirmation:
             result = runner.invoke(cli, ["delete", "--source", "test.pdf", "--yes"])
 
         assert result.exit_code == 0
-        assert "Deleted 3 document(s)" in result.output
+        assert "Deleted 3 chunk(s)" in result.output
         mock_instance = mock_deleter_class.return_value
         mock_instance.delete.assert_called_once()
         call_kwargs = mock_instance.delete.call_args[1]
@@ -254,7 +254,7 @@ class TestDeleteConfirmation:
             result = runner.invoke(cli, ["delete", "--all"], input="y\n")
 
         assert result.exit_code == 0
-        assert "Deleted 100 document(s)" in result.output
+        assert "Deleted 100 chunk(s)" in result.output
         mock_instance = mock_deleter_class.return_value
         mock_instance.delete.assert_called_once()
         call_kwargs = mock_instance.delete.call_args[1]
@@ -281,7 +281,7 @@ class TestDeleteConfirmation:
             result = runner.invoke(cli, ["delete", "--chunk-id", "chunk-123", "--yes"])
 
         assert result.exit_code == 0
-        assert "Deleted 1 document(s)" in result.output
+        assert "Deleted 1 chunk(s)" in result.output
         mock_instance = mock_deleter_class.return_value
         mock_instance.delete.assert_called_once()
         call_kwargs = mock_instance.delete.call_args[1]
@@ -298,7 +298,7 @@ class TestDeleteConfirmation:
             )
 
         assert result.exit_code == 0
-        assert "Deleted 5 document(s)" in result.output
+        assert "Deleted 5 chunk(s)" in result.output
         mock_instance = mock_deleter_class.return_value
         mock_instance.delete.assert_called_once()
         call_kwargs = mock_instance.delete.call_args[1]
@@ -317,7 +317,7 @@ class TestDeleteByFileType:
             result = runner.invoke(cli, ["delete", "--file-type", "pdf", "--yes"])
 
         assert result.exit_code == 0
-        assert "Deleted 42 document(s)" in result.output
+        assert "Deleted 42 chunk(s)" in result.output
         mock_instance = mock_deleter_class.return_value
         mock_instance.delete.assert_called_once()
         call_kwargs = mock_instance.delete.call_args[1]
@@ -409,4 +409,4 @@ class TestDeleteByFileType:
             result = runner.invoke(cli, ["delete", "--file-type", "docx", "--yes"])
 
         assert result.exit_code == 0
-        assert "Deleted 9 document(s)" in result.output
+        assert "Deleted 9 chunk(s)" in result.output
