@@ -157,6 +157,82 @@ def audio_tree() -> DocumentStructure:
     )
 
 
+def sibling_section_tree() -> DocumentStructure:
+    """ch05 whose 5.2 (pages 7-9) and 5.4 (pages 9-11) share page 9."""
+    return DocumentStructure(
+        source_file="/books/siblings.pdf",
+        nodes=[
+            node(
+                "ch05",
+                kind="chapter",
+                level=1,
+                number="5",
+                title="Installing",
+                page_start=5,
+                page_end=12,
+            ),
+            node(
+                "sec05.02",
+                parent="ch05",
+                number="5.2",
+                title="Setup",
+                page_start=7,
+                page_end=9,
+            ),
+            node(
+                "sec05.04",
+                parent="ch05",
+                number="5.4",
+                title="Tuning",
+                page_start=9,
+                page_end=11,
+            ),
+        ],
+    )
+
+
+def ambiguous_page_tree() -> DocumentStructure:
+    """Page 7 is shared by sibling sections 5.2 and 5.3 (chain-inconsistent)."""
+    return DocumentStructure(
+        source_file="/books/ambiguous.pdf",
+        nodes=[
+            node(
+                "ch05",
+                kind="chapter",
+                level=1,
+                number="5",
+                title="Installing",
+                page_start=5,
+                page_end=12,
+            ),
+            node(
+                "sec05.02",
+                parent="ch05",
+                number="5.2",
+                title="Setup",
+                page_start=7,
+                page_end=9,
+            ),
+            node(
+                "sec05.03",
+                parent="ch05",
+                number="5.3",
+                title="Ignition",
+                page_start=7,
+                page_end=8,
+            ),
+            node(
+                "sec05.04",
+                parent="ch05",
+                number="5.4",
+                title="Tuning",
+                page_start=9,
+                page_end=11,
+            ),
+        ],
+    )
+
+
 def chunk(text: str, page: int = 1, **extra: Any) -> dict[str, Any]:
     base: dict[str, Any] = {"text": text, "page": page}
     base.update(extra)
@@ -445,8 +521,11 @@ class TestAddOnlySemantics:
     def test_results_are_order_independent_for_nested_trees(self) -> None:
         """The containment filter matches per chunk, so batching is safe.
 
-        This is the property the qdrant refresh relies on when it feeds
-        arbitrary scroll batches through annotate_chunks.
+        This is the unordered (default) property: chunk order does not
+        matter for well-formed trees. Ordered mode deliberately trades it
+        for reading-order disambiguation, so only callers that walk chunks
+        in reading order (or sort first, like the qdrant refresh) may pass
+        ``ordered=True``.
         """
         chunks = [
             chunk("5.2 Setup " + "prose " * 40, page=7),
@@ -458,3 +537,120 @@ class TestAddOnlySemantics:
         reversed_chunks = list(reversed(chunks))
         backward = annotate_chunks(reversed_chunks, document_tree())
         assert [dict(c) for c in forward] == [dict(c) for c in reversed(backward)]
+
+
+class TestOrderedStickyInheritance:
+    """ordered=True carries the previous target as a sticky owner (design D2).
+
+    Only page mode: the sticky owner must resolve the same-page sibling
+    ambiguity, never misfire on oscillating pages, and stay off for audio
+    (time mode) trees. The unordered default keeps today's behavior.
+    """
+
+    def test_unanchored_body_after_second_heading_inherits_it(self) -> None:
+        chunks = [
+            chunk("5.2 Setup " + "prose " * 40, page=7),
+            chunk("5.4 Tuning " + "prose " * 40, page=9),
+            chunk("tuning body prose " * 20, page=9),
+        ]
+        ordered = annotate_chunks(chunks, sibling_section_tree(), ordered=True)
+        unordered = annotate_chunks(chunks, sibling_section_tree())
+
+        # Anchors resolve identically in both modes ...
+        assert ordered[0]["node_id"] == "sec05.02"
+        assert ordered[0] == unordered[0]
+        # page 9 lies in both sections' ranges; only 5.4's heading forms match.
+        assert ordered[1]["node_id"] == "sec05.04"
+        assert ordered[1] == unordered[1]
+        # ... but the unanchored body chunk annotates only in ordered mode:
+        # the sticky owner (5.4) beats the same-page bail-out.
+        assert ordered[2]["node_id"] == "sec05.04"
+        assert ordered[2]["section_id"] == "5.4"
+        assert ordered[2]["chapter_id"] == "5"
+        assert "node_id" not in unordered[2]  # default behavior unchanged
+
+    def test_oscillating_page_does_not_inherit_the_stale_owner(self) -> None:
+        chunks = [
+            chunk("5.4 Tuning " + "prose " * 40, page=9),
+            chunk("setup prose before its heading " * 10, page=7),
+        ]
+        ordered = annotate_chunks(chunks, ambiguous_page_tree(), ordered=True)
+        unordered = annotate_chunks(chunks, ambiguous_page_tree())
+
+        assert ordered[0]["node_id"] == "sec05.04"
+        # The sticky owner (5.4, pages 9-11) does NOT contain page 7, so it
+        # must NOT be inherited (design D2 rule 2). Ordered mode still
+        # resolves via the most-recent-start candidate (rule 3): among the
+        # page-7 containers the last-started sibling is 5.3 — containment-
+        # bounded, never the stale owner. The unordered call keeps today's
+        # same-page bail-out.
+        assert ordered[1]["node_id"] == "sec05.03"
+        assert ordered[1]["node_id"] != "sec05.04"
+        assert "node_id" not in unordered[1]  # default behavior unchanged
+
+    def test_unanchored_first_chunk_inherits_most_recent_start(self) -> None:
+        # No sticky owner exists yet (first chunk) — ordered mode resolves
+        # through the most-recent-start candidate instead of bailing (D2
+        # rule 3); page 9's containers are 5.2 (starts 7) and 5.4 (starts 9).
+        chunks = [chunk("orphan body prose " * 20, page=9)]
+        ordered = annotate_chunks(chunks, sibling_section_tree(), ordered=True)
+        unordered = annotate_chunks(chunks, sibling_section_tree())
+
+        assert ordered[0]["node_id"] == "sec05.04"  # most-recent start (page 9)
+        assert "node_id" not in unordered[0]  # unordered keeps the bail-out
+
+    def test_sticky_owner_survives_unannotated_gaps(self) -> None:
+        chunks = [
+            chunk("5.2 Setup " + "prose " * 40, page=7),
+            chunk("orphan prose on an unknown page " * 10, page=99),
+            chunk("still setup prose " * 20, page=9),  # page 9: 5.2 + 5.4 overlap
+        ]
+        outs = annotate_chunks(chunks, sibling_section_tree(), ordered=True)
+
+        assert outs[0]["node_id"] == "sec05.02"
+        assert "node_id" not in outs[1]  # the gap gets no keys, stays refreshable
+        # The owner is NOT reset by the unannotated gap: containment is
+        # re-checked per chunk, and 5.2's range still contains page 9.
+        assert outs[2]["node_id"] == "sec05.02"
+
+    def test_time_mode_never_applies_the_sticky_rule(self) -> None:
+        chunks = [
+            chunk(
+                "welcome everyone to the show and stay tuned",
+                page=0,
+                t_start=0.0,
+                t_end=1.0,
+            ),
+            chunk("rambling prose " * 20, page=0, t_start=30.0, t_end=31.0),
+        ]
+        ordered = annotate_chunks(chunks, audio_tree(), ordered=True)
+        unordered = annotate_chunks(chunks, audio_tree())
+
+        assert ordered[0]["node_id"] == "seg01"  # anchor, as today
+        # t=30 is contained by BOTH segments; the deepest-wins rule picks
+        # seg02. A sticky owner (seg01) would be wrong — ordered mode must
+        # not apply it in time mode (audio annotation stays stateless).
+        assert ordered[1]["node_id"] == "seg02"
+        assert ordered == unordered
+
+    def test_ordered_annotation_only_adds_keys_and_never_mutates(self) -> None:
+        anchored = chunk(
+            "5.2 Setup " + "prose " * 40,
+            page=7,
+            text_hash="abc123",
+            custom_field={"keep": "me"},
+        )
+        body = chunk("setup body prose " * 20, page=8)
+        snapshots = [dict(anchored), dict(body)]
+
+        outs = annotate_chunks([anchored, body], sibling_section_tree(), ordered=True)
+
+        assert [dict(c) for c in (anchored, body)] == snapshots  # inputs untouched
+        assert outs[0] is not anchored
+        assert outs[1] is not body
+        # Existing and unknown keys are preserved; only annotation keys appear.
+        assert outs[0]["text_hash"] == "abc123"
+        assert outs[0]["custom_field"] == {"keep": "me"}
+        assert outs[0]["page"] == 7
+        assert outs[1]["node_id"] == "sec05.02"  # sticky inheritance
+        assert set(outs[1]) - set(body) <= set(ANNOTATION_PAYLOAD_KEYS)

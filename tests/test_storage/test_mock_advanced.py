@@ -287,6 +287,33 @@ def test_get_body_chunks_filters_role_and_page_floor() -> None:
     assert [c["chunk_id"] for c in from_page3] == ["a-p3", "a-p5"]
 
 
+def test_get_body_chunks_orders_document_order_page_then_pos() -> None:
+    """Mirrors QdrantVectorStorage (fix-chapter-bucket-sampling D3, layer 1).
+
+    Chunks stored deliberately out of document order come back ordered by
+    ``(page_number, page_pos)``; a chunk without ``page_pos`` sorts last on
+    its page.
+    """
+    storage = MockVectorStorage()
+    storage.store_batch(
+        [
+            {**_chunk("p3-b", source="s.pdf", page=3), "page_pos": 1},
+            {**_chunk("p2-d", source="s.pdf", page=2), "page_pos": 9},
+            {**_chunk("p2-a", source="s.pdf", page=2), "page_pos": 2},
+            _chunk("p2-nopos", source="s.pdf", page=2),
+            {**_chunk("p3-a", source="s.pdf", page=3), "page_pos": 0},
+        ]
+    )
+
+    assert [c["chunk_id"] for c in storage.get_body_chunks("s.pdf")] == [
+        "p2-a",
+        "p2-d",
+        "p2-nopos",
+        "p3-a",
+        "p3-b",
+    ]
+
+
 def test_get_body_chunks_limit_and_text_strip() -> None:
     storage = MockVectorStorage()
     storage.store_batch(

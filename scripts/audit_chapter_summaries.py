@@ -9,8 +9,19 @@ heading-title anchors, each chapter bucket's first page, empty buckets,
 monotonicity, and a PASS/FAIL verdict.
 
 PASS rule: ``chapters_detected > 0`` AND zero empty buckets AND bucket first
-pages monotonic non-decreasing AND every first page >= 10. (Zero detected
-chapters is a FAIL, not a vacuous pass.)
+pages monotonic non-decreasing AND every first page >= 10 AND zero degraded
+window compositions. A degraded composition (fix-summary-fidelity D2) is one
+whose real run would surface an explicit coverage note: a window holding no
+in-range chunks while foreign or refused material was seen, or a window whose
+tolerated-foreign share exceeds 0.5. (Zero detected chapters is a FAIL, not a
+vacuous pass.)
+
+Each record additionally carries ``window_compositions`` (per-chapter
+in_range/foreign/dropped/foreign_share statistics stashed by the pipeline for
+the audit harness), ``degraded`` (chapters whose composition would surface a
+coverage note), and an advisory ``table_scan`` (chunks whose text fuses a
+magnitude with a unit into the next row's decimal — the degenerate-table
+bleed class; reported in the JSON payload, not verdict-gating).
 
 Usage::
 
@@ -39,11 +50,13 @@ import argparse
 import json
 import logging
 import os
+import re
 import signal
 import sys
 import time
 import traceback
 import types
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, NoReturn
@@ -202,16 +215,20 @@ def _fatal(message: str) -> NoReturn:
 
 
 def _import_secondbrain() -> tuple[
-    type[RAGPipeline], type[Searcher], type[QdrantVectorStorage]
+    type[RAGPipeline],
+    type[Searcher],
+    type[QdrantVectorStorage],
+    Callable[[dict[str, int | float]], str | None],
 ]:
     """Import the product pipeline lazily, after stderr has been silenced."""
     try:
         from secondbrain.rag.pipeline import RAGPipeline
+        from secondbrain.rag.pipeline._pipeline import _chapter_coverage_note
         from secondbrain.search import Searcher
         from secondbrain.storage.qdrant import QdrantVectorStorage
     except Exception as exc:
         _fatal(f"cannot import secondbrain from {REPO}: {exc}")
-    return RAGPipeline, Searcher, QdrantVectorStorage
+    return RAGPipeline, Searcher, QdrantVectorStorage, _chapter_coverage_note
 
 
 def check_preconditions(st: QdrantVectorStorage) -> int:
@@ -259,27 +276,72 @@ def load_manifest(path: Path) -> list[str]:
     return sorted({line.strip() for line in lines if line.strip()})
 
 
+# Degenerate-table bleed (fix-summary-fidelity 2.4): a table row's magnitude
+# fused with its unit and followed by the next row's decimal, e.g.
+# "1200 ms 0.98" where 0.98 belongs to a different metric.  Advisory signal
+# for the table-serialization work; not verdict-gating here.
+_TABLE_BLEED_RE = re.compile(
+    r"\b\d+(?:\.\d+)?\s*"
+    r"(?:ms|milliseconds?|secs?|seconds?|mins?|minutes?|hours?|days?)\s+"
+    r"\d+\.\d+\b",
+    re.IGNORECASE,
+)
+
+
+def scan_degenerate_tables(
+    st: QdrantVectorStorage, source: str, max_samples: int = 5
+) -> dict[str, Any]:
+    """Count chunks carrying the degenerate magnitude/decimal bleed shape.
+
+    Advisory: returns the hit count plus up to *max_samples* matches with
+    page number and surrounding context, for the JSON payload.
+    """
+    hits = 0
+    samples: list[dict[str, Any]] = []
+    for chunk in st.get_body_chunks(source, limit=None):
+        text = chunk.get("chunk_text") or ""
+        match = _TABLE_BLEED_RE.search(text)
+        if match is None:
+            continue
+        hits += 1
+        if len(samples) < max_samples:
+            start, end = match.span()
+            samples.append(
+                {
+                    "page": chunk.get("page_number"),
+                    "match": match.group(0),
+                    "context": text[max(0, start - 40) : end + 40],
+                }
+            )
+    return {"hits": hits, "samples": samples}
+
+
 def audit_source(
     pipeline_cls: type[RAGPipeline],
     searcher_cls: type[Searcher],
     st: QdrantVectorStorage,
     source: str,
     timeout_s: float,
+    coverage_note: Callable[[dict[str, int | float]], str | None],
 ) -> dict[str, Any]:
     """Run the real detection + bucket-fill path for one source.
 
     Monkeypatches ``_generate_multi_chapter_summary`` to record each chapter
     bucket's first page (restored in ``finally``), instruments
-    ``_heading_title_anchors`` for anchor stats, and guards the run with a
-    per-source SIGALRM timeout recorded as a failure.
+    ``_heading_title_anchors`` for anchor stats, reads the pipeline's
+    ``_window_compositions`` for the D2 composition/degraded report, runs an
+    advisory degenerate-table scan, and guards the run with a per-source
+    SIGALRM timeout recorded as a failure.
     """
-    name = Path(source).stem
     rec: dict[str, Any] = {
         "source": source,
         "chapters_detected": 0,
         "anchors": {},
         "bucket_first_pages": {},
         "empty": [],
+        "window_compositions": {},
+        "degraded": [],
+        "table_scan": {"hits": 0, "samples": []},
         "monotonic": False,
         "pass": False,
         "error": None,
@@ -326,13 +388,19 @@ def audit_source(
 
     orig_multi = pipeline_cls._generate_multi_chapter_summary
     pipeline_cls._generate_multi_chapter_summary = logged_multi
+    q: Any = None
     try:
         q = pipeline_cls(searcher_cls(), StubProvider())
         signal.signal(signal.SIGALRM, _on_alarm)
         signal.setitimer(signal.ITIMER_REAL, timeout_s)
         try:
+            # Target-less query on purpose: the file stem may itself contain
+            # a dotted number ("pve-admin-guide-9.1"), which the query-intent
+            # parser reads as a chapter/section target — silently narrowing
+            # the audit to that one chapter (or none).  Source selection is
+            # the explicit source_filter's job, not the query's.
             q._iterative_query(
-                f"summarize by chapter {name}",
+                "summarize by chapter",
                 top_k=12,
                 show_sources=False,
                 source_filter=source,
@@ -345,6 +413,23 @@ def audit_source(
         rec["error"] = f"iterative-query: {type(exc).__name__}: {exc}"
     finally:
         pipeline_cls._generate_multi_chapter_summary = orig_multi
+
+    # --- D2 window compositions + degraded chapters -----------------------
+    if q is not None:
+        comps = dict(getattr(q, "_window_compositions", {}) or {})
+        rec["window_compositions"] = {
+            str(ch): dict(comp) for ch, comp in sorted(comps.items())
+        }
+        rec["degraded"] = sorted(
+            (str(ch) for ch, comp in comps.items() if coverage_note(comp) is not None),
+            key=int,
+        )
+
+    # --- Advisory degenerate-table scan (2.4) ------------------------------
+    try:
+        rec["table_scan"] = scan_degenerate_tables(st, source)
+    except Exception as exc:
+        rec["table_scan"] = {"hits": -1, "error": f"{type(exc).__name__}: {exc}"}
 
     # --- Verdict ---
     chapters = sorted(report)
@@ -364,6 +449,7 @@ def audit_source(
         and not rec["empty"]
         and rec["monotonic"]
         and all(v is not None and v >= 10 for v in first_pages)
+        and not rec["degraded"]
     )
     if rec["error"] is None and not chapters:
         rec["error"] = "pipeline fallback: zero chapters detected"
@@ -372,8 +458,8 @@ def audit_source(
 
 
 def failing_chapters(rec: dict[str, Any]) -> list[str]:
-    """Chapters that are empty, out of order, or pinned before page 10."""
-    bad: set[str] = set(rec["empty"])
+    """Chapters that are empty, degraded, out of order, or pinned before 10."""
+    bad: set[str] = set(rec["empty"]) | set(rec.get("degraded", []))
     ordered = sorted(rec["bucket_first_pages"], key=int)
     running_max: int | None = None
     for ch in ordered:
@@ -392,16 +478,20 @@ def failing_chapters(rec: dict[str, Any]) -> list[str]:
 def _print_table(results: list[dict[str, Any]]) -> None:
     """Print the compact per-source verdict table to stdout."""
     print(
-        f"{'RESULT':<4} {'source':<55} {'ch':>3} {'emp':>3} {'mono':<5} {'secs':>5}  failing"
+        f"{'RESULT':<4} {'source':<55} {'ch':>3} {'emp':>3} {'deg':>3} "
+        f"{'mono':<5} {'tbl':>4} {'secs':>5}  failing"
     )
     for r in results:
         name = Path(r["source"]).stem
         status = "PASS" if r["pass"] else "FAIL"
         fails = "" if r["pass"] else " ".join(failing_chapters(r))
         suffix = f" ({r['error']})" if r["error"] else ""
+        tbl_hits = int((r.get("table_scan") or {}).get("hits", 0))
+        tbl = f"{tbl_hits:>4}" if tbl_hits >= 0 else " n/a"
         print(
             f"{status:<4} {name:<55} {r['chapters_detected']:>3} "
-            f"{len(r['empty']):>3} {r['monotonic']!s:<5} {r['secs']:>5}  {fails}{suffix}"
+            f"{len(r['empty']):>3} {len(r.get('degraded', [])):>3} "
+            f"{r['monotonic']!s:<5} {tbl} {r['secs']:>5}  {fails}{suffix}"
         )
 
 
@@ -414,7 +504,7 @@ def main(argv: list[str] | None = None) -> int:
     sys.stderr = Path(os.devnull).open("w")  # noqa: SIM115 - process-long by design
     logging.disable(logging.CRITICAL)
 
-    pipeline_cls, searcher_cls, storage_cls = _import_secondbrain()
+    pipeline_cls, searcher_cls, storage_cls, coverage_note = _import_secondbrain()
 
     st = storage_cls()
     points = check_preconditions(st)
@@ -433,7 +523,7 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     results = [
-        audit_source(pipeline_cls, searcher_cls, st, src, args.timeout)
+        audit_source(pipeline_cls, searcher_cls, st, src, args.timeout, coverage_note)
         for src in sources
     ]
     n_pass = sum(1 for r in results if r["pass"])
@@ -456,7 +546,19 @@ def main(argv: list[str] | None = None) -> int:
         "manifest": str(args.manifest) if args.manifest is not None else None,
         "pass_rule": (
             "chapters_detected > 0 AND zero empty buckets AND bucket first "
-            "pages monotonic non-decreasing AND every first page >= 10"
+            "pages monotonic non-decreasing AND every first page >= 10 AND "
+            "zero degraded window compositions"
+        ),
+        "degraded_rule": (
+            "window composition would surface a D2 coverage note: "
+            "in_range == 0 with foreign or dropped material seen, or "
+            "tolerated foreign share > 0.5"
+        ),
+        "table_scan_rule": (
+            "advisory, not verdict-gating: chunk text matches "
+            "\\b\\d+(?:\\.\\d+)?\\s*(?:ms|milliseconds?|secs?|seconds?|mins?"
+            "|minutes?|hours?|days?)\\s+\\d+\\.\\d+\\b (case-insensitive), "
+            "i.e. a magnitude fused with a unit into the next row's decimal"
         ),
         "results": results,
     }

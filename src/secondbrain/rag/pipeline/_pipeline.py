@@ -12,6 +12,7 @@ import logging
 import re
 import statistics
 import time
+from math import ceil
 from typing import Any, cast
 
 from secondbrain.config import config
@@ -48,6 +49,260 @@ _QUERY_TARGET_RE = re.compile(
     r"\b(?:chapter|section|part)\s+\d+\b|\b\d+\.\d+\b",
     re.IGNORECASE,
 )
+
+# ---------------------------------------------------------------------------
+# Chapter-window purity (fix-summary-fidelity, decisions D1/D2)
+#
+# The per-chapter window assembly admits candidate chunks only from the
+# chapter's own derived page range.  Ranges/pins themselves are authoritative
+# and untouched — the filter runs after they are derived and only decides
+# which candidates each chapter's generation window admits.
+# ---------------------------------------------------------------------------
+
+# Admission verdicts for one candidate chunk against one chapter's range.
+_WINDOW_IN_RANGE = "in_range"
+_WINDOW_STRADDLE = "straddle"
+_WINDOW_FOREIGN = "foreign"
+
+# Bounded boundary tolerance: a chunk that straddles a range boundary may be
+# admitted when it opens at most this many pages outside the range and
+# carries the chapter's own opener evidence.
+_STRADDLE_TOLERANCE_PAGES = 1
+
+# A window is foreign-dominated when the share of tolerated foreign chunks
+# among its admitted chunks exceeds this; the coverage note then replaces the
+# summary.  Calibrated on the chapter-map corpus fixtures
+# (``tests/fixtures/chapter_map``): every healthy book window admits ~0
+# tolerated foreign chunks (foreign share ≈ 0 — see
+# ``tests/unit/rag/test_chapter_window_purity.py``), so the majority
+# threshold sits far above every healthy window while still catching the
+# dominated shape.
+_FOREIGN_SHARE_NOTE_THRESHOLD = 0.5
+
+# Density-aware per-page admission bound (fix-chapter-bucket-sampling, D4).
+# The multi-chapter round-robin keeps a flat base bound per page and scales
+# it up for dense pages:
+#
+#     cap_pg = min(PAGE_CAP_MAX, max(page_cap, ceil(PAGE_DENSITY_FACTOR * n)))
+#
+# where ``n`` is the number of body chunks the stream delivers for that
+# chapter and page.  A dense page contributes more than the base bound,
+# within the bounded maximum; a page holding no more than the base bound
+# keeps it unchanged.  Tunable implementation values — the spec constrains
+# only the bounded-scaling shape and the per-chapter limit.
+PAGE_CAP_BASE = 3
+PAGE_DENSITY_FACTOR = 0.6
+PAGE_CAP_MAX = 2 * PAGE_CAP_BASE
+
+
+def _page_document_order_key(chunk: dict[str, Any]) -> tuple[int, float]:
+    """Document order within a source (fix-chapter-bucket-sampling, D3).
+
+    Ascending page, then ascending within-page position; a missing or None
+    ``page_pos`` sorts last — the same rule the storage layer's
+    ``get_body_chunks`` guarantees.  Admission consumes chunks in this
+    order, so the sampler's output is a deterministic function of stored
+    content, independent of the backend's enumeration order.
+    """
+    pos = chunk.get("page_pos")
+    return (
+        int(chunk.get("page_number") or 0),
+        float(pos) if pos is not None else float("inf"),
+    )
+
+
+def _chapter_window_evidence(
+    chunk: dict[str, Any], ch_num: int, title: str, *, page_level: bool = False
+) -> bool:
+    """Return True when a chunk's text carries chapter ``ch_num``'s opener evidence.
+
+    Tight shapes (all admission decisions): the chapter's own section
+    numbering at the text start (``16.1 Backup Modes …``), its ``Chapter 16``
+    banner (at the text start, or anywhere in a heading-role chunk), its
+    roster title opening the text — directly or after the chapter number
+    (``1 Foundational Signal Concepts``, ``21. Source Register``) — or the
+    number+title pair glued mid-text (an opener sentence merged onto the
+    previous chunk's tail: ``… [1][3]. 7. The IDEO Field Guide …``).
+    Markers are anchored because a boundary-straddling opener chunk OPENS
+    with (or glues) its chapter's marker, while loose anywhere-searches
+    match ToC rows (``G.1.2 …`` reads as ``1.2``, ``E.1 Introduction …``
+    reads as the title) and addresses such as ``10.1.2.0/24`` (reads as
+    ``10.1``), admitting neighboring material on false evidence.
+
+    Page-level shapes (``page_level=True``, opener-page detection only) add
+    a bare chapter-number mention, a numbered heading anywhere in the chunk
+    (``… 6. Phase-by-Phase Working Table …`` whose roster title drifted from
+    the printed one), and the roster title anywhere — a false hit there only
+    widens an opener page to the pre-filter behavior, it never admits
+    foreign material on a boundary page.
+    """
+    text = str(chunk.get("chunk_text") or "")
+    if not text:
+        return False
+    flat = " ".join(text.lower().split())
+    if re.match(rf"\s*{ch_num}\.\d", text):
+        return True
+    if re.match(rf"\s*chapter\s+{ch_num}\b", text, re.IGNORECASE):
+        return True
+    if str(chunk.get("chunk_role") or "") == "heading" and re.search(
+        rf"\bchapter\s+{ch_num}\b", text, re.IGNORECASE
+    ):
+        return True
+    squashed = " ".join(str(title).lower().split())
+    if len(squashed) >= 6:
+        escaped = re.escape(squashed)
+        if flat.startswith(squashed) or re.match(
+            rf"\s*{ch_num}\s*[.:]?\s+{escaped}\b", flat
+        ):
+            return True
+        if re.search(rf"(?:^|[^\w.]){ch_num}\s*[.:]?\s+{escaped}\b", flat):
+            return True
+        # Glued-title variants: the stored roster title may have its intra-
+        # title spaces deleted (docling space regression, "ClusterManager")
+        # while the opener chunk carries the spaced form — compare with all
+        # whitespace removed on both sides.  Left-guarded on non-digit
+        # non-dot so a longer number ("14") never feeds a single-digit
+        # chapter's match.
+        title_nows = re.sub(r"\s+", "", squashed)
+        flat_nows = re.sub(r"\s+", "", flat)
+        if flat_nows.startswith(title_nows) or re.match(
+            rf"{ch_num}[.:]?{re.escape(title_nows)}", flat_nows
+        ):
+            return True
+        if re.search(rf"(?:^|[^\d.]){ch_num}[.:]?{re.escape(title_nows)}", flat_nows):
+            return True
+    if not page_level:
+        return False
+    if re.search(rf"(?:^|[^\w.]){ch_num}\s*[.:]\s+\S", flat):
+        return True
+    if len(squashed) >= 6 and squashed in flat:
+        return True
+    return bool(re.search(rf"\b{ch_num}\b", flat))
+
+
+def _classify_window_chunk(
+    chunk: dict[str, Any],
+    ch_num: int,
+    start: int,
+    end: int,
+    *,
+    opener_on_start_page: bool,
+    title: str,
+) -> str:
+    """Classify a candidate chunk against chapter ``ch_num``'s derived range.
+
+    ``in_range``: the chunk's page lies inside ``[start, end]`` — admitted,
+    except on the range's first page when that page is the pin convention's
+    speculative "minus one" page (no opener evidence on the page itself) and
+    the chunk carries none either: its content is then the previous
+    chapter's tail and it is refused (``foreign``).  ``straddle``: the chunk
+    opens one page before the range but carries opener evidence — the
+    bounded one-page boundary tolerance admits it.  Everything else is
+    ``foreign`` and never admitted.
+    """
+    pg = int(chunk.get("page_number") or 0)
+    if start <= pg <= end:
+        if (
+            pg == start
+            and not opener_on_start_page
+            and not _chapter_window_evidence(chunk, ch_num, title)
+        ):
+            return _WINDOW_FOREIGN
+        return _WINDOW_IN_RANGE
+    if pg == start - _STRADDLE_TOLERANCE_PAGES and _chapter_window_evidence(
+        chunk, ch_num, title
+    ):
+        return _WINDOW_STRADDLE
+    return _WINDOW_FOREIGN
+
+
+def _chapter_opener_start_pages(
+    structure_chunks: list[dict[str, Any]],
+    chapter_ranges: dict[int, tuple[int, int]],
+    titles: dict[int, str],
+    source: str,
+) -> dict[int, bool]:
+    """Per chapter: whether its derived range's start page carries opener evidence.
+
+    When the start page itself names the chapter (banner, title, or its own
+    ``N.x`` section heading), the page is the chapter's opener page and every
+    chunk on it is admitted; otherwise the page is the pin convention's
+    speculative "minus one" page and chunks on it need per-chunk opener
+    evidence (see :func:`_classify_window_chunk`).
+    """
+    start_pages = {
+        rng[0] for rng in chapter_ranges.values() if rng[1] >= rng[0] and rng[0] > 0
+    }
+    by_page: dict[int, list[dict[str, Any]]] = {}
+    if start_pages:
+        for chunk in structure_chunks:
+            if chunk.get("source_file") != source:
+                continue
+            pg = int(chunk.get("page_number") or 0)
+            if pg in start_pages:
+                by_page.setdefault(pg, []).append(chunk)
+    return {
+        ch: (
+            rng[1] >= rng[0]
+            and rng[0] > 0
+            and any(
+                _chapter_window_evidence(chunk, ch, titles.get(ch, ""), page_level=True)
+                for chunk in by_page.get(rng[0], ())
+            )
+        )
+        for ch, rng in chapter_ranges.items()
+    }
+
+
+def _window_composition(
+    in_range: int, foreign: int, dropped: int
+) -> dict[str, int | float]:
+    """Window-composition statistics for one chapter (D2).
+
+    ``in_range``: admitted chunks from the chapter's own range; ``foreign``:
+    admitted chunks outside it (tolerated straddles); ``dropped``: foreign
+    candidates the admission filter refused.  ``foreign_share`` is the
+    tolerated foreign share of the admitted window (0.0 when empty).
+    """
+    total = in_range + foreign
+    return {
+        "in_range": in_range,
+        "foreign": foreign,
+        "dropped": dropped,
+        "foreign_share": (foreign / total) if total else 0.0,
+    }
+
+
+def _chapter_coverage_note(
+    composition: dict[str, int | float] | None,
+) -> str | None:
+    """Coverage note for an empty or foreign-dominated chapter window (D2).
+
+    Same style as the existing "no document content was retrieved" placeholder.
+    ``None`` keeps the chapter's current output unchanged: healthy windows,
+    and truly empty buckets (no candidates at all), which the existing
+    empty-bucket placeholder already speaks for.
+    """
+    if not composition:
+        return None
+    in_range = int(composition["in_range"])
+    foreign = int(composition["foreign"])
+    dropped = int(composition["dropped"])
+    if in_range == 0 and (foreign or dropped):
+        return (
+            "No document content was retrieved for this chapter (its "
+            "detected page window contains only material from outside the "
+            "chapter's own page range), so no faithful summary could be "
+            "generated."
+        )
+    total = in_range + foreign
+    if total and foreign / total > _FOREIGN_SHARE_NOTE_THRESHOLD:
+        return (
+            f"Coverage note: only {in_range} of {total} window chunks fall "
+            "inside this chapter's detected page range; the rest comes from "
+            "neighboring material, so this summary is partial."
+        )
+    return None
 
 
 class RAGPipeline(
@@ -96,6 +351,10 @@ class RAGPipeline(
         self._intent_parser = StructuralIntentParser(self._config)
         self._security_filter = SecurityFilter()
         self._on_chunk = on_chunk
+        # Per-chapter window-composition statistics from the most recent
+        # legacy-path chapter assembly (fix-summary-fidelity D2); reset per
+        # query and consumed by the audit harness.
+        self._window_compositions: dict[int, dict[str, int | float]] = {}
         # Lazily-initialized DocumentRouter for document-scoped retrieval.
         # Created on first use so that the pipeline can be constructed without
         # a running vector store connection (e.g. during CLI help / --version).
@@ -131,6 +390,7 @@ class RAGPipeline(
             dict with 'answer', 'query', 'sources' (if show_sources).
         """
         self._structure_source = None
+        self._window_compositions = {}
         intent_decision = self._intent_parser.parse(query)
 
         # When enumerating a single chapter, boost top_k so the bucket
@@ -1270,9 +1530,50 @@ class RAGPipeline(
                 # versus the old 4-chunk cap, which summarized dense chapters
                 # from one or two pages.
                 per_chapter_limit = 8
+                # Range-faithful admission (D1): opener evidence per chapter's
+                # start page decides whether that page is the chapter's own
+                # opener (all its chunks admitted) or the pin convention's
+                # speculative "minus one" page (per-chunk evidence required).
+                edge_titles_: dict[int, str] = {
+                    ct[0]: ct[2] for ct in chapters_to_cover if ct[1] == src
+                }
+                # Opener-page evidence must not depend on the probe sample:
+                # the probe is a bounded structural retrieval, so a chapter's
+                # opener heading can be missing from it.  Merge the storage's
+                # own heading chunks (the authoritative structural record)
+                # into the scan.
+                heading_scan_: list[dict[str, Any]] = []
+                edge_storage_ = getattr(self._searcher, "storage", None)
+                if edge_storage_ is not None and hasattr(
+                    edge_storage_, "find_structural_chunks"
+                ):
+                    try:
+                        heading_scan_ = list(
+                            edge_storage_.find_structural_chunks(
+                                chunk_roles=["heading"], source_prefix=src
+                            )
+                        )
+                    except Exception:
+                        heading_scan_ = []
+                opener_on_start_ = _chapter_opener_start_pages(
+                    [*structure_chunks, *heading_scan_],
+                    chapter_ranges_,
+                    edge_titles_,
+                    src,
+                )
+                # Per-chapter window-composition statistics (D2); surfaced via
+                # ``self._window_compositions`` for the audit harness.
+                window_compositions: dict[int, dict[str, int | float]] = {
+                    ch: _window_composition(0, 0, 0) for ch in chapter_keys
+                }
                 chapter_buckets: dict[int, list[dict[str, Any]]] = {
                     ch: [] for ch in chapter_keys
                 }
+                # Deferred boundary-straddle candidates (D1): the multi-
+                # chapter pass collects them, the supplement below admits
+                # them.  Single-section fetches handle their own boundary
+                # through the start-minus-one candidate page.
+                straddle_pool: dict[int, list[dict[str, Any]]] = {}
                 if single_section_mode:
                     # Deterministic full-chapter fetch: every body chunk inside
                     # the chapter's page range, in document order, with no
@@ -1280,43 +1581,134 @@ class RAGPipeline(
                     # sampling silently dropped dense pages from single-chapter
                     # overviews; the summarizer bounds its own context
                     # downstream, so fetching everything here is lossless.
+                    # The fetch starts one page early so a chunk that straddles
+                    # the range's opening boundary can be admitted under the
+                    # one-page tolerance; the admission filter decides.
                     for ch_num in chapter_keys:
                         start_pg_, end_pg_ = chapter_ranges_[ch_num]
-                        in_range = [
+                        candidates = [
                             c
                             for c in cast(
                                 list[dict[str, Any]],
-                                storage.get_body_chunks(src, page_gte=start_pg_),
+                                storage.get_body_chunks(
+                                    src, page_gte=max(1, start_pg_ - 1)
+                                ),
                             )
                             if (c.get("page_number") or 0) <= end_pg_
                         ]
-                        in_range.sort(
+                        candidates.sort(
                             key=lambda c: (
                                 c.get("page_number") or 0,
                                 c.get("page_pos") or 0,
                             )
                         )
-                        for c in in_range:
+                        bucket: list[dict[str, Any]] = []
+                        dropped_n = 0
+                        for c in candidates:
+                            verdict = _classify_window_chunk(
+                                c,
+                                ch_num,
+                                start_pg_,
+                                end_pg_,
+                                opener_on_start_page=opener_on_start_.get(
+                                    ch_num, False
+                                ),
+                                title=edge_titles_.get(ch_num, ""),
+                            )
+                            if verdict == _WINDOW_FOREIGN:
+                                dropped_n += 1
+                                continue
                             c["score"] = 0.5
-                        chapter_buckets[ch_num] = in_range
+                            bucket.append(c)
+                        chapter_buckets[ch_num] = bucket
+                        # in_range/foreign/foreign_share are derived from
+                        # final bucket membership after assembly (below);
+                        # the refusal count is recorded here.
+                        window_compositions[ch_num]["dropped"] = dropped_n
                 else:
                     # Multi-chapter round-robin: per-page caps keep sampling
                     # spread across the chapter's range instead of clustering
                     # on its first pages.
-                    page_cap = 3
+                    page_cap = PAGE_CAP_BASE
                     page_count_per_ch: dict[int, dict[int, int]] = {
                         ch: {} for ch in chapter_keys
                     }
-                    for c in cast(
+                    # One-page boundary-straddle targets (D1): chapter by
+                    # range-start page; a chunk one page before a start may
+                    # join that chapter's window when it carries opener
+                    # evidence.
+                    straddle_targets: dict[int, int] = {
+                        rng[0]: ch
+                        for ch, rng in chapter_ranges_.items()
+                        if rng[1] >= rng[0]
+                    }
+                    page_stream = cast(
                         list[dict[str, Any]], storage.get_body_chunks(src, limit=6000)
-                    ):
+                    )
+                    # Document-order admission (D3, layer 2): sort the stream
+                    # client-side by (page_number, page_pos) so within-page
+                    # admission follows the document regardless of the order
+                    # the storage returned the chunks in.
+                    page_stream.sort(key=_page_document_order_key)
+                    # Density pre-pass (D4): count the body chunks the stream
+                    # delivers for each (chapter, page) — every chunk whose
+                    # page lies in the chapter's range, refused candidates
+                    # included, because the bound scales with the page's
+                    # stored density — and derive each page's dynamic
+                    # admission bound before admission starts.  The admission
+                    # loop below streams this materialized list exactly once,
+                    # so the counts cannot be taken while admitting.
+                    page_chunk_counts: dict[int, dict[int, int]] = {
+                        ch: {} for ch in chapter_keys
+                    }
+                    for c in page_stream:
                         pg = c.get("page_number", 0)
                         for ch_num in chapter_keys:
                             rng = chapter_ranges_[ch_num]
                             if rng[0] <= pg <= rng[1]:
+                                counts_pg = page_chunk_counts[ch_num]
+                                counts_pg[pg] = counts_pg.get(pg, 0) + 1
+                    page_caps: dict[int, dict[int, int]] = {
+                        ch: {
+                            pg: min(
+                                PAGE_CAP_MAX,
+                                max(page_cap, ceil(PAGE_DENSITY_FACTOR * n)),
+                            )
+                            for pg, n in counts.items()
+                        }
+                        for ch, counts in page_chunk_counts.items()
+                    }
+                    for c in page_stream:
+                        pg = c.get("page_number", 0)
+                        for ch_num in chapter_keys:
+                            rng = chapter_ranges_[ch_num]
+                            if rng[0] <= pg <= rng[1]:
+                                # D4: this (chapter, page)'s dynamic bound;
+                                # a page absent from the pre-pass counts
+                                # (impossible for an in-range stream chunk,
+                                # but the fallback keeps the base bound).
+                                cap_pg = page_caps[ch_num].get(pg, page_cap)
+                                verdict = _classify_window_chunk(
+                                    c,
+                                    ch_num,
+                                    rng[0],
+                                    rng[1],
+                                    opener_on_start_page=opener_on_start_.get(
+                                        ch_num, False
+                                    ),
+                                    title=edge_titles_.get(ch_num, ""),
+                                )
+                                if verdict == _WINDOW_FOREIGN:
+                                    # In-range page refused by the admission
+                                    # filter: the previous chapter's tail on
+                                    # this chapter's speculative start page
+                                    # (D1).  Never admitted; counted as a
+                                    # foreign drop for the composition report.
+                                    window_compositions[ch_num]["dropped"] += 1
+                                    break
                                 if len(chapter_buckets[ch_num]) < per_chapter_limit:
                                     per_page = page_count_per_ch[ch_num]
-                                    if per_page.get(pg, 0) < page_cap:
+                                    if per_page.get(pg, 0) < cap_pg:
                                         per_page[pg] = per_page.get(pg, 0) + 1
                                         c["score"] = 0.5
                                         chapter_buckets[ch_num].append(c)
@@ -1347,12 +1739,12 @@ class RAGPipeline(
                                                     break
                                             # All existing page entries are also section
                                             # headers — grant extra slots to avoid losing
-                                            # genuine section content. Allow up to 4 per
-                                            # page for pages with dense section headers
-                                            # (e.g. VirtualBox ch11 p186 has 4: 11.6.3,
-                                            # 11.6.4, 11.6.4.1, 11.6.5).
+                                            # genuine section content. Allow up to
+                                            # cap_pg + 2 per page for pages with dense
+                                            # section headers (e.g. VirtualBox ch11 p186
+                                            # has 4: 11.6.3, 11.6.4, 11.6.4.1, 11.6.5).
                                             if not replaced:
-                                                if per_page.get(pg, 0) < page_cap + 2:
+                                                if per_page.get(pg, 0) < cap_pg + 2:
                                                     per_page[pg] = (
                                                         per_page.get(pg, 0) + 1
                                                     )
@@ -1369,6 +1761,84 @@ class RAGPipeline(
                                                         len(chapter_buckets[ch_num]),
                                                     )
                                 break
+                        # One-page boundary tolerance (D1): a chunk that opens
+                        # one page before a chapter's range start and carries
+                        # that chapter's opener evidence straddles the boundary
+                        # (the chapter's opening sentence merged onto the
+                        # previous chapter's last page).  It may join the next
+                        # chapter's window as tolerated foreign material -- the
+                        # previous chapter's own claim (in-range or refused) is
+                        # unaffected -- and it is counted in that window's
+                        # composition (D2).
+                        straddle_ch = straddle_targets.get(pg + 1)
+                        if straddle_ch is not None:
+                            verdict = _classify_window_chunk(
+                                c,
+                                straddle_ch,
+                                chapter_ranges_[straddle_ch][0],
+                                chapter_ranges_[straddle_ch][1],
+                                opener_on_start_page=opener_on_start_.get(
+                                    straddle_ch, False
+                                ),
+                                title=edge_titles_.get(straddle_ch, ""),
+                            )
+                            if verdict == _WINDOW_STRADDLE:
+                                straddle_pool.setdefault(straddle_ch, []).append(c)
+
+                # Boundary-straddle supplement (D1): admitted now that the
+                # in-range pass is complete, while the window still has room.
+                # A copy per admission: the chunk may already sit in the
+                # previous chapter's bucket, and the section-header injection
+                # below mutates bucket members in place.
+                for straddle_ch, pool in straddle_pool.items():
+                    bucket = chapter_buckets[straddle_ch]
+                    per_page = page_count_per_ch[straddle_ch]
+                    for c in pool:
+                        if len(bucket) >= per_chapter_limit:
+                            break
+                        pg_s = int(c.get("page_number") or 0)
+                        # D4: the straddle page lies outside this chapter's
+                        # range, so the pre-pass counts nothing for it here
+                        # and the dynamic bound falls back to the base
+                        # per-page cap.
+                        if per_page.get(pg_s, 0) >= page_caps[straddle_ch].get(
+                            pg_s, page_cap
+                        ):
+                            continue
+                        per_page[pg_s] = per_page.get(pg_s, 0) + 1
+                        admitted = dict(c)
+                        admitted["score"] = 0.5
+                        bucket.append(admitted)
+
+                # Window-composition statistics (D2), derived from final
+                # bucket membership: everything a window admitted lies inside
+                # its chapter's range except tolerated one-page boundary
+                # straddles, so in_range/foreign fall out of the buckets.
+                # ``dropped`` was counted at refusal time (edge rejections
+                # only — per-page cap drops are sampling, not refusals).
+                for ch_num, comp in window_compositions.items():
+                    range_start_, range_end_ = chapter_ranges_[ch_num]
+                    ch_bucket = chapter_buckets[ch_num]
+                    in_range_n = sum(
+                        1
+                        for c in ch_bucket
+                        if range_start_ <= int(c.get("page_number") or 0) <= range_end_
+                    )
+                    comp["in_range"] = in_range_n
+                    comp["foreign"] = len(ch_bucket) - in_range_n
+                    comp["foreign_share"] = (
+                        comp["foreign"] / len(ch_bucket) if ch_bucket else 0.0
+                    )
+                # Stash for the audit harness (D5) and surface any window
+                # that refused or tolerated foreign candidates (D2).
+                self._window_compositions = window_compositions
+                _flagged = {
+                    ch: comp
+                    for ch, comp in window_compositions.items()
+                    if comp["dropped"] or comp["foreign"]
+                }
+                if _flagged:
+                    logger.info("Chapter window composition: %s", _flagged)
 
                 # Post-processing: inject missing section headers.
                 # Docling sometimes drops section numbers from body chunks
@@ -1484,6 +1954,7 @@ class RAGPipeline(
                     if ct[0] in good_title_nums and ct[0] not in ch_titles:
                         ch_titles[ct[0]] = ct[2]
                 chapter_roster_lines = []
+                chapter_roster_by_ch: dict[int, str] = {}
                 for ch_num in sorted(chapter_ranges_.keys()):
                     pg_start, pg_end = chapter_ranges_[ch_num]
                     title = self._display_chapter_title(ch_titles.get(ch_num, ""))
@@ -1494,13 +1965,11 @@ class RAGPipeline(
                         "" if pg_end < pg_start else f" (approx pages {pg_start}+)"
                     )
                     if title:
-                        chapter_roster_lines.append(
-                            f"Chapter {ch_num} — {title}{pg_note}"
-                        )
+                        roster_line = f"Chapter {ch_num} — {title}{pg_note}"
                     else:
-                        chapter_roster_lines.append(
-                            f"Chapter {ch_num} — No official title{pg_note}"
-                        )
+                        roster_line = f"Chapter {ch_num} — No official title{pg_note}"
+                    chapter_roster_lines.append(roster_line)
+                    chapter_roster_by_ch[ch_num] = roster_line
                 chapter_roster = "\n".join(chapter_roster_lines)
 
                 if appendix_entries:
@@ -1628,8 +2097,12 @@ class RAGPipeline(
                                 span.set_attribute("rag.iterative_mode", True)
                                 span.set_attribute("rag.enumeration_mode", True)
                                 span.set_attribute("rag.top_k", top_k)
-                            answer = self._generate_multi_chapter_summary(
-                                chapter_keys, chapter_buckets, ch_titles
+                            answer = self._generate_multi_chapter_summary_with_coverage(
+                                chapter_keys,
+                                chapter_buckets,
+                                ch_titles,
+                                window_compositions,
+                                chapter_roster_by_ch,
                             )
                     elif has_section_target and not raw_section_target and final_chunks:
                         # Single-chapter detailed breakdown (e.g. "tell me about
@@ -1796,6 +2269,81 @@ class RAGPipeline(
 
         return result
 
+    def _generate_multi_chapter_summary_with_coverage(
+        self,
+        chapter_keys: list[int],
+        chapter_buckets: dict[int, list[dict[str, Any]]],
+        ch_titles: dict[int, str],
+        window_compositions: dict[int, dict[str, int | float]],
+        roster_lines: dict[int, str] | None = None,
+    ) -> str:
+        """Chapter-by-chapter overview with explicit coverage notes (D2).
+
+        Delegates each chapter's bounded-window summary to
+        :meth:`_generate_multi_chapter_summary` (unchanged), one chapter per
+        call, and splices in a coverage note when that chapter's window
+        composition is degraded: a window with no in-range chunks gets the
+        note instead of a summary built from foreign material, and a
+        foreign-dominated window keeps its (partial) summary with the note
+        attached.  Stream and return text stay byte-identical to the
+        unwrapped method whenever every window is healthy.
+
+        A chapter whose per-chapter call comes back empty (LLM failure)
+        keeps its roster line — the same line the whole-answer roster
+        fallback carried before the per-chapter split — so a transient
+        empty summary cannot silently drop the chapter from the overview.
+        """
+        parts: list[str] = []
+        for ch_num in chapter_keys:
+            composition = window_compositions.get(ch_num)
+            note = _chapter_coverage_note(composition)
+            title = self._display_chapter_title(ch_titles.get(ch_num, ""))
+            heading = f"Chapter {ch_num}" + (f" — {title}" if title else "")
+            if note and composition and int(composition["in_range"]) == 0:
+                # The window holds none of the chapter's own content: the
+                # note replaces the summary instead of presenting foreign
+                # material as this chapter's content.
+                if self._on_chunk:
+                    self._on_chunk(
+                        (f"{heading}\n\n" if not parts else f"\n\n{heading}\n\n")
+                        + note,
+                        None,
+                    )
+                parts.append(f"{heading}\n\n{note}")
+                continue
+            if parts and self._on_chunk:
+                # The wrapped call emits only its own heading separator, so
+                # the part-join separator is emitted here to keep the live
+                # stream byte-identical to a single unwrapped run.
+                self._on_chunk("\n\n", None)
+            part = self._generate_multi_chapter_summary(
+                [ch_num], chapter_buckets, ch_titles
+            )
+            if not part.strip() and not note:
+                # Empty per-chapter summary with a healthy window: fall back
+                # to the chapter's roster line so the entry is not dropped
+                # (mirrors the whole-answer roster fallback upstream).
+                part = (roster_lines or {}).get(ch_num) or heading
+                if self._on_chunk:
+                    self._on_chunk(part, None)
+            if note and part.strip():
+                # Foreign-dominated window: the (partial) summary keeps its
+                # entry, with the explicit coverage note attached.
+                if self._on_chunk:
+                    self._on_chunk(f"\n\n{note}", None)
+                part = f"{part}\n\n{note}"
+            elif note:
+                # The summary came back unusable but the window is degraded:
+                # the note alone still speaks for the chapter.  The wrapped
+                # call already streamed the heading, so only the note text
+                # goes to the stream here.
+                if self._on_chunk:
+                    self._on_chunk(note, None)
+                part = f"{heading}\n\n{note}"
+            if part.strip():
+                parts.append(part)
+        return "\n\n".join(parts)
+
     def _tree_chapter_query(
         self,
         query: str,
@@ -1837,7 +2385,8 @@ class RAGPipeline(
             the tree governed the answer, or ``None`` when the legacy
             chapter path must proceed: no structure store, store or load
             errors, treeless document, a tree without chapter/section
-            nodes, a requested chapter the tree does not carry, or a
+            nodes (including a degenerate ToC-span-guarded map), a
+            requested chapter the tree does not carry, or a
             storage without the page-list ``find_chunks`` API.
         """
         tree = self._load_document_tree(src)
@@ -1846,7 +2395,9 @@ class RAGPipeline(
         all_ranges: dict[int, tuple[int, int]] = {}
         all_titles: dict[int, str] = {}
         if not raw_section_target:
-            all_ranges, all_titles = self._tree_chapter_map(tree.nodes)
+            all_ranges, all_titles = self._guarded_tree_chapter_map(
+                tree.nodes, self._searcher.storage, src
+            )
             if not all_ranges:
                 logger.info(
                     "Structure tree for %s has no chapter/section nodes; "
@@ -1854,6 +2405,13 @@ class RAGPipeline(
                     src,
                 )
                 return None
+            # fix-chapter-coverage task 3.2: extend undershooting window
+            # ends to the next chapter's derived start (never shrink, never
+            # overrun) so boundary pages between mis-captured nodes stay
+            # owned by some chapter's window.  Both the broad and the
+            # single-target branch below select from the clamped map; the
+            # exact-section branch builds its own range.
+            all_ranges = self._clamp_tree_window_ends(all_ranges)
 
         # Dotted targets use the exact section, not its enclosing chapter.
         if raw_section_target:

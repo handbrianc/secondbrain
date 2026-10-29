@@ -123,7 +123,12 @@ class VectorStorageProtocol(Protocol):
         page_gte: int | None = None,
         with_text: bool = True,
     ) -> Sequence[ChunkInfo]:
-        """Return a source's body chunks ordered by page, optionally page/limit."""
+        """Return a source's body chunks in document order, optionally page/limit.
+
+        Ordered by ``(page_number, page_pos)`` — ascending page, then
+        ascending within-page position, with a missing ``page_pos`` sorting
+        last — so reads reconstruct the processor's document walk.
+        """
         ...  # pragma: no cover
 
     def count_chunks(

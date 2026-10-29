@@ -556,9 +556,23 @@ class _FallbackMixin(_RAGPipelineState):
         Chapters whose bucket is empty (page-range detection found no body text
         in their range) are still listed, with an explicit placeholder note, so
         a partial overview is visible to the reader instead of silently
-        omitting chapters.
+        omitting chapters.  The same holds for a chapter whose overview comes
+        back empty: its heading block stays in the returned transcript (which
+        is what gets stored), matching the heading that was streamed, so a
+        mixed run (some chapters summarized, some not) stores exactly what the
+        reader saw.
+
+        When NO chapter yields any content (every overview came back empty and
+        there is no placeholder note), the transcript collapses to ``""`` so
+        the caller's roster fallback can speak, mirroring
+        :meth:`_generate_single_chapter_summary`; a bare stack of headings
+        would otherwise suppress the fallback while telling the reader nothing.
+        The streamed headings still went to the terminal in that case -- the
+        same documented roster-fallback display divergence as before this
+        change, deliberately left unchanged.
         """
         all_parts: list[str] = []
+        have_content = False
         for ch_num in chapter_keys:
             bucket = chapter_buckets.get(ch_num)
             title = self._display_chapter_title(ch_titles.get(ch_num, ""))
@@ -582,6 +596,7 @@ class _FallbackMixin(_RAGPipelineState):
                         None,
                     )
                 all_parts.append(f"{heading}\n\n{note}")
+                have_content = True
                 continue
             if self._on_chunk:
                 # The returned text joins blocks with "\n\n"; the live stream
@@ -597,17 +612,33 @@ class _FallbackMixin(_RAGPipelineState):
                 "years, statistics, and metrics EXACTLY as they appear in the "
                 "content below; never invent, estimate, round, or 'correct' a "
                 "figure the source does not state -- if a specific number is not "
-                "clearly present, omit it rather than guessing. Do not hedge, "
-                "second-guess, or correct figures, and do not reproduce code "
-                "details or function arguments (e.g. list(range(...))) verbatim."
+                "clearly present, omit it rather than guessing. When the content "
+                "below lists the same item names under different parent sections "
+                "(e.g. backup modes described separately for VMs and for "
+                "containers), attribute each item's description to the parent "
+                "section it appears under; never swap, merge, or reuse one "
+                "section's description for another section's same-named item. Do "
+                "not hedge, second-guess, or correct figures, and do not "
+                "reproduce code details or function arguments (e.g. "
+                "list(range(...))) verbatim."
             )
             summary = self._summarize_bounded(
                 heading=heading,
                 windows=self._split_bounded(bucket),
                 instruction=instruction,
             )
+            # The heading was already emitted above, so the returned
+            # transcript (what gets stored) must carry it even when the
+            # overview came back empty -- the display and the stored answer
+            # stay byte-identical in a mixed run.  The block counts as
+            # content only when the overview said something; a run where no
+            # chapter did collapses to "" below so the caller's roster
+            # fallback can speak.
             if summary.strip():
-                all_parts.append(f"{heading}\n\n{summary}")
+                have_content = True
+            all_parts.append(f"{heading}\n\n{summary}")
+        if not have_content:
+            return ""
         return "\n\n".join(all_parts)
 
     def _generate_single_chapter_summary(
@@ -645,6 +676,10 @@ class _FallbackMixin(_RAGPipelineState):
             heading=heading, windows=windows, instruction=instruction
         )
         if not body.strip():
+            # Nothing usable was generated: return "" so the caller's roster
+            # fallback can speak (the streamed heading above diverges from
+            # the stored roster exactly as it did before deferred display --
+            # the documented out-of-scope roster-fallback divergence).
             return ""
         return f"{heading}:\n\n{body}"
 
@@ -793,8 +828,8 @@ class _FallbackMixin(_RAGPipelineState):
             chunks: Body chunks of the scoped document.
 
         Returns:
-            The note line followed by the overview text (or just the note
-            when the overview could not be generated).
+            The note line followed by the overview text (or just the note and
+            its trailing separator when the overview could not be generated).
         """
         note = _WHOLE_DOCUMENT_OVERVIEW_NOTE
         if self._on_chunk:
@@ -806,7 +841,9 @@ class _FallbackMixin(_RAGPipelineState):
             instruction=_WHOLE_DOCUMENT_OVERVIEW_INSTRUCTION,
         )
         if not summary.strip():
-            return note
+            # The note was already streamed with its separator, so the
+            # returned transcript (what gets stored) must match it exactly.
+            return f"{note}\n\n"
         return f"{note}\n\n{summary}"
 
     @staticmethod
@@ -1004,7 +1041,8 @@ class _FallbackMixin(_RAGPipelineState):
         length ceiling effective.  Its size is shaped by "terse digest
         paragraph" phrasing rather than a numeric word bound, which would
         only trigger word-counting loops in the model's reasoning.
-        Reasoning streams (visible activity) but content stays
+        Reasoning is forwarded on the reasoning channel (the renderer
+        collapses it by default) but the digest content itself stays
         internal. On a stream failure the digest is regenerated once via
         :meth:`_generate_guarded`; an unusable digest is skipped with a warning
         so one bad window cannot stall the whole overview.
@@ -1034,8 +1072,9 @@ class _FallbackMixin(_RAGPipelineState):
             def _fwd_map(chunk: str, reasoning: str | None) -> None:
                 if time.monotonic() - digest_start > _WINDOW_MAX_SECONDS:
                     raise TimeoutError("map digest exceeded time budget")
-                # Reasoning streams so the user sees live activity; the digest
-                # content itself must never reach the screen.
+                # Reasoning is forwarded on the reasoning channel ("" content)
+                # so the renderer can show its collapsed thinking element; the
+                # digest content itself must never reach the screen.
                 if reasoning and self._on_chunk:
                     self._on_chunk("", reasoning)
                 if chunk:
@@ -1106,6 +1145,18 @@ class _FallbackMixin(_RAGPipelineState):
         are handled explicitly below: a normal return whose content was
         amputated mid-sentence by the server output cap, and a normal return
         with no content at all.
+
+        Display contract (live streaming): committed hold-releases stream to
+        the terminal while the draft forms, on the content channel only.  The
+        stored answer is the finalized overview returned below: on the happy
+        path the finalize post-passes make no mutation, so display equals
+        storage byte for byte, while repair paths (leak-scrub hold
+        replacement, low-temperature retry blocks, dead-stream continuation,
+        post-pass trims) may legitimately leave screen text the stored answer
+        supersedes.  Reasoning keeps flowing on the reasoning channel
+        (``("", reasoning)``) for the renderer's collapsed thinking element.
+        ``hold``/``flushed`` accounting is unchanged so the leak scrubber's
+        already-emitted-prefix comparison keeps its semantics.
         """
         emit = self._on_chunk
         can_stream = (
@@ -1161,9 +1212,12 @@ class _FallbackMixin(_RAGPipelineState):
             if not final.strip() or not self._is_plausible_summary(final):
                 return ""
             if emit:
-                # Non-streaming mode still surfaces the completed overview through
-                # the callback so the chat shows progressive output.
-                emit(f"\n\n{final}\n\n", None)
+                # Non-streaming mode still surfaces the completed overview
+                # through the callback so the chat shows progressive output.
+                # The bare final is emitted exactly as it will be stored --
+                # the old "\n\n{final}\n\n" wrapping made the transcript
+                # differ from the display by its padding.
+                emit(final, None)
             return final
 
         pieces: list[str] = []
@@ -1172,9 +1226,14 @@ class _FallbackMixin(_RAGPipelineState):
         # is caught on the buffered text before it reaches the screen.
         hold: list[str] = [""]
         flushed = [0]
+        # True once any content-channel emission happened for this reduce
+        # (live committed prefixes, a retry's replacement block); the final
+        # emission below must not duplicate it.
+        streamed = [False]
 
         def _emit_streamed(text: str) -> None:
             if text and emit:
+                streamed[0] = True
                 emit(text, None)
 
         def _flush_hold() -> None:
@@ -1261,8 +1320,10 @@ class _FallbackMixin(_RAGPipelineState):
             )
             if retry is None:
                 return ""
-            # _fwd must operate on the adopted draft so a follow-up
-            # continuation extends it instead of resurrecting dead pieces.
+            # _low_temp_retry streamed the retry as a replacement block; _fwd
+            # must operate on the adopted draft so a follow-up continuation
+            # extends it instead of resurrecting dead pieces.
+            streamed[0] = True
             pieces.clear()
             pieces.append(retry)
             hold[0] = ""
@@ -1278,12 +1339,21 @@ class _FallbackMixin(_RAGPipelineState):
             _flush_hold()
             text = "".join(pieces)
 
-        return self._finalize_or_retry_overview(
+        final = self._finalize_or_retry_overview(
             text,
             prompt=prompt,
             heading=heading,
             grounding_context=grounding_context,
+            streamed=streamed,
         )
+        if final and emit and not streamed[0]:
+            # Nothing was streamed (e.g. a provider that returned the whole
+            # overview without streaming chunks): emit the finalized overview
+            # once so the display is not empty.  When content did stream, the
+            # committed hold-releases already showed the draft and re-emitting
+            # the final would duplicate it.
+            emit(final, None)
+        return final
 
     def _condense_digest_groups(self, heading: str, digests: list[str]) -> list[str]:
         """Condense a large digest set into balanced groups for the reduce prompt.
@@ -1347,8 +1417,15 @@ class _FallbackMixin(_RAGPipelineState):
         prompt: str,
         heading: str,
         grounding_context: str,
+        streamed: list[bool] | None = None,
     ) -> str:
-        """Ground and trim the reduced overview, regenerating once if degenerate."""
+        """Ground and trim the reduced overview, regenerating once if degenerate.
+
+        The degenerate-output retry streams its replacement block live
+        (``_low_temp_retry`` semantics); when *streamed* is given it is marked
+        True, so the caller's "emit the final only if nothing streamed" guard
+        does not duplicate the block the retry already put on screen.
+        """
         final = self._finalize_overview(text, grounding_context)
         if not final.strip():
             return ""
@@ -1357,6 +1434,8 @@ class _FallbackMixin(_RAGPipelineState):
                 prompt, True, heading, max_tokens=_SUMMARY_REDUCE_MAX_TOKENS
             )
             if retry is not None:
+                if streamed is not None:
+                    streamed[0] = True
                 final = self._finalize_overview(retry, grounding_context)
         return final
 
@@ -1699,6 +1778,9 @@ class _FallbackMixin(_RAGPipelineState):
         whole) so the caller can surface a complete, stable summary rather than
         a truncated or degenerate one.  Returns ``None`` when the retry is also
         unacceptable, so the caller decides the fallback.
+
+        Returns:
+            The retry text when acceptable, else ``None``.
         """
         # Attempt 1 asks for exact source figures, which the model can obsess over
         # and burn its reasoning budget on; relax that pressure on the retry so it

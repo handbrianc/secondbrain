@@ -69,6 +69,121 @@ class TestFormatContext:
         assert "heading" in out
         assert "Chapter 3" in out
 
+    def test_chunk_with_heading_path_gets_label(self) -> None:
+        pipeline = _make_pipeline()
+        chunks = [
+            {
+                "chunk_text": "Snapshot mode stores VM state.",
+                "source_file": "doc.pdf",
+                "page": 12,
+                "chunk_role": "body",
+                "heading_path": "Chapter 16 > Backup Modes > snapshot mode",
+            },
+        ]
+        out = pipeline._format_context(chunks)
+        assert (
+            "Source: doc.pdf (page 12 [body, Chapter 16 > Backup Modes > snapshot mode])"
+            in out
+        )
+
+    def test_heading_path_appended_after_role_and_label(self) -> None:
+        pipeline = _make_pipeline()
+        chunks = [
+            {
+                "chunk_text": "Chapter 3: Setup",
+                "source_file": "d.pdf",
+                "page": 1,
+                "chunk_role": "heading",
+                "heading_path": "Part I > Installation",
+            },
+        ]
+        out = pipeline._format_context(chunks)
+        # Tag order: chunk_role, inferred section label, heading path last.
+        assert "[heading, Chapter 3:: Setup, Part I > Installation]" in out
+
+    def test_chunk_without_heading_path_unchanged(self) -> None:
+        pipeline = _make_pipeline()
+        chunks = [
+            {"chunk_text": "Hello", "source_file": "doc.pdf", "page": 1},
+        ]
+        # Byte-identical to the pre-heading-path format.
+        assert pipeline._format_context(chunks) == "Source: doc.pdf (page 1)\nHello\n"
+
+    def test_empty_and_none_heading_path_unchanged(self) -> None:
+        pipeline = _make_pipeline()
+        chunks = [
+            {
+                "chunk_text": "Hello",
+                "source_file": "doc.pdf",
+                "page": 1,
+                "heading_path": "",
+            },
+            {
+                "chunk_text": "World",
+                "source_file": "doc.pdf",
+                "page": 2,
+                "heading_path": None,
+            },
+        ]
+        assert pipeline._format_context(chunks) == (
+            "Source: doc.pdf (page 1)\nHello\n\n\nSource: doc.pdf (page 2)\nWorld\n"
+        )
+
+    def test_labels_are_per_chunk(self) -> None:
+        pipeline = _make_pipeline()
+        chunks = [
+            {
+                "chunk_text": "VM snapshot text",
+                "source_file": "doc.pdf",
+                "page": 12,
+                "chunk_role": "body",
+                "heading_path": "Chapter 16 > Backup > VM > snapshot mode",
+            },
+            {
+                "chunk_text": "Container snapshot text",
+                "source_file": "doc.pdf",
+                "page": 40,
+                "chunk_role": "body",
+                "heading_path": "Chapter 16 > Backup > Containers > snapshot mode",
+            },
+            {
+                "chunk_text": "Unlabeled text",
+                "source_file": "doc.pdf",
+                "page": 41,
+            },
+        ]
+        out = pipeline._format_context(chunks)
+        assert (
+            "Source: doc.pdf (page 12 [body, Chapter 16 > Backup > VM > snapshot mode])"
+            in out
+        )
+        assert (
+            "Source: doc.pdf (page 40 [body, Chapter 16 > Backup > Containers > snapshot mode])"
+            in out
+        )
+        assert "Source: doc.pdf (page 41)\nUnlabeled text\n" in out
+
+    def test_heading_path_counts_toward_max_chars(self) -> None:
+        pipeline = _make_pipeline()
+        heading_path = "Chapter 16 — Backup and Restore > Backup Modes > snapshot mode"
+        chunks = [
+            {
+                "chunk_text": "first",
+                "source_file": "a.pdf",
+                "page": 1,
+                "chunk_role": "body",
+                "heading_path": heading_path,
+            },
+            {"chunk_text": "second", "source_file": "b.pdf", "page": 2},
+        ]
+        first_entry = f"Source: a.pdf (page 1 [body, {heading_path}])\nfirst\n"
+        # The labeled entry alone fits the budget; the next chunk must not be
+        # added — the label's length participates in the accounting.
+        out = pipeline._format_context(chunks, max_chars=len(first_entry) + 1)
+        assert "a.pdf" in out
+        assert heading_path in out
+        assert "b.pdf" not in out
+
 
 class TestDedupeByTextHash:
     def test_removes_duplicates_keeps_order(self) -> None:

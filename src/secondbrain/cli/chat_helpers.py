@@ -34,19 +34,35 @@ class _ThinkingStream:
     Encapsulates the terminal-capability detection (iTerm2 OSC-1337 and
     Windows Terminal OSC-133 fold protocols) and the reasoning/content
     emission state machine used by :func:`_run_chat_with_spinner`.
+
+    Display policy: reasoning is collapsed by default -- buffered and
+    rendered once as a fold or a one-line dark-gray summary, never streamed
+    inline before the answer.  Full live reasoning text is opt-in only (the
+    ``show_thinking`` argument, backed by the ``--show-thinking`` chat flag
+    and ``SECONDBRAIN_SHOW_THINKING``).
     """
 
-    def __init__(self) -> None:
-        # Thinking/reasoning streams live in dark gray by default, so generation
-        # is visibly streaming for the whole thinking phase (which dominates
-        # wall-clock time for long-context overviews) instead of hiding behind
-        # the spinner.  SECONDBRAIN_SHOW_THINKING=0 opts out:
+    def __init__(self, show_thinking: bool | None = None) -> None:
+        """Resolve the reasoning display policy and reset stream state.
+
+        Args:
+            show_thinking: Opt-in full-text reasoning streaming.  ``None``
+                falls back to a lenient read of ``SECONDBRAIN_SHOW_THINKING``
+                (the environment is read directly rather than through the
+                cached config, so tests and late env changes are honoured);
+                unset means the collapsed default.
+        """
+        if show_thinking is None:
+            raw = os.environ.get("SECONDBRAIN_SHOW_THINKING", "").strip().lower()
+            show_thinking = raw not in ("", "0", "false", "no", "off")
+        # Reasoning stays visibly distinct from the answer either way:
+        # collapsed, it is buffered and emitted once as a dark-gray fold or
+        # summary line; opted in, it streams live in dark gray under a
+        # "▸ Thinking:" banner.  It is never written as plain answer content.
         #   - Fold-capable terminals (iTerm2 OSC-1337, Windows Terminal OSC-133
         #     C/D): reasoning is buffered and emitted once as a foldable block.
         #   - Other terminals (Ghostty, Linux, ...): reasoning buffers and
         #     collapses to a single dark-gray summary line.
-        raw_thinking = os.environ.get("SECONDBRAIN_SHOW_THINKING", "1").strip().lower()
-        show_thinking = raw_thinking not in ("0", "false", "no", "off")
         is_tty = sys.stdout.isatty()
         self._is_iterm = os.environ.get("TERM_PROGRAM") == "iTerm.app" and is_tty
         self._is_wt = bool(os.environ.get("WT_SESSION")) and is_tty
@@ -136,14 +152,12 @@ class _ThinkingStream:
 def _wait_for_first_token(
     chunk_queue: queue.Queue[tuple[str, str]],
     done_event: threading.Event,
-    stream: _ThinkingStream,
 ) -> tuple[str, str] | None:
     """Block under the spinner until the first streamed token arrives.
 
     Args:
         chunk_queue: Queue fed by the background chat thread.
         done_event: Set by the background thread when it terminates.
-        stream: Renderer providing ``live_thinking`` and reasoning buffering.
 
     Returns
     -------
@@ -159,17 +173,12 @@ def _wait_for_first_token(
                 if done_event.is_set():
                     break
                 continue
-            content, reasoning = token
-            if reasoning and not content:
-                # Lift the spinner as soon as any token (incl. reasoning) arrives
-                # so a thinking-model chat is never stuck on "Thinking..." while
-                # it reasons in the background.
-                if stream.live_thinking:
-                    first_token = token
-                else:
-                    stream.buffer_reasoning(reasoning)
-                    first_token = ("", reasoning)
-                continue
+            # Any token (including a reasoning-only one) lifts the spinner so
+            # a thinking-model chat is never stuck on "Thinking..." while it
+            # reasons in the background.  The token is replayed through
+            # ``stream.emit()`` below -- which buffers collapsed reasoning --
+            # so it must not be pre-buffered here: that would count the same
+            # delta twice in the collapsed fold.
             first_token = token
     return first_token
 
@@ -197,6 +206,7 @@ def _run_chat_with_spinner(
     session_obj: Any,
     top_k: int,
     show_sources: bool,
+    show_thinking: bool | None = None,
 ) -> dict[str, Any]:
     """Run chat with a Rich spinner that animates until streaming starts.
 
@@ -204,6 +214,16 @@ def _run_chat_with_spinner(
     generates its first response token.  All output is routed through a
     ``queue.Queue`` to avoid interleaving with Rich's Live display.
     The spinner is written to stderr so it never pollutes stdout.
+
+    Args:
+        pipeline: Pipeline whose ``chat`` runs in the background thread and
+            whose ``_on_chunk`` callback feeds the queue.
+        query: The user's question.
+        session_obj: Active conversation session.
+        top_k: Retrieval breadth passed through to the pipeline.
+        show_sources: Whether the caller prints source chunks afterwards.
+        show_thinking: Reasoning display policy forwarded to
+            :class:`_ThinkingStream` (``None`` = its lenient env default).
     """
     chunk_queue: queue.Queue[tuple[str, str]] = queue.Queue()
     done_event = threading.Event()
@@ -229,8 +249,8 @@ def _run_chat_with_spinner(
     t = threading.Thread(target=_run, daemon=True)
     t.start()
 
-    stream = _ThinkingStream()
-    first_token = _wait_for_first_token(chunk_queue, done_event, stream)
+    stream = _ThinkingStream(show_thinking=show_thinking)
+    first_token = _wait_for_first_token(chunk_queue, done_event)
     if first_token is not None:
         stream.emit(*first_token)
     _drain_chunk_queue(chunk_queue, done_event, stream)
@@ -283,11 +303,21 @@ def _single_turn_chat(
     temperature: float,
     model: str | None,
     show_sources: bool,
+    show_thinking: bool | None = None,
 ) -> None:
     """Handle single-turn chat with a query.
 
     Shows a thinking spinner until the first response token arrives,
     then streams subsequent tokens directly to the terminal.
+
+    Args:
+        query: The user's question.
+        session: Session ID to use or create (``None`` = new session).
+        top_k: Retrieval breadth.
+        temperature: LLM sampling temperature.
+        model: LLM model override.
+        show_sources: Whether to print retrieved sources.
+        show_thinking: Reasoning display policy forwarded to the renderer.
     """
     from secondbrain.conversation import ConversationSession, ConversationStorage
     from secondbrain.rag import RAGPipeline
@@ -339,6 +369,7 @@ def _single_turn_chat(
         session_obj,
         top_k=top_k,
         show_sources=show_sources,
+        show_thinking=show_thinking,
     )
 
     # Ensure trailing newline after streamed output
@@ -458,8 +489,18 @@ def _interactive_chat(
     temperature: float,
     model: str | None,
     show_sources: bool,
+    show_thinking: bool | None = None,
 ) -> None:
-    """Handle interactive REPL mode for chat."""
+    """Handle interactive REPL mode for chat.
+
+    Args:
+        session: Session ID to resume (``None`` = new session).
+        top_k: Retrieval breadth.
+        temperature: LLM sampling temperature.
+        model: LLM model override.
+        show_sources: Whether to print retrieved sources.
+        show_thinking: Reasoning display policy forwarded to the renderer.
+    """
     from secondbrain.conversation import ConversationStorage
     from secondbrain.rag import RAGPipeline
     from secondbrain.rag.factory import create_query_rewriter
@@ -527,6 +568,7 @@ def _interactive_chat(
                 session_obj,
                 top_k=top_k,
                 show_sources=show_sources,
+                show_thinking=show_thinking,
             )
 
             sys.stdout.write("\n")

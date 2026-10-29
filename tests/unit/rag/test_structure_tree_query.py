@@ -36,6 +36,7 @@ from secondbrain.storage.structure_sqlite import (
     StructureStore,
 )
 from tests.unit.rag._chapter_fixture_storage import (
+    BASELINE_WINDOW_OVERRIDES,
     ChapterFixtureStorage,
     load_fixture,
 )
@@ -955,7 +956,15 @@ class TestTreelessFallbackCharacterization:
         assert capture.ranges == expected_ranges, (
             f"{fixture_name}: legacy chapter ranges diverged from baseline"
         )
-        assert recorded == baselines["multi"]["bucket_pages"], (
+        # Intended D1 window diffs: the admission filter refuses foreign
+        # material on speculative start pages, sliding those windows onto the
+        # chapter's own pages (see BASELINE_WINDOW_OVERRIDES).  Everything
+        # else must stay byte-identical to the baseline.
+        expected_buckets = {
+            **baselines["multi"]["bucket_pages"],
+            **BASELINE_WINDOW_OVERRIDES.get(fixture_name, {}),
+        }
+        assert recorded == expected_buckets, (
             f"{fixture_name}: legacy bucket page lists diverged from baseline"
         )
         # No tree provenance was ever set.
@@ -987,7 +996,15 @@ class TestDegradedStoreFallbacks:
         baselines = _baseline_entry("hcd-report")
         expected_ranges = {int(k): tuple(v) for k, v in baselines["ranges"].items()}
         assert capture.ranges == expected_ranges
-        assert recorded == baselines["multi"]["bucket_pages"]
+        # The D4 density cap (fix-chapter-bucket-sampling) legitimately moves
+        # the dense-book legacy buckets; the fallback's expectation is the
+        # standard legacy map (pre-change baseline + window overrides), the
+        # same merge TestTreelessFallbackCharacterization asserts.
+        expected_buckets = {
+            **baselines["multi"]["bucket_pages"],
+            **BASELINE_WINDOW_OVERRIDES["hcd-report"],
+        }
+        assert recorded == expected_buckets
         assert pipeline._structure_source is None
         assert any("Structure tree lookup failed" in m for m in capture.messages)
 
@@ -1027,7 +1044,14 @@ class TestDegradedStoreFallbacks:
         baselines = _baseline_entry("hcd-report")
         expected_ranges = {int(k): tuple(v) for k, v in baselines["ranges"].items()}
         assert capture.ranges == expected_ranges
-        assert recorded == baselines["multi"]["bucket_pages"]
+        # The D4 density cap (fix-chapter-bucket-sampling) legitimately moves
+        # the dense-book legacy buckets; the fallback's expectation is the
+        # standard legacy map (pre-change baseline + window overrides).
+        expected_buckets = {
+            **baselines["multi"]["bucket_pages"],
+            **BASELINE_WINDOW_OVERRIDES["hcd-report"],
+        }
+        assert recorded == expected_buckets
         assert pipeline._structure_source is None
         assert any("no chapter/section nodes" in m for m in capture.messages)
 
@@ -1056,7 +1080,14 @@ class TestDegradedStoreFallbacks:
         baselines = _baseline_entry("hcd-report")
         expected_ranges = {int(k): tuple(v) for k, v in baselines["ranges"].items()}
         assert capture.ranges == expected_ranges
-        assert recorded == baselines["multi"]["bucket_pages"]
+        # The D4 density cap (fix-chapter-bucket-sampling) legitimately moves
+        # the dense-book legacy buckets; the fallback's expectation is the
+        # standard legacy map (pre-change baseline + window overrides).
+        expected_buckets = {
+            **baselines["multi"]["bucket_pages"],
+            **BASELINE_WINDOW_OVERRIDES["hcd-report"],
+        }
+        assert recorded == expected_buckets
         assert pipeline._structure_source is None
         assert any("Structure store unavailable" in m for m in capture.messages)
 

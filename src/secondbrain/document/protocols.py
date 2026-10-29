@@ -35,6 +35,10 @@ class Segment(TypedDict):
         parser exposed one; absent for label-less paths (fast text, plain text).
     t_start, t_end : float
         Optional ASR source bounds in seconds.
+    table_degenerate : bool
+        Optional flag set on serialized table segments that failed the
+        row-alignment check (``table_serialize``); propagated to the stored
+        chunk metadata by the ingest paths.
     """
 
     text: str
@@ -42,6 +46,7 @@ class Segment(TypedDict):
     label: NotRequired[str]
     t_start: NotRequired[float]
     t_end: NotRequired[float]
+    table_degenerate: NotRequired[bool]
 
 
 class DocumentParsingProtocol:

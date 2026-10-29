@@ -1514,6 +1514,33 @@ class TestMultiChapterMapReduce:
         assert "Chapter one introduces the core concepts" in result
         assert len(provider.calls) == 2
 
+    def test_multi_chapter_brief_instruction_carries_attribution_guard(self) -> None:
+        """The per-chapter brief instruction carries the attribution guard.
+
+        Both the tree path and the legacy path funnel their per-chapter briefs
+        through this one instruction.  When a chapter's content repeats the
+        same item names under sibling scopes (e.g. backup modes described under
+        a VM block and again under a container block), the model must attribute
+        each description to the scope it appears under instead of swapping,
+        merging, or reusing one scope's description for another (design D1).
+        The "2-4 sentences" length guidance must survive unchanged.
+        """
+        provider = _SequenceProvider(
+            ["Chapter one introduces the core concepts with clear examples."]
+        )
+        p = self._make_pipeline(provider)
+        buckets = {1: [self._chunk("chapter one body text here")]}
+        result = p._generate_multi_chapter_summary([1], buckets, {1: "Intro"})
+        assert "Chapter 1 — Intro" in result
+        assert len(provider.calls) == 1
+        prompt = provider.calls[0]["prompt"]
+        assert (
+            "attribute each item's description to the parent section it "
+            "appears under" in prompt
+        )
+        assert "never swap, merge, or reuse" in prompt
+        assert "2-4 sentences" in prompt
+
     def test_multi_chapter_summary_skips_bad_per_chapter(self) -> None:
         # Keyed responses make the parallel threads deterministic: chapter 1 sees
         # garbage (both its first try and the retry are dropped), chapter 2 gets
@@ -1532,8 +1559,12 @@ class TestMultiChapterMapReduce:
         result = p._generate_multi_chapter_summary(
             [1, 2], buckets, {1: "One", 2: "Two"}
         )
-        # Chapter 1's output is garbage and is dropped (incl. its retry).
-        assert "Chapter 1" not in result
+        # Chapter 1's overview is garbage and is dropped (incl. its retry) --
+        # but the heading block a live run streams stays in the returned
+        # transcript, so a mixed run stores byte-for-byte what it displays.
+        # Only the unusable overview text is withheld.
+        assert "Chapter 1 — One" in result
+        assert "garbage" not in result
         assert "Chapter 2 — Two" in result
         assert "A clean summary of chapter two" in result
         assert len(provider.calls) == 3
@@ -3878,7 +3909,7 @@ class TestChapterPinWindowResolution:
         assert "Rejected chapter" not in caplog.text
 
     @pytest.mark.parametrize(
-        ("chapters", "raw_body", "reject_line", "pages", "banned"),
+        ("chapters", "raw_body", "reject_line", "pages", "banned", "notes"),
         [
             pytest.param(
                 [
@@ -3905,6 +3936,7 @@ class TestChapterPinWindowResolution:
                 "Rejected chapter 11 pin @6",
                 [276, 300, 336],
                 [6],
+                (11,),
                 id="sklearn",
             ),
             pytest.param(
@@ -3932,6 +3964,7 @@ class TestChapterPinWindowResolution:
                 "Rejected chapter 11 pin @4",
                 [284, 321, 362],
                 [4],
+                (11,),
                 id="iot",
             ),
         ],
@@ -3943,6 +3976,7 @@ class TestChapterPinWindowResolution:
         reject_line: str,
         pages: list[int],
         banned: list[int],
+        notes: tuple[int, ...],
         monkeypatch: pytest.MonkeyPatch,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
@@ -3951,7 +3985,18 @@ class TestChapterPinWindowResolution:
         with caplog.at_level(logging.DEBUG, logger="secondbrain.rag.pipeline"):
             answer = self._run(pipeline)
         assert reject_line in caplog.text, caplog.text
+        # Range-faithful admission (D1): once the front-matter pin is
+        # rejected, the rescued window holds only the "see N for ..." cross-
+        # reference row, which carries no chapter-N evidence and is refused;
+        # the degraded window ships the D2 coverage note instead of a
+        # page-pinned summary built from foreign material.
         for (num, title), page in zip(chapters, pages, strict=True):
+            if num in notes:
+                assert (
+                    f"Chapter {num} — {title}\n\n"
+                    "No document content was retrieved for this chapter"
+                ) in answer, answer
+                continue
             assert f"Chapter {num} — {title} (approx pages {page}+)" in answer, answer
         for bad in banned:
             assert f"approx pages {bad}+" not in answer, (
@@ -4123,6 +4168,13 @@ class TestChapterPinWindowResolution:
 
         The spy returns "" so the chapter roster fallback renders the answer,
         whose "approx pages N+" lines double as pin-page assertions.
+
+        The summarizer is invoked once per chapter by the coverage-aware
+        wrapper (fix-summary-fidelity D2: a degraded window's note replaces
+        its summary without an LLM call), so the spy accumulates across the
+        per-chapter calls instead of overwriting; a chapter whose window was
+        refused wholesale by the admission filter takes the note path and is
+        absent from the capture.
         """
         captured: dict[str, Any] = {}
 
@@ -4131,11 +4183,12 @@ class TestChapterPinWindowResolution:
             chapter_buckets: dict[int, list[dict[str, Any]]],
             _ch_titles: dict[int, str],
         ) -> str:
-            captured["keys"] = list(chapter_keys)
-            captured["pages"] = {
-                ch: [int(c.get("page_number") or 0) for c in chapter_buckets[ch]]
-                for ch in chapter_keys
-            }
+            captured.setdefault("keys", []).extend(chapter_keys)
+            pages = captured.setdefault("pages", {})
+            for ch in chapter_keys:
+                pages[ch] = [
+                    int(c.get("page_number") or 0) for c in chapter_buckets[ch]
+                ]
             return ""
 
         monkeypatch.setattr(pipeline, "_generate_multi_chapter_summary", _spy)
@@ -4217,7 +4270,11 @@ class TestChapterPinWindowResolution:
         )
         assert "approx pages 8+" not in answer
         assert captured["keys"] == [1, 2]
-        assert captured["pages"] == {1: [20, 24, 30], 2: [45, 50, 58]}
+        # D1: the phase-2 loose-digit pin chunk @45 ("2 capacity ledgers…")
+        # does not match ch2's roster title, so the range-faithful admission
+        # filter refuses it on the speculative start page; the window keeps
+        # ch2's own in-range prose pages instead of the pin wording.
+        assert captured["pages"] == {1: [20, 24, 30], 2: [50, 58]}
 
     def test_degenerate_interp_gap_skips_duplicate_pin(
         self, monkeypatch: pytest.MonkeyPatch
@@ -4343,13 +4400,17 @@ class TestChapterPinWindowResolution:
         captured = self._capture(monkeypatch, pipeline)
         answer = self._run(pipeline)
         assert "approx pages 3+" not in answer
+        # D1: ch1's interpolated pin @35 is the pin convention's speculative
+        # page — its only candidate is the prose tail of ch2's front matter,
+        # which carries no ch1 opener evidence, so the range-faithful
+        # admission filter refuses it; the degraded window ships the D2
+        # coverage note instead of a fabricated "(approx pages 35+)" line.
         assert (
-            "Chapter 1 — Foundational Signal Concepts (approx pages 35+)" in answer
-        ), (
-            "head-gap interpolation must recover chapter 1 after the front-matter refusal"
-        )
-        assert captured["keys"] == [1, 2, 3]
-        assert captured["pages"] == {1: [35], 2: [36], 3: [80, 90]}
+            "Chapter 1 — Foundational Signal Concepts\n\n"
+            "No document content was retrieved for this chapter"
+        ) in answer, answer
+        assert captured["keys"] == [2, 3]
+        assert captured["pages"] == {2: [36], 3: [80, 90]}
 
 
 class TestToCListingResolution:
@@ -4499,9 +4560,14 @@ class TestToCListingResolution:
         )
         answer_pure = self._run(self._make(monkeypatch, base, body, headings))
         assert answer_sparse == answer_pure
+        # D1: ch12's speculative tail pin @323 holds only inert prose, which
+        # carries no ch12 opener evidence, so the range-faithful admission
+        # filter refuses it and the degraded window ships the D2 coverage
+        # note instead of a summary built from foreign material.
         assert (
-            "Chapter 12 — Bayesian Deep Learning (approx pages 323+)" in answer_pure
-        ), answer_pure
+            "Chapter 12 — Bayesian Deep Learning\n\n"
+            "No document content was retrieved for this chapter"
+        ) in answer_pure, answer_pure
 
     def test_toc_high_coverage_kills_phantom_chapter(
         self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
@@ -4544,9 +4610,14 @@ class TestToCListingResolution:
             headings=self._anchors(list(range(1, 12))),
         )
         answer_spared = self._run(pipeline)
+        # D1/D2: ch12's speculative tail pin @323 holds only inert prose
+        # (no opener evidence), so its window degrades to the coverage note;
+        # ch13's open range (324, inf) still holds in-range material past its
+        # start page, so it keeps a real roster line.
         assert (
-            "Chapter 12 — Bayesian Deep Learning (approx pages 323+)" in answer_spared
-        ), answer_spared
+            "Chapter 12 — Bayesian Deep Learning\n\n"
+            "No document content was retrieved for this chapter"
+        ) in answer_spared, answer_spared
         assert (
             "Chapter 13 — Rogue Applications Annex (approx pages 324+)" in answer_spared
         ), answer_spared
@@ -4709,9 +4780,14 @@ class TestToCListingResolution:
         )
         with caplog.at_level(logging.DEBUG, logger="secondbrain.rag.pipeline"):
             answer = self._run(pipeline)
-        assert "Chapter 12 — Bayesian Deep Learning (approx pages 323+)" in answer, (
-            answer
-        )
+        # D1: the mention-only row keeps ch12, but its speculative tail pin
+        # @323 holds only inert prose with no opener evidence, so the
+        # admission filter refuses it and the degraded window ships the D2
+        # coverage note.
+        assert (
+            "Chapter 12 — Bayesian Deep Learning\n\n"
+            "No document content was retrieved for this chapter"
+        ) in answer, answer
         assert "Dropped phantom roster chapter 12" not in caplog.text
         assert "median=30" in caplog.text
 
@@ -6743,6 +6819,12 @@ class _EvidenceArchetypeHarness:
 
         The spy returns "" so the chapter roster fallback renders the answer,
         whose "approx pages N+" lines double as pin-page assertions.
+
+        The summarizer is invoked once per chapter by the coverage-aware
+        wrapper (fix-summary-fidelity D2), so the spy accumulates across the
+        per-chapter calls; a chapter whose window was refused wholesale by
+        the admission filter takes the coverage-note path and is absent from
+        the capture.
         """
         captured: dict[str, Any] = {}
 
@@ -6751,11 +6833,12 @@ class _EvidenceArchetypeHarness:
             chapter_buckets: dict[int, list[dict[str, Any]]],
             _ch_titles: dict[int, str],
         ) -> str:
-            captured["keys"] = list(chapter_keys)
-            captured["pages"] = {
-                ch: sorted(int(c.get("page_number") or 0) for c in chapter_buckets[ch])
-                for ch in chapter_keys
-            }
+            captured.setdefault("keys", []).extend(chapter_keys)
+            pages = captured.setdefault("pages", {})
+            for ch in chapter_keys:
+                pages[ch] = sorted(
+                    int(c.get("page_number") or 0) for c in chapter_buckets[ch]
+                )
             return ""
 
         monkeypatch.setattr(pipeline, "_generate_multi_chapter_summary", _spy)
@@ -6846,7 +6929,11 @@ class TestOffsetZeroBareFootersArchetype:
         # Ranges are disjoint and ordered; buckets carry each chapter's own
         # pages (the stub serves nav chunks through the body stream too).
         assert captured["keys"] == [1, 2, 3]
-        assert captured["pages"] == {1: [20, 21], 2: [30, 31], 3: [40, 41]}
+        # D1: ch1/ch2 start pages carry their "N.1" headings (opener pages,
+        # everything on them admitted); ch3's "3.1" heading sits @41, so the
+        # refined pin page 40 is speculative and its bare nav footer "40"
+        # carries no ch3 opener evidence — the admission filter refuses it.
+        assert captured["pages"] == {1: [20, 21], 2: [30, 31], 3: [41]}
 
 
 class TestPrintedOffsetFootersArchetype:
@@ -6923,7 +7010,11 @@ class TestPrintedOffsetFootersArchetype:
         assert "approx pages 12+" not in answer, answer
         assert "via run-on ToC row (printed 30 + offset 78)" in caplog.text
         assert captured["keys"] == [1, 2, 3]
-        assert captured["pages"] == {1: [98, 99], 2: [108, 109], 3: [118, 119]}
+        # D1: ch1/ch2 start pages carry their "N.1" headings (opener pages);
+        # ch3's "3.1" heading sits @119, so the refined pin page 118 is
+        # speculative and its "40 / 634" nav footer carries no ch3 opener
+        # evidence — the admission filter refuses it.
+        assert captured["pages"] == {1: [98, 99], 2: [108, 109], 3: [119]}
 
 
 class TestFooterlessEvidenceArchetype:
@@ -7190,10 +7281,17 @@ class TestUnnumberedTailChaptersEnumeration:
         pipeline = self.H._make(monkeypatch, toc, body, headings)
         captured = self.H._capture(monkeypatch, pipeline)
         answer = self.H._run(pipeline)
-        assert captured["keys"] == [1, 2, 3, 4, 5], (
-            "every roster chapter is enumerated, including the unsignaled one"
+        # D1: ch3's speculative start page 21 holds only ch1's own "1.1"
+        # material (no ch3 opener evidence) — refused; ch5's speculative
+        # start page 41 holds only opener-less prose — refused.  Refused
+        # start pages leave their windows degraded, so those chapters ship
+        # the D2 coverage note instead of a summary (ch5) or stay on their
+        # in-range material (ch3 @22).
+        assert captured["keys"] == [1, 2, 3, 4], (
+            "chapters with window material are summarized; ch5's degraded "
+            "window ships the coverage note instead of a summary call"
         )
-        assert captured["pages"] == {1: [20], 2: [], 3: [21, 22], 4: [40], 5: [41]}
+        assert captured["pages"] == {1: [20], 2: [], 3: [22], 4: [40]}
         assert (
             "Chapter 1 — Alpha Foundational Frameworks (approx pages 20+)" in answer
         ), answer
@@ -7203,9 +7301,13 @@ class TestUnnumberedTailChaptersEnumeration:
         assert (
             "Chapter 4 — Delta Recurrent Architectures (approx pages 40+)" in answer
         ), answer
+        # D2: ch5's window holds none of its own content, so the coverage
+        # note replaces the summary instead of presenting foreign material.
         assert (
-            "Chapter 5 — Epsilon Attention Mechanisms (approx pages 41+)" in answer
-        ), answer
+            "Chapter 5 — Epsilon Attention Mechanisms\n\n"
+            "No document content was retrieved for this chapter"
+        ) in answer, answer
+        assert "approx pages 41+" not in answer, answer
         # The sentinel chapter's roster line carries no page claim.
         assert "Chapter 2 — Beta Optimization Landscapes (approx pages" not in answer
 
@@ -7218,9 +7320,19 @@ class TestUnnumberedTailChaptersEnumeration:
         assert "Chapter 2 — Beta Optimization Landscapes" in answer, answer
         assert "No document content was retrieved for this chapter" in answer, answer
         assert "Chapter 2 — Beta Optimization Landscapes (approx pages" not in answer
-        # The scripted provider returns "" per chapter, so only the
-        # placeholder note survives — the roster fallback never fires.
-        assert "Chapter 1 —" not in answer, answer
+        # The scripted provider returns "" per chapter, so every chapter's
+        # part comes from its fallback: healthy windows fall back to their
+        # roster lines (the per-chapter twin of the whole-answer roster
+        # fallback), the sentinel-empty ch2 keeps the base placeholder
+        # (truly no body text in its page range), and ch5's degraded window
+        # (foreign-only after the D1 filter) ships the D2 coverage note.
+        assert (
+            "Chapter 1 — Alpha Foundational Frameworks (approx pages 20+)" in answer
+        ), answer
+        assert "its detected page range contains no body text" in answer, answer
+        assert (
+            "its detected page window contains only material from outside" in answer
+        ), answer
 
 
 class TestScanTocLikePageGuards:

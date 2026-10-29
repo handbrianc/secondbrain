@@ -115,3 +115,114 @@ The system SHALL automatically detect document file types by extension and MIME 
 - **WHEN** user provides file with unknown extension
 - **THEN** system rejects with helpful error message
 - **AND** lists supported file extensions
+
+### Requirement: Structure capture wired into ingestion
+
+Every ingest path (single, recursive, sync, and multicore) SHALL invoke the
+shared structure-capture module exactly once per document at the parse stage
+and persist the captured tree once per document. Worker processes SHALL NOT
+write to SQLite: capture returns the structure with the worker result and the
+parent path persists it.
+
+#### Scenario: Multicore ingest captures each document's tree
+
+- **WHEN** a directory is ingested with `--cores 4`
+- **THEN** every successfully parsed document has exactly one stored tree
+- **AND** no SQLite write contention is introduced by worker processes
+
+#### Scenario: Sync and async paths behave identically
+
+- **WHEN** the same document is ingested through the sync and async paths
+- **THEN** both produce the same stored tree
+
+### Requirement: Heading hierarchy enabled for PDF parsing
+
+The PDF conversion pipeline SHALL enable docling's heading-hierarchy stage
+(`HeadingHierarchyOptions.enabled = True`) so detected section headings carry
+hierarchy levels (bookmark-matched headings authoritative; numbering and font
+style as fallback).
+
+#### Scenario: Headings carry levels after conversion
+
+- **WHEN** a PDF is converted with the pipeline options
+- **THEN** detected section headers expose their hierarchy level
+- **AND** the stage neither adds, removes, nor reorders text items
+
+### Requirement: Heading roles preserved
+
+Standalone section-numbered heading chunks (a single heading segment, not
+merged with body content) SHALL keep a structural role so their metadata is
+queryable; merged opener chunks (a heading merged together with following
+body text into one chunk) SHALL keep the `body` role and SHALL carry the
+structural annotation fields instead. Role classification SHALL NOT change
+chunk text or boundaries: chunk text streams SHALL remain byte-identical for
+unchanged input.
+
+#### Scenario: Standalone section-numbered heading keeps a structural role
+
+- **WHEN** a chunk consists of a single section-numbered heading segment
+  (e.g. "11.18 Configuring the Autostart Service")
+- **THEN** it is stored with a structural role rather than `body`
+
+#### Scenario: Merged opener chunk stays body but is annotated
+
+- **WHEN** a chunk merges a section-numbered heading with following body text
+- **THEN** its role remains `body`
+- **AND** its payload carries the structural annotation fields (node_id,
+  heading_path, section_id)
+
+#### Scenario: Role change does not move chunk boundaries
+
+- **WHEN** the same document is chunked before and after the role change
+- **THEN** the chunk text sequence is byte-identical
+- **AND** text hashes are unchanged
+
+### Requirement: Table serializations preserve row alignment
+
+When tabular content is serialized into chunk text at ingest, the
+serialization SHALL preserve each cell's binding to its row: cells SHALL
+be emitted row by row such that a value remains adjacent to its own row
+label/header, and a single table SHALL NOT be split across chunk
+boundaries in the middle of a row. The observed degenerate form — a
+flattened cell run like `5.26 minutes 99.9999` that separates a value from
+its row label — SHALL NOT be producible from a well-formed source table.
+
+#### Scenario: Value stays adjacent to its row label
+
+- **WHEN** a document is ingested containing a two-column table that maps
+  availability levels to yearly downtime (e.g. 99.999% → 5.26 minutes,
+  99.9999% → 31.5 seconds)
+- **THEN** the stored chunk text serializes each row with its label and
+  value together
+- **AND** no stored chunk pairs one row's value with a different row's
+  label
+
+#### Scenario: Oversized table splits at a row boundary
+
+- **WHEN** a table's serialized text exceeds the chunk-size limit
+- **THEN** the chunk split occurs between table rows
+- **AND** no row is split so that its label and value land in different
+  chunks
+
+### Requirement: Degenerate table serializations are flagged at ingest
+
+When the table-to-text serialization output fails the row-alignment
+invariant (cells out of source order relative to their rows), ingest SHALL
+flag the affected chunk(s) — via chunk metadata and an ingest-time warning
+— rather than silently storing the degenerate text as if it were reliable
+content.
+
+#### Scenario: Flattened table row is flagged
+
+- **WHEN** a PDF's table extraction produces a chunk whose cells read out
+  of row order (detected by the row-alignment check)
+- **THEN** the chunk is stored with a degenerate-table flag in its
+  metadata
+- **AND** the ingest report warns that the table's content may be
+  unreliable
+
+#### Scenario: Well-formed tables store unflagged
+
+- **WHEN** a table's serialization passes the row-alignment check
+- **THEN** the chunk stores with no degenerate-table flag
+- **AND** ingest emits no warning for it

@@ -16,6 +16,20 @@ from .ingest_progress import IngestProgressUI
 console = Console(markup=True)
 
 
+def _count_label(count: int, word: str) -> str:
+    """Return ``count word`` pluralized for CLI summaries (``1 file``/``2 files``).
+
+    Args:
+        count: The number to render.
+        word: The singular noun (pluralized by appending ``s``).
+
+    Returns
+    -------
+        The pluralization-correct ``"<count> <word>"`` string.
+    """
+    return f"{count} {word}" if count == 1 else f"{count} {word}s"
+
+
 @handle_cli_errors
 @cli.command()
 @click.argument("path", type=click.Path(exists=True))
@@ -142,12 +156,21 @@ def ingest(
 
     num_success = results["success"]
     num_failed = results["failed"]
-    console.print(f"[green]Successfully ingested {num_success} files[/green]")
+    # Backend payloads are typed loosely (dict[str, int | list[...]]); the
+    # counts are ints in practice — coerce defensively for the pluralized
+    # summary (failed is narrowed by its own isinstance guard below).
+    if not isinstance(num_success, int):
+        num_success = 0
+    console.print(
+        f"[green]Successfully ingested {_count_label(num_success, 'file')}[/green]"
+    )
     num_skipped = results.get("skipped")
     if isinstance(num_skipped, int) and num_skipped > 0:
-        console.print(f"[dim]Skipped (already stored): {num_skipped} files[/dim]")
+        console.print(
+            f"[dim]Skipped (already stored): {_count_label(num_skipped, 'file')}[/dim]"
+        )
     if isinstance(num_failed, int) and num_failed > 0:
-        console.print(f"[yellow]Failed: {num_failed} files[/yellow]")
+        console.print(f"[yellow]Failed: {_count_label(num_failed, 'file')}[/yellow]")
         failures = results.get("failures", [])
         for f in failures if isinstance(failures, list) else []:
             console.print(f"  [red]✗[/red] {f[0]}: {f[1]}")

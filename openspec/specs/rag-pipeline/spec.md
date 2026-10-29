@@ -377,3 +377,172 @@ containing quoted phrases are captured whole.
   Means`
 - **THEN** the roster title is the full heading text, not truncated at the
   quote
+
+### Requirement: Stored tree drives chapter enumeration
+
+When the queried document has a stored structure tree containing chapter or
+section nodes, broad-coverage chapter/section enumeration SHALL resolve
+chapter maps and ranges from the tree (SQL lookup → page-range or ID filters
+through the existing retrieval machinery) and SHALL NOT run the legacy
+regex-based reconstruction for that document. A tree chapter whose page range
+holds no body content SHALL be emitted with the existing placeholder note.
+
+#### Scenario: Previously failing report enumerates fully
+
+- **WHEN** the user asks to summarize a document whose stored tree covers
+  every chapter (the HCD report case)
+- **THEN** the output names every chapter with a real page range
+- **AND** no chapter is a false placeholder
+- **AND** no chapter's summary draws content from another chapter's pages
+
+#### Scenario: Chapter question answers from the tree
+
+- **WHEN** the user asks which page a chapter starts on, or to list sections
+- **THEN** the answer is derived from the stored tree, not from regex scans
+
+### Requirement: Legacy reconstruction is fallback only
+
+When the queried document has no stored tree, the tree lookup fails, or the
+tree carries no chapter/section nodes, the pipeline SHALL use the legacy
+heuristic path unchanged — including anthology detection and the
+chapter-range agreement gate. The legacy path's behavior on treeless
+documents SHALL remain byte-identical to its pre-change behavior.
+
+#### Scenario: Treeless document keeps legacy behavior
+
+- **WHEN** a document ingested before this change is summarized
+- **THEN** the legacy chapter path (and, where applicable, the anthology path
+  and agreement gate) produces the same output as before
+
+#### Scenario: Lookup failure degrades to legacy
+
+- **WHEN** the structure store errors during lookup
+- **THEN** the query proceeds through the legacy path
+- **AND** the failure is logged, not surfaced as a query error
+
+### Requirement: Chapter windows admit only in-range source chunks
+
+When the broad-coverage per-chapter pipeline assembles the generation
+context for one chapter, it SHALL admit source chunks only from that
+chapter's own derived page range. A chunk whose page lies outside the
+range SHALL NOT be admitted, except for a chunk that straddles the range
+boundary, which MAY be admitted under a bounded one-page boundary
+tolerance. Content from a neighboring chapter (e.g. a previous chapter's
+closing sections) SHALL NOT fill a chapter's window.
+
+#### Scenario: Tail of the previous chapter does not bleed in
+
+- **WHEN** a book is summarized by chapter and chapter N's derived range
+  begins at page 433 while chapter N−1's content (e.g. its closing
+  "Cluster Resource Scheduler" sections) occupies pages 432–433
+- **THEN** chapter N's generation context contains no chunks from outside
+  chapter N's range beyond the boundary tolerance
+- **AND** chapter N's summary is built from chapter N's own material
+  (backup storage and backup modes), not from chapter N−1's material
+
+#### Scenario: Boundary-straddling chunk is tolerated
+
+- **WHEN** a body chunk opens at the last page of chapter N−1 and carries
+  chapter N's opening sentence
+- **THEN** the chunk may be admitted to chapter N's window under the
+  one-page boundary tolerance
+- **AND** chapter N−1's summary remains unchanged
+
+### Requirement: Coverage gaps in chapter windows are surfaced explicitly
+
+For each chapter whose generation context is assembled, the pipeline SHALL
+compute window-composition statistics (count and share of in-range versus
+foreign-range chunks). When a chapter's window is empty of in-range
+content, or its foreign-range share dominates the window, the pipeline
+SHALL surface an explicit coverage note in that chapter's output entry —
+in the same style as the existing "no document content was retrieved"
+placeholder — instead of silently emitting a summary built from foreign
+material. Chapters with healthy window composition SHALL keep the current
+output unchanged.
+
+#### Scenario: Foreign-dominated window produces a coverage note
+
+- **WHEN** a chapter's window contains almost exclusively chunks from
+  outside the chapter's derived range (e.g. the neighboring chapter's
+  closing sections)
+- **THEN** the chapter's entry carries an explicit note that the chapter's
+  own content could not be retrieved and the summary is partial
+- **AND** the entry does not present foreign content as if it were the
+  chapter's content
+
+#### Scenario: Healthy window keeps current behavior
+
+- **WHEN** a chapter's window is composed predominantly of in-range chunks
+- **THEN** the chapter's summary is emitted exactly as today, with no
+  coverage note
+
+### Requirement: Stored-tree chapter map integrity
+
+The chapter map derived from a stored structure tree SHALL be built only from
+chapter-shaped nodes whose page range lies outside the document's
+table-of-contents page span. A candidate chapter range whose stored chunks
+are dot-leader-dense (ToC-like) SHALL NOT contribute a chapter-map entry.
+When the surviving number-keyed map covers fewer chapters than the tree's
+chapter-shaped nodes support, the pipeline SHALL treat the map as degenerate
+and fall back to the legacy chapter path with the guards of "Legacy chapter
+title and window guards" — it SHALL NOT enumerate chapters from a partial
+map whose ranges are known to sit inside the ToC span.
+
+#### Scenario: ToC-span node cannot define a chapter
+
+- **WHEN** a stored tree carries a chapter node numbered 1 whose page range
+  lies inside the document's table-of-contents span (e.g. pages 3–8 of a
+  ToC spanning pages 3–22), as observed for `pve-admin-guide-9.1.pdf`
+- **THEN** that node contributes no chapter-map entry with that range
+- **AND** chapter 1's summary window covers the chapter's body pages, never
+  the table-of-contents pages
+
+#### Scenario: Degenerate map falls back instead of mis-summarizing
+
+- **WHEN** the number-keyed tree map covers 2 of 21 chapter-shaped nodes
+  (both with ToC-span ranges)
+- **THEN** the pipeline falls back to the legacy guarded chapter path
+- **AND** the multi-chapter output still names every roster chapter, with
+  summaries drawn from real body content — never from the 2 bogus ranges
+
+#### Scenario: Healthy tree enumerates unchanged
+
+- **WHEN** a stored tree's chapter map covers every chapter with body-page
+  ranges (the HCD-report case of the tree-driven enumeration requirement)
+- **THEN** map construction behaves exactly as today
+- **AND** no additional fallback or guard fires
+
+### Requirement: Legacy chapter title and window guards
+
+Wherever the legacy chapter path runs, a heading with a dotted number prefix
+(e.g. "1.1 Central Management") SHALL NOT supply a chapter's title; the
+chapter's title SHALL come from the document's ToC listing for that chapter
+number when one is recovered, else the entry header SHALL show the chapter
+number only. A chapter's legacy page window SHALL end at the next chapter's
+derived start (minus one page) when that boundary is derivable and lies
+beyond the window's current end — the clamp only extends an undershooting
+window, never shrinks or overruns into the next chapter. Documents whose
+chapter headings all parse as today SHALL keep byte-identical legacy output.
+
+#### Scenario: Dotted heading does not title chapter 1
+
+- **WHEN** the legacy scan's first parseable heading for chapter 1 is the
+  section heading "1.1 Central Management" (the chapter's own heading chunk
+  failed to parse)
+- **THEN** chapter 1's entry is titled "Introduction" from its ToC listing,
+  or "Chapter 1" when no listing is available
+- **AND** it is never titled "1.1 Central Management"
+
+#### Scenario: Undershooting window extends to the next chapter
+
+- **WHEN** chapter 1's own heading chunk is unparseable but chapter 2's start
+  is derived (page 10 of a 9-page chapter 1)
+- **THEN** chapter 1's window extends to chapter 2's start page
+- **AND** its summary draws on sections 1.1 through 1.13, not only 1.1
+
+#### Scenario: Healthy legacy documents are unchanged
+
+- **WHEN** every chapter's heading parses as today and windows reach their
+  next-chapter boundaries already
+- **THEN** titles, windows, and emitted summaries are byte-identical to the
+  pre-change legacy behavior

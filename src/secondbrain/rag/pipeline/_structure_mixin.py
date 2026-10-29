@@ -86,6 +86,38 @@ _TOC_CHAPTER_ENTRY_RE = re.compile(
 _TOC_CHAPTER_MENTION_RE = re.compile(r"Chapter\s+(\d{1,2})\s*[:.\-]")
 
 
+# Table-serialized chapter row (fix-summary-fidelity D4): Lane A's row-
+# oriented table serialization writes the printed ToC one row per line with
+# cells joined by " — " ("2 Installing Proxmox VE — 10"), and the dot-leader
+# column arrives as its own cell ("N Title — . . . . — 2").  Chapter rows
+# only: the leading label must be a bare 1-2 digit number (a section row's
+# "N.N" label fails the required space and falls through), the title is
+# letter-started like the flat shape, and the trailing page may sit behind a
+# dot-leader cell.  Tried BEFORE _TOC_LISTING_LINE_RE so the cell separator
+# never lands inside the captured title; flat rows carry no dash and match
+# the historical regex unchanged.
+_TOC_TABLE_ROW_RE = re.compile(
+    r"^\s*(\d{1,2})\s+([A-Za-z].{2,90}?)\s*[\u2013\u2014]\s*"
+    r"(?:(?:\.[ \t]*){2,}[\u2013\u2014][ \t]*)?(\d{1,3})\s*$"
+)
+
+
+# The run-on row recovery flattens whole chunks, so the table rows must be
+# rewritten to the historical flat shape before that parser runs: the row
+# TAIL — a dash, optionally a dot-leader cell and a second dash, then the
+# trailing printed page — becomes the bare page ("2 Installing Proxmox VE
+# — 10" -> "2 Installing Proxmox VE 10").  Line-anchored (MULTILINE) with
+# [ \t] only, so a rewrite never crosses a row boundary, and it cannot touch
+# flat rows (no dash before the page) or 4-digit numbers.  A prose line that
+# ends in a dash and a number loses only the dash — a shape no row parser
+# below can mistake for a boundary.
+_TABLE_ROW_TAIL_RE = re.compile(
+    r"[ \t]*[\u2013\u2014][ \t]*(?:(?:\.[ \t]*){2,}[\u2013\u2014][ \t]*)?"
+    r"(\d{1,3})[ \t]*\r?$",
+    re.MULTILINE,
+)
+
+
 # Coverage floor for the reconciliation tier: the parsed ToC must list at
 # least this fraction of the roster chapters before a pin or a phantom kill
 # may act; below it the tier is fully disabled.
@@ -107,6 +139,23 @@ _SECTION_PIN_RE = re.compile(r"^(\d{1,2})\.1(?:\.\d+)?\s+")
 # Deep Learning 310") or carrying dot leaders ("Chapter 8 ....... 223").
 _DOT_LEADER_TAIL_RE = re.compile(r"\d{1,4}$")
 _DOT_LEADER_RUN_RE = re.compile(r"\.{2,}")
+
+# Dotted-section title guard (fix-chapter-coverage D3): a captured chapter
+# title whose leading token is a dotted section number ("1.1 Central
+# Management" captured after a bare chapter-number line) names a SECTION,
+# never the chapter.  Mirror of the ToC-row guard inside
+# :meth:`_recovered_runon_toc_rows`, which rejects the same shape for
+# recovered rows ("a real chapter row's title never starts with its own
+# dotted section number").
+_DOTTED_SECTION_TITLE_RE = re.compile(r"^\d+(?:\.\d+)+\s")
+
+# Upper bound on the pages a ToC-span probe fetches for one chapter-shaped
+# node's range (:meth:`_guarded_tree_chapter_map`).  Real chapter ranges are
+# far shorter; the cap only keeps a mis-captured range (e.g. an unbounded
+# page_end) from building a pathological MatchAny page list.  ToC spans in
+# the wild (pve-admin-guide: pages 3-22) fit comfortably.
+_TOC_PROBE_MAX_PAGES = 64
+
 # Share of a page's non-empty lines that must look like ToC rows before the
 # page is classified ToC-like; 60% keeps prose pages that merely end a few
 # lines with a year or figure from being misclassified.
@@ -493,6 +542,15 @@ class _StructureMixin(_RAGPipelineState):
         prefix names the recovered chapter (6.1 -> chapter 6).  The left
         seg's own number-prefixed run-on (5.14.2) must not be confused with
         the row: only its TAIL after the last printed serial is the row.
+
+        Lane A's table serialization (fix-summary-fidelity D4) writes each
+        ToC row on its own line with the trailing page behind a " — " dash
+        (optionally behind an interleaved dot-leader cell); flattening turns
+        every chunk into the run-on shape, so the dash tails are rewritten to
+        the historical " page" form BEFORE the dot-run collapse, and the tail
+        branch rejects titles that start with a dotted section number — on a
+        table ToC the right side may lead with a deep section ("16.6.2")
+        whose row tail names a SECTION, not a chapter.
         """
         row_title_re = re.compile(r"^(?:Chapter\s+)?(\d{1,2})\.?\s+")
         dotted_prefix_re = re.compile(r"^(\d{1,2})\.\d+\s")
@@ -521,7 +579,15 @@ class _StructureMixin(_RAGPipelineState):
             if page > 30 or (c.get("source_file") or "") != src:
                 continue
             text = c.get("chunk_text") or ""
-            flat = re.sub(r"\s+", " ", dot_run_re.sub(" ", text)).strip()
+            # Table-serialized rows: rewrite the " — page" row tail to the
+            # historical " page" BEFORE the dot-run collapse (afterwards the
+            # dash would weld the page to the leader cell and serial
+            # detection would lose it).  Flat rows carry no dash: no-op.
+            flat = re.sub(
+                r"\s+",
+                " ",
+                dot_run_re.sub(" ", _TABLE_ROW_TAIL_RE.sub(r" \1", text)),
+            ).strip()
             if not flat:
                 continue
             matches = list(split_re.finditer(flat))
@@ -585,6 +651,13 @@ class _StructureMixin(_RAGPipelineState):
                 printed = int(serial) if serial.isdigit() else 0
                 if not (1 <= ch <= 30) or printed <= 0:
                     continue
+                # A table ToC leaves the dash-tail shape on section rows
+                # too: a span tail like "16.6.2 Retention Settings Example
+                # 419" (right side continues with another dotted section)
+                # names a SECTION, not a chapter — reject it.
+                if re.match(r"\d+(?:\.\d+)+", title):
+                    continue
+                title = re.sub(rf"^{ch}\.?\s+", "", title)
                 recovered.setdefault(ch, (title, printed))
         # Pass 2: glued-shape scan over the SAME early-page chunks, in a
         # separate loop so it runs even where pass 1's splitter found no
@@ -600,7 +673,11 @@ class _StructureMixin(_RAGPipelineState):
             if page > 30 or (c.get("source_file") or "") != src:
                 continue
             flat = re.sub(
-                r"\s+", " ", dot_run_re.sub(" ", c.get("chunk_text") or "")
+                r"\s+",
+                " ",
+                dot_run_re.sub(
+                    " ", _TABLE_ROW_TAIL_RE.sub(r" \1", c.get("chunk_text") or "")
+                ),
             ).strip()
             if not flat:
                 continue
@@ -744,17 +821,27 @@ class _StructureMixin(_RAGPipelineState):
     ) -> tuple[dict[int, tuple[str, int]], set[int]]:
         """Parse front-matter ToC listing rows into chapter -> (title, page).
 
-        Returns (listings, mentions).  Chapter rows arrive in the two shapes
-        the module ToC regexes describe; a "Chapter N :.-" row whose trailing
-        page number was lost in extraction is collected separately as an
-        ambiguous mention so the reconciliation tier can keep (never kill)
-        its chapter.
+        Returns (listings, mentions).  Chapter rows arrive in the shapes the
+        module ToC regexes describe: the historical flat listing ("12 Bayesian
+        Deep Learning 310") and Lane A's table serialization ("2 Installing
+        Proxmox VE — 10", optionally with an interleaved dot-leader cell
+        before the page).  The table shape is tried first so the cell
+        separator never lands inside the captured title; a "Chapter N :.-"
+        row whose trailing page number was lost in extraction is collected
+        separately as an ambiguous mention so the reconciliation tier can
+        keep (never kill) its chapter.
         """
         listings: dict[int, tuple[str, int]] = {}
         mentions: set[int] = set()
         for c in structure_chunks:
             text = c.get("chunk_text") or ""
             for line in text.split("\n"):
+                m = _TOC_TABLE_ROW_RE.match(line)
+                if m:
+                    listings.setdefault(
+                        int(m.group(1)), (m.group(2).strip(), int(m.group(3)))
+                    )
+                    continue
                 m = _TOC_LISTING_LINE_RE.match(line)
                 if m:
                     listings.setdefault(
@@ -860,6 +947,13 @@ class _StructureMixin(_RAGPipelineState):
         seen: set[tuple[int, str]] = set()
         seen_appendix: set[tuple[str, str]] = set()
         gated_nums: set[tuple[int, str]] = set()
+        # Dotted-section captures (pass-2 guard below): real chapter numbers
+        # whose captured "title" is actually the next line's section heading.
+        # They stay unclaimed in ``seen`` so a legitimate title captured
+        # elsewhere (a ToC row, a spaced heading) can win the slot first;
+        # whatever is still unclaimed at the end becomes an empty-title
+        # entry instead of a section-heading-titled chapter.
+        dotted_titles: set[tuple[int, str]] = set()
         dot_leader = re.compile(r"\.{2,}[.\-]+")
         section_re = re.compile(r"(\d+)(?:\.(\d+))+(?:\s+(.+))?")
         chapter_n_re = re.compile(
@@ -1043,6 +1137,19 @@ class _StructureMixin(_RAGPipelineState):
                     or (major, source) in seen
                 ):
                     continue
+                # Dotted-section title guard (fix-chapter-coverage D3): a
+                # bare-number chapter line directly followed by a section
+                # heading ("1\n1.1 Central Management") captures the SECTION
+                # heading as the chapter's title.  The number itself is a
+                # real chapter start, so record it title-less and let a ToC
+                # row, the opener heading or the "Chapter N" placeholder
+                # header speak for the slot — the pass-2 mirror of the
+                # ToC-row guard in _recovered_runon_toc_rows (pass 1's
+                # dotted first-word check never sees this shape: the title
+                # class starts at the section text, not at "N.N").
+                if _DOTTED_SECTION_TITLE_RE.match(bm.group(2)):
+                    dotted_titles.add((major, source))
+                    continue
                 title = self._clean_chapter_title(bm.group(2))
                 if len(title) < 4:
                     continue
@@ -1151,6 +1258,18 @@ class _StructureMixin(_RAGPipelineState):
                         title = re.sub(r"\s*\d+\s*$", "", first_line).rstrip(".")
                         seen.add((gap_n, src_cur))
                         entries.append((gap_n, src_cur, title))
+
+        # Dotted-section captures no legitimate title claimed: keep the
+        # chapter number with an empty title so the roster neither loses the
+        # chapter nor prints a section heading as its title ("1.1 Central
+        # Management" used to become chapter 1's title; the header builder
+        # renders "Chapter N" for an empty title, and the run-on ToC-row
+        # backfill can still fill the slot).  Mirrors the gated-caption
+        # placeholder loop below; first-wins dedupe by (number, source).
+        for dt_num, dt_src in sorted(dotted_titles):
+            if (dt_num, dt_src) not in seen:
+                seen.add((dt_num, dt_src))
+                entries.append((dt_num, dt_src, ""))
 
         entries.sort(key=lambda x: x[0])
         appendix_entries.sort(key=lambda x: x[0])
@@ -2319,6 +2438,149 @@ class _StructureMixin(_RAGPipelineState):
                 ranges[ch_num] = (0, -1)
             titles[ch_num] = node.title or ""
         return ranges, titles
+
+    def _guarded_tree_chapter_map(
+        self,
+        nodes: list[StructureNode],
+        storage: Any,
+        source_file: str,
+    ) -> tuple[dict[int, tuple[int, int]], dict[int, str]]:
+        """Build the tree chapter map with the ToC-span guard applied.
+
+        fix-chapter-coverage D2 / tasks 2.1-2.2: a mis-captured structure
+        tree can place chapter nodes INSIDE the printed table of contents
+        (in the wild the flattened ToC parsed as chapter-shaped nodes
+        spanning pages 3-22).  Each chapter-shaped node's page range is
+        probed through the existing ``find_chunks`` page-list API and the
+        fetched chunks are classified with :meth:`_dot_leader_page`; a
+        dot-leader-dense range is a ToC span and contributes no chapter-map
+        entry.  The probe fails open: a storage error admits the node, and
+        a storage without the ``find_chunks`` API leaves the guard fully
+        inactive (the plain :meth:`_tree_chapter_map` result, unchanged).
+
+        When the surviving number-keyed map covers fewer chapters than the
+        tree carries chapter-shaped nodes outside ToC spans, the capture is
+        degenerate — structure survived but chapter numbers failed to parse
+        — and the empty map sends the caller down the legacy scan instead
+        of trusting a partial map.  Number-less surviving nodes count
+        toward the comparison: they are real chapter-shaped structure the
+        number-keyed map lost.  A repeated chapter number keeps
+        :meth:`_tree_chapter_map`'s own bail-out (and its log line).
+
+        Args:
+            nodes: The tree's nodes, in stored (page-ordered) sequence.
+            storage: The searcher's vector storage.  Probing requires the
+                page-list ``find_chunks`` API; without it the guard is
+                inactive.
+            source_file: Exact document key for the probe's equality
+                filter.
+
+        Returns
+        -------
+            ``(ranges, titles)`` in the :meth:`_tree_chapter_map` shape.
+            Empty ``ranges`` means the caller must fall back to the legacy
+            scan: no chapter nodes, a repeated chapter number, or a
+            degenerate guard outcome.
+        """
+        finder = getattr(storage, "find_chunks", None)
+        if not callable(finder):
+            # Legacy doubles and older stores: the guard cannot probe, so
+            # the map builds exactly as before.
+            return self._tree_chapter_map(nodes)
+
+        def _chapter_shaped(node: StructureNode) -> bool:
+            return node.kind in ("chapter", "section") and not (
+                node.kind == "section" and node.parent_id is not None
+            )
+
+        kept: list[StructureNode] = []
+        for node in nodes:
+            if not _chapter_shaped(node):
+                continue
+            start, end = node.page_start, node.page_end
+            if start is None or end is None or end < start:
+                # Nothing usable to probe (sentinel nodes included): no
+                # range evidence of a ToC span, so admit.
+                kept.append(node)
+                continue
+            pages = list(range(start, min(end, start + _TOC_PROBE_MAX_PAGES - 1) + 1))
+            try:
+                found = finder(source_file=source_file, page_number=pages)
+                dense = self._dot_leader_page(cast(list[dict[str, Any]], list(found)))
+            except Exception:
+                logger.debug(
+                    "ToC-span probe failed for %s node %s; admitting the node",
+                    source_file,
+                    node.node_id,
+                    exc_info=True,
+                )
+                dense = False
+            if dense:
+                logger.debug(
+                    "Excluding ToC-span node %s (%s, pages %d-%d) from the "
+                    "tree chapter map for %s",
+                    node.node_id,
+                    node.number or "<unnumbered>",
+                    start,
+                    end,
+                    source_file,
+                )
+                continue
+            kept.append(node)
+
+        ranges, titles = self._tree_chapter_map(kept)
+        # Degenerate-map fallback (task 2.2): the number-keyed map covers
+        # fewer chapters than the surviving chapter-shaped nodes, so the
+        # partial map is untrustworthy and the legacy scan (which derives
+        # numbers from text) takes over via the caller's empty-map path.
+        if kept and len(ranges) < len(kept):
+            logger.info(
+                "Degenerate tree chapter map for %s: %d chapter-shaped "
+                "nodes survive the ToC-span guard but only %d carry a "
+                "usable chapter number; using the legacy chapter scan",
+                source_file,
+                len(kept),
+                len(ranges),
+            )
+            return {}, {}
+        return ranges, titles
+
+    @staticmethod
+    def _clamp_tree_window_ends(
+        chapter_ranges: dict[int, tuple[int, int]],
+    ) -> dict[int, tuple[int, int]]:
+        """Extend undershooting chapter window ends to the next chapter's start.
+
+        fix-chapter-coverage task 3.2: a mis-captured node range can end
+        well before the next chapter begins (chapter 1 captured as pages
+        1-2 while its sections run to page 9), leaving the pages between
+        the two nodes owned by no chapter's window.  Each chapter's window
+        end becomes the next present chapter's start minus one when that
+        is LARGER — extend-only: windows never shrink, and they never
+        overrun the next chapter's derived start.  Sentinel ranges
+        ``(0, -1)`` (and any range without a positive start or with
+        ``end < start``) are left untouched, and a next chapter whose
+        start is not derivable (non-positive, sentinel) extends nothing,
+        so a chapter followed by a range-less node keeps its own end.
+        Numbering gaps are irrelevant: the next present key bounds.
+
+        Args:
+            chapter_ranges: Chapter number to inclusive page range;
+                extended in place and returned for convenience.
+
+        Returns
+        -------
+            The same mapping with window ends extended where derivable.
+        """
+        keys = sorted(chapter_ranges)
+        for i, num in enumerate(keys[:-1]):
+            start, end = chapter_ranges[num]
+            if start < 1 or end < start:
+                continue
+            next_start = chapter_ranges[keys[i + 1]][0]
+            if next_start - 1 > end:
+                chapter_ranges[num] = (start, next_start - 1)
+        return chapter_ranges
 
     @staticmethod
     def _tree_chapter_buckets(

@@ -17,14 +17,12 @@ from uuid import uuid4
 from secondbrain.config import config
 from secondbrain.document.chunker import (
     classify_chunk_role,
-    docling_item_label,
     label_to_element_type,
 )
 from secondbrain.document.fast_text import extract_printed_page, resolve_printed_pages
 from secondbrain.document.ingestor._constants import (
     MAX_MEMORY_BATCH_SIZE,
     _detect_cpu_count,
-    _element_text,
     get_file_type,
     is_supported,
 )
@@ -347,7 +345,7 @@ class DocumentIngestor:
                         "element_type": dedup_role,
                         **{
                             key: segment[key]
-                            for key in ("t_start", "t_end")
+                            for key in ("t_start", "t_end", "table_degenerate")
                             if key in segment
                         },
                     }
@@ -482,7 +480,7 @@ class DocumentIngestor:
                 "ingested_at": ingested_at,
                 **{
                     key: chunk_item[key]
-                    for key in ("t_start", "t_end")
+                    for key in ("t_start", "t_end", "table_degenerate")
                     if key in chunk_item
                 },
             }
@@ -740,7 +738,7 @@ class DocumentIngestor:
                 "ingested_at": ingested_at,
                 **{
                     key: chunk_item[key]
-                    for key in ("t_start", "t_end")
+                    for key in ("t_start", "t_end", "table_degenerate")
                     if key in chunk_item
                 },
             }
@@ -1549,38 +1547,23 @@ class DocumentIngestor:
                         get_converter_for_path,
                     )
                     from secondbrain.document.processor import (
+                        _extend_segments_from_document,
                         _fallback_text_or_raise,
                         _segments_have_text,
                     )
-                    from secondbrain.document.structure_capture import _item_time_span
 
                     converter = get_converter_for_path(file_path)
                     result = converter.convert(file_path)
                     content = result.document
 
-                    segments = []
-
-                    if hasattr(content, "texts") and content.texts:
-                        for text_item in content.texts:
-                            txt = _element_text(text_item)
-                            if not txt:
-                                continue
-
-                            page_num = 1
-                            prov = getattr(text_item, "prov", None) or []
-                            if prov:
-                                p = prov[0]
-                                if hasattr(p, "page_no"):
-                                    page_num = p.page_no
-
-                            segment: dict[str, Any] = {"text": txt, "page": page_num}
-                            label = docling_item_label(text_item)
-                            if label is not None:
-                                segment["label"] = label
-                            time_span = _item_time_span(text_item)
-                            if time_span is not None:
-                                segment["t_start"], segment["t_end"] = time_span
-                            segments.append(segment)
+                    # Shared docling→segment loop (identical per-item shape to
+                    # the historical inline loop, plus row-oriented table
+                    # serialization — openspec fix-summary-fidelity, D4).
+                    extracted: list[Any] = []
+                    _extend_segments_from_document(
+                        content, extracted, file_path=file_path
+                    )
+                    segments = extracted
 
                     if structure_sink is not None:
                         if get_file_type(file_path) == "audio":

@@ -254,6 +254,34 @@ def test_get_body_chunks_strips_text(storage: QdrantVectorStorage) -> None:
     assert full[0]["chunk_text"] == "secret"
 
 
+def test_get_body_chunks_orders_document_order_page_then_pos(
+    storage: QdrantVectorStorage,
+) -> None:
+    """Document order (fix-chapter-bucket-sampling D3, layer 1).
+
+    Chunks stored deliberately out of document order come back ordered by
+    ``(page_number, page_pos)``; a chunk without ``page_pos`` sorts last on
+    its page.
+    """
+    storage.store_batch(
+        [
+            {**_doc("p3-b", page=3), "page_pos": 1},
+            {**_doc("p2-d", page=2), "page_pos": 9},
+            {**_doc("p2-a", page=2), "page_pos": 2},
+            _doc("p2-nopos", page=2),
+            {**_doc("p3-a", page=3), "page_pos": 0},
+        ]
+    )
+
+    assert [c["chunk_id"] for c in storage.get_body_chunks("book.pdf")] == [
+        "p2-a",
+        "p2-d",
+        "p2-nopos",
+        "p3-a",
+        "p3-b",
+    ]
+
+
 def test_count_chunks_filters(storage: QdrantVectorStorage) -> None:
     storage.store_batch(
         [

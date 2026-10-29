@@ -344,6 +344,38 @@ class TestWorkerAttachesStructure:
 
 
 # ---------------------------------------------------------------------------
+# Worker annotation wiring (design D4)
+# ---------------------------------------------------------------------------
+
+
+class TestWorkerAnnotatesInReadingOrder:
+    """The worker's fresh-ingest annotation passes ordered=True (design D4).
+
+    The post-dedup chunk list is true reading order, so the sticky-owner
+    rule may resolve same-page sibling sections; the wiring (not the
+    matching, covered by test_structure_annotate.py) is what this pins.
+    """
+
+    def test_worker_passes_ordered_to_annotate_chunks(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        file_path = tmp_path / "book.epub"
+        file_path.write_bytes(b"epub-bytes")
+        recorded: list[bool] = []
+        real_annotate = processor.annotate_chunks
+
+        def spy(chunks: Any, tree: Any, **kwargs: Any) -> Any:
+            recorded.append(bool(kwargs.get("ordered", False)))
+            return real_annotate(chunks, tree, **kwargs)
+
+        monkeypatch.setattr(processor, "annotate_chunks", spy)
+        result = run_worker(file_path, heading_document(), monkeypatch)
+
+        assert result["success"] is True
+        assert recorded == [True], "the worker must annotate with ordered=True"
+
+
+# ---------------------------------------------------------------------------
 # Sync ingestor persist
 # ---------------------------------------------------------------------------
 

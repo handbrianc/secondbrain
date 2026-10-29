@@ -182,7 +182,7 @@ class TestResultReporting:
         result = _invoke(ingestor_class, tmp_path)
 
         assert result.exit_code == 0
-        assert "Successfully ingested 1 files" in result.output
+        assert "Successfully ingested 1 file" in result.output
         assert "Failed:" not in result.output
 
     def test_failures_list_rendered_per_file(self, tmp_path: Path) -> None:
@@ -199,7 +199,7 @@ class TestResultReporting:
 
         assert result.exit_code == 0
         flat = " ".join(result.output.split())
-        assert "Failed: 1 files" in flat
+        assert "Failed: 1 file" in flat
         assert "parse error" in flat
         assert "bad.txt" in flat
 
@@ -223,7 +223,8 @@ class TestResultReporting:
         result = _invoke(ingestor_class, tmp_path)
 
         assert result.exit_code == 0
-        assert "Successfully ingested 1 files" in result.output
+        assert "Successfully ingested 1 file" in result.output
+        assert "1 files" not in result.output
         assert "Failed:" not in result.output
 
 
@@ -238,7 +239,7 @@ class TestSkippedReporting:
 
         assert result.exit_code == 0
         assert "Successfully ingested 2 files" in result.output
-        assert "Skipped (already stored): 1 files" in result.output
+        assert "Skipped (already stored): 1 file" in result.output
 
     def test_missing_skipped_not_printed(self, tmp_path: Path) -> None:
         (tmp_path / "doc.txt").write_text("hello")

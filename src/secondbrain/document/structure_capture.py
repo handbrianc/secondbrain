@@ -12,11 +12,23 @@ sources, per the change design §5:
   ``SectionHeaderItem`` items (with the heading levels docling's
   heading-hierarchy stage attaches when
   ``heading_hierarchy_options.enabled=True``); fills sections when the
-  outline is absent and always participates in the merge.
+  outline is absent and always participates in the merge. Items failing the
+  heading plausibility gate (:func:`is_plausible_heading`,
+  fix-chunk-heading-context D1) create no nodes; outline capture is never
+  gated.
 * **Merge** (:func:`merge_structures`) — outline nodes win where both sources
   describe the same region; docling-only headings attach under the containing
   outline node by page range; docling-only chapters fill the tree when no
   outline exists.
+* **ToC number recovery** (:func:`recover_chapter_numbers`) — after the merge,
+  number-less nodes are matched against the document's own table-of-contents
+  listings (dot-leader and leader-less rows parsed from the PDF's native text
+  layer via :func:`parse_toc_rows`) and gain their chapter/section numbers
+  (fix-chapter-coverage, D1). Parsed numbers always win; ambiguous or
+  unmatched nodes stay number-less. A match must also sit where the ToC says
+  it does: the row's printed page, mapped through /PageLabels, has to land
+  within a few physical pages of the node (:func:`_page_bound_allows`), so a
+  generic title cannot reach across the document.
 * **Dispatcher** (:func:`capture_structure`) — the single capture point the
   processor worker and the async ingestor call. **Never raises**: any failure
   is caught, logged as a warning, and reported as ``None`` so ingest proceeds
@@ -43,9 +55,10 @@ import unicodedata
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
-from secondbrain.document.chunker import docling_item_label
+from secondbrain.document.chunker import docling_item_label, is_plausible_heading
+from secondbrain.document.fast_text import extract_native_pdf_text
 from secondbrain.storage.structure_sqlite import (
     AudioSegment,
     DocumentStructure,
@@ -54,6 +67,7 @@ from secondbrain.storage.structure_sqlite import (
 )
 
 __all__ = [
+    "TocListing",
     "audio_topic_segments",
     "capture_audio_structure",
     "capture_docling_headings",
@@ -61,6 +75,8 @@ __all__ = [
     "capture_pdf_outline",
     "capture_structure",
     "merge_structures",
+    "parse_toc_rows",
+    "recover_chapter_numbers",
 ]
 
 logger = logging.getLogger(__name__)
@@ -845,8 +861,11 @@ def capture_docling_headings(docling_doc: Any, path: Path) -> DocumentStructure 
     their text, ``level`` (attached by docling's heading-hierarchy stage,
     which ``docling_factory`` enables for PDF pipelines) and provenance page
     (same 1-based page semantics as ``processor.py:204-230``). Level 1 →
-    ``chapter``, deeper → ``section``/``subsection`` (design §5). Never
-    raises.
+    ``chapter``, deeper → ``section``/``subsection`` (design §5). Items whose
+    text fails the :func:`is_plausible_heading` gate (run-in labels, synopsis
+    lines — openspec fix-chunk-heading-context D1) are skipped from node
+    creation; outline capture stays ungated and no text item is altered,
+    dropped, or reordered. Never raises.
 
     Args:
         docling_doc: A parsed docling document, or a sequence of per-window
@@ -869,13 +888,22 @@ def capture_docling_headings(docling_doc: Any, path: Path) -> DocumentStructure 
             text = getattr(item, "text", None)
             if not text or not str(text).strip():
                 continue
+            heading_text = str(text).strip()
+            # D1 gate (openspec fix-chunk-heading-context): docling's layout
+            # model also marks run-in labels and synopsis lines as section
+            # headers, and every one of them used to become a tree node.
+            # The gate only decides heading treatment — text items are never
+            # altered, dropped, or reordered, and the PDF outline capture
+            # (capture_pdf_outline) stays ungated.
+            if not is_plausible_heading(heading_text):
+                continue
             raw_level = getattr(item, "level", None)
             if isinstance(raw_level, bool) or not isinstance(raw_level, (int, float)):
                 level = 1
             else:
                 level = max(1, int(raw_level))
             page_start = _docling_item_page(item)
-            headings.append((level, str(text).strip(), page_start))
+            headings.append((level, heading_text, page_start))
             if page_start is not None:
                 last_page = (
                     page_start if last_page is None else max(last_page, page_start)
@@ -1366,6 +1394,748 @@ def _derive_merged_page_ends(
 
 
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# ToC-listing number recovery (fix-chapter-coverage, D1)
+# ---------------------------------------------------------------------------
+
+# The ToC-row shapes the recovery pass matches against (design D1):
+# "1 Introduction .... 1", "1.1 Central Management .... 2". Multi-component
+# numbers are tried first so "1.1 X" never backtracks into the bare shape;
+# the optional trailing dot after the number tolerates punctuated rows
+# ("1. Introduction .... 1").
+_TOC_ROW_RE = re.compile(
+    r"^\s*(?P<num>\d{1,3}(?:\.\d{1,3})+|\d{1,3})(?P<dot>\.?)\s+(?P<rest>\S.*?)\s*$"
+)
+# The docling-parse space regression also deletes the space AFTER a dotted
+# section number ("5.14.2MigrationNetwork") — the same shape the pipeline's
+# glued-row scan rescues. Multi-component numbers only, and only with title
+# evidence (several tokens or an intra-word case/paren boundary), so version
+# strings ("1.2Beta") and single words are never read as rows.
+_TOC_ROW_GLUED_RE = re.compile(
+    r"^\s*(?P<num>\d{1,3}(?:\.\d{1,3})+)(?P<rest>[A-Z(]\S.*)$"
+)
+# A dotted number alone on a line ("1.13") is the number half of a row the
+# extractor wrapped right after the number; single digits are too often
+# prose/table/footer noise to trust.
+_TOC_NUMBER_ONLY_RE = re.compile(r"^\s*(?P<num>\d{1,3}(?:\.\d{1,3})+)\.?\s*$")
+# Dot-leader + printed page tail: whitespace, then at least one leader glyph
+# (dots, middle dots, ellipses, underscores), possibly interleaved with more
+# leader glyphs and spaces, then the page digits at end of line. The leader
+# run must be whitespace-separated from the title so a title's own dotted
+# sub-number never donates a fake page ("2.3 Release 7.2" keeps its "7.2" —
+# that dot is glued to the title, not a leader); the required leader glyph
+# still keeps a page with no dots at all ("Introduction  12") off this shape
+# and on the bare-page path below, where it belongs.
+_TOC_PAGE_TAIL_RE = re.compile(
+    r"^(?P<title>\S.*?)\s+[.·‥⋯…_][\s.·‥⋯…_]*(?P<page>\d{1,4})\s*$"
+)
+# Bare printed-page tail, no leader glyphs: a trailing whitespace-separated
+# 1-4-digit printed page, the shape of leader-less chapter rows in the wild
+# ("1 Introduction 1", "2 Installing Proxmox VE 10"). Only trusted when the
+# remaining title still carries at least one alphabetic character, so a
+# pure-number rest ("2 4 6") never donates a fake page.
+_TOC_BARE_PAGE_TAIL_RE = re.compile(r"^(?P<title>\S.*?)\s+(?P<page>\d{1,4})$")
+# Trailing leader/punctuation remnants stripped from parsed row titles.
+_TOC_TITLE_TRAILING = " .·‥⋯…_"
+
+
+class TocListing(NamedTuple):
+    """One parsed table-of-contents row (fix-chapter-coverage, D1).
+
+    Attributes:
+        number: Normalized numbering token (``"1"``, ``"1.1"``; ``"05.02"``
+            normalizes to ``"5.2"``).
+        title: Clean row title — numbering token, dot-leader and trailing
+            printed page removed, fully-glued titles re-spaced (see
+            :func:`_unglue_glued_title`).
+        page: The row's printed page number, or None when the row carries
+            no page column.
+        level: Nesting level from the number's dot components (1 for
+            ``"1"``, 2 for ``"1.1"``, …).
+    """
+
+    number: str
+    title: str
+    page: int | None
+    level: int
+
+
+def _unglue_glued_title(title: str) -> str:
+    """Re-space a fully-glued CamelCase title for matching.
+
+    Local mirror of the pipeline's ``_pretty_glued_title`` (design D1
+    chooses a capture-layer parser over a cross-layer refactor): it fires
+    ONLY when the title contains no whitespace at all AND is at least 10
+    chars, and splits at lower→upper CamelCase boundaries plus before "("
+    after a lowercase letter. Normally-spaced titles pass through
+    untouched.
+
+    Args:
+        title: A parsed ToC row title.
+
+    Returns
+    -------
+        The re-spaced title, or the input unchanged when it is not glued.
+    """
+    t = title.strip()
+    if len(t) < 10 or re.search(r"\s", t):
+        return t
+    spaced = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", t)
+    return re.sub(r"(?<=[a-z])\(", " (", spaced)
+
+
+def _clean_toc_title(title: str) -> str:
+    """Collapse a parsed row title and strip trailing leader remnants.
+
+    Args:
+        title: The raw title fragment captured before a dot-leader tail.
+
+    Returns
+    -------
+        The whitespace-collapsed title without trailing dots/leaders.
+    """
+    return " ".join(title.split()).rstrip(_TOC_TITLE_TRAILING)
+
+
+def _row_title_and_page(rest: str) -> tuple[str, int | None]:
+    """Split a parsed row's rest into its title fragment and printed page.
+
+    Two tail shapes, tried in order:
+
+    * a dot-leader tail (:func:`_TOC_PAGE_TAIL_RE`) — whitespace, a leader
+      run, then the page digits (``"Central Management . . . . 2"``);
+    * a bare printed-page tail (:func:`_TOC_BARE_PAGE_TAIL_RE`) — a trailing
+      whitespace-separated 1-4-digit page with no leader glyphs, the shape
+      of leader-less chapter rows (``"Introduction 1"``). Trusted only when
+      the remaining title keeps at least one alphabetic character, so a
+      pure-number rest never donates a fake page.
+
+    Anything else stays whole with no page: a rest like ``"Release 7.2"``
+    (no whitespace before the trailing digits) and one with no trailing
+    number at all keep their full text and ``page=None`` — while a rest
+    without any alphabetic character at all (``".... 2"``) has no title
+    text and yields an empty title, which the caller drops.
+
+    Args:
+        rest: A matched ToC row's text after the numbering token.
+
+    Returns
+    -------
+        ``(title_fragment, page)`` — the raw title fragment (cleaned by the
+        caller) and the printed page, or None when the rest carries no
+        trusted page tail.
+    """
+    tail = _TOC_PAGE_TAIL_RE.match(rest)
+    if tail is not None:
+        return tail.group("title"), int(tail.group("page"))
+    bare = _TOC_BARE_PAGE_TAIL_RE.match(rest)
+    if bare is not None:
+        bare_title = bare.group("title")
+        if bare_title and any(ch.isalpha() for ch in bare_title):
+            return bare_title, int(bare.group("page"))
+    if not any(ch.isalpha() for ch in rest):
+        # A letterless rest (leader dots, digits, punctuation only) carries
+        # no title text at all — the caller drops the row entirely.
+        return "", None
+    return rest, None
+
+
+def _glued_toc_row(line: str) -> re.Match[str] | None:
+    """Match the space-glued row shape ("5.14.2MigrationNetwork") or None.
+
+    The docling-parse space regression deletes the space AFTER a dotted
+    section number. Mirrors the pipeline's glued-row gate: the title part
+    (dot-leader tail removed) must show glue evidence — several tokens or
+    an intra-word case/paren boundary — so a single unbroken word
+    ("1.2Beta") is never read as a row.
+
+    Args:
+        line: One raw text line.
+
+    Returns
+    -------
+        The glued row match, or None when the shape/gate does not hold.
+    """
+    match = _TOC_ROW_GLUED_RE.match(line)
+    if match is None:
+        return None
+    tail = _TOC_PAGE_TAIL_RE.match(match.group("rest"))
+    title = tail.group("title") if tail else match.group("rest")
+    if len(title.split()) > 1 or re.search(r"(?<=[a-z])[A-Z(]", title):
+        return match
+    return None
+
+
+def _match_key(title: str) -> str:
+    """Normalize a title for listing↔node matching (case-fold, ws-squash).
+
+    Args:
+        title: A node or listing title.
+
+    Returns
+    -------
+        The case-folded, whitespace-collapsed key with trailing
+        punctuation/leader remnants stripped.
+    """
+    return " ".join(title.split()).casefold().rstrip(_TOC_TITLE_TRAILING + ":;")
+
+
+def _match_squash(title: str) -> str:
+    """Glued-variant match key: ALL whitespace removed (case-folded).
+
+    Equals :func:`_match_key` for spaced titles and matches the glued
+    spelling of the same words either way around, so a glued node title
+    ("InstallingProxmoxVE") still finds its spaced ToC listing.
+
+    Args:
+        title: A node or listing title.
+
+    Returns
+    -------
+        The case-folded, whitespace-free key with trailing punctuation
+        stripped.
+    """
+    return re.sub(r"\s+", "", title).casefold().rstrip(_TOC_TITLE_TRAILING + ":;")
+
+
+def parse_toc_rows(text: str) -> list[TocListing]:
+    """Parse table-of-contents rows out of raw page text (pure).
+
+    Recognizes the design D1 row shapes — ``"1 Introduction .... 1"`` and
+    ``"1.1 Central Management .... 2"`` — plus their leader-less chapter-row
+    variants (``"1 Introduction 1"``, a bare whitespace-separated trailing
+    printed page), page-less rows, wrapped rows (the page column on the
+    following unnumbered line, or the number alone on its own line) and the
+    docling space-glued number→title junction
+    (``"5.14.2MigrationNetwork"``). Prose look-alikes are rejected: list
+    items (``"1. Install the package"``), years, bare footer page numbers
+    and number-less lines are never rows, and a rest without a trusted page
+    tail stays whole (``"2.3 Release 7.2"`` keeps its version number).
+    Roman-numeral rows are not recognized (the affected outlines number
+    chapters decimally).
+
+    Args:
+        text: Raw text — one page's extracted text (or any concatenation);
+            no I/O happens here.
+
+    Returns
+    -------
+        The parsed rows in line order. Rows keep ``page=None`` when their
+        page column is absent (tolerated); a wrapped row's title/page merge
+        into that single row.
+    """
+    rows: list[TocListing] = []
+    pending: int | None = None  # index of the last page-less row awaiting its page
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        number_only = _TOC_NUMBER_ONLY_RE.match(line)
+        if number_only is not None:
+            # The number half of a wrapped row; the title/page follow.
+            pending = len(rows)
+            rows.append(
+                TocListing(
+                    number=_normalize_number(number_only.group("num")),
+                    title="",
+                    page=None,
+                    level=number_only.group("num").count(".") + 1,
+                )
+            )
+            continue
+        row = _TOC_ROW_RE.match(line)
+        if row is None:
+            row = _glued_toc_row(line)
+        if row is not None:
+            number = _normalize_number(row.group("num"))
+            title_fragment, page = _row_title_and_page(row.group("rest"))
+            title = _unglue_glued_title(_clean_toc_title(title_fragment))
+            if page is None and row.groupdict().get("dot") and "." not in number:
+                # "1. Install the package" — a prose list item, not a row
+                # (punctuated rows are only trusted with a page column or a
+                # multi-component number).
+                pending = None
+                continue
+            if title:
+                rows.append(
+                    TocListing(
+                        number=number,
+                        title=title,
+                        page=page,
+                        level=number.count(".") + 1,
+                    )
+                )
+                pending = len(rows) - 1 if page is None else None
+            else:
+                pending = None
+            continue
+        tail = _TOC_PAGE_TAIL_RE.match(line)
+        if tail is not None and pending is not None:
+            # Wrapped row: the page column lands on the following unnumbered
+            # line ("1.10 Configuring the Network for / Guest Access .... 12").
+            fold_title = _clean_toc_title(tail.group("title"))
+            if fold_title:
+                holder = rows[pending]
+                merged_title = _unglue_glued_title(
+                    f"{holder.title} {fold_title}".strip()
+                )
+                rows[pending] = holder._replace(
+                    title=merged_title, page=int(tail.group("page"))
+                )
+        pending = None  # any other content expires the pending wrap
+    return rows
+
+
+# Two consecutive paged pages may lie at most this many pages apart (i.e.
+# with up to two page-less pages between them) and still count as one
+# contiguous ToC run; a larger gap ends the run, so a body page that
+# fabricated paged rows is an outlier, not an extension of the ToC span.
+_TOC_RUN_MAX_STEP = 3
+
+
+def _longest_paged_run(pages: Sequence[int]) -> tuple[int, int]:
+    """Find the longest contiguous run of ToC paged pages (pure).
+
+    The ToC page span must be a RUN of pages, never the min/max over every
+    page that yielded a paged row: a body page can fabricate paged rows (a
+    ``ceph osd crush tree`` example printing ``12 nvme 0.72769 osd.12``), and
+    a min/max span would stretch across the whole body and make the span
+    exclusion guard drop every real node between the ToC and the outlier.
+    Consecutive paged pages up to :data:`_TOC_RUN_MAX_STEP` apart keep the
+    run going; a larger gap ends it. Equal-length runs take the earliest.
+
+    Args:
+        pages: Distinct 1-based pages that yielded paged rows, sorted
+            ascending and non-empty (the caller filters and sorts).
+
+    Returns
+    -------
+        ``(first_page, last_page)`` of the winning run, inclusive.
+    """
+    runs: list[list[int]] = [[pages[0]]]
+    for page in pages[1:]:
+        if page - runs[-1][-1] <= _TOC_RUN_MAX_STEP:
+            runs[-1].append(page)
+        else:
+            runs.append([page])
+    best = max(runs, key=lambda run: (len(run), -run[0]))
+    return best[0], best[-1]
+
+
+def _pdf_toc_listings(
+    path: Path,
+) -> tuple[list[TocListing], tuple[int, int] | None]:
+    """Parse the PDF's ToC listings from its native text layer (design D1).
+
+    Reads every page's text through :func:`extract_native_pdf_text`
+    (pypdfium2, no docling — the same reader the fast path uses) and parses
+    ToC rows per page. The pages that yielded rows carrying a printed page
+    column define the ToC page span as their longest contiguous run
+    (:func:`_longest_paged_run`) — body pages can fabricate ToC-looking rows
+    (command output, running heads), so pages outside that run are dropped
+    from the listing set entirely, and page-less rows are kept only inside
+    the run.
+
+    Args:
+        path: Path to the PDF file.
+
+    Returns
+    -------
+        ``(listings, toc_page_span)`` — the parsed rows in document order
+        and the inclusive 1-based physical page span of the longest
+        contiguous run of pages that yielded paged rows (None when no paged
+        row exists). Empty listings when the document has no readable text
+        layer or no ToC rows. Never raises.
+    """
+    per_page: list[tuple[int, list[TocListing]]] = []
+    try:
+        for segment in extract_native_pdf_text(path):
+            page = int(segment.get("page") or 0)
+            if page <= 0:
+                continue
+            page_rows = parse_toc_rows(str(segment.get("text") or ""))
+            if page_rows:
+                per_page.append((page, page_rows))
+    except Exception as e:
+        logger.warning(
+            "ToC listing scan failed for %s (%s: %s); skipping number recovery",
+            path,
+            type(e).__name__,
+            e,
+        )
+        return [], None
+    paged_pages = sorted(
+        {
+            page
+            for page, page_rows in per_page
+            if any(row.page is not None for row in page_rows)
+        }
+    )
+    if not paged_pages:
+        return [], None
+    span = _longest_paged_run(paged_pages)
+    listings = [
+        row
+        for page, page_rows in per_page
+        for row in page_rows
+        if span[0] <= page <= span[1]
+    ]
+    return listings, span
+
+
+def _recovery_number_consistent(
+    node: StructureNode,
+    number: str,
+    by_id: dict[str, StructureNode],
+    children: dict[str, list[StructureNode]],
+    numbers: dict[str, str | None],
+) -> bool:
+    """Check that assigning *number* to *node* keeps the tree consistent.
+
+    Two guards back the spec's inheritance rule ("a recovered chapter
+    number is the leading component of its descendants' recovered section
+    numbers") and its no-wrong-number rule:
+
+    * the node's parent — when numbered and not a part (parts restart
+      numbering by design, see :func:`_detect_part_openers`) — must equal
+      the number or be its leading prefix, and
+    * every child already carrying a number (parsed, or recovered earlier
+      in this same walk) must sit consistently under the recovered number
+      (a chapter whose sections were parsed as "5.x" is never renumbered
+      "3").
+
+    An unnumbered parent constrains nothing: the child's ToC-derived number
+    stays authoritative even where the parent's row was unmatched.
+
+    Args:
+        node: The candidate node.
+        number: The candidate recovered number.
+        by_id: All tree nodes by ``node_id`` (parent-kind lookup).
+        children: ``parent_id`` → child nodes.
+        numbers: The live number per ``node_id`` — parsed numbers plus any
+            recovered earlier in this walk (parents precede children).
+
+    Returns
+    -------
+        True when the assignment cannot contradict any existing number.
+    """
+    parent = by_id.get(node.parent_id) if node.parent_id else None
+    parent_number = numbers.get(node.parent_id) if node.parent_id else None
+    if (
+        parent is not None
+        and parent.kind != "part"
+        and parent_number is not None
+        and number != parent_number
+        and not number.startswith(parent_number + ".")
+    ):
+        return False
+    for child in children.get(node.node_id, ()):
+        child_number = numbers.get(child.node_id)
+        if child_number is None:
+            continue
+        if child_number != number and not child_number.startswith(number + "."):
+            return False
+    return True
+
+
+# Page bound for ToC number recovery (D1 refinement): a listing's printed
+# page, mapped through the document's /PageLabels, must land within this
+# many physical pages of the node's page_start. Real skew between a ToC row
+# and the body heading it describes is 1-2 pages (heading attribution at
+# page boundaries, label rounding); the far-ahead jumps the bound exists to
+# reject are 100+ pages away, so 3 absorbs the noise and stays decisive.
+_TOC_PAGE_BOUND_TOLERANCE = 3
+
+# Printed-page labels that map to physical pages are plain decimal runs
+# ("1", "12"); roman ("iii") or lettered ("A-1") labels carry no body pages
+# and are ignored (the bound fails open around them).
+_TOC_DECIMAL_LABEL_RE = re.compile(r"\d{1,4}")
+
+
+def _printed_to_physical(
+    page_labels: Sequence[PageLabelRange], printed: int
+) -> int | None:
+    """Map a ToC row's printed page to a physical page via /PageLabels.
+
+    Walks the document's label runs (page_start ascending): a decimal run
+    whose first page carries label *L* maps printed page *P* to
+    ``page_start + (P - L)`` when that physical page lies inside the run.
+    Roman or lettered runs carry no body pages and are skipped.
+
+    Args:
+        page_labels: The document's page-label runs.
+        printed: The printed (label) page a ToC row advertises.
+
+    Returns
+    -------
+        The 1-based physical page, or None when no decimal label run covers
+        the printed page.
+    """
+    for label_range in page_labels:
+        match = _TOC_DECIMAL_LABEL_RE.fullmatch(str(label_range.label).strip())
+        if match is None:
+            continue  # roman/lettered front matter carries no body pages
+        physical = label_range.page_start + (printed - int(match.group(0)))
+        if physical < label_range.page_start:
+            continue  # printed page precedes this run's first label
+        if physical > label_range.page_end:
+            continue  # printed page beyond this run
+        return physical
+    return None
+
+
+def _mapped_listing_pages(
+    listings: Sequence[TocListing],
+    page_labels: Sequence[PageLabelRange] | None,
+) -> list[int | None]:
+    """Physical page per listing (None where page-less or unmappable).
+
+    Args:
+        listings: The parsed ToC rows, in document order.
+        page_labels: The document's page-label runs, or None/empty when the
+            document carries no /PageLabels (the bound then fails open for
+            every listing).
+
+    Returns
+    -------
+        One entry per listing: the printed page mapped to a physical page,
+        or None for a page-less row, a row no decimal label run covers, or
+        every row when *page_labels* is empty.
+    """
+    if not page_labels:
+        return [None] * len(listings)
+    return [
+        _printed_to_physical(page_labels, row.page) if row.page is not None else None
+        for row in listings
+    ]
+
+
+def _page_bound_allows(
+    mapped_pages: Sequence[int | None],
+    index: int,
+    node_page: int | None,
+    tolerance: int = _TOC_PAGE_BOUND_TOLERANCE,
+) -> bool:
+    """Whether the listing at *index* may number a node sitting at *node_page*.
+
+    A mapped row allows the match only within *tolerance* physical pages of
+    the node. A page-less (or unmappable) row interpolates: its nearest
+    mappable ToC neighbors bracket the page it would have carried, so the
+    node must lie in ``[prev - tolerance, next + tolerance]`` (a missing
+    side stays unbounded). Anything unboundable fails OPEN — a page-less
+    node, a document without page labels, a row with no mappable neighbors —
+    so recovery never gets worse than the order-only rule it refines.
+
+    Args:
+        mapped_pages: Physical page per listing (:func:`_mapped_listing_pages`).
+        index: The candidate listing's index.
+        node_page: The candidate node's ``page_start`` (None = unboundable).
+        tolerance: Allowed ``|physical - page_start|`` distance.
+
+    Returns
+    -------
+        True when the match may proceed.
+    """
+    if node_page is None:
+        return True  # nothing to bound against — order-only (fail open)
+    low = high = mapped_pages[index]
+    if low is None:
+        # Page-less or unmappable row: bracket it from its nearest mappable
+        # ToC neighbors — its position between them pins the page it carries.
+        for before in range(index - 1, -1, -1):
+            mapped = mapped_pages[before]
+            if mapped is not None:
+                low = mapped
+                break
+        for after in range(index + 1, len(mapped_pages)):
+            mapped = mapped_pages[after]
+            if mapped is not None:
+                high = mapped
+                break
+        if low is None and high is None:
+            return True  # nothing mappable nearby — order-only (fail open)
+    if low is not None and node_page < low - tolerance:
+        return False
+    return not (high is not None and node_page > high + tolerance)
+
+
+def recover_chapter_numbers(
+    structure: DocumentStructure,
+    listings: Sequence[TocListing],
+    *,
+    toc_page_span: tuple[int, int] | None = None,
+) -> DocumentStructure:
+    """Recover missing chapter/section numbers from ToC listings (D1).
+
+    The post-merge numbering pass: number-less nodes are matched against
+    the document's own ToC listings and gain the listing's number, so a
+    tree captured from a number-less PDF outline comes out fully numbered.
+    Matching rules (spec):
+
+    * the normalized title (case-fold + whitespace-squash, plus the
+      glued-variant squash for the docling space regression) must match
+      exactly ONE unused listing whose nesting level equals the node's
+      level and which sits after the last consumed listing — document
+      order and nesting level must agree;
+    * the match must also sit where the ToC says it does: the listing's
+      printed page, mapped through the document's /PageLabels, lies within
+      :data:`_TOC_PAGE_BOUND_TOLERANCE` physical pages of the node's
+      ``page_start`` (:func:`_page_bound_allows`; a page-less row takes an
+      interpolated bracket from its nearest paged ToC neighbors; page-less
+      nodes, label-less documents, and unmappable pages fail open to the
+      order-only rule). Without it a generic title ("Configuration")
+      matches a far-ahead chapter's identically named row and the cursor
+      jump starves every chapter whose listing lies in between;
+    * one listing assigns at most one node; ambiguous or unmatched nodes
+      stay number-less;
+    * parsed numbers always win — numbered nodes are never touched;
+    * assignments that would contradict a numbered parent or numbered
+      children are rejected (:func:`_recovery_number_consistent`);
+    * ``part``/``segment`` nodes never take ToC numbers.
+
+    Re-running the pass over its own output is a no-op: recovered nodes
+    carry their numbers (skipped), and the page bound rejects the far-ahead
+    re-assignments an order-only search would otherwise produce on the
+    leftover number-less nodes. A tree recovery could not fully number keeps
+    gaining page-valid numbers across runs until the fixpoint: a node whose
+    row was passed by an earlier assignment (e.g. a same-page shallower
+    sibling walked first by the storage load order) stays number-less in
+    that run, and once the passing node carries its number the cursor no
+    longer advances past the passed row, so the next run assigns it.
+
+    Node ids and parent links are unchanged (ids are the stable storage
+    keys); ``heading_path`` is recomputed so labels reflect the recovered
+    numbers, and ``sources`` gains ``"toc_number_recovery": True`` when at
+    least one node was numbered. Nodes whose ``page_start`` lies inside
+    *toc_page_span* (the ToC's own physical page span, when known) are
+    excluded — headings captured from ToC-page text must never number
+    themselves.
+
+    Args:
+        structure: The merged structure (nodes in document order); its
+            ``page_labels`` map printed ToC pages to physical pages for the
+            page bound (empty labels fail open).
+        listings: The parsed ToC rows, in document order.
+        toc_page_span: Inclusive 1-based physical page span the rows were
+            found on, or None when unknown.
+
+    Returns
+    -------
+        A new :class:`DocumentStructure` with the recovered numbers (the
+        input unchanged when no node could be numbered). Pure: no I/O.
+    """
+    if not listings or not structure.nodes:
+        return structure
+    nodes = list(structure.nodes)
+    by_id = {node.node_id: node for node in nodes}
+    children: dict[str, list[StructureNode]] = {}
+    for node in nodes:
+        if node.parent_id:
+            children.setdefault(node.parent_id, []).append(node)
+    listing_keys = [
+        (_match_key(row.title), _match_squash(row.title)) for row in listings
+    ]
+    mapped_pages = _mapped_listing_pages(listings, structure.page_labels or None)
+    span_low, span_high = toc_page_span or (0, 0)
+    cursor = -1
+    assignments: dict[str, str] = {}
+    numbers: dict[str, str | None] = {node.node_id: node.number for node in nodes}
+    for node in nodes:
+        if node.number is not None or node.kind in ("part", "segment"):
+            continue  # parsed numbers always win; parts/segments never match
+        page = node.page_start
+        if page is None or span_low <= page <= span_high:
+            continue  # inside the ToC's own page span, or pageless
+        key, squash = _match_key(node.title), _match_squash(node.title)
+        candidates = [
+            index
+            for index in range(cursor + 1, len(listings))
+            if listings[index].level == node.level
+            and (listing_keys[index][0] == key or listing_keys[index][1] == squash)
+            and _page_bound_allows(mapped_pages, index, page)
+        ]
+        if len(candidates) != 1:
+            continue  # unmatched or ambiguous — stays number-less (spec)
+        index = candidates[0]
+        number = listings[index].number
+        if not _recovery_number_consistent(node, number, by_id, children, numbers):
+            continue
+        assignments[node.node_id] = number
+        numbers[node.node_id] = number
+        cursor = index
+    if not assignments:
+        return structure
+
+    labels = {
+        node.node_id: _node_label(
+            node.kind, assignments.get(node.node_id, node.number), node.title
+        )
+        for node in nodes
+    }
+    new_nodes: list[StructureNode] = []
+    for node in nodes:
+        final_number: str | None = assignments.get(node.node_id, node.number)
+        chain: list[str] = []
+        seen: set[str] = set()
+        cursor_id: str | None = node.node_id
+        while cursor_id is not None and cursor_id not in seen:
+            seen.add(cursor_id)
+            chain.append(labels[cursor_id])
+            parent = by_id.get(cursor_id)
+            cursor_id = parent.parent_id if parent is not None else None
+        heading_path = " > ".join(reversed(chain))
+        if final_number == node.number and heading_path == node.heading_path:
+            new_nodes.append(node)
+        else:
+            new_nodes.append(
+                node.model_copy(
+                    update={"number": final_number, "heading_path": heading_path}
+                )
+            )
+    return structure.model_copy(
+        update={
+            "nodes": new_nodes,
+            "sources": {**structure.sources, "toc_number_recovery": True},
+        }
+    )
+
+
+def _recover_numbers_from_document_toc(
+    structure: DocumentStructure, path: Path
+) -> DocumentStructure:
+    """Wire the D1 recovery pass into the capture flow (task 1.3).
+
+    Parses the document's ToC listings from its native text layer
+    (:func:`_pdf_toc_listings`) and runs :func:`recover_chapter_numbers`
+    over the freshly merged tree — the single call site between
+    :func:`merge_structures` and persistence. Never raises and never
+    degrades the tree: any failure returns the structure unchanged, so
+    ingest keeps today's behavior.
+
+    Args:
+        structure: The merged structure tree.
+        path: Path to the source PDF (its text layer is the ToC source).
+
+    Returns
+    -------
+        The structure with recovered numbers, or the input unchanged when
+        no listings exist or recovery failed.
+    """
+    try:
+        listings, span = _pdf_toc_listings(path)
+        if not listings:
+            return structure
+        return recover_chapter_numbers(structure, listings, toc_page_span=span)
+    except Exception as e:
+        logger.warning(
+            "ToC number recovery failed for %s (%s: %s); keeping captured numbers",
+            path,
+            type(e).__name__,
+            e,
+        )
+        return structure
+
+
 # Audio capture (design §5, lane 1b) — ASR timestamps → segment nodes
 # ---------------------------------------------------------------------------
 
@@ -1778,8 +2548,15 @@ def capture_structure(
             labels = capture_page_labels(path)
             docling_part = _merged_docling_part(docling_doc, path)
             merged = merge_structures(outline_part, docling_part)
+            # /PageLabels go on BEFORE the recovery pass: its page bound maps
+            # ToC printed pages to physical pages through them (D1
+            # refinement; label-less documents fail open to order-only).
             merged.page_labels = labels
             merged.sources["page_labels"] = bool(labels)
+            # fix-chapter-coverage (D1): recover chapter/section numbers for
+            # number-less nodes from the document's own ToC listings, before
+            # persistence. Never raises; a no-listing document is unchanged.
+            merged = _recover_numbers_from_document_toc(merged, path)
             return merged if (merged.nodes or labels) else None
 
         docling_part = _merged_docling_part(docling_doc, path)

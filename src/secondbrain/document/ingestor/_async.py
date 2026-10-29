@@ -374,7 +374,7 @@ class AsyncDocumentIngestor(DocumentIngestor):
                         "element_type": chunk_role,
                         **{
                             key: segment[key]
-                            for key in ("t_start", "t_end")
+                            for key in ("t_start", "t_end", "table_degenerate")
                             if key in segment
                         },
                     }
@@ -522,7 +522,7 @@ class AsyncDocumentIngestor(DocumentIngestor):
                 "ingested_at": ingested_at,
                 **{
                     key: chunk_item[key]
-                    for key in ("t_start", "t_end")
+                    for key in ("t_start", "t_end", "table_degenerate")
                     if key in chunk_item
                 },
             }

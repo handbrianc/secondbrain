@@ -28,6 +28,7 @@ import pytest
 
 from secondbrain.rag.pipeline import RAGPipeline
 from tests.unit.rag._chapter_fixture_storage import (
+    BASELINE_WINDOW_OVERRIDES,
     ChapterFixtureStorage,
     load_fixture,
 )
@@ -260,7 +261,15 @@ class TestLegacyCharacterization:
             f"{fixture_name}: derived chapter ranges diverged from the "
             "recorded pre-change baseline"
         )
-        assert recorded == baselines["multi"]["bucket_pages"], (
+        # Intended D1 window diffs: the admission filter refuses foreign
+        # material on speculative start pages, sliding those windows onto the
+        # chapter's own pages (see BASELINE_WINDOW_OVERRIDES).  Everything
+        # else must stay byte-identical to the baseline.
+        expected_buckets = {
+            **baselines["multi"]["bucket_pages"],
+            **BASELINE_WINDOW_OVERRIDES.get(fixture_name, {}),
+        }
+        assert recorded == expected_buckets, (
             f"{fixture_name}: multi-chapter bucket page lists diverged from "
             "the recorded pre-change baseline"
         )

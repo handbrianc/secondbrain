@@ -22,6 +22,9 @@ class _FormattingMixin(_RAGPipelineState):
 
         Args:
             chunks: List of search results with chunk_text, source_file.
+                Chunks may also carry an optional non-empty ``heading_path``
+                string, appended last to the source-line tags as a structural
+                scope label; chunks without it format exactly as before.
             max_chars: Maximum context length.
 
         Returns:
@@ -30,7 +33,16 @@ class _FormattingMixin(_RAGPipelineState):
         Example:
             >>> chunks = [{"chunk_text": "Hello", "source_file": "doc.pdf", "page": 1}]
             >>> pipeline._format_context(chunks)
-            'Source: doc.pdf (page 1)\nHello\n\n'
+            'Source: doc.pdf (page 1)\nHello\n'
+            >>> chunks = [{
+            ...     "chunk_text": "Snapshot mode stores VM state.",
+            ...     "source_file": "doc.pdf",
+            ...     "page": 12,
+            ...     "chunk_role": "body",
+            ...     "heading_path": "Chapter 16 > Backup Modes > snapshot mode",
+            ... }]
+            >>> pipeline._format_context(chunks)
+            'Source: doc.pdf (page 12 [body, Chapter 16 > Backup Modes > snapshot mode])\nSnapshot mode stores VM state.\n'
         """
         if not chunks:
             return ""
@@ -55,6 +67,9 @@ class _FormattingMixin(_RAGPipelineState):
                 label = self._infer_section_label(chunk_text, chunk_role)
                 if label:
                     tags.append(label)
+            heading_path = chunk.get("heading_path")
+            if heading_path:
+                tags.append(heading_path)
             tag_str = f" [{', '.join(tags)}]" if tags else ""
             source_line = f"Source: {source_file} (page {page}{tag_str})"
             chunk_entry = f"{source_line}\n{chunk_text}\n"

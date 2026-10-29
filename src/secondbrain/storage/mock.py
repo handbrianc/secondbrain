@@ -11,6 +11,20 @@ import types
 from typing import Any
 
 
+def _document_order_key(chunk: dict[str, Any]) -> tuple[float, float]:
+    """Reading-order key ``(page_number, page_pos)`` for ``get_body_chunks``.
+
+    Mirrors ``QdrantVectorStorage.get_body_chunks`` (design D3, layer 1):
+    ascending page, then ascending within-page position, with a missing or
+    None ``page_pos`` sorting last on its page.
+    """
+    pos = chunk.get("page_pos")
+    return (
+        float(chunk.get("page_number") or 0),
+        float(pos) if pos is not None else math.inf,
+    )
+
+
 class MockVectorStorage:
     """In-memory mock vector storage for testing.
 
@@ -384,7 +398,11 @@ class MockVectorStorage:
         page_gte: int | None = None,
         with_text: bool = True,
     ) -> list[dict[str, Any]]:
-        """Return a source's body chunks ordered by page, optionally page/limit."""
+        """Return a source's body chunks in document order, optionally page/limit.
+
+        Ordered by ``(page_number, page_pos)`` with a missing ``page_pos``
+        sorting last, mirroring the Qdrant backend (design D3, layer 1).
+        """
         chunks = [
             c
             for c in self._chunks.values()
@@ -392,7 +410,7 @@ class MockVectorStorage:
         ]
         if page_gte is not None:
             chunks = [c for c in chunks if (c.get("page_number") or 0) >= page_gte]
-        chunks.sort(key=lambda c: c.get("page_number") or 0)
+        chunks.sort(key=_document_order_key)
         if limit is not None:
             chunks = chunks[:limit]
         result: list[dict[str, Any]] = []

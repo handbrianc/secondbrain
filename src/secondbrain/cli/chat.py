@@ -31,6 +31,14 @@ console = Console(markup=True)
 @click.option("--temperature", "-t", type=float, default=0.1, help="LLM temperature")
 @click.option("--model", "-m", type=str, default=None, help="LLM model name")
 @click.option("--show-sources", is_flag=True, help="Show retrieved sources")
+@click.option(
+    "--show-thinking/--no-show-thinking",
+    default=None,
+    help=(
+        "Stream the model's reasoning live instead of the default collapsed "
+        "summary (default: from config / SECONDBRAIN_SHOW_THINKING)"
+    ),
+)
 @click.option("--list-sessions", is_flag=True, help="List all sessions")
 @click.option("--history", is_flag=True, help="Show session history")
 @click.option("--delete-session", "-d", type=str, help="Delete a session")
@@ -50,6 +58,7 @@ def chat(
     temperature: float,
     model: str | None,
     show_sources: bool,
+    show_thinking: bool | None,
     list_sessions: bool,
     history: bool,
     delete_session: str | None,
@@ -67,6 +76,12 @@ def chat(
     --------
     """
     cfg = config()
+
+    # Reasoning display precedence: explicit flag > config (which itself maps
+    # SECONDBRAIN_SHOW_THINKING) > the renderer's own lenient env read.
+    resolved_show_thinking = (
+        show_thinking if show_thinking is not None else cfg.show_thinking
+    )
 
     if list_sessions:
         _list_sessions()
@@ -96,6 +111,7 @@ def chat(
             temperature=temperature,
             model=model,
             show_sources=show_sources,
+            show_thinking=resolved_show_thinking,
         )
         return
 
@@ -106,6 +122,7 @@ def chat(
         temperature=temperature,
         model=model,
         show_sources=show_sources,
+        show_thinking=resolved_show_thinking,
     )
 
 

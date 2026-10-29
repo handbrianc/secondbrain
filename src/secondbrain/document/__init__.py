@@ -22,6 +22,7 @@ from secondbrain.document.chunker import (
     chunk_segments,
     deduplicate_segments,
     docling_item_label,
+    is_plausible_heading,
     label_to_element_type,
 )
 from secondbrain.document.ingestor import (

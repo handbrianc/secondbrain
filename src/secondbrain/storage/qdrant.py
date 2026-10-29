@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import re
 import threading
 import time
@@ -56,8 +57,9 @@ _INDEXED_FIELDS = (
     "printed_page",
 )
 
-# Points per refresh_structural_payload scroll/upsert round (~256 dense
-# vectors ≈ 2 MB per round, design §7).
+# Point ids per refresh_structural_payload set_payload batch (design D3 of
+# fix-chunk-heading-context); the refresh's collect pass pages payload-only
+# scroll reads at the same size.
 _REFRESH_BATCH_SIZE = 256
 
 _OUTPUT_KEYS = (
@@ -104,6 +106,164 @@ def _traced_qdrant_operation(
                 if value is not None:
                     span.set_attribute(f"qdrant.{key}", value)
         yield span
+
+
+# ---------------------------------------------------------------------------
+# Structural payload refresh (design D3, fix-chunk-heading-context)
+# ---------------------------------------------------------------------------
+
+
+def _refresh_position(payload: dict[str, Any], key: str) -> float:
+    """Return a numeric payload position for the refresh sort (0 if absent).
+
+    Stored payloads are processor-built and numeric; the coercion keeps a
+    hostile value from exploding the sort instead of degrading to position 0.
+    """
+    value = payload.get(key)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return 0
+    return float(value)
+
+
+def _refresh_sort_key(record: Any) -> tuple[float, float, str]:
+    """Reading-order key ``(page_number, page_pos, point id)`` (design D3).
+
+    ``(page_number, page_pos)`` reconstructs the processor's document walk;
+    the point id only breaks ties deterministically.
+    """
+    payload = dict(record.payload or {})
+    return (
+        _refresh_position(payload, "page_number"),
+        _refresh_position(payload, "page_pos"),
+        str(record.id),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Document-order reads (design D3, fix-chapter-bucket-sampling)
+# ---------------------------------------------------------------------------
+
+
+def _document_order_key(record: Any) -> tuple[float, float]:
+    """Reading-order key ``(page_number, page_pos)`` for ``get_body_chunks``.
+
+    The method promises document order: ascending page, then ascending
+    within-page position.  A missing, None, or non-numeric ``page_pos``
+    sorts last on its page, so positioned chunks never lose their place to
+    unpositioned legacy payloads and a hostile value degrades the same way
+    instead of exploding the sort (same coercion policy as
+    :func:`_refresh_position`).
+    """
+    payload = dict(record.payload or {})
+    pos = payload.get("page_pos")
+    return (
+        _refresh_position(payload, "page_number"),
+        float(pos)
+        if isinstance(pos, (int, float)) and not isinstance(pos, bool)
+        else math.inf,
+    )
+
+
+def _refresh_chunk(record: Any, time_mode: bool) -> dict[str, Any]:
+    """Project a stored point payload onto the annotation chunk shape.
+
+    Only the keys :func:`annotate_chunks` reads are carried (``page``,
+    ``text``, plus audio ``t_start``/``t_end`` for time-keyed trees); the
+    payload itself is never rewritten — the refresh writes annotation keys
+    via ``set_payload``. ``t_start``/``t_end`` are projected only in time
+    mode: for page-keyed documents they are never legitimate annotation
+    keys, and projecting them would write stale audio leftovers back via
+    the annotation tuple instead of deleting them.
+    """
+    payload = dict(record.payload or {})
+    chunk: dict[str, Any] = {
+        "page": payload.get("page_number"),
+        "text": payload.get("chunk_text", ""),
+    }
+    if time_mode:
+        chunk.update(
+            {key: payload[key] for key in ("t_start", "t_end") if key in payload}
+        )
+    return chunk
+
+
+def _annotated_refresh_updates(
+    records: Sequence[Any],
+    structure: DocumentStructure,
+) -> tuple[
+    list[tuple[list[Any], dict[str, Any]]],
+    list[tuple[list[Any], list[str]]],
+]:
+    """Annotate reading-order-sorted records into diff-gated write batches.
+
+    *records* must already be sorted by :func:`_refresh_sort_key`; they are
+    annotated in ONE ``annotate_chunks(..., ordered=True)`` pass so the
+    refresh yields the same annotations a fresh ingest of the same content
+    would produce (design D3). A record is written only when its stored
+    annotation keys are missing or differ from the fresh annotation — the
+    pass therefore also corrects points annotated against an older tree,
+    and is a no-op on already-correct points (idempotent re-runs). Records
+    whose annotated chunk resolves no node are never written.
+
+    Returns two batch lists:
+
+    * set batches — ``(ids, payload)`` for ``set_payload``: records grouped
+      by identical annotation (same target node ⇒ same keys and values),
+      each group split into id batches of :data:`_REFRESH_BATCH_SIZE` so
+      every call writes one consistent key/value set to its ids;
+    * delete batches — ``(ids, keys)`` for ``delete_payload``: records whose
+      stored annotation carries keys the fresh annotation no longer has
+      (stale extras from an older tree). ``set_payload`` cannot delete
+      payload keys, so those are removed with a targeted key deletion,
+      grouped by identical stale-key set.
+
+    A record may appear in both lists (corrected values *and* stale keys);
+    the caller counts each point once.
+    """
+    from secondbrain.document.structure_annotate import (
+        ANNOTATION_PAYLOAD_KEYS,
+        annotate_chunks,
+        is_time_mode_tree,
+    )
+
+    time_mode = is_time_mode_tree(structure.nodes)
+    annotated = annotate_chunks(
+        [_refresh_chunk(record, time_mode) for record in records],
+        structure,
+        ordered=True,
+    )
+    # Ids are the client-accepted point-id forms (str here); ``Any`` keeps
+    # the container compatible with set_payload's invariant id-list union.
+    groups: dict[tuple[tuple[str, Any], ...], list[Any]] = {}
+    stale_groups: dict[tuple[str, ...], list[Any]] = {}
+    for record, chunk in zip(records, annotated, strict=True):
+        if "node_id" not in chunk:
+            continue
+        annotation = tuple(
+            (key, chunk[key]) for key in ANNOTATION_PAYLOAD_KEYS if key in chunk
+        )
+        payload = record.payload or {}
+        stored = tuple(
+            (key, payload[key]) for key in ANNOTATION_PAYLOAD_KEYS if key in payload
+        )
+        fresh_keys = {key for key, _ in annotation}
+        stale_keys = tuple(sorted({key for key, _ in stored} - fresh_keys))
+        if stale_keys:
+            stale_groups.setdefault(stale_keys, []).append(str(record.id))
+        if stored == annotation:
+            continue  # stored annotation already correct — idempotent no-op
+        groups.setdefault(annotation, []).append(str(record.id))
+    set_batches = [
+        (ids[start : start + _REFRESH_BATCH_SIZE], dict(group_annotation))
+        for group_annotation, ids in groups.items()
+        for start in range(0, len(ids), _REFRESH_BATCH_SIZE)
+    ]
+    delete_batches = [
+        (ids[start : start + _REFRESH_BATCH_SIZE], list(stale_keys))
+        for stale_keys, ids in stale_groups.items()
+        for start in range(0, len(ids), _REFRESH_BATCH_SIZE)
+    ]
+    return set_batches, delete_batches
 
 
 class QdrantVectorStorage:
@@ -393,16 +553,29 @@ class QdrantVectorStorage:
         source_file: str,
         structure: DocumentStructure | None = None,
     ) -> int:
-        """Annotate stored points that predate structural annotation.
+        """Re-annotate a document's stored points against its structure tree.
 
         Re-ingesting a document skips embedding/storing for chunks whose
-        ``text_hash`` is already stored, so those legacy points keep payload
-        without the structural keys. This method scroll-reads exactly the
-        target document's points **whose ``node_id`` is empty** — freshly
-        stored (already-annotated) points are excluded by the same filter —
-        annotates each against *structure*, and upserts the full record
-        (payload + vector) back. Per-point payloads forbid
-        ``set_payload``-by-filter (design §9 trap 5), hence read-modify-write.
+        ``text_hash`` is already stored, so legacy points keep payload
+        without (or with stale) structural keys. The refresh reads **all**
+        of this document's points — a filtered subset (e.g. only points
+        missing ``node_id``) lacks the heading anchors and reading-order
+        continuity the ordered annotation needs — with a **payload-only**
+        scroll pass (``with_vectors=False``; vectors are never
+        round-tripped), reconstructs reading order by sorting the records on
+        ``(page_number, page_pos, point id)``, annotates the sorted list in
+        ONE ``annotate_chunks(..., ordered=True)`` pass (design D2/D3 of
+        ``fix-chunk-heading-context``), and writes annotation keys back with
+        ``set_payload`` by explicit point ids in
+        :data:`_REFRESH_BATCH_SIZE` batches — grouped by identical
+        annotation, and only for points whose stored annotation keys are
+        missing or differ, so the pass also corrects annotations made
+        against an older tree and is a no-op on already-correct points.
+        Annotation keys the fresh annotation no longer carries (stale
+        extras from an older tree) are removed with a targeted
+        ``delete_payload`` pass — ``set_payload`` cannot delete keys — so
+        repeated refreshes truly converge. Points whose annotated chunk
+        resolves no node are never written.
 
         Args:
             source_file: The document key; MUST equal the payload
@@ -414,59 +587,55 @@ class QdrantVectorStorage:
 
         Returns
         -------
-            The number of points re-upserted with structural keys. Never
-            raises: qdrant failures are warned and reported as the partial
-            count so ingest continues.
+            The number of points whose payload was updated (annotation keys
+            set or stale keys deleted). Never raises: qdrant failures are
+            warned and reported as the partial count so ingest continues
+            (untouched points keep their stored annotation, so a retry
+            rewrites exactly them).
         """
         if structure is None:
             structure = self._load_structure_tree(source_file)
         if structure is None:
             return 0
         self._ensure_collection()
-        # ``is_empty`` is a plain boolean flag on qdrant-client 1.20's
-        # ``FieldCondition`` (verified against the pinned client).
-        refresh_filter = models.Filter(
+        # The document scope is the whole source — annotation needs every
+        # heading anchor in reading order, not just the keyless points.
+        source_filter = models.Filter(
             must=[
                 models.FieldCondition(
                     key="source_file", match=models.MatchValue(value=source_file)
-                ),
-                models.FieldCondition(key="node_id", is_empty=True),
+                )
             ]
         )
+        refreshed_ids: set[Any] = set()
         refreshed = 0
-        seen_ids: set[str] = set()
-        offset: Any = None
         try:
-            while True:
-                records, offset = self._get_client().scroll(
-                    collection_name=self.collection_name,
-                    scroll_filter=refresh_filter,
-                    limit=_REFRESH_BATCH_SIZE,
-                    offset=offset,
-                    with_payload=True,
-                    with_vectors=True,
-                )
-                if not records:
-                    break
-                page_ids = {str(record.id) for record in records}
-                if page_ids <= seen_ids:
-                    # Points with no matching node are skipped (never
-                    # upserted) and keep matching the is_empty filter; this
-                    # guard stops the cursor from stalling on them forever.
-                    break
-                seen_ids |= page_ids
-                points = self._annotated_refresh_points(records, structure)
-                if points:
-                    with _traced_qdrant_operation(
-                        self.collection_name, "upsert", points=len(points)
-                    ):
-                        self._get_client().upsert(
-                            collection_name=self.collection_name,
-                            points=points,
-                        )
-                    refreshed += len(points)
-                if offset is None:
-                    break
+            records = sorted(
+                self._scroll_refresh_records(source_filter), key=_refresh_sort_key
+            )
+            set_batches, delete_batches = _annotated_refresh_updates(records, structure)
+            for ids, payload in set_batches:
+                with _traced_qdrant_operation(
+                    self.collection_name, "set_payload", points=len(ids)
+                ):
+                    self._get_client().set_payload(
+                        collection_name=self.collection_name,
+                        payload=payload,
+                        points=ids,
+                    )
+                refreshed_ids.update(ids)
+                refreshed = len(refreshed_ids)
+            for ids, keys in delete_batches:
+                with _traced_qdrant_operation(
+                    self.collection_name, "delete_payload", points=len(ids)
+                ):
+                    self._get_client().delete_payload(
+                        collection_name=self.collection_name,
+                        keys=keys,
+                        points=ids,
+                    )
+                refreshed_ids.update(ids)
+                refreshed = len(refreshed_ids)
         except Exception as e:
             logger.warning(
                 "Structural payload refresh incomplete for %s (%s: %s)",
@@ -476,55 +645,30 @@ class QdrantVectorStorage:
             )
         return refreshed
 
-    def _annotated_refresh_points(
-        self,
-        records: Sequence[Any],
-        structure: DocumentStructure,
-    ) -> list[models.PointStruct]:
-        """Build upsert points for the scroll records that got a node.
+    def _scroll_refresh_records(self, source_filter: models.Filter) -> list[Any]:
+        """Collect every stored point for one document (payload only).
 
-        Each record is annotated statelessly against the tree (equivalent to
-        the reading-order walk because tree ranges are nested: a child's
-        range is contained in its parent's). Records for which no node is
-        found are dropped — they stay refreshable (bounded re-read waste,
-        design §7) instead of being rewritten unchanged.
+        The collect pass finishes before any write, so the result set is
+        stable and plain cursor pagination terminates. All points of the
+        document are read — already-annotated ones anchor the reading-order
+        pass and provide diff targets — and no vectors are read: the
+        refresh writes annotation keys only.
         """
-        from secondbrain.document.structure_annotate import (
-            ANNOTATION_PAYLOAD_KEYS,
-            annotate_chunks,
-        )
-
-        chunks: list[dict[str, Any]] = []
-        for record in records:
-            payload = dict(record.payload or {})
-            chunks.append(
-                {
-                    "page": payload.get("page_number"),
-                    "text": payload.get("chunk_text", ""),
-                    **{
-                        key: payload[key]
-                        for key in ("t_start", "t_end")
-                        if key in payload
-                    },
-                }
+        records: list[Any] = []
+        offset: Any = None
+        while True:
+            page, offset = self._get_client().scroll(
+                collection_name=self.collection_name,
+                scroll_filter=source_filter,
+                limit=_REFRESH_BATCH_SIZE,
+                offset=offset,
+                with_payload=True,
+                with_vectors=False,
             )
-        annotated = annotate_chunks(chunks, structure)
-        points: list[models.PointStruct] = []
-        for record, chunk in zip(records, annotated, strict=True):
-            if "node_id" not in chunk:
-                continue
-            payload = dict(record.payload or {})
-            payload.update(
-                {key: chunk[key] for key in ANNOTATION_PAYLOAD_KEYS if key in chunk}
-            )
-            points.append(
-                models.PointStruct(
-                    id=record.id,
-                    vector=record.vector,
-                    payload=payload,
-                )
-            )
-        return points
+            records.extend(page)
+            if not page or offset is None:
+                break
+        return records
 
     def _load_structure_tree(self, source_file: str) -> DocumentStructure | None:
         """Lazily load the stored tree for *source_file* (None on any failure)."""
@@ -767,13 +911,17 @@ class QdrantVectorStorage:
         page_gte: int | None = None,
         with_text: bool = True,
     ) -> Sequence[ChunkInfo]:
-        """Return a source's body chunks (``chunk_role == 'body'``) ordered by page.
+        """Return a source's body chunks (``chunk_role == 'body'``) in document order.
 
-        Mirrors the legacy ``collection.find({"source_file": src, "chunk_role": "body"},
-        {...}).sort("page_number", 1).limit(n)`` reads used by the chapter/section
-        reconstruction path. If *page_gte* is given, only chunks on or after that
-        page are returned (used for appendix extraction); the page filter is
-        applied before the *limit* so the truncation is exact.
+        Ordered by ``(page_number, page_pos)`` — ascending page, then ascending
+        within-page position, with a missing ``page_pos`` sorting last — so
+        reads reconstruct the processor's document walk (design D3, layer 1).
+        Mirrors the legacy ``collection.find({"source_file": src, "chunk_role":
+        "body"}, {...}).sort("page_number", 1).limit(n)`` reads used by the
+        chapter/section reconstruction path. If *page_gte* is given, only
+        chunks on or after that page are returned (used for appendix
+        extraction); the page filter is applied before the *limit* so the
+        truncation is exact.
         """
         self._ensure_collection()
         conditions: list[models.Condition] = [
@@ -788,7 +936,7 @@ class QdrantVectorStorage:
                 )
             )
         records = self._scroll_records(models.Filter(must=conditions), None)
-        records.sort(key=lambda p: (p.payload or {}).get("page_number") or 0)
+        records.sort(key=_document_order_key)
         if limit is not None:
             records = records[:limit]
         chunks: list[ChunkInfo] = []

@@ -5,6 +5,11 @@ the generic top-k fall-through, single-chapter/section overview generation,
 multi-chapter map-reduce, storage-failure fallbacks, and the helper machinery
 they drive (``_generate_multi_chapter_summary``, ``_generate_single_chapter_summary``,
 ``_split_bounded``/``_align_window_boundaries``, section-label filtering).
+
+Also covers the legacy multi-chapter round-robin's document-order, density-
+aware admission (fix-chapter-bucket-sampling D3/D4): the five spec scenarios
+plus the boundary-straddle supplement's cap, pinned on a PVE-ch16-shaped
+dense page through an order-preserving storage double.
 """
 
 from __future__ import annotations
@@ -16,6 +21,7 @@ import pytest
 
 from secondbrain.rag.intent_parser import IntentDecision, QueryIntent
 from secondbrain.rag.pipeline import RAGPipeline
+from secondbrain.rag.pipeline._pipeline import PAGE_CAP_MAX
 from tests.unit.rag.test_pipeline_chat_flow import _SessionDouble
 from tests.unit.rag.test_pipeline_streaming_guards import (
     _CallbackCapture,
@@ -544,3 +550,346 @@ class TestPublicEntryDispatch:
         assert _PLAUSIBLE in result["answer"]
         assert ("user", "tell me about chapter 3") in session.messages
         assert ("assistant", result["answer"]) in session.messages
+
+
+# --- fix-chapter-bucket-sampling D3/D4: density-aware document-order admission
+#
+# The legacy multi-chapter round-robin admits window chunks with a dynamic
+# per-page bound, cap_pg = min(PAGE_CAP_MAX, max(3, ceil(0.6 * n))) where n
+# is the page's in-range body-chunk count, and consumes the stream in
+# (page_number, page_pos) document order.  The fixtures below pin the five
+# spec scenarios on a PVE-ch16-shaped dense page through _IterStorage, whose
+# get_body_chunks preserves the caller's list order — a shuffled body list
+# therefore proves the pipeline's client-side sort decides admission.
+
+_DENSITY_ROSTER: tuple[tuple[int, str, int], ...] = (
+    (1, "Alpha Frameworks", 10),
+    (2, "Beta Widgets", 20),
+    (3, "Gamma Pipelines", 30),
+)
+
+# Digit-free, marker-free prose: no chapter numbers, no "N.M" section shapes
+# (those would trigger header promotion beyond the page bound), no roster
+# titles — so only the admission bounds decide membership.
+_PROSE_SENTENCES: tuple[str, ...] = (
+    "the meadow keeps its calm weather through the whole season",
+    "quiet hills roll onward beneath a wide and patient sky",
+    "harvest notes stay beside the barn ledger every evening",
+    "the orchard rows follow the gentle slope toward the river",
+    "morning fog lifts slowly over the terraced vegetable beds",
+    "the windmill turns at a steady unhurried pace all day",
+    "sheep graze along the stonewall until the light fades",
+    "seed catalogs arrive before the last frost has passed",
+    "the greenhouse glass holds the afternoon warmth inside",
+    "bees drift between the lavender rows without any hurry",
+    "rain barrels catch the roof water for the dry weeks",
+    "the farmer marks the calendar for each sowing round",
+    "compost heaps steam gently under the early frost",
+    "the lane to the mill narrows past the old bridge",
+    "wood smoke settles into the valley after sunset",
+    "the cellar shelves hold jars of pickled beans",
+    "geese fly over the stubble fields at first light",
+    "the well rope creaks as the bucket rises slowly",
+    "hedges border the footpath all the way to town",
+    "the trough freezes over before the sun climbs high",
+    "hay bales stack neatly beneath the open barn door",
+    "the dog watches the gate from the porch steps",
+    "plows rest in the shed until the ground softens",
+    "the creek murmurs under the willow branches",
+    "clover patches draw the cattle every afternoon",
+    "the fence posts lean where the frost heaves them",
+    "sparrows gather on the wire above the yard",
+    "the kitchen garden needs weeding after the rain",
+    "lanterns glow in the windows as night arrives",
+    "the autumn leaves drift across the gravel path",
+)
+
+
+def _body_pos(text: str, page: int, pos: int) -> dict[str, Any]:
+    """Body chunk at an explicit within-page position (document order)."""
+    chunk = _body(text, page)
+    chunk["page_pos"] = pos
+    return chunk
+
+
+def _density_headings() -> list[dict[str, Any]]:
+    """Heading chunks pinning each chapter and marking its opener page.
+
+    Bare "N Title" text (the real books' opener-heading shape); served by
+    ``find_structural_chunks`` for both the heading-anchor pins and the
+    opener-page scan, so every chapter's start page admits all its chunks
+    and only the per-page bounds decide membership.
+    """
+    return [
+        {
+            "chunk_text": f"{num} {title}",
+            "chunk_role": "heading",
+            "source_file": _SRC,
+            "page_number": page,
+            "page_pos": 0,
+        }
+        for num, title, page in _DENSITY_ROSTER
+    ]
+
+
+def _vm_container_page(page: int) -> list[dict[str, Any]]:
+    """The PVE-ch16-shaped dense opener: 8 body chunks on one page.
+
+    The chapter banner opens the page, VM prose follows, a numbered section
+    heading arrives embedded in body text ("2.3 Container backup modes" —
+    the docling shape the header-promotion path exists for), then container
+    prose.  Density 8 gives cap_pg = min(6, max(3, ceil(0.6 * 8))) = 5.
+    """
+    return [
+        _body_pos(
+            "Chapter 2 Beta Widgets\nVM snapshot mode captures guest state", page, 0
+        ),
+        _body_pos("snapshot mode freezes the guest file system briefly", page, 1),
+        _body_pos(
+            "snapshot mode keeps the memory image beside the disk state", page, 2
+        ),
+        _body_pos(
+            "2.3 Container backup modes\narchive the configuration directories",
+            page,
+            3,
+        ),
+        _body_pos("container backup runs walk each mounted volume in turn", page, 4),
+        _body_pos("container backup schedules follow the retention window", page, 5),
+        _body_pos(
+            "container backup verification reopens every archived bundle", page, 6
+        ),
+        _body_pos("container backup notes stay beside the restore checklist", page, 7),
+    ]
+
+
+def _density_book() -> list[dict[str, Any]]:
+    """A three-chapter book carrying the three admission-bound shapes.
+
+    ch1 is sparse (page 10 holds 3 chunks, page 11 holds 2 — every page at
+    or under the base bound), ch2 opens on a dense page (page 20: 8 chunks,
+    bound 5) and spills onto a short page 21 (3 chunks), and ch3 opens on a
+    saturated page (page 30: 12 chunks — the density bound clamps to
+    PAGE_CAP_MAX = 6) with a 2-chunk page 31 tail.  The heading chunks pin
+    chapters at pages 10/20/30.
+    """
+    sentences = iter(_PROSE_SENTENCES)
+
+    def prose(page: int, count: int) -> list[dict[str, Any]]:
+        return [_body_pos(next(sentences), page, i) for i in range(count)]
+
+    return [
+        *prose(10, 3),
+        *prose(11, 2),
+        *_vm_container_page(20),
+        *prose(21, 3),
+        *prose(30, 12),
+        *prose(31, 2),
+    ]
+
+
+def _limit_book() -> list[dict[str, Any]]:
+    """The density book with ch2's second page dense as well.
+
+    ch2 holds 8 chunks on page 20 (bound 5) and 8 more on page 21 (bound
+    5): the bounds alone would admit 10, so the per-chapter limit (8) is
+    the binding constraint.  ch1 and ch3 stay sparse.
+    """
+    sentences = iter(_PROSE_SENTENCES)
+
+    def prose(page: int, count: int) -> list[dict[str, Any]]:
+        return [_body_pos(next(sentences), page, i) for i in range(count)]
+
+    return [
+        *prose(10, 3),
+        *prose(11, 2),
+        *_vm_container_page(20),
+        *prose(21, 8),
+        *prose(30, 3),
+    ]
+
+
+def _record_density_buckets(
+    pipeline: RAGPipeline,
+    monkeypatch: pytest.MonkeyPatch,
+) -> dict[str, list[tuple[int, int]]]:
+    """Capture (page, position) admission tuples at the summarizer boundary.
+
+    The recorder replaces ``_generate_multi_chapter_summary``; the coverage
+    wrapper calls it once per chapter with the FULL buckets dict, so the
+    recorded mapping carries every chapter's window.  Returning "" keeps
+    the LLM out of the run — the roster fallback speaks instead.
+    """
+    recorded: dict[str, list[tuple[int, int]]] = {}
+
+    def _recorder(
+        chapter_keys: list[int],
+        chapter_buckets: dict[int, list[dict[str, Any]]],
+        ch_titles: dict[int, str],
+    ) -> str:
+        for ch, bucket in chapter_buckets.items():
+            recorded[str(ch)] = [
+                (int(c.get("page_number") or 0), int(c.get("page_pos") or 0))
+                for c in bucket
+            ]
+        return ""
+
+    monkeypatch.setattr(pipeline, "_generate_multi_chapter_summary", _recorder)
+    return recorded
+
+
+class TestDensityAwareDocumentOrderAdmission:
+    """The legacy round-robin's D3/D4 admission (fix-chapter-bucket-sampling 3.2/3.3).
+
+    The five spec scenarios against the density-aware per-page bound and the
+    client-side (page_number, page_pos) sort, pinned on an order-preserving
+    storage double so a shuffled body list exercises the sort.
+    """
+
+    @staticmethod
+    def _run(pipeline: RAGPipeline) -> str:
+        result = pipeline._iterative_query(
+            "summarize this document",
+            top_k=8,
+            show_sources=False,
+            source_filter=_SRC,
+        )
+        return str(result["answer"])
+
+    def _pipeline_for(
+        self,
+        body: list[dict[str, Any]],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> tuple[RAGPipeline, dict[str, list[tuple[int, int]]]]:
+        provider = _StreamedProvider(generate_responses=[_PLAUSIBLE])
+        pipeline = _make_iterative(
+            provider,
+            _toc([(num, title) for num, title, _pg in _DENSITY_ROSTER]),
+            body,
+            _broad_intent(),
+            _IterStorage(body, _density_headings()),
+            monkeypatch,
+        )
+        return pipeline, _record_density_buckets(pipeline, monkeypatch)
+
+    def test_document_order_decides_within_a_page(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Spec: two same-page candidates within the page's bound — the lower
+        # within-page position is admitted first, regardless of the order
+        # the storage returned the chunks.  The book's chunk list is fully
+        # reversed, so the window's document-order shape can only come from
+        # the pipeline's client-side (page, pos) sort.
+        body = _density_book()
+        body.reverse()
+        pipeline, recorded = self._pipeline_for(body, monkeypatch)
+        answer = self._run(pipeline)
+
+        # ch2's window reads in stored order: the banner, the VM prose, the
+        # embedded 2.3 heading (page_pos 3), then container prose — 5 of
+        # page 20's 8 chunks (bound ceil(0.6 * 8) = 5), then page 21's 3.
+        assert recorded["2"] == [
+            (20, 0),
+            (20, 1),
+            (20, 2),
+            (20, 3),
+            (20, 4),
+            (21, 0),
+            (21, 1),
+            (21, 2),
+        ]
+        # The recorder answers "", so the roster fallback speaks and the LLM
+        # is never consulted — the canary text must stay absent.
+        assert _PLAUSIBLE not in answer
+        assert "Chapter 2 — Beta Widgets (approx pages 20+)" in answer
+
+    def test_dense_page_contributes_more_than_base_bound(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Spec: a page holding many more body chunks than the base bound
+        # contributes more, scaled by density within a bounded maximum.
+        body = _density_book()
+        pipeline, recorded = self._pipeline_for(body, monkeypatch)
+        self._run(pipeline)
+
+        # Page 20 keeps 5 of its 8 chunks (bound 5 > base 3; the flat base
+        # bound would have kept 3 and spilled 5 onto page 21); the window
+        # then takes page 21's 3 remaining slots.
+        assert recorded["2"] == [
+            (20, 0),
+            (20, 1),
+            (20, 2),
+            (20, 3),
+            (20, 4),
+            (21, 0),
+            (21, 1),
+            (21, 2),
+        ]
+        # Page 30 holds 12 chunks: the density bound would be ceil(7.2) = 8,
+        # but the bounded maximum clamps it — exactly PAGE_CAP_MAX of page
+        # 30's 12 chunks are admitted, then page 31's 2 finish the window.
+        assert recorded["3"] == [
+            (30, 0),
+            (30, 1),
+            (30, 2),
+            (30, 3),
+            (30, 4),
+            (30, 5),
+            (31, 0),
+            (31, 1),
+        ]
+        assert len([t for t in recorded["3"] if t[0] == 30]) == PAGE_CAP_MAX
+
+    def test_sparse_page_unaffected(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Spec: a page at or under the base bound keeps its pre-D4 behavior
+        # — every in-range chunk on it stays admissible.  ch1's pages hold 3
+        # and 2 chunks (ceil(0.6 * n) <= 3 -> base bound 3): the window
+        # keeps all 5 chunks in document order, exactly as the flat base
+        # bound would have admitted them.
+        body = _density_book()
+        pipeline, recorded = self._pipeline_for(body, monkeypatch)
+        self._run(pipeline)
+
+        assert recorded["1"] == [(10, 0), (10, 1), (10, 2), (11, 0), (11, 1)]
+
+    def test_per_chapter_limit_still_wins(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Spec: density scaling may not push a window past the per-chapter
+        # limit.  ch2 holds 8 chunks on page 20 (bound 5) and 8 more on
+        # page 21 (bound 5): the bounds alone would admit 10, but the limit
+        # stops admission at 8 — after page 20's 5, only 3 of page 21's 8
+        # join, and page 21's own bound (5) is never reached.
+        body = _limit_book()
+        pipeline, recorded = self._pipeline_for(body, monkeypatch)
+        self._run(pipeline)
+
+        assert recorded["2"] == [
+            (20, 0),
+            (20, 1),
+            (20, 2),
+            (20, 3),
+            (20, 4),
+            (21, 0),
+            (21, 1),
+            (21, 2),
+        ]
+
+    def test_sampling_reproducible_across_runs(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Spec: the same stored content sampled twice — even when the
+        # storage returns the chunks in a different order — yields the
+        # identical window, for every chapter.
+        pipeline_sorted, recorded_sorted = self._pipeline_for(
+            _density_book(), monkeypatch
+        )
+        self._run(pipeline_sorted)
+        shuffled = _density_book()
+        shuffled.reverse()
+        pipeline_shuffled, recorded_shuffled = self._pipeline_for(shuffled, monkeypatch)
+        self._run(pipeline_shuffled)
+
+        assert recorded_shuffled == recorded_sorted
+        # Sanity: every chapter built a non-empty window in both runs.
+        assert set(recorded_sorted) == {"1", "2", "3"}
+        assert all(recorded_sorted[ch] for ch in recorded_sorted)

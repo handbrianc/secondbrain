@@ -199,6 +199,7 @@ class _Segment(TypedDict):
     element_type: NotRequired[str]
     label: NotRequired[str]
     merged: NotRequired[bool]
+    table_degenerate: NotRequired[bool]
     t_start: NotRequired[float]
     t_end: NotRequired[float]
 
@@ -208,6 +209,7 @@ class _Chunk(TypedDict):
     page: int
     chunk_role: str
     element_type: str
+    table_degenerate: NotRequired[bool]
     t_start: NotRequired[float]
     t_end: NotRequired[float]
 
@@ -215,6 +217,19 @@ class _Chunk(TypedDict):
 _STRUCTURAL_ROLES: frozenset[ElementTypeLiteral] = frozenset(
     {"heading", "toc_entry", "caption", "navigation"}
 )
+
+# Docling's run-in heading label (maps to "heading" above). Only this label
+# is demoted by the plausibility gate in _merge_segments (openspec
+# fix-chunk-heading-context D1); "title" and the other structural roles keep
+# the standalone flush regardless of text shape.
+_SECTION_HEADER_LABEL = "section_header"
+
+# Segment label marking a serialized table run (table_serialize.TABLE_LABEL;
+# not imported to keep this pure module import-light). Table segments are
+# flushed standalone like structural roles — table rows must never be merged
+# with surrounding prose — and chunk_segments splits them only at row
+# boundaries.
+_TABLE_LABEL = "table"
 
 
 def _flush_accumulation(
@@ -227,6 +242,10 @@ def _flush_accumulation(
     segment: _Segment = {"text": text, "page": page, "merged": merged}
     if label is not None:
         segment["label"] = label
+    if any(source.get("table_degenerate") for source in sources):
+        # A degenerate-table segment is flushed standalone (never merged), so
+        # the flag travels from its single source to the flushed segment.
+        segment["table_degenerate"] = True
     starts = [source["t_start"] for source in sources if "t_start" in source]
     ends = [source["t_end"] for source in sources if "t_end" in source]
     if starts:
@@ -280,6 +299,34 @@ def _is_likely_title(text: str) -> bool:
     )
 
 
+def is_plausible_heading(text: str) -> bool:
+    """Return whether a parser-labeled heading's text plausibly is one.
+
+    Shared gate for structure capture and chunk assembly (openspec
+    fix-chunk-heading-context design D1): docling's layout model also marks
+    bold run-in labels and "command - description" synopsis lines as
+    ``section_header`` items, and every one of them used to become a
+    structure-tree node or a standalone heading chunk. A section-number
+    prefix (``_is_section_numbered``) always passes; otherwise the text must
+    be short, carry no trailing sentence punctuation, and have no synopsis
+    shape — the dash rejection mirrors :func:`_is_likely_title`.
+
+    Args:
+        text: Stripped text to test (both call sites pass ``text.strip()``).
+
+    Returns
+    -------
+        True when the text should be treated as a heading.
+    """
+    if _is_section_numbered(text):
+        return True
+    return (
+        len(text) < 120
+        and not text.endswith((".", ":", ",", ";", "—"))
+        and " - " not in text
+    )
+
+
 def _merge_segments(segments: Sequence[Segment]) -> list[_Segment]:
     """Merge raw extraction segments into chunkable segments.
 
@@ -288,6 +335,10 @@ def _merge_segments(segments: Sequence[Segment]) -> list[_Segment]:
     before chunking, and title detection lets short punctuation-free
     fragments join the following content.
     ASR bounds are aggregated without changing the text merge policy.
+    Labeled structural segments flush standalone — the one exception is a
+    docling ``section_header`` whose text fails :func:`is_plausible_heading`
+    (openspec fix-chunk-heading-context D1): it is run-in body text, joins
+    the accumulation, and its label is dropped on join.
 
     Args:
         segments: List of extracted text segments.
@@ -320,25 +371,41 @@ def _merge_segments(segments: Sequence[Segment]) -> list[_Segment]:
         label = segment.get("label")
         if label is not None:
             labeled_role = label_to_element_type(label)
-            if labeled_role is not None and labeled_role in _STRUCTURAL_ROLES:
-                if current_text:
-                    merged_segments.append(
-                        _flush_accumulation(
-                            current_text,
-                            current_page,
-                            current_label,
-                            current_merged,
-                            current_sources,
+            if (
+                labeled_role is not None and labeled_role in _STRUCTURAL_ROLES
+            ) or label == _TABLE_LABEL:
+                # D1 (openspec fix-chunk-heading-context): docling's layout
+                # model also marks run-in labels and synopsis lines as
+                # section_header. One failing the plausibility gate is body
+                # text: it does NOT flush standalone — it falls through to
+                # the accumulation path below with its heading label dropped
+                # (a demoted start carries no label; a demoted join keeps the
+                # accumulation's earlier label, mirroring the label-less join
+                # branch). Plausible headings and every other structural or
+                # table label keep the standalone flush.
+                if label == _SECTION_HEADER_LABEL and not is_plausible_heading(
+                    stripped
+                ):
+                    label = None
+                else:
+                    if current_text:
+                        merged_segments.append(
+                            _flush_accumulation(
+                                current_text,
+                                current_page,
+                                current_label,
+                                current_merged,
+                                current_sources,
+                            )
                         )
+                    merged_segments.append(
+                        _flush_accumulation(stripped, page, label, sources=[segment])
                     )
-                merged_segments.append(
-                    _flush_accumulation(stripped, page, label, sources=[segment])
-                )
-                current_text = ""
-                current_label = None
-                current_sources = []
-                current_merged = False
-                continue
+                    current_text = ""
+                    current_label = None
+                    current_sources = []
+                    current_merged = False
+                    continue
 
         is_likely_title = _is_likely_title(stripped)
 
@@ -446,6 +513,12 @@ def chunk_segments(
             and not text.strip().endswith(".")
         )
 
+        # Table segments (serialized table runs, see table_serialize) split
+        # ONLY at row boundaries: a row's label and value must never land in
+        # different chunks. Row boundaries are the newlines the serializer
+        # emits between rows.
+        is_table = segment.get("label") == _TABLE_LABEL
+
         start = 0
         while start < len(text):
             if start + chunk_size >= len(text):
@@ -473,15 +546,34 @@ def chunk_segments(
                         final_chunk["t_start"] = segment["t_start"]
                     if "t_end" in segment:
                         final_chunk["t_end"] = segment["t_end"]
+                    if "table_degenerate" in segment:
+                        final_chunk["table_degenerate"] = segment["table_degenerate"]
                     chunks.append(final_chunk)
                 seg_counter += 1
                 break
 
             next_start = start + chunk_size
             chunk_end = next_start
-            last_space = text.rfind(" ", start, chunk_end)
-            if last_space > start:
-                chunk_end = last_space
+            row_aligned_split = False
+            if is_table:
+                row_break = text.rfind("\n", start, chunk_end)
+                if row_break > start:
+                    # Split at the row boundary; the newline itself is
+                    # excluded so the chunk holds complete rows only.
+                    chunk_end = row_break
+                    row_aligned_split = True
+                else:
+                    # A single row longer than chunk_size cannot honor both
+                    # bounds; fall back to the word-boundary split so the
+                    # loop still advances (no row structure was available
+                    # to do better — see table_serialize.build_table_run).
+                    last_space = text.rfind(" ", start, chunk_end)
+                    if last_space > start:
+                        chunk_end = last_space
+            else:
+                last_space = text.rfind(" ", start, chunk_end)
+                if last_space > start:
+                    chunk_end = last_space
 
             chunk_text = text[start:chunk_end]
             if chunk_text.strip():
@@ -507,11 +599,25 @@ def chunk_segments(
                     chunk["t_start"] = segment["t_start"]
                 if "t_end" in segment:
                     chunk["t_end"] = segment["t_end"]
+                if "table_degenerate" in segment:
+                    chunk["table_degenerate"] = segment["table_degenerate"]
                 chunks.append(chunk)
                 seg_counter += 1
 
-            new_start = chunk_end - chunk_overlap
-            start = chunk_end if new_start <= start else new_start
+            if row_aligned_split:
+                # Restart at a row start: the overlap window repeats whole
+                # rows only (the first row boundary at or after
+                # chunk_end + 1 - chunk_overlap), never a partial row.
+                candidate = chunk_end + 1 - chunk_overlap
+                if candidate <= start:
+                    start = chunk_end + 1
+                else:
+                    boundary = text.find("\n", candidate, chunk_end)
+                    new_start = boundary + 1 if boundary != -1 else chunk_end + 1
+                    start = new_start if new_start > start else chunk_end + 1
+            else:
+                new_start = chunk_end - chunk_overlap
+                start = chunk_end if new_start <= start else new_start
 
     return chunks
 
@@ -556,7 +662,7 @@ def deduplicate_segments(
                     "text_hash": text_hash,
                     **{
                         key: segment[key]
-                        for key in ("t_start", "t_end")
+                        for key in ("t_start", "t_end", "table_degenerate")
                         if key in segment
                     },
                 }

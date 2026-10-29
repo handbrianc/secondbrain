@@ -90,6 +90,16 @@ class RagMixin:
             )
         return self
 
+    show_thinking: bool = Field(
+        default=False,
+        description=(
+            "Stream the model's reasoning (chain-of-thought) live during chat "
+            "instead of collapsing it to a single dark-gray summary line "
+            "(default: false; env SECONDBRAIN_SHOW_THINKING). Reasoning is "
+            "never part of the answer text either way."
+        ),
+    )
+
     rag_max_context_chars: int = Field(
         default=16000,
         ge=1000,

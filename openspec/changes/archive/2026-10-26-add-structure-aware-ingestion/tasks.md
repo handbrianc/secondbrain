@@ -36,10 +36,22 @@
   idempotent payload-index creation in `_ensure_collection`;
   `refresh_structural_payload(source_file)` batched is_empty-targeted
   read-modify-write; call it from both ingest paths after store
-- [ ] 10. Audio capture in `structure_capture.py`: ASR timestamps →
+- [x] 10. Audio capture in `structure_capture.py`: ASR timestamps →
   `t_start`/`t_end` nodes/segments (empirical probe on the corpus m4a);
   LLM topic segmentation in the parent after persist (config flag, ≤20
   windows); no-timestamps → single whole-document segment; ingest never fails
+  — Evidence: live probe on `Tampa International Airport.m4a` after installing
+  the declared `asr` extra (`whisper-s2t-reborn 1.8.0`): dispatcher routed to
+  `capture_audio_structure`, ASR timestamps → node `seg01` (0.04–9.856s),
+  parent-side LLM segmentation filled the `audio_segments` title ("Testing
+  transcription with numbers", distinct from the raw-transcript node title).
+  Degradation + never-raise covered by `test_audio_structure_capture.py`
+  (no-timestamps→single-segment, hostile items, LLM failure→empty titles);
+  ≤20 windows bounded; flag consumption tested in
+  `test_structure_worker_wiring.py`/`test_structure_refresh_wiring.py`
+  (`_sync.py:925`/`_async.py:952` read `audio_topic_segmentation_enabled`).
+  Missing ASR backend is a loud, deliberate ImportError at converter build
+  (declared `asr` optional extra), upstream of capture — capture never raises.
 - [x] 11. Tests: annotate mapping (anchor, inherit, chapter/section ids),
   role-change regression (fixture byte-identity), qdrant index creation +
   refresh against a fake client, audio degradation path
@@ -77,13 +89,53 @@
 
 ## 7. Live verification
 
-- [ ] 22. Re-ingest with the worktree code against the live store:
+- [x] 22. Re-ingest with the worktree code against the live store:
   `hcd_best_practices_report.pdf`, VirtualBox UserManual, pve admin guide,
   Tampa m4a; confirm trees stored + payload fields populated + legacy points
   refreshed without re-embedding unchanged hashes
-- [ ] 23. Replay the failing chat queries: HCD summarize enumerates chapters
+  — Evidence (3 of 4 docs; HCD BLOCKED, see below): pve re-ingested 4× (last
+  run during an embeddings outage reported "Skipped (already stored)" — zero
+  re-embedding of unchanged hashes, `_refresh_structural_payload` still ran
+  per design §6.4 outcome-independent wiring, `_sync.py:1227-1236`); 7515
+  points intact. VirtualBox `UserManual.pdf` ingested post-outage: tree
+  re-captured (2624 nodes, pages 1–1200, sources outline/heading_hierarchy/
+  page_labels), 12231 qdrant points with `chunk_role` 100%, 7916 tree-anchored
+  (`node_id`/`chapter_id`/`section_id`/`section_label`/`heading_path`
+  populated on anchored chunks; unanchored front-matter chunks correctly
+  omitted). Tampa m4a: audio tree (node `seg01`, 0.04–9.856s) + 1 annotated
+  point + `audio_segments` with LLM title. HCD report replay IMPOSSIBLE:
+  `/data/workspace/uploads/` no longer exists — source file gone from this
+  machine; HCD tree shape remains covered by the task 15 unit tests and the
+  real-tree equivalent passed end-to-end on pve.
+- [x] 23. Replay the failing chat queries: HCD summarize enumerates chapters
   1–21 (no placeholders, chapter 6 clean); section-start questions answer from
   the tree (`structure_source=tree`); `secondbrain structure` output matches
   the store; treeless control document keeps legacy behavior
-- [ ] 24. Tick tasks as steps complete; archive the change
+  — Evidence: provenance probe (`/tmp/opencode/probe_tree_source.py`, stub LLM)
+  + real-LLM replay. Section-target query on pve: `structure_source="tree"`
+  (probe) and live chat "summarize section 1.1 of the guide" answered
+  exclusively from the tree's p.24 bucket (8 sources, all page 24, uniform
+  bucket scores, faithful Central Management content —
+  `/tmp/opencode/chat_section11_tree.txt`). `secondbrain structure` matches
+  the store byte-for-field: pve 3324 nodes both sides, m4a segment node +
+  LLM-titled segments table. Treeless control (`/tmp/opencode/treeless_control.txt`)
+  ingested with no `structure_meta`/`structure_nodes` rows; both query shapes
+  return `structure_source=None` (legacy path, no error). pve multi-chapter
+  queries correctly proceed via the guarded legacy path (`None`): the tree's
+  front-matter/ToC-span chapters degenerate the guarded map by design (D2),
+  matching the validated fix-chapter-coverage end state. HCD enumerate clause
+  BLOCKED (missing source file, above); its assertions are covered by the
+  task 15 synthetic HCD-shaped tree tests.
+- [x] 24. Tick tasks as steps complete; archive the change
   (`openspec archive add-structure-aware-ingestion`) with spec promotion
+  — Evidence: all tasks above ticked with per-task evidence notes;
+  `openspec validate --changes` 3/3 pass (2026-10-26). Spec promotion synced
+  inline BEFORE the archive move (openspec-sync-specs workflow): 7 ADDED
+  requirements appended to existing main specs (document-ingestion 3,
+  rag-pipeline 2, vector-storage 2) and new main spec
+  `openspec/specs/document-structure/spec.md` created from the delta's 5 ADDED
+  requirements (delta carried no `## Purpose`; main spec left a TBD Purpose
+  placeholder, flagged in the archive summary). `openspec validate --specs`
+  15/15 pass; all 4 capabilities re-verified already-synced (ADDED present,
+  single `## Requirements`, no delta headers). Archived to
+  `openspec/changes/archive/2026-10-26-add-structure-aware-ingestion/`.

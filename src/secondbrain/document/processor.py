@@ -47,6 +47,10 @@ from secondbrain.document.structure_annotate import (
     ANNOTATION_PAYLOAD_KEYS,
     annotate_chunks,
 )
+from secondbrain.document.table_serialize import (
+    append_table_segment,
+    table_run_plan,
+)
 from secondbrain.utils.tracing import trace_operation
 
 # Suppress HF-hub progress bars before any docling/transformers import.
@@ -103,6 +107,7 @@ class _Segment(TypedDict):
     text: str
     page: int
     label: NotRequired[str]
+    table_degenerate: NotRequired[bool]
     t_start: NotRequired[float]
     t_end: NotRequired[float]
 
@@ -196,7 +201,11 @@ def _fallback_text_or_raise(file_path: Path) -> str:
     )
 
 
-def _extend_segments_from_document(content: Any, segments: list[_Segment]) -> None:
+def _extend_segments_from_document(
+    content: Any,
+    segments: list[_Segment],
+    file_path: Path | None = None,
+) -> None:
     """Extend *segments* with the text items of a docling document.
 
     Appends one window's (or the whole document's) text items in document
@@ -204,16 +213,35 @@ def _extend_segments_from_document(content: Any, segments: list[_Segment]) -> No
     single-conversion path inlined, so windowed and whole-document
     conversions produce identical segment streams.
 
+    Table content (openspec fix-summary-fidelity, D4): docling emits each
+    table cell as a plain text item inside ``content.texts``; the cells
+    inside a detected table region (:func:`table_run_plan`) are consumed and
+    replaced by ONE standalone row-oriented ``"table"`` segment at the first
+    cell's position, so the chunker can serialize/split the table row by row
+    instead of merging adjacent cells across row boundaries.
+
     Args:
         content: A docling ``DoclingDocument`` (``result.document``).
         segments: Segment list to extend; each entry carries ``"text"``,
             ``"page"``, and optionally ``"label"``.
+        file_path: Source file path, used only for the degenerate-table
+            warning's context; None keeps a placeholder in the log line.
     """
+    plan = table_run_plan(content, file_path=file_path)
     if not (hasattr(content, "texts") and content.texts):
+        # Grid-only table regions (structure-enabled parses moved the cell
+        # text out of the text items) still serialize, unanchored.
+        for run in plan.floating:
+            append_table_segment(segments, run)
         return
     from secondbrain.document.structure_capture import _item_time_span
 
-    for text_item in content.texts:
+    for index, text_item in enumerate(content.texts):
+        if index in plan.consumed:
+            anchored_run = plan.start_index.get(index)
+            if anchored_run is not None:
+                append_table_segment(segments, anchored_run)
+            continue
         if not hasattr(text_item, "text") or not text_item.text:
             continue
         page_num = 1
@@ -241,6 +269,9 @@ def _extend_segments_from_document(content: Any, segments: list[_Segment]) -> No
         if time_span is not None:
             segment["t_start"], segment["t_end"] = time_span
         segments.append(segment)
+
+    for run in plan.floating:
+        append_table_segment(segments, run)
 
 
 def _asr_capture_shape(docling_doc: Any) -> Any:
@@ -343,8 +374,15 @@ def convert_file_to_segments(file_path: Path) -> list[_Segment]:
 
     segments = []
 
+    plan = table_run_plan(content, file_path=file_path)
+
     if hasattr(content, "texts") and content.texts:
-        for text_item in content.texts:
+        for index, text_item in enumerate(content.texts):
+            if index in plan.consumed:
+                run = plan.start_index.get(index)
+                if run is not None:
+                    append_table_segment(segments, run)
+                continue
             if not hasattr(text_item, "text") or not text_item.text:
                 continue
 
@@ -359,6 +397,9 @@ def convert_file_to_segments(file_path: Path) -> list[_Segment]:
             if label is not None:
                 segment["label"] = label
             segments.append(segment)
+
+    for run in plan.floating:
+        append_table_segment(segments, run)
 
     # Fallback: plain text read
     if not segments:
@@ -409,8 +450,15 @@ def _extract_and_chunk_file(
 
             segments = []
 
+            plan = table_run_plan(content, file_path=file_path)
+
             if hasattr(content, "texts") and content.texts:
-                for text_item in content.texts:
+                for index, text_item in enumerate(content.texts):
+                    if index in plan.consumed:
+                        run = plan.start_index.get(index)
+                        if run is not None:
+                            append_table_segment(segments, run)
+                        continue
                     if not hasattr(text_item, "text") or not text_item.text:
                         continue
 
@@ -420,11 +468,17 @@ def _extract_and_chunk_file(
                         if hasattr(prov, "page_no"):
                             page_num = prov.page_no
 
-                    segment: _Segment = {"text": text_item.text, "page": page_num}
+                    segment: _Segment = {
+                        "text": text_item.text,
+                        "page": page_num,
+                    }
                     label = docling_item_label(text_item)
                     if label is not None:
                         segment["label"] = label
                     segments.append(segment)
+
+            for run in plan.floating:
+                append_table_segment(segments, run)
 
         # Fallback: read file directly for plain text formats
         if not segments:
@@ -787,7 +841,9 @@ def _extract_chunk_and_embed_file(
                         if window is not None
                         else converter.convert(file_path)
                     )
-                    _extend_segments_from_document(result.document, segments)
+                    _extend_segments_from_document(
+                        result.document, segments, file_path=file_path
+                    )
                     # Structure capture (design §6) must read the docling
                     # document BEFORE it is released below — after unload/del
                     # it is dead memory. Each window contributes one heading
@@ -898,7 +954,11 @@ def _extract_chunk_and_embed_file(
                         "element_type": chunk.get("element_type", "body"),
                         **{
                             key: chunk[key]
-                            for key in ("t_start", "t_end")
+                            for key in (
+                                "t_start",
+                                "t_end",
+                                "table_degenerate",
+                            )
                             if key in chunk
                         },
                     }
@@ -957,7 +1017,11 @@ def _extract_chunk_and_embed_file(
         annotated_chunks: list[Mapping[str, Any]] = list(unique_chunks)
         if structure is not None:
             try:
-                annotated_chunks = annotate_chunks(unique_chunks, structure)
+                # Design D4: fresh ingest walks chunks in reading order
+                # post-dedup, so the sticky owner resolves same-page siblings.
+                annotated_chunks = annotate_chunks(
+                    unique_chunks, structure, ordered=True
+                )
             except Exception:
                 logger.warning(
                     "Structural annotation failed for %s; storing unannotated chunks",
@@ -1026,6 +1090,11 @@ def _extract_chunk_and_embed_file(
             for ann_key in ANNOTATION_PAYLOAD_KEYS:
                 if ann_key in chunk_item:
                     doc[ann_key] = chunk_item[ann_key]
+            # Degenerate-table flag (openspec fix-summary-fidelity, D4):
+            # surfaced on the stored payload so retrieval can distrust the
+            # chunk; well-formed table chunks carry no flag.
+            if chunk_item.get("table_degenerate"):
+                doc["table_degenerate"] = True
             documents.append(doc)
             page_pos += 1
 

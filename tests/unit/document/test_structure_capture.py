@@ -10,6 +10,7 @@ import pytest
 
 from secondbrain.document import structure_capture as sc
 from secondbrain.document.structure_capture import (
+    TocListing,
     _build_nodes_from_headings,
     _group_label_runs,
     _label_style,
@@ -20,10 +21,13 @@ from secondbrain.document.structure_capture import (
     capture_pdf_outline,
     capture_structure,
     merge_structures,
+    parse_toc_rows,
+    recover_chapter_numbers,
 )
 from secondbrain.storage.structure_sqlite import (
     DocumentStructure,
     PageLabelRange,
+    StructureStore,
 )
 
 pytestmark = pytest.mark.unit
@@ -304,6 +308,90 @@ class TestCaptureDoclingHeadings:
 
 
 # ---------------------------------------------------------------------------
+# Heading plausibility gate (fix-chunk-heading-context, tasks 2.1/2.2)
+# ---------------------------------------------------------------------------
+
+
+class TestCaptureDoclingHeadingGate:
+    """Implausible docling headings create no tree nodes (design D1).
+
+    The gate only decides which ``section_header`` items are treated as
+    headings: outline capture stays ungated and no text item is altered,
+    dropped, or reordered.
+    """
+
+    def test_run_in_label_creates_no_node(self, tmp_path: Any) -> None:
+        doc = docling_doc(
+            doc_item("Restart chrony:", level=1, page=2),
+            doc_item("Chapter 1 — Timekeeping", level=1, page=3),
+        )
+        part = capture_docling_headings(doc, tmp_path / "book.pdf")
+        assert part is not None
+        # The chapter title is normalized (number parsed out); the run-in
+        # label must appear nowhere in the tree.
+        assert [n.title for n in part.nodes] == ["Timekeeping"]
+        assert [n.heading_path for n in part.nodes] == ["Chapter 1 — Timekeeping"]
+
+    def test_numbered_heading_passes_the_gate(self, tmp_path: Any) -> None:
+        doc = docling_doc(
+            doc_item("Restart chrony:", level=1, page=2),
+            doc_item("19.2 pveperf", level=2, page=4),
+        )
+        part = capture_docling_headings(doc, tmp_path / "book.pdf")
+        assert part is not None
+        (section,) = part.nodes
+        assert (section.number, section.title) == ("19.2", "pveperf")
+
+    def test_short_all_caps_run_in_heading_stays_a_node(self, tmp_path: Any) -> None:
+        # Spec scenario: a short, punctuation-free run-in heading is real.
+        doc = docling_doc(doc_item("GENERAL BTRFS ADVANTAGES", level=2, page=7))
+        part = capture_docling_headings(doc, tmp_path / "book.pdf")
+        assert part is not None
+        assert [n.title for n in part.nodes] == ["GENERAL BTRFS ADVANTAGES"]
+
+    def test_only_implausible_headers_yield_no_part(self, tmp_path: Any) -> None:
+        doc = docling_doc(
+            doc_item("Restart chrony:", level=1, page=2),
+            doc_item("pvesubscription - Subscription Management", level=1, page=3),
+        )
+        assert capture_docling_headings(doc, tmp_path / "book.pdf") is None
+
+    def test_text_items_are_never_touched(self, tmp_path: Any) -> None:
+        # Gating is heading selection only: the parsed items leave capture
+        # exactly as they entered (spec: never altered, reordered, dropped).
+        items = [
+            doc_item("Restart chrony:", level=1, page=2),
+            doc_item("Chapter 1 — Timekeeping", level=1, page=3),
+        ]
+        part = capture_docling_headings(docling_doc(*items), tmp_path / "book.pdf")
+        assert part is not None
+        assert [i.text for i in items] == [
+            "Restart chrony:",
+            "Chapter 1 — Timekeeping",
+        ]
+
+    def test_outline_derived_node_is_never_gated(self, tmp_path: Any) -> None:
+        # Spec scenario: outline (bookmark) evidence is authoritative — an
+        # entry whose title would fail the plausibility test still becomes a
+        # node, because the gate lives only in capture_docling_headings.
+        try:
+            from reportlab.pdfgen import canvas as pdf_canvas
+        except ImportError:  # pragma: no cover - env without reportlab
+            pytest.skip("reportlab is not installed")
+
+        pdf_path = tmp_path / "runin_outline.pdf"
+        c = pdf_canvas.Canvas(str(pdf_path))
+        c.bookmarkPage("runin")
+        c.addOutlineEntry("Restart chrony:", "runin", level=0, closed=False)
+        c.drawString(72, 750, "Restart chrony:")
+        c.showPage()
+        c.save()
+
+        part = capture_pdf_outline(pdf_path)
+        assert [n.title for n in part.nodes] == ["Restart chrony:"]
+
+
+# ---------------------------------------------------------------------------
 # Page labels
 # ---------------------------------------------------------------------------
 
@@ -554,3 +642,956 @@ class TestCapturePdfOutlineRealPdf:
         ids = [n.node_id for n in structure.nodes]
         assert ids == ["ch01", "sec01.01", "ch02"]
         assert structure.page_labels == []
+
+
+# ---------------------------------------------------------------------------
+# ToC-row parser (fix-chapter-coverage, task 1.1)
+# ---------------------------------------------------------------------------
+
+
+class TestParseTocRows:
+    """parse_toc_rows: dot-leader rows in, (number, title, page, level) out."""
+
+    @pytest.mark.parametrize(
+        ("line", "expected"),
+        [
+            ("1 Introduction .... 1", ("1", "Introduction", 1, 1)),
+            ("1.1 Central Management .... 2", ("1.1", "Central Management", 2, 2)),
+            ("05.02 Input .... 3", ("5.2", "Input", 3, 2)),
+            (
+                "1.13 Translating Proxmox VE .... 15",
+                ("1.13", "Translating Proxmox VE", 15, 2),
+            ),
+            ("1. Introduction .... 1", ("1", "Introduction", 1, 1)),  # punctuated
+            ("1 Introduction . . . . 1", ("1", "Introduction", 1, 1)),  # spaced dots
+            ("1 Introduction .......... 1", ("1", "Introduction", 1, 1)),
+            ("   1.1 Indented row .... 2", ("1.1", "Indented row", 2, 2)),
+            ("3.2 Local File-System", ("3.2", "Local File-System", None, 2)),
+            ("2.3 Release 7.2 .... 5", ("2.3", "Release 7.2", 5, 2)),
+            # Leader-less chapter rows (real pve-admin-guide 9.1 shape): the
+            # printed page is glued after the title with a plain space.
+            ("1 Introduction 1", ("1", "Introduction", 1, 1)),
+            ("2 Installing Proxmox VE 10", ("2", "Installing Proxmox VE", 10, 1)),
+            (
+                "10 QEMU/KVM Virtual Machines 203",
+                ("10", "QEMU/KVM Virtual Machines", 203, 1),
+            ),
+            (
+                "6 Proxmox Cluster File System (pmxcfs) 136",
+                ("6", "Proxmox Cluster File System (pmxcfs)", 136, 1),
+            ),
+            ("1 Introduction", ("1", "Introduction", None, 1)),  # no page anywhere
+        ],
+    )
+    def test_row_shapes(
+        self, line: str, expected: tuple[str, str, int | None, int]
+    ) -> None:
+        (row,) = parse_toc_rows(line)
+        assert row == TocListing(*expected)
+
+    def test_glued_camelcase_title(self) -> None:
+        (row,) = parse_toc_rows("2.1 InstallingProxmoxVE .... 8")
+        assert row == TocListing("2.1", "Installing Proxmox VE", 8, 2)
+
+    def test_glued_number_title_junction(self) -> None:
+        (row,) = parse_toc_rows("5.14.2MigrationNetwork .... 12")
+        assert row == TocListing("5.14.2", "Migration Network", 12, 3)
+
+    def test_glued_single_word_is_rejected(self) -> None:
+        # One unbroken capitalized word is prose noise, never a glue victim.
+        assert parse_toc_rows("1.2Beta .... 12") == []
+
+    def test_version_rest_without_page_stays_whole(self) -> None:
+        # "Release 7.2": no whitespace before the trailing digits, and the
+        # dot inside "7.2" is glued to its token, not a leader — the rest
+        # must stay whole and page-less, never "Release 7" with page 2.
+        (row,) = parse_toc_rows("2.3 Release 7.2")
+        assert row == TocListing("2.3", "Release 7.2", None, 2)
+        # A real printed page after the version still splits off cleanly.
+        (row,) = parse_toc_rows("2.3 Release 7.2 5")
+        assert row == TocListing("2.3", "Release 7.2", 5, 2)
+
+    def test_glued_row_with_bare_page(self) -> None:
+        # The glued junction also parses when the page tail has no leader.
+        (row,) = parse_toc_rows("5.14.2MigrationNetwork 12")
+        assert row == TocListing("5.14.2", "Migration Network", 12, 3)
+
+    def test_bare_page_never_splits_letterless_rest(self) -> None:
+        # A pure-number rest has no alphabetic title left after the split —
+        # the split is refused, and a rest without any letters at all has no
+        # title text either, so the line is no row at all.
+        assert parse_toc_rows("1 2 3") == []
+        assert parse_toc_rows("1.1 .... 2") == []
+
+    def test_crush_tree_line_stays_pageless(self) -> None:
+        # Real `ceph osd crush tree` example output (pve body page): the
+        # dots in "0.72769"/"osd.12" are glued to their tokens, not leaders,
+        # and the trailing digits have no whitespace before them — the line
+        # must never yield a fabricated page column.
+        (row,) = parse_toc_rows("12 nvme 0.72769 osd.12")
+        assert row == TocListing("12", "nvme 0.72769 osd.12", None, 1)
+
+    def test_punctuated_row_with_bare_page_is_trusted(self) -> None:
+        # A punctuated single-component row was only ever trusted WITH a
+        # page column; the bare-page split now provides one ("1. Item 1" in
+        # a markdown primer). Body pages full of such lines are rejected as
+        # span outliers (see TestPdfTocListingsSpan).
+        (row,) = parse_toc_rows("1. Item 1")
+        assert row == TocListing("1", "Item", 1, 1)
+
+    def test_pve_leaderless_chapter_rows(self) -> None:
+        # Real pve-admin-guide 9.1 ToC shape: chapter rows carry NO dot
+        # leader while subsection rows keep spaced dot leaders.
+        rows = parse_toc_rows(
+            "1 Introduction 1\n"
+            "1.1 Central Management . . . . . . . . . . . . . . . . 2\n"
+            "1.13 Translating Proxmox VE . . . . . . . . . . . . . . 8\n"
+            "2 Installing Proxmox VE 10\n"
+            "2.1 System Requirements . . . . . . . . . . . . . . . . 10\n"
+        )
+        assert [(r.number, r.title, r.page, r.level) for r in rows] == [
+            ("1", "Introduction", 1, 1),
+            ("1.1", "Central Management", 2, 2),
+            ("1.13", "Translating Proxmox VE", 8, 2),
+            ("2", "Installing Proxmox VE", 10, 1),
+            ("2.1", "System Requirements", 10, 2),
+        ]
+
+    def test_wrapped_row_page_on_next_line(self) -> None:
+        rows = parse_toc_rows(
+            "1.10 Configuring the Network for\n    Guest Access .... 12"
+        )
+        assert rows == [
+            TocListing("1.10", "Configuring the Network for Guest Access", 12, 2)
+        ]
+
+    def test_wrapped_row_number_alone(self) -> None:
+        rows = parse_toc_rows("1.13\nTranslating Proxmox VE .... 15")
+        assert rows == [TocListing("1.13", "Translating Proxmox VE", 15, 2)]
+
+    def test_fold_expires_after_one_line(self) -> None:
+        # Only the next non-blank line may close a page-less row; prose in
+        # between expires it and later paged lines are ignored.
+        rows = parse_toc_rows(
+            "1.10 Configuring the Network for\n"
+            "A paragraph intervenes\n"
+            "Guest Access .... 12\n"
+        )
+        assert rows == [TocListing("1.10", "Configuring the Network for", None, 2)]
+
+    @pytest.mark.parametrize(
+        "line",
+        [
+            "1. Install the package",  # prose list item
+            "1984",  # a year is a title, never a number
+            "12",  # footer page number
+            "1.1 .... 2",  # no title text
+            "Contents",  # unnumbered header
+            "Chapter 1 Introduction .... 5",  # chapter-word rows unsupported
+            "iii Preface .... 2",  # roman-numeral rows unsupported
+        ],
+    )
+    def test_non_rows_rejected(self, line: str) -> None:
+        assert parse_toc_rows(line) == []
+
+    def test_pve_toc_block(self) -> None:
+        rows = parse_toc_rows(
+            "Contents\n"
+            "1 Introduction .... 1\n"
+            "1.1 Central Management .... 2\n"
+            "1.2 System Requirements .... 3\n"
+            "1.13 Translating Proxmox VE .... 15\n"
+            "2 Installing Proxmox VE .... 16\n"
+        )
+        assert [(r.number, r.title, r.page, r.level) for r in rows] == [
+            ("1", "Introduction", 1, 1),
+            ("1.1", "Central Management", 2, 2),
+            ("1.2", "System Requirements", 3, 2),
+            ("1.13", "Translating Proxmox VE", 15, 2),
+            ("2", "Installing Proxmox VE", 16, 1),
+        ]
+
+
+# ---------------------------------------------------------------------------
+# ToC page span = contiguous run (fix-chapter-coverage, amendment B)
+# ---------------------------------------------------------------------------
+
+
+class TestPdfTocListingsSpan:
+    """_pdf_toc_listings: the ToC page span is a contiguous run of pages."""
+
+    def test_longest_run_with_gap_tolerance(self) -> None:
+        # Up to two page-less pages between consecutive paged pages keep the
+        # run going (5→8 skips 6, 7); a larger gap ends it (4→8 skips three,
+        # 5→9 skips three) and the outlier page is never glued on.
+        assert sc._longest_paged_run([3, 4, 5, 8, 9, 213]) == (3, 9)
+        assert sc._longest_paged_run([3, 4, 8, 213]) == (3, 4)
+        assert sc._longest_paged_run([7]) == (7, 7)
+
+    def test_longest_run_ties_take_the_earliest(self) -> None:
+        assert sc._longest_paged_run([3, 4, 20, 21]) == (3, 4)
+
+    def test_page213_outlier_rows_are_dropped(self, monkeypatch: Any) -> None:
+        # Real pve-admin-guide shape (amendment evidence): 19 contiguous ToC
+        # pages, then a Ceph body page whose `ceph osd crush tree` output
+        # fabricates ToC-looking rows ("12 nvme 0.72769 osd.12" — page-less
+        # under the hardened tails, plus a bare-page line that parses WITH a
+        # page). A min/max span would have stretched to the outlier and the
+        # span guard would have excluded every real body node; the run keeps
+        # the span at the ToC and drops the outlier's rows entirely.
+        pages = [
+            {
+                "page": toc_page,
+                "text": (
+                    f"{chapter} Chapter{chapter} {chapter}\n"
+                    f"{chapter}.1 Detail . . . . {chapter}"
+                ),
+            }
+            for chapter, toc_page in enumerate(range(3, 22), start=1)
+        ]
+        pages.append(
+            {
+                "page": 213,
+                "text": "\n".join(f"{n} nvme 0.72769 osd.{n}" for n in (12, 13, 14))
+                + "\n2 osd pools 3",
+            }
+        )
+        monkeypatch.setattr(sc, "extract_native_pdf_text", lambda _p: pages)
+        listings, span = sc._pdf_toc_listings(Path("/docs/pve.pdf"))
+        assert span == (3, 21)
+        expected: list[TocListing] = []
+        for chapter in range(1, 20):
+            expected.append(TocListing(str(chapter), f"Chapter{chapter}", chapter, 1))
+            expected.append(TocListing(f"{chapter}.1", "Detail", chapter, 2))
+        assert listings == expected  # nothing from page 213 survives
+
+    def test_body_nodes_recover_across_the_whole_run(self) -> None:
+        # Regression for the page-213 failure: with a (3, 21) ToC span, body
+        # nodes after the run — even far beyond it — still recover; the old
+        # min/max span (3, 213) excluded every node in between.
+        outline = headings_part(
+            [
+                (1, "Introduction", 10),  # inside the ToC run
+                (1, "Installing Proxmox VE", 23),  # right after it
+                (1, "Deploy Hyper-Converged Ceph Cluster", 195),
+                (2, "Ceph Client", 214),  # the outlier's neighborhood
+            ],
+            final_page=300,
+        )
+        listings = [
+            TocListing("1", "Introduction", 1, 1),
+            TocListing("2", "Installing Proxmox VE", 10, 1),
+            TocListing("8", "Deploy Hyper-Converged Ceph Cluster", 173, 1),
+            TocListing("8.11", "Ceph Client", 214, 2),
+        ]
+        recovered = recover_chapter_numbers(
+            merge_structures(outline), listings, toc_page_span=(3, 21)
+        )
+        by_title = {node.title: node for node in recovered.nodes}
+        assert by_title["Introduction"].number is None  # page 10 inside the run
+        assert by_title["Installing Proxmox VE"].number == "2"
+        assert by_title["Deploy Hyper-Converged Ceph Cluster"].number == "8"
+        assert by_title["Ceph Client"].number == "8.11"
+
+
+# ---------------------------------------------------------------------------
+# Post-merge numbering recovery (fix-chapter-coverage, task 1.2, D1)
+# ---------------------------------------------------------------------------
+
+
+def pve_outline_part(source_file: str = "/docs/pve.pdf") -> DocumentStructure:
+    """A pve-shaped outline part whose bookmark titles carry NO numbers."""
+    return headings_part(
+        [
+            (1, "Introduction", 23),
+            (2, "Central Management", 23),
+            (2, "System Requirements", 24),
+            (2, "Translating Proxmox VE", 30),
+            (1, "Installing Proxmox VE", 32),
+            (2, "Using the Proxmox VE Installer", 33),
+            (1, "GNU Free Documentation License", 300),
+        ],
+        source_file=source_file,
+        allow_parts=True,
+        final_page=340,
+    )
+
+
+def pve_listings() -> list[TocListing]:
+    """The pve-shaped ToC listings matching :func:`pve_outline_part`."""
+    return [
+        TocListing("1", "Introduction", 1, 1),
+        TocListing("1.1", "Central Management", 2, 2),
+        TocListing("1.2", "System Requirements", 3, 2),
+        TocListing("1.3", "Translating Proxmox VE", 4, 2),
+        TocListing("2", "Installing Proxmox VE", 15, 1),
+        TocListing("2.1", "Using the Proxmox VE Installer", 16, 2),
+    ]
+
+
+class TestRecoverChapterNumbers:
+    """The D1 pass: number-less nodes gain numbers from ToC listings."""
+
+    def test_numberless_outline_yields_numbered_tree(self) -> None:
+        # Spec scenario: a number-less PDF outline + its own ToC listings
+        # produce a fully numbered tree at the bookmark page ranges.
+        merged = merge_structures(pve_outline_part())
+        recovered = recover_chapter_numbers(
+            merged, pve_listings(), toc_page_span=(3, 22)
+        )
+        by_title = {node.title: node for node in recovered.nodes}
+        intro = by_title["Introduction"]
+        assert intro.number == "1"
+        assert intro.node_id == "ch-introduction"  # ids stay the storage keys
+        assert (intro.page_start, intro.page_end) == (23, 31)  # bookmark range
+        assert intro.heading_path == "Chapter 1 — Introduction"
+        for title, number in (
+            ("Central Management", "1.1"),
+            ("System Requirements", "1.2"),
+            ("Translating Proxmox VE", "1.3"),
+            ("Installing Proxmox VE", "2"),
+            ("Using the Proxmox VE Installer", "2.1"),
+        ):
+            assert by_title[title].number == number
+        # inheritance: descendants carry the chapter's leading component
+        assert (
+            by_title["Central Management"].heading_path
+            == "Chapter 1 — Introduction > 1.1"
+        )
+        assert (
+            by_title["Using the Proxmox VE Installer"].parent_id
+            == by_title["Installing Proxmox VE"].node_id
+        )
+        # unlisted nodes stay number-less
+        assert by_title["GNU Free Documentation License"].number is None
+        assert recovered.sources["toc_number_recovery"] is True
+
+    def test_recovery_is_pure(self) -> None:
+        merged = merge_structures(pve_outline_part())
+        snapshot = [(node.number, node.heading_path) for node in merged.nodes]
+        recover_chapter_numbers(merged, pve_listings())
+        assert [(node.number, node.heading_path) for node in merged.nodes] == snapshot
+
+    def test_parsed_numbers_are_never_overwritten(self) -> None:
+        # Spec scenario: a title that already carries a numbering token
+        # ("2.3 Using the Proxmox VE Installer") is kept as-is.
+        outline = headings_part(
+            [
+                (1, "Introduction", 23),
+                (2, "Central Management", 23),
+                (1, "Configuring Systems", 40),
+                (2, "2.3 Using the Proxmox VE Installer", 41),
+            ],
+            final_page=50,
+        )
+        listings = [
+            TocListing("1", "Introduction", 1, 1),
+            TocListing("1.1", "Central Management", 2, 2),
+            TocListing("2", "Configuring Systems", 20, 1),
+            TocListing("2.3", "Using the Proxmox VE Installer", 22, 2),
+        ]
+        recovered = recover_chapter_numbers(merge_structures(outline), listings)
+        by_id = {node.node_id: node for node in recovered.nodes}
+        parsed = by_id["sec02.03"]
+        assert parsed.number == "2.3"
+        assert parsed.title == "Using the Proxmox VE Installer"
+        # its recovered ancestor still relabels the path; the parsed number
+        # itself is untouched
+        assert parsed.heading_path == "Chapter 2 — Configuring Systems > 2.3"
+
+    def test_ambiguous_match_stays_unnumbered(self) -> None:
+        # Spec scenario: a title matching multiple listings equally — and a
+        # title matching nothing — persist without a number.
+        outline = headings_part(
+            [
+                (1, "Introduction", 23),
+                (2, "Configuration File Options", 25),
+                (1, "Command Line Options", 60),
+                (2, "Configuration File Options", 61),
+            ],
+            final_page=70,
+        )
+        listings = [
+            TocListing("1", "Introduction", 1, 1),
+            TocListing("3.1", "Configuration File Options", 10, 2),
+            TocListing("9.1", "Configuration File Options", 40, 2),
+            TocListing("10", "Command Line Options", 50, 1),
+        ]
+        recovered = recover_chapter_numbers(merge_structures(outline), listings)
+        numbered = [
+            (node.title, node.number)
+            for node in recovered.nodes
+            if node.number is not None
+        ]
+        assert numbered == [("Introduction", "1"), ("Command Line Options", "10")]
+        options = [
+            node
+            for node in recovered.nodes
+            if node.title == "Configuration File Options"
+        ]
+        assert [node.number for node in options] == [None, None]
+
+    def test_one_listing_assigns_at_most_one_node(self) -> None:
+        outline = headings_part(
+            [(1, "Overview", 5), (1, "Overview", 20)], final_page=30
+        )
+        recovered = recover_chapter_numbers(
+            merge_structures(outline), [TocListing("1", "Overview", 1, 1)]
+        )
+        assert [node.number for node in recovered.nodes] == ["1", None]
+
+    def test_duplicate_listings_are_ambiguous_for_every_node(self) -> None:
+        outline = headings_part(
+            [(1, "Overview", 5), (1, "Overview", 20)], final_page=30
+        )
+        listings = [
+            TocListing("1", "Overview", 1, 1),
+            TocListing("2", "Overview", 2, 1),
+        ]
+        recovered = recover_chapter_numbers(merge_structures(outline), listings)
+        assert [node.number for node in recovered.nodes] == [None, None]
+
+    def test_level_mismatch_stays_unnumbered(self) -> None:
+        outline = headings_part([(1, "Overview", 5)], final_page=10)
+        listings = [TocListing("1.1", "Overview", 2, 2)]  # ToC: section, tree: chapter
+        recovered = recover_chapter_numbers(merge_structures(outline), listings)
+        assert recovered.nodes[0].number is None
+
+    def test_out_of_order_match_stays_unnumbered(self) -> None:
+        # Document order must agree with ToC order: the first node takes the
+        # only listing still ahead of the cursor, the second finds none.
+        outline = headings_part(
+            [(1, "Installing", 20), (1, "Configuring", 30)], final_page=40
+        )
+        listings = [
+            TocListing("2", "Configuring", 10, 1),
+            TocListing("1", "Installing", 5, 1),
+        ]
+        recovered = recover_chapter_numbers(merge_structures(outline), listings)
+        assert [node.number for node in recovered.nodes] == ["1", None]
+
+    def test_nodes_inside_toc_span_are_excluded(self) -> None:
+        # Headings captured from ToC-page text must never number themselves.
+        outline = headings_part(
+            [(1, "Introduction", 15), (1, "Installing", 23)], final_page=40
+        )
+        listings = [
+            TocListing("1", "Introduction", 1, 1),
+            TocListing("2", "Installing", 2, 1),
+        ]
+        recovered = recover_chapter_numbers(
+            merge_structures(outline), listings, toc_page_span=(3, 22)
+        )
+        by_title = {node.title: node for node in recovered.nodes}
+        assert by_title["Introduction"].number is None  # page 15 inside the span
+        assert by_title["Installing"].number == "2"  # page 23 outside it
+
+    def test_junk_toc_page_headings_do_not_desynchronize(self) -> None:
+        outline = pve_outline_part()
+        junk = capture_docling_headings(
+            docling_doc(
+                doc_item("1 Introduction", level=1, page=3),  # numbered junk
+                doc_item("Introduction", level=1, page=15),  # number-less junk
+            ),
+            Path(outline.source_file),
+        )
+        assert junk is not None
+        merged = merge_structures(outline, junk)
+        recovered = recover_chapter_numbers(
+            merged, pve_listings(), toc_page_span=(3, 22)
+        )
+        junk_numbered = next(n for n in recovered.nodes if n.page_start == 3)
+        junk_numberless = next(n for n in recovered.nodes if n.page_start == 15)
+        intro = next(
+            n
+            for n in recovered.nodes
+            if n.title == "Introduction" and n.page_start == 23
+        )
+        assert junk_numbered.number == "1"  # parsed number, untouched
+        assert junk_numberless.number is None  # inside the ToC span
+        assert intro.number == "1"  # the real chapter still recovers
+
+    def test_inconsistent_with_recovered_parent_stays_unnumbered(self) -> None:
+        outline = headings_part([(1, "Storage", 23), (2, "Extents", 24)], final_page=40)
+        listings = [
+            TocListing("5", "Storage", 1, 1),
+            TocListing("9.9", "Extents", 2, 2),
+        ]
+        recovered = recover_chapter_numbers(merge_structures(outline), listings)
+        by_title = {node.title: node for node in recovered.nodes}
+        assert by_title["Storage"].number == "5"
+        assert by_title["Extents"].number is None  # 9.9 cannot live under 5
+
+    def test_section_under_unnumbered_parent_still_recovers(self) -> None:
+        # An unmatched parent does not make the child's ToC-derived number
+        # wrong; only a NUMBERED parent constrains its children.
+        outline = headings_part([(1, "Storage", 23), (2, "Extents", 24)], final_page=40)
+        listings = [TocListing("9.9", "Extents", 2, 2)]
+        recovered = recover_chapter_numbers(merge_structures(outline), listings)
+        by_title = {node.title: node for node in recovered.nodes}
+        assert by_title["Storage"].number is None
+        assert by_title["Extents"].number == "9.9"
+
+    def test_inconsistent_with_parsed_children_stays_unnumbered(self) -> None:
+        outline = headings_part(
+            [(1, "Storage", 23), (2, "5.2 Extents", 24)], final_page=40
+        )
+        listings = [TocListing("3", "Storage", 1, 1)]
+        recovered = recover_chapter_numbers(merge_structures(outline), listings)
+        storage, extents = recovered.nodes
+        assert storage.number is None  # children parsed as 5.x, not 3.x
+        assert extents.number == "5.2"  # parsed child untouched
+
+    def test_glued_node_title_matches_spaced_listing(self) -> None:
+        outline = headings_part([(1, "InstallingProxmoxVE", 32)], final_page=40)
+        listings = [TocListing("2", "Installing Proxmox VE", 15, 1)]
+        recovered = recover_chapter_numbers(merge_structures(outline), listings)
+        assert recovered.nodes[0].number == "2"
+        assert recovered.nodes[0].title == "InstallingProxmoxVE"  # titles untouched
+
+    def test_glued_listing_matches_spaced_node(self) -> None:
+        outline = headings_part([(1, "Installing Proxmox VE", 32)], final_page=40)
+        (listing,) = parse_toc_rows("2 InstallingProxmoxVE .... 15")
+        recovered = recover_chapter_numbers(merge_structures(outline), [listing])
+        assert recovered.nodes[0].number == "2"
+
+    def test_recovery_from_parsed_toc_text(self) -> None:
+        merged = merge_structures(pve_outline_part())
+        listings = parse_toc_rows(
+            "1 Introduction .... 1\n"
+            "1.1 Central Management .... 2\n"
+            "1.2 System Requirements .... 3\n"
+            "1.3 Translating Proxmox VE .... 4\n"
+            "2 Installing Proxmox VE .... 15\n"
+            "2.1 Using the Proxmox VE Installer .... 16\n"
+        )
+        recovered = recover_chapter_numbers(merged, listings, toc_page_span=(3, 22))
+        by_title = {node.title: node for node in recovered.nodes}
+        assert by_title["Introduction"].number == "1"
+        assert by_title["Translating Proxmox VE"].number == "1.3"
+
+    def test_recovery_is_idempotent(self) -> None:
+        once = recover_chapter_numbers(
+            merge_structures(pve_outline_part()), pve_listings(), toc_page_span=(3, 22)
+        )
+        twice = recover_chapter_numbers(once, pve_listings(), toc_page_span=(3, 22))
+        assert twice.nodes == once.nodes
+
+    def test_no_listings_or_no_nodes_return_unchanged(self) -> None:
+        merged = merge_structures(pve_outline_part())
+        assert recover_chapter_numbers(merged, []) is merged
+        empty = merge_structures(None, None)
+        assert recover_chapter_numbers(empty, pve_listings()) is empty
+
+
+# ---------------------------------------------------------------------------
+# Page bound on the recovery match (fix-chapter-coverage, D1 refinement)
+# ---------------------------------------------------------------------------
+
+
+def bound_labels() -> list[PageLabelRange]:
+    """One decimal label run: printed page P sits on physical page P + 4."""
+    return [PageLabelRange(page_start=5, page_end=60, label="1", style="decimal")]
+
+
+def bound_structure(
+    entries: list[tuple[int, str, int]],
+    labels: list[PageLabelRange] | None = None,
+) -> DocumentStructure:
+    """A merged structure carrying /PageLabels, as capture wiring does.
+
+    Args:
+        entries: ``(level, title, page)`` heading tuples.
+        labels: Page-label runs to attach; None attaches the default decimal
+            run (:func:`bound_labels`), ``[]`` models a label-less document.
+    """
+    merged = merge_structures(headings_part(entries, final_page=70))
+    merged.page_labels = bound_labels() if labels is None else list(labels)
+    return merged
+
+
+# All level 1 so the parent-consistency guard stays out of the way. ToC
+# order puts the generic "Configuration" row LAST, 29 physical pages past
+# the node old order-only matching lets it number — consuming it starves
+# Beta, whose row lies before the consumed index.
+JUMP_ENTRIES = [
+    (1, "Alpha", 10),
+    (1, "Configuration", 20),
+    (1, "Beta", 30),
+]
+JUMP_LISTINGS = [
+    TocListing("1", "Alpha", 6, 1),  # printed 6 -> physical 10: Alpha's page
+    TocListing("5", "Beta", 26, 1),  # printed 26 -> physical 30: Beta's page
+    TocListing("9", "Configuration", 45, 1),  # printed 45 -> physical 49: far
+]
+
+
+class TestRecoveryPageBound:
+    """A listing may only number a node near where the ToC says it sits."""
+
+    def test_far_ahead_match_rejected_and_starved_sibling_recovers(self) -> None:
+        # Old order-only walk: Alpha -> "1", then the generic "Configuration"
+        # node consumes the far "9 Configuration" row (physical 49 vs p.20)
+        # and starves Beta. With the page bound the far row is rejected and
+        # Beta recovers instead.
+        recovered = recover_chapter_numbers(
+            bound_structure(JUMP_ENTRIES), JUMP_LISTINGS
+        )
+        by_title = {node.title: node for node in recovered.nodes}
+        assert by_title["Alpha"].number == "1"  # near match still accepted
+        assert by_title["Configuration"].number is None  # 29 pages away: no
+        assert by_title["Beta"].number == "5"  # no longer starved
+
+    def test_without_page_labels_fails_open_to_order_only(self) -> None:
+        # A label-less document must keep today's behavior exactly.
+        recovered = recover_chapter_numbers(
+            bound_structure(JUMP_ENTRIES, labels=[]), JUMP_LISTINGS
+        )
+        by_title = {node.title: node for node in recovered.nodes}
+        assert by_title["Alpha"].number == "1"
+        assert by_title["Configuration"].number == "9"  # the old far-ahead jump
+        assert by_title["Beta"].number is None  # the old starvation
+
+    def test_bound_resolves_ambiguity_toward_the_near_row(self) -> None:
+        # Two same-title listings: order-only sees ambiguity and numbers
+        # nothing; the bound rejects the far row, the near one becomes the
+        # unique candidate.
+        recovered = recover_chapter_numbers(
+            bound_structure([(1, "Configuration", 20)]),
+            [
+                TocListing("5", "Configuration", 16, 1),  # -> physical 20
+                TocListing("9", "Configuration", 45, 1),  # -> physical 49
+            ],
+        )
+        assert recovered.nodes[0].number == "5"
+
+    @pytest.mark.parametrize(
+        ("node_page", "expected"),
+        [
+            (17, "4"),  # |17 - 14| == tolerance
+            (11, "4"),
+            (18, None),  # one past tolerance
+            (10, None),
+        ],
+        ids=["at-plus-tol", "at-minus-tol", "past-plus-tol", "past-minus-tol"],
+    )
+    def test_tolerance_edges(self, node_page: int, expected: str | None) -> None:
+        # '4 Zeta' printed 10 maps to physical 14; only nodes within 3
+        # physical pages may take its number.
+        recovered = recover_chapter_numbers(
+            bound_structure([(1, "Zeta", node_page)]),
+            [TocListing("4", "Zeta", 10, 1)],
+        )
+        assert recovered.nodes[0].number == expected
+
+    def test_page_less_listing_uses_interpolated_bracket(self) -> None:
+        # '2 Zeta' carries no page: its bracket comes from the paged rows
+        # around it (physical 10 and 20 -> allowed [7, 23]).
+        listings = [
+            TocListing("1", "Alpha", 6, 1),  # -> physical 10
+            TocListing("2", "Zeta", None, 1),
+            TocListing("3", "Beta", 16, 1),  # -> physical 20
+        ]
+        recovered = recover_chapter_numbers(
+            bound_structure([(1, "Alpha", 10), (1, "Zeta", 14), (1, "Beta", 20)]),
+            listings,
+        )
+        by_title = {node.title: node for node in recovered.nodes}
+        assert by_title["Zeta"].number == "2"
+        assert by_title["Alpha"].number == "1"
+        assert by_title["Beta"].number == "3"
+
+    def test_page_less_listing_rejects_beyond_bracket(self) -> None:
+        # Nodes come back in page order, so the far "Beta" row here is only
+        # the bracket anchor (mapped 20): no node matches it, keeping Zeta
+        # first in the walk. Order-only would hand Zeta the row; the bracket
+        # [7, 23] rejects it.
+        listings = [
+            TocListing("1", "Alpha", 6, 1),  # -> physical 10
+            TocListing("2", "Zeta", None, 1),
+            TocListing("3", "Beta", 16, 1),  # -> physical 20
+        ]
+        recovered = recover_chapter_numbers(
+            bound_structure([(1, "Zeta", 60)]), listings
+        )
+        assert recovered.nodes[0].number is None  # 60 beyond [7, 23]
+
+    def test_page_less_bracket_missing_side_stays_open_to_that_side(self) -> None:
+        # No paged row BEFORE the page-less one: only the next row bounds it
+        # (the "Beta" row is the anchor — no node matches it, so Zeta is
+        # walked first).
+        listings = [
+            TocListing("1", "Zeta", None, 1),
+            TocListing("2", "Beta", 16, 1),  # -> physical 20, bounds from above
+        ]
+        beyond = recover_chapter_numbers(bound_structure([(1, "Zeta", 60)]), listings)
+        assert beyond.nodes[0].number is None  # 60 past 20 + 3
+        # No paged row AFTER the page-less one: only the previous row bounds
+        # it — inside the open side it still matches, before the closed side
+        # it does not.
+        listings = [
+            TocListing("1", "Alpha", 6, 1),  # -> physical 10, bounds from below
+            TocListing("2", "Zeta", None, 1),
+        ]
+        inside = recover_chapter_numbers(
+            bound_structure([(1, "Alpha", 10), (1, "Zeta", 40)]), listings
+        )
+        by_title = {node.title: node for node in inside.nodes}
+        assert by_title["Alpha"].number == "1"
+        assert by_title["Zeta"].number == "2"  # 40 within [7, inf)
+        before = recover_chapter_numbers(
+            bound_structure([(1, "Alpha", 10), (1, "Zeta", 3)]), listings
+        )
+        by_title = {node.title: node for node in before.nodes}
+        assert by_title["Alpha"].number == "1"
+        assert by_title["Zeta"].number is None  # 3 below 10 - 3
+
+    def test_page_less_without_mappable_neighbors_fails_open(self) -> None:
+        # Labels exist, but the only listing is page-less and has no paged
+        # ToC neighbors: nothing to bracket, order-only applies.
+        recovered = recover_chapter_numbers(
+            bound_structure([(1, "Zeta", 100)]),
+            [TocListing("4", "Zeta", None, 1)],
+        )
+        assert recovered.nodes[0].number == "4"
+
+    def test_roman_only_labels_fail_open(self) -> None:
+        # Roman runs carry no body pages: decimal mapping finds nothing and
+        # the bound fails open instead of rejecting everything.
+        roman = [
+            PageLabelRange(page_start=1, page_end=100, label="i", style="lower_roman")
+        ]
+        recovered = recover_chapter_numbers(
+            bound_structure([(1, "Zeta", 100)], labels=roman),
+            [TocListing("4", "Zeta", 10, 1)],
+        )
+        assert recovered.nodes[0].number == "4"
+
+    def test_recovery_with_bound_is_idempotent(self) -> None:
+        once = recover_chapter_numbers(bound_structure(JUMP_ENTRIES), JUMP_LISTINGS)
+        twice = recover_chapter_numbers(once, JUMP_LISTINGS)
+        assert twice is once  # nothing left to assign: unchanged object
+        assert twice.nodes == once.nodes
+
+    def test_second_run_rescues_row_passed_by_same_page_sibling(self) -> None:
+        # A same-page node walked first consumes the row AFTER the deeper
+        # node's (storage load order walks level 2 before level 3 at one
+        # page), passing that row: run 1 starves the deeper node, run 2 —
+        # with the passer numbered and no longer advancing the cursor —
+        # rescues it with its own page-valid row. A third run is a no-op.
+        entries = [
+            (1, "Chapter", 29),  # printed 25 -> physical 29
+            (2, "Misc", 30),
+            (3, "Hookscripts", 30),
+            (2, "Security", 30),
+        ]
+        listings = [
+            TocListing("11", "Chapter", 25, 1),  # -> physical 29
+            TocListing("11.4.7", "Hookscripts", 26, 3),  # -> physical 30
+            TocListing("11.4", "Misc", 26, 2),  # -> physical 30
+            TocListing("11.5", "Security", 26, 2),  # -> physical 30
+        ]
+        once = recover_chapter_numbers(bound_structure(entries), listings)
+        numbers = {n.title: n.number for n in once.nodes}
+        assert numbers == {
+            "Chapter": "11",
+            "Misc": "11.4",
+            "Hookscripts": None,  # its row was passed by Misc's assignment
+            "Security": "11.5",
+        }
+        twice = recover_chapter_numbers(once, listings)
+        numbers = {n.title: n.number for n in twice.nodes}
+        assert numbers["Hookscripts"] == "11.4.7"  # rescued, page-valid
+        assert numbers["Security"] == "11.5"  # nothing renumbered
+        assert recover_chapter_numbers(twice, listings) is twice  # fixpoint
+
+
+# ---------------------------------------------------------------------------
+# Wiring: capture_structure runs the pass before persistence (task 1.3, D1)
+# ---------------------------------------------------------------------------
+
+
+class TestTocRecoveryWiring:
+    """capture_structure's PDF branch runs the recovery pass (single call)."""
+
+    def test_pdf_capture_recovers_numbers_from_toc_text(
+        self, tmp_path: Any, monkeypatch: Any
+    ) -> None:
+        path = tmp_path / "book.pdf"  # does not exist: real outline/labels fail
+        monkeypatch.setattr(
+            sc,
+            "capture_pdf_outline",
+            lambda p: headings_part(
+                [(1, "Introduction", 23), (2, "Central Management", 23)],
+                source_file=str(p),
+                final_page=40,
+            ),
+        )
+        monkeypatch.setattr(
+            sc,
+            "extract_native_pdf_text",
+            lambda p: [
+                {
+                    "text": "1 Introduction .... 1\n1.1 Central Management .... 2",
+                    "page": 3,
+                }
+            ],
+        )
+        structure = capture_structure(path, docling_doc=None, file_type="pdf")
+        assert structure is not None
+        assert [(node.title, node.number) for node in structure.nodes] == [
+            ("Introduction", "1"),
+            ("Central Management", "1.1"),
+        ]
+        assert structure.sources["toc_number_recovery"] is True
+
+    def test_failed_toc_scan_leaves_the_tree_unrecovered(
+        self, tmp_path: Any, monkeypatch: Any
+    ) -> None:
+        path = tmp_path / "book.pdf"
+        monkeypatch.setattr(
+            sc,
+            "capture_pdf_outline",
+            lambda p: headings_part(
+                [(1, "Introduction", 23)], source_file=str(p), final_page=40
+            ),
+        )
+        monkeypatch.setattr(sc, "extract_native_pdf_text", lambda p: [])
+        structure = capture_structure(path, docling_doc=None, file_type="pdf")
+        assert structure is not None
+        assert structure.nodes[0].number is None
+        assert "toc_number_recovery" not in structure.sources
+
+    def test_recovery_failure_never_breaks_capture(
+        self, tmp_path: Any, monkeypatch: Any
+    ) -> None:
+        path = tmp_path / "book.pdf"
+        monkeypatch.setattr(
+            sc,
+            "capture_pdf_outline",
+            lambda p: headings_part(
+                [(1, "Introduction", 23)], source_file=str(p), final_page=40
+            ),
+        )
+        monkeypatch.setattr(
+            sc,
+            "extract_native_pdf_text",
+            lambda p: [{"text": "1 Introduction .... 1", "page": 3}],
+        )
+
+        def boom(*_args: object, **_kwargs: object) -> None:
+            raise RuntimeError("boom")
+
+        monkeypatch.setattr(sc, "recover_chapter_numbers", boom)
+        structure = capture_structure(path, docling_doc=None, file_type="pdf")
+        assert structure is not None
+        assert [node.number for node in structure.nodes] == [None]
+
+    def test_non_pdf_branch_never_scans_for_toc(
+        self, tmp_path: Any, monkeypatch: Any
+    ) -> None:
+        called: list[bool] = []
+
+        def fake_scan(_path: Any) -> tuple[list[TocListing], None]:
+            called.append(True)
+            return [], None
+
+        monkeypatch.setattr(sc, "_pdf_toc_listings", fake_scan)
+        assert capture_structure(tmp_path / "doc.txt", file_type="text") is None
+        assert called == []  # the ToC scan is PDF-branch only
+
+
+class TestTocRecoveryPersistence:
+    """Recovered numbers round-trip through StructureStore (task 1.3)."""
+
+    def test_recovered_numbers_roundtrip_through_sqlite(
+        self, tmp_path: Any, monkeypatch: Any
+    ) -> None:
+        path = tmp_path / "pve.pdf"
+        outline = pve_outline_part(source_file=str(path))
+        monkeypatch.setattr(sc, "capture_pdf_outline", lambda p: outline)
+        monkeypatch.setattr(
+            sc,
+            "extract_native_pdf_text",
+            lambda p: [
+                {
+                    "text": (
+                        "1 Introduction .... 1\n"
+                        "1.1 Central Management .... 2\n"
+                        "1.2 System Requirements .... 3\n"
+                        "1.3 Translating Proxmox VE .... 4\n"
+                        "2 Installing Proxmox VE .... 15\n"
+                        "2.1 Using the Proxmox VE Installer .... 16\n"
+                    ),
+                    "page": 3,
+                }
+            ],
+        )
+        structure = capture_structure(path, docling_doc=None, file_type="pdf")
+        assert structure is not None
+        assert [node.number for node in structure.nodes] == [
+            "1",
+            "1.1",
+            "1.2",
+            "1.3",
+            "2",
+            "2.1",
+            None,
+        ]
+
+        store = StructureStore(db_path=str(tmp_path / "secondbrain.db"))
+        try:
+            store.save_structure(structure)
+            loaded = store.load_tree(str(path))
+        finally:
+            store.close()
+        assert loaded is not None
+        assert loaded.nodes == structure.nodes  # full fidelity, numbers included
+        by_title = {node.title: node for node in loaded.nodes}
+        assert by_title["Introduction"].number == "1"
+        assert by_title["Central Management"].number == "1.1"
+        assert by_title["Installing Proxmox VE"].number == "2"
+        assert by_title["GNU Free Documentation License"].number is None
+        assert (
+            by_title["Central Management"].heading_path
+            == "Chapter 1 — Introduction > 1.1"
+        )
+
+
+class TestTocRecoveryRealPdf:
+    """End-to-end against a real reportlab PDF (skipped without reportlab)."""
+
+    def test_capture_recovers_from_real_pdf(self, tmp_path: Any) -> None:
+        try:
+            from reportlab.lib.pagesizes import A4
+            from reportlab.pdfgen import canvas as pdf_canvas
+        except ImportError:  # pragma: no cover - env without reportlab
+            pytest.skip("reportlab is not installed")
+
+        pdf_path = tmp_path / "toc-book.pdf"
+        c = pdf_canvas.Canvas(str(pdf_path), pagesize=A4)
+        # Page 1: a dot-leader ToC.
+        c.drawString(72, 750, "Contents")
+        c.drawString(72, 730, "1 Introduction .... 1")
+        c.drawString(72, 710, "1.1 Central Management .... 2")
+        c.showPage()
+        # Pages 2+: number-less bookmark outline over the body.
+        c.bookmarkPage("ch1")
+        c.addOutlineEntry("Introduction", "ch1", level=0, closed=False)
+        c.drawString(72, 750, "Introduction")
+        c.showPage()
+        c.bookmarkPage("s11")
+        c.addOutlineEntry("Central Management", "s11", level=1, closed=False)
+        c.drawString(72, 750, "Central Management")
+        c.showPage()
+        c.save()
+
+        structure = capture_structure(pdf_path, docling_doc=None, file_type="pdf")
+        assert structure is not None
+        assert structure.sources["outline"] is True
+        assert structure.sources["toc_number_recovery"] is True
+        chapter, section = structure.nodes
+        assert (chapter.title, chapter.number) == ("Introduction", "1")
+        assert chapter.node_id == "ch-introduction"
+        assert (section.title, section.number) == ("Central Management", "1.1")
+        assert section.heading_path == "Chapter 1 — Introduction > 1.1"
