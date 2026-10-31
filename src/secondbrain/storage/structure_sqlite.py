@@ -40,6 +40,7 @@ the change design (§3).
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import sqlite3
@@ -633,6 +634,20 @@ class StructureStore(ValidatableService):
                 self._conn.commit()
                 self._conn.close()
             self._conn = None
+
+    def __del__(self) -> None:
+        """Best-effort close when a store is garbage-collected unclosed.
+
+        Tests and ad-hoc scripts construct stores without the context
+        manager; an unclosed sqlite3.Connection warns on collection
+        ("unclosed database"), and that warning has landed in captured CLI
+        output mid-invoke (the flaky test_json_dump_shape). Explicit
+        close()/context-manager use remains the norm; this only silences
+        the leaked-store path. Never raises: a failed best-effort close is
+        dropped (partially-initialized instances, interpreter shutdown).
+        """
+        with contextlib.suppress(Exception):
+            self.close()
 
     async def close_async(self) -> None:
         """Async wrapper over :meth:`close`.
