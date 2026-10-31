@@ -475,11 +475,14 @@ class TestFileLogging:
 
         del os.environ["SECONDBRAIN_LOG_FILE"]
 
-    def test_setup_logging_without_log_file_attaches_no_file_handler(self) -> None:
+    def test_setup_logging_with_disable_env_attaches_no_file_handler(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """SECONDBRAIN_LOG_DISABLE_FILE=1 suppresses file logging entirely."""
         root_logger = logging.getLogger()
         root_logger.handlers.clear()
 
-        os.environ.pop("SECONDBRAIN_LOG_FILE", None)
+        monkeypatch.setenv("SECONDBRAIN_LOG_DISABLE_FILE", "1")
         setup_logging(verbose=True)
 
         assert len(root_logger.handlers) == 1
@@ -552,10 +555,14 @@ class TestFileLogging:
         assert log_file.parent.exists()
         assert log_file.exists()
 
-    def test_file_logging_does_not_create_file_when_not_configured(self) -> None:
+    def test_file_logging_suppressed_by_disable_env(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """SECONDBRAIN_LOG_DISABLE_FILE=1 keeps the streams-only transport."""
         root_logger = logging.getLogger()
         root_logger.handlers.clear()
 
+        monkeypatch.setenv("SECONDBRAIN_LOG_DISABLE_FILE", "1")
         setup_logging(verbose=True)
 
         assert len(root_logger.handlers) == 1

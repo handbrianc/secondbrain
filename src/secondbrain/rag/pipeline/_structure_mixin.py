@@ -2387,6 +2387,41 @@ class _StructureMixin(_RAGPipelineState):
             )
             return None
 
+    def _tree_sources_with_number(self, number: str) -> list[str]:
+        """Return the sources whose stored tree carries a node numbered *number*.
+
+        fix-chat-session-integrity D1: for an unscoped numbered chapter or
+        section query, the pipeline resolves the requested number per source
+        through the structure store instead of ranking documents by
+        body-chunk count (a 12k-chunk manual must not silently outrank the
+        guide that actually carries the requested chapter).  The lookup
+        fails open: a missing store or a lookup error yields no candidates,
+        which sends the caller down the unchanged chunk-count document pick.
+
+        Args:
+            number: The requested chapter or section number, e.g. ``"15"``
+                or ``"5.2"``.
+
+        Returns
+        -------
+            The source-file keys whose stored tree carries a
+            chapter/section node with that number; empty when the store is
+            unavailable, the lookup fails, or no tree carries the number.
+        """
+        store = self._get_structure_store()
+        if store is None:
+            return []
+        try:
+            return store.sources_with_number(number)
+        except Exception:
+            logger.warning(
+                "Structure number lookup failed for %r; using the "
+                "chunk-count document pick",
+                number,
+                exc_info=True,
+            )
+            return []
+
     @staticmethod
     def _tree_chapter_map(
         nodes: list[StructureNode],
@@ -2681,6 +2716,21 @@ class _StructureMixin(_RAGPipelineState):
                 )
                 for chunk in cast(list[dict[str, Any]], list(found)):
                     if chunk.get("chunk_role") != "body":
+                        continue
+                    # Cross-source window purity (fix-chat-session-integrity
+                    # D3): the window belongs to one source, so a chunk
+                    # carrying a DIFFERENT source_file is never admitted even
+                    # when the storage filter itself missed it.  Chunks
+                    # without source metadata keep the single-collection
+                    # behavior (no filter applies to them).
+                    chunk_source = chunk.get("source_file", chunk.get("source"))
+                    if chunk_source and chunk_source != source_file:
+                        logger.debug(
+                            "Excluding cross-source chunk from the %s window "
+                            "(chunk claims %s)",
+                            source_file,
+                            chunk_source,
+                        )
                         continue
                     if target is not None:
                         reliable_owner = False

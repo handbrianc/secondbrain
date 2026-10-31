@@ -1,11 +1,16 @@
 """Logging utilities for SecondBrain application.
 
 Log transport follows 12-Factor Factor XI (treat logs as event streams):
-the default transport is stdout/stderr only, and the consuming terminal or
-process manager owns routing and storage. Writing to a log file is strictly
-opt-in for local CLI debugging via the SECONDBRAIN_LOG_FILE environment
-variable (or an explicit log_file argument); no file handler is attached
-unless that opt-in is present.
+stdout/stderr is the primary transport, and the consuming terminal or process
+manager owns routing and storage there. In addition, every CLI run attaches a
+size-rotating file log under the user's application data directory
+(``~/.secondbrain/logs/secondbrain.log``, 10 MB x 5 backups) by default, so
+stalls and errors remain attributable without environment configuration.
+
+``SECONDBRAIN_LOG_FILE`` overrides the destination path;
+``SECONDBRAIN_LOG_DISABLE_FILE=1`` (or ``true``/``yes``) suppresses file
+logging entirely, reverting to streams-only. Console behavior is unchanged by
+the file-log default.
 """
 
 import json
@@ -24,6 +29,9 @@ from typing import TypedDict
 from rich.console import Console
 from rich.logging import RichHandler
 
+from .slow_call import timed_external_call
+from .stage_timing import timed_stage
+
 __all__ = [
     "HealthStatus",
     "JSONFormatter",
@@ -35,6 +43,8 @@ __all__ = [
     "setup_json_logging",
     "setup_logging",
     "setup_rich_logging",
+    "timed_external_call",
+    "timed_stage",
 ]
 
 
@@ -109,6 +119,35 @@ def _quiet_noisy_loggers() -> None:
         logging.getLogger(name).setLevel(logging.WARNING)
 
 
+def _env_flag(name: str) -> bool:
+    """Read a boolean env flag accepting the "1"/"true"/"yes" truthy variants.
+
+    Args:
+        name: Environment variable name.
+
+    Returns
+    -------
+        True when the variable is set to a truthy variant (case- and
+        whitespace-insensitive), False otherwise.
+    """
+    return os.environ.get(name, "").strip().lower() in ("1", "true", "yes")
+
+
+def _default_log_file() -> str:
+    """Return the default rotating log path under the user's data directory.
+
+    The application data directory is ``~/.secondbrain`` (the parent of the
+    SQLite conversation store's default location); logs live in its
+    ``logs/`` subdirectory. Computed at call time so a redirected ``HOME``
+    (tests, sandboxes) is honored.
+
+    Returns
+    -------
+        The default log file path as a string.
+    """
+    return str(Path.home() / ".secondbrain" / "logs" / "secondbrain.log")
+
+
 def setup_logging(
     verbose: bool = False,
     json_format: bool = False,
@@ -119,14 +158,20 @@ def setup_logging(
 ) -> None:
     """Configure logging with the specified options.
 
-    stdout/stderr is the default transport; a log file is attached only when
-    explicitly requested (see the module docstring for the 12-factor contract).
+    stdout/stderr is the console transport; a size-rotating file log under
+    the user's application data directory is attached by default (see the
+    module docstring). The destination may be overridden with the
+    ``SECONDBRAIN_LOG_FILE`` env var or the *log_file* argument, and file
+    logging may be suppressed entirely with ``SECONDBRAIN_LOG_DISABLE_FILE=1``
+    (or ``true``/``yes``).
 
     Args:
         verbose: Enable DEBUG level if True.
         json_format: Use JSON format if True, rich text otherwise.
-        log_file: Path to log file. If None, reads from SECONDBRAIN_LOG_FILE env var.
-            When neither is set, no file handler is attached.
+        log_file: Path to log file. If None, reads from SECONDBRAIN_LOG_FILE
+            env var; when that is unset too, defaults to
+            ``~/.secondbrain/logs/secondbrain.log``. Suppressed entirely by
+            SECONDBRAIN_LOG_DISABLE_FILE.
         max_bytes: Max log file size before rotation. If None, reads from
             SECONDBRAIN_LOG_MAX_BYTES env var (default 10MB).
         backup_count: Number of backup files to keep. If None, reads from
@@ -153,6 +198,13 @@ def setup_logging(
 
     if log_file is None:
         log_file = os.environ.get("SECONDBRAIN_LOG_FILE")
+
+    if _env_flag("SECONDBRAIN_LOG_DISABLE_FILE"):
+        # Explicit kill switch wins over both the env destination and the
+        # default path: file logging is suppressed entirely.
+        log_file = None
+    elif log_file is None:
+        log_file = _default_log_file()
 
     if max_bytes is None:
         max_bytes_env = os.environ.get("SECONDBRAIN_LOG_MAX_BYTES")

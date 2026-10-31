@@ -466,13 +466,45 @@ class RAGPipeline(
 
         if structural_query:
             if not source_filter:
-                try:
-                    tree_src = max(
-                        {chunk["source_file"] for chunk in structure_chunks},
-                        key=lambda s: self._searcher.storage.count_chunks(s, "body"),
-                    )
-                except Exception:
-                    tree_src = None
+                tree_src: str | None = None
+                requested_number = raw_section_target or enum_target
+                if requested_number is not None:
+                    # Per-source resolution (fix-chat-session-integrity D1):
+                    # ask the structure store which sources carry a tree node
+                    # with the requested number instead of ranking whole
+                    # documents by body-chunk count — a 12k-chunk manual must
+                    # not silently outrank the guide that actually carries
+                    # "chapter 15".
+                    candidate_sources = self._tree_sources_with_number(requested_number)
+                    if len(candidate_sources) > 1:
+                        multi_result = self._per_source_number_result(
+                            query,
+                            candidate_sources,
+                            enum_target=enum_target,
+                            raw_section_target=raw_section_target,
+                            show_sources=show_sources,
+                        )
+                        if multi_result is not None:
+                            return multi_result
+                    elif candidate_sources:
+                        # The number is unique to one source: resolve against
+                        # it directly.  For a single-source collection this is
+                        # exactly the document the chunk-count pick below
+                        # would choose, so that behavior is unchanged.
+                        tree_src = candidate_sources[0]
+                if tree_src is None:
+                    # No stored tree governs the requested number (or the
+                    # query carries none): the chunk-count document pick and
+                    # the legacy path stay as before.
+                    try:
+                        tree_src = max(
+                            {chunk["source_file"] for chunk in structure_chunks},
+                            key=lambda s: self._searcher.storage.count_chunks(
+                                s, "body"
+                            ),
+                        )
+                    except Exception:
+                        tree_src = None
                 if tree_src:
                     tree_result = self._tree_chapter_query(
                         query,
@@ -2651,4 +2683,250 @@ class RAGPipeline(
         result: dict[str, Any] = {"answer": answer, "query": query}
         if show_sources:
             result["sources"] = final_chunks
+        return result
+
+    # ------------------------------------------------------------------
+    # Per-source resolution of numbered chapter/section queries
+    # (fix-chat-session-integrity D1/D3)
+    # ------------------------------------------------------------------
+
+    def _tree_number_window(
+        self,
+        src: str,
+        *,
+        enum_target: str | None,
+        raw_section_target: str | None,
+    ) -> tuple[list[dict[str, Any]], str] | None:
+        """Collect one source's chapter/section window for the requested number.
+
+        The per-source counterpart of :meth:`_tree_chapter_query`'s
+        single-target selection slice: the same tree load, the same guarded
+        chapter map (or exact dotted-section node), the same
+        :meth:`_tree_chapter_buckets` collection, and the same round-robin
+        dedupe + score sort + page interleave that branch applies to its
+        single chapter key.  It builds windows only — no generation — so
+        several sources' windows can be formatted as separately labeled
+        parts of one answer (D1).  Every failure mode returns ``None`` and
+        simply drops the source from the candidate parts.
+
+        Args:
+            src: Exact document key of the candidate source.
+            enum_target: Chapter number requested by the query (chapter
+                part of a dotted target), or None.
+            raw_section_target: Original dotted section target
+                (e.g. ``"5.2"``), or None when the query targeted a chapter.
+
+        Returns
+        -------
+            ``(window_chunks, node_title)`` for the requested number, or
+            ``None`` when the source's tree cannot resolve a window for it
+            (treeless document, no exact section node, degenerate chapter
+            map, the number is absent, ambiguous shared-page ownership, or
+            a storage without the page-list ``find_chunks`` API).
+        """
+        if raw_section_target is None and enum_target is None:
+            return None
+        tree = self._load_document_tree(src)
+        if tree is None:
+            return None
+        if raw_section_target:
+            # Mirror _tree_chapter_query's exact-section branch: the dotted
+            # target resolves to its own node's page range, not the
+            # enclosing chapter's.
+            section_nodes = [
+                node
+                for node in tree.nodes
+                if node.kind in ("section", "subsection")
+                and node.number == raw_section_target
+            ]
+            if len(section_nodes) != 1:
+                return None
+            section_node = section_nodes[0]
+            target_num = int(raw_section_target.split(".")[0])
+            start, end = section_node.page_start, section_node.page_end
+            chapter_ranges_: dict[int, tuple[int, int]] = {
+                target_num: (
+                    (start, end)
+                    if start is not None and end is not None and end >= start
+                    else (0, -1)
+                )
+            }
+            title = section_node.title
+        else:
+            try:
+                target_num = int(enum_target)  # type: ignore[arg-type]
+            except ValueError:
+                return None
+            all_ranges, all_titles = self._guarded_tree_chapter_map(
+                tree.nodes, self._searcher.storage, src
+            )
+            if not all_ranges:
+                return None
+            all_ranges = self._clamp_tree_window_ends(all_ranges)
+            if target_num not in all_ranges:
+                return None
+            chapter_ranges_ = {target_num: all_ranges[target_num]}
+            title = all_titles.get(target_num, "")
+        buckets = self._tree_chapter_buckets(
+            self._searcher.storage,
+            src,
+            chapter_ranges_,
+            nodes=tree.nodes,
+            section_target=raw_section_target,
+        )
+        if buckets is None:
+            return None
+        bucket = buckets.get(target_num, [])
+        # Single-key merge, byte-for-byte the tree path's <=2-chapters
+        # branch: text-hash dedupe, score sort, then a round-robin page
+        # interleave (deterministic full fetch — the summarizer bounds its
+        # own context downstream).
+        unique_by_hash: dict[int, dict[str, Any]] = {}
+        hashes_seen: set[int] = set()
+        for chunk in bucket:
+            text_hash = hash(chunk.get("chunk_text", "")[:512])
+            if text_hash not in hashes_seen:
+                hashes_seen.add(text_hash)
+                unique_by_hash[text_hash] = chunk
+        accumulated = list(unique_by_hash.values())
+        accumulated.sort(key=lambda c: c.get("score", 0.0), reverse=True)
+        pg_groups: dict[int, list[dict[str, Any]]] = {}
+        for fc in accumulated:
+            pg_groups.setdefault(fc.get("page_number") or 0, []).append(fc)
+        interleaved: list[dict[str, Any]] = []
+        max_per_pg = max((len(g) for g in pg_groups.values()), default=0)
+        for slot in range(max_per_pg):
+            for pg in sorted(pg_groups):
+                if slot < len(pg_groups[pg]):
+                    interleaved.append(pg_groups[pg][slot])
+        return interleaved, title
+
+    def _per_source_number_result(
+        self,
+        query: str,
+        candidate_sources: list[str],
+        *,
+        enum_target: str | None,
+        raw_section_target: str | None,
+        show_sources: bool,
+    ) -> dict[str, Any] | None:
+        """Answer a numbered query from one labeled window per candidate source.
+
+        The multi-source branch of the per-source resolution (D1): each
+        candidate source whose tree actually resolves the requested number
+        contributes its own chapter/section window, and the parts are
+        formatted into one generation context where every part begins with
+        its ``Source: <file>`` header (D2) — the model can attribute each
+        section of the answer to its source.  No document is silently
+        selected by an internal heuristic.
+
+        The ambiguity must survive into the answer: when fewer than two
+        candidate sources resolve a window (trees disagree with the store —
+        e.g. a ToC-ghost node the runtime guard excluded), ``None`` is
+        returned so the caller's chunk-count pick and legacy path govern
+        unchanged, exactly as before this resolution existed.
+
+        Args:
+            query: Original user query.
+            candidate_sources: Sources whose stored tree carries the
+                requested number (from the structure-store lookup).
+            enum_target: Chapter number requested by the query, or None.
+            raw_section_target: Original dotted section target, or None.
+            show_sources: Whether to include sources in the result.
+
+        Returns
+        -------
+            The result dict (``answer``/``query``/optional ``sources``)
+            with per-source parts, or ``None`` when the request should
+            proceed down the unchanged single-pick path (no concrete
+            number, fewer than two resolvable windows).
+        """
+        if raw_section_target is None and enum_target is None:
+            return None
+        parts: list[tuple[str, list[dict[str, Any]], str]] = []
+        for src in candidate_sources:
+            window = self._tree_number_window(
+                src,
+                enum_target=enum_target,
+                raw_section_target=raw_section_target,
+            )
+            if window is None:
+                continue
+            window_chunks, title = window
+            if not window_chunks:
+                continue
+            parts.append((src, window_chunks, title))
+        if len(parts) < 2:
+            return None
+
+        self._structure_source = "tree"
+        label = (
+            f"section {raw_section_target}"
+            if raw_section_target
+            else f"chapter {enum_target}"
+        )
+        source_list = ", ".join(src for src, _chunks, _title in parts)
+        subject = (
+            f"The user asked for a summary of {label}, which exists in "
+            f"multiple documents ({source_list}). Below, the content of "
+            f"{label} from each document is provided as separately labeled "
+            'parts, each beginning with a "Source: <file>" line. Summarize '
+            "each part separately and label every part's summary with its "
+            "source document; do not merge or attribute one source's "
+            "content to another.\n" + "=== BODY CONTENT ===\n"
+        )
+        context_text = subject + self._format_multi_source_parts(
+            [(src, chunks) for src, chunks, _title in parts],
+            max_chars_per_part=self._config.rag_max_context_chars * 3,
+        )
+
+        generation_start = time.perf_counter()
+        answer = ""
+        try:
+            prompt = self._build_prompt(query, context_text)
+            prompt += (
+                "\n\nYou are summarizing source material. Quote figures "
+                "(percentages, counts, years, metrics, returns) EXACTLY as "
+                "stated in the retrieved context; never invent, estimate, "
+                "round, or 'correct' a value the source does not state. "
+                "This rule applies to prose statistics only -- do not "
+                "fixate on reproducing code details or function arguments "
+                "(e.g. list(range(...))) verbatim. State each figure once, "
+                "confidently, and move on."
+            )
+            with trace_operation("rag_generation_iterative") as span:
+                if span:
+                    span.set_attribute("rag.iterative_mode", True)
+                    span.set_attribute("rag.enumeration_mode", True)
+                    span.set_attribute("rag.structure_source", "tree")
+                    span.set_attribute("rag.per_source_parts", len(parts))
+                answer = self._vet_answer(self._generate(prompt), prompt, context_text)
+                if self._on_chunk and answer:
+                    self._on_chunk(answer, None)
+        except Exception as e:
+            logger.error("Per-source generation failed: %s: %s", type(e).__name__, e)
+            answer = f"An error occurred during generation: {e}"
+        finally:
+            metrics.record("generation_latency", time.perf_counter() - generation_start)
+
+        # If the LLM returned empty, fall back to a per-part roster so the
+        # candidate sources still surface with attribution.
+        if not answer or not answer.strip():
+            roster_lines = []
+            for src, _chunks, title in parts:
+                if raw_section_target:
+                    part_label = f"Section {raw_section_target}"
+                else:
+                    part_label = f"Chapter {enum_target}"
+                display = self._display_chapter_title(title)
+                roster_lines.append(
+                    f"Source: {src} — {part_label} — {display or 'No official title'}"
+                )
+            answer = "\n".join(roster_lines) + "\n"
+
+        result: dict[str, Any] = {"answer": answer, "query": query}
+        if show_sources:
+            result["sources"] = [
+                chunk for _src, chunks, _t in parts for chunk in chunks
+            ]
         return result

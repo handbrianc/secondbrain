@@ -15,6 +15,8 @@ class _FormattingMixin(_RAGPipelineState):
         self,
         chunks: list[dict[str, Any]],
         max_chars: int | None = None,
+        *,
+        part_source: str | None = None,
     ) -> str:
         if max_chars is None:
             max_chars = self._config.rag_max_context_chars
@@ -26,6 +28,12 @@ class _FormattingMixin(_RAGPipelineState):
                 string, appended last to the source-line tags as a structural
                 scope label; chunks without it format exactly as before.
             max_chars: Maximum context length.
+            part_source: When the caller assembles a generation context from
+                several per-source parts (fix-chat-session-integrity D2),
+                the part's source file: a ``Source: <file>`` part-header line
+                is prefixed to the formatted body.  Per-chunk source lines
+                and their tags are untouched; ``None`` (the default) keeps
+                the single-source output byte-identical.
 
         Returns:
             Formatted context string.
@@ -34,6 +42,8 @@ class _FormattingMixin(_RAGPipelineState):
             >>> chunks = [{"chunk_text": "Hello", "source_file": "doc.pdf", "page": 1}]
             >>> pipeline._format_context(chunks)
             'Source: doc.pdf (page 1)\nHello\n'
+            >>> pipeline._format_context(chunks, part_source="doc.pdf")
+            'Source: doc.pdf\nSource: doc.pdf (page 1)\nHello\n'
             >>> chunks = [{
             ...     "chunk_text": "Snapshot mode stores VM state.",
             ...     "source_file": "doc.pdf",
@@ -81,7 +91,50 @@ class _FormattingMixin(_RAGPipelineState):
             context_parts.append(chunk_entry)
             total_chars += len(chunk_entry)
 
-        return "\n\n".join(context_parts)
+        body = "\n\n".join(context_parts)
+        if part_source:
+            # Part-level attribution (D2): one header line per part; the
+            # per-chunk lines below keep their exact format.
+            return f"Source: {part_source}\n{body}"
+        return body
+
+    def _format_multi_source_parts(
+        self,
+        parts: list[tuple[str, list[dict[str, Any]]]],
+        *,
+        max_chars_per_part: int | None = None,
+    ) -> str:
+        """Format per-source window parts into one labeled generation context.
+
+        fix-chat-session-integrity D2: a multi-source answer's context is
+        assembled from separately labeled parts — each part begins with a
+        ``Source: <file>`` part-header line, and the per-chunk lines keep
+        their exact format (including the in-flight ``heading_path`` tag).
+        Parts without chunks are skipped (they carry no attributable
+        content), so a caller that resolved no windows gets an empty string
+        and can fall back to the single-source path.
+
+        Args:
+            parts: ``(source_file, window_chunks)`` pairs in the order the
+                parts should appear in the context.
+            max_chars_per_part: Per-part context budget forwarded to
+                :meth:`_format_context` (``None`` uses the configured
+                default).
+
+        Returns:
+            The parts joined with a blank line, each prefixed with its
+            ``Source: <file>`` header; empty when no part carries chunks.
+        """
+        formatted = [
+            self._format_context(
+                chunks,
+                max_chars=max_chars_per_part,
+                part_source=source_file,
+            )
+            for source_file, chunks in parts
+            if chunks
+        ]
+        return "\n\n".join(formatted)
 
     def _build_prompt(
         self,

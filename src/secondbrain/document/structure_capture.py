@@ -15,7 +15,13 @@ sources, per the change design §5:
   outline is absent and always participates in the merge. Items failing the
   heading plausibility gate (:func:`is_plausible_heading`,
   fix-chunk-heading-context D1) create no nodes; outline capture is never
-  gated.
+  gated. A plausible candidate whose physical page lies INSIDE the detected
+  ToC page span AND whose text matches a ToC listing row is suppressed
+  (fix-chat-session-integrity D4): docling detects flattened ToC rows as
+  headings, and without suppression a table of contents mints ghost
+  chapter nodes. Suppressed candidates are recorded in the capture's
+  sources payload under ``suppressed_toc_headings``, which the storage
+  layer persists verbatim into ``structure_meta``.
 * **Merge** (:func:`merge_structures`) — outline nodes win where both sources
   describe the same region; docling-only headings attach under the containing
   outline node by page range; docling-only chapters fill the tree when no
@@ -28,7 +34,11 @@ sources, per the change design §5:
   unmatched nodes stay number-less. A match must also sit where the ToC says
   it does: the row's printed page, mapped through /PageLabels, has to land
   within a few physical pages of the node (:func:`_page_bound_allows`), so a
-  generic title cannot reach across the document.
+  generic title cannot reach across the document. Where the labels yield no
+  mapping, the printed→physical offset is derived as the median offset of
+  the listings already matched in the same walk instead of being assumed
+  (fix-chat-session-integrity D5), and a recovered number already held by a
+  same-scope sibling is refused rather than doubled.
 * **Dispatcher** (:func:`capture_structure`) — the single capture point the
   processor worker and the async ingestor call. **Never raises**: any failure
   is caught, logged as a warning, and reported as ``None`` so ingest proceeds
@@ -49,13 +59,16 @@ documents stay treeless until that wiring passes it through).
 
 from __future__ import annotations
 
+import json
 import logging
 import re
+import statistics
 import unicodedata
 from collections.abc import Sequence
 from datetime import UTC, datetime
+from functools import lru_cache
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, cast
 
 from secondbrain.document.chunker import docling_item_label, is_plausible_heading
 from secondbrain.document.fast_text import extract_native_pdf_text
@@ -854,7 +867,157 @@ def _iter_docling_texts(docling_doc: Any) -> list[Any]:
     return items
 
 
-def capture_docling_headings(docling_doc: Any, path: Path) -> DocumentStructure | None:
+# structure_meta key under which suppressed ToC-page heading candidates are
+# recorded (fix-chat-session-integrity D4). ``structure_meta`` stores the
+# capture's ``sources`` payload verbatim as JSON (storage/ owns that write;
+# this lane must not touch it), and the payload's typed shape is
+# ``dict[str, bool]`` — so the suppressed-candidate list rides under its own
+# key as its JSON encoding. The storage-side reload bool-coerces sources
+# values, so a reloaded tree sees the key's presence while the persisted row
+# keeps the full list for audit.
+_META_SUPPRESSED_KEY = "suppressed_toc_headings"
+
+
+def _text_matches_toc_listing(
+    text: str, listing_keys: Sequence[tuple[str, str]]
+) -> bool:
+    """Whether a heading candidate's text echoes a ToC listing row (D4).
+
+    The numbering token is parsed out of the heading text first (docling
+    reads the flattened ToC row verbatim — "7 Proxmox VE Storage" — while
+    :func:`parse_toc_rows` already stripped the row's number), then both
+    match keys (:func:`_match_key`, glued-variant :func:`_match_squash`) are
+    compared against every listing title.
+
+    Args:
+        text: The heading candidate's raw text.
+        listing_keys: ``(key, squash)`` pairs of the parsed listing titles.
+
+    Returns
+    -------
+        True when the title (with or without its numbering token) equals a
+        listing row's title.
+    """
+    _, rest = _parse_numbering(text)
+    key, squash = _match_key(rest), _match_squash(rest)
+    return any(
+        listing_key == key or listing_squash == squash
+        for listing_key, listing_squash in listing_keys
+    )
+
+
+def _suppress_toc_page_headings(
+    headings: list[tuple[int, str, int | None]],
+    listings: Sequence[TocListing],
+    toc_page_span: tuple[int, int] | None,
+) -> tuple[list[tuple[int, str, int | None]], list[dict[str, Any]]]:
+    """Split heading candidates into kept and ToC-ghost-suppressed (D4).
+
+    A candidate is suppressed only when BOTH conditions hold — its physical
+    page lies inside the detected ToC page span AND its text matches a ToC
+    listing row (:func:`_text_matches_toc_listing`). A page-inside-span test
+    alone is too eager (front-matter headings share those pages); a
+    text-match test alone re-admits ghosts when pages are mis-parsed. Real
+    chapter candidates starting at or after the span's end are kept
+    untouched, and page-less candidates are kept (they cannot be placed
+    inside a span).
+
+    Args:
+        headings: ``(level, title, page_start)`` candidates in document order.
+        listings: The document's parsed ToC rows.
+        toc_page_span: Inclusive 1-based physical page span, or None when
+            unknown (nothing is suppressed without span evidence).
+
+    Returns
+    -------
+        ``(kept, suppressed)`` — the surviving candidates and one
+        ``{"title": …, "page": …}`` record per suppressed candidate.
+    """
+    if toc_page_span is None or not listings:
+        return headings, []
+    span_low, span_high = toc_page_span
+    listing_keys = [
+        (_match_key(row.title), _match_squash(row.title)) for row in listings
+    ]
+    kept: list[tuple[int, str, int | None]] = []
+    suppressed: list[dict[str, Any]] = []
+    for level, text, page in headings:
+        if (
+            page is not None
+            and span_low <= page <= span_high
+            and _text_matches_toc_listing(text, listing_keys)
+        ):
+            suppressed.append({"title": text, "page": page})
+            continue
+        kept.append((level, text, page))
+    return kept, suppressed
+
+
+def _attach_suppressed_meta(
+    structure: DocumentStructure, suppressed: Sequence[dict[str, Any]]
+) -> None:
+    """Record suppressed ToC-page headings in the capture's sources payload.
+
+    ``structure_meta`` persists ``sources`` verbatim as JSON (the storage
+    layer owns that write), so the suppressed candidates ride the payload
+    under :data:`_META_SUPPRESSED_KEY` — encoded, because the payload's
+    typed shape is ``dict[str, bool]`` (see the constant's comment). Mutating
+    the mapping in place after construction is the established pattern
+    (``merged.sources["page_labels"] = …``); a no-op when nothing was
+    suppressed.
+
+    Args:
+        structure: The captured structure to annotate, in place.
+        suppressed: ``{"title": …, "page": …}`` records to record.
+    """
+    if not suppressed:
+        return
+    entries = sorted(
+        ({"title": str(e["title"]), "page": e["page"]} for e in suppressed),
+        key=lambda e: (int(e["page"]), str(e["title"])),
+    )
+    sources = cast("dict[str, Any]", structure.sources)
+    sources[_META_SUPPRESSED_KEY] = json.dumps(entries, sort_keys=True)
+
+
+def _suppressed_entries_of(part: DocumentStructure) -> list[dict[str, Any]]:
+    """Read a captured part's suppressed-candidate records back.
+
+    Decoding mirrors :func:`_attach_suppressed_meta`; anything absent or
+    unparsable (including the bool-coerced shape a reloaded tree carries)
+    yields no entries.
+
+    Args:
+        part: A captured (or merged) structure part.
+
+    Returns
+    -------
+        The decoded ``{"title": …, "page": …}`` records, in stored order.
+    """
+    raw = cast("object", part.sources.get(_META_SUPPRESSED_KEY))
+    if not isinstance(raw, str):
+        return []
+    try:
+        decoded = json.loads(raw)
+    except ValueError:
+        logger.warning("Unparsable suppressed-ToC-heading payload; ignoring")
+        return []
+    if not isinstance(decoded, list):
+        return []
+    return [
+        {"title": str(entry.get("title", "")), "page": entry.get("page")}
+        for entry in decoded
+        if isinstance(entry, dict)
+    ]
+
+
+def capture_docling_headings(
+    docling_doc: Any,
+    path: Path,
+    *,
+    toc_listings: Sequence[TocListing] | None = None,
+    toc_page_span: tuple[int, int] | None = None,
+) -> DocumentStructure | None:
     """Capture the docling heading hierarchy of a parsed document.
 
     Scans ``SectionHeaderItem`` items (``label == "section_header"``) taking
@@ -865,7 +1028,19 @@ def capture_docling_headings(docling_doc: Any, path: Path) -> DocumentStructure 
     text fails the :func:`is_plausible_heading` gate (run-in labels, synopsis
     lines — openspec fix-chunk-heading-context D1) are skipped from node
     creation; outline capture stays ungated and no text item is altered,
-    dropped, or reordered. Never raises.
+    dropped, or reordered.
+
+    Plausible candidates whose physical page lies INSIDE the detected ToC
+    page span AND whose text matches a ToC listing row are suppressed from
+    node creation (fix-chat-session-integrity D4): docling detects the
+    flattened ToC rows themselves as section headers, and every one of them
+    used to become a ghost chapter node sitting on the ToC's own pages.
+    Suppressed candidates are recorded in the part's sources payload under
+    ``suppressed_toc_headings`` (persisted into ``structure_meta`` by the
+    storage layer); real chapter candidates starting at or after the span's
+    end are kept untouched. A capture whose every candidate was suppressed
+    reports ``None`` (no part to record the suppression on) — the ghost
+    nodes are gone either way. Never raises.
 
     Args:
         docling_doc: A parsed docling document, or a sequence of per-window
@@ -873,6 +1048,13 @@ def capture_docling_headings(docling_doc: Any, path: Path) -> DocumentStructure 
             per window; every ``prov.page_no`` is absolute (verified), so the
             parts concatenate into one document-order stream.
         path: Path to the source file (unresolved — becomes ``source_file``).
+        toc_listings: The document's precomputed ToC rows (from
+            :func:`_pdf_toc_listings`); when omitted they are scanned once
+            here — only for ``.pdf`` paths, and only for direct callers, as
+            :func:`capture_structure` precomputes the same evidence for the
+            suppression AND the number-recovery pass.
+        toc_page_span: The precomputed ToC page span accompanying
+            *toc_listings*.
 
     Returns
     -------
@@ -880,8 +1062,9 @@ def capture_docling_headings(docling_doc: Any, path: Path) -> DocumentStructure 
         True}`` when the document has any section headers, else ``None``.
     """
     try:
-        headings: list[tuple[int, str, int | None]] = []
-        last_page: int | None = None
+        if toc_listings is None and path.suffix.lower() == ".pdf":
+            toc_listings, toc_page_span = _toc_evidence(path)
+        candidates: list[tuple[int, str, int | None]] = []
         for item in _iter_docling_texts(docling_doc):
             if docling_item_label(item) != _SECTION_HEADER_LABEL:
                 continue
@@ -902,8 +1085,12 @@ def capture_docling_headings(docling_doc: Any, path: Path) -> DocumentStructure 
                 level = 1
             else:
                 level = max(1, int(raw_level))
-            page_start = _docling_item_page(item)
-            headings.append((level, heading_text, page_start))
+            candidates.append((level, heading_text, _docling_item_page(item)))
+        headings, suppressed = _suppress_toc_page_headings(
+            candidates, toc_listings or [], toc_page_span
+        )
+        last_page: int | None = None
+        for _, _, page_start in headings:
             if page_start is not None:
                 last_page = (
                     page_start if last_page is None else max(last_page, page_start)
@@ -921,11 +1108,13 @@ def capture_docling_headings(docling_doc: Any, path: Path) -> DocumentStructure 
             # an empty part would dishonestly mark "heading_hierarchy" as a
             # source, so report no capture at all.
             return None
-        return DocumentStructure(
+        part = DocumentStructure(
             source_file=str(path),
             nodes=nodes,
             sources={"heading_hierarchy": True},
         )
+        _attach_suppressed_meta(part, suppressed)
+        return part
     except Exception as e:
         logger.warning(
             "docling heading capture failed for %s (%s: %s); proceeding without it",
@@ -1205,6 +1394,8 @@ def _union_sources(parts: list[DocumentStructure]) -> dict[str, bool]:
     }
     for part in parts:
         for key, value in part.sources.items():
+            if key == _META_SUPPRESSED_KEY:
+                continue  # carried separately; merge_structures re-attaches it
             sources[key] = bool(sources.get(key, False)) or bool(value)
     return sources
 
@@ -1293,12 +1484,20 @@ def merge_structures(*parts: DocumentStructure | None) -> DocumentStructure:
     tree_end = _tree_end_hint(real_parts)
 
     nodes = _finalize_nodes(ordered_pairs, set(), tree_end)
-    return DocumentStructure(
+    merged = DocumentStructure(
         source_file=source_file,
         nodes=nodes,
         sources=_union_sources(real_parts),
         captured_at=datetime.now(UTC).isoformat(),
     )
+    # Suppressed ToC-page headings ride the parts' sources payloads; the
+    # union above skips the key (its value is not a bool), so the combined
+    # record is re-attached here — every part's entries survive the merge.
+    _attach_suppressed_meta(
+        merged,
+        [entry for part in real_parts for entry in _suppressed_entries_of(part)],
+    )
+    return merged
 
 
 def _finalize_nodes(
@@ -1783,6 +1982,46 @@ def _pdf_toc_listings(
     return listings, span
 
 
+# The ToC evidence (listings + page span) depends only on the FILE's text
+# layer, never on the docling document — but every capture entry point needs
+# it: the dispatcher (suppression + recovery), and each per-window docling
+# capture the processor worker produces. One bounded memo per file version
+# keeps the text-layer scan to a single pass per (path, mtime, size); entries
+# churn naturally (maxsize), and a stale entry is impossible for the same
+# file version. Keyed on stat stamps (not the Path) so re-written files
+# re-scan and a bounded LRU never pins dead paths.
+_TOC_EVIDENCE_CACHE_MAX = 8
+
+
+@lru_cache(maxsize=_TOC_EVIDENCE_CACHE_MAX)
+def _cached_toc_evidence(
+    path_str: str, mtime_ns: int, size: int
+) -> tuple[tuple[TocListing, ...], tuple[int, int] | None]:
+    """Memoized :func:`_pdf_toc_listings` keyed on the file's stat stamps."""
+    listings, span = _pdf_toc_listings(Path(path_str))
+    return tuple(listings), span
+
+
+def _toc_evidence(
+    path: Path,
+) -> tuple[list[TocListing], tuple[int, int] | None]:
+    """Return the document's ToC listings + page span, scanned once per version.
+
+    Args:
+        path: Path to the PDF file.
+
+    Returns
+    -------
+        ``(listings, toc_page_span)`` as :func:`_pdf_toc_listings` returns.
+    """
+    try:
+        stat = path.stat()
+    except OSError:
+        return _pdf_toc_listings(path)
+    listings, span = _cached_toc_evidence(str(path), stat.st_mtime_ns, stat.st_size)
+    return list(listings), span
+
+
 def _recovery_number_consistent(
     node: StructureNode,
     number: str,
@@ -1836,6 +2075,70 @@ def _recovery_number_consistent(
         if child_number != number and not child_number.startswith(number + "."):
             return False
     return True
+
+
+def _refresh_derived_pages(
+    listings: Sequence[TocListing],
+    effective_pages: list[int | None],
+    offsets: Sequence[int],
+) -> None:
+    """Fill label-unmapped listings' physical pages from derived offsets (D5).
+
+    In place: every row whose /PageLabels mapping was unusable gets
+    ``printed page + median(offsets)`` — the offset the walk has actually
+    observed between matched listings' printed pages and their nodes'
+    physical pages, never an assumed constant. Rows without a printed page
+    stay ``None`` (their bound comes from the neighbors' bracket); rows the
+    labels already mapped are never touched — the document's own labels win.
+
+    Args:
+        listings: The parsed ToC rows, in document order.
+        effective_pages: The working physical page per row (mutated).
+        offsets: The observed ``node page - printed page`` samples so far.
+    """
+    if not offsets:
+        return
+    offset = int(statistics.median(offsets))
+    for index, row in enumerate(listings):
+        if effective_pages[index] is None and row.page is not None:
+            effective_pages[index] = row.page + offset
+
+
+def _recovery_number_collides(
+    node: StructureNode,
+    number: str,
+    siblings: dict[str | None, list[str]],
+    numbers: dict[str, str | None],
+    assignments: dict[str, str],
+) -> bool:
+    """Whether *number* is already held by one of *node*'s same-scope peers.
+
+    The collision refusal (fix-chat-session-integrity D5): when this walk
+    has already recovered *number* for a sibling (same ``parent_id``, root
+    included), a second assignment is refused rather than doubled — the
+    stored tree never carries two nodes with the same RECOVERED number, even
+    where suppression missed a leftover ToC-span ghost and the walk would
+    otherwise stamp both. Only recovered-this-pass numbers collide: parsed
+    numbers are never overwritten and anthology part-restarts (the parsed
+    ``1`` of another part) are not this pass's doing.
+
+    Args:
+        node: The candidate node.
+        number: The candidate recovered number.
+        siblings: ``parent_id`` → child ``node_id`` list (None key = roots).
+        numbers: The live number per ``node_id`` (parsed + recovered so far).
+        assignments: The ``node_id`` → number assignments made this walk.
+
+    Returns
+    -------
+        True when assigning would double a recovered number in scope.
+    """
+    for sibling_id in siblings.get(node.parent_id, ()):
+        if sibling_id == node.node_id:
+            continue
+        if numbers.get(sibling_id) == number and sibling_id in assignments:
+            return True
+    return False
 
 
 # Page bound for ToC number recovery (D1 refinement): a listing's printed
@@ -1980,12 +2283,21 @@ def recover_chapter_numbers(
     * the match must also sit where the ToC says it does: the listing's
       printed page, mapped through the document's /PageLabels, lies within
       :data:`_TOC_PAGE_BOUND_TOLERANCE` physical pages of the node's
-      ``page_start`` (:func:`_page_bound_allows`; a page-less row takes an
-      interpolated bracket from its nearest paged ToC neighbors; page-less
-      nodes, label-less documents, and unmappable pages fail open to the
-      order-only rule). Without it a generic title ("Configuration")
-      matches a far-ahead chapter's identically named row and the cursor
-      jump starves every chapter whose listing lies in between;
+      ``page_start`` — the range-consistency test (D5): the mapped page must
+      be consistent with the node's physical page range. Where the labels
+      yield no mapping for a row, the printed→physical offset is DERIVED as
+      the median offset of the listings already matched in this walk
+      (:func:`_refresh_derived_pages`) instead of assuming a constant, and a
+      row with neither evidence fails open to the order-only rule
+      (:func:`_page_bound_allows`; a page-less row takes an interpolated
+      bracket from its nearest mappable ToC neighbors; page-less nodes fail
+      open). Without it a generic title ("Configuration") matches a
+      far-ahead chapter's identically named row and the cursor jump starves
+      every chapter whose listing lies in between;
+    * a recovered number this walk already gave a same-scope sibling is
+      refused rather than doubled (:func:`_recovery_number_collides`) — the
+      tree never carries two nodes with the same recovered number, even
+      where a leftover ToC-span ghost escaped suppression;
     * one listing assigns at most one node; ambiguous or unmatched nodes
       stay number-less;
     * parsed numbers always win — numbered nodes are never touched;
@@ -2036,6 +2348,15 @@ def recover_chapter_numbers(
         (_match_key(row.title), _match_squash(row.title)) for row in listings
     ]
     mapped_pages = _mapped_listing_pages(listings, structure.page_labels or None)
+    # D5: the label mapping is preferred evidence; where it leaves a row
+    # unmapped, the offset the walk itself observes between matched listings'
+    # printed pages and their nodes' physical pages fills the gap (median of
+    # the samples so far — derived, never assumed).
+    effective_pages = list(mapped_pages)
+    offsets: list[int] = []
+    siblings: dict[str | None, list[str]] = {}
+    for node in nodes:
+        siblings.setdefault(node.parent_id, []).append(node.node_id)
     span_low, span_high = toc_page_span or (0, 0)
     cursor = -1
     assignments: dict[str, str] = {}
@@ -2052,16 +2373,22 @@ def recover_chapter_numbers(
             for index in range(cursor + 1, len(listings))
             if listings[index].level == node.level
             and (listing_keys[index][0] == key or listing_keys[index][1] == squash)
-            and _page_bound_allows(mapped_pages, index, page)
+            and _page_bound_allows(effective_pages, index, page)
         ]
         if len(candidates) != 1:
             continue  # unmatched or ambiguous — stays number-less (spec)
         index = candidates[0]
         number = listings[index].number
+        if _recovery_number_collides(node, number, siblings, numbers, assignments):
+            continue  # the walk already recovered this number in scope (D5)
         if not _recovery_number_consistent(node, number, by_id, children, numbers):
             continue
         assignments[node.node_id] = number
         numbers[node.node_id] = number
+        printed = listings[index].page
+        if printed is not None:
+            offsets.append(page - printed)
+            _refresh_derived_pages(listings, effective_pages, offsets)
         cursor = index
     if not assignments:
         return structure
@@ -2101,7 +2428,11 @@ def recover_chapter_numbers(
 
 
 def _recover_numbers_from_document_toc(
-    structure: DocumentStructure, path: Path
+    structure: DocumentStructure,
+    path: Path,
+    *,
+    listings: Sequence[TocListing] | None = None,
+    toc_page_span: tuple[int, int] | None = None,
 ) -> DocumentStructure:
     """Wire the D1 recovery pass into the capture flow (task 1.3).
 
@@ -2115,6 +2446,10 @@ def _recover_numbers_from_document_toc(
     Args:
         structure: The merged structure tree.
         path: Path to the source PDF (its text layer is the ToC source).
+        listings: Precomputed ToC rows to reuse (the dispatcher scans once
+            and shares the evidence with the D4 ghost-suppression pass);
+            scanned here when None.
+        toc_page_span: The precomputed ToC page span accompanying *listings*.
 
     Returns
     -------
@@ -2122,10 +2457,11 @@ def _recover_numbers_from_document_toc(
         no listings exist or recovery failed.
     """
     try:
-        listings, span = _pdf_toc_listings(path)
+        if listings is None:
+            listings, toc_page_span = _toc_evidence(path)
         if not listings:
             return structure
-        return recover_chapter_numbers(structure, listings, toc_page_span=span)
+        return recover_chapter_numbers(structure, listings, toc_page_span=toc_page_span)
     except Exception as e:
         logger.warning(
             "ToC number recovery failed for %s (%s: %s); keeping captured numbers",
@@ -2457,7 +2793,13 @@ def _parse_segment_id(node_id: str) -> int | None:
 # ---------------------------------------------------------------------------
 
 
-def _merged_docling_part(docling_doc: Any, path: Path) -> DocumentStructure | None:
+def _merged_docling_part(
+    docling_doc: Any,
+    path: Path,
+    *,
+    toc_listings: Sequence[TocListing] | None = None,
+    toc_page_span: tuple[int, int] | None = None,
+) -> DocumentStructure | None:
     """Normalize the docling input into one docling structure part.
 
     Accepts (design §6's ``docling_doc`` is deliberately ``Any``):
@@ -2472,6 +2814,12 @@ def _merged_docling_part(docling_doc: Any, path: Path) -> DocumentStructure | No
     Args:
         docling_doc: Any of the shapes above.
         path: Path to the source file (becomes ``source_file``).
+        toc_listings: Precomputed ToC rows forwarded to
+            :func:`capture_docling_headings` for the D4 ghost-suppression
+            pass (raw-doc candidates only; already-captured parts carry
+            their own record).
+        toc_page_span: The precomputed ToC page span accompanying
+            *toc_listings*.
 
     Returns
     -------
@@ -2489,7 +2837,12 @@ def _merged_docling_part(docling_doc: Any, path: Path) -> DocumentStructure | No
         if isinstance(candidate, DocumentStructure):
             parts.append(candidate)
             continue
-        captured = capture_docling_headings(candidate, path)
+        captured = capture_docling_headings(
+            candidate,
+            path,
+            toc_listings=toc_listings,
+            toc_page_span=toc_page_span,
+        )
         if captured is not None:
             parts.append(captured)
     if not parts:
@@ -2544,9 +2897,18 @@ def capture_structure(
             return capture_audio_structure(docling_doc, path)
 
         if is_pdf:
+            # One ToC-evidence scan serves BOTH the D4 ghost suppression
+            # (inside the docling heading capture) and the D1/D5 number
+            # recovery below — the dispatcher precomputes and reuses it.
+            toc_listings, toc_page_span = _toc_evidence(path)
             outline_part = capture_pdf_outline(path)
             labels = capture_page_labels(path)
-            docling_part = _merged_docling_part(docling_doc, path)
+            docling_part = _merged_docling_part(
+                docling_doc,
+                path,
+                toc_listings=toc_listings,
+                toc_page_span=toc_page_span,
+            )
             merged = merge_structures(outline_part, docling_part)
             # /PageLabels go on BEFORE the recovery pass: its page bound maps
             # ToC printed pages to physical pages through them (D1
@@ -2556,7 +2918,9 @@ def capture_structure(
             # fix-chapter-coverage (D1): recover chapter/section numbers for
             # number-less nodes from the document's own ToC listings, before
             # persistence. Never raises; a no-listing document is unchanged.
-            merged = _recover_numbers_from_document_toc(merged, path)
+            merged = _recover_numbers_from_document_toc(
+                merged, path, listings=toc_listings, toc_page_span=toc_page_span
+            )
             return merged if (merged.nodes or labels) else None
 
         docling_part = _merged_docling_part(docling_doc, path)

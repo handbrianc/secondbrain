@@ -158,6 +158,161 @@ class TestSaveLoadRoundTrip:
 
 
 # ---------------------------------------------------------------------------
+# Per-source number lookup (fix-chat-session-integrity task 2.1)
+# ---------------------------------------------------------------------------
+
+
+def _numbered_tree(source_file: str, nodes: list[StructureNode]) -> DocumentStructure:
+    """A tree carrying exactly the given nodes (metadata sources only)."""
+    return DocumentStructure(
+        source_file=source_file,
+        nodes=nodes,
+        sources={"outline": True},
+    )
+
+
+class TestSourcesWithNumber:
+    """sources_with_number: which stored trees carry a chapter/section number."""
+
+    @staticmethod
+    def _seed(store: StructureStore) -> None:
+        """Four documents: collision on 15, unique 5.2/3.1, noise kinds."""
+        store.save_structure(
+            _numbered_tree(
+                "/docs/a.pdf",
+                [
+                    chapter_node(node_id="chA5", number="5", page_start=1, page_end=9),
+                    StructureNode(
+                        node_id="secA5.02",
+                        parent_id="chA5",
+                        kind="section",
+                        level=2,
+                        number="5.2",
+                        title="Input handling",
+                        page_start=3,
+                        page_end=7,
+                        heading_path="Chapter 5 — Installing > 5.2",
+                    ),
+                    chapter_node(
+                        node_id="chA15", number="15", page_start=10, page_end=20
+                    ),
+                    chapter_node(
+                        node_id="partA2",
+                        kind="part",
+                        number="II",
+                        title="Part II",
+                        page_start=21,
+                        page_end=30,
+                    ),
+                ],
+            )
+        )
+        store.save_structure(
+            _numbered_tree(
+                "/docs/b.pdf",
+                [
+                    chapter_node(
+                        node_id="chB15", number="15", page_start=5, page_end=8
+                    ),
+                ],
+            )
+        )
+        store.save_structure(
+            _numbered_tree(
+                "/docs/c.pdf",
+                [
+                    chapter_node(node_id="chC3", number="3", page_start=1, page_end=6),
+                    StructureNode(
+                        node_id="subC3.01",
+                        parent_id="chC3",
+                        kind="subsection",
+                        level=3,
+                        number="3.1",
+                        title="Setup",
+                        page_start=2,
+                        page_end=4,
+                        heading_path="Chapter 3 — Setup > 3.1",
+                    ),
+                ],
+            )
+        )
+        # A treeless capture (metadata only, no nodes) contributes nothing.
+        store.save_structure(_numbered_tree("/docs/d.pdf", []))
+
+    def test_colliding_number_lists_every_carrying_source(
+        self, store: StructureStore
+    ) -> None:
+        self._seed(store)
+        assert store.sources_with_number("15") == ["/docs/a.pdf", "/docs/b.pdf"]
+
+    def test_dotted_section_number_scopes_to_its_source(
+        self, store: StructureStore
+    ) -> None:
+        self._seed(store)
+        assert store.sources_with_number("5.2") == ["/docs/a.pdf"]
+        assert store.sources_with_number("3.1") == ["/docs/c.pdf"]
+
+    def test_exact_match_never_prefix_matches(self, store: StructureStore) -> None:
+        self._seed(store)
+        # "5" matches chapter 5 only — never the "5.2" section.
+        assert store.sources_with_number("5") == ["/docs/a.pdf"]
+
+    def test_unknown_number_returns_empty(self, store: StructureStore) -> None:
+        self._seed(store)
+        assert store.sources_with_number("9") == []
+
+    def test_blank_number_returns_empty(self, store: StructureStore) -> None:
+        self._seed(store)
+        assert store.sources_with_number("") == []
+        assert store.sources_with_number("   ") == []
+
+    def test_whitespace_is_normalized(self, store: StructureStore) -> None:
+        self._seed(store)
+        assert store.sources_with_number(" 15 ") == [
+            "/docs/a.pdf",
+            "/docs/b.pdf",
+        ]
+
+    def test_only_chapter_shaped_kinds_count(self, store: StructureStore) -> None:
+        self._seed(store)
+        # The "part" node carries number II but is not chapter/section shaped.
+        assert store.sources_with_number("II") == []
+
+    def test_delete_removes_the_source_from_the_lookup(
+        self, store: StructureStore
+    ) -> None:
+        self._seed(store)
+        store.delete_structure("/docs/b.pdf")
+        assert store.sources_with_number("15") == ["/docs/a.pdf"]
+
+    def test_resave_replaces_the_carrying_set(self, store: StructureStore) -> None:
+        self._seed(store)
+        # Re-capture of a.pdf drops chapter 15: the collision collapses.
+        store.save_structure(
+            _numbered_tree(
+                "/docs/a.pdf",
+                [chapter_node(node_id="chA5", number="5", page_start=1, page_end=9)],
+            )
+        )
+        assert store.sources_with_number("15") == ["/docs/b.pdf"]
+
+    def test_empty_store_returns_empty(self, tmp_path: Path) -> None:
+        fresh = StructureStore(db_path=str(tmp_path / "fresh.db"))
+        try:
+            assert fresh.sources_with_number("15") == []
+        finally:
+            fresh.close()
+
+    async def test_async_twin_mirrors_sync(self, store: StructureStore) -> None:
+        self._seed(store)
+        assert await store.sources_with_number_async("15") == [
+            "/docs/a.pdf",
+            "/docs/b.pdf",
+        ]
+        assert await store.sources_with_number_async("9") == []
+
+
+# ---------------------------------------------------------------------------
 # Schema rules
 # ---------------------------------------------------------------------------
 

@@ -84,6 +84,10 @@ class TestCLI:
     def test_delete_with_chunk_id(self, mock_deleter_class: MagicMock) -> None:
         """Test delete command with chunk-id option."""
         mock_deleter = MagicMock()
+        # The CLI drives Deleter as a context manager; without this the
+        # ``with`` block binds ``__enter__()``'s child mock and the delete
+        # return value configured below is never seen.
+        mock_deleter.__enter__ = MagicMock(return_value=mock_deleter)
         mock_deleter.delete.return_value = 1
         mock_deleter_class.return_value = mock_deleter
 
@@ -92,12 +96,14 @@ class TestCLI:
 
         assert result.exit_code == 0
         assert "Deleted" in result.output
-        assert "document" in result.output
+        assert "chunk(s)" in result.output
 
     @patch("secondbrain.management.Deleter")
     def test_delete_all_with_confirmation(self, mock_deleter_class: MagicMock) -> None:
         """Test delete all command with confirmation."""
         mock_deleter = MagicMock()
+        # Context-manager wiring as in test_delete_with_chunk_id above.
+        mock_deleter.__enter__ = MagicMock(return_value=mock_deleter)
         mock_deleter.delete.return_value = 100
         mock_deleter_class.return_value = mock_deleter
 
@@ -106,7 +112,7 @@ class TestCLI:
 
         assert result.exit_code == 0
         assert "Deleted" in result.output
-        assert "document" in result.output
+        assert "chunk(s)" in result.output
 
     @patch("secondbrain.management.Deleter")
     def test_delete_cancelled_by_user(self, mock_deleter_class: MagicMock) -> None:

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+import sqlite3
+from collections.abc import Sequence
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -69,14 +72,14 @@ def docling_doc(*items: Any) -> Any:
 
 
 def headings_part(
-    entries: list[tuple[int, str, int]],
+    entries: Sequence[tuple[int, str, int | None]],
     source_file: str = "/docs/book.pdf",
     allow_parts: bool = True,
     final_page: int | None = None,
 ) -> DocumentStructure:
     """Build a part through the real heading→node pipeline."""
     nodes = _build_nodes_from_headings(
-        entries,
+        list(entries),
         source_file=source_file,
         allow_parts=allow_parts,
         final_page=final_page,
@@ -868,7 +871,10 @@ class TestPdfTocListingsSpan:
     def test_body_nodes_recover_across_the_whole_run(self) -> None:
         # Regression for the page-213 failure: with a (3, 21) ToC span, body
         # nodes after the run — even far beyond it — still recover; the old
-        # min/max span (3, 213) excluded every node in between.
+        # min/max span (3, 213) excluded every node in between. Printed
+        # pages sit a constant 9 behind the physical ones (the D5 offset the
+        # walk derives from its first match), so every later row's derived
+        # page lands on its node.
         outline = headings_part(
             [
                 (1, "Introduction", 10),  # inside the ToC run
@@ -880,9 +886,9 @@ class TestPdfTocListingsSpan:
         )
         listings = [
             TocListing("1", "Introduction", 1, 1),
-            TocListing("2", "Installing Proxmox VE", 10, 1),
-            TocListing("8", "Deploy Hyper-Converged Ceph Cluster", 173, 1),
-            TocListing("8.11", "Ceph Client", 214, 2),
+            TocListing("2", "Installing Proxmox VE", 14, 1),
+            TocListing("8", "Deploy Hyper-Converged Ceph Cluster", 186, 1),
+            TocListing("8.11", "Ceph Client", 205, 2),
         ]
         recovered = recover_chapter_numbers(
             merge_structures(outline), listings, toc_page_span=(3, 21)
@@ -918,14 +924,19 @@ def pve_outline_part(source_file: str = "/docs/pve.pdf") -> DocumentStructure:
 
 
 def pve_listings() -> list[TocListing]:
-    """The pve-shaped ToC listings matching :func:`pve_outline_part`."""
+    """The pve-shaped ToC listings matching :func:`pve_outline_part`.
+
+    Printed pages sit a consistent ~21-22 physical pages behind their
+    bookmark pages (the D5 offset the label-less walk derives from its
+    first match), so every row's derived page lands on its node.
+    """
     return [
         TocListing("1", "Introduction", 1, 1),
         TocListing("1.1", "Central Management", 2, 2),
         TocListing("1.2", "System Requirements", 3, 2),
-        TocListing("1.3", "Translating Proxmox VE", 4, 2),
-        TocListing("2", "Installing Proxmox VE", 15, 1),
-        TocListing("2.1", "Using the Proxmox VE Installer", 16, 2),
+        TocListing("1.3", "Translating Proxmox VE", 7, 2),
+        TocListing("2", "Installing Proxmox VE", 10, 1),
+        TocListing("2.1", "Using the Proxmox VE Installer", 11, 2),
     ]
 
 
@@ -1001,20 +1012,23 @@ class TestRecoverChapterNumbers:
 
     def test_ambiguous_match_stays_unnumbered(self) -> None:
         # Spec scenario: a title matching multiple listings equally — and a
-        # title matching nothing — persist without a number.
+        # title matching nothing — persist without a number. Both same-title
+        # rows map near the node (printed +22), so the ambiguity (not the
+        # page bound) refuses them; the CommandLine node sits on its own
+        # row's derived page.
         outline = headings_part(
             [
                 (1, "Introduction", 23),
                 (2, "Configuration File Options", 25),
-                (1, "Command Line Options", 60),
+                (1, "Command Line Options", 72),
                 (2, "Configuration File Options", 61),
             ],
-            final_page=70,
+            final_page=80,
         )
         listings = [
             TocListing("1", "Introduction", 1, 1),
-            TocListing("3.1", "Configuration File Options", 10, 2),
-            TocListing("9.1", "Configuration File Options", 40, 2),
+            TocListing("3.1", "Configuration File Options", 1, 2),
+            TocListing("9.1", "Configuration File Options", 4, 2),
             TocListing("10", "Command Line Options", 50, 1),
         ]
         recovered = recover_chapter_numbers(merge_structures(outline), listings)
@@ -1161,9 +1175,9 @@ class TestRecoverChapterNumbers:
             "1 Introduction .... 1\n"
             "1.1 Central Management .... 2\n"
             "1.2 System Requirements .... 3\n"
-            "1.3 Translating Proxmox VE .... 4\n"
-            "2 Installing Proxmox VE .... 15\n"
-            "2.1 Using the Proxmox VE Installer .... 16\n"
+            "1.3 Translating Proxmox VE .... 7\n"
+            "2 Installing Proxmox VE .... 10\n"
+            "2.1 Using the Proxmox VE Installer .... 11\n"
         )
         recovered = recover_chapter_numbers(merged, listings, toc_page_span=(3, 22))
         by_title = {node.title: node for node in recovered.nodes}
@@ -1242,15 +1256,63 @@ class TestRecoveryPageBound:
         assert by_title["Configuration"].number is None  # 29 pages away: no
         assert by_title["Beta"].number == "5"  # no longer starved
 
-    def test_without_page_labels_fails_open_to_order_only(self) -> None:
-        # A label-less document must keep today's behavior exactly.
+    def test_without_page_labels_bounded_by_derived_offset(self) -> None:
+        # D5: a label-less document bounds its walk with the offset its own
+        # matched listings observe — Alpha anchors it (no evidence yet, the
+        # order-only rule), the far-ahead "9 Configuration" row is then
+        # rejected (45 + 4 != 20), and the starved Beta recovers.
         recovered = recover_chapter_numbers(
             bound_structure(JUMP_ENTRIES, labels=[]), JUMP_LISTINGS
         )
         by_title = {node.title: node for node in recovered.nodes}
+        assert by_title["Alpha"].number == "1"  # first anchor: order-only
+        assert by_title["Configuration"].number is None  # 29 pages off: no
+        assert by_title["Beta"].number == "5"  # no longer starved
+
+    def test_without_labels_or_evidence_fails_open_to_order_only(self) -> None:
+        # Zero evidence (no labels, no matched listings yet): the very first
+        # candidate anchors order-only — today's behavior, unchanged.
+        recovered = recover_chapter_numbers(
+            bound_structure([(1, "Configuration", 20)], labels=[]),
+            [TocListing("9", "Configuration", 45, 1)],  # printed 45 → far
+        )
+        assert recovered.nodes[0].number == "9"
+
+    def test_refused_skew_cannot_steer_the_derived_offset(self) -> None:
+        # D5: the offset pool feeds only from MATCHED rows, so the derived
+        # bound stays the honest median of what the walk actually observed.
+        # A row whose printed page disagrees with it beyond the tolerance is
+        # refused and its skew never enters the pool: Gamma's row (printed
+        # 34 → 38 under the offset-4 evidence, twelve pages short of the
+        # node at 50) starves, while Delta still recovers after it — a pool
+        # poisoned by the refused skew (mean 8) would map Delta's row to 74
+        # and starve it too.
+        labels: list[PageLabelRange] = []  # label-less: D5 fallback drives
+        outline = headings_part(
+            [
+                (1, "Alpha", 10),
+                (1, "Beta", 30),
+                (1, "Gamma", 50),
+                (1, "Delta", 70),
+                (1, "Epsilon", 80),
+            ],
+            final_page=90,
+        )
+        outline.page_labels = labels
+        listings = [
+            TocListing("1", "Alpha", 6, 1),  # anchor: order-only, offset 4
+            TocListing("2", "Beta", 26, 1),  # 26 + 4: matches
+            TocListing("3", "Gamma", 34, 1),  # 34 + 4 = 38 vs 50: refused
+            TocListing("4", "Delta", 66, 1),  # 66 + 4: matches — pool honest
+            TocListing("5", "Epsilon", 94, 1),  # 94 + 4 vs 80: refused
+        ]
+        recovered = recover_chapter_numbers(merge_structures(outline), listings)
+        by_title = {node.title: node for node in recovered.nodes}
         assert by_title["Alpha"].number == "1"
-        assert by_title["Configuration"].number == "9"  # the old far-ahead jump
-        assert by_title["Beta"].number is None  # the old starvation
+        assert by_title["Beta"].number == "2"
+        assert by_title["Gamma"].number is None
+        assert by_title["Delta"].number == "4"
+        assert by_title["Epsilon"].number is None
 
     def test_bound_resolves_ambiguity_toward_the_near_row(self) -> None:
         # Two same-title listings: order-only sees ambiguity and numbers
@@ -1519,9 +1581,9 @@ class TestTocRecoveryPersistence:
                         "1 Introduction .... 1\n"
                         "1.1 Central Management .... 2\n"
                         "1.2 System Requirements .... 3\n"
-                        "1.3 Translating Proxmox VE .... 4\n"
-                        "2 Installing Proxmox VE .... 15\n"
-                        "2.1 Using the Proxmox VE Installer .... 16\n"
+                        "1.3 Translating Proxmox VE .... 7\n"
+                        "2 Installing Proxmox VE .... 10\n"
+                        "2.1 Using the Proxmox VE Installer .... 11\n"
                     ),
                     "page": 3,
                 }
@@ -1595,3 +1657,356 @@ class TestTocRecoveryRealPdf:
         assert chapter.node_id == "ch-introduction"
         assert (section.title, section.number) == ("Central Management", "1.1")
         assert section.heading_path == "Chapter 1 — Introduction > 1.1"
+
+
+# ---------------------------------------------------------------------------
+# ToC ghost suppression at capture (fix-chat-session-integrity D4 / task 3.1)
+# ---------------------------------------------------------------------------
+
+
+def _pve_labels() -> list[PageLabelRange]:
+    """One decimal label run: printed page P sits on physical page P + 10.
+
+    The brief's shape: the ToC prints "7 Proxmox VE Storage … 153" while the
+    real chapter 7 opens on physical page 163 (front matter shifts the body).
+    """
+    return [PageLabelRange(page_start=11, page_end=300, label="1", style="decimal")]
+
+
+class TestToCGhostSuppression:
+    """ToC-page candidates that echo a listing row are suppressed (D4)."""
+
+    def test_span_and_match_matrix(self, tmp_path: Any) -> None:
+        # Both conditions are required: span + listing-row match drops the
+        # ghost; span alone, match alone, and neither all keep the heading.
+        part = capture_docling_headings(
+            docling_doc(
+                doc_item("Foreword", level=1, page=5),  # span only: front matter
+                doc_item("7 Proxmox VE Storage", level=1, page=9),  # span + match
+                doc_item("Cluster Architecture", level=1, page=30),  # neither
+                doc_item("Proxmox VE Storage", level=1, page=163),  # match only
+            ),
+            tmp_path / "book.pdf",
+            toc_listings=[TocListing("7", "Proxmox VE Storage", 153, 1)],
+            toc_page_span=(3, 22),
+        )
+        assert part is not None
+        assert [(node.title, node.page_start) for node in part.nodes] == [
+            ("Foreword", 5),
+            ("Cluster Architecture", 30),
+            ("Proxmox VE Storage", 163),  # the real chapter survives
+        ]
+        assert sc._suppressed_entries_of(part) == [
+            {"title": "7 Proxmox VE Storage", "page": 9}
+        ]
+        assert isinstance(part.sources[sc._META_SUPPRESSED_KEY], str)
+
+    def test_span_boundaries_are_inclusive(self, tmp_path: Any) -> None:
+        part = capture_docling_headings(
+            docling_doc(
+                *[
+                    doc_item("Proxmox VE Storage", level=1, page=page)
+                    for page in (2, 3, 22, 23)
+                ]
+            ),
+            tmp_path / "book.pdf",
+            toc_listings=[TocListing("7", "Proxmox VE Storage", 153, 1)],
+            toc_page_span=(3, 22),
+        )
+        assert part is not None
+        assert [node.page_start for node in part.nodes] == [2, 23]
+        assert [e["page"] for e in sc._suppressed_entries_of(part)] == [3, 22]
+
+    def test_no_evidence_suppresses_nothing(self, tmp_path: Any) -> None:
+        ghost = docling_doc(doc_item("7 Proxmox VE Storage", level=1, page=9))
+        listing = TocListing("7", "Proxmox VE Storage", 153, 1)
+        # Span unknown: nothing can be placed inside it, so nothing is dropped.
+        part = capture_docling_headings(
+            ghost,
+            tmp_path / "book.pdf",
+            toc_listings=[listing],
+            toc_page_span=None,
+        )
+        assert part is not None
+        assert sc._META_SUPPRESSED_KEY not in part.sources
+        # Rows unknown: a text match alone is too eager (front matter shares
+        # the span's pages), so the span-only page test cannot run.
+        part = capture_docling_headings(
+            ghost,
+            tmp_path / "book.pdf",
+            toc_listings=[],
+            toc_page_span=(3, 22),
+        )
+        assert part is not None
+        assert sc._META_SUPPRESSED_KEY not in part.sources
+        # No evidence passed at all on a non-PDF path: same posture.
+        part = capture_docling_headings(ghost, tmp_path / "book.txt")
+        assert part is not None
+        assert sc._META_SUPPRESSED_KEY not in part.sources
+
+    def test_precomputed_evidence_is_reused_not_rescanned(
+        self, tmp_path: Any, monkeypatch: Any
+    ) -> None:
+        def no_rescan(*_args: object, **_kwargs: object) -> None:
+            raise AssertionError("evidence was passed; no rescan may happen")
+
+        monkeypatch.setattr(sc, "_toc_evidence", no_rescan)
+        part = capture_docling_headings(
+            docling_doc(doc_item("7 Proxmox VE Storage", level=1, page=9)),
+            tmp_path / "book.pdf",
+            toc_listings=[TocListing("7", "Proxmox VE Storage", 153, 1)],
+            toc_page_span=(3, 22),
+        )
+        assert part is None  # the ghost was suppressed without any rescan
+
+    def test_every_candidate_suppressed_reports_none(self, tmp_path: Any) -> None:
+        part = capture_docling_headings(
+            docling_doc(
+                doc_item("1 Introduction", level=1, page=3),
+                doc_item("7 Proxmox VE Storage", level=1, page=9),
+            ),
+            tmp_path / "book.pdf",
+            toc_listings=[
+                TocListing("1", "Introduction", 1, 1),
+                TocListing("7", "Proxmox VE Storage", 153, 1),
+            ],
+            toc_page_span=(3, 22),
+        )
+        assert part is None  # no part survives — the ghosts are gone either way
+
+    def test_pageless_candidates_survive_the_seam(self) -> None:
+        # A candidate without provenance cannot be placed inside a span, so
+        # suppression never drops it (node building later skips it).
+        kept, suppressed = sc._suppress_toc_page_headings(
+            [(1, "7 Proxmox VE Storage", None), (1, "Foreword", 5)],
+            [TocListing("7", "Proxmox VE Storage", 153, 1)],
+            (3, 22),
+        )
+        assert kept == [(1, "7 Proxmox VE Storage", None), (1, "Foreword", 5)]
+        assert suppressed == []
+
+    def test_listing_text_match_variants(self) -> None:
+        keys = [
+            (
+                sc._match_key("Proxmox VE Storage"),
+                sc._match_squash("Proxmox VE Storage"),
+            )
+        ]
+        assert sc._text_matches_toc_listing("7 Proxmox VE Storage", keys)
+        assert sc._text_matches_toc_listing("ProxmoxVEStorage", keys)  # glued
+        assert not sc._text_matches_toc_listing("Proxmox VE Installation", keys)
+
+    def test_e2e_capture_suppresses_ghosts_and_records_evidence(
+        self, tmp_path: Any, monkeypatch: Any
+    ) -> None:
+        # The brief's defect shape: docling reads the flattened ToC rows on
+        # pages 3-5 as numbered section headers; the real number-less
+        # chapters sit at 13/163/195. Suppression drops the ghosts, and the
+        # recovery pass (shared evidence) numbers the real chapters through
+        # the printed-page labels.
+        path = tmp_path / "pve.pdf"  # does not exist: outline/labels are faked
+        scans: list[Path] = []
+
+        def fake_text(p: Path) -> list[dict[str, Any]]:
+            scans.append(p)
+            return [
+                {
+                    "text": "1 Introduction .... 1\n2 Installing Proxmox VE .... 10",
+                    "page": 3,
+                },
+                {"text": "7 Proxmox VE Storage .... 153", "page": 4},
+                {"text": "8 Backup and Restore .... 185", "page": 5},
+            ]
+
+        monkeypatch.setattr(sc, "capture_pdf_outline", lambda p: None)
+        monkeypatch.setattr(sc, "capture_page_labels", lambda p: _pve_labels())
+        monkeypatch.setattr(sc, "extract_native_pdf_text", fake_text)
+        structure = capture_structure(
+            path,
+            docling_doc=docling_doc(
+                doc_item("1 Introduction", level=1, page=3),  # ghost
+                doc_item("2 Installing Proxmox VE", level=1, page=4),  # ghost
+                doc_item("7 Proxmox VE Storage", level=1, page=5),  # ghost
+                doc_item("Introduction", level=1, page=13),  # real chapter 1
+                doc_item("Proxmox VE Storage", level=1, page=163),  # real 7
+                doc_item("Backup and Restore", level=1, page=195),  # real 8
+                doc_item(
+                    "GNU Free Documentation License", level=2, page=215
+                ),  # trailing section
+            ),
+            file_type="pdf",
+        )
+        assert structure is not None
+        assert [(n.title, n.number) for n in structure.nodes] == [
+            ("Introduction", "1"),
+            ("Proxmox VE Storage", "7"),
+            ("Backup and Restore", "8"),
+            ("GNU Free Documentation License", None),
+        ]
+        assert not any(
+            node.page_start is not None and 3 <= node.page_start <= 5
+            for node in structure.nodes
+        )
+        assert structure.nodes[1].heading_path == "Chapter 7 — Proxmox VE Storage"
+        assert structure.sources["toc_number_recovery"] is True
+        assert sc._suppressed_entries_of(structure) == [
+            {"title": "1 Introduction", "page": 3},
+            {"title": "2 Installing Proxmox VE", "page": 4},
+            {"title": "7 Proxmox VE Storage", "page": 5},
+        ]
+        assert scans == [path]  # one text-layer scan serves both passes
+
+    def test_structure_meta_row_carries_the_suppression_json(
+        self, tmp_path: Any, monkeypatch: Any
+    ) -> None:
+        path = tmp_path / "pve.pdf"
+        monkeypatch.setattr(sc, "capture_pdf_outline", lambda p: None)
+        monkeypatch.setattr(sc, "capture_page_labels", lambda p: _pve_labels())
+        monkeypatch.setattr(
+            sc,
+            "extract_native_pdf_text",
+            lambda p: [{"text": "7 Proxmox VE Storage .... 153", "page": 5}],
+        )
+        structure = capture_structure(
+            path,
+            docling_doc=docling_doc(
+                doc_item("7 Proxmox VE Storage", level=1, page=5),  # ghost
+                doc_item("Proxmox VE Storage", level=1, page=163),  # real 7
+            ),
+            file_type="pdf",
+        )
+        assert structure is not None
+
+        store = StructureStore(db_path=str(tmp_path / "secondbrain.db"))
+        try:
+            store.save_structure(structure)
+            row = (
+                sqlite3.connect(str(tmp_path / "secondbrain.db"))
+                .execute(
+                    "SELECT sources FROM structure_meta WHERE source_file = ?",
+                    (str(path),),
+                )
+                .fetchone()
+            )
+        finally:
+            store.close()
+        assert row is not None
+        payload = json.loads(row[0])
+        assert payload["heading_hierarchy"] is True
+        # The suppressed candidates ride structure_meta verbatim as JSON.
+        assert json.loads(payload[sc._META_SUPPRESSED_KEY]) == [
+            {"page": 5, "title": "7 Proxmox VE Storage"}
+        ]
+
+    def test_merge_reattaches_combined_records(self, tmp_path: Any) -> None:
+        # Page-windowed captures each suppress their own ghosts; the merge
+        # re-attaches every part's record (the union skips the key).
+        part_a = capture_docling_headings(
+            docling_doc(
+                doc_item("1 Introduction", level=1, page=3),  # ghost
+                doc_item("Introduction", level=1, page=13),  # real chapter
+            ),
+            tmp_path / "book.pdf",
+            toc_listings=[TocListing("1", "Introduction", 1, 1)],
+            toc_page_span=(3, 4),
+        )
+        part_b = capture_docling_headings(
+            docling_doc(
+                doc_item("7 Proxmox VE Storage", level=1, page=4),  # ghost
+                doc_item("Proxmox VE Storage", level=1, page=163),  # real 7
+            ),
+            tmp_path / "book.pdf",
+            toc_listings=[TocListing("7", "Proxmox VE Storage", 153, 1)],
+            toc_page_span=(3, 4),
+        )
+        assert part_a is not None and part_b is not None
+        merged = merge_structures(part_a, part_b)
+        assert sc._suppressed_entries_of(merged) == [
+            {"title": "1 Introduction", "page": 3},
+            {"title": "7 Proxmox VE Storage", "page": 4},
+        ]
+        assert isinstance(merged.sources[sc._META_SUPPRESSED_KEY], str)
+
+
+# ---------------------------------------------------------------------------
+# Printed-page mapping + collision refusal in recovery (task 3.2, D5)
+# ---------------------------------------------------------------------------
+
+
+class TestRecoveryPrintedPageMapping:
+    """The recovery bound maps printed ToC pages through /PageLabels."""
+
+    def test_pve_chapter_seven_recovers_through_printed_page_labels(self) -> None:
+        # The brief: the ToC prints "7 Proxmox VE Storage … 153"; /PageLabels
+        # place printed 153 on physical 163, where the real chapter 7 opens.
+        merged = merge_structures(
+            headings_part([(1, "Proxmox VE Storage", 163)], final_page=194)
+        )
+        merged.page_labels = _pve_labels()
+        recovered = recover_chapter_numbers(
+            merged,
+            [TocListing("7", "Proxmox VE Storage", 153, 1)],
+            toc_page_span=(3, 22),
+        )
+        (node,) = recovered.nodes
+        assert node.number == "7"
+        assert (node.page_start, node.page_end) == (163, 194)
+        assert node.heading_path == "Chapter 7 — Proxmox VE Storage"
+        assert recovered.sources["toc_number_recovery"] is True
+
+    def test_span_ghost_stays_unnumbered_while_the_real_node_recovers(self) -> None:
+        # A number-less ghost sitting inside the ToC span never takes the
+        # row's number (headings captured from ToC-page text must not number
+        # themselves); the real node at the mapped page does.
+        merged = merge_structures(
+            headings_part(
+                [(1, "Proxmox VE Storage", 9), (1, "Proxmox VE Storage", 163)],
+                final_page=194,
+            )
+        )
+        merged.page_labels = _pve_labels()
+        recovered = recover_chapter_numbers(
+            merged,
+            [TocListing("7", "Proxmox VE Storage", 153, 1)],
+            toc_page_span=(3, 22),
+        )
+        by_page = {node.page_start: node for node in recovered.nodes}
+        assert by_page[9].number is None  # inside the ToC span
+        assert by_page[163].number == "7"
+
+
+class TestRecoveryCollisionRefusal:
+    """A recovered number is never doubled among same-scope siblings (D5)."""
+
+    def test_second_same_number_sibling_is_refused(self) -> None:
+        # Two leftover same-title ghosts with two "7 Storage" rows: the walk
+        # recovers "7" once, then refuses the second assignment rather than
+        # stamping the tree with two recovered 7s.
+        merged = merge_structures(
+            headings_part([(1, "Storage", 163), (1, "Storage", 165)], final_page=200)
+        )
+        merged.page_labels = _pve_labels()
+        recovered = recover_chapter_numbers(
+            merged,
+            [
+                TocListing("7", "Storage", 153, 1),  # -> 163: matches node 1
+                TocListing("7", "Storage", 158, 1),  # -> 168: node 2's row
+            ],
+        )
+        assert [node.number for node in recovered.nodes] == ["7", None]
+
+    def test_parsed_sibling_number_does_not_block_recovery(self) -> None:
+        # Anthology safety: a sibling's PARSED number is not this pass's
+        # doing, so it never collides — parsed and recovered "1" coexist
+        # (part restarts; the junk-desync test pins the same contract).
+        merged = merge_structures(
+            headings_part([(1, "1 Preamble", 5), (1, "Storage", 30)], final_page=60)
+        )
+        merged.page_labels = bound_labels()
+        recovered = recover_chapter_numbers(
+            merged,
+            [TocListing("1", "Storage", 26, 1)],
+        )
+        by_title = {node.title: node for node in recovered.nodes}
+        assert by_title["Preamble"].number == "1"  # parsed, untouched
+        assert by_title["Storage"].number == "1"  # recovery may coexist
