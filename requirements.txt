@@ -51,11 +51,11 @@ defusedxml==0.7.1
     #   docling-slim
 dill==0.4.1
     # via multiprocess
-doclang==0.7.3
+doclang==0.8.1
     # via docling-core
-docling==2.141.0
+docling==2.142.1
     # via -r requirements.in
-docling-core[chunking]==2.103.1
+docling-core[chunking]==2.104.0
     # via
     #   -r requirements.in
     #   docling-parse
@@ -63,8 +63,10 @@ docling-core[chunking]==2.103.1
 docling-ibm-models==4.0.3
     # via docling-slim
 docling-parse==7.22.3
-    # via docling-slim
-docling-slim[standard]==2.141.0
+    # via
+    #   -r requirements.in
+    #   docling-slim
+docling-slim[standard]==2.142.1
     # via docling
 docstring-parser==0.18.0
     # via anthropic
@@ -212,7 +214,7 @@ olefile==0.47
     # via python-oxmsg
 omegaconf==2.4.0
     # via rapidocr
-openai==3.36.0
+openai==3.42.0
     # via -r requirements.in
 opencv-python-headless==5.0.0.93
     # via rapidocr
@@ -263,7 +265,7 @@ pydantic==2.14.1
     #   pydantic-settings
 pydantic-core==2.50.1
     # via pydantic
-pydantic-settings==2.16.0
+pydantic-settings==2.16.2
     # via
     #   -r requirements.in
     #   docling-core
