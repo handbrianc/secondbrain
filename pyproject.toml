@@ -32,7 +32,7 @@ dependencies = [
     "docling>=2.142.1,<2.143.0",  # First release forcing docling-parse >=7.22.1 (space regression fixed)
     "docling-core>=2.104.0,<2.105.0",  # Core types - required by docling-parse 7.22.x
     "docling-parse>=7.22.2,<7.23.0",  # Floor excludes 7.21.x-7.22.0 word/space-loss regression (docling-parse #355/#359, fixed by PR #361)
-    "qdrant-client>=1.19.1",  # Qdrant vector DB client - production storage backend
+    "qdrant-client>=1.20.0",  # Qdrant vector DB client - production storage backend
     "httpx>=0.28.1",  # HTTP client - async support for LLM calls
     "pydantic>=2.14.0",  # Data validation - pydantic v2 compatible
     "pydantic-settings>=2.16.1",  # Settings management - pydantic v2 compatible
