@@ -25,13 +25,13 @@ dependencies = [
     "qdrant-client>=1.19.1",  # Qdrant vector DB client - production storage backend
     "httpx>=0.28.1",  # HTTP client - async support for LLM calls
     "pydantic>=2.14.0",  # Data validation - pydantic v2 compatible
-    "pydantic-settings>=2.15.0",  # Settings management - pydantic v2 compatible
+    "pydantic-settings>=2.16.1",  # Settings management - pydantic v2 compatible
     "rich>=15.0.0",  # CLI formatting - modern terminal output
     "numpy>=2.5.2",  # Numerical computing - array API compatibility
     "opentelemetry-api>=1.45.1",  # Telemetry - stable tracing API
     "opentelemetry-sdk>=1.45.1",  # Telemetry - tracing implementation
-    "openai>=3.35.1",  # LLM provider - v1 SDK required
-    "anthropic>=1.15.0",  # LLM provider - Claude models support
+    "openai>=3.37.0",  # LLM provider - v1 SDK required
+    "anthropic>=2.2.0",  # LLM provider - Claude models support
     "typing_extensions>=4.16.0",  # Type hints - backport new features
     "pyobjc-core>=12.2.2; sys_platform == 'darwin'",  # MacOS Objective-C bridge - required for ocrmac
     "pyobjc-framework-cocoa>=12.2.2; sys_platform == 'darwin'",  # MacOS Cocoa framework - required for ocrmac
@@ -89,7 +89,7 @@ precommit = [
 
 # Web frameworks and serving
 web = [
-    "fastapi>=0.150.0",  # API framework - future REST API support
+    "fastapi>=0.161.1",  # API framework - future REST API support
     "uvicorn>=0.54.0",  # ASGI server - async HTTP server
     "flask>=3.1.3",  # Web framework - alternative API option
 ]
@@ -118,7 +118,7 @@ bundled = [
     "pre-commit>=4.7.0",
     "pyinstaller>=6.22.3",
     "vulture>=2.16",
-    "pipdeptree>=4.2.8",
+    "pipdeptree>=4.2.9",
     # All docs deps
     "mkdocs>=1.6.1",
     "mkdocstrings>=1.0.8",
@@ -126,7 +126,7 @@ bundled = [
     "mkdocs-material>=9.7.7",
     "jinja2>=3.1.6",
     # All web deps
-    "fastapi>=0.150.0",
+    "fastapi>=0.161.1",
     "uvicorn>=0.54.0",
     "flask>=3.1.3",
     # Transitive/util deps (with CVE fixes)
@@ -142,11 +142,11 @@ bundled = [
     "pyopenssl>=26.4.0",
     "idna>=3.20",
     "wheel>=0.48.0",
-    "setuptools>=84.2.0",
-    "virtualenv>=21.14.11",  # GHSA-9h9j-4vrj-gf7g (fix 21.7.11), GHSA-94p9-xgh2-xp45 + GHSA-x78j-v8h9-3j2q (fix 21.7.12), GHSA-p58f-9548-mpm2 (fix 21.7.13) — was 21.7.9 via pre-commit
+    "setuptools>=84.2.1",
+    "virtualenv>=21.14.13",  # GHSA-9h9j-4vrj-gf7g (fix 21.7.11), GHSA-94p9-xgh2-xp45 + GHSA-x78j-v8h9-3j2q (fix 21.7.12), GHSA-p58f-9548-mpm2 (fix 21.7.13) — was 21.7.9 via pre-commit
     "werkzeug>=3.1.9",  # GHSA-g6x2-hccm-hh4m (was 3.1.8)
     "fpdf2>=2.8.9",
-    "reportlab>=5.0.1",
+    "reportlab>=5.1.0",
     # Bundled extras (depends on mutation)
     "mutmut>=3.8.0",
 ]
@@ -181,7 +181,7 @@ asr = [
 secondbrain = "secondbrain.cli:main"
 
 [build-system]
-requires = ["setuptools>=84.2.0", "wheel"]  # setuptools v83+ required for pyproject.toml build backend support + CVE fix
+requires = ["setuptools>=84.2.1", "wheel"]  # setuptools v83+ required for pyproject.toml build backend support + CVE fix
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
