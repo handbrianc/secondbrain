@@ -380,3 +380,36 @@ class TestStreamAbortError:
 
     def test_abort_error_is_an_exception(self) -> None:
         assert isinstance(_StreamAbortError(), Exception)
+
+
+class TestMapDigestReasoningChannel:
+    """Map digests forward reasoning on the reasoning channel only.
+
+    ``_ThinkingStream`` (cli/chat_helpers) renders these per-window groups
+    as distinct collapsed thinking elements with separating blank lines; the
+    pipeline contract it consumes is that the reasoning rides the reasoning
+    channel with empty content and the digest text itself never reaches the
+    streaming callback (the conversational-rag reasoning-display policy).
+    """
+
+    def test_map_digest_reasoning_never_rides_content_channel(self) -> None:
+        provider = _StreamedProvider(
+            stream_scripts=[
+                [("", "window one thinking"), (_PLAUSIBLE, None)],
+                [("", "window two thinking"), (_PLAUSIBLE, None)],
+            ]
+        )
+        capture = _CallbackCapture()
+        pipeline = _make_pipeline(provider, on_chunk=capture)
+        digest_one = pipeline._map_window_digest("## H", "ctx one", 1, 2)
+        digest_two = pipeline._map_window_digest("## H", "ctx two", 2, 2)
+        assert digest_one == _PLAUSIBLE
+        assert digest_two == _PLAUSIBLE
+        # Reasoning-only emissions on the reasoning channel, one group per
+        # window...
+        assert capture.calls
+        assert all(content == "" for content, _ in capture.calls)
+        assert any(reasoning == "window one thinking" for _, reasoning in capture.calls)
+        assert any(reasoning == "window two thinking" for _, reasoning in capture.calls)
+        # ...while the digest text itself never streams to the callback.
+        assert _PLAUSIBLE not in capture.text

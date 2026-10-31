@@ -7,13 +7,18 @@ import queue
 import readline
 import sys
 import threading
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import click
 from rich.console import Console
+from rich.status import Status
 
 from secondbrain.config import config
+
+if TYPE_CHECKING:
+    from secondbrain.rag.intent_parser import IntentDecision
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +31,14 @@ _OSC133 = "\x1b]133;"
 _BEL = "\x07"
 _GRAY_ON = "\x1b[38;2;128;128;128m"
 _RESET = "\x1b[0m"
+
+# The bounded map pass forwards one-line progress markers ("· window i/N")
+# on the reasoning channel ahead of each summary window's stream
+# (fix-summary-window-truncation D5).  The renderer treats such a marker as
+# its own collapsed progress line and closes the thinking element before it,
+# so consecutive windows render as distinct elements instead of gluing
+# together.
+_PROGRESS_MARKER_PREFIX = "·"
 
 
 class _ThinkingStream:
@@ -69,6 +82,15 @@ class _ThinkingStream:
         self.live_thinking = show_thinking
         self._reasoning_buffer: list[str] = []
         self._live_started = False
+        # Whether the last live reasoning write left an unterminated line
+        # (reasoning deltas carry no newlines), so a following progress
+        # marker can close the line instead of gluing onto it.
+        self._live_line_open = False
+        # Whether a reasoning element (fold block, collapsed summary, live
+        # reasoning run, or progress marker) has already been rendered, so a
+        # later reasoning emission starts with a separating blank line
+        # instead of gluing onto the previous element or onto answer text.
+        self._thinking_emitted = False
         self.wrote_content = False
 
     def buffer_reasoning(self, reasoning: str) -> None:
@@ -83,6 +105,7 @@ class _ThinkingStream:
         """
         if not self._reasoning_buffer:
             return
+        self._separate_thinking_elements()
         text = "".join(self._reasoning_buffer)
         if self._is_iterm:
             sys.stdout.write(
@@ -99,12 +122,29 @@ class _ThinkingStream:
                 f"\n\u25b8 Thinking: {len(text)} chars (collapsed)", style="#808080"
             )
         self._reasoning_buffer.clear()
+        self._thinking_emitted = True
+
+    def _separate_thinking_elements(self) -> None:
+        """Write a separating blank line before a later reasoning element.
+
+        A reasoning emission that arrives after a previous thinking element
+        has closed (a fold block, collapsed summary, live reasoning run, or
+        progress marker was already rendered) starts on a separated element,
+        so consecutive reasoning blocks -- e.g. one per map window -- stay
+        visually distinct instead of gluing together.  The first element of
+        a stream renders exactly as before.
+        """
+        if self._thinking_emitted:
+            sys.stdout.write("\n")
+            sys.stdout.flush()
 
     def _stream_thinking_live(self, reasoning: str) -> None:
         """Stream a reasoning delta live in dark gray."""
         if not self._live_started:
+            self._separate_thinking_elements()
             console.print("\u25b8 Thinking:", style="#808080")
             self._live_started = True
+            self._thinking_emitted = True
         # stdout is block-buffered on pipes and line-buffered (not delta-
         # buffered) on TTYs; reasoning arrives as many tiny deltas with no
         # newlines, so without an explicit flush it sits in the buffer until
@@ -112,6 +152,30 @@ class _ThinkingStream:
         # as one burst at the end instead of streaming live.
         sys.stdout.write(f"{_GRAY_ON}{reasoning}{_RESET}")
         sys.stdout.flush()
+        self._live_line_open = not reasoning.endswith("\n")
+
+    def _is_progress_marker(self, reasoning: str) -> bool:
+        """Return whether a reasoning delta is a one-line progress marker."""
+        return reasoning.startswith(_PROGRESS_MARKER_PREFIX) and reasoning.endswith(
+            "\n"
+        )
+
+    def _render_progress_marker(self, marker: str) -> None:
+        """Render a reasoning-channel progress marker as its own element.
+
+        Any buffered thinking element flushes first (closing the previous
+        window's element), then the marker renders as a one-line collapsed
+        element in dark gray; the reasoning that follows starts a fresh
+        element.  Markers are reasoning-channel progress -- they never touch
+        the answer/content stream.
+        """
+        self._flush_buffered_thinking()
+        if self.live_thinking and self._live_line_open:
+            sys.stdout.write("\n")
+            sys.stdout.flush()
+            self._live_line_open = False
+        console.print(marker.rstrip("\n"), style="#808080")
+        self._thinking_emitted = True
 
     def _separate_before_answer(self) -> None:
         """Terminate a live reasoning stream before the answer is written."""
@@ -119,6 +183,7 @@ class _ThinkingStream:
             sys.stdout.write("\n")
             sys.stdout.flush()
             self._live_started = False
+            self._live_line_open = False
 
     def emit(self, content: str, reasoning: str) -> None:
         """Emit one (content, reasoning) chunk from the stream queue.
@@ -128,7 +193,9 @@ class _ThinkingStream:
             reasoning: Thinking/reasoning delta (may be empty).
         """
         if reasoning:
-            if self.live_thinking:
+            if self._is_progress_marker(reasoning):
+                self._render_progress_marker(reasoning)
+            elif self.live_thinking:
                 self._stream_thinking_live(reasoning)
             else:
                 self._reasoning_buffer.append(reasoning)
@@ -149,15 +216,98 @@ class _ThinkingStream:
             sys.stdout.flush()
 
 
+class _SpinnerGate:
+    """Thread-safe pause/resume for the chat spinner's live display.
+
+    While the Rich spinner animates, any line the chat loop writes can
+    interleave with its frames.  The gate wraps the active
+    :class:`rich.status.Status`: :meth:`pause` stops the live display (the
+    refresh thread stops, the spinner line is erased) for the duration of an
+    emission, and leaving the context restarts it.  Both directions are
+    no-ops when no spinner is bound, and a resume never resurrects a spinner
+    whose context has already closed, so a first token racing a pause
+    degrades to today's interleaving rather than leaving a spinner running
+    over the answer.  Failures of an already-dead display are logged and
+    swallowed: pausing must never break or hang the chat.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._status: Status | None = None
+        self._depth = 0
+        self._paused = False
+
+    def bind(self, status: Status) -> None:
+        """Attach the gate to a spinner that is about to start."""
+        with self._lock:
+            self._status = status
+            self._depth = 0
+            self._paused = False
+
+    def unbind(self) -> None:
+        """Detach the gate; later pause/resume calls become no-ops.
+
+        Idempotently stops the display as well, in case a racing resume
+        restarted it after the spinner's own context had exited.
+        """
+        with self._lock:
+            status = self._status
+            self._status = None
+            self._depth = 0
+            self._paused = False
+        if status is not None:
+            try:
+                status.stop()
+            except Exception as exc:
+                logger.debug("Failed to stop chat spinner on unbind: %s", exc)
+
+    @contextlib.contextmanager
+    def pause(self) -> Iterator[None]:
+        """Suppress spinner frames until the enclosing write completes.
+
+        Nested pauses are refcounted: only the outermost pause stops the
+        display and only the last exit restarts it.
+        """
+        with self._lock:
+            self._depth += 1
+            status = self._status
+            suppress = self._depth == 1 and status is not None and not self._paused
+            if suppress:
+                self._paused = True
+        if suppress and status is not None:
+            try:
+                status.stop()
+            except Exception as exc:
+                logger.debug("Failed to pause chat spinner: %s", exc)
+        try:
+            yield
+        finally:
+            with self._lock:
+                self._depth = max(self._depth - 1, 0)
+                status = self._status
+                restore = self._depth == 0 and self._paused and status is not None
+                if restore:
+                    self._paused = False
+            if restore and status is not None:
+                try:
+                    status.start()
+                except Exception as exc:
+                    logger.debug("Failed to resume chat spinner: %s", exc)
+
+
 def _wait_for_first_token(
     chunk_queue: queue.Queue[tuple[str, str]],
     done_event: threading.Event,
+    gate: _SpinnerGate | None = None,
 ) -> tuple[str, str] | None:
     """Block under the spinner until the first streamed token arrives.
 
     Args:
         chunk_queue: Queue fed by the background chat thread.
         done_event: Set by the background thread when it terminates.
+        gate: Spinner pause gate bound to the status for as long as the
+            spinner is active, so the chat loop can suppress frames around
+            its emissions; unbound (no-op) once the spinner lifts.
 
     Returns
     -------
@@ -165,21 +315,28 @@ def _wait_for_first_token(
         finished without streaming anything.
     """
     first_token: tuple[str, str] | None = None
-    with console.status("[bold cyan]Thinking...", spinner="dots"):
-        while first_token is None:
-            try:
-                token = chunk_queue.get(timeout=0.1)
-            except queue.Empty:
-                if done_event.is_set():
-                    break
-                continue
-            # Any token (including a reasoning-only one) lifts the spinner so
-            # a thinking-model chat is never stuck on "Thinking..." while it
-            # reasons in the background.  The token is replayed through
-            # ``stream.emit()`` below -- which buffers collapsed reasoning --
-            # so it must not be pre-buffered here: that would count the same
-            # delta twice in the collapsed fold.
-            first_token = token
+    status = console.status("[bold cyan]Thinking...", spinner="dots")
+    if gate is not None:
+        gate.bind(status)
+    try:
+        with status:
+            while first_token is None:
+                try:
+                    token = chunk_queue.get(timeout=0.1)
+                except queue.Empty:
+                    if done_event.is_set():
+                        break
+                    continue
+                # Any token (including a reasoning-only one) lifts the spinner so
+                # a thinking-model chat is never stuck on "Thinking..." while it
+                # reasons in the background.  The token is replayed through
+                # ``stream.emit()`` below -- which buffers collapsed reasoning --
+                # so it must not be pre-buffered here: that would count the same
+                # delta twice in the collapsed fold.
+                first_token = token
+    finally:
+        if gate is not None:
+            gate.unbind()
     return first_token
 
 
@@ -187,6 +344,7 @@ def _drain_chunk_queue(
     chunk_queue: queue.Queue[tuple[str, str]],
     done_event: threading.Event,
     stream: _ThinkingStream,
+    gate: _SpinnerGate | None = None,
 ) -> None:
     """Stream remaining (content, reasoning) chunks until the chat is done.
 
@@ -194,10 +352,20 @@ def _drain_chunk_queue(
         chunk_queue: Queue fed by the background chat thread.
         done_event: Set by the background thread when it terminates.
         stream: Renderer used to emit each chunk.
+        gate: Spinner pause gate taken around each emission so spinner
+            frames never interleave with written lines (a no-op when the
+            spinner is not active).
     """
     while not done_event.is_set() or not chunk_queue.empty():
-        with contextlib.suppress(queue.Empty):
-            stream.emit(*chunk_queue.get(timeout=0.1))
+        try:
+            chunk = chunk_queue.get(timeout=0.1)
+        except queue.Empty:
+            continue
+        if gate is None:
+            stream.emit(*chunk)
+        else:
+            with gate.pause():
+                stream.emit(*chunk)
 
 
 def _run_chat_with_spinner(
@@ -227,6 +395,7 @@ def _run_chat_with_spinner(
     """
     chunk_queue: queue.Queue[tuple[str, str]] = queue.Queue()
     done_event = threading.Event()
+    gate = _SpinnerGate()
 
     def on_chunk(content: str, reasoning: str | None) -> None:
         if content or reasoning:
@@ -250,10 +419,11 @@ def _run_chat_with_spinner(
     t.start()
 
     stream = _ThinkingStream(show_thinking=show_thinking)
-    first_token = _wait_for_first_token(chunk_queue, done_event)
+    first_token = _wait_for_first_token(chunk_queue, done_event, gate)
     if first_token is not None:
-        stream.emit(*first_token)
-    _drain_chunk_queue(chunk_queue, done_event, stream)
+        with gate.pause():
+            stream.emit(*first_token)
+    _drain_chunk_queue(chunk_queue, done_event, stream, gate)
     stream.finish()
 
     t.join()
@@ -296,6 +466,25 @@ def _print_chat_sources(result: dict[str, Any]) -> None:
         )
 
 
+def _intent_label(decision: IntentDecision) -> str:
+    """Render the "Detected intent" progress label for a parsed decision.
+
+    Broad-coverage decisions append the parsed chapter target ("broad
+    coverage · chapter 15") so live progress shows what the coverage run
+    targets; other intents and target-less decisions render the bare label
+    as before.
+    """
+    from secondbrain.rag.intent_parser import broad_coverage_target_label
+
+    if decision.intent.name == "UNKNOWN":
+        return "general query"
+    label = decision.intent.name.lower().replace("_", " ")
+    target = broad_coverage_target_label(decision)
+    if target:
+        label = f"{label} · {target}"
+    return label
+
+
 def _single_turn_chat(
     query: str,
     session: str | None,
@@ -331,7 +520,7 @@ def _single_turn_chat(
     intent_parser = StructuralIntentParser(cfg)
     intent_result = intent_parser.parse(query)
     click.echo(
-        f"\u25b6 Detected intent: {'general query' if intent_result.intent.name == 'UNKNOWN' else intent_result.intent.name.lower().replace('_', ' ')}",
+        f"\u25b6 Detected intent: {_intent_label(intent_result)}",
         err=True,
     )
 
@@ -550,7 +739,7 @@ def _interactive_chat(
 
             intent_result = intent_parser.parse(user_input)
             click.echo(
-                f"\u25b6 Detected intent: {'general query' if intent_result.intent.name == 'UNKNOWN' else intent_result.intent.name.lower().replace('_', ' ')}",
+                f"\u25b6 Detected intent: {_intent_label(intent_result)}",
                 err=True,
             )
 
