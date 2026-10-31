@@ -38,6 +38,7 @@ from openai import (
 
 from secondbrain.embedding.interfaces import EmbeddingProvider
 from secondbrain.exceptions import ServiceUnavailableError
+from secondbrain.logging import timed_external_call
 from secondbrain.utils.circuit_breaker import (
     CircuitBreaker,
     CircuitBreakerConfig,
@@ -213,9 +214,10 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
                 kwargs["dimensions"] = self._dimensions
 
             with _traced_embedding_operation("generate", text_length=len(text)) as span:
-                response = self._call_through_breaker(
-                    lambda: self._client.embeddings.create(**kwargs)
-                )
+                with timed_external_call("embedding.generate", self._model):
+                    response = self._call_through_breaker(
+                        lambda: self._client.embeddings.create(**kwargs)
+                    )
                 embedding: list[float] = response.data[0].embedding
                 if span is not None:
                     span.set_attribute("embedding.dimensions", len(embedding))
@@ -290,9 +292,10 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
             with _traced_embedding_operation(
                 "generate_batch", batch_size=len(valid_texts)
             ) as span:
-                response = self._call_through_breaker(
-                    lambda: self._client.embeddings.create(**kwargs)
-                )
+                with timed_external_call("embedding.generate_batch", self._model):
+                    response = self._call_through_breaker(
+                        lambda: self._client.embeddings.create(**kwargs)
+                    )
 
                 # Sort by index to maintain input order (API may return in any order)
                 embeddings_sorted = sorted(response.data, key=lambda x: x.index)
@@ -359,9 +362,10 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
             with _traced_embedding_operation(
                 "generate_async", text_length=len(text)
             ) as span:
-                response = await self._call_through_breaker_async(
-                    lambda: self._async_client.embeddings.create(**kwargs)
-                )
+                with timed_external_call("embedding.generate_async", self._model):
+                    response = await self._call_through_breaker_async(
+                        lambda: self._async_client.embeddings.create(**kwargs)
+                    )
                 embedding: list[float] = response.data[0].embedding
                 if span is not None:
                     span.set_attribute("embedding.dimensions", len(embedding))
@@ -433,9 +437,10 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
             with _traced_embedding_operation(
                 "generate_batch_async", batch_size=len(valid_texts)
             ) as span:
-                response = await self._call_through_breaker_async(
-                    lambda: self._async_client.embeddings.create(**kwargs)
-                )
+                with timed_external_call("embedding.generate_batch_async", self._model):
+                    response = await self._call_through_breaker_async(
+                        lambda: self._async_client.embeddings.create(**kwargs)
+                    )
                 embeddings_sorted = sorted(response.data, key=lambda x: x.index)
                 embeddings = [emb.embedding for emb in embeddings_sorted]
                 if span is not None and embeddings:

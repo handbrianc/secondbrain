@@ -28,6 +28,7 @@ from qdrant_client.http import models
 
 from secondbrain.config import config
 from secondbrain.constants import MAX_LIST_LIMIT
+from secondbrain.logging import timed_external_call
 from secondbrain.types import (
     ChunkInfo,
     SearchResult,
@@ -459,7 +460,10 @@ class QdrantVectorStorage:
         """Search for similar chunks; apply a payload filter when given."""
         self._ensure_collection()
         query_filter = self._build_search_filter(source_filter, file_type_filter)
-        with _traced_qdrant_operation(self.collection_name, "search", top_k=top_k):
+        with (
+            _traced_qdrant_operation(self.collection_name, "search", top_k=top_k),
+            timed_external_call("qdrant.search", self.collection_name),
+        ):
             resp = self._get_client().query_points(
                 collection_name=self.collection_name,
                 query=embedding,
@@ -518,7 +522,10 @@ class QdrantVectorStorage:
         """Upsert a single point; return its id."""
         self._ensure_collection()
         point = self._point_from_document(document)
-        with _traced_qdrant_operation(self.collection_name, "upsert"):
+        with (
+            _traced_qdrant_operation(self.collection_name, "upsert"),
+            timed_external_call("qdrant.upsert", self.collection_name),
+        ):
             self._get_client().upsert(
                 collection_name=self.collection_name,
                 points=[point],
@@ -531,8 +538,11 @@ class QdrantVectorStorage:
             return 0
         self._ensure_collection()
         points = [self._point_from_document(doc) for doc in documents]
-        with _traced_qdrant_operation(
-            self.collection_name, "upsert", points=len(documents)
+        with (
+            _traced_qdrant_operation(
+                self.collection_name, "upsert", points=len(documents)
+            ),
+            timed_external_call("qdrant.upsert", self.collection_name),
         ):
             self._get_client().upsert(
                 collection_name=self.collection_name,

@@ -61,11 +61,23 @@ NC='\033[0m' # No Color
 # and Windows soft locks; Safety uses standard FileLock, and SecondBrain
 # does not import filelock. The security job runs on Linux. Mirrors the
 # documented ignore in pyproject.toml [tool.safety]; revisit when Safety
-# permits filelock>=4.2.1. Other filelock advisories remain blocking.
+# permits filelock>=4.2.1.
+#
+# 2026-10-31 pip-audit advisory cluster on the same filelock 3.32.x (the
+# audit DB caught up to the October Anthropic-OSS-Scanner reports): same
+# acceptance. Nine fixed in 4.2.1; CVE-2026-112936 fixed in 4.0.9 - still
+# >=4.0, still unresolvable under safety's filelock<4.0 floor. Other
+# filelock advisories remain blocking.
 PIP_AUDIT_IGNORE_ARGS=(
     --ignore-vuln PYSEC-2026-3740 --ignore-vuln CVE-2025-69872
     --ignore-vuln CVE-2026-112940 --ignore-vuln CVE-2026-112913
     --ignore-vuln CVE-2026-112907
+    # filelock 2026-10-31 advisory cluster (fixed 4.2.1 / 4.0.9, safety-blocked)
+    --ignore-vuln CVE-2026-112908 --ignore-vuln CVE-2026-112909
+    --ignore-vuln CVE-2026-112910 --ignore-vuln CVE-2026-112911
+    --ignore-vuln CVE-2026-112912 --ignore-vuln CVE-2026-112915
+    --ignore-vuln CVE-2026-112935 --ignore-vuln CVE-2026-112936
+    --ignore-vuln CVE-2026-112938 --ignore-vuln CVE-2026-112939
     # pillow 12.3.0 2026-10 advisory cluster (fixed 13.0.0, upstream-blocked)
     --ignore-vuln CVE-2026-112390 --ignore-vuln CVE-2026-112391
     --ignore-vuln CVE-2026-112392 --ignore-vuln CVE-2026-112393
@@ -79,6 +91,22 @@ PIP_AUDIT_IGNORE_ARGS=(
     --ignore-vuln CVE-2026-112895 --ignore-vuln CVE-2026-112896
     --ignore-vuln CVE-2026-112897 --ignore-vuln CVE-2026-112899
     --ignore-vuln CVE-2026-112900 --ignore-vuln CVE-2026-112901
+    # pillow 12.3.0 2026-10-31 cluster (fixed 13.0.0, upstream-blocked as above)
+    --ignore-vuln CVE-2026-96638 --ignore-vuln CVE-2026-96640
+    --ignore-vuln CVE-2026-96778 --ignore-vuln GHSA-78g4-xqwv-q3g8
+    --ignore-vuln PYSEC-2026-4327 --ignore-vuln PYSEC-2026-4330
+    --ignore-vuln PYSEC-2026-4332 --ignore-vuln PYSEC-2026-4336
+    --ignore-vuln PYSEC-2026-4337 --ignore-vuln PYSEC-2026-4338
+    --ignore-vuln PYSEC-2026-4339 --ignore-vuln PYSEC-2026-4340
+    --ignore-vuln PYSEC-2026-4341 --ignore-vuln PYSEC-2026-4342
+    --ignore-vuln PYSEC-2026-4343
+    # authlib 1.7.x (CI pin): fixed 1.9.0/1.9.1, incompatible with
+    # Safety 3.8.1's httpx2 transport; dev-only transitive, no src imports
+    --ignore-vuln CVE-2026-116672 --ignore-vuln CVE-2026-96760
+    --ignore-vuln PYSEC-2026-4355 --ignore-vuln PYSEC-2026-4356
+    --ignore-vuln PYSEC-2026-4357 --ignore-vuln PYSEC-2026-4358
+    --ignore-vuln PYSEC-2026-4359 --ignore-vuln PYSEC-2026-4360
+    --ignore-vuln PYSEC-2026-4354
 )
 
 # Check if virtual environment is activated

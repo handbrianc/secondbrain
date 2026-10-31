@@ -20,7 +20,7 @@ from secondbrain.document.chunker import (
 )
 from secondbrain.document.fast_text import extract_printed_page, resolve_printed_pages
 from secondbrain.document.ingestor._constants import get_file_type
-from secondbrain.document.ingestor._sync import DocumentIngestor
+from secondbrain.document.ingestor._sync import DocumentIngestor, _audio_stage_cm
 from secondbrain.document.structure_capture import capture_structure
 from secondbrain.exceptions import DocumentExtractionError
 from secondbrain.utils.tracing import trace_operation
@@ -322,65 +322,66 @@ class AsyncDocumentIngestor(DocumentIngestor):
             if span is not None:
                 span.set_attribute("ingest.segments_count", len(segments))
 
-            seen_hashes = set()
-            all_chunks: list[dict[str, Any]] = []
+            with _audio_stage_cm("chunk", file_path):
+                seen_hashes = set()
+                all_chunks: list[dict[str, Any]] = []
 
-            stream_seg_counter = 0
-            stream_total_segs = len(segments)
+                stream_seg_counter = 0
+                stream_total_segs = len(segments)
 
-            for i, segment in enumerate(segments):
-                cleaned = segment["text"].strip()
-                if not cleaned:
-                    continue
+                for i, segment in enumerate(segments):
+                    cleaned = segment["text"].strip()
+                    if not cleaned:
+                        continue
 
-                normalized = " ".join(cleaned.lower().split())
-                text_hash = hashlib.sha256(normalized.encode()).hexdigest()
+                    normalized = " ".join(cleaned.lower().split())
+                    text_hash = hashlib.sha256(normalized.encode()).hexdigest()
 
-                if text_hash in seen_hashes:
-                    continue
-                seen_hashes.add(text_hash)
+                    if text_hash in seen_hashes:
+                        continue
+                    seen_hashes.add(text_hash)
 
-                # Already stored (re-ingest skip): drop before classification
-                # so neither the embedder nor the store sees it again.
-                if skip_hashes and text_hash in skip_hashes:
-                    continue
+                    # Already stored (re-ingest skip): drop before classification
+                    # so neither the embedder nor the store sees it again.
+                    if skip_hashes and text_hash in skip_hashes:
+                        continue
 
-                is_likely_title_raw = (
-                    len(cleaned) < 100
-                    and not any(p in cleaned for p in [".", ":", "-", "—"])
-                    and not cleaned.strip().endswith(".")
-                )
-
-                labeled_role = label_to_element_type(segment.get("label"))
-                chunk_role = (
-                    labeled_role
-                    if labeled_role is not None
-                    else classify_chunk_role(
-                        cleaned,
-                        stream_seg_counter,
-                        stream_total_segs,
-                        is_likely_title_raw,
+                    is_likely_title_raw = (
+                        len(cleaned) < 100
+                        and not any(p in cleaned for p in [".", ":", "-", "—"])
+                        and not cleaned.strip().endswith(".")
                     )
-                )
 
-                all_chunks.append(
-                    {
-                        "file_path": file_path,
-                        "original_index": i,
-                        "text": cleaned,
-                        "page": segment["page"],
-                        "text_hash": text_hash,
-                        "chunk_role": chunk_role,
-                        "element_type": chunk_role,
-                        **{
-                            key: segment[key]
-                            for key in ("t_start", "t_end", "table_degenerate")
-                            if key in segment
-                        },
-                    }
-                )
+                    labeled_role = label_to_element_type(segment.get("label"))
+                    chunk_role = (
+                        labeled_role
+                        if labeled_role is not None
+                        else classify_chunk_role(
+                            cleaned,
+                            stream_seg_counter,
+                            stream_total_segs,
+                            is_likely_title_raw,
+                        )
+                    )
 
-                stream_seg_counter += 1
+                    all_chunks.append(
+                        {
+                            "file_path": file_path,
+                            "original_index": i,
+                            "text": cleaned,
+                            "page": segment["page"],
+                            "text_hash": text_hash,
+                            "chunk_role": chunk_role,
+                            "element_type": chunk_role,
+                            **{
+                                key: segment[key]
+                                for key in ("t_start", "t_end", "table_degenerate")
+                                if key in segment
+                            },
+                        }
+                    )
+
+                    stream_seg_counter += 1
 
         docs_stored = 0
         for start in range(0, len(all_chunks), batch_size):
@@ -484,7 +485,10 @@ class AsyncDocumentIngestor(DocumentIngestor):
         with trace_operation("ingest_worker_embed") as span:
             if span is not None:
                 span.set_attribute("ingest.chunks_count", len(chunks))
-            chunk_to_embedding = await self._embed_chunks_async(chunks, embedding_gen)
+            with _audio_stage_cm("embed", file_path):
+                chunk_to_embedding = await self._embed_chunks_async(
+                    chunks, embedding_gen
+                )
 
         docs_to_store: list[dict[str, Any]] = []
         seen_doc_keys = set()
@@ -570,17 +574,19 @@ class AsyncDocumentIngestor(DocumentIngestor):
         with trace_operation("ingest_worker_chunk") as span:
             if span is not None:
                 span.set_attribute("ingest.segments_count", len(segments))
-            all_chunks = self._deduplicate_and_chunk_segments(file_path, segments)
-            if skip_hashes:
-                all_chunks = [
-                    c for c in all_chunks if c["text_hash"] not in skip_hashes
-                ]
+            with _audio_stage_cm("chunk", file_path):
+                all_chunks = self._deduplicate_and_chunk_segments(file_path, segments)
+                if skip_hashes:
+                    all_chunks = [
+                        c for c in all_chunks if c["text_hash"] not in skip_hashes
+                    ]
         with trace_operation("ingest_worker_embed") as span:
             if span is not None:
                 span.set_attribute("ingest.chunks_count", len(all_chunks))
-            chunk_to_embedding = await self._generate_embeddings_with_cache_async(
-                all_chunks, embedding_gen
-            )
+            with _audio_stage_cm("embed", file_path):
+                chunk_to_embedding = await self._generate_embeddings_with_cache_async(
+                    all_chunks, embedding_gen
+                )
         return self._build_documents_from_chunks(all_chunks, chunk_to_embedding)
 
     async def _generate_embeddings_with_cache_async(
@@ -737,8 +743,10 @@ class AsyncDocumentIngestor(DocumentIngestor):
             # Audio topic segmentation (design §5): fills audio segment
             # titles in the parent process after the tree is persisted.
             # Runs ahead of the outcome branches so a fully-skipped
-            # re-ingest also gains titles; never raises.
-            await self._segment_audio_topics_async(file_path, structure, segments)
+            # re-ingest also gains titles; never raises. Stage-timed for
+            # audio files (design D7); the call never raises.
+            with _audio_stage_cm("audio.topic_segmentation", file_path):
+                await self._segment_audio_topics_async(file_path, structure, segments)
 
             # Re-ingest skip detection, mirroring the sync pool worker
             # (``processor._extract_chunk_and_embed_file``): with skip_existing

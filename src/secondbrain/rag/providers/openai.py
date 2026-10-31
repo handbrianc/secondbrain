@@ -28,7 +28,7 @@ from openai import (
 )
 
 from secondbrain.exceptions import ServiceUnavailableError
-from secondbrain.logging import get_logger
+from secondbrain.logging import get_logger, timed_external_call
 
 from ..interfaces import LocalLLMProvider, StreamingCallback
 
@@ -375,14 +375,15 @@ class OpenAILLMProvider(LocalLLMProvider):
             temp = temperature if temperature is not None else self._temperature
             tokens = max_tokens if max_tokens is not None else self._max_tokens
 
-            response = self._client.chat.completions.create(
-                model=self._model,
-                messages=messages,
-                temperature=temp,
-                top_p=self._top_p,
-                max_tokens=tokens,
-                extra_body=self._extra_body(),
-            )
+            with timed_external_call("llm.generate", self._model):
+                response = self._client.chat.completions.create(
+                    model=self._model,
+                    messages=messages,
+                    temperature=temp,
+                    top_p=self._top_p,
+                    max_tokens=tokens,
+                    extra_body=self._extra_body(),
+                )
 
             _log_token_usage(
                 "completion", getattr(response, "usage", None), self._model
@@ -426,14 +427,15 @@ class OpenAILLMProvider(LocalLLMProvider):
             temp = temperature if temperature is not None else self._temperature
             tokens = max_tokens if max_tokens is not None else self._max_tokens
 
-            response = await self._async_client.chat.completions.create(
-                model=self._model,
-                messages=messages,
-                temperature=temp,
-                top_p=self._top_p,
-                max_tokens=tokens,
-                extra_body=self._extra_body(),
-            )
+            with timed_external_call("llm.generate_async", self._model):
+                response = await self._async_client.chat.completions.create(
+                    model=self._model,
+                    messages=messages,
+                    temperature=temp,
+                    top_p=self._top_p,
+                    max_tokens=tokens,
+                    extra_body=self._extra_body(),
+                )
 
             _log_token_usage(
                 "completion", getattr(response, "usage", None), self._model
@@ -524,27 +526,28 @@ class OpenAILLMProvider(LocalLLMProvider):
             temp = temperature if temperature is not None else self._temperature
             tokens = max_tokens if max_tokens is not None else self._max_tokens
 
-            response = self._client.chat.completions.create(
-                model=self._model,
-                messages=messages,
-                temperature=temp,
-                top_p=self._top_p,
-                max_tokens=tokens,
-                stream=True,
-                extra_body=self._extra_body(),
-            )
+            with timed_external_call("llm.stream_chat", self._model):
+                response = self._client.chat.completions.create(
+                    model=self._model,
+                    messages=messages,
+                    temperature=temp,
+                    top_p=self._top_p,
+                    max_tokens=tokens,
+                    stream=True,
+                    extra_body=self._extra_body(),
+                )
 
-            state = _StreamAccumulator(max_answer_chars=self._max_answer_chars)
-            stream_usage: object = None
-            for chunk in response:
-                # Some OpenAI-compatible servers append a usage-bearing final
-                # chunk even without ``stream_options``; capture it when present
-                # so streaming responses log token usage too.
-                chunk_usage = getattr(chunk, "usage", None)
-                if chunk_usage is not None:
-                    stream_usage = chunk_usage
-                if state.consume(chunk, on_chunk):
-                    break
+                state = _StreamAccumulator(max_answer_chars=self._max_answer_chars)
+                stream_usage: object = None
+                for chunk in response:
+                    # Some OpenAI-compatible servers append a usage-bearing final
+                    # chunk even without ``stream_options``; capture it when present
+                    # so streaming responses log token usage too.
+                    chunk_usage = getattr(chunk, "usage", None)
+                    if chunk_usage is not None:
+                        stream_usage = chunk_usage
+                    if state.consume(chunk, on_chunk):
+                        break
 
             answer = state.resolve()
             _log_token_usage("streaming completion", stream_usage, self._model)

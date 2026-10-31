@@ -7,10 +7,14 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from secondbrain.cli.chat_helpers import (
+    _intent_label,
     _interactive_chat,
     _run_chat_with_spinner,
     _single_turn_chat,
+    _SpinnerGate,
+    _ThinkingStream,
 )
+from secondbrain.rag.intent_parser import QueryIntent, StructuralIntentParser
 
 
 class _FakeTty:
@@ -389,3 +393,269 @@ class TestInteractiveChat:
                 )
         out = capsys.readouterr().out
         assert "Goodbye!" in out
+
+
+class TestThinkingStreamSeparators:
+    """Reasoning elements separate from each other; the answer boundary holds.
+
+    fix-summary-window-truncation F2: a reasoning emission arriving after a
+    previous thinking element has closed gets a preceding blank-line
+    separator, consecutive map-window groups (progress marker + thinking)
+    render as distinct collapsed elements, and reasoning never glues into
+    the answer stream.
+    """
+
+    def test_consecutive_collapsed_elements_get_separator(self, monkeypatch, capsys):
+        monkeypatch.setenv("SECONDBRAIN_SHOW_THINKING", "0")
+        pipeline = _FakePipeline(
+            [
+                ("", "· window 1/50\n"),
+                ("", "window one thinking"),
+                ("", "· window 2/50\n"),
+                ("", "the second window thinks here"),
+                ("Answer A", None),
+                ("Answer B", None),
+            ]
+        )
+        _run_spinner(pipeline)
+        out = capsys.readouterr().out
+        # One collapsed element per reasoning group...
+        assert out.count("▸ Thinking:") == 2
+        assert "▸ Thinking: 19 chars (collapsed)" in out
+        assert "▸ Thinking: 29 chars (collapsed)" in out
+        # ...separated from the closed previous element by a blank line...
+        assert "· window 1/50\n\n\n▸ Thinking: 19 chars (collapsed)" in out
+        assert "· window 2/50\n\n\n▸ Thinking: 29 chars (collapsed)" in out
+        # ...with the progress markers as their own collapsed lines.
+        assert "· window 1/50" in out
+        assert "· window 2/50" in out
+        assert "(collapsed)\n· window 2/50" in out
+        # No reasoning glues into the answer stream.
+        assert "window one thinking" not in out
+        assert "the second window thinks here" not in out
+        assert "Answer A" in out
+        assert "Answer B" in out
+
+    def test_first_thinking_element_renders_without_separator(
+        self, monkeypatch, capsys
+    ):
+        monkeypatch.setenv("SECONDBRAIN_SHOW_THINKING", "0")
+        pipeline = _FakePipeline([("", "only thinking"), ("Answer", None)])
+        _run_spinner(pipeline)
+        out = capsys.readouterr().out
+        # The first element renders exactly as before the change.
+        assert out.startswith("\n▸ Thinking: 13 chars (collapsed)")
+        assert "\n\n\n▸" not in out
+        assert "Answer" in out
+
+    def test_stream_direct_emits_separate_elements(self, monkeypatch, capsys):
+        """Drive the renderer directly: a marker closes the open element."""
+        monkeypatch.setenv("SECONDBRAIN_SHOW_THINKING", "0")
+        stream = _ThinkingStream()
+        stream.emit("", "· window 1/50\n")
+        stream.emit("", "window one thinking")
+        stream.emit("", "· window 2/50\n")
+        stream.emit("", "window two thinking")
+        stream.emit("Answer", "")
+        stream.finish()
+        out = capsys.readouterr().out
+        assert out.count("▸ Thinking:") == 2
+        # Each marker closes the previous window's thinking element, which
+        # then renders blank-line separated before the next marker.
+        assert "· window 1/50\n\n\n▸ Thinking: 19 chars (collapsed)" in out
+        assert "· window 2/50\n\n\n▸ Thinking: 19 chars (collapsed)" in out
+        # The answer starts separated after the last element.
+        assert "(collapsed)\nAnswer" in out
+        assert "window one thinking" not in out
+        assert "window two thinking" not in out
+
+    def test_live_reasoning_elements_get_separator(self, monkeypatch, capsys):
+        monkeypatch.setenv("SECONDBRAIN_SHOW_THINKING", "1")
+        pipeline = _FakePipeline(
+            [
+                ("", "first run"),
+                ("Answer", None),
+                ("", "second run"),
+                ("More", None),
+            ]
+        )
+        _run_spinner(pipeline)
+        out = capsys.readouterr().out
+        assert out.count("▸ Thinking:") == 2
+        # The second live run starts separated from the closed first one
+        # instead of gluing onto the answer text.
+        assert "\nAnswer\n▸ Thinking:" in out
+        assert "More" in out
+
+    def test_answer_boundary_fires_exactly_once(self, monkeypatch, capsys):
+        monkeypatch.setenv("SECONDBRAIN_SHOW_THINKING", "1")
+        pipeline = _FakePipeline(
+            [
+                ("", "thought one"),
+                ("", "thought two"),
+                ("A", None),
+                ("B", None),
+                ("C", None),
+            ]
+        )
+        _run_spinner(pipeline)
+        out = capsys.readouterr().out
+        # Banner newline, the single answer-boundary newline, and the
+        # trailing newline -- the boundary never fires per content chunk.
+        assert out.count("\n") == 3
+        assert "▸ Thinking:\n" in out
+        assert "\nABC\n" in out
+
+    def test_progress_marker_renders_in_live_mode(self, monkeypatch, capsys):
+        monkeypatch.setenv("SECONDBRAIN_SHOW_THINKING", "1")
+        pipeline = _FakePipeline(
+            [("", "· window 1/50\n"), ("", "window thinking"), ("Answer", None)]
+        )
+        _run_spinner(pipeline)
+        out = capsys.readouterr().out
+        assert "· window 1/50" in out
+        assert "window thinking" in out
+        assert "Answer" in out
+        # marker line, separator, banner, answer boundary, trailing newline
+        assert out.count("\n") == 5
+        assert "· window 1/50\n\n▸ Thinking:" in out
+
+
+class _FakeStatus:
+    """Spinner double recording stop/start transitions."""
+
+    def __init__(self):
+        self.started = False
+        self.stop_calls = 0
+        self.start_calls = 0
+
+    def stop(self):
+        self.stop_calls += 1
+        self.started = False
+
+    def start(self):
+        self.start_calls += 1
+        self.started = True
+
+
+class TestSpinnerGate:
+    """Thread-safe spinner pause/resume (fix 3.2).
+
+    With an active spinner the pause suppresses frames and the resume
+    restores them; without one both are no-ops -- no exceptions, no
+    deadlock, and no resurrected spinner after the lift.
+    """
+
+    def test_pause_suppresses_and_resume_restores_active_spinner(self):
+        status = _FakeStatus()
+        gate = _SpinnerGate()
+        gate.bind(status)
+        with gate.pause():
+            # Frames are suppressed while the write runs...
+            assert status.stop_calls == 1
+            assert not status.started
+        # ...and restored afterwards, exactly once.
+        assert status.started
+        assert status.start_calls == 1
+        assert status.stop_calls == 1
+
+    def test_nested_pauses_refcount_single_stop_start(self):
+        status = _FakeStatus()
+        gate = _SpinnerGate()
+        gate.bind(status)
+        with gate.pause():
+            with gate.pause():
+                assert status.stop_calls == 1
+            # The inner resume must not resurrect while the outer pause holds.
+            assert not status.started
+        assert status.started
+        assert status.start_calls == 1
+
+    def test_pause_is_noop_without_active_spinner(self):
+        gate = _SpinnerGate()
+        with gate.pause():
+            pass
+
+    def test_pause_is_noop_after_unbind(self):
+        status = _FakeStatus()
+        gate = _SpinnerGate()
+        gate.bind(status)
+        gate.unbind()
+        stops = status.stop_calls
+        with gate.pause():
+            pass
+        assert status.stop_calls == stops
+        assert status.start_calls == 0
+
+    def test_unbind_during_pause_never_resurrects_spinner(self):
+        status = _FakeStatus()
+        gate = _SpinnerGate()
+        gate.bind(status)
+        with gate.pause():
+            # The spinner lifts (unbind) while a pause is still held...
+            gate.unbind()
+            assert not status.started
+        # ...so the late resume must not restart it over the answer.
+        assert status.start_calls == 0
+        assert not status.started
+
+    def test_pause_swallows_display_errors(self):
+        class _BrokenStatus:
+            def stop(self):
+                raise RuntimeError("dead display")
+
+            def start(self):
+                raise RuntimeError("dead display")
+
+        gate = _SpinnerGate()
+        gate.bind(_BrokenStatus())
+        # stop/resume failures are logged and swallowed: no exception, no
+        # deadlock, the chat write completes either way.
+        with gate.pause():
+            pass
+
+    def test_gate_wraps_real_rich_status(self, capsys):
+        from rich.console import Console
+
+        console = Console()
+        status = console.status("[bold cyan]Thinking...", spinner="dots")
+        gate = _SpinnerGate()
+        gate.bind(status)
+        with status:
+            assert status._live.is_started
+            with gate.pause():
+                assert not status._live.is_started
+            assert status._live.is_started
+        assert not status._live.is_started
+
+
+class TestIntentLabel:
+    """Intent progress label carries the parsed target (fix 3.3)."""
+
+    def test_broad_coverage_label_with_chapter_target(self):
+        decision = StructuralIntentParser().parse("tell me everything about chapter 15")
+        assert decision.intent is QueryIntent.BROAD_COVERAGE
+        assert decision.target == "15"
+        assert _intent_label(decision) == "broad coverage · chapter 15"
+
+    def test_broad_coverage_label_without_target(self):
+        decision = StructuralIntentParser().parse("tell me everything about proxmox")
+        assert decision.intent is QueryIntent.BROAD_COVERAGE
+        assert decision.target is None
+        assert _intent_label(decision) == "broad coverage"
+
+    def test_unknown_intent_renders_general_query(self):
+        decision = StructuralIntentParser().parse("what is the capital of france")
+        assert decision.intent is QueryIntent.UNKNOWN
+        assert _intent_label(decision) == "general query"
+
+    def test_section_enumerate_does_not_inherit_target_label(self):
+        decision = StructuralIntentParser().parse("list sections in chapter 4.5.6")
+        # The parsed section target must not leak into a non-coverage label.
+        assert decision.intent is QueryIntent.SECTION_ENUMERATE
+        assert _intent_label(decision) == "section enumerate"
+
+    def test_chapter_enumerate_label_unchanged(self):
+        decision = StructuralIntentParser().parse("list all chapters")
+        assert decision.intent is QueryIntent.CHAPTER_ENUMERATE
+        assert _intent_label(decision) == "chapter enumerate"

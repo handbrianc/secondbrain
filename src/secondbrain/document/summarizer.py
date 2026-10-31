@@ -75,6 +75,23 @@ Aim for roughly {target_tokens} tokens. Respond in the same language as the part
 ## Combined Summary:
 """
 
+# Prepended to the final returned summary when the windowed path had to build
+# its windows from an evenly spread sample (source exceeds what
+# ``max_windows * max_input_chars`` can hold). The CLI prints the returned
+# text verbatim, so the note travels with the summary and partial coverage is
+# disclosed rather than silently hidden (mirrors the chat path's
+# whole-document overview note).
+PARTIAL_COVERAGE_NOTE = (
+    "The source is larger than the summary input budget can cover in full; "
+    "the summary below is built from an evenly spread sample of it, so its "
+    "coverage is partial."
+)
+
+
+def _ceil_div(a: int, b: int) -> int:
+    """Integer ceiling division for positive *b* (avoids float rounding)."""
+    return -(-a // b)
+
 
 @dataclass
 class ChapterSummary:
@@ -126,7 +143,9 @@ class Summarizer:
     max_windows
         Upper bound on map-reduce partial windows (default 8) so that an
         arbitrarily large chapter cannot spawn an unbounded number of LLM
-        calls. When exceeded the excerpts are truncated to the budget.
+        calls. When the source exceeds what the cap can hold even at the
+        per-call input budget, it is summarized from an evenly spread sample
+        and the returned summary is labelled with ``PARTIAL_COVERAGE_NOTE``.
     """
 
     def __init__(
@@ -469,6 +488,10 @@ class Summarizer:
         folded back together via ``MERGE_SUMMARIES_PROMPT``. This prevents a
         chapter/section larger than the model's context window from being
         sent whole, which previously produced truncated, degenerate output.
+        When even the window cap cannot hold the source, the windows are
+        built from an evenly spread sample and ``PARTIAL_COVERAGE_NOTE`` is
+        prepended to the final returned summary so the partial coverage is
+        disclosed.
         """
         excerpts = self._extract_excerpts(chunks)
         if not excerpts:
@@ -477,8 +500,9 @@ class Summarizer:
             prompt = self._build_summary_prompt(excerpts, context)
             return await self._generate_with_guard(prompt)
 
+        windows, partial_coverage = self._plan_windows(excerpts)
         partials: list[str] = []
-        for window in self._window_excerpts(excerpts):
+        for window in windows:
             prompt = self._build_summary_prompt(window, context)
             partial = await self._generate_with_guard(prompt)
             if partial:
@@ -487,8 +511,14 @@ class Summarizer:
         if not partials:
             return ""
         if len(partials) == 1:
-            return partials[0]
-        return await self._generate_with_guard(self._build_merge_prompt(partials))
+            summary = partials[0]
+        else:
+            summary = await self._generate_with_guard(
+                self._build_merge_prompt(partials)
+            )
+        if partial_coverage:
+            return f"{PARTIAL_COVERAGE_NOTE}\n\n{summary}"
+        return summary
 
     def _fits_in_budget(self, excerpts: list[str]) -> bool:
         """Return True when the combined excerpts fit the single-call budget."""
@@ -497,28 +527,54 @@ class Summarizer:
     def _window_excerpts(self, excerpts: list[str]) -> list[list[str]]:
         """Greedily group *excerpts* into windows within the char budget.
 
-        The number of windows is capped by ``self._max_windows``; when the
-        source is so large that the windows would exceed that cap, trailing
-        excerpts are dropped so the summariser never issues an unbounded
-        number of LLM calls.
+        Thin wrapper over :meth:`_plan_windows`, kept for the historical
+        signature; see the planner for the coverage contract.
         """
-        kept = excerpts
-        hard_budget = self._max_input_chars * self._max_windows
-        total = sum(len(e) for e in kept)
-        if total > hard_budget:
-            acc = 0
-            kept = []
-            for text in excerpts:
-                if acc + len(text) > hard_budget:
-                    break
-                kept.append(text)
-                acc += len(text)
+        return self._plan_windows(excerpts)[0]
 
+    def _plan_windows(self, excerpts: list[str]) -> tuple[list[list[str]], bool]:
+        """Plan the summarisation windows, returning ``(windows, partial)``.
+
+        When ``ceil(total / max_input_chars)`` is within ``max_windows`` the
+        FULL source is windowed (adaptive size, each window within
+        ``max_input_chars``), so coverage is complete and ``partial`` is
+        False. The default greedy packing is kept for every source it can
+        already fit within the cap; when excerpt-boundary waste would
+        overflow the cap, the windows are re-packed at the adaptive
+        per-window target ``ceil(total / max_windows)`` instead of dropping
+        trailing excerpts.
+
+        Only when the source exceeds what the cap can hold even at the
+        per-call input budget is the coverage partial: the ordered excerpts
+        are sampled evenly across their full extent (never head-truncated,
+        first and last always kept) sized to fit the cap, then windowed, and
+        ``partial`` is True so the caller can disclose it via
+        ``PARTIAL_COVERAGE_NOTE``.
+        """
+        total = sum(len(e) for e in excerpts)
+        needed = _ceil_div(total, self._max_input_chars)
+        if needed <= self._max_windows:
+            windows = self._pack_windows(excerpts, self._max_input_chars)
+            if len(windows) <= self._max_windows:
+                return windows, False
+            # Default greedy size overflows the window cap: re-pack at the
+            # adaptive per-window target so the whole source still fits.
+            return self._fit_windows(excerpts), False
+
+        sample = self._spread_sample(excerpts)
+        windows = self._pack_windows(sample, self._max_input_chars)
+        if len(windows) > self._max_windows:
+            windows = self._fit_windows(sample)
+        return windows, True
+
+    @staticmethod
+    def _pack_windows(excerpts: list[str], limit: int) -> list[list[str]]:
+        """Greedily group ordered *excerpts* into windows of ≤ *limit* chars."""
         windows: list[list[str]] = []
         current: list[str] = []
         current_size = 0
-        for text in kept:
-            if current and current_size + len(text) > self._max_input_chars:
+        for text in excerpts:
+            if current and current_size + len(text) > limit:
                 windows.append(current)
                 current = []
                 current_size = 0
@@ -527,6 +583,66 @@ class Summarizer:
         if current:
             windows.append(current)
         return windows
+
+    def _fit_windows(self, excerpts: list[str]) -> list[list[str]]:
+        """Re-pack the full source within ``self._max_windows`` windows.
+
+        Starts from the adaptive per-window target
+        ``ceil(total / max_windows)`` and raises it only as far as atomic
+        excerpt boundaries force, so the window count stays within the cap
+        and no excerpt is ever dropped: the overflow is spread evenly across
+        the windows instead. When a single excerpt already exceeds the
+        per-call budget, windows grow past it rather than losing content.
+        """
+        total = sum(len(e) for e in excerpts)
+        low = _ceil_div(total, self._max_windows)
+        high = total
+        while low < high:
+            mid = (low + high) // 2
+            if len(self._pack_windows(excerpts, mid)) <= self._max_windows:
+                high = mid
+            else:
+                low = mid + 1
+        return self._pack_windows(excerpts, low)
+
+    def _spread_sample(self, excerpts: list[str]) -> list[str]:
+        """Sample *excerpts* evenly across the full extent within the budget.
+
+        Picks indices spread like ``round(i * step)`` across the whole
+        sequence — first and last always kept — shrinking the sample count
+        until the picked total fits ``max_windows * max_input_chars``. This
+        is never a head-truncation slice; when even the first and last
+        excerpts together exceed the budget they are still kept, and the
+        partial-coverage note discloses the shortfall.
+        """
+        n = len(excerpts)
+        if n <= 2:
+            return list(excerpts)
+        budget = self._max_windows * self._max_input_chars
+        avg = max(1, sum(len(e) for e in excerpts) // n)
+        count = max(2, min(n, budget // avg))
+        indices = self._spread_indices(n, count)
+        while count > 2:
+            picked = sum(len(excerpts[i]) for i in indices)
+            if picked <= budget:
+                break
+            count = max(2, min(count - 1, (count * budget) // picked))
+            indices = self._spread_indices(n, count)
+        return [excerpts[i] for i in indices]
+
+    @staticmethod
+    def _spread_indices(n: int, count: int) -> list[int]:
+        """Return *count* indices evenly spread over ``range(n)``.
+
+        Integer equivalent of ``round(i * (n - 1) / (count - 1))``; the
+        first and last indices are always ``0`` and ``n - 1`` and the picks
+        are strictly increasing.
+        """
+        if count <= 1:
+            return [0]
+        last = n - 1
+        half = (count - 1) // 2
+        return [(i * last + half) // (count - 1) for i in range(count)]
 
     def _build_merge_prompt(self, partials: list[str]) -> str:
         """Build the fold prompt combining per-window partial summaries."""

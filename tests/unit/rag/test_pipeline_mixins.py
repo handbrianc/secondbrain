@@ -184,6 +184,105 @@ class TestFormatContext:
         assert heading_path in out
         assert "b.pdf" not in out
 
+    def test_part_source_prefixes_a_part_header_line(self) -> None:
+        # Multi-source assembly (fix-chat-session-integrity D2): the part
+        # header line sits above the untouched per-chunk format.
+        pipeline = _make_pipeline()
+        chunks = [
+            {
+                "chunk_text": "Snapshot mode stores VM state.",
+                "source_file": "doc.pdf",
+                "page": 12,
+                "chunk_role": "body",
+                "heading_path": "Chapter 16 > Backup Modes > snapshot mode",
+            },
+        ]
+        out = pipeline._format_context(chunks, part_source="doc.pdf")
+        assert out == (
+            "Source: doc.pdf\n"
+            "Source: doc.pdf (page 12 [body, Chapter 16 > Backup Modes > snapshot mode])\n"
+            "Snapshot mode stores VM state.\n"
+        )
+
+    def test_default_output_stays_byte_identical(self) -> None:
+        # part_source=None (the default) must not change the single-source
+        # output — including the in-flight heading_path tag.
+        pipeline = _make_pipeline()
+        chunks = [
+            {
+                "chunk_text": "Snapshot mode stores VM state.",
+                "source_file": "doc.pdf",
+                "page": 12,
+                "chunk_role": "body",
+                "heading_path": "Chapter 16 > Backup Modes > snapshot mode",
+            },
+        ]
+        assert pipeline._format_context(chunks) == pipeline._format_context(
+            chunks, part_source=None
+        )
+        assert pipeline._format_context(chunks) == (
+            "Source: doc.pdf (page 12 [body, Chapter 16 > Backup Modes > snapshot mode])\n"
+            "Snapshot mode stores VM state.\n"
+        )
+
+    def test_multi_source_parts_join_with_per_part_headers(self) -> None:
+        pipeline = _make_pipeline()
+        parts = [
+            (
+                "a.pdf",
+                [
+                    {
+                        "chunk_text": "Alpha material",
+                        "source_file": "a.pdf",
+                        "page": 21,
+                        "chunk_role": "body",
+                        "heading_path": "Chapter 15 > High Availability",
+                    }
+                ],
+            ),
+            (
+                "b.pdf",
+                [
+                    {
+                        "chunk_text": "Beta material",
+                        "source_file": "b.pdf",
+                        "page": 60,
+                    }
+                ],
+            ),
+            # An empty part carries no attributable content: skipped.
+            ("c.pdf", []),
+        ]
+        out = pipeline._format_multi_source_parts(parts)
+        assert out == (
+            "Source: a.pdf\n"
+            "Source: a.pdf (page 21 [body, Chapter 15 > High Availability])\n"
+            "Alpha material\n"
+            "\n\n"
+            "Source: b.pdf\n"
+            "Source: b.pdf (page 60)\n"
+            "Beta material\n"
+        )
+
+    def test_multi_source_parts_with_no_chunks_is_empty(self) -> None:
+        pipeline = _make_pipeline()
+        assert pipeline._format_multi_source_parts([("a.pdf", [])]) == ""
+        assert pipeline._format_multi_source_parts([]) == ""
+
+    def test_part_header_respects_the_per_part_budget(self) -> None:
+        pipeline = _make_pipeline()
+        chunks = [
+            {"chunk_text": "first", "source_file": "a.pdf", "page": 1},
+            {"chunk_text": "second", "source_file": "a.pdf", "page": 2},
+        ]
+        first_entry = "Source: a.pdf (page 1)\nfirst\n"
+        out = pipeline._format_multi_source_parts(
+            [("a.pdf", chunks)], max_chars_per_part=len(first_entry) + 1
+        )
+        # The budget is applied to the part's body (the header prefix rides
+        # on top), so only the first chunk fits.
+        assert out == "Source: a.pdf\n" + first_entry
+
 
 class TestDedupeByTextHash:
     def test_removes_duplicates_keeps_order(self) -> None:

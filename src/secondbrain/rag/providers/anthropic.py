@@ -19,7 +19,7 @@ from anthropic import (
 )
 
 from secondbrain.exceptions import ServiceUnavailableError
-from secondbrain.logging import get_logger
+from secondbrain.logging import get_logger, timed_external_call
 
 from ..interfaces import LocalLLMProvider, StreamingCallback
 
@@ -156,13 +156,14 @@ class AnthropicLLMProvider(LocalLLMProvider):
             temp = temperature if temperature is not None else self._temperature
             tokens = max_tokens if max_tokens is not None else self._max_tokens
 
-            response = self._client.messages.create(
-                model=self._model,
-                messages=messages,  # type: ignore
-                temperature=temp,
-                top_p=self._top_p,
-                max_tokens=tokens,
-            )
+            with timed_external_call("llm.generate", self._model):
+                response = self._client.messages.create(
+                    model=self._model,
+                    messages=messages,  # type: ignore
+                    temperature=temp,
+                    top_p=self._top_p,
+                    max_tokens=tokens,
+                )
 
             _log_token_usage(
                 "completion", getattr(response, "usage", None), self._model
@@ -204,13 +205,14 @@ class AnthropicLLMProvider(LocalLLMProvider):
             temp = temperature if temperature is not None else self._temperature
             tokens = max_tokens if max_tokens is not None else self._max_tokens
 
-            response = await self._async_client.messages.create(
-                model=self._model,
-                messages=messages,  # type: ignore
-                temperature=temp,
-                top_p=self._top_p,
-                max_tokens=tokens,
-            )
+            with timed_external_call("llm.generate_async", self._model):
+                response = await self._async_client.messages.create(
+                    model=self._model,
+                    messages=messages,  # type: ignore
+                    temperature=temp,
+                    top_p=self._top_p,
+                    max_tokens=tokens,
+                )
 
             _log_token_usage(
                 "completion", getattr(response, "usage", None), self._model
@@ -272,38 +274,39 @@ class AnthropicLLMProvider(LocalLLMProvider):
             temp = temperature if temperature is not None else self._temperature
             tokens = max_tokens if max_tokens is not None else self._max_tokens
 
-            response = self._client.messages.create(
-                model=self._model,
-                messages=messages,  # type: ignore
-                temperature=temp,
-                top_p=self._top_p,
-                max_tokens=tokens,
-                stream=True,
-            )
+            with timed_external_call("llm.stream_chat", self._model):
+                response = self._client.messages.create(
+                    model=self._model,
+                    messages=messages,  # type: ignore
+                    temperature=temp,
+                    top_p=self._top_p,
+                    max_tokens=tokens,
+                    stream=True,
+                )
 
-            full_content = ""
-            full_reasoning = ""
-            start_usage: object = None
-            output_tokens: int | None = None
+                full_content = ""
+                full_reasoning = ""
+                start_usage: object = None
+                output_tokens: int | None = None
 
-            for event in response:
-                if event.type == "message_start":
-                    start_usage = getattr(
-                        getattr(event, "message", None), "usage", None
-                    )
-                elif event.type == "message_delta":
-                    delta_usage = getattr(event, "usage", None)
-                    delta_out = getattr(delta_usage, "output_tokens", None)
-                    if isinstance(delta_out, int):
-                        output_tokens = delta_out
-                elif event.type == "content_block_delta":
-                    if hasattr(event.delta, "text") and event.delta.text:
-                        full_content += event.delta.text
-                        on_chunk(event.delta.text, None)
+                for event in response:
+                    if event.type == "message_start":
+                        start_usage = getattr(
+                            getattr(event, "message", None), "usage", None
+                        )
+                    elif event.type == "message_delta":
+                        delta_usage = getattr(event, "usage", None)
+                        delta_out = getattr(delta_usage, "output_tokens", None)
+                        if isinstance(delta_out, int):
+                            output_tokens = delta_out
+                    elif event.type == "content_block_delta":
+                        if hasattr(event.delta, "text") and event.delta.text:
+                            full_content += event.delta.text
+                            on_chunk(event.delta.text, None)
 
-                    if hasattr(event.delta, "thinking") and event.delta.thinking:
-                        full_reasoning += event.delta.thinking
-                        on_chunk("", event.delta.thinking)
+                        if hasattr(event.delta, "thinking") and event.delta.thinking:
+                            full_reasoning += event.delta.thinking
+                            on_chunk("", event.delta.thinking)
 
             _log_token_usage(
                 "streaming completion",
@@ -334,36 +337,37 @@ class AnthropicLLMProvider(LocalLLMProvider):
             temp = temperature if temperature is not None else self._temperature
             tokens = max_tokens if max_tokens is not None else self._max_tokens
 
-            response = await self._async_client.messages.create(
-                model=self._model,
-                messages=messages,  # type: ignore
-                temperature=temp,
-                top_p=self._top_p,
-                max_tokens=tokens,
-                stream=True,
-            )
+            with timed_external_call("llm.stream_chat_async", self._model):
+                response = await self._async_client.messages.create(
+                    model=self._model,
+                    messages=messages,  # type: ignore
+                    temperature=temp,
+                    top_p=self._top_p,
+                    max_tokens=tokens,
+                    stream=True,
+                )
 
-            full_content = ""
-            start_usage: object = None
-            output_tokens: int | None = None
+                full_content = ""
+                start_usage: object = None
+                output_tokens: int | None = None
 
-            async for event in response:
-                if event.type == "message_start":
-                    start_usage = getattr(
-                        getattr(event, "message", None), "usage", None
-                    )
-                elif event.type == "message_delta":
-                    delta_usage = getattr(event, "usage", None)
-                    delta_out = getattr(delta_usage, "output_tokens", None)
-                    if isinstance(delta_out, int):
-                        output_tokens = delta_out
-                elif event.type == "content_block_delta":
-                    if hasattr(event.delta, "text") and event.delta.text:
-                        full_content += event.delta.text
-                        on_chunk(event.delta.text, None)
+                async for event in response:
+                    if event.type == "message_start":
+                        start_usage = getattr(
+                            getattr(event, "message", None), "usage", None
+                        )
+                    elif event.type == "message_delta":
+                        delta_usage = getattr(event, "usage", None)
+                        delta_out = getattr(delta_usage, "output_tokens", None)
+                        if isinstance(delta_out, int):
+                            output_tokens = delta_out
+                    elif event.type == "content_block_delta":
+                        if hasattr(event.delta, "text") and event.delta.text:
+                            full_content += event.delta.text
+                            on_chunk(event.delta.text, None)
 
-                    if hasattr(event.delta, "thinking") and event.delta.thinking:
-                        on_chunk("", event.delta.thinking)
+                        if hasattr(event.delta, "thinking") and event.delta.thinking:
+                            on_chunk("", event.delta.thinking)
 
             _log_token_usage(
                 "streaming completion",

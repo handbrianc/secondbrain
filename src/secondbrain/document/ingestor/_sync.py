@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import math
+import os
 import time
+import wave
 from collections.abc import Callable, Mapping
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
-from contextlib import nullcontext
+from contextlib import AbstractContextManager, nullcontext, suppress
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -27,6 +30,7 @@ from secondbrain.document.ingestor._constants import (
     is_supported,
 )
 from secondbrain.exceptions import DocumentExtractionError
+from secondbrain.logging import timed_stage
 from secondbrain.storage import StorageFactory
 from secondbrain.utils.embedding_cache import EmbeddingCache
 from secondbrain.utils.tracing import trace_operation
@@ -41,6 +45,137 @@ if TYPE_CHECKING:
     )
 
 logger = logging.getLogger(__name__)
+
+#: Legacy worker-result wait bound for text tasks, sized for text extraction
+#: (openspec fix-chat-session-integrity D6: text keeps the current bound).
+TEXT_WORKER_WAIT_SECONDS = 300.0
+
+#: Environment variable overriding the audio-transcription worker wait bound
+#: (seconds). A valid positive value wins over the derived bound; malformed
+#: values fall back to the derived bound.
+TRANSCRIPTION_WAIT_SECONDS_ENV = "SECONDBRAIN_TRANSCRIPTION_WAIT_SECONDS"
+
+#: Derived audio-transcription wait bound constants (design D6). The observed
+#: 408 s transcription of a 9.9 s clip was dominated by the one-time
+#: WhisperS2T/CTranslate2 model build per fresh pool worker
+#: (docling_factory._build_audio_converter); the base budget covers that build
+#: and pipeline initialization, the per-second factor covers transcription
+#: throughput (2 s of wall clock per audio second — roughly 2x margin over
+#: typical faster-than-realtime tiny-model CPU transcription), and the floor
+#: keeps short clips' bounds comfortably above the observed 408 s case (the
+#: 9.9 s clip derives 300 + 2 x 9.9 = 319.8 s, floored to 900 s). The
+#: SECONDBRAIN_TRANSCRIPTION_WAIT_SECONDS override exists because hardware
+#: varies (model build time, GPU vs CPU).
+AUDIO_TRANSCRIPTION_WAIT_BASE_SECONDS = 300.0
+AUDIO_TRANSCRIPTION_WAIT_PER_SECOND_FACTOR = 2.0
+AUDIO_TRANSCRIPTION_WAIT_FLOOR_SECONDS = 900.0
+
+
+def _probe_audio_duration_seconds(file_path: Path) -> float:
+    """Return the audio duration of *file_path* in seconds, best effort.
+
+    Reads the duration from the file header: stdlib ``wave`` for RIFF/WAVE,
+    libsndfile (``soundfile`` — installed with the ASR pipeline's dependency
+    chain) for the remaining audio formats. 0.0 is returned when the duration
+    cannot be determined (unreadable header, codec without libsndfile support,
+    soundfile not installed), which makes the derived wait bound fall back to
+    its floor — still far above the observed model-build-dominated case. This
+    probe is best-effort by design: it must never break an ingest.
+
+    Args:
+        file_path: The audio file to probe.
+
+    Returns
+    -------
+        The duration in seconds, or 0.0 when it cannot be determined.
+    """
+    with suppress(Exception), wave.open(str(file_path), "rb") as handle:
+        frame_rate = handle.getframerate()
+        if frame_rate > 0:
+            return handle.getnframes() / frame_rate
+    with suppress(Exception):
+        import soundfile  # installed alongside the ASR pipeline's deps
+
+        duration = float(soundfile.info(str(file_path)).duration)
+        if math.isfinite(duration) and duration > 0:
+            return duration
+    return 0.0
+
+
+def _transcription_wait_seconds(
+    duration_seconds: float, window_count: int = 1
+) -> float:
+    """Return the stage-aware worker-result wait bound for a transcription.
+
+    Text tasks keep the legacy text-extraction bound; audio transcription gets
+    a bound derived from its actual worst-case work (openspec
+    fix-chat-session-integrity D6, design decision D6): the one-time ASR model
+    build (:data:`AUDIO_TRANSCRIPTION_WAIT_BASE_SECONDS`) plus transcription
+    time for the audio's duration and conversion-window count
+    (:data:`AUDIO_TRANSCRIPTION_WAIT_PER_SECOND_FACTOR` seconds of wall clock
+    per audio second per window), floored at
+    :data:`AUDIO_TRANSCRIPTION_WAIT_FLOOR_SECONDS`. An explicit
+    :data:`TRANSCRIPTION_WAIT_SECONDS_ENV` override wins when it is a valid
+    positive finite number; malformed values fall back to the derived bound so
+    a typo can never shrink the wait to zero.
+
+    Audio files are never page-windowed (page windowing is PDF-only — the
+    worker's ``total_pages`` is 0 for audio), so the call site passes the
+    default ``window_count=1``; the multiplier keeps the bound formula honest
+    should windowing ever apply.
+
+    Args:
+        duration_seconds: The audio's duration in seconds (0.0 when unknown;
+            the derived bound then equals the floor).
+        window_count: Number of conversion windows the worker will run.
+
+    Returns
+    -------
+        The wait bound in seconds.
+    """
+    raw = os.environ.get(TRANSCRIPTION_WAIT_SECONDS_ENV)
+    if raw is not None and raw.strip():
+        try:
+            override = float(raw)
+        except ValueError:
+            override = None
+        if override is not None and math.isfinite(override) and override > 0:
+            return override
+    derived = (
+        AUDIO_TRANSCRIPTION_WAIT_BASE_SECONDS
+        + AUDIO_TRANSCRIPTION_WAIT_PER_SECOND_FACTOR
+        * max(0.0, duration_seconds)
+        * max(1, window_count)
+    )
+    return max(AUDIO_TRANSCRIPTION_WAIT_FLOOR_SECONDS, derived)
+
+
+def _audio_stage_cm(
+    stage: str, file_path: Path, *, started_at: float | None = None
+) -> AbstractContextManager[None]:
+    """Return a stage-timing context manager for audio files; no-op otherwise.
+
+    Stage timing is scoped to audio ingestion (openspec
+    fix-chat-session-integrity D7): text ingestion keeps today's logging, so
+    large text batches are not flooded with per-stage records. For audio files
+    the helper wraps the call site in :func:`timed_stage` with the file path as
+    the log context.
+
+    Args:
+        stage: Logical stage name (e.g. ``"audio.transcription"``, ``"chunk"``).
+        file_path: The ingested file; its type gates the instrumentation and
+            its path becomes the log context.
+        started_at: Optional ``time.monotonic()`` anchor passed through to
+            :func:`timed_stage`.
+
+    Returns
+    -------
+        A context manager that times the stage for audio files and does
+        nothing otherwise.
+    """
+    if get_file_type(file_path) == "audio":
+        return timed_stage(stage, context=str(file_path), started_at=started_at)
+    return nullcontext()
 
 
 def _warn_if_glued_text[T: Mapping[str, object]](
@@ -512,10 +647,12 @@ class DocumentIngestor:
         -------
             List of documents ready for storage.
         """
-        all_chunks = self._deduplicate_and_chunk_segments(file_path, segments)
-        chunk_to_embedding = self._generate_embeddings_with_cache(
-            all_chunks, embedding_gen
-        )
+        with _audio_stage_cm("chunk", file_path):
+            all_chunks = self._deduplicate_and_chunk_segments(file_path, segments)
+        with _audio_stage_cm("embed", file_path):
+            chunk_to_embedding = self._generate_embeddings_with_cache(
+                all_chunks, embedding_gen
+            )
         return self._build_documents_from_chunks(all_chunks, chunk_to_embedding)
 
     def _stream_process_chunks(
@@ -672,35 +809,36 @@ class DocumentIngestor:
             text_to_chunk[chunk["text"]] = chunk
 
         if texts_to_embed:
-            try:
-                embeddings = embedding_gen.generate_batch(texts_to_embed)
-                for text, embedding in zip(texts_to_embed, embeddings, strict=True):
-                    self.embedding_cache.set(text, embedding)
-                    chunk = text_to_chunk[text]
-                    chunk_to_embedding[chunk["text_hash"]] = embedding
-            except Exception as e:
-                logger.error(
-                    "Failed to generate batch embeddings: %s: %s",
-                    type(e).__name__,
-                    e,
-                )
-                for text in texts_to_embed:
-                    chunk = text_to_chunk[text]
-                    try:
-                        cached = self.embedding_cache.get(text)
-                        if cached is not None:
-                            chunk_to_embedding[chunk["text_hash"]] = cached
-                            continue
-                        embedding = embedding_gen.generate(text)
+            with _audio_stage_cm("embed", file_path):
+                try:
+                    embeddings = embedding_gen.generate_batch(texts_to_embed)
+                    for text, embedding in zip(texts_to_embed, embeddings, strict=True):
                         self.embedding_cache.set(text, embedding)
+                        chunk = text_to_chunk[text]
                         chunk_to_embedding[chunk["text_hash"]] = embedding
-                    except Exception as e2:
-                        logger.error(
-                            "Failed to generate embedding: %s: %s",
-                            type(e2).__name__,
-                            e2,
-                        )
-                        continue
+                except Exception as e:
+                    logger.error(
+                        "Failed to generate batch embeddings: %s: %s",
+                        type(e).__name__,
+                        e,
+                    )
+                    for text in texts_to_embed:
+                        chunk = text_to_chunk[text]
+                        try:
+                            cached = self.embedding_cache.get(text)
+                            if cached is not None:
+                                chunk_to_embedding[chunk["text_hash"]] = cached
+                                continue
+                            embedding = embedding_gen.generate(text)
+                            self.embedding_cache.set(text, embedding)
+                            chunk_to_embedding[chunk["text_hash"]] = embedding
+                        except Exception as e2:
+                            logger.error(
+                                "Failed to generate embedding: %s: %s",
+                                type(e2).__name__,
+                                e2,
+                            )
+                            continue
 
         docs_to_store: list[dict[str, Any]] = []
         seen_doc_keys = set()
@@ -1140,6 +1278,12 @@ class DocumentIngestor:
         # still-unaccounted file with one clear reason.
         pool_broken: BrokenProcessPool | None = None
         futures: dict[Any, Path] = {}
+        # Stage-clock anchors (design D7): one monotonic timestamp per future,
+        # taken at submission so the worker-stage elapsed time covers pool
+        # queuing plus the wait — as_completed only yields a future once it is
+        # done, so measuring from the result call would report ~0 for every
+        # stage. Keyed alongside ``futures`` (same population/cleanup shape).
+        submitted_at: dict[Any, float] = {}
         # Files already accounted (success/failed/skipped), used by the
         # pool-broken handler to find what is still in flight.
         processed_files: set[str] = set()
@@ -1212,6 +1356,9 @@ class DocumentIngestor:
                             self.progress_callback(f, False)
                         continue
                     futures[future] = f
+                    # Worker stage starts at submission (design D7): see the
+                    # ``submitted_at`` note above.
+                    submitted_at[future] = time.monotonic()
                 pending_futures = dict(futures)
 
                 while pending_futures:
@@ -1222,7 +1369,77 @@ class DocumentIngestor:
                         for future in as_completed(pending_futures, timeout=0.2):
                             file_path = futures[future]
                             try:
-                                result = future.result(timeout=300)
+                                # Stage-aware worker-result wait (design D6):
+                                # text tasks keep the legacy text-extraction
+                                # bound; audio transcription derives the bound
+                                # from the one-time ASR model build plus the
+                                # clip duration (see
+                                # ``_transcription_wait_seconds``). The stage
+                                # record is anchored at submission (design
+                                # D7) so the trail shows the true worker-stage
+                                # elapsed time.
+                                is_audio = get_file_type(file_path) == "audio"
+                                wait_bound = (
+                                    _transcription_wait_seconds(
+                                        _probe_audio_duration_seconds(file_path)
+                                    )
+                                    if is_audio
+                                    else TEXT_WORKER_WAIT_SECONDS
+                                )
+                                stage_cm: AbstractContextManager[None] = (
+                                    timed_stage(
+                                        "audio.transcription",
+                                        context=str(file_path),
+                                        started_at=submitted_at[future],
+                                    )
+                                    if is_audio
+                                    else nullcontext()
+                                )
+                                try:
+                                    with stage_cm:
+                                        result = future.result(timeout=wait_bound)
+                                except TimeoutError:
+                                    # The bound expired while the worker was
+                                    # still inside its stage. Log the
+                                    # attributable trail (stage, bound, elapsed)
+                                    # BEFORE the timeout failure surfaces, and
+                                    # surface a failure that names the stage.
+                                    # The worker is not cancelled: it keeps
+                                    # running and its late result is dropped
+                                    # with the future.
+                                    stage_started = submitted_at[future]
+                                    elapsed = time.monotonic() - stage_started
+                                    stage = (
+                                        "audio.transcription"
+                                        if is_audio
+                                        else "extraction"
+                                    )
+                                    logger.warning(
+                                        "Worker wait bound expired for %s: "
+                                        "stage=%s bound=%.3fs elapsed=%.3fs",
+                                        file_path,
+                                        stage,
+                                        wait_bound,
+                                        elapsed,
+                                    )
+                                    error_msg = (
+                                        f"{stage} stage exceeded its "
+                                        f"{wait_bound:.1f}s worker wait bound "
+                                        f"(elapsed {elapsed:.1f}s)"
+                                    )
+                                    logger.error(
+                                        "Failed to process %s: %s",
+                                        file_path,
+                                        error_msg,
+                                    )
+                                    failed_files += 1
+                                    failure_reasons.append((str(file_path), error_msg))
+                                    completed += 1
+                                    processed_files.add(str(file_path))
+                                    if self.progress_callback:
+                                        self.progress_callback(file_path, False)
+                                    done_futures.append(future)
+                                    continue
                                 self._drain_progress_queue(progress_queue)
                                 # Persist the worker's captured structure tree
                                 # once per file (design §6) — regardless of
@@ -1233,7 +1450,13 @@ class DocumentIngestor:
                                 # for every outcome and never raise.
                                 self._persist_worker_structure(result)
                                 self._refresh_structural_payload(result, storage)
-                                self._segment_audio_topics(result)
+                                # Audio topic segmentation (design D5/D7):
+                                # stage-timed for audio files; the call itself
+                                # never raises (failures are logged inside).
+                                with _audio_stage_cm(
+                                    "audio.topic_segmentation", file_path
+                                ):
+                                    self._segment_audio_topics(result)
 
                                 if not result["success"]:
                                     error_msg = result.get("error", "Unknown error")
@@ -1553,7 +1776,15 @@ class DocumentIngestor:
                     )
 
                     converter = get_converter_for_path(file_path)
-                    result = converter.convert(file_path)
+                    # Audio (design D7): docling's convert() call is the
+                    # decode + ASR-transcription stage boundary at this layer
+                    # — the WhisperS2T model build and the transcription both
+                    # happen inside it, and the decode/transcribe sub-stages
+                    # are not separable without instrumenting docling_factory
+                    # (read-only for this change). The single stage name
+                    # covers the fused boundary.
+                    with _audio_stage_cm("audio.transcription", file_path):
+                        result = converter.convert(file_path)
                     content = result.document
 
                     # Shared docling→segment loop (identical per-item shape to

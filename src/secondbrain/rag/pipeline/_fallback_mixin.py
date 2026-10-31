@@ -86,6 +86,25 @@ _WINDOW_MAX_SECONDS = max(
 _SUMMARY_WINDOW_CHARS = 3500
 
 
+# Ceiling on the source characters one summary window may carry when an
+# oversized map pass is re-split (design D1).  When a caller's default
+# pre-split produces more windows than _MAX_MAP_REDUCE_WINDOWS, the windows are
+# flattened back into chunks (window boundaries are plain grouping) and
+# re-split at an adaptive size -- ceil(total / _MAX_MAP_REDUCE_WINDOWS), never
+# below _SUMMARY_WINDOW_CHARS -- so every part of the source still reaches a
+# map call instead of the previous silent ``windows[:50]`` slice dropping
+# roughly half the source without a trace.  8000 is about 2.3x today's window:
+# a window this size still formats comfortably under the 16k
+# rag_max_context_chars cap at the observed ~2x formatting overhead, and each
+# digest still completes well inside its token and wall-clock budgets.  A
+# source so large that even this ceiling cannot fit the map-call budget
+# (ceil(total / _MAX_MAP_REDUCE_WINDOWS) > _MAX_SUMMARY_WINDOW_CHARS, i.e.
+# above ~400k source chars) cannot be covered in full at all; it degrades to
+# the evenly spread, explicitly disclosed sample of design D2 instead of
+# head-truncation.
+_MAX_SUMMARY_WINDOW_CHARS = 8_000
+
+
 # Output token caps for the summary paths (single-pass overview, and the
 # two-pass map-reduce fallback: map digest -> reduce overview).  These are
 # ceilings, NOT length targets: the prompts bound the visible length (terse
@@ -133,7 +152,16 @@ _HIERARCHY_THRESHOLD = 12
 # draft must survive finalization unchanged -- observed three-paragraph
 # overviews run 500-900 words, and a tighter ceiling silently amputated the
 # stored/history answer well short of the text the user had just read.
-_OVERVIEW_MAX_WORDS = 1200
+#
+# 1200 proved too tight for a legitimately dense chapter: with full-coverage
+# map windows (fix-summary-window-truncation) the replayed UserManual.pdf
+# chapter-15 overview drafted 1255 words in ten paragraphs, and the ceiling
+# trimmed the stored copy at a sentence boundary ("...manage VM snapshots.")
+# while the terminal had streamed the complete draft -- the exact amputation
+# this guard exists to prevent.  1600 leaves headroom above the largest
+# observed legitimate draft while still capping genuine runaway loops, which
+# historically run to thousands of words.
+_OVERVIEW_MAX_WORDS = 1600
 
 
 # Mid-stream guard for a live-streaming map-reduce window: once this many
@@ -208,6 +236,23 @@ _CHAPTER_OVERVIEW_INSTRUCTION = (
 _WHOLE_DOCUMENT_OVERVIEW_NOTE = (
     "Per-chapter page mapping was unavailable for this document; "
     "here is a whole-document overview."
+)
+
+
+# Honest-coverage note streamed (and stored) ahead of a summary whose source
+# had to be sampled instead of covered in full: ceil(total /
+# _MAX_MAP_REDUCE_WINDOWS) exceeds _MAX_SUMMARY_WINDOW_CHARS, so no window
+# sizing can fit the source into the map-call budget and an evenly spread
+# page-ordered sample stands in.  Mirrors _WHOLE_DOCUMENT_OVERVIEW_NOTE in
+# style, placement, and emission contract (content channel with its "\n\n"
+# separator AND the same text ahead of the returned overview, so display and
+# storage stay byte-identical).  Phrased source-neutrally ("the source", not
+# "the chapter") so it stays honest at every call site that routes through
+# _summarize_bounded -- a chapter, an anthology part, or a whole document.
+_CHAPTER_PARTIAL_COVERAGE_NOTE = (
+    "The source is larger than the summary budget can cover in full; the "
+    "overview below is built from an evenly spread sample of it, so its "
+    "coverage is partial."
 )
 
 
@@ -967,6 +1012,17 @@ class _FallbackMixin(_RAGPipelineState):
             windows[idx + 1][0] = merged
         return windows
 
+    def _format_window_contexts(self, windows: list[list[dict[str, Any]]]) -> list[str]:
+        """Format each window's source, dropping windows that format to nothing."""
+        contexts: list[str] = []
+        for window in windows:
+            ctx = self._format_context(
+                window, max_chars=self._config.rag_max_context_chars
+            )
+            if ctx.strip():
+                contexts.append(ctx)
+        return contexts
+
     def _summarize_bounded(
         self,
         *,
@@ -987,14 +1043,21 @@ class _FallbackMixin(_RAGPipelineState):
         into a terse internal digest (map -- digest content never streams), and
         one final streamed call writes the overview from the digests (reduce).
         A window whose digest is unusable is skipped, never surfaced.
+
+        When the caller's pre-split produces more windows than
+        ``_MAX_MAP_REDUCE_WINDOWS``, the windows are flattened back into chunks
+        and re-split at an adaptive size (design D1, see
+        :meth:`_replan_oversized_windows`) so the map pass still covers the
+        complete source within the map-call budget -- the previous silent
+        ``windows[:50]`` slice dropped trailing windows head-first.  When even
+        the per-window ceiling cannot fit the source into the budget, an evenly
+        spread page-ordered sample stands in and the partial coverage is
+        disclosed (design D2/D3): the note is streamed on the content channel
+        ahead of the map pass AND returned ahead of the overview text, so the
+        stored answer matches what the terminal displayed byte for byte (the
+        ``_generate_whole_document_overview`` parity precedent).
         """
-        contexts: list[str] = []
-        for window in windows:
-            ctx = self._format_context(
-                window, max_chars=self._config.rag_max_context_chars
-            )
-            if ctx.strip():
-                contexts.append(ctx)
+        contexts = self._format_window_contexts(windows)
         if not contexts:
             return ""
         if sum(len(ctx) for ctx in contexts) <= _SINGLE_PASS_MAX_CHARS:
@@ -1005,15 +1068,22 @@ class _FallbackMixin(_RAGPipelineState):
                 parts_are_digests=False,
                 numbered_parts=False,
             )
+        note_prefix = ""
+        partial_coverage = False
         if len(windows) > _MAX_MAP_REDUCE_WINDOWS:
-            logger.warning(
-                "summary source exceeds the single-pass budget and has %d "
-                "windows; capping map pass at %d",
-                len(windows),
-                _MAX_MAP_REDUCE_WINDOWS,
-            )
-            windows = windows[:_MAX_MAP_REDUCE_WINDOWS]
-            contexts = contexts[:_MAX_MAP_REDUCE_WINDOWS]
+            windows, sampled = self._replan_oversized_windows(windows)
+            contexts = self._format_window_contexts(windows)
+            if not contexts:
+                return ""
+            partial_coverage = sampled
+            if sampled:
+                # Disclose before the map pass runs, right after the
+                # caller-streamed heading: the reader sees the summary's
+                # scope before any digest work starts, and the note joins
+                # the returned text below so display and storage match.
+                note_prefix = f"{_CHAPTER_PARTIAL_COVERAGE_NOTE}\n\n"
+                if self._on_chunk:
+                    self._on_chunk(note_prefix, None)
         digests: list[str] = []
         total = len(contexts)
         for index, ctx in enumerate(contexts, 1):
@@ -1021,9 +1091,153 @@ class _FallbackMixin(_RAGPipelineState):
             if digest:
                 digests.append(digest)
         if not digests:
-            return ""
-        return self._reduce_digest_overview(
-            heading, digests, instruction, parts_are_digests=True
+            # Any partial-coverage note was already streamed, so the returned
+            # transcript must carry it too -- the whole-document precedent
+            # keeps display and storage identical even when the overview
+            # itself could not be generated.
+            return note_prefix
+        overview = self._reduce_digest_overview(
+            heading,
+            digests,
+            instruction,
+            parts_are_digests=True,
+            partial_coverage=partial_coverage,
+        )
+        if not overview.strip():
+            # Same parity rule on the empty-overview path: the streamed note
+            # (if any) is already on screen, so the stored answer carries it;
+            # with no note this collapses to "" exactly as before.
+            return note_prefix
+        return f"{note_prefix}{overview}"
+
+    def _replan_oversized_windows(
+        self,
+        windows: list[list[dict[str, Any]]],
+    ) -> tuple[list[list[dict[str, Any]]], bool]:
+        """Re-plan a map pass whose pre-split exceeds the map-call budget.
+
+        Design D1/D2.  The caller's windows are a plain grouping of the source
+        chunks, so they are flattened back into chunks and re-split at an
+        adaptive size -- ``ceil(total / _MAX_MAP_REDUCE_WINDOWS)`` chars, never
+        below :data:`_SUMMARY_WINDOW_CHARS`, never above
+        :data:`_MAX_SUMMARY_WINDOW_CHARS` -- which fits the source into the
+        map-call budget while still covering every chunk.  Only when even the
+        per-window ceiling cannot fit the source (a floor-bound source above
+        ~400k chars) is full coverage impossible: then an evenly spaced,
+        page-ordered sample of the chunks (via :meth:`_page_spread_sample`,
+        first and last chunks always kept) stands in, sized from the mean chunk
+        length so the sampled total fits
+        ``_MAX_MAP_REDUCE_WINDOWS * _MAX_SUMMARY_WINDOW_CHARS``, and the
+        caller is told to disclose the partial coverage.  A greedy re-split
+        cannot always reach the budget on its own (chunk boundaries are
+        indivisible), so any surplus windows beyond the cap are consolidated
+        rather than sliced -- no contiguous slice of the source is ever
+        dropped to satisfy the map-call limit.
+
+        Args:
+            windows: The caller's pre-split windows, in reading order.
+
+        Returns:
+            ``(windows, partial_coverage)``: the re-planned windows (at most
+            ``_MAX_MAP_REDUCE_WINDOWS``) and whether they cover only an
+            evenly spread sample of the source (the caller must disclose
+            partial coverage via ``_CHAPTER_PARTIAL_COVERAGE_NOTE``).
+        """
+        chunks = [chunk for window in windows for chunk in window]
+        total_chars = self._source_char_total(chunks)
+        floor = -(-total_chars // _MAX_MAP_REDUCE_WINDOWS)
+        partial = floor > _MAX_SUMMARY_WINDOW_CHARS
+        if partial:
+            # Sample limit from the mean chunk length so the sampled total
+            # fits _MAX_MAP_REDUCE_WINDOWS * _MAX_SUMMARY_WINDOW_CHARS:
+            # floor(budget / mean) == floor(budget * n / total) in integer
+            # arithmetic.  Never a head-truncation slice.
+            limit = (
+                _MAX_MAP_REDUCE_WINDOWS
+                * _MAX_SUMMARY_WINDOW_CHARS
+                * len(chunks)
+                // total_chars
+            )
+            limit = max(1, min(len(chunks), limit))
+            logger.warning(
+                "summary source of %d chars cannot fit %d map windows even "
+                "at the %d-char window ceiling; sampling %d of %d chunks "
+                "evenly across the full page range (partial coverage will "
+                "be disclosed)",
+                total_chars,
+                _MAX_MAP_REDUCE_WINDOWS,
+                _MAX_SUMMARY_WINDOW_CHARS,
+                limit,
+                len(chunks),
+            )
+            chunks = self._page_spread_sample(chunks, limit=limit)
+        else:
+            logger.warning(
+                "summary source of %d chars exceeds the single-pass budget "
+                "in %d windows; re-splitting at the adaptive window size to "
+                "cover the full source within %d map calls",
+                total_chars,
+                len(windows),
+                _MAX_MAP_REDUCE_WINDOWS,
+            )
+        adaptive = min(
+            max(
+                _SUMMARY_WINDOW_CHARS,
+                -(-self._source_char_total(chunks) // _MAX_MAP_REDUCE_WINDOWS),
+            ),
+            _MAX_SUMMARY_WINDOW_CHARS,
+        )
+        replanned = self._split_bounded(chunks, max_chars=adaptive)
+        replanned = self._consolidate_windows(replanned)
+        return replanned, partial
+
+    @staticmethod
+    def _consolidate_windows(
+        windows: list[list[dict[str, Any]]],
+        limit: int = _MAX_MAP_REDUCE_WINDOWS,
+    ) -> list[list[dict[str, Any]]]:
+        """Regroup surplus windows into at most *limit* windows, dropping none.
+
+        Greedy re-splitting cannot always reach the map-call cap by itself:
+        chunk boundaries are indivisible, so a source of chunks just over half
+        the adaptive window size packs one chunk per window and the re-split
+        can still exceed *limit* even though the floor arithmetic promised
+        fewer.  Window boundaries are plain grouping, so the flat chunk
+        sequence is simply re-cut into *limit* evenly sized groups: every
+        chunk keeps exactly one map window and no contiguous slice of the
+        source is dropped -- the map-reduce coverage contract forbids the
+        head-truncation slice the old cap used.  Groups are even in chunk
+        count, so with the floor arithmetic bounding ``total / limit`` by the
+        window ceiling, consolidated windows stay of the intended size on
+        average.
+
+        Args:
+            windows: Windows in reading order (each a list of chunks).
+            limit: Maximum number of windows to return.
+
+        Returns:
+            At most *limit* windows covering exactly the same chunks in order.
+        """
+        if len(windows) <= limit:
+            return windows
+        flat = [chunk for window in windows for chunk in window]
+        total = len(flat)
+        step = total / limit
+        regrouped: list[list[dict[str, Any]]] = []
+        start = 0
+        for i in range(1, limit + 1):
+            end = round(i * step) if i < limit else total
+            end = max(end, start + 1)
+            regrouped.append(flat[start:end])
+            start = end
+        return regrouped
+
+    @staticmethod
+    def _source_char_total(chunks: list[dict[str, Any]]) -> int:
+        """Total source characters carried by *chunks* (summed text lengths)."""
+        return sum(
+            len(chunk.get("chunk_text", chunk.get("text", "")) or "")
+            for chunk in chunks
         )
 
     def _map_window_digest(
@@ -1046,7 +1260,16 @@ class _FallbackMixin(_RAGPipelineState):
         internal. On a stream failure the digest is regenerated once via
         :meth:`_generate_guarded`; an unusable digest is skipped with a warning
         so one bad window cannot stall the whole overview.
+
+        A one-line ``"· window i/N"`` progress marker is forwarded on the
+        reasoning channel at entry, ahead of the window's generation: a map
+        pass can run tens of sequential digest streams, and the marker gives
+        the reader a heartbeat of where the pass is.  The content channel
+        stays pure -- the reasoning-display policy forbids non-answer text on
+        the content stream.
         """
+        if self._on_chunk:
+            self._on_chunk("", f"· window {index}/{total}\n")
         prompt = self._build_prompt(
             (
                 f"You are preparing an internal digest of Part {index} of "
@@ -1129,6 +1352,7 @@ class _FallbackMixin(_RAGPipelineState):
         *,
         parts_are_digests: bool,
         numbered_parts: bool = True,
+        partial_coverage: bool = False,
     ) -> str:
         """Write the final overview from *parts* in one streamed LLM call.
 
@@ -1137,6 +1361,13 @@ class _FallbackMixin(_RAGPipelineState):
         digests, numbered in reading order).  When the digest count exceeds
         ``_HIERARCHY_THRESHOLD``, the digests are first condensed into balanced
         groups so the reduce prompt stays readable.
+
+        ``partial_coverage`` marks a map pass whose windows cover only an
+        evenly spread sample of the source (the floor-bound fallback of
+        design D2): the digest framing then swaps "cover every part in order"
+        for sample framing, so the reduce never presents a sampled overview
+        as complete coverage.  The single-pass framing is untouched -- it is
+        complete by construction.
 
         A single call is what gives the overview one voice, an effective
         length bound, and no per-window seams. All streaming guards apply here:
@@ -1175,7 +1406,26 @@ class _FallbackMixin(_RAGPipelineState):
             )
         else:
             joined = "\n\n".join(parts)
-        if parts_are_digests:
+        if parts_are_digests and partial_coverage:
+            # Sample framing (design D3): the digests cover an evenly spread
+            # sample of the source, not all of it, so the reduce must neither
+            # claim sequential completeness nor present the sample as the
+            # whole source.  Voice and forbidders match the complete framing.
+            framing = (
+                "The document content below consists of terse digests "
+                "covering an evenly spread sample of "
+                f"{heading}, in reading order; the sample is not the "
+                "complete source. Write the final overview as ONE coherent "
+                "piece of prose that weaves the digests into a single "
+                "narrative from this sample, and never present it as the "
+                "complete source: cover the sampled parts in order with one "
+                "consistent voice; never use per-part headers or 'Part N' "
+                "labels; never name a figure or table the digests do not "
+                "contain, and when you do cite one, quote its label exactly "
+                "as the digests give it; never mention page numbers; end on "
+                "a complete statement."
+            )
+        elif parts_are_digests:
             framing = (
                 "The document content below consists of terse digests of the "
                 f"consecutive parts of {heading}, in reading order. Write the "

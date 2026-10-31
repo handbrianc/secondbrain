@@ -62,7 +62,13 @@ def test_cli_flags_present_in_source() -> None:
     assert "--no-skip-existing" in content
 
 
-def test_ingest_help_lists_new_flags() -> None:
+def test_ingest_help_lists_new_flags(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # The CLI callback runs setup_logging, which attaches a default rotating
+    # file log under ~/.secondbrain; redirect HOME so the real directory is
+    # never written.
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
     runner = CliRunner()
     result = runner.invoke(cli, ["ingest", "--help"])
     assert result.exit_code == 0

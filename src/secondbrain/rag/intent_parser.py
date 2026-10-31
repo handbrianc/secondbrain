@@ -417,3 +417,23 @@ def _suggest_pipeline(intent: QueryIntent, target: str | None) -> str:
     if intent is QueryIntent.BROAD_COVERAGE and target is not None:
         return "hybrid"
     return "semantic"
+
+
+def broad_coverage_target_label(decision: IntentDecision) -> str | None:
+    """Render the parsed broad-coverage target for a progress label.
+
+    Parameters
+    ----------
+    decision :
+        Parsed intent decision.
+
+    Returns
+    -------
+    str | None
+        ``"chapter <n>"`` when ``decision`` is a broad-coverage intent with
+        an extracted chapter target, else None (document-wide coverage, or a
+        different intent), so callers append no suffix.
+    """
+    if decision.intent is not QueryIntent.BROAD_COVERAGE or not decision.target:
+        return None
+    return f"chapter {decision.target}"

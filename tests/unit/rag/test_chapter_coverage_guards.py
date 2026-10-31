@@ -18,6 +18,12 @@ Groups:
    never supplies the chapter's title; a ToC listing or a spaced heading
    wins the slot instead, and the roster prints the chapter title-less
    rather than a section heading.
+5. Summary coverage disclosure (fix-summary-window-truncation D2/D3): a
+   floor-bound summary source (ceil(total/50) above the window ceiling)
+   samples evenly across its full page range and discloses the partial
+   coverage through the note -- on the content channel and in the stored
+   answer byte for byte -- with sample framing in the reduce prompt; a
+   fully covered map pass stays silent and keeps the complete framing.
 """
 
 from __future__ import annotations
@@ -27,8 +33,26 @@ from typing import Any
 import pytest
 
 from secondbrain.rag.pipeline import RAGPipeline
+from secondbrain.rag.pipeline._fallback_mixin import (
+    _CHAPTER_PARTIAL_COVERAGE_NOTE,
+    _MAX_MAP_REDUCE_WINDOWS,
+)
 from secondbrain.rag.pipeline._structure_mixin import _TOC_PROBE_MAX_PAGES
 from secondbrain.storage.structure_sqlite import StructureNode, StructureStore
+from tests.unit.rag.test_pipeline_digest_guards import (
+    _MAP_DIGEST,
+    _PLAUSIBLE,
+    _digest_calls,
+    _page_chunk,
+    _prompt_pages,
+)
+from tests.unit.rag.test_pipeline_streaming_guards import (
+    _CallbackCapture,
+    _StreamedProvider,
+)
+from tests.unit.rag.test_pipeline_streaming_guards import (
+    _make_pipeline as _make_streaming_pipeline,
+)
 from tests.unit.rag.test_structure_tree_query import (
     _CANNED_ANSWER,
     _CHAPTER_PLAN,
@@ -471,3 +495,113 @@ class TestDottedSectionTitleGuard:
         # roster's pre-existing rendering) and the section heading is still
         # listed as a SECTION of chapter 1.
         assert "[Chapter 1] 1.1 — Unknown" in roster
+
+
+class TestSummaryCoverageDisclosure:
+    """Floor-bound sources sample evenly and disclose partial coverage (D2/D3)."""
+
+    def test_floor_bound_source_samples_evenly_and_discloses_partial_coverage(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The floor-bound path samples, notes, and frames honestly.
+
+        800 chunks of 800 chars (~640k source chars, 200 pages, 4 chunks per
+        page): ceil(640k/50) = 12.8k chars exceeds the 8k window ceiling, so
+        full coverage is impossible within the 50-window map-call budget.
+        The pass must sample 500 chunks evenly across the page-sorted
+        sequence (first and last chunks always kept), re-split them at
+        8000 chars into exactly 50 map windows, and disclose the partial
+        coverage: the note on the content channel ahead of the map pass AND
+        the same note ahead of the overview in the stored answer.
+        """
+        chunks = [_page_chunk(1 + i // 4, i % 4) for i in range(800)]
+        assert sum(len(c["chunk_text"]) for c in chunks) == 640_000
+        provider = _StreamedProvider(
+            [],
+            generate_responses=[_MAP_DIGEST] * _MAX_MAP_REDUCE_WINDOWS + [_PLAUSIBLE],
+        )
+        capture = _CallbackCapture()
+        pipeline = _make_streaming_pipeline(provider, on_chunk=capture)
+        pipeline._config.streaming_enabled = False
+        # Condensation is reduce-prompt plumbing (exercised in
+        # test_pipeline_digest_guards); patched out so the generate-call
+        # accounting here counts map calls only.
+        monkeypatch.setattr(
+            pipeline, "_condense_digest_groups", lambda heading, digests: digests
+        )
+        answer = pipeline._summarize_bounded(
+            heading="Chapter 15 (overview)",
+            windows=pipeline._split_bounded(chunks),
+            instruction="Write an overview.",
+        )
+        digest_calls = _digest_calls(provider)
+        # The sampled re-split fits the map-call budget exactly.
+        assert len(digest_calls) == _MAX_MAP_REDUCE_WINDOWS
+        # The sample spreads across the full page range: even index spacing
+        # over the page-sorted chunks keeps every one of the 200 pages
+        # represented, first and last included -- never a head-truncation
+        # slice that would orphan the trailing pages.
+        pages: set[int] = set()
+        for call in digest_calls:
+            pages |= _prompt_pages(call["prompt"])
+        assert pages == set(range(1, 201))
+        # The note is disclosed on the content channel first -- before any
+        # digest or overview emission -- with its blank-line separator.
+        assert capture.calls[0] == (f"{_CHAPTER_PARTIAL_COVERAGE_NOTE}\n\n", None)
+        # ... and it is stored ahead of the overview, byte-identical to the
+        # display (non-streaming run: the only content emissions are the
+        # note and the final overview).
+        assert answer == f"{_CHAPTER_PARTIAL_COVERAGE_NOTE}\n\n{_PLAUSIBLE}"
+        assert capture.text == answer
+        # The reduce prompt reflects actual coverage: sample framing, never
+        # the complete sequential-coverage instruction.
+        reduce_prompt = next(
+            c["prompt"]
+            for c in provider.generate_calls
+            if "terse digests" in c["prompt"]
+        )
+        assert "evenly spread sample of Chapter 15 (overview)" in reduce_prompt
+        assert "cover every part in order" not in reduce_prompt
+
+    def test_full_coverage_map_pass_stays_silent_with_complete_framing(self) -> None:
+        """A map pass within the cap covers everything: no note, old framing.
+
+        Two pre-formed windows of 220 chunks (~176k source chars each)
+        exceed the single-pass budget together (formatted ~364k > 320k) while
+        staying within the map-call cap, so the replan never runs: both
+        windows map in full, no disclosure note is emitted or stored, and
+        the reduce framing still instructs covering every part in order.
+        """
+        chunks = [_page_chunk(1 + i // 4, i % 4) for i in range(440)]
+        provider = _StreamedProvider(
+            [], generate_responses=[_MAP_DIGEST, _MAP_DIGEST, _PLAUSIBLE]
+        )
+        capture = _CallbackCapture()
+        pipeline = _make_streaming_pipeline(provider, on_chunk=capture)
+        pipeline._config.streaming_enabled = False
+        pipeline._config.rag_max_context_chars = 400_000
+        answer = pipeline._summarize_bounded(
+            heading="Chapter 15 (overview)",
+            windows=[chunks[:220], chunks[220:]],
+            instruction="Write an overview.",
+        )
+        digest_calls = _digest_calls(provider)
+        assert len(digest_calls) == 2
+        pages: set[int] = set()
+        for call in digest_calls:
+            pages |= _prompt_pages(call["prompt"])
+        # Both windows mapped their whole page range: all 110 pages, no drop.
+        assert pages == set(range(1, 111))
+        # No disclosure note on either channel.
+        assert _CHAPTER_PARTIAL_COVERAGE_NOTE not in answer
+        assert _CHAPTER_PARTIAL_COVERAGE_NOTE not in capture.text
+        assert answer == _PLAUSIBLE
+        assert capture.text == answer
+        # The reduce framing still claims complete sequential coverage.
+        reduce_prompt = next(
+            c["prompt"]
+            for c in provider.generate_calls
+            if "terse digests" in c["prompt"]
+        )
+        assert "cover every part in order" in reduce_prompt
+        assert "evenly spread sample" not in reduce_prompt

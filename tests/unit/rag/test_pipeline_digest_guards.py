@@ -11,10 +11,16 @@ regeneration — using the scripted provider doubles from
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 import pytest
 
+from secondbrain.rag.pipeline._fallback_mixin import (
+    _CHAPTER_PARTIAL_COVERAGE_NOTE,
+    _MAX_MAP_REDUCE_WINDOWS,
+    _OVERVIEW_MAX_WORDS,
+)
 from tests.unit.rag.test_pipeline_streaming_guards import (
     _CallbackCapture,
     _make_pipeline,
@@ -27,6 +33,50 @@ _PLAUSIBLE = (
     "Each idea appears once with a short example and no repetition at all. "
     "The closing paragraph ties the workflow together cleanly for readers."
 )
+
+# Scripted map-digest response: plausible (passes the degenerate-output
+# gate), sentence-terminal-ended, and free of digits so figure grounding
+# against the window context is a no-op.
+_MAP_DIGEST = (
+    "The part covers its topics in the order the source presents them, "
+    "recording the structure of the argument and the claims each section "
+    "advances, with every point stated once in plain prose and no "
+    "commentary added beyond the source."
+)
+
+_PAGE_BODY = "Narrative prose continues the argument here. "
+
+
+def _page_chunk(page: int, page_pos: int, chars: int = 800) -> dict[str, Any]:
+    """A body chunk of exactly *chars* characters, tagged with its page spot.
+
+    Texts end on a sentence terminal with no trailing whitespace, so window
+    boundary alignment (``_align_window_boundaries``) is a no-op and the
+    page/window arithmetic in the coverage tests stays exact.
+    """
+    text = (_PAGE_BODY * (chars // len(_PAGE_BODY) + 1))[: chars - 1]
+    if text.endswith(" "):
+        text = text[:-1] + "x"
+    return {
+        "chunk_text": text + ".",
+        "source_file": "a.pdf",
+        "page_number": page,
+        "page_pos": page_pos,
+    }
+
+
+def _digest_calls(provider: Any) -> list[dict[str, Any]]:
+    """The provider's generate calls that are map-digest prompts."""
+    return [
+        call
+        for call in provider.generate_calls
+        if "internal digest of Part" in call["prompt"]
+    ]
+
+
+def _prompt_pages(prompt: str) -> set[int]:
+    """Pages represented in a prompt's formatted ``Source: ... (page N)`` lines."""
+    return {int(m) for m in re.findall(r"Source: a\.pdf \(page (\d+)\)", prompt)}
 
 
 class TestSummarizeBounded:
@@ -107,8 +157,150 @@ class TestSummarizeBounded:
         assert any("unusable; skipping" in r.message for r in caplog.records)
 
 
+class TestSummaryWindowReplan:
+    """Oversized map passes: adaptive re-split (D1) and coverage framing (D3).
+
+    The old cap silently sliced ``windows[:50]``, dropping roughly half the
+    source head-first; the replan re-splits the flattened chunks at an
+    adaptive window size so the map pass covers the complete source within
+    the map-call budget, and discloses sampling when even the per-window
+    ceiling cannot fit the source.
+    """
+
+    def test_oversized_source_resplits_within_cap_and_covers_all_pages(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """D1: a >50-window source re-splits to the cap, covering every page.
+
+        400 chunks of 800 chars (~320k source chars, 100 pages): the caller's
+        default 3500-char pre-split yields 100 windows -- over the 50-window
+        map-call cap -- and the adaptive re-split at ceil(320k/50) = 6400
+        chars yields exactly 50 windows of 8 chunks, so every page reaches a
+        map window and none is dropped trailing.
+        """
+        chunks = [_page_chunk(1 + i // 4, i % 4) for i in range(400)]
+        assert sum(len(c["chunk_text"]) for c in chunks) == 320_000
+        provider = _StreamedProvider(
+            [],
+            generate_responses=[_MAP_DIGEST] * _MAX_MAP_REDUCE_WINDOWS + [_PLAUSIBLE],
+        )
+        capture = _CallbackCapture()
+        pipeline = _make_pipeline(provider, on_chunk=capture)
+        pipeline._config.streaming_enabled = False
+        # Condensation is reduce-prompt plumbing (covered by
+        # TestCondenseDigestGroup); patched out so the generate-call
+        # accounting here counts map calls only.
+        monkeypatch.setattr(
+            pipeline, "_condense_digest_groups", lambda heading, digests: digests
+        )
+        answer = pipeline._summarize_bounded(
+            heading="Chapter 15 (overview)",
+            windows=pipeline._split_bounded(chunks),
+            instruction="Write an overview.",
+        )
+        digest_calls = _digest_calls(provider)
+        # The map pass ran exactly at the cap: one digest per re-split
+        # window, numbered to 50 -- not the caller's 100 windows.
+        assert len(digest_calls) == _MAX_MAP_REDUCE_WINDOWS
+        assert "Part 50 of 50" in digest_calls[-1]["prompt"]
+        # Full page range covered: every page of the 100-page source reached
+        # a map window, and the final window still owns the trailing pages
+        # the old windows[:50] slice used to drop.
+        pages: set[int] = set()
+        for call in digest_calls:
+            pages |= _prompt_pages(call["prompt"])
+        assert pages == set(range(1, 101))
+        assert max(_prompt_pages(digest_calls[-1]["prompt"])) == 100
+        # The reduce consumed the digests under the unchanged complete
+        # framing, and no disclosure note reached either channel.
+        reduce_prompt = next(
+            c["prompt"]
+            for c in provider.generate_calls
+            if "terse digests" in c["prompt"]
+        )
+        assert "cover every part in order" in reduce_prompt
+        assert "evenly spread sample" not in reduce_prompt
+        assert answer == _PLAUSIBLE
+        assert _CHAPTER_PARTIAL_COVERAGE_NOTE not in answer
+        assert _CHAPTER_PARTIAL_COVERAGE_NOTE not in capture.text
+
+    def test_partial_digest_framing_presents_a_sample_not_the_source(self) -> None:
+        """D3: ``partial_coverage`` swaps the sequential-coverage framing."""
+        provider = _StreamedProvider([], generate_responses=[_PLAUSIBLE])
+        pipeline = _make_pipeline(provider, on_chunk=None)
+        pipeline._config.streaming_enabled = False
+        answer = pipeline._reduce_digest_overview(
+            "Chapter 15 — Virtual machines",
+            ["digest one"],
+            "Write an overview.",
+            parts_are_digests=True,
+            partial_coverage=True,
+        )
+        assert answer == _PLAUSIBLE
+        prompt = provider.generate_calls[0]["prompt"]
+        assert "evenly spread sample of Chapter 15 — Virtual machines" in prompt
+        assert "not the complete source" in prompt
+        # The complete framing's sequential claim must not leak into a
+        # sampled run.
+        assert "cover every part in order" not in prompt
+
+    def test_single_pass_framing_untouched_by_the_partial_flag(self) -> None:
+        """The single-pass framing is complete by construction; flag is inert."""
+        provider = _StreamedProvider([], generate_responses=[_PLAUSIBLE])
+        pipeline = _make_pipeline(provider, on_chunk=None)
+        pipeline._config.streaming_enabled = False
+        answer = pipeline._reduce_digest_overview(
+            "Chapter 15 — Virtual machines",
+            ["raw source part"],
+            "Write an overview.",
+            parts_are_digests=False,
+            numbered_parts=False,
+            partial_coverage=True,
+        )
+        assert answer == _PLAUSIBLE
+        prompt = provider.generate_calls[0]["prompt"]
+        assert "covers Chapter 15 — Virtual machines" in prompt
+        assert "terse digests" not in prompt
+        assert "evenly spread sample" not in prompt
+
+    def test_consolidate_windows_regroups_without_dropping_chunks(self) -> None:
+        """Surplus windows re-group evenly; no chunk is dropped or duplicated."""
+        provider = _StreamedProvider([], generate_responses=[])
+        pipeline = _make_pipeline(provider, on_chunk=None)
+        windows = [[{"i": i}] for i in range(60)]
+        # At or under the limit the windows are returned untouched.
+        kept = windows[:_MAX_MAP_REDUCE_WINDOWS]
+        assert pipeline._consolidate_windows(kept) is kept
+        regrouped = pipeline._consolidate_windows(windows)
+        assert len(regrouped) == _MAX_MAP_REDUCE_WINDOWS
+        # Every chunk survives exactly once, in reading order.
+        flat = [c["i"] for window in regrouped for c in window]
+        assert flat == list(range(60))
+        # Even grouping: group sizes differ by at most one chunk.
+        sizes = [len(window) for window in regrouped]
+        assert max(sizes) - min(sizes) <= 1
+
+
 class TestMapWindowDigest:
     """Digest generation: stream preference, failure regeneration, validation."""
+
+    def test_progress_marker_forwarded_on_reasoning_channel(self) -> None:
+        """One one-line marker per window on the reasoning channel only."""
+        provider = _StreamedProvider(
+            [],
+            generate_responses=[
+                "A digest paragraph covering the retrieval topics with every "
+                "figure preserved exactly once, in careful detail, throughout."
+            ],
+        )
+        capture = _CallbackCapture()
+        pipeline = _make_pipeline(provider, on_chunk=capture)
+        digest = pipeline._map_window_digest("Chapter 15", "source ctx", 3, 7)
+        assert "digest paragraph" in digest
+        # Exactly the window's marker, ahead of its generation, on the
+        # reasoning channel; the content channel stays pure.
+        assert ("", "· window 3/7\n") in capture.calls
+        assert capture.text == ""
 
     def test_stream_failure_falls_back_to_generate_guarded(self, caplog) -> None:
         provider = _StreamedProvider(
@@ -421,3 +613,85 @@ class TestReduceDigestOverviewStreaming:
         provider = _StreamedProvider([], generate_responses=[])
         pipeline = _make_pipeline(provider, on_chunk=None)
         assert hasattr(pipeline, "_reduce_digest_overview")
+
+
+class TestOverviewWordCeiling:
+    """The word ceiling is a runaway guard: legitimate drafts survive it.
+
+    The fix-summary-window-truncation replay of UserManual.pdf chapter 15
+    (full-coverage adaptive map windows) drafted a legitimate 1255-word,
+    ten-paragraph overview; the then-1200-word ceiling trimmed the stored
+    copy at a sentence boundary ("...manage VM snapshots.") while the
+    terminal had streamed the complete draft.  These tests pin the contract
+    the ceiling's rationale comment claims: a normal draft survives
+    finalization unchanged, a genuine runaway loop is still cut.
+    """
+
+    @staticmethod
+    def _draft(words: int) -> str:
+        """A digits-free, sentence-terminal prose draft of ~*words* words.
+
+        Sentences cycle topic/qualifier words so the text is varied rather
+        than degenerate repetition, and contain no digits, which keeps the
+        scrub, metric-prune, and figure-ground post-passes no-ops so the
+        tests exercise only the word-ceiling behaviour.
+        """
+        topics = [
+            "retrieval",
+            "ranking",
+            "chunking",
+            "embedding",
+            "storage",
+            "ingestion",
+            "search",
+            "querying",
+            "caching",
+            "streaming",
+        ]
+        qualifiers = [
+            "careful",
+            "detailed",
+            "concise",
+            "thorough",
+            "practical",
+            "clear",
+            "structured",
+            "focused",
+            "consistent",
+            "compact",
+        ]
+        sentences: list[str] = []
+        count = 0
+        i = 0
+        while count < words:
+            topic = topics[i % len(topics)]
+            qualifier = qualifiers[(i // len(topics)) % len(qualifiers)]
+            sentence = (
+                f"The {qualifier} handling of {topic} receives its own "
+                "careful explanation here, and the chapter keeps each "
+                "discussion grounded in the workflow the reader already "
+                "knows well."
+            )
+            sentences.append(sentence)
+            count += len(sentence.split())
+            i += 1
+        return " ".join(sentences)
+
+    def test_legitimate_dense_draft_survives_finalization(self) -> None:
+        pipeline = _make_pipeline(
+            _StreamedProvider([], generate_responses=[]), on_chunk=None
+        )
+        draft = self._draft(1255)  # the observed legitimate ch15 draft size
+        assert len(draft.split()) >= 1255
+        assert _OVERVIEW_MAX_WORDS > 1255
+        assert pipeline._finalize_overview(draft, "") == draft
+
+    def test_runaway_draft_is_still_trimmed_at_sentence_boundary(self) -> None:
+        pipeline = _make_pipeline(
+            _StreamedProvider([], generate_responses=[]), on_chunk=None
+        )
+        draft = self._draft(_OVERVIEW_MAX_WORDS * 2)
+        result = pipeline._finalize_overview(draft, "")
+        assert result != draft
+        assert len(result.split()) <= _OVERVIEW_MAX_WORDS
+        assert result.endswith(".")

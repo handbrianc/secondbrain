@@ -22,6 +22,7 @@ locking and transaction behavior.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import sqlite3
 import threading
@@ -513,6 +514,18 @@ class ConversationStorage(ValidatableService):
                 self._conn.commit()
                 self._conn.close()
             self._conn = None
+
+    def __del__(self) -> None:
+        """Best-effort close when a store is garbage-collected unclosed.
+
+        Mirrors :meth:`StructureStore.__del__`: an unclosed
+        sqlite3.Connection warns on collection ("unclosed database"), and
+        such a warning can land in captured CLI output mid-invoke.
+        Explicit close()/context-manager use remains the norm. Never
+        raises: a failed best-effort close is dropped.
+        """
+        with contextlib.suppress(Exception):
+            self.close()
 
     async def close_async(self) -> None:
         """Async wrapper over :meth:`close`.

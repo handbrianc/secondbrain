@@ -40,6 +40,7 @@ the change design (§3).
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import sqlite3
@@ -573,6 +574,55 @@ class StructureStore(ValidatableService):
         """
         return await asyncio.to_thread(self.has_tree, source_file)
 
+    def sources_with_number(self, number: str) -> list[str]:
+        """Return the source files whose stored tree carries *number*.
+
+        Per-source resolution lookup (fix-chat-session-integrity D1): for an
+        unscoped numbered chapter/section query ("summarize chapter 15") the
+        pipeline asks which sources' trees carry a chapter-or-section node
+        with the requested number, instead of ranking whole documents by
+        body-chunk count. Matching is exact on the stored ``number`` string
+        ("15" never matches "15.2"), and only chapter-shaped kinds count —
+        ``chapter``, ``section`` and ``subsection``; ``part`` and ``segment``
+        nodes are excluded.
+
+        Args:
+            number: The requested chapter or section number, e.g. ``"15"``
+                or ``"5.2"``. Whitespace is ignored; an empty string
+                returns no sources.
+
+        Returns
+        -------
+            The distinct ``source_file`` keys (sorted ascending) whose tree
+            has at least one matching node. Empty when no stored tree
+            carries the number.
+        """
+        requested = number.strip()
+        if not requested:
+            return []
+        with self._db_lock:
+            rows = self.conn.execute(
+                "SELECT DISTINCT source_file FROM structure_nodes"
+                " WHERE number = ? AND kind IN ('chapter', 'section',"
+                " 'subsection') ORDER BY source_file ASC",
+                (requested,),
+            ).fetchall()
+        return [row["source_file"] for row in rows]
+
+    async def sources_with_number_async(self, number: str) -> list[str]:
+        """Async wrapper over :meth:`sources_with_number`.
+
+        Args:
+            number: The requested chapter or section number, e.g. ``"15"``
+                or ``"5.2"``.
+
+        Returns
+        -------
+            The distinct ``source_file`` keys carrying a node with that
+            number, sorted ascending.
+        """
+        return await asyncio.to_thread(self.sources_with_number, number)
+
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
@@ -584,6 +634,20 @@ class StructureStore(ValidatableService):
                 self._conn.commit()
                 self._conn.close()
             self._conn = None
+
+    def __del__(self) -> None:
+        """Best-effort close when a store is garbage-collected unclosed.
+
+        Tests and ad-hoc scripts construct stores without the context
+        manager; an unclosed sqlite3.Connection warns on collection
+        ("unclosed database"), and that warning has landed in captured CLI
+        output mid-invoke (the flaky test_json_dump_shape). Explicit
+        close()/context-manager use remains the norm; this only silences
+        the leaked-store path. Never raises: a failed best-effort close is
+        dropped (partially-initialized instances, interpreter shutdown).
+        """
+        with contextlib.suppress(Exception):
+            self.close()
 
     async def close_async(self) -> None:
         """Async wrapper over :meth:`close`.
