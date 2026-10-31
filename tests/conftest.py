@@ -2,7 +2,7 @@
 
 import os
 import threading
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 os.environ["PYTHOSTRACKING_TEST"] = "pytest"
 os.environ["SECONDBRAIN_TRACING_ENABLED"] = "false"
@@ -15,6 +15,40 @@ from typing import Any
 import pytest
 
 
+class _ModuleStub(MagicMock):
+    """``sys.modules`` stand-in for the eagerly-imported docling submodules.
+
+    MagicMock auto-created attributes live in ``_mock_children``, not in the
+    instance ``__dict__``. pytest 9.2.0's ``MonkeyPatch.setattr`` reads the
+    pre-patch value from ``target.__dict__`` (its fix for pytest #10644), so
+    patching an auto-created attribute is recorded as ``NOTSET`` and undone
+    with ``delattr`` — and a deleted mock child makes every later
+    ``getattr`` of it raise. The document suites routinely patch
+    ``docling.document_converter.DocumentConverter`` per test, so under
+    pytest >= 9.2 the first patch in a worker poisoned every later one at
+    fixture setup (CI: 16 setup ERRORs, pytest 9.1.1 was clean).
+
+    Healing on access keeps the stubs working under any pytest: deleted or
+    missing plain attributes are re-created (into ``__dict__`` this time,
+    which pytest 9.2 reads — so later patches restore by ``setattr``, not
+    ``delattr``). Mock-internal, magic and assert-guarded names keep
+    failing, preserving ``MagicMock`` safety behavior.
+    """
+
+    def __getattr__(self, name: str) -> Any:
+        try:
+            return MagicMock.__getattr__(self, name)
+        except AttributeError:
+            if name.startswith("_") or name.startswith(
+                ("assert", "assret", "aseert", "asert", "assrt")
+            ):
+                raise
+            child = type(self)(name=f"{self._mock_name or 'mock'}.{name}")
+            self._mock_children[name] = child
+            setattr(self, name, child)
+            return child
+
+
 def pytest_configure(config: Any) -> None:
     from secondbrain.config import get_config
 
@@ -24,7 +58,6 @@ def pytest_configure(config: Any) -> None:
     # overhead each time DocumentIngestor is instantiated in tests.
     # DocumentIngestor.__init__ eagerly imports docling.datamodel submodules.
     import sys
-    from unittest.mock import MagicMock
 
     for mod_name in (
         "docling",
@@ -35,7 +68,7 @@ def pytest_configure(config: Any) -> None:
         "docling.document_converter",
     ):
         if mod_name not in sys.modules:
-            sys.modules[mod_name] = MagicMock()
+            sys.modules[mod_name] = _ModuleStub()
 
     try:
         import secondbrain.utils.tracing as tracing_mod
