@@ -15,7 +15,8 @@ requires-python = ">=3.14"
 authors = [
     {name = "Bishal Chand", email = "bishal.chand@gmail.com"}
 ]
-license = {text = "MIT"}
+license = "MIT"  # SPDX expression
+license-files = ["LICENSE.md"]
 ```
 
 ## Build Backends

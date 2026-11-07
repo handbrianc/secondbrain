@@ -279,7 +279,7 @@ Fix: keep the shipped `SECONDBRAIN_MAX_WORKERS=2` cap in `.env.docker`. For
 still-larger files, lower `SECONDBRAIN_STREAMING_CHUNK_BATCH_SIZE`, pass a
 smaller per-call `cores`, or split the document. Also make sure the client's
 MCP request timeout exceeds the server's
-`SECONDBRAIN_MCP_SUBPROCESS_TIMEOUT_SECONDS` (900 s) — a shorter client
+`SECONDBRAIN_MCP_SUBPROCESS_TIMEOUT_SECONDS` (7200 s) — a shorter client
 timeout cancels the call before the CLI can report this diagnostic, which the
 client then misreads as a crashed server.
 

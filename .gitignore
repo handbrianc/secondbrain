@@ -86,3 +86,6 @@ graphify-out/
 
 # Rust (mcp-server crate)
 mcp-server/target/
+
+# Ingest workspace: personal documents, never part of the repo
+workspace/
