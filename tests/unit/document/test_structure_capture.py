@@ -393,9 +393,7 @@ class TestSynthesizedHeadings:
         assert [n.node_id for n in part.nodes] == ["ch05", "sec05.02"]
         assert part.nodes[1].parent_id == "ch05"
 
-    def test_synthesized_echo_is_deduplicated_first_wins(
-        self, tmp_path: Any
-    ) -> None:
+    def test_synthesized_echo_is_deduplicated_first_wins(self, tmp_path: Any) -> None:
         doc = docling_doc(
             doc_item("9. Krippendorff's Turn", label="text", level=0, page=10),
             doc_item("9. Krippendorff's Turn", label="text", level=0, page=10),
