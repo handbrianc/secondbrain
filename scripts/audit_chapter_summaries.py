@@ -356,6 +356,18 @@ def audit_source(
         probe._llm_provider = None
         structure = probe._probe_document_structure(top_k=400, source_filter=source)
         entries, _good_nums, _appendix = probe._derive_chapter_numbers(structure)
+        # D1 claim channel (add-intra-page-chapter-pins): the return stays a
+        # 3-tuple; the claim map rides on the instance side channel.
+        claims_attr = getattr(probe, "_chapter_claims", None) or {}
+        rec["claims"] = {
+            str(n): {
+                "page": c[1],
+                "pos": c[2],
+                "offset": c[3],
+                "half": "first" if c[4] else "second",
+            }
+            for n, c in sorted(claims_attr.items())
+        }
         full = [e for e in entries if e[1] == source]
         desc = probe._front_matter_desc_pages(structure)
         heading: Any = list(

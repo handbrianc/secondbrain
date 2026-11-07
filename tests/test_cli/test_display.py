@@ -93,7 +93,9 @@ class TestDisplaySearchResults:
             output_str = str(console_mock.print.call_args_list[0])
             assert "0.8765" in output_str
 
-    def test_display_search_results_json_format(self, console_mock: MagicMock) -> None:
+    def test_display_search_results_json_format(
+        self, console_mock: MagicMock, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         results = [
             {
                 "source_file": "test.pdf",
@@ -106,10 +108,44 @@ class TestDisplaySearchResults:
         with patch("secondbrain.cli.display.console", console_mock):
             display_search_results(results, "json")
 
-            console_mock.print.assert_called_once()
-            json_output = console_mock.print.call_args[0][0]
-            parsed = json.loads(json_output)
-            assert parsed == results
+        # JSON goes to stdout directly (not through Rich's console.print,
+        # which would re-wrap and markup-render the payload).
+        parsed = json.loads(capsys.readouterr().out)
+        assert parsed == results
+
+    def test_display_search_results_json_bypasses_rich(
+        self, console_mock: MagicMock, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Regression: JSON must not pass through Rich's console.print.
+
+        The CLI used to emit `--format json` via ``console.print``: Rich
+        soft-wrapped long chunk_text lines at console width, inserting a raw
+        newline *inside* a JSON string literal (a control character that
+        breaks the MCP server's serde parse), and its markup parser could
+        consume ``[bracket]`` spans. The payload must go to stdout untouched
+        and the console must stay out of the machine-readable path.
+        """
+        chunk_text = (
+            'The system\'s default\r\nquota is "unlimited" [bold]per-user\r\n'
+            "tail " + "word " * 30
+        )
+        results = [
+            {
+                "chunk_id": "chunk-001",
+                "source_file": "docs/system-guide.pdf",
+                "page_number": 9,
+                "chunk_text": chunk_text,
+                "score": 0.87,
+            }
+        ]
+
+        with patch("secondbrain.cli.display.console", console_mock):
+            display_search_results(results, "json")
+
+        console_mock.print.assert_not_called()
+        parsed = json.loads(capsys.readouterr().out)
+        assert len(parsed) == 1
+        assert parsed[0]["chunk_text"] == chunk_text
 
     def test_display_search_results_below_threshold(
         self, console_mock: MagicMock

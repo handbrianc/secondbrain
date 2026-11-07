@@ -978,7 +978,10 @@ class DocumentIngestor:
         that fails later in the pipeline) still records its tree — an orphan
         tree is inert (structure queries only surface documents that also
         have qdrant points) and the next ingest of the same file overwrites
-        it (save is delete+insert, idempotent).
+        it (save is delete+insert, idempotent). Every way a captured tree
+        can fail to reach the store is logged with the source and its node
+        count (fix-chapter-evidence-fidelity): a persistence loss is never
+        silent.
 
         Args:
             result: The worker's return payload; the tree is read from
@@ -988,18 +991,32 @@ class DocumentIngestor:
         structure = result.get("structure")
         if structure is None:
             return
+        node_count = len(structure.nodes)
         store = self._get_structure_store()
         if store is None:
+            logger.warning(
+                "Structure store unavailable; captured structure tree for "
+                "%s (%d nodes) not persisted",
+                structure.source_file,
+                node_count,
+            )
             return
         try:
             self._preserve_audio_topics(structure, store)
             store.save_structure(structure)
         except Exception as e:
             logger.warning(
-                "Failed to persist structure tree for %s: %s: %s",
+                "Failed to persist structure tree for %s (%d nodes): %s: %s",
                 structure.source_file,
+                node_count,
                 type(e).__name__,
                 e,
+            )
+            return
+        if not structure.nodes:
+            logger.warning(
+                "Captured structure tree for %s persisted with 0 nodes",
+                structure.source_file,
             )
 
     def _refresh_structural_payload(

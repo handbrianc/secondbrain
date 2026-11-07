@@ -263,8 +263,11 @@ class TestRefreshStructuralPayload:
         The refresh reads the document's full point set and writes only
         where the stored annotation is missing or differs (design D3):
         ``fresh-1`` carries only ``node_id`` and is rewritten to the full
-        annotation. A second refresh finds every stored annotation already
-        correct and writes nothing (idempotent).
+        annotation. ``legacy-2`` models the cross-page armed carry (design
+        D-2): its page (11) lies outside the armed section's span (7-9), yet
+        the heading evidence from ``legacy-1`` keeps it with 5.2 rather than
+        the page's chapter span. A second refresh finds every stored
+        annotation already correct and writes nothing (idempotent).
         """
         storage.store_batch(
             [
@@ -282,8 +285,16 @@ class TestRefreshStructuralPayload:
         assert payloads["legacy-1"]["section_id"] == "5.2"
         assert payloads["legacy-1"]["section_label"] == "Setup"
         assert payloads["legacy-1"]["chapter_id"] == "5"
-        assert payloads["legacy-2"]["node_id"] == "ch05"  # page 11 → chapter
-        assert payloads["legacy-2"]["section_id"] == "5"
+        # Page 11 lies outside 5.2's span (7-9) and inside chapter 5's, but
+        # the "5.2 Setup" heading armed the section's ownership, and the
+        # evidence-armed assignment carries through heading-free chunks
+        # across the page break, ahead of the chapter-span fill (design
+        # D-2 — the live ch10 page-11 shape). The chapter still owns the
+        # identity ("5").
+        assert payloads["legacy-2"]["node_id"] == "sec05.02"
+        assert payloads["legacy-2"]["section_id"] == "5.2"
+        assert payloads["legacy-2"]["section_label"] == "Setup"
+        assert payloads["legacy-2"]["chapter_id"] == "5"
         # The partial point keeps its node_id and gains the remaining keys.
         assert payloads["fresh-1"]["node_id"] == "sec05.02"
         assert payloads["fresh-1"]["section_label"] == "Setup"
@@ -500,7 +511,12 @@ class TestRefreshStructuralPayload:
             [
                 _legacy_doc("sec-a", 7, "5.2 Setup " + "p " * 40),
                 _legacy_doc("sec-b", 8, "5.2 Setup " + "p " * 40),
-                _legacy_doc("chapter", 11, "prose " * 40),
+                # Own "5. Installing" heading line → a chapter-5
+                # annotation, a group distinct from the 5.2 pair. (Under
+                # the armed carry a heading-free page-11 point would share
+                # the 5.2 group's identity — design D-2 — and land in the
+                # same batch, so the failure hook below would never fire.)
+                _legacy_doc("chapter", 11, "5. Installing\n" + "prose " * 40),
             ]
         )
         client = storage._client
@@ -520,9 +536,10 @@ class TestRefreshStructuralPayload:
         refreshed = storage.refresh_structural_payload(SOURCE, section_tree())
 
         # Group 1 (the two 5.2 points on pages 7-8) wrote; group 2 (the
-        # page-11 chapter point) failed → partial count 2. The failed point
-        # keeps its unannotated payload, so the next refresh's diff gate
-        # rewrites exactly it.
+        # page-11 point, anchored by its own "5. Installing" heading to a
+        # chapter-5 annotation distinct from the 5.2 group) failed →
+        # partial count 2. The failed point keeps its unannotated payload,
+        # so the next refresh's diff gate rewrites exactly it.
         assert refreshed == 2
         assert batch_sizes == [2, 1]
         payloads = _payloads(storage)

@@ -997,13 +997,11 @@ class TestDegradedStoreFallbacks:
         expected_ranges = {int(k): tuple(v) for k, v in baselines["ranges"].items()}
         assert capture.ranges == expected_ranges
         # The D4 density cap (fix-chapter-bucket-sampling) legitimately moves
-        # the dense-book legacy buckets; the fallback's expectation is the
-        # standard legacy map (pre-change baseline + window overrides), the
-        # same merge TestTreelessFallbackCharacterization asserts.
-        expected_buckets = {
-            **baselines["multi"]["bucket_pages"],
-            **BASELINE_WINDOW_OVERRIDES["hcd-report"],
-        }
+        # the dense-book legacy buckets; since B2-r4 the hcd baseline records
+        # the derivation itself, so the fallback's expectation is the
+        # baseline map directly — the same merge
+        # TestTreelessFallbackCharacterization asserts.
+        expected_buckets = baselines["multi"]["bucket_pages"]
         assert recorded == expected_buckets
         assert pipeline._structure_source is None
         assert any("Structure tree lookup failed" in m for m in capture.messages)
@@ -1045,12 +1043,11 @@ class TestDegradedStoreFallbacks:
         expected_ranges = {int(k): tuple(v) for k, v in baselines["ranges"].items()}
         assert capture.ranges == expected_ranges
         # The D4 density cap (fix-chapter-bucket-sampling) legitimately moves
-        # the dense-book legacy buckets; the fallback's expectation is the
-        # standard legacy map (pre-change baseline + window overrides).
-        expected_buckets = {
-            **baselines["multi"]["bucket_pages"],
-            **BASELINE_WINDOW_OVERRIDES["hcd-report"],
-        }
+        # the dense-book legacy buckets; since B2-r4 the hcd baseline records
+        # the derivation itself, so the fallback's expectation is the
+        # baseline map directly (no window-override term remains for
+        # hcd-report).
+        expected_buckets = baselines["multi"]["bucket_pages"]
         assert recorded == expected_buckets
         assert pipeline._structure_source is None
         assert any("no chapter/section nodes" in m for m in capture.messages)
@@ -1081,12 +1078,11 @@ class TestDegradedStoreFallbacks:
         expected_ranges = {int(k): tuple(v) for k, v in baselines["ranges"].items()}
         assert capture.ranges == expected_ranges
         # The D4 density cap (fix-chapter-bucket-sampling) legitimately moves
-        # the dense-book legacy buckets; the fallback's expectation is the
-        # standard legacy map (pre-change baseline + window overrides).
-        expected_buckets = {
-            **baselines["multi"]["bucket_pages"],
-            **BASELINE_WINDOW_OVERRIDES["hcd-report"],
-        }
+        # the dense-book legacy buckets; since B2-r4 the hcd baseline records
+        # the derivation itself, so the fallback's expectation is the
+        # baseline map directly (no window-override term remains for
+        # hcd-report).
+        expected_buckets = baselines["multi"]["bucket_pages"]
         assert recorded == expected_buckets
         assert pipeline._structure_source is None
         assert any("Structure store unavailable" in m for m in capture.messages)

@@ -483,7 +483,11 @@ def structure(doc: str, as_json: bool) -> None:
         return
 
     if as_json:
-        console.print_json(tree.model_dump_json(indent=2))
+        # Machine-readable JSON never passes through Rich's console pipeline
+        # (same rule as display_search_results / health --output json): the
+        # dump goes to stdout byte-exact, unstyled and parseable, regardless
+        # of how Rich's JSON renderer evolves.
+        click.echo(tree.model_dump_json(indent=2))
         return
 
     _render_structure(tree)

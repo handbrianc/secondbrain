@@ -4,6 +4,7 @@ import json
 from collections.abc import Sequence
 from typing import Any
 
+import click
 from rich.console import Console
 from rich.table import Table
 
@@ -27,7 +28,13 @@ def display_search_results(
         min_score: Minimum similarity score threshold (0.0-1.0).
     """
     if format == "json":
-        console.print(json.dumps(results, indent=2))
+        # JSON is data, not console text: Rich's print() soft-wraps long
+        # lines (inserting a raw newline *inside* JSON string literals — a
+        # control character that breaks strict parsers) and processes
+        # ``[bracket]`` markup, both of which corrupt chunk text. Machine
+        # consumers (the MCP server parses this stdout with serde) need the
+        # payload byte-exact, so write it straight to stdout.
+        click.echo(json.dumps(results, indent=2))
         return
 
     if not results:

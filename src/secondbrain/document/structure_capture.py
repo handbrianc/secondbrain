@@ -22,6 +22,15 @@ sources, per the change design §5:
   chapter nodes. Suppressed candidates are recorded in the capture's
   sources payload under ``suppressed_toc_headings``, which the storage
   layer persists verbatim into ``structure_meta``.
+  Numbered headings the parser missed are synthesized from the same text
+  stream (fix-chapter-evidence-fidelity): every text item's lines are
+  scanned with the shared heading forms (:mod:`secondbrain.document.heading_forms`,
+  the bare chapter form requiring its separating dot so register rows never
+  match), woven into the parser stream, and mapped by the same tree
+  builder — same ids, kinds and heading paths. A synthesized candidate
+  whose number a parser candidate already carries is dropped: parser
+  nodes win, never displaced or duplicated. Synthesis is docling-only —
+  the outline capture is untouched.
 * **Merge** (:func:`merge_structures`) — outline nodes win where both sources
   describe the same region; docling-only headings attach under the containing
   outline node by page range; docling-only chapters fill the tree when no
@@ -72,6 +81,12 @@ from typing import Any, NamedTuple, cast
 
 from secondbrain.document.chunker import docling_item_label, is_plausible_heading
 from secondbrain.document.fast_text import extract_native_pdf_text
+from secondbrain.document.heading_forms import (
+    capture_title,
+    is_list_context,
+    looks_like_citation_row,
+    scan_text,
+)
 from secondbrain.storage.structure_sqlite import (
     AudioSegment,
     DocumentStructure,
@@ -131,6 +146,14 @@ _BARE_ROMAN_RE = re.compile(r"^(?P<num>[IVXLCDM]{2,})\.?\s+(?P<rest>\S.*)$")
 
 _ROMAN_IS_ONE_RE = re.compile(r"^[IVXLCDM]+$")
 _PART_TITLE_RE = re.compile(r"^part\b", re.IGNORECASE)
+
+# A printed number deeper than two components ("12.3.4 Deep Heading") is
+# beyond the synthesis contract (N. chapter and N.M section forms only).
+# The shared section form would still match its N.M head with the rest of
+# the number as the title ("3 Details"), minting a garbage sibling next to
+# the real node — so such lines are never synthesized from. The parser's
+# own numbering regex handles multi-component numbers for caught headings.
+_DEEPER_NUMBER_RE = re.compile(r"^\d{1,2}\.\d{1,2}\.\d")
 
 _SLUG_MAX_LEN = 40
 
@@ -867,6 +890,115 @@ def _iter_docling_texts(docling_doc: Any) -> list[Any]:
     return items
 
 
+# Candidate-tuple arity: ``(level, title, page_start)`` for parser
+# candidates, with an optional trailing synthesis marker (the candidate's
+# "N"/"N.M" number token) on synthesized ones. The weave marker rides
+# through suppression (extra fields preserved) so the gate can tell the
+# two apart; :func:`_build_nodes_from_headings` still receives plain
+# 3-tuples.
+_Candidate = tuple[int, str, int | None, str | None]
+
+
+def _synthesized_heading_candidates(item: Any, page: int | None) -> list[_Candidate]:
+    """Synthesize numbered-heading candidates from one text item's lines.
+
+    The shared heading-form scan (:func:`scan_text`, ``require_dot=True``:
+    the bare chapter form needs its separating dot, so source-register rows
+    like "7 Wikipedia — …" never match) reads the item's text. Lines inside
+    a numbered-list or register cluster (:func:`is_list_context`) are
+    skipped; a section title must start with an alphanumeric character (the
+    observed prose shapes "3.1/3.0/Swagger …" and "1.6.3 …" start with "/"
+    and "."), a line whose printed number runs deeper than two components
+    is beyond the synthesis contract (:data:`_DEEPER_NUMBER_RE`), and a
+    citation-shaped title is rejected (:func:`looks_like_citation_row`).
+    Each surviving line's title is captured at line boundaries with one
+    bounded continuation line (:func:`capture_title`). The candidate text
+    re-embeds the number token ("9. Title" / "9.1 Title") so the shared
+    tree builder's numbering parse produces the same ids, kinds and
+    heading paths parser candidates get; *page* is the item's provenance
+    page.
+
+    Args:
+        item: A docling text item (or fabricated shape) — any label: the
+            point is to catch headings the parser never marked.
+        page: The item's provenance page (1-based), or None.
+
+    Returns
+    -------
+        Synthesized ``(level, "N[.] title", page, number)`` candidates in
+        the item's line order; empty when nothing qualifies.
+    """
+    text = getattr(item, "text", None)
+    if not text:
+        return []
+    item_text = str(text)
+    if not item_text.strip():
+        return []
+    lines = item_text.split("\n")
+    synthesized: list[_Candidate] = []
+    for form in scan_text(item_text, require_dot=True):
+        if is_list_context(lines, form.line_index):
+            continue
+        if form.section is not None:
+            if not form.title[:1].isalnum():
+                continue
+            number = f"{form.chapter}.{form.section}"
+            level = 2
+        else:
+            number = str(form.chapter)
+            level = 1
+        next_index = form.line_index + 1
+        next_line = lines[next_index] if next_index < len(lines) else None
+        title = capture_title(form.title, next_line)
+        if looks_like_citation_row(title):
+            continue
+        synthesized.append((level, f"{number} {title}", page, number))
+    return synthesized
+
+
+def _weave_synthesized_headings(
+    headings: Sequence[tuple[Any, ...]],
+) -> list[tuple[int, str, int | None]]:
+    """Weave surviving parser and synthesized candidates into one stream.
+
+    Parser candidates (no synthesis marker) pass through untouched. A
+    synthesized candidate whose number a parser candidate already carries
+    is dropped — parser-produced headings win by number and are never
+    displaced or duplicated (fix-chapter-evidence-fidelity). A synthesized
+    candidate for an already-woven synthesized number is dropped too (the
+    first in document order wins — a heading echoed later in the body text
+    mints nothing). Survivors come out as plain ``(level, title, page)``
+    tuples in document order, ready for :func:`_build_nodes_from_headings`.
+
+    Args:
+        headings: Suppressed-filtered candidates in document order, with
+            the optional trailing synthesis marker preserved.
+
+    Returns
+    -------
+        The woven ``(level, title, page_start)`` stream.
+    """
+    parser_numbers: set[str] = set()
+    for entry in headings:
+        if len(entry) > 3 and entry[3] is not None:
+            continue
+        number, _ = _parse_numbering(str(entry[1]))
+        if number is not None:
+            parser_numbers.add(number)
+    stream: list[tuple[int, str, int | None]] = []
+    woven_numbers: set[str] = set()
+    for entry in headings:
+        synth_number = entry[3] if len(entry) > 3 else None
+        if synth_number is not None and (
+            synth_number in parser_numbers or synth_number in woven_numbers
+        ):
+            continue
+        if synth_number is not None:
+            woven_numbers.add(synth_number)
+        stream.append((entry[0], str(entry[1]), cast("int | None", entry[2])))
+    return stream
+
+
 # structure_meta key under which suppressed ToC-page heading candidates are
 # recorded (fix-chat-session-integrity D4). ``structure_meta`` stores the
 # capture's ``sources`` payload verbatim as JSON (storage/ owns that write;
@@ -907,10 +1039,10 @@ def _text_matches_toc_listing(
 
 
 def _suppress_toc_page_headings(
-    headings: list[tuple[int, str, int | None]],
+    headings: Sequence[tuple[Any, ...]],
     listings: Sequence[TocListing],
     toc_page_span: tuple[int, int] | None,
-) -> tuple[list[tuple[int, str, int | None]], list[dict[str, Any]]]:
+) -> tuple[list[tuple[Any, ...]], list[dict[str, Any]]]:
     """Split heading candidates into kept and ToC-ghost-suppressed (D4).
 
     A candidate is suppressed only when BOTH conditions hold — its physical
@@ -920,28 +1052,33 @@ def _suppress_toc_page_headings(
     text-match test alone re-admits ghosts when pages are mis-parsed. Real
     chapter candidates starting at or after the span's end are kept
     untouched, and page-less candidates are kept (they cannot be placed
-    inside a span).
+    inside a span). Runs over the woven parser+synthesized candidate
+    stream, so a synthesized ToC ghost is suppressed (and recorded) exactly
+    like a parser one.
 
     Args:
-        headings: ``(level, title, page_start)`` candidates in document order.
+        headings: ``(level, title, page_start)`` candidates in document
+            order, optionally carrying trailing extra fields (the synthesis
+            marker of the weave) which are preserved on the kept side.
         listings: The document's parsed ToC rows.
         toc_page_span: Inclusive 1-based physical page span, or None when
             unknown (nothing is suppressed without span evidence).
 
     Returns
     -------
-        ``(kept, suppressed)`` — the surviving candidates and one
-        ``{"title": …, "page": …}`` record per suppressed candidate.
+        ``(kept, suppressed)`` — the surviving candidates (same arity as
+        the inputs) and one ``{"title": …, "page": …}`` record per
+        suppressed candidate.
     """
     if toc_page_span is None or not listings:
-        return headings, []
+        return list(headings), []
     span_low, span_high = toc_page_span
     listing_keys = [
         (_match_key(row.title), _match_squash(row.title)) for row in listings
     ]
-    kept: list[tuple[int, str, int | None]] = []
+    kept: list[tuple[Any, ...]] = []
     suppressed: list[dict[str, Any]] = []
-    for level, text, page in headings:
+    for level, text, page, *extra in headings:
         if (
             page is not None
             and span_low <= page <= span_high
@@ -949,7 +1086,7 @@ def _suppress_toc_page_headings(
         ):
             suppressed.append({"title": text, "page": page})
             continue
-        kept.append((level, text, page))
+        kept.append((level, text, page, *extra))
     return kept, suppressed
 
 
@@ -1040,7 +1177,18 @@ def capture_docling_headings(
     storage layer); real chapter candidates starting at or after the span's
     end are kept untouched. A capture whose every candidate was suppressed
     reports ``None`` (no part to record the suppression on) — the ghost
-    nodes are gone either way. Never raises.
+    nodes are gone either way.
+
+    Numbered headings the parser missed are synthesized from the same text
+    stream (fix-chapter-evidence-fidelity): every text item's lines are
+    scanned with the shared heading forms (the bare chapter form requiring
+    its separating dot), woven into the parser candidate stream ahead of
+    suppression, and mapped by the same tree builder — the resulting nodes
+    carry the identical payload shape and id scheme (``"ch09"``,
+    ``"sec09.01"``). Parser candidates win by number: a synthesized
+    candidate whose number a surviving parser candidate already carries is
+    dropped, and the first synthesized candidate for a number wins over
+    later echoes. Never raises.
 
     Args:
         docling_doc: A parsed docling document, or a sequence of per-window
@@ -1059,46 +1207,57 @@ def capture_docling_headings(
     Returns
     -------
         A :class:`DocumentStructure` part with ``sources={"heading_hierarchy":
-        True}`` when the document has any section headers, else ``None``.
+        True}`` when the woven candidate stream (parser and synthesized) is
+        non-empty, else ``None``.
     """
     try:
         if toc_listings is None and path.suffix.lower() == ".pdf":
             toc_listings, toc_page_span = _toc_evidence(path)
-        candidates: list[tuple[int, str, int | None]] = []
+        # One document-order candidate stream. Parser candidates carry no
+        # synthesis marker and come first per item, so a section header
+        # docling read verbatim and the same line's printed form stay in
+        # reading order; synthesized candidates are scanned on EVERY text
+        # item, label regardless — the point is to catch printed headings
+        # the parser never marked (chapter titles left as plain
+        # paragraphs).
+        candidates: list[_Candidate] = []
         for item in _iter_docling_texts(docling_doc):
-            if docling_item_label(item) != _SECTION_HEADER_LABEL:
-                continue
-            text = getattr(item, "text", None)
-            if not text or not str(text).strip():
-                continue
-            heading_text = str(text).strip()
-            # D1 gate (openspec fix-chunk-heading-context): docling's layout
-            # model also marks run-in labels and synopsis lines as section
-            # headers, and every one of them used to become a tree node.
-            # The gate only decides heading treatment — text items are never
-            # altered, dropped, or reordered, and the PDF outline capture
-            # (capture_pdf_outline) stays ungated.
-            if not is_plausible_heading(heading_text):
-                continue
-            raw_level = getattr(item, "level", None)
-            if isinstance(raw_level, bool) or not isinstance(raw_level, (int, float)):
-                level = 1
-            else:
-                level = max(1, int(raw_level))
-            candidates.append((level, heading_text, _docling_item_page(item)))
+            item_page = _docling_item_page(item)
+            if docling_item_label(item) == _SECTION_HEADER_LABEL:
+                text = getattr(item, "text", None)
+                if text and str(text).strip():
+                    heading_text = str(text).strip()
+                    # D1 gate (openspec fix-chunk-heading-context): docling's
+                    # layout model also marks run-in labels and synopsis
+                    # lines as section headers, and every one of them used
+                    # to become a tree node. The gate only decides heading
+                    # treatment — text items are never altered, dropped, or
+                    # reordered, and the PDF outline capture
+                    # (capture_pdf_outline) stays ungated.
+                    if is_plausible_heading(heading_text):
+                        raw_level = getattr(item, "level", None)
+                        if isinstance(raw_level, bool) or not isinstance(
+                            raw_level, (int, float)
+                        ):
+                            level = 1
+                        else:
+                            level = max(1, int(raw_level))
+                        candidates.append((level, heading_text, item_page, None))
+            candidates.extend(_synthesized_heading_candidates(item, item_page))
         headings, suppressed = _suppress_toc_page_headings(
             candidates, toc_listings or [], toc_page_span
         )
+        stream = _weave_synthesized_headings(headings)
         last_page: int | None = None
-        for _, _, page_start in headings:
+        for _, _, page_start in stream:
             if page_start is not None:
                 last_page = (
                     page_start if last_page is None else max(last_page, page_start)
                 )
-        if not headings:
+        if not stream:
             return None
         nodes = _build_nodes_from_headings(
-            headings,
+            stream,
             source_file=str(path),
             allow_parts=False,
             final_page=last_page,

@@ -381,6 +381,34 @@ class TestJsonOutput:
         assert data["page_labels"][0]["label"] == "i"
         assert data["audio_segments"][0]["t_end"] == 83.0
 
+    def test_json_dump_round_trips_hostile_text(
+        self, structure_db, monkeypatch
+    ) -> None:
+        r"""--json output stays byte-exact, parseable and unstyled.
+
+        Pins the machine-readable contract for the dump: long values with
+        raw ``\\r\\n`` (PDF line endings), quotes and ``[bracket]`` spans
+        round-trip verbatim, the output parses strictly, and no ANSI
+        styling ever enters the piped stream.
+        """
+        title = (
+            'The system\'s default\r\nquota is "unlimited" [bold]per-user\r\n'
+            "extremes expose hacks [6] " + "word " * 30
+        )
+        structure = _sample_structure(DOC_KEY)
+        structure.nodes[0].title = title
+        structure.nodes[0].heading_path = title
+        structure_db.save_structure(structure)
+        _install_cli_stores(monkeypatch, structure_db, [DOC_KEY])
+
+        result = _invoke(DOC_KEY, "--json")
+
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["nodes"][0]["title"] == title
+        assert data["nodes"][0]["heading_path"] == title
+        assert "\x1b" not in result.output, "JSON output must carry no ANSI styling"
+
     def test_json_dump_of_audio_only_structure(self, structure_db, monkeypatch) -> None:
         """Audio-only trees dump without node page fields set."""
         structure_db.save_structure(

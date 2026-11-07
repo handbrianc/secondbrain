@@ -133,28 +133,37 @@ class TestSlowCallBehavior:
 
         assert not caplog.records
 
-    def test_emits_when_root_is_configured_to_error(
+    def test_respects_ambient_root_log_level(
         self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
-        """The logger gate never suppresses the record (level-independent).
+        """Slow-call records follow the ambient root log level.
 
-        The slow-call logger carries its own WARNING level, so a quiet root
-        (ERROR) does not gate the record out. (Per-transport handler levels
-        remain authoritative for what each transport prints.)
+        The slow-call logger carries no level of its own, so a quiet root
+        (ERROR — what a SECONDBRAIN_LOG_LEVEL=ERROR run produces) gates the
+        record out at the logger level on every transport, while the default
+        WARNING root keeps it visible.
         """
         monkeypatch.setenv(SLOW_CALL_SECONDS_ENV, "0.001")
         root_logger = logging.getLogger()
         previous = root_logger.level
+
         root_logger.setLevel(logging.ERROR)
         try:
-            with caplog.at_level(logging.WARNING, logger=SLOW_CALL_LOGGER):
+            with caplog.at_level(logging.ERROR):
                 with timed_external_call("llm.generate", "m"):
                     time.sleep(0.01)
+            records = [r for r in caplog.records if r.name == SLOW_CALL_LOGGER]
+            assert records == []
+
+            root_logger.setLevel(logging.WARNING)
+            caplog.clear()
+            with caplog.at_level(logging.WARNING):
+                with timed_external_call("llm.generate", "m"):
+                    time.sleep(0.01)
+            records = [r for r in caplog.records if r.name == SLOW_CALL_LOGGER]
+            assert len(records) == 1
         finally:
             root_logger.setLevel(previous)
-
-        records = [r for r in caplog.records if r.name == SLOW_CALL_LOGGER]
-        assert len(records) == 1
 
     def test_thread_safety_all_calls_reported(
         self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture

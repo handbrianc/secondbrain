@@ -26,7 +26,10 @@ from secondbrain.rag.pipeline._constants import (
     filter_chapters_by_target,
     strip_document_filenames,
 )
-from secondbrain.rag.pipeline._fallback_mixin import _FallbackMixin
+from secondbrain.rag.pipeline._fallback_mixin import (
+    _EMPTY_BUCKET_PLACEHOLDER_NOTE,
+    _FallbackMixin,
+)
 from secondbrain.rag.pipeline._formatting_mixin import _FormattingMixin
 from secondbrain.rag.pipeline._orchestration import _OrchestrationMixin
 from secondbrain.rag.pipeline._routing_mixin import _RoutingMixin
@@ -109,6 +112,78 @@ def _page_document_order_key(chunk: dict[str, Any]) -> tuple[int, float]:
         int(chunk.get("page_number") or 0),
         float(pos) if pos is not None else float("inf"),
     )
+
+
+def _chunk_merge_id(chunk: dict[str, Any]) -> tuple[Any, ...]:
+    """Identity key for deduplicating merged structure samples (design D2).
+
+    Storage chunks carry ``chunk_id``; test-fixture doubles may not, so the
+    key falls back to the chunk's position and content coordinates.
+    """
+    chunk_id = chunk.get("chunk_id")
+    if chunk_id:
+        return ("id", str(chunk_id))
+    return (
+        "content",
+        str(chunk.get("source_file", "")),
+        int(chunk.get("page_number") or 0),
+        int(chunk.get("page_pos") or 0),
+        str(chunk.get("chunk_text", "")),
+    )
+
+
+def _merge_heading_channel(
+    probe_chunks: list[dict[str, Any]],
+    heading_chunks: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Merge the heading-role scan into the derivation's chunk sample (D2).
+
+    fix-chapter-heading-probe-rank: the probe is a bounded structural
+    retrieval, so a chapter's heading chunk can sit beyond the page window
+    its sample returned.  The storage's own heading chunks (the
+    authoritative structural record) are merged in — deduplicated by chunk
+    id with the probe's copy preferred.
+
+    Scan-only chunks are woven in at their ``(page_number, page_pos)``
+    position rather than appended wholesale: the probe sorts by page number
+    only (within-page order is the store's scroll order) and truncates
+    after that sort, so its cut can land mid-page and drop a heading whose
+    position precedes included same-page chunks.  Appending would place
+    that heading behind its own page's body chunks, where a same-number
+    body claim could shadow it (first-claim-wins).  The probe's own chunk
+    order is never disturbed; chunks without a page number keep the
+    historical append-at-end placement (no position to weave by).
+    """
+    seen_ids = {_chunk_merge_id(c) for c in probe_chunks}
+    paged_scans: list[tuple[tuple[int, int], dict[str, Any]]] = []
+    pageless: list[dict[str, Any]] = []
+    for heading_c in heading_chunks:
+        key = _chunk_merge_id(heading_c)
+        if key in seen_ids:
+            continue
+        seen_ids.add(key)
+        page = int(heading_c.get("page_number") or 0)
+        if page:
+            paged_scans.append(((page, int(heading_c.get("page_pos") or 0)), heading_c))
+        else:
+            pageless.append(heading_c)
+    paged_scans.sort(key=lambda kv: kv[0])
+    scans = iter(paged_scans)
+    nxt = next(scans, None)
+    merged: list[dict[str, Any]] = []
+    for probe_c in probe_chunks:
+        while nxt is not None and nxt[0] <= (
+            int(probe_c.get("page_number") or 0),
+            int(probe_c.get("page_pos") or 0),
+        ):
+            merged.append(nxt[1])
+            nxt = next(scans, None)
+        merged.append(probe_c)
+    while nxt is not None:
+        merged.append(nxt[1])
+        nxt = next(scans, None)
+    merged.extend(pageless)
+    return merged
 
 
 def _chapter_window_evidence(
@@ -273,6 +348,73 @@ def _window_composition(
     }
 
 
+def _chunk_ppos(chunk: dict[str, Any]) -> int:
+    """Chunk's position on its page (D4 cut admission key)."""
+    return int(chunk.get("page_pos") or 0)
+
+
+def _chunk_chapter_owner(
+    page: int,
+    ppos: int,
+    cuts_by_page: dict[int, list[tuple[int, int, int, int, bool, bool]]],
+    chapter_keys: list[int],
+    chapter_ranges: dict[int, tuple[int, int]],
+) -> int | None:
+    """Cut-aware owner of one chunk position (add-intra-page-chapter-pins D4).
+
+    Walks the page's cuts (each ``(page, ppos, after, before,
+    before_contains, first_half)``, ascending by ``(ppos, after)``) among
+    chapters that survive to bucket assembly:
+
+    - before the first cut → the first cut's before-chapter;
+    - exactly on a cut (the boundary chunk) → the after-chapter on the
+      claim's first half, else the before-chapter iff the before
+      chapter's pre-extension range contained the page, else the
+      after-chapter;
+    - between cuts → the previous cut's after-chapter;
+    - after the last cut → the last cut's after-chapter.
+
+    The chosen owner must be a live key whose final range contains the
+    page; on any miss — pages without cuts included — the caller falls
+    back to today's first-range-wins rule, so pages without cuts keep
+    today's behavior byte-for-byte.
+    """
+    page_cuts = [
+        cut for cut in (cuts_by_page.get(page) or []) if cut[2] in chapter_keys
+    ]
+    if not page_cuts:
+        return None
+    first_cut = page_cuts[0]
+    owner: int | None
+    if ppos < first_cut[1]:
+        owner = first_cut[3]
+    else:
+        owner = None
+        prev_after: int | None = None
+        for cut in page_cuts:
+            if ppos == cut[1]:
+                # Boundary chunk: the heading claim's own chunk.
+                if cut[5]:
+                    owner = cut[2]
+                elif cut[4] and cut[3] != -1:
+                    owner = cut[3]
+                else:
+                    owner = cut[2]
+                break
+            if ppos < cut[1]:
+                owner = prev_after
+                break
+            prev_after = cut[2]
+        if owner is None:
+            owner = page_cuts[-1][2]
+    if owner is None or owner not in chapter_keys:
+        return None
+    owner_range = chapter_ranges.get(owner)
+    if owner_range is None or not owner_range[0] <= page <= owner_range[1]:
+        return None
+    return owner
+
+
 def _chapter_coverage_note(
     composition: dict[str, int | float] | None,
 ) -> str | None:
@@ -355,6 +497,12 @@ class RAGPipeline(
         # legacy-path chapter assembly (fix-summary-fidelity D2); reset per
         # query and consumed by the audit harness.
         self._window_compositions: dict[int, dict[str, int | float]] = {}
+        # D4 cut map from the most recent legacy-path chapter assembly
+        # (add-intra-page-chapter-pins): page → that page's chapter-start
+        # cuts, each (page, ppos, after, before, before_contains,
+        # first_half) ascending by (ppos, after); consumed by the
+        # cut-aware bucket admission and the audit harness.
+        self._chapter_cuts: dict[int, list[tuple[int, int, int, int, bool, bool]]] = {}
         # Lazily-initialized DocumentRouter for document-scoped retrieval.
         # Created on first use so that the pipeline can be constructed without
         # a running vector store connection (e.g. during CLI help / --version).
@@ -391,6 +539,7 @@ class RAGPipeline(
         """
         self._structure_source = None
         self._window_compositions = {}
+        self._chapter_cuts = {}
         intent_decision = self._intent_parser.parse(query)
 
         # When enumerating a single chapter, boost top_k so the bucket
@@ -459,6 +608,36 @@ class RAGPipeline(
             top_k=400,
             source_filter=source_filter,
         )
+        # fix-chapter-heading-probe-rank D2: the derivation's view of a
+        # document's headings must not depend on the probe sample — the probe
+        # is a bounded structural retrieval (page-ascending scroll, hard
+        # limit), so a chapter's heading chunk can sit beyond the page window
+        # it returned.  Merge the storage's own heading chunks into the
+        # sample unconditionally (probe-independent, like the opener-evidence
+        # scan below), with the opener scan's degraded-storage tolerance.
+        heading_channel_: list[dict[str, Any]] = []
+        channel_storage_ = getattr(self._searcher, "storage", None)
+        if channel_storage_ is not None and hasattr(
+            channel_storage_, "find_structural_chunks"
+        ):
+            try:
+                heading_channel_ = list(
+                    channel_storage_.find_structural_chunks(
+                        chunk_roles=["heading"], source_prefix=source_filter
+                    )
+                )
+            except Exception:
+                logger.warning(
+                    "Heading-channel scan failed for %s; deriving from the "
+                    "probe sample only",
+                    source_filter,
+                    exc_info=True,
+                )
+                heading_channel_ = []
+        if heading_channel_:
+            structure_chunks = _merge_heading_channel(
+                structure_chunks, heading_channel_
+            )
         if not structure_chunks:
             return self._generic_one_shot(
                 query, top_k, show_sources, source_filter=source_filter
@@ -522,6 +701,15 @@ class RAGPipeline(
                         return tree_result
             chapters_to_cover, good_title_nums, appendix_entries = (
                 self._derive_chapter_numbers(structure_chunks)
+            )
+            # D1 claim channel (add-intra-page-chapter-pins): the claim map
+            # rides on the instance (see _derive_chapter_numbers) because
+            # the legacy 3-tuple return is unpacked positionally by ~24
+            # existing test call sites and monkeypatched doubles.  Doubles
+            # that never set the attribute yield an empty map — claims
+            # simply absent, today's behavior.
+            chapter_claims_: dict[int, tuple[str, int, int, int, bool]] = dict(
+                getattr(self, "_chapter_claims", None) or {}
             )
             # Keep the full (un-filtered) chapter set for boundary anchoring: a
             # target chapter's end page is bounded by the NEXT chapter's start, so
@@ -1341,6 +1529,45 @@ class RAGPipeline(
                         if not missing:
                             break
 
+                # D3 claim pin tier (add-intra-page-chapter-pins): a
+                # derivation claim is heading evidence — the strongest kind
+                # this path has — so fill-only pin each claimed roster
+                # chapter at its claim page.  No page floor in the WINDOW
+                # check (unlike the loose-digit rescue's >= 10): hcd
+                # chapters 1-3 claim on pages 2-4.  Ascending order matters:
+                # ch4's claim page equals ch3's pin page and the window
+                # check must see ch3 pinned first to reject ch4 here — the
+                # cut map (D4) carries that same-page start instead.
+                # Evidence filter: only claims carrying a real page position
+                # feed the tier, the cut map and the sentinel recovery.  A
+                # probe row without a page number (legacy ToC probes key the
+                # page "page", or not at all) records page 0 — not page
+                # evidence; likewise a claim sitting on a boilerplate or
+                # dot-leader ToC-like page (the guard this tier applied
+                # inline, now applied once so every consumer shares it).
+                # Without it, an unsignaled chapter whose only occurrence is
+                # its printed-ToC row would resurrect a "(approx pages 0+)"
+                # range the sentinel block must never emit, and a ToC-row
+                # claim would pin through the open window check.
+                src_claims_: dict[int, tuple[str, int, int, int, bool]] = {
+                    ch_: cl_
+                    for ch_, cl_ in chapter_claims_.items()
+                    if cl_[0] == src
+                    and cl_[1] >= 1
+                    and cl_[1] not in boiler_pages_
+                    and cl_[1] not in toc_like_pages_
+                }
+                for ct_ch_, ct_src_, _ct_title in sorted(chapters_to_cover):
+                    if ct_src_ != src or ct_ch_ not in src_claims_:
+                        continue
+                    if ct_ch_ in chapter_first_pg or ct_ch_ in toc_killed_:
+                        continue
+                    if not self._pin_fits_window(
+                        chapter_first_pg, ct_ch_, src_claims_[ct_ch_][1]
+                    ):
+                        continue
+                    chapter_first_pg[ct_ch_] = src_claims_[ct_ch_][1]
+
                 # Merge appendix labels detected from body section numbering
                 # into appendix_entries (from _derive_chapter_numbers).
                 seen_appendix_labels: set[str] = {al[0] for al in appendix_entries}
@@ -1493,6 +1720,90 @@ class RAGPipeline(
                             end_pg_ = boundary_pgs[nxt] - 1
                             break
                     source_chapter_ranges_[ch_] = (start_pg_, end_pg_)
+
+                # D4 cut map (add-intra-page-chapter-pins): page-granular
+                # ranges cannot represent same-page chapter starts, so every
+                # roster chapter whose claim sits on its final pin page —
+                # and every claimed chapter that stayed unpinned (it is
+                # sentinel-recovered with range start = claim page below) —
+                # records a cut: the position on the page where its heading
+                # claim sits.  Bucket admission walks the cuts instead of
+                # trusting the page range alone.  ``before_contains`` is
+                # whether the before-chapter's PRE-extension range contains
+                # the cut page — captured here, before the D5 extensions
+                # below, so the second-half boundary rule sees pre-extension
+                # truth (D6 orders the steps).  Cuts whose after-chapter is
+                # ToC-killed or filtered out are dropped at admission time
+                # and their page falls back to today's rule.
+                cut_by_after_: dict[int, tuple[int, int, int, int, bool, bool]] = {}
+                cuts_by_page_: dict[
+                    int, list[tuple[int, int, int, int, bool, bool]]
+                ] = {}
+                src_roster_nums_ = sorted(
+                    {ct[0] for ct in chapters_to_cover if ct[1] == src}
+                )
+                for c_ch_ in src_roster_nums_:
+                    claim_ = src_claims_.get(c_ch_)
+                    if claim_ is None:
+                        continue
+                    claim_pg_, claim_ppos_ = claim_[1], claim_[2]
+                    if (
+                        c_ch_ in chapter_first_pg
+                        and chapter_first_pg[c_ch_] != claim_pg_
+                    ):
+                        continue
+                    # Unpinned-but-claimed keeps its cut: the sentinel
+                    # recovery below starts its range at the claim page.
+                    before_ch_ = -1
+                    lower_roster_ = [n for n in src_roster_nums_ if n < c_ch_]
+                    if lower_roster_:
+                        before_ch_ = lower_roster_[-1]
+                    before_contains_ = False
+                    if before_ch_ != -1:
+                        before_rng_ = source_chapter_ranges_.get(before_ch_)
+                        before_contains_ = bool(
+                            before_rng_
+                            and before_rng_[0] <= claim_pg_ <= before_rng_[1]
+                        )
+                    cut_ = (
+                        claim_pg_,
+                        claim_ppos_,
+                        c_ch_,
+                        before_ch_,
+                        before_contains_,
+                        claim_[4],
+                    )
+                    cut_by_after_[c_ch_] = cut_
+                    cuts_by_page_.setdefault(claim_pg_, []).append(cut_)
+                for page_cuts_ in cuts_by_page_.values():
+                    page_cuts_.sort(key=lambda t: (t[1], t[2]))
+
+                # D5 range extension: when the next roster chapter's cut
+                # sits on its own range start page with ppos > 0, the
+                # pre-heading chunks of that page belong to the previous
+                # chapter — extend its end onto the cut page.  A sentinel j
+                # has no range at pass time; its recovery below embeds its
+                # own extension, so the pass skips it.  ppos == 0 cuts
+                # extend nothing (hcd ch4→ch5, ch15→ch16).
+                for r_idx_ in range(len(src_roster_nums_) - 1):
+                    j_ch_ = src_roster_nums_[r_idx_]
+                    k_ch_ = src_roster_nums_[r_idx_ + 1]
+                    j_rng_ = source_chapter_ranges_.get(j_ch_)
+                    if j_rng_ is None:
+                        continue
+                    k_cut_ = cut_by_after_.get(k_ch_)
+                    if k_cut_ is None or k_cut_[1] <= 0:
+                        continue
+                    k_start_ = source_chapter_ranges_.get(k_ch_, (None, None))[0]
+                    if k_start_ is None:
+                        # k unpinned: sentinel-recovered at its claim page.
+                        k_claim_ = src_claims_.get(k_ch_)
+                        if k_claim_ is None:
+                            continue
+                        k_start_ = k_claim_[1]
+                    if k_cut_[0] != k_start_ or j_rng_[1] != k_start_ - 1:
+                        continue
+                    source_chapter_ranges_[j_ch_] = (j_rng_[0], k_cut_[0])
                 if not source_chapter_ranges_:
                     logger.warning(
                         "No chapter page ranges derived for %s; "
@@ -1521,16 +1832,12 @@ class RAGPipeline(
                     for ch, page_range in source_chapter_ranges_.items()
                     if ch in target_ch_nums
                 }
-                chapter_keys = sorted(chapter_ranges_)
-                if not chapter_keys:
-                    logger.warning(
-                        "No target chapter page ranges derived for %s; "
-                        "falling back to generic search",
-                        src,
-                    )
-                    return self._generic_one_shot(
-                        query, top_k, show_sources, source_filter=source_filter
-                    )
+                # Fetch mode counts real ranges only: sentinel ranges must
+                # not flip a small book's single-section full fetch into
+                # round-robin sampling.  Decided from the source-derived
+                # ranges BEFORE D5 sentinel recovery widens the map — the
+                # same key set the pre-claim-channel code counted here.
+                single_section_mode = len(chapter_ranges_) <= 2
                 # Enumeration completeness: a target roster chapter no tier
                 # pinned still belongs in the answer.  Give it an empty
                 # sentinel range — its bucket stays empty and the existing
@@ -1543,18 +1850,95 @@ class RAGPipeline(
                 # sentinel ranges cannot shift any real chapter's end page.
                 tgt_src_nums_ = {ct[0] for ct in chapters_to_cover if ct[1] == src}
                 for tgt_ch_ in sorted(tgt_src_nums_):
-                    if tgt_ch_ not in chapter_ranges_:
+                    if tgt_ch_ in chapter_ranges_:
+                        continue
+                    # D5 sentinel recovery (add-intra-page-chapter-pins): a
+                    # claimed roster chapter no tier pinned still has
+                    # heading-position evidence — recover a real range
+                    # starting at its claim page instead of the empty (0, -1)
+                    # sentinel.  The end is the next roster chapter's start
+                    # page minus 1 (pin page when pinned, claim page when it
+                    # too is sentinel-recovered), extended onto that
+                    # chapter's cut page when its cut ppos > 0 (the same
+                    # rule the extension pass applies to existing pairs —
+                    # this chapter had no range at pass time).  Chapters
+                    # with no claim, or whose claim carries no page
+                    # evidence (a page-less probe row, a boilerplate or
+                    # ToC-like page — filtered out of src_claims_) keep the
+                    # (0, -1) sentinel: the placeholder-note path still
+                    # speaks for them, and a printed-ToC row never
+                    # resurrects a range.
+                    tgt_claim_ = src_claims_.get(tgt_ch_)
+                    if tgt_claim_ is None:
                         chapter_ranges_[tgt_ch_] = (0, -1)
+                        continue
+                    claim_page_ = tgt_claim_[1]
+                    next_start_: int | None = None
+                    next_cut_ch_: int | None = None
+                    roster_hi_ = max(
+                        (
+                            ct[0]
+                            for ct in full_chapters
+                            if ct[1] == src and ct[0] not in toc_killed_
+                        ),
+                        default=tgt_ch_,
+                    )
+                    for nxt_ in range(tgt_ch_ + 1, roster_hi_ + 1):
+                        if nxt_ in boundary_pgs:
+                            next_start_ = boundary_pgs[nxt_]
+                            next_cut_ch_ = nxt_
+                            break
+                        nxt_claim_ = src_claims_.get(nxt_)
+                        if nxt_claim_ is not None:
+                            next_start_ = nxt_claim_[1]
+                            next_cut_ch_ = nxt_
+                            break
+                    if next_start_ is None:
+                        chapter_ranges_[tgt_ch_] = (claim_page_, 10**6)
+                        continue
+                    end_ = next_start_ - 1
+                    if end_ < claim_page_:
+                        # Degenerate pin layout (next chapter starts before
+                        # this claim): clamp instead of emitting start > end.
+                        chapter_ranges_[tgt_ch_] = (claim_page_, claim_page_)
+                        continue
+                    nxt_cut_ = (
+                        cut_by_after_.get(next_cut_ch_)
+                        if next_cut_ch_ is not None
+                        else None
+                    )
+                    if (
+                        nxt_cut_ is not None
+                        and nxt_cut_[1] > 0
+                        and nxt_cut_[0] == next_start_
+                    ):
+                        end_ = next_start_
+                    chapter_ranges_[tgt_ch_] = (claim_page_, end_)
+                # D5 (add-intra-page-chapter-pins): the recovery above gave
+                # every page-evidenced target a real range, so a
+                # single-target query whose target was never pinned (its
+                # claim shares the previous chapter's opener page) still
+                # reaches the chapter path.  (0, -1) sentinels — unclaimed
+                # targets, or claims without page evidence — do not rescue
+                # the run: no page evidence means no page claim to make,
+                # and today's generic fallback is the right answer for it.
+                chapter_keys = sorted(chapter_ranges_.keys())
+                if not chapter_ranges_ or all(
+                    rng == (0, -1) for rng in chapter_ranges_.values()
+                ):
+                    logger.warning(
+                        "No target chapter page ranges derived for %s; "
+                        "falling back to generic search",
+                        src,
+                    )
+                    return self._generic_one_shot(
+                        query, top_k, show_sources, source_filter=source_filter
+                    )
                 logger.debug(
                     "Chapter page ranges for %s: %s",
                     src,
                     chapter_ranges_,
                 )
-                # Fetch mode counts real ranges only: sentinel ranges must
-                # not flip a small book's single-section full fetch into
-                # round-robin sampling.
-                single_section_mode = len(chapter_keys) <= 2
-                chapter_keys = sorted(chapter_ranges_.keys())
                 # Per-chapter fetch budget for multi-chapter overviews.  Each
                 # chapter is summarized independently via _summarize_bounded
                 # (single-pass budget 320k chars), so 8 chunks stay within one
@@ -1637,6 +2021,23 @@ class RAGPipeline(
                         bucket: list[dict[str, Any]] = []
                         dropped_n = 0
                         for c in candidates:
+                            # D4 cut-aware admission (add-intra-page-chapter-
+                            # pins): when the page carries cuts and the
+                            # helper assigns this chunk to another chapter's
+                            # segment, it is not this window's material.
+                            # No owner (page without cuts, or the chosen
+                            # owner's final range lost the page) → today's
+                            # admission filter decides, byte-for-byte.
+                            owner_ = _chunk_chapter_owner(
+                                int(c.get("page_number") or 0),
+                                _chunk_ppos(c),
+                                cuts_by_page_,
+                                chapter_keys,
+                                chapter_ranges_,
+                            )
+                            if owner_ is not None and owner_ != ch_num:
+                                dropped_n += 1
+                                continue
                             verdict = _classify_window_chunk(
                                 c,
                                 ch_num,
@@ -1712,9 +2113,25 @@ class RAGPipeline(
                     }
                     for c in page_stream:
                         pg = c.get("page_number", 0)
+                        # D4 cut-aware admission (add-intra-page-chapter-
+                        # pins): when the page carries cuts, the owner
+                        # helper segments it chunk-by-chunk and only the
+                        # owning chapter considers this chunk; when it
+                        # yields no owner (page without cuts, or the chosen
+                        # owner's final range lost the page) today's
+                        # first-range-wins rule applies, byte-for-byte.
+                        owner_ch_ = _chunk_chapter_owner(
+                            int(pg or 0),
+                            _chunk_ppos(c),
+                            cuts_by_page_,
+                            chapter_keys,
+                            chapter_ranges_,
+                        )
                         for ch_num in chapter_keys:
                             rng = chapter_ranges_[ch_num]
-                            if rng[0] <= pg <= rng[1]:
+                            if (owner_ch_ is not None and ch_num == owner_ch_) or (
+                                owner_ch_ is None and rng[0] <= pg <= rng[1]
+                            ):
                                 # D4: this (chapter, page)'s dynamic bound;
                                 # a page absent from the pre-pass counts
                                 # (impossible for an in-range stream chunk,
@@ -1864,6 +2281,9 @@ class RAGPipeline(
                 # Stash for the audit harness (D5) and surface any window
                 # that refused or tolerated foreign candidates (D2).
                 self._window_compositions = window_compositions
+                # D4 cut map stash (add-intra-page-chapter-pins): consumed
+                # by the audit harness alongside _window_compositions.
+                self._chapter_cuts = cuts_by_page_
                 _flagged = {
                     ch: comp
                     for ch, comp in window_compositions.items()
@@ -2318,7 +2738,23 @@ class RAGPipeline(
         note instead of a summary built from foreign material, and a
         foreign-dominated window keeps its (partial) summary with the note
         attached.  Stream and return text stay byte-identical to the
-        unwrapped method whenever every window is healthy.
+        unwrapped method whenever every window is healthy, the bucket guard
+        is a no-op, and the roster has no gaps to acknowledge.
+
+        The buckets pass the chapter-identity guard once over the full
+        roster before the loop (chapter-label-integrity design D1-r2): the
+        delegations each carry a single-key roster, inside which foreign
+        content could only be dropped -- its target chapter is not in that
+        delegation's roster -- and no roster gap could ever be seen, so the
+        wrapper partitions up front and passes the guarded buckets down.
+        Each delegated call re-runs the guard on the already-clean buckets
+        (a no-op there), keeping the funnel's own safety net unchanged.  A
+        chapter the guard emptied shows the placeholder note with the D5
+        reason line naming where its content went, instead of a summary; a
+        chapter that was empty before the guard keeps the funnel-driven
+        placeholder verbatim.  A roster spanning at least
+        ``_ROSTER_NOTE_MIN_CHAPTERS`` chapters with gaps gains the D5
+        coverage note exactly once, appended as the overview's last block.
 
         A chapter whose per-chapter call comes back empty (LLM failure)
         keeps its roster line — the same line the whole-answer roster
@@ -2326,11 +2762,42 @@ class RAGPipeline(
         empty summary cannot silently drop the chapter from the overview.
         """
         parts: list[str] = []
+        # Guard once over the full roster (design D1-r2/D2/D4), before any
+        # delegation -- see _guard_chapter_buckets for the walk.  The
+        # caller's dict and bucket lists are never mutated: the helper
+        # returns a working copy.
+        guarded, moved_away, dropped_from = self._guard_chapter_buckets(
+            chapter_keys, chapter_buckets
+        )
+        # Sizes before the guard ran: the helper copies the caller's buckets
+        # and only seeds absent roster keys with empty lists, so reading the
+        # caller's dict here is provably the same sizes its pre-pass saw.
+        pre_guard_size = {k: len(chapter_buckets.get(k) or []) for k in chapter_keys}
         for ch_num in chapter_keys:
             composition = window_compositions.get(ch_num)
             note = _chapter_coverage_note(composition)
             title = self._display_chapter_title(ch_titles.get(ch_num, ""))
             heading = f"Chapter {ch_num}" + (f" — {title}" if title else "")
+            if not guarded.get(ch_num) and pre_guard_size.get(ch_num):
+                # The guard emptied this bucket: its content self-identified
+                # as other chapters, so the placeholder plus the D5 reason
+                # line replaces both a summary and the degraded-window note
+                # -- here the cause is known, and the reason names where the
+                # content went.  The delegated call is skipped: the funnel's
+                # own placeholder could not carry the reason line, because
+                # the buckets it receives are already guarded empty.
+                bucket_note = _EMPTY_BUCKET_PLACEHOLDER_NOTE
+                reason = self._guard_emptied_reason(ch_num, moved_away, dropped_from)
+                if reason:
+                    bucket_note = f"{bucket_note}\n{reason}"
+                if self._on_chunk:
+                    self._on_chunk(
+                        (f"{heading}\n\n" if not parts else f"\n\n{heading}\n\n")
+                        + bucket_note,
+                        None,
+                    )
+                parts.append(f"{heading}\n\n{bucket_note}")
+                continue
             if note and composition and int(composition["in_range"]) == 0:
                 # The window holds none of the chapter's own content: the
                 # note replaces the summary instead of presenting foreign
@@ -2348,9 +2815,7 @@ class RAGPipeline(
                 # the part-join separator is emitted here to keep the live
                 # stream byte-identical to a single unwrapped run.
                 self._on_chunk("\n\n", None)
-            part = self._generate_multi_chapter_summary(
-                [ch_num], chapter_buckets, ch_titles
-            )
+            part = self._generate_multi_chapter_summary([ch_num], guarded, ch_titles)
             if not part.strip() and not note:
                 # Empty per-chapter summary with a healthy window: fall back
                 # to the chapter's roster line so the entry is not dropped
@@ -2374,6 +2839,16 @@ class RAGPipeline(
                 part = f"{heading}\n\n{note}"
             if part.strip():
                 parts.append(part)
+        coverage = self._roster_coverage_block(chapter_keys)
+        if coverage:
+            # Roster-gap acknowledgment (design D5) exactly once for the
+            # full roster -- never per delegated call, whose single-key
+            # roster sits below the note's minimum size.  It streams through
+            # _on_chunk like the headings and is the overview's last block,
+            # keeping streamed == stored byte-identical.
+            if parts and self._on_chunk:
+                self._on_chunk(f"\n\n{coverage}", None)
+            parts.append(coverage)
         return "\n\n".join(parts)
 
     def _tree_chapter_query(

@@ -203,6 +203,45 @@ class TestCLIJSONFormatValidation:
         assert "quotes" in parsed[0]["chunk_text"]
 
     @patch("secondbrain.search.Searcher")
+    def test_search_json_format_long_wrapped_text_round_trips(
+        self, mock_searcher_class: MagicMock
+    ) -> None:
+        """Regression: piped JSON output must parse despite hostile chunk text.
+
+        The JSON branch used to emit through ``console.print``, whose
+        soft-wrap inserted raw newlines inside long string values (control
+        characters) and whose markup parser could consume ``[bracket]``
+        spans — exactly what real PDF chunks contain. The MCP server parses
+        this stdout with serde and must never see a mutated payload.
+        """
+        chunk_text = (
+            'The system\'s default\r\nquota is "unlimited" [bold]per-user\r\n'
+            "extremes expose hacks [6] " + "word " * 40
+        )
+        mock_searcher = MagicMock()
+        mock_searcher.search.return_value = [
+            {
+                "chunk_id": "chunk-001",
+                "source_file": "docs/system-guide.pdf",
+                "page_number": 9,
+                "chunk_text": chunk_text,
+                "score": 0.87,
+            }
+        ]
+        mock_searcher.__enter__ = MagicMock(return_value=mock_searcher)
+        mock_searcher.__exit__ = MagicMock(return_value=False)
+        mock_searcher_class.return_value = mock_searcher
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["search", "system quota", "--format", "json"])
+
+        assert result.exit_code == 0
+        parsed = json.loads(result.output)
+        assert len(parsed) == 1
+        assert parsed[0]["chunk_text"] == chunk_text
+        assert "\x1b" not in result.output, "JSON output must carry no ANSI styling"
+
+    @patch("secondbrain.search.Searcher")
     def test_search_json_format_unicode(self, mock_searcher_class: MagicMock) -> None:
         """Test JSON format handles Unicode correctly."""
         mock_searcher = MagicMock()

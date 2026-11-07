@@ -54,7 +54,9 @@ def health(ctx: click.Context, output: str) -> None:
     with console.status("[cyan]Checking health...", spinner="dots"):
         health_status = get_health_status()
     if output == "json":
-        console.print(json.dumps(health_status, indent=2))
+        # Same rule as display_search_results: JSON must not pass through
+        # Rich's print(), which re-wraps and markup-renders the payload.
+        click.echo(json.dumps(health_status, indent=2))
     else:
         display_health_status(health_status)
 

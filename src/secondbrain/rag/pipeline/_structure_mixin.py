@@ -7,6 +7,7 @@ import re
 import unicodedata
 from typing import Any, ClassVar, cast
 
+from secondbrain.document import heading_forms
 from secondbrain.rag.intent_parser import QueryIntent
 from secondbrain.rag.pipeline._attributes import _RAGPipelineState
 from secondbrain.rag.pipeline._constants import (
@@ -187,6 +188,21 @@ _BOILERPLATE_CAPTION_RE = re.compile(
 )
 
 
+# Sentence-case license/boilerplate vocabulary for the amended D6-r3
+# "the"-carve-out (add-intra-page-chapter-pins D2): a dot-shaped
+# "N. The …" heading is admitted WITHOUT a colon unless it matches one of
+# these license/boilerplate phrases.  The colon requirement alone rejected
+# hcd-report's real ch4 heading ("4. The Four Phases of HCD Work") while
+# these tokens keep the license-header family rejected ("1. The Project
+# Gutenberg eBook of Alice…", "2. The MIT License", GFDL front matter).
+_LICENSE_TITLE_RE = re.compile(
+    r"(?:project\s+gutenberg|e-?book\s+of|free\s+software\s+foundation|"
+    r"mit\s+license|gnu\s+free\s+documentation|origin\s+of\s+this\s+software|"
+    r"endorse\s+or\s+promote|documentation\s+license|redistributions?\s+of)",
+    re.IGNORECASE,
+)
+
+
 # Standalone headings that start a license/colophon region regardless of
 # letter case (unnumbered license openers between real appendices).
 _BOILERPLATE_TITLE_RE = re.compile(
@@ -273,6 +289,55 @@ _CHAPTER_GATE_MIN_COMPARED = 4
 _CHAPTER_GATE_MIN_SCORE = 0.7
 
 
+# Bucket identity extraction calibration (chapter-label-integrity design
+# D3-r2/D6).  A chunk's chapter identity is read from its own payload in a
+# fixed priority order, first hit wins: the ingest-time structured fields
+# first, then the heading-shaped text marker.  Structured fields are
+# captured from the source document's own structure at ingestion, so they
+# are authoritative over the query-time page-range pins that assembled the
+# bucket and never hit the page floor -- the floor defends against ToC-row
+# text, not against ingest-captured fields.
+
+# ``section_id``: a dotted ("7.1") or bare ("11") section number, matched
+# against the whole stripped value so multi-level ids ("7.1.3") and
+# non-numeric ones ("intro") are skipped, never guessed from a prefix.
+_BUCKET_SECTION_ID_RE = re.compile(r"^\s*(\d{1,2})(?:\.\d{1,2})?")
+
+# ``heading_path``: the leading "Chapter N" prefix, case-sensitive -- only
+# the ingest-captured heading shape speaks, not prose like "chapter 7
+# covers ...".  The \b keeps "Chapter 7X" from reading as chapter 7.
+_BUCKET_HEADING_PATH_RE = re.compile(r"^Chapter (\d{1,2})\b")
+
+# Text-marker fallback calibration (the v1 rule).  Two head lines:
+# magazine-style openings put the section heading directly after the
+# printed-page marker line ("[ 591 ]" then "7.1 Walking Skeleton"), so the
+# marker must be found on the chunk's first or second line; beyond that the
+# chunk head is body prose, and a line-initial number there is a list step,
+# not a heading.  120 chars: real heading lines are short -- the same
+# ceiling the chapter-title capture inside _derive_chapter_numbers uses for
+# its title body ({2,120}) -- so a wrapped prose paragraph cannot be read
+# as a heading no matter how its line begins.  The front-matter floor of 3
+# excludes the title page and the ToC (pages 1-2) of short reports; the real
+# noise defense against ToC-row text is the dot-leader and page-suffix guards
+# below, so a book-length floor (the old 20) only starves short reports whose
+# chapters start from page 3 onward (fix-chapter-evidence-fidelity D5).
+_BUCKET_MARKER_MAX_LINES = 2
+_BUCKET_MARKER_MAX_HEADING_CHARS = 120
+_BUCKET_MARKER_MIN_PAGE = 3
+
+# The heading shape itself: line-initial "N.M" (chapter prefix captured),
+# optional whitespace, then a non-space of heading text.  A bare "7.1" with
+# nothing after it, and "1. Walk through..." list items (no second digit
+# group), match neither and never re-identify a chunk.
+_BUCKET_MARKER_RE = re.compile(r"^(\d{1,2})\.\d{1,2}\b\s*\S")
+
+# Per-line noise guards, mirrored from _detect_chapter_openings: a dot-leader
+# run anywhere marks a flattened ToC row, and a line ENDING in a bare number
+# is a ToC row's trailing page (digits inside the heading text are fine).
+_BUCKET_MARKER_DOT_LEADER_RE = re.compile(r"\.{2,}")
+_BUCKET_MARKER_PAGE_SUFFIX_RE = re.compile(r"\d+\s*$")
+
+
 def _anthology_is_heading_chunk(chunk: dict[str, Any]) -> bool:
     """Return True when a chunk is heading-role (role or element_type).
 
@@ -303,6 +368,17 @@ class _StructureMixin(_RAGPipelineState):
     # touches SQLite (or the shared conversation database).
     _structure_store: StructureStore | None
     _structure_store_ready: bool
+
+    # Intra-page chapter-pin claim channel (add-intra-page-chapter-pins D1),
+    # populated by ``_derive_chapter_numbers``: chapter number →
+    # (source, page_number, page_pos, match char offset, first_half), first
+    # claim wins (matching ``seen``).  It travels as an instance side
+    # channel instead of a fourth return element because the legacy
+    # 3-tuple return is unpacked by ~24 existing test call sites and by
+    # monkeypatched ``_derive_chapter_numbers`` doubles that must keep
+    # passing unchanged; ``_pipeline.py`` reads it immediately after the
+    # derivation call.
+    _chapter_claims: dict[int, tuple[str, int, int, int, bool]]
 
     def _derive_chapter_roster(self, structure_chunks: list[dict[str, Any]]) -> str:
         import re
@@ -924,6 +1000,105 @@ class _StructureMixin(_RAGPipelineState):
                 break
         return starts
 
+    @staticmethod
+    def _chunk_section_marker(chunk: dict[str, Any]) -> int | None:
+        """Return the chapter number the chunk's own structural identity names.
+
+        The bucket guard (chapter-label-integrity design D3-r2) needs
+        per-chunk chapter identity, read from the chunk's own payload in a
+        fixed priority order, first hit wins: the ingest-time structured
+        fields ``section_id`` (a dotted "7.1" or bare "11" numeric prefix,
+        matched against the whole stripped value), then ``chapter_id``
+        (numeric values and numeric strings only -- docling slugs like
+        "ch-story-mapping-..." are not chapter numbers), then the leading
+        "Chapter N" prefix of ``heading_path`` (case-sensitive), and only
+        when none of those yield a number, the heading-shaped ``N.M`` text
+        marker within the chunk's first ``_BUCKET_MARKER_MAX_LINES`` lines.
+
+        Structured identity is ingest-time evidence captured from the source
+        document's own structure, so it is authoritative over the query-time
+        page-range pins that assembled the bucket and never hits the
+        front-matter page floor: the floor defends against ToC-row text, not
+        against fields the ingester captured (design D3-r2).  The
+        text-marker fallback keeps the full v1 guard set -- the front-matter
+        page floor, the dot-leader rejection, and the page-suffix rejection
+        mirroring
+        :meth:`_detect_chapter_openings` -- so a line that could never open
+        a chapter also cannot re-identify a bucket chunk.  Inline prose ("in
+        chapter 7 we discuss ...") never matches because the pattern is
+        line-anchored at the ``N.M`` shape, and numbered list items ("1. Do
+        X") fail it for lack of a second digit group.  Pure function of the
+        chunk dict: no I/O, no state, so it is unit-testable without
+        instantiating the pipeline.
+
+        Parameters
+        ----------
+        chunk : dict[str, Any]
+            A bucket chunk; ``section_id``, ``chapter_id``, ``heading_path``,
+            ``chunk_text``, and ``page_number`` are read.
+
+        Returns
+        -------
+        int | None
+            The chapter number (1..30) of the first identity hit in priority
+            order, or ``None`` when no field qualifies.
+        """
+        # (1) section_id: dotted ("7.1") or bare ("11") numeric prefix,
+        # matched against the whole stripped value; anything else ("7.1.3",
+        # "intro") is skipped, never guessed from a prefix.
+        section_id = chunk.get("section_id")
+        if section_id is not None:
+            m = _BUCKET_SECTION_ID_RE.fullmatch(str(section_id))
+            if m:
+                ch = int(m.group(1))
+                if 1 <= ch <= 30:
+                    return ch
+        # (2) chapter_id: numeric values and numeric strings only; docling
+        # slugs ("ch-story-mapping-...") are not chapter numbers.
+        chapter_id = chunk.get("chapter_id")
+        if isinstance(chapter_id, bool):  # bool is an int subclass; not a number
+            chapter_id = None
+        if isinstance(chapter_id, int):
+            if 1 <= chapter_id <= 30:
+                return chapter_id
+        elif isinstance(chapter_id, str):
+            try:
+                ch = int(chapter_id.strip())
+            except ValueError:
+                ch = 0
+            if 1 <= ch <= 30:
+                return ch
+        # (3) heading_path: the leading "Chapter N" prefix, case-sensitive.
+        heading_path = chunk.get("heading_path")
+        if isinstance(heading_path, str) and heading_path:
+            m = _BUCKET_HEADING_PATH_RE.match(heading_path.strip())
+            if m:
+                ch = int(m.group(1))
+                if 1 <= ch <= 30:
+                    return ch
+        # (4) heading-shaped text marker (the v1 rule) -- the only step
+        # behind the front-matter page floor (_BUCKET_MARKER_MIN_PAGE).
+        page = int(chunk.get("page_number", 0) or 0)
+        if page < _BUCKET_MARKER_MIN_PAGE:  # title/ToC pages 1-2 (design D5)
+            return None
+        text = (chunk.get("chunk_text") or "").lstrip()
+        for line in text.split("\n")[:_BUCKET_MARKER_MAX_LINES]:
+            t = line.strip()
+            if len(t) > _BUCKET_MARKER_MAX_HEADING_CHARS:
+                continue
+            m = _BUCKET_MARKER_RE.match(t)
+            if not m:
+                continue
+            ch = int(m.group(1))
+            if not 1 <= ch <= 30:
+                continue
+            toc_row = _BUCKET_MARKER_DOT_LEADER_RE.search(t)
+            page_tail = _BUCKET_MARKER_PAGE_SUFFIX_RE.search(t)
+            if toc_row or page_tail:
+                continue
+            return ch
+        return None
+
     def _derive_chapter_numbers(
         self, structure_chunks: list[dict[str, Any]]
     ) -> tuple[list[tuple[int, str, str]], set[int], list[tuple[str, str, str]]]:
@@ -932,8 +1107,19 @@ class _StructureMixin(_RAGPipelineState):
         Returns (entries, chapter_level_nums, appendix_entries) where
         chapter_level_nums are chapter numbers from CHAPTER_N_RE/BARE_CHAPTER_RE
         (reliable titles) and appendix_entries are (appendix_label, source, title).
+
+        Side channel (add-intra-page-chapter-pins D1): the claim map —
+        chapter number → (source, page_number, page_pos, char offset,
+        first half) — is published on ``self._chapter_claims`` (reset at
+        entry, filtered with ``seen`` by the consecutive-run trim) instead
+        of widening the return to a 4-tuple, whose shape ~24 existing test
+        call sites and monkeypatched doubles unpack positionally.
         """
         import re
+
+        # D1 claim channel: reset per invocation so a stale map from a
+        # previous document or query can never leak into this one.
+        self._chapter_claims = {}
 
         if self._chunks_are_code_like(structure_chunks):
             # Code files (bundled JS, source, etc.) have no prose chapter
@@ -954,6 +1140,35 @@ class _StructureMixin(_RAGPipelineState):
         # whatever is still unclaimed at the end becomes an empty-title
         # entry instead of a section-heading-titled chapter.
         dotted_titles: set[tuple[int, str]] = set()
+        # D1 (add-intra-page-chapter-pins): claim positions recorded at each
+        # roster claim — (source, page_number, page_pos, char offset,
+        # first half) keyed by chapter number, first claim wins (matching
+        # ``seen``).  The offset is the regex match start (including the
+        # ``(?:^|\n)`` prefix for bare-number matches); the half rule
+        # mirrors document.structure_annotate: offset < len(text)/2.
+        # Recorded for pass-1 ``chapter_n_re`` and pass-2
+        # ``bare_chapter_re`` claims only — not ft_catch, not the Phase-3
+        # gap recovery, not the dotted/gated placeholders, none of which
+        # are heading-position evidence.
+        claims: dict[int, tuple[str, int, int, int, bool]] = {}
+
+        def _record_claim(
+            ch_num: int,
+            claim_src: str,
+            claim_chunk: dict[str, Any],
+            offset: int,
+        ) -> None:
+            if ch_num in claims:
+                return
+            claim_raw = claim_chunk.get("chunk_text", "")
+            claims[ch_num] = (
+                claim_src,
+                int(claim_chunk.get("page_number") or 0),
+                int(claim_chunk.get("page_pos") or 0),
+                offset,
+                offset < len(claim_raw) / 2,
+            )
+
         dot_leader = re.compile(r"\.{2,}[.\-]+")
         section_re = re.compile(r"(\d+)(?:\.(\d+))+(?:\s+(.+))?")
         chapter_n_re = re.compile(
@@ -968,10 +1183,40 @@ class _StructureMixin(_RAGPipelineState):
         # the quote, rosters reading "First Principles: What").  Display-only:
         # no pin logic reads quotes (add-anthology-aware-chapter-
         # summarization rider).
+        # fix-chapter-evidence-fidelity D6: the title body stops at line
+        # boundaries (whitespace without CR/LF) so a title never glues across
+        # arbitrary body lines, and the raised 200-char ceiling lets the
+        # word-boundary trim below decide the final length instead of the old
+        # mid-word 80-class cut.  The number→title separator is HORIZONTAL
+        # whitespace only ([^\S\n]): a numbered line with no title on its own
+        # line never matches — docling's empty list-marker runs ("1. ⏎ 2. ⏎
+        # … N. ⏎") sitting directly above a running footer used to make the
+        # last marker claim the footer line as a chapter title (B2-r1).  The
+        # number part keeps its OPTIONAL dot: the dot-less "2 First
+        # Principles: ..." shape is a shipped spec.
         bare_chapter_re = re.compile(
-            r"(?:^|\n)\s*(\d{1,2})\.?\s+([A-Za-z0-9]"
-            r"[A-Za-z0-9\s\-\(\),'/:.\u2013\u2014\"\u201c\u201d]{4,80})",
+            r"(?:^|\n)\s*(\d{1,2})\.?[^\S\n]+([A-Za-z0-9]"
+            r"[A-Za-z0-9 \t\v\f\-\(\),'/:.\u2013\u2014\"\u201c\u201d]{4,200})",
             re.MULTILINE,
+        )
+        # B2-r2 banner carve-out (orchestrator option A): the on-line anchor
+        # above killed the v1 cross-line capture for every no-title number
+        # line — including the shipped banner shape "1⏎1.1 Central
+        # Management" (a chapter banner dropped onto its own line above its
+        # dotted section heading), which the dotted-section guard used to
+        # convert to an empty-title entry.  This dedicated pattern restores
+        # exactly that shape, and only that shape: the number line carries no
+        # title text, intervening lines are blank, and the next content line
+        # must open with a dotted N.M section heading (lookahead) — a running
+        # footer ("Human-Centered Design — …") or another empty list marker
+        # ("2. ") never qualifies, so the marker-run/footer phantoms stay
+        # dead.  Matches feed the same dotted-section guard in the loop
+        # below; no title cleanup (trim/citation/legal_starts) ever sees
+        # them.  Display-only companion to bare_chapter_re: no pin logic
+        # reads banner captures.
+        banner_chapter_re = re.compile(
+            r"(?:^|\n)\s*(\d{1,2})\.?(?:[^\S\n]*\n)+[^\S\n]*"
+            r"(?=\s*\d{1,2}\.\d{1,2}\b)(\S[^\n]{4,200})"
         )
         # Patterns for appendix detection
         appendix_n_re = self._APPENDIX_RE
@@ -1025,6 +1270,7 @@ class _StructureMixin(_RAGPipelineState):
                     continue
                 if re.match(r"\d+(?:\.\d+)*$", fw):
                     continue
+                _record_claim(major, source, chunk, nm.start())
                 seen.add((major, source))
                 entries.append((major, source, title))
             for am in appendix_n_re.finditer(raw):
@@ -1123,19 +1369,124 @@ class _StructureMixin(_RAGPipelineState):
             "figure",
             "table",
         }
+        # D2 tail-deferral (add-intra-page-chapter-pins task 1.2): captures
+        # whose title class runs to the chunk's final character are
+        # fragments of a heading the chunker split mid-line (hcd-report
+        # "7. The IDEO", p6.p2 tail — the complete heading is captured by
+        # the next chunk).  They are collected here and re-run through the
+        # identical guard chain after the scan; the number claims only if
+        # nothing claimed it in the meantime.  A complete heading that
+        # merely ends at the chunk boundary still claims (post-scan), so
+        # no legitimate claim is lost.
+        pending_bare: list[tuple[dict[str, Any], re.Match[str]]] = []
+
+        def _claim_bare_match(
+            bm: re.Match[str],
+            raw: str,
+            raw_lines: list[str],
+            major: int,
+            source: str,
+        ) -> str | None:
+            """Guard chain for one bare_chapter_re match: title or None.
+
+            Shared verbatim by the in-loop pass and the deferred-tail
+            post-scan (task 1.2) so both paths apply the identical guard
+            sequence.  The dotted-section and gated-caption side effects
+            (``dotted_titles``/``gated_nums``) are preserved.
+            """
+            if _DOTTED_SECTION_TITLE_RE.match(bm.group(2)):
+                dotted_titles.add((major, source))
+                return None
+            # D6: the title capture is line-bound — the matched line plus
+            # at most one continuation line via heading_forms.capture_title
+            # (wrapped printed headings join; body lines never glue), then
+            # a word-boundary trim under the legacy 80-char budget.  A
+            # source-register citation row ("7 Wikipedia — The Design of
+            # Everyday Things (Doet…)") is rejected outright WITHOUT
+            # consuming the seen slot, so a real heading elsewhere in the
+            # chunk set can still claim the number.
+            match_line = raw.count("\n", 0, bm.end(2))
+            next_line = (
+                raw_lines[match_line + 1] if match_line + 1 < len(raw_lines) else None
+            )
+            title = heading_forms.capture_title(bm.group(2), next_line)
+            title = self._clean_chapter_title(title)
+            title = heading_forms.trim_title(title, 80)
+            if heading_forms.looks_like_citation_row(title):
+                return None
+            if len(title) < 4:
+                return None
+            fw = (title.lower().split()[0] if title.split() else "").rstrip(":;,.")
+            # D6-r3 "the"-carve-out, amended (add-intra-page-chapter-pins
+            # D2): the colon requirement rejected hcd-report's real ch4
+            # heading "4. The Four Phases of HCD Work" (no colon), which
+            # cascade-killed chapters 1-3 with it.  A dot-shaped
+            # "N. The …" title now also passes WITHOUT a colon unless it
+            # matches the license/boilerplate vocabulary
+            # (_LICENSE_TITLE_RE) — "1. The Project Gutenberg eBook of…"
+            # and the other observed license shapes stay rejected.
+            if fw in legal_starts and not (
+                fw == "the"
+                and raw[bm.end(1) : bm.end(1) + 1] == "."
+                and (":" in title or not _LICENSE_TITLE_RE.search(title))
+            ):
+                return None
+            if title[0].islower():
+                return None
+            if re.search(r"\bon\s+page\s+\d+", title, re.IGNORECASE):
+                return None
+            if self._is_boilerplate_caption(f"{major}. {title}"):
+                gated_nums.add((major, source))
+                return None
+            return title
+
         for chunk in structure_chunks:
             raw = chunk.get("chunk_text", "")
             source = chunk.get("source_file", "")
             cleaned = dot_leader.sub("", raw, count=1).strip()
+            raw_lines = raw.split("\n")
+            # fix-chapter-heading-probe-rank D1: the chunk's heading role
+            # gates the "Chapter N" ceiling exemption in the bare-number and
+            # banner loops below (ft_catch keeps its unconditional ceiling).
+            is_heading_chunk = chunk.get("chunk_role") == "heading"
 
             for bm in bare_chapter_re.finditer(raw):
                 major = int(bm.group(1))
-                if (
-                    major < 1
-                    or major > 30
-                    or (auth_max > 0 and major > auth_max)
-                    or (major, source) in seen
-                ):
+                if major < 1 or major > 30 or (major, source) in seen:
+                    continue
+                # D1 (fix-chapter-heading-probe-rank): the ceiling's purpose
+                # is suppressing noisy BODY text in Chapter-N-labeled books
+                # ("12 Selection and Assignment" prose) — noise lives on
+                # non-heading chunks.  A bare-number chapter match on a
+                # chunk_role == "heading" chunk is structural evidence, not
+                # noise (a lone later chapter's heading above a dense
+                # banner's "Chapter 2" capture), so it is exempt from the
+                # ceiling and proceeds through the remaining guards below.
+                # D3: non-heading refusals surface here instead of
+                # vanishing silently.
+                if auth_max > 0 and major > auth_max and not is_heading_chunk:
+                    logger.debug(
+                        "Ceiling refused chapter %d for %s (bare match)",
+                        major,
+                        source,
+                    )
+                    continue
+                # D2 tail-deferral: a capture whose title class ran to the
+                # chunk's final character is a chunk-boundary fragment, not
+                # a complete heading — but only when content precedes the
+                # match in the chunk (bm.start() > 0): the heading is
+                # embedded in flowing text the chunker truncated mid-line,
+                # so the line may continue in the next chunk ("7. The
+                # IDEO", p6.p2 tail — the complete capture on p6.p3 wins
+                # first).  A match at the chunk's very start is a standalone
+                # heading/ToC-row emission ("1 Introduction" heading chunks,
+                # "1 About Oracle VirtualBox" ToC rows) — complete by
+                # construction, and deferring it would let a later garbage
+                # claim (a license body line, a cross-reference) steal the
+                # number the fragment used to block.  Such matches claim
+                # in-loop exactly as before.
+                if bm.end(2) >= len(raw) and bm.start() > 0:
+                    pending_bare.append((chunk, bm))
                     continue
                 # Dotted-section title guard (fix-chapter-coverage D3): a
                 # bare-number chapter line directly followed by a section
@@ -1146,25 +1497,48 @@ class _StructureMixin(_RAGPipelineState):
                 # header speak for the slot — the pass-2 mirror of the
                 # ToC-row guard in _recovered_runon_toc_rows (pass 1's
                 # dotted first-word check never sees this shape: the title
-                # class starts at the section text, not at "N.N").
-                if _DOTTED_SECTION_TITLE_RE.match(bm.group(2)):
-                    dotted_titles.add((major, source))
+                # class starts at the section text, not at "N.N").  Since
+                # the B2-r1 on-line anchor the cross-line banner shape
+                # arrives via banner_chapter_re (loop below), which feeds
+                # this same guard; on-line dotted-shaped titles ("1 1.1 …"
+                # on one line) still arrive through the primary match.
+                # The guard chain itself (this guard plus the D6 line-bound
+                # title capture, citation rejection, carve-out and
+                # boilerplate gate) lives in _claim_bare_match above,
+                # shared verbatim with the deferred-tail post-scan.
+                bare_title = _claim_bare_match(bm, raw, raw_lines, major, source)
+                if bare_title is None:
                     continue
-                title = self._clean_chapter_title(bm.group(2))
-                if len(title) < 4:
-                    continue
-                fw = (title.lower().split()[0] if title.split() else "").rstrip(":;,.")
-                if fw in legal_starts:
-                    continue
-                if title[0].islower():
-                    continue
-                if re.search(r"\bon\s+page\s+\d+", title, re.IGNORECASE):
-                    continue
-                if self._is_boilerplate_caption(f"{major}. {title}"):
-                    gated_nums.add((major, source))
-                    continue
+                _record_claim(major, source, chunk, bm.start())
                 seen.add((major, source))
-                entries.append((major, source, title))
+                entries.append((major, source, bare_title))
+
+            # B2-r2 banner carve-out: number-only lines whose next content
+            # line opens with a dotted N.M section heading (banner_chapter_re
+            # above).  The captured section text is dotted-shaped by
+            # construction, so it flows straight into the same dotted-section
+            # guard as the primary captures: record the chapter title-less
+            # and never run title cleanup on it.  No seen check here — the
+            # placeholder materialization below re-checks seen, so a real
+            # title claim anywhere (earlier or later chunk) shadows the
+            # banner exactly as v1's cross-line capture did.
+            for bcm in banner_chapter_re.finditer(raw):
+                major_bn = int(bcm.group(1))
+                if major_bn < 1 or major_bn > 30:
+                    continue
+                # D1 (fix-chapter-heading-probe-rank): same heading-role
+                # exemption as the bare-number loop above — a banner-shaped
+                # capture on a heading chunk is structural evidence; on a
+                # non-heading chunk it is refused and surfaced (D3).
+                if auth_max > 0 and major_bn > auth_max and not is_heading_chunk:
+                    logger.debug(
+                        "Ceiling refused chapter %d for %s (banner match)",
+                        major_bn,
+                        source,
+                    )
+                    continue
+                if _DOTTED_SECTION_TITLE_RE.match(bcm.group(2)):
+                    dotted_titles.add((major_bn, source))
 
             for bam in bare_appendix_re.finditer(raw):
                 label = bam.group(1).upper()
@@ -1178,12 +1552,19 @@ class _StructureMixin(_RAGPipelineState):
 
             for fm in ft_catch.finditer(raw):
                 major_ft = int(fm.group(1))
-                if (
-                    major_ft < 1
-                    or major_ft > 30
-                    or (auth_max > 0 and major_ft > auth_max)
-                    or (major_ft, source) in seen
-                ):
+                if major_ft < 1 or major_ft > 30 or (major_ft, source) in seen:
+                    continue
+                # D1 (fix-chapter-heading-probe-rank): ft_catch captures are
+                # flattened-ToC row shapes; an above-ceiling ToC row is a
+                # phantom by construction, so the ceiling stays unconditional
+                # here regardless of the chunk's role.  D3: the refusal is
+                # surfaced instead of vanishing silently.
+                if auth_max > 0 and major_ft > auth_max:
+                    logger.debug(
+                        "Ceiling refused chapter %d for %s (toc-row match)",
+                        major_ft,
+                        source,
+                    )
                     continue
                 title_ft = self._clean_chapter_title(fm.group(2))
                 if len(title_ft) < 6:
@@ -1223,6 +1604,39 @@ class _StructureMixin(_RAGPipelineState):
                 if re.match(r"\d+(?:\.\d+)*$", fw):
                     clean_title = ""
                 seen_sec.add(major)
+
+        # D2 deferred-tail post-scan (task 1.2): re-run the identical guard
+        # chain on the tail-fragment captures collected above.  A number
+        # still unclaimed after the complete scan claims here with the
+        # fragment's position — the complete capture that ran in-loop
+        # already holds the slot and drops the fragment instead.  Runs
+        # before Phase-3 gap recovery so a recovered fragment claim fills
+        # the gap like any in-loop claim would.
+        for p_chunk, p_bm in pending_bare:
+            p_raw = p_chunk.get("chunk_text", "")
+            p_source = p_chunk.get("source_file", "")
+            p_major = int(p_bm.group(1))
+            if p_major < 1 or p_major > 30 or (p_major, p_source) in seen:
+                continue
+            # D3 (fix-chapter-heading-probe-rank): the deferred-tail refusal
+            # surfaces here instead of vanishing silently; the refusal
+            # semantics are unchanged — truncated above-ceiling captures
+            # stay refused.
+            if auth_max > 0 and p_major > auth_max:
+                logger.debug(
+                    "Ceiling refused chapter %d for %s (bare match)",
+                    p_major,
+                    p_source,
+                )
+                continue
+            p_title = _claim_bare_match(
+                p_bm, p_raw, p_raw.split("\n"), p_major, p_source
+            )
+            if p_title is None:
+                continue
+            _record_claim(p_major, p_source, p_chunk, p_bm.start())
+            seen.add((p_major, p_source))
+            entries.append((p_major, p_source, p_title))
 
         # Phase 3: chunk-boundary recovery for chapters
         if entries:
@@ -1312,6 +1726,10 @@ class _StructureMixin(_RAGPipelineState):
                 main_set = set(main_run)
                 entries = [e for e in entries if e[0] in main_set]
                 seen = {(n, s) for (n, s) in seen if n in main_set}
+                # D1: the claim map follows the same run filter as ``seen``
+                # — a claim outside the surviving consecutive run is not
+                # heading evidence the pipeline should pin or cut on.
+                claims = {n: c for n, c in claims.items() if n in main_set}
 
         # LLM fallback: classify unmatched appendix candidates
         if not appendix_entries and self._llm_provider is not None:
@@ -1375,6 +1793,10 @@ class _StructureMixin(_RAGPipelineState):
                 except Exception:
                     logger.debug("LLM appendix fallback failed", exc_info=True)
 
+        # D1: publish the claim map on the instance side channel (see the
+        # class attribute and docstring for why it is not a fourth return
+        # element).
+        self._chapter_claims = dict(claims)
         return entries, {s[0] for s in seen}, appendix_entries
 
     def _is_broad_coverage_query(self, query: str) -> bool:
@@ -2498,9 +2920,15 @@ class _StructureMixin(_RAGPipelineState):
         degenerate — structure survived but chapter numbers failed to parse
         — and the empty map sends the caller down the legacy scan instead
         of trusting a partial map.  Number-less surviving nodes count
-        toward the comparison: they are real chapter-shaped structure the
-        number-keyed map lost.  A repeated chapter number keeps
-        :meth:`_tree_chapter_map`'s own bail-out (and its log line).
+        toward the comparison — except the front-matter exemption (D-1):
+        number-less ROOT nodes preceding the first numbered kept node are
+        the document's title/cover, a real bookmark every outline-captured
+        tree carries, not a chapter whose number failed to parse.  With no
+        numbered kept node nothing precedes it and nothing is exempt;
+        number-less nodes interleaved after a numbered one still count:
+        they are real chapter-shaped structure the number-keyed map lost.
+        A repeated chapter number keeps :meth:`_tree_chapter_map`'s own
+        bail-out (and its log line).
 
         Args:
             nodes: The tree's nodes, in stored (page-ordered) sequence.
@@ -2568,7 +2996,28 @@ class _StructureMixin(_RAGPipelineState):
         # fewer chapters than the surviving chapter-shaped nodes, so the
         # partial map is untrustworthy and the legacy scan (which derives
         # numbers from text) takes over via the caller's empty-map path.
-        if kept and len(ranges) < len(kept):
+        # D-1 front-matter exemption: number-less ROOT (parent_id is None)
+        # kept nodes preceding the FIRST numbered kept node in kept order
+        # are the document's title/cover — a real bookmark every
+        # outline-captured tree carries, not a chapter whose number failed
+        # to parse — so they do not count toward the comparison.  With no
+        # numbered kept node nothing precedes it and nothing is exempt;
+        # number-less nodes interleaved after a numbered one still count,
+        # exactly as before.
+        first_numbered = next(
+            (
+                idx
+                for idx, node in enumerate(kept)
+                if re.fullmatch(r"\d+", (node.number or "").strip())
+            ),
+            None,
+        )
+        front_matter = 0
+        if first_numbered is not None:
+            for node in kept[:first_numbered]:
+                if node.parent_id is None:
+                    front_matter += 1
+        if kept and len(ranges) < len(kept) - front_matter:
             logger.info(
                 "Degenerate tree chapter map for %s: %d chapter-shaped "
                 "nodes survive the ToC-span guard but only %d carry a "
