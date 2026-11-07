@@ -12,7 +12,10 @@ logging.
 The threshold defaults to 10 seconds and is overridable through the
 ``SECONDBRAIN_SLOW_CALL_SECONDS`` environment variable, which is read at call
 time; malformed values fall back to the default. A call within the threshold
-emits nothing.
+emits nothing. The warning carries no logger level of its own, so it obeys
+the ambient log level: at the default WARNING level it stays visible in the
+default file log, and a quieter configuration (``SECONDBRAIN_LOG_LEVEL=ERROR``)
+suppresses it on every transport.
 """
 
 from __future__ import annotations
@@ -37,11 +40,10 @@ DEFAULT_SLOW_CALL_SECONDS = 10.0
 SLOW_CALL_SECONDS_ENV = "SECONDBRAIN_SLOW_CALL_SECONDS"
 
 logger = logging.getLogger(__name__)
-# The slow-call record must survive root-level reconfiguration (a quiet CLI
-# run keeps root at WARNING, a very quiet one at ERROR): pinning this logger's
-# own level means the logger gate never suppresses the record (handler-level
-# filtering, which is per-transport, still applies).
-logger.setLevel(logging.WARNING)
+# No logger level of its own: the record follows the ambient (root) log level,
+# so SECONDBRAIN_LOG_LEVEL=ERROR gates it out at the logger level on every
+# transport, while the default WARNING level keeps it visible. (A quiet CLI
+# run keeps root at WARNING — the warning survives that unchanged.)
 
 
 def _slow_call_threshold() -> float:
@@ -77,8 +79,9 @@ def timed_external_call(operation: str, target: str) -> Iterator[None]:
     helper. On exit, if the measured wall time exceeds the slow-call
     threshold, exactly one WARNING record is emitted naming *operation*,
     *target* and the elapsed seconds; a call within the threshold emits
-    nothing. The record is emitted regardless of the ambient log-level
-    configuration so silent stalls stay attributable in the default file log.
+    nothing. The record respects the ambient log level: the default WARNING
+    level keeps silent stalls attributable in the default file log, and a
+    quieter configuration (``SECONDBRAIN_LOG_LEVEL=ERROR``) suppresses it.
 
     The warning is also emitted when the wrapped call raises, provided the
     failed call was slow enough — a stalled call that errors is still

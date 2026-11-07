@@ -24,6 +24,12 @@ from secondbrain.rag.pipeline._streaming import (
     _StreamLeakError,
     _WindowStreamSink,
 )
+
+# The bucket guard reads each chunk's own heading-shaped section marker; the
+# extractor lives on _StructureMixin beside the chapter-opener detection it
+# mirrors (chapter-label-integrity design D3).  No import cycle: that module
+# never imports this one (the composed mixin class lives in _mixins.py).
+from secondbrain.rag.pipeline._structure_mixin import _StructureMixin
 from secondbrain.rag.pipeline._text_quality import (
     _DERAIL_FUNCTION_WORD_RATIO,
     _DERAIL_TTR_FN_GATE,
@@ -254,6 +260,105 @@ _CHAPTER_PARTIAL_COVERAGE_NOTE = (
     "overview below is built from an evenly spread sample of it, so its "
     "coverage is partial."
 )
+
+
+# Minimum roster size before the enumeration acknowledges gaps
+# (chapter-label-integrity design D5/D6).  Below it the small-roster paths
+# (single-chapter full fetch, small documents) own the output shape and a
+# coverage note would only restate what the reader already sees.
+_ROSTER_NOTE_MIN_CHAPTERS = 3
+
+
+# Empty-bucket placeholder note, single-sourced from its former inline home
+# in _generate_multi_chapter_summary so the funnel and the legacy coverage
+# wrapper (chapter-label-integrity design D1-r2) emit the exact same block.
+# The wording is unchanged from the pre-guard funnel and stays pinned
+# verbatim by existing tests.
+_EMPTY_BUCKET_PLACEHOLDER_NOTE = (
+    "No document content was retrieved for this chapter "
+    "(its detected page range contains no body text), so no "
+    "summary could be generated."
+)
+
+
+# Empty-bucket reason lines appended under the existing placeholder note
+# (chapter-label-integrity design D5).  Wording is fixed so the streamed
+# block and the stored transcript stay byte-identical and tests pin it
+# verbatim; {targets} is the ascending, comma-joined list of chapters the
+# guard reassigned the bucket's content to.
+_GUARD_REASSIGNED_NOTE = (
+    "Content in this chapter's detected page range self-identifies as "
+    "chapter {targets} and was summarized under chapter {targets}'s heading."
+)
+_GUARD_DROPPED_NOTE = (
+    "Content in this chapter's detected page range could not be attributed "
+    "to any rostered chapter and was skipped."
+)
+
+
+# Roster-gap coverage note (chapter-label-integrity design D5).  It streams
+# through the same _on_chunk channel as the chapter headings and is appended
+# to the returned transcript, so streamed == stored stays byte-identical.
+# {missing} is the en-dash-collapsed list of chapter numbers the roster does
+# not include ("1\u20135, 9").
+_ROSTER_COVERAGE_NOTE = (
+    "Coverage note: the detected chapter roster does not include chapter(s) "
+    "{missing} \u2014 they may exist but were not located in the document's "
+    "structure; this overview covers only the chapters listed above."
+)
+
+
+def _missing_chapter_numbers(chapter_keys: list[int]) -> list[int]:
+    """Return the chapter numbers in 1..max that the roster does not include.
+
+    The multi-chapter enumeration (chapter-label-integrity design D5)
+    acknowledges a roster that begins above 1 or skips numbers inside its
+    span, so a partial overview cannot pass as complete.  Numbers above the
+    roster maximum are out of scope (nothing suggests they exist), and 0 or
+    negative numbers were never valid chapter numbers anywhere in this
+    pipeline.
+
+    Args:
+        chapter_keys: The detected roster, in any order.
+
+    Returns
+    -------
+        Ascending chapter numbers from 1 through ``max(chapter_keys)`` that
+        are missing from the roster; empty for an empty roster.
+    """
+    if not chapter_keys:
+        return []
+    roster = set(chapter_keys)
+    return [n for n in range(1, max(roster) + 1) if n not in roster]
+
+
+def _format_chapter_gaps(numbers: list[int]) -> str:
+    """Render missing chapter numbers with en-dash runs ("1\u20135, 9").
+
+    Consecutive numbers collapse into one inclusive en-dash range (U+2013,
+    the same dash the chapter headings use), everything else stays a bare
+    number, and the result joins ascending with ", ".
+
+    Args:
+        numbers: Missing chapter numbers, ascending (see
+            :func:`_missing_chapter_numbers`).
+
+    Returns
+    -------
+        The collapsed list, or ``""`` when *numbers* is empty.
+    """
+    if not numbers:
+        return ""
+    runs: list[tuple[int, int]] = []
+    start = prev = numbers[0]
+    for n in numbers[1:]:
+        if n == prev + 1:
+            prev = n
+            continue
+        runs.append((start, prev))
+        start = prev = n
+    runs.append((start, prev))
+    return ", ".join(str(a) if a == b else f"{a}\u2013{b}" for a, b in runs)
 
 
 # Upper bound on the page-spread sample that feeds the whole-document overview
@@ -590,6 +695,117 @@ class _FallbackMixin(_RAGPipelineState):
         logger.error("RAG output still implausible; returning empty")
         return ""
 
+    def _guard_chapter_buckets(
+        self,
+        chapter_keys: list[int],
+        chapter_buckets: dict[int, list[dict[str, Any]]],
+    ) -> tuple[dict[int, list[dict[str, Any]]], dict[int, set[int]], set[int]]:
+        """Partition the buckets by each chunk's own chapter identity (D2/D4).
+
+        Returns ``(guarded_buckets, moved_away, dropped_from)``: a working
+        copy in which chunks whose own identity names a different chapter
+        were reassigned to the rostered target (or dropped when the target
+        is unrostered), per source chapter the set of chapters its content
+        was reassigned to, and the set of chapters that lost content to an
+        unrostered chapter.  The caller's dict and bucket lists are never
+        mutated.  The walk visits roster chapters in ascending order so a
+        chunk moving forward lands in its target before that target's own
+        pass; a moved chunk's id is shielded from re-examination, so the
+        sweep terminates deterministically in one pass no matter how buckets
+        overlap (design D4's one-sweep rule).
+
+        The legacy coverage wrapper (design D1-r2) calls this once over the
+        full roster before its per-chapter delegations and passes the
+        guarded buckets down; the delegations then re-run it on
+        already-clean buckets, where it is a no-op by construction.
+        """
+        buckets: dict[int, list[dict[str, Any]]] = {
+            k: list(v) for k, v in chapter_buckets.items()
+        }
+        for k in chapter_keys:
+            # A rostered chapter without a caller-side bucket stays
+            # placeholder-empty; the guard can still reassign content into it.
+            buckets.setdefault(k, [])
+        roster = set(chapter_keys)
+        moved_away: dict[int, set[int]] = {}
+        dropped_from: set[int] = set()
+
+        def _cid(c: dict[str, Any]) -> Any:
+            # Same identity convention as the routing mixin's by-id merge
+            # (``c.get("chunk_id", id(c))``): stored chunks carry a unique
+            # ``chunk_id``; doubles fall back to object identity.  ``or``
+            # rather than the default argument so a None/"" chunk_id cannot
+            # collapse distinct chunks onto one key.
+            return c.get("chunk_id") or id(c)
+
+        moved_ids: set[Any] = set()
+        for n in sorted(roster):
+            kept: list[dict[str, Any]] = []
+            for c in buckets[n]:
+                cid = _cid(c)
+                if cid in moved_ids:
+                    # Reassigned here by an earlier chapter's pass: its home
+                    # is decided, and re-examining it could only bounce it
+                    # back out (design D4's one-sweep rule).
+                    kept.append(c)
+                    continue
+                m = _StructureMixin._chunk_section_marker(c)
+                if m is None or m == n:
+                    kept.append(c)
+                    continue
+                if m in roster:
+                    # Reassign to the chapter the chunk itself names, deduped
+                    # by chunk id (page-range overlap can pre-place it there).
+                    target = buckets[m]
+                    if not any(_cid(t) == cid for t in target):
+                        target.append(c)
+                    moved_ids.add(cid)
+                    moved_away.setdefault(n, set()).add(m)
+                else:
+                    # Unrostered target: dropped from the bucket, never from
+                    # the store (design D4).
+                    dropped_from.add(n)
+            buckets[n] = kept
+        return buckets, moved_away, dropped_from
+
+    def _guard_emptied_reason(
+        self,
+        ch_num: int,
+        moved_away: dict[int, set[int]],
+        dropped_from: set[int],
+    ) -> str:
+        """Reason line for a bucket the guard emptied (design D5).
+
+        Returns the fixed wording for the second line under the placeholder
+        note -- naming the chapters the content was reassigned to, or saying
+        it was skipped as unattributable -- or ``""`` when the guard took
+        nothing from this chapter.  When content was both reassigned and
+        dropped, the reassignment line wins: it names where the content
+        went, and D5 fixes exactly these two variants.  Single-sourced so
+        the funnel and the coverage wrapper emit the same line.
+        """
+        targets = sorted(moved_away.get(ch_num, ()))
+        if targets:
+            joined = ", ".join(str(t) for t in targets)
+            return _GUARD_REASSIGNED_NOTE.format(targets=joined)
+        if ch_num in dropped_from:
+            return _GUARD_DROPPED_NOTE
+        return ""
+
+    def _roster_coverage_block(self, chapter_keys: list[int]) -> str:
+        """Coverage note naming the roster's missing chapter numbers (D5).
+
+        Returns the formatted note, or ``""`` when the roster is empty,
+        contiguous, or smaller than ``_ROSTER_NOTE_MIN_CHAPTERS`` (the
+        small-roster paths own their output shape).  Single-sourced so the
+        funnel and the legacy coverage wrapper emit the same block, exactly
+        once per overview.
+        """
+        missing = _missing_chapter_numbers(chapter_keys)
+        if len(chapter_keys) >= _ROSTER_NOTE_MIN_CHAPTERS and missing:
+            return _ROSTER_COVERAGE_NOTE.format(missing=_format_chapter_gaps(missing))
+        return ""
+
     def _generate_multi_chapter_summary(
         self,
         chapter_keys: list[int],
@@ -607,6 +823,25 @@ class _FallbackMixin(_RAGPipelineState):
         mixed run (some chapters summarized, some not) stores exactly what the
         reader saw.
 
+        Before any heading streams, the buckets pass a content-consistency
+        guard (chapter-label-integrity design D2/D4) on a working copy: a
+        chunk whose own structural identity (structured payload fields, else
+        heading-shaped text markers) names a different rostered chapter is
+        reassigned to that chapter's bucket (deduped by chunk id, each chunk
+        moving at most once), and one naming an unrostered chapter is
+        dropped, so no chapter heading is ever summarized over content that
+        self-identifies as another chapter.  A
+        bucket the guard empties keeps its placeholder note, extended with a
+        deterministic reason line naming where its content went; buckets that
+        were already empty keep the note verbatim.  A roster that skips
+        chapter numbers (or starts above 1) and spans at least
+        ``_ROSTER_NOTE_MIN_CHAPTERS`` chapters gains a coverage note naming
+        the missing numbers (design D5).  Both new blocks flow through
+        ``_on_chunk`` exactly as the headings do, so the streamed transcript
+        and the stored answer stay byte-identical; the note is withheld on the
+        all-empty run, whose transcript collapses to ``""`` for the caller's
+        roster fallback.
+
         When NO chapter yields any content (every overview came back empty and
         there is no placeholder note), the transcript collapses to ``""`` so
         the caller's roster fallback can speak, mirroring
@@ -616,10 +851,21 @@ class _FallbackMixin(_RAGPipelineState):
         same documented roster-fallback display divergence as before this
         change, deliberately left unchanged.
         """
+        # Guard pass (design D2/D4) on a working copy -- the caller's dict and
+        # bucket lists are never mutated; the walk itself lives in
+        # _guard_chapter_buckets.
+        buckets, moved_away, dropped_from = self._guard_chapter_buckets(
+            chapter_keys, chapter_buckets
+        )
+        # Sizes before the guard ran: the helper copies the caller's buckets
+        # and only seeds absent roster keys with empty lists, so reading the
+        # caller's dict here is provably the same sizes its pre-pass saw.
+        pre_guard_size = {k: len(chapter_buckets.get(k) or []) for k in chapter_keys}
+
         all_parts: list[str] = []
         have_content = False
         for ch_num in chapter_keys:
-            bucket = chapter_buckets.get(ch_num)
+            bucket = buckets.get(ch_num)
             title = self._display_chapter_title(ch_titles.get(ch_num, ""))
             heading = f"Chapter {ch_num}" + (f" — {title}" if title else "")
             if not bucket:
@@ -627,11 +873,17 @@ class _FallbackMixin(_RAGPipelineState):
                 # body chunks (usually a mis-pinned start page).  Emit an
                 # explicit placeholder: silently omitting chapters made a
                 # partial overview look complete.
-                note = (
-                    "No document content was retrieved for this chapter "
-                    "(its detected page range contains no body text), so no "
-                    "summary could be generated."
-                )
+                note = _EMPTY_BUCKET_PLACEHOLDER_NOTE
+                if pre_guard_size.get(ch_num):
+                    # The guard -- not the caller -- emptied this bucket, so
+                    # the placeholder owes the reader a reason line (design
+                    # D5).  Buckets that were already empty keep the note
+                    # verbatim.
+                    reason = self._guard_emptied_reason(
+                        ch_num, moved_away, dropped_from
+                    )
+                    if reason:
+                        note = f"{note}\n{reason}"
                 if self._on_chunk:
                     # The returned text joins blocks with "\n\n"; the live
                     # stream needs its own separators or chapters glue together.
@@ -684,6 +936,18 @@ class _FallbackMixin(_RAGPipelineState):
             all_parts.append(f"{heading}\n\n{summary}")
         if not have_content:
             return ""
+        note = self._roster_coverage_block(chapter_keys)
+        if note:
+            # Roster-gap acknowledgment (design D5): a partial overview must
+            # not pass as complete, so the missing chapter numbers are named
+            # where the enumeration itself lives.  The note is the last block
+            # and streams through _on_chunk like the headings, keeping
+            # streamed == stored byte-identical; it is withheld on the
+            # all-empty run, whose transcript collapses to "" above and whose
+            # caller-side roster fallback owns the enumeration instead.
+            if self._on_chunk and all_parts:
+                self._on_chunk(f"\n\n{note}", None)
+            all_parts.append(note)
         return "\n\n".join(all_parts)
 
     def _generate_single_chapter_summary(

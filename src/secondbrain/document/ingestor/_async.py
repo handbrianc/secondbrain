@@ -884,9 +884,20 @@ class AsyncDocumentIngestor(DocumentIngestor):
                 return None
             store = self._get_structure_store()
             if store is None:
+                logger.warning(
+                    "Structure store unavailable; captured structure tree for "
+                    "%s (%d nodes) not persisted",
+                    structure.source_file,
+                    len(structure.nodes),
+                )
                 return None
             await asyncio.to_thread(self._preserve_audio_topics, structure, store)
             await store.save_structure_async(structure)
+            if not structure.nodes:
+                logger.warning(
+                    "Captured structure tree for %s persisted with 0 nodes",
+                    structure.source_file,
+                )
             return structure
         except Exception as e:
             logger.warning(

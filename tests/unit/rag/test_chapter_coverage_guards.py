@@ -7,7 +7,9 @@ Groups:
    storage without ``find_chunks`` leaves the guard fully inactive.
 2. Degenerate-map fallback (task 2.2): when the surviving number-keyed map
    covers fewer chapters than the tree's chapter-shaped nodes outside ToC
-   spans (number-less survivors included), the empty map sends
+   spans (number-less survivors included; the front-matter title root —
+   a number-less root preceding every numbered node — is exempt, D-1),
+   the empty map sends
    ``_tree_chapter_query`` down the existing legacy seam; a healthy tree
    is untouched, byte-identical to the plain map.
 3. Window-end clamp (task 3.2): undershooting tree window ends extend to
@@ -274,6 +276,89 @@ class TestToCSpanGuard:
             {ch: f"Title {ch}" for ch in expected_ranges},
         )
         assert not any("Degenerate tree chapter map" in m for m in capture.messages)
+
+    def test_numberless_title_root_does_not_degenerate_the_map(
+        self, tmp_path: Any
+    ) -> None:
+        # D-1: the document-title root every outline-captured tree carries
+        # (kind="chapter", number=None, pages 1-1, parent None) is front
+        # matter, not a lost chapter.  The hcd-report shape — title root
+        # followed by 21 numbered chapters with real page ranges, all
+        # probe-clean — must build the full 21-entry map instead of
+        # degenerating to the legacy scan.
+        store = StructureStore(db_path=str(tmp_path / "structures.db"))
+        nodes = [
+            _node(
+                "doc-title-root",
+                number=None,
+                title="Human-Centered Design — Best Practices Report",
+                pages=(1, 1),
+            )
+        ]
+        nodes += [
+            _node(f"ch-{n}", number=str(n), title=f"Title {n}", pages=(n + 1, n + 1))
+            for n in range(1, 22)
+        ]
+        _save_tree(store, _GUARD_SRC, nodes_override=nodes)
+        storage = _TreeStorage(_guard_chunks(_GUARD_SRC, toc_pages=None))
+        pipeline = _make_pipeline(storage, _CannedProvider(), store)
+        tree = store.load_tree(_GUARD_SRC)
+        assert tree is not None
+
+        capture = _capture_logs(pipeline)
+        try:
+            guarded = pipeline._guarded_tree_chapter_map(
+                tree.nodes, storage, _GUARD_SRC
+            )
+        finally:
+            _release_logs(capture)
+
+        assert guarded == RAGPipeline._tree_chapter_map(tree.nodes)
+        assert len(guarded[0]) == 21
+        assert not any("Degenerate tree chapter map" in m for m in capture.messages)
+
+    def test_interleaved_numberless_root_still_degenerates_the_map(
+        self, tmp_path: Any
+    ) -> None:
+        # The D-1 exemption is front matter only: a second number-less root
+        # sitting BETWEEN numbered chapters (after any numbered node) still
+        # counts toward the degenerate comparison, exactly as before.
+        store = StructureStore(db_path=str(tmp_path / "structures.db"))
+        nodes = [
+            _node(
+                "doc-title-root",
+                number=None,
+                title="Human-Centered Design — Best Practices Report",
+                pages=(1, 1),
+            )
+        ]
+        nodes += [
+            _node(f"ch-{n}", number=str(n), title=f"Title {n}", pages=(n + 1, n + 1))
+            for n in range(1, 4)
+        ]
+        nodes.append(
+            _node("mid-root", number=None, title="Unnumbered part", pages=(5, 5))
+        )
+        nodes += [
+            _node(f"ch-{n}", number=str(n), title=f"Title {n}", pages=(n + 2, n + 2))
+            for n in range(4, 6)
+        ]
+        _save_tree(store, _GUARD_SRC, nodes_override=nodes)
+        storage = _TreeStorage(_guard_chunks(_GUARD_SRC, toc_pages=None))
+        pipeline = _make_pipeline(storage, _CannedProvider(), store)
+        tree = store.load_tree(_GUARD_SRC)
+        assert tree is not None
+
+        capture = _capture_logs(pipeline)
+        try:
+            guarded = pipeline._guarded_tree_chapter_map(
+                tree.nodes, storage, _GUARD_SRC
+            )
+        finally:
+            _release_logs(capture)
+
+        assert guarded == ({}, {})
+        assert any("Degenerate tree chapter map" in m for m in capture.messages)
 
     def test_plain_map_builds_all_21_chapters(self) -> None:
         nodes = [

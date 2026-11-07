@@ -6445,7 +6445,17 @@ class TestGluedTitleAnchoringEndToEnd:
                 "source_file": self.SRC,
             },
         ]
-        headings = [self.H._heading("Chapter 4 — Graphical User Interface", 119)]
+        # Premise change (fix-chapter-heading-probe-rank): pre-D2 the
+        # toc-only probe pin hid the storage's heading chunks from the
+        # derivation; D2's probe-independent heading channel removes that
+        # artificial seam, and with the real (unpinned) probe the pre-B
+        # sample already contained these headings.  Glued labels ("Chapter4",
+        # as in the sibling test) defeat chapter_n_re and keep auth_max at 0,
+        # so the backfill machinery stays under test.
+        headings = [
+            self.H._heading("Chapter4 Graphical User Interface", 119),
+            self.H._heading("Chapter6 StorageReplication", 302),
+        ]
         body = [
             self.H._body("4 GraphicalUser Interface 44", 6),
             self.H._body(
@@ -6454,6 +6464,14 @@ class TestGluedTitleAnchoringEndToEnd:
             self.H._body("prose padding the middle of the chapter quietly", 200),
         ]
         pipeline = self.H._make(monkeypatch, toc_probe, body, headings)
+        # The real probe's primary role filter already includes heading
+        # chunks; pin the sample to what it would return (the toc rows plus
+        # these storage headings) instead of the toc-only rows.
+        monkeypatch.setattr(
+            pipeline,
+            "_probe_document_structure",
+            lambda top_k, source_filter=None: [*toc_probe, *headings],
+        )
         answer = self.H._run(pipeline)
         # ch4 shows the spaced opener spelling ...
         assert "Chapter 4 — Graphical User Interface (approx pages 119+)" in answer, (

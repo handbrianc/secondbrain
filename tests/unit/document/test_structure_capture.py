@@ -310,6 +310,154 @@ class TestCaptureDoclingHeadings:
         assert part is None or part.source_file == str(tmp_path / "book.pdf")
 
 
+class TestSynthesizedHeadings:
+    """Numbered headings the parser missed are synthesized (A2).
+
+    The shared heading forms scan every text item's lines (the bare chapter
+    form requires its separating dot); synthesized candidates are woven
+    into the parser stream and mapped by the same tree builder, so the ids,
+    kinds and heading paths are identical to parser-produced nodes.
+    """
+
+    def test_missed_chapters_are_synthesized(self, tmp_path: Any) -> None:
+        # docling left the printed headings as plain paragraphs: the roster
+        # is synthesized from the text stream with the same node scheme.
+        doc = docling_doc(
+            doc_item(
+                "Body prose before the chapter " * 5, label="text", level=0, page=8
+            ),
+            doc_item("9. Krippendorff's Turn", label="text", level=0, page=10),
+            doc_item("9.1 Knowledge Creation", label="text", level=0, page=11),
+            doc_item("Closing body prose " * 30, label="text", level=0, page=12),
+        )
+        part = capture_docling_headings(doc, tmp_path / "book.pdf")
+        assert part is not None
+        assert [n.node_id for n in part.nodes] == ["ch09", "sec09.01"]
+        ch = part.nodes[0]
+        assert ch.kind == "chapter"
+        assert ch.number == "9"
+        assert ch.title == "Krippendorff's Turn"
+        assert ch.page_start == 10
+        sec = part.nodes[1]
+        assert sec.parent_id == "ch09"
+        assert sec.kind == "section"
+        assert sec.number == "9.1"
+        assert sec.heading_path == "Chapter 9 — Krippendorff's Turn > 9.1"
+        assert part.sources == {"heading_hierarchy": True}
+
+    def test_register_rows_without_dot_are_never_synthesized(
+        self, tmp_path: Any
+    ) -> None:
+        # "7 Wikipedia — …" lacks the separating dot: the bare form's
+        # synthesis requirement rejects it outright.
+        doc = docling_doc(
+            doc_item(
+                "7 Wikipedia — The Design of Everyday Things (Doet)",
+                label="text",
+                level=0,
+                page=23,
+            )
+        )
+        assert capture_docling_headings(doc, tmp_path / "book.pdf") is None
+
+    def test_dotted_register_rows_are_rejected_as_citations(
+        self, tmp_path: Any
+    ) -> None:
+        # The dotted variant passes the number scan but carries the
+        # citation shape (spaced dash + parenthetical abbreviation).
+        doc = docling_doc(
+            doc_item(
+                "7. Wikipedia — The Design of Everyday Things (Doet)",
+                label="text",
+                level=0,
+                page=23,
+            )
+        )
+        assert capture_docling_headings(doc, tmp_path / "book.pdf") is None
+
+    def test_parser_headings_are_never_displaced_or_duplicated(
+        self, tmp_path: Any
+    ) -> None:
+        # The parser caught 5.2 verbatim; the stream also carries chapter
+        # 5's printed form. The parser node wins by number and the printed
+        # form fills the chapter it names — no duplicates anywhere.
+        doc = docling_doc(
+            doc_item("5. Input Handling Rules", label="text", level=0, page=3),
+            doc_item("5.2 Input Handling", level=2, page=4),
+        )
+        part = capture_docling_headings(doc, tmp_path / "book.pdf")
+        assert part is not None
+        numbers = [n.number for n in part.nodes]
+        assert numbers.count("5") == 1
+        assert numbers.count("5.2") == 1
+        assert [n.node_id for n in part.nodes] == ["ch05", "sec05.02"]
+        assert part.nodes[1].parent_id == "ch05"
+
+    def test_synthesized_echo_is_deduplicated_first_wins(self, tmp_path: Any) -> None:
+        doc = docling_doc(
+            doc_item("9. Krippendorff's Turn", label="text", level=0, page=10),
+            doc_item("9. Krippendorff's Turn", label="text", level=0, page=10),
+        )
+        part = capture_docling_headings(doc, tmp_path / "book.pdf")
+        assert part is not None
+        assert [n.node_id for n in part.nodes] == ["ch09"]
+
+    def test_deeper_numbered_lines_are_not_synthesized(self, tmp_path: Any) -> None:
+        # "5.2.3 Details" is beyond the N./N.M synthesis contract; without
+        # the guard the N.M head would mint a garbage sibling titled
+        # "3 Details" next to the parser's real node.
+        doc = docling_doc(doc_item("5.2.3 Details", label="text", level=0, page=8))
+        assert capture_docling_headings(doc, tmp_path / "book.pdf") is None
+
+    def test_prose_shaped_section_lines_are_not_synthesized(
+        self, tmp_path: Any
+    ) -> None:
+        # Observed false-positive shapes on the real corpus: the section
+        # form's title must start with an alphanumeric character.
+        doc = docling_doc(
+            doc_item(
+                "3.1/3.0/Swagger 2.0; static HTML via", label="text", level=0, page=21
+            ),
+            doc_item(
+                "1.6.3 observed at retrieval time", label="text", level=0, page=23
+            ),
+        )
+        assert capture_docling_headings(doc, tmp_path / "book.pdf") is None
+
+    def test_numbered_list_clusters_are_not_synthesized(self, tmp_path: Any) -> None:
+        doc = docling_doc(
+            doc_item(
+                "1. Install the package\n2. Configure the service\n3. Restart the daemon",
+                label="text",
+                level=0,
+                page=5,
+            )
+        )
+        assert capture_docling_headings(doc, tmp_path / "book.pdf") is None
+
+    def test_synthesized_toc_ghosts_are_suppressed_and_recorded(
+        self, tmp_path: Any
+    ) -> None:
+        # Suppression runs over the woven stream: a synthesized ghost on a
+        # ToC page is dropped and recorded exactly like a parser ghost,
+        # while the real chapter outside the span survives.
+        doc = docling_doc(
+            doc_item("9. Krippendorff's Turn", label="text", level=0, page=30),
+            doc_item("7.1 Definitions", label="text", level=0, page=9),
+        )
+        part = capture_docling_headings(
+            doc,
+            tmp_path / "book.pdf",
+            toc_listings=[TocListing("7.1", "Definitions", 9, 1)],
+            toc_page_span=(3, 22),
+        )
+        assert part is not None
+        assert [n.node_id for n in part.nodes] == ["ch09"]
+        assert sc._suppressed_entries_of(part) == [
+            {"title": "7.1 Definitions", "page": 9}
+        ]
+
+
 # ---------------------------------------------------------------------------
 # Heading plausibility gate (fix-chunk-heading-context, tasks 2.1/2.2)
 # ---------------------------------------------------------------------------

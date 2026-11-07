@@ -31,9 +31,12 @@ unchanged by this default.
 External service calls (LLM, embedding, vector store) SHALL log a WARNING
 with the operation name, target (endpoint or collection), and elapsed time
 when the call's elapsed time exceeds a configured slow-call threshold. The
-warning SHALL be emitted regardless of log level configuration, so silent
-multi-minute stalls are attributable in the default file log. Calls within
-the threshold SHALL NOT emit the warning.
+warning SHALL carry no logger level of its own, so it follows the ambient
+log level: at the default WARNING level it is emitted regardless of any
+transport configuration, keeping silent multi-minute stalls attributable in
+the default file log, and a quieter level configuration (e.g.
+``SECONDBRAIN_LOG_LEVEL=ERROR``) suppresses it. Calls within the threshold
+SHALL NOT emit the warning.
 
 #### Scenario: Stalled call is attributable
 

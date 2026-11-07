@@ -45,7 +45,7 @@ def _document_order_key(chunk: dict[str, Any]) -> tuple[int, float]:
 
 
 # Intended bucket-window diffs, verified per book by running the sampler
-# over these fixtures.  Two deliberate mechanisms move window page lists:
+# over these fixtures.  Three deliberate mechanisms move window page lists:
 #
 # (1) fix-summary-fidelity D1 — the range-faithful admission filter refuses
 #     foreign material on a chapter's speculative "minus one" start page,
@@ -58,6 +58,15 @@ def _document_order_key(chunk: dict[str, Any]) -> tuple[int, float]:
 #     bound and each window pulls toward its earlier dense pages.  These
 #     books are dense nearly everywhere, so almost every chapter's list
 #     moves; the lists below are the post-D4 windows.
+# (3) chapter-label-integrity D1-r2 — the full-roster bucket guard runs in
+#     the coverage wrapper before the per-chapter delegations, so chunks the
+#     delegations previously dropped (their target chapter was not in a
+#     single-key roster) are now reassigned into the rostered target's
+#     bucket and the summarizer boundary receives it there.  Only hcd-report
+#     ever carried such a chunk (an "18.3" heading line inside ch19's
+#     pre-B2 detected range); under the regenerated B2-r4 baseline ch18's
+#     own range covers that chunk's page, so the guard is moot there (see
+#     the D6-r4 provenance note below the overrides).
 #
 # Ranges, pins, enumeration, and every other bucket stay byte-identical to
 # ``baselines.json`` (the pre-change record); only these page lists move.
@@ -123,24 +132,47 @@ BASELINE_WINDOW_OVERRIDES: dict[str, dict[str, list[int]]] = {
         "19": [467, 467, 467, 467, 467, 467, 468, 468],
         "20": [469, 469, 469, 470, 470, 470, 470, 470],
     },
-    "hcd-report": {
-        # D4-only moves: dense pages (6-8 body chunks) now contribute up to
-        # 5 chunks before the window spills onto the next page; chapters
-        # whose pages hold <= 5 in-range chunks keep their baseline windows
-        # (6, 10, 13, 15, 16 are not overridden).
-        "7": [6, 6, 6, 6, 6, 7, 7, 7],
-        "8": [9, 9, 9, 9],
-        "9": [10, 10, 10, 10, 10],
-        "11": [11, 11, 11, 11, 11],
-        "12": [12, 12, 12, 12],
-        "14": [13, 13, 13, 13],
-        "17": [16, 16, 16, 16, 16, 17, 17, 17],
-        "18": [19, 19, 19, 19, 19],
-        "19": [20, 20, 20, 20, 21, 21, 21, 21],
-        "20": [22, 22, 22, 22],
-        "21": [23, 23, 23, 23, 23, 24, 24, 24],
-    },
 }
+
+
+# B2-r4 (design D6-r4): the former ``hcd-report`` entry here was removed —
+# its baseline section in ``baselines.json`` is regenerated from the current
+# derivation (the same capture the characterization tests use), and these
+# overrides merge OVER that baseline, so the stale lists would only shadow
+# it.  ``user-manual`` / ``pve-admin-guide`` stay: their baselines remain
+# pre-change records (window purity pins pve ch16 to its override).
+#
+# Provenance of the regenerated hcd diff, classified per D6-r4 (as amended
+# by the round-2 D-3 outcome below):
+#   ground-truth-verified:
+#   - register row can no longer title ch7 (citation-rejected); ch7 is
+#     titled from its real heading, admitted via the D6-r3 "the"-carve-out.
+#   - ch5 admitted with its real heading/title and its own content (pg5's
+#     three chunks move from ch6's bucket to ch5's).
+#   - 18/19 boundary (D-3 resolution): ch19's real heading is physically on
+#     page 20 (chunk at char 326, verified against the live store's tree,
+#     whose ch19 node spans pages 20-21).  The D-3 continuation fix
+#     restored ch19's short title needle ("… (OpenAPI"), letting the
+#     title-anchor tier match the real heading and pin @20; the glued title
+#     used to fail that match (its needle spanned the `\ufffeFirst
+#     Tooling)` corruption) and a later tier pinned @21.  18 (19,19),
+#     19 (20,21) — ground truth, no longer deferred.
+#   - D-3 roster titles: ch12/13/16/18/20/21 glue bodies removed and ch6/
+#     ch15 orphan-word joins preserved — every derived title now matches
+#     the tree's clean node titles; ch19 truncates at "(OpenAPI" (source
+#     `\ufffe` corruption beyond the head window — artifact, recorded
+#     verbatim).
+#   artifact-removal shifts, accepted:
+#   - ch6 sentinel (0,-1): same-page ch5/ch6 claim collision — the
+#     page-granular fallback cannot represent same-page starts.
+#   - ch3 dropped by the longest-consecutive-run filter: its [1,2,3] run is
+#     front-matter-contaminated and loses to the [5..21] run.
+#   - residual: ch6's marker-less page-6 table body derives into ch7's
+#     bucket (recoverable only by the future intra-page-pin change).
+#   - ch18's bucket keeps the page-20 "18.3" marker chunk (text-marker
+#     identity beats the (19,19) window — the chunk self-identifies as
+#     ch18's section, consistent with the tree's page-granular
+#     under-coverage of ch18).
 
 
 def load_fixture(name: str) -> list[dict[str, Any]]:

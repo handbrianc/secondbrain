@@ -855,3 +855,409 @@ class TestThresholdCalibration:
         assert pipeline._window_compositions == {}
         assert _PARTIAL_NOTE_PREFIX not in answer
         assert _EMPTY_NOTE not in answer
+
+
+# ---------------------------------------------------------------------------
+# fix-chapter-heading-probe-rank (tasks 1.3, 2.2)
+#
+# The "Chapter N" ceiling in _derive_chapter_numbers used to refuse every
+# above-ceiling chapter match silently — including the lone later chapter's
+# heading chunk itself, whose bare number ("3 Gamma Convolution Pipelines")
+# exceeds the highest "Chapter N"-labeled capture a dense page's banner
+# contributed (auth_max = 2).  The dropped chapter then flipped the flow into
+# the 2-chapter lossless fetch, whose unbounded ch2 bucket absorbed ch3's
+# page.  D1 exempts heading-role chunks from the bare/banner ceilings
+# (ft_catch ToC-row captures keep it unconditionally); D3 surfaces every
+# ceiling refusal at debug level; D2 merges a heading-role storage scan into
+# the derivation sample so the derivation sees a chapter's heading even when
+# the bounded probe sample does not.
+# ---------------------------------------------------------------------------
+
+
+def _chapter_labeled_noise_book() -> list[dict[str, Any]]:
+    """A Chapter-N-labeled two-chapter book with noisy body text above the ceiling.
+
+    Pass 1 captures "Chapter 1"/"Chapter 2" from the two heading chunks,
+    setting auth_max = 2; page 22 then carries a bare-number line shaped
+    like a section heading on a NON-heading chunk — the "12 Selection and
+    Assignment" prose shape the ceiling exists to refuse in Chapter-N-labeled
+    books.  Without the ceiling this line would fabricate chapter 12.
+    """
+    return [
+        _chunk("Chapter 1 Alpha Foundational Frameworks", 10, role="heading"),
+        _chunk("prose deriving wavelets", 11),
+        _chunk("Chapter 2 Beta Optimization Landscapes", 20, role="heading"),
+        _chunk("prose pacing coherence schedules", 21),
+        _chunk("12 Selection and Assignment prose trails here", 22),
+        _chunk("prose finishing the closing cross-references", 23),
+    ]
+
+
+def _ceiling_noise_book() -> list[dict[str, Any]]:
+    """The Chapter-N book carrying one of each above-ceiling noise shape.
+
+    Page 22: bare-number prose on a body chunk.  Page 23: a banner shape — a
+    number-only line above a dotted section line — on a body chunk.  Page
+    24: a flattened ToC row on a HEADING chunk — ft_catch's ceiling holds
+    regardless of the chunk's role.
+    """
+    return [
+        _chunk("Chapter 1 Alpha Foundational Frameworks", 10, role="heading"),
+        _chunk("prose deriving wavelets", 11),
+        _chunk("Chapter 2 Beta Optimization Landscapes", 20, role="heading"),
+        _chunk("prose pacing coherence schedules", 21),
+        _chunk("12 Selection and Assignment prose trails here", 22),
+        _chunk("12\n12.1 Container Modes Section", 23),
+        _chunk("Pipelines 7 12 Convolution Pipeline Notes", 24, role="heading"),
+        _chunk("prose finishing the closing cross-references", 25),
+    ]
+
+
+class TestHeadingCeilingExemption:
+    """D1/D3: heading-role evidence is admissible above the ceiling."""
+
+    def test_dense_book_real_probe_keeps_chapter_three(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        storage = ChapterFixtureStorage(_dense_banner_book())
+        pipeline = _make_pipeline(storage, _NullProvider())
+        # No probe pin: the REAL _probe_document_structure runs.  The shipped
+        # TestDensePageDocumentOrder pins the probe to _dense_probe() to
+        # route around this exact drop; this test is the drop's regression.
+        recorded = _record_window_positions(pipeline, monkeypatch)
+        answer = _run_iterative(pipeline, "summarize this document", _SRC)
+
+        # The roster keeps all three chapters: three per-chapter summaries
+        # at the summarizer boundary, ch3 bucketed with its page-41 chunk.
+        assert sorted(recorded) == ["1", "2", "3"]
+        assert [(pg, pos) for pg, pos, _txt in recorded["3"]] == [(41, 0)]
+        assert "prose convolving kernels" in recorded["3"][0][2]
+        # Multi-chapter mode, not the 2-chapter lossless fetch: ch2's window
+        # stays on its own pages (30-31) and never absorbs page 41.
+        assert {pg for pg, _pos, _txt in recorded["2"]} == {30, 31}
+        assert 41 not in {pg for pg, _pos, _txt in recorded["2"]}
+        assert "Chapter 1 — Alpha Foundational Frameworks" in answer
+        assert "Chapter 2 — Beta Optimization Landscapes" in answer
+        assert "Chapter 3 — Gamma Convolution Pipelines" in answer
+        assert _PARTIAL_NOTE_PREFIX not in answer
+        assert _EMPTY_NOTE not in answer
+
+    def test_body_noise_above_ceiling_stays_refused(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        storage = ChapterFixtureStorage(_chapter_labeled_noise_book())
+        pipeline = _make_pipeline(storage, _NullProvider())
+        probe = pipeline._probe_document_structure(top_k=400, source_filter=_SRC)
+        entries, _good, _appendix = pipeline._derive_chapter_numbers(probe)
+
+        # The bare above-ceiling line lives on a non-heading chunk: the
+        # ceiling refuses it and the roster keeps its labeled chapters only.
+        assert sorted({e[0] for e in entries}) == [1, 2]
+
+        # The full flow keeps the two-chapter map: no chapter 12 bucket,
+        # no chapter 12 entry in the answer.
+        recorded = _record_buckets(pipeline, monkeypatch)
+        answer = _run_iterative(pipeline, "summarize this document", _SRC)
+        assert sorted(recorded) == ["1", "2"]
+        assert "Chapter 12" not in answer
+
+    def test_ft_catch_row_above_ceiling_refused_regardless_of_role(self) -> None:
+        storage = ChapterFixtureStorage(_ceiling_noise_book())
+        pipeline = _make_pipeline(storage, _NullProvider())
+        probe = pipeline._probe_document_structure(top_k=400, source_filter=_SRC)
+        entries, _good, _appendix = pipeline._derive_chapter_numbers(probe)
+
+        # The flattened ToC row sits on a chunk_role == "heading" chunk, but
+        # ft_catch captures keep the ceiling unconditionally (an
+        # above-ceiling ToC row is a phantom by construction): the roster
+        # keeps its labeled chapters only.
+        assert sorted({e[0] for e in entries}) == [1, 2]
+
+    def test_ceiling_refusals_surface_in_debug_log(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        storage = ChapterFixtureStorage(_ceiling_noise_book())
+        pipeline = _make_pipeline(storage, _NullProvider())
+        probe = pipeline._probe_document_structure(top_k=400, source_filter=_SRC)
+        with caplog.at_level(
+            logging.DEBUG, logger="secondbrain.rag.pipeline._structure_mixin"
+        ):
+            entries, _good, _appendix = pipeline._derive_chapter_numbers(probe)
+
+        assert sorted({e[0] for e in entries}) == [1, 2]
+        messages = [record.getMessage() for record in caplog.records]
+        # D3: every ceiling refusal names the number, the source, and the
+        # matching shape instead of vanishing silently.
+        assert f"Ceiling refused chapter 12 for {_SRC} (bare match)" in messages
+        assert f"Ceiling refused chapter 12 for {_SRC} (banner match)" in messages
+        assert f"Ceiling refused chapter 12 for {_SRC} (toc-row match)" in messages
+
+    def test_deferred_tail_ceiling_refusal_surfaces(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        book = [
+            _chunk("Chapter 1 Alpha Foundational Frameworks", 10, role="heading"),
+            _chunk("prose deriving wavelets", 11),
+            _chunk("Chapter 2 Beta Optimization Landscapes", 20, role="heading"),
+            _chunk("prose pacing coherence schedules", 21),
+            # A chunk-boundary fragment on a HEADING chunk: the last line's
+            # bare match runs to the chunk's final character, so the D2
+            # tail-deferral holds the capture for the post-scan instead of
+            # claiming it in-loop (the D1 role exemption already passed the
+            # in-loop ceiling).  The post-scan ceiling then refuses the
+            # truncated above-ceiling capture — surfacing in the debug log
+            # (D3) instead of vanishing silently.
+            _chunk(
+                "prose noise preamble\n12 Gamma Convolution Tail", 26, role="heading"
+            ),
+        ]
+        storage = ChapterFixtureStorage(book)
+        pipeline = _make_pipeline(storage, _NullProvider())
+        probe = pipeline._probe_document_structure(top_k=400, source_filter=_SRC)
+        with caplog.at_level(
+            logging.DEBUG, logger="secondbrain.rag.pipeline._structure_mixin"
+        ):
+            entries, _good, _appendix = pipeline._derive_chapter_numbers(probe)
+
+        assert sorted({e[0] for e in entries}) == [1, 2]
+        messages = [record.getMessage() for record in caplog.records]
+        assert messages == [f"Ceiling refused chapter 12 for {_SRC} (bare match)"]
+
+    def test_banner_match_on_heading_chunk_claims_above_ceiling(self) -> None:
+        book = [
+            _chunk("Chapter 1 Alpha Foundational Frameworks", 10, role="heading"),
+            _chunk("prose deriving wavelets", 11),
+            _chunk("Chapter 2 Beta Optimization Landscapes", 20, role="heading"),
+            _chunk("prose pacing coherence schedules", 21),
+            _chunk("12\n12.1 Container Modes Section", 30, role="heading"),
+            _chunk("prose archiving container estates calmly", 31),
+        ]
+        storage = ChapterFixtureStorage(book)
+        pipeline = _make_pipeline(storage, _NullProvider())
+        probe = pipeline._probe_document_structure(top_k=400, source_filter=_SRC)
+        entries, _good, _appendix = pipeline._derive_chapter_numbers(probe)
+
+        # The banner-shaped capture sits on a heading chunk above the
+        # ceiling: exempted like the bare-number loop, it claims the chapter.
+        assert sorted({e[0] for e in entries}) == [1, 2, 12]
+        # The dotted banner capture records the number title-less: no section
+        # text ever becomes the chapter's title (the same dotted-section
+        # guard the bare loop feeds).
+        assert [e[2] for e in entries if e[0] == 12] == [""]
+
+
+class _TruncatedProbeStorage(ChapterFixtureStorage):
+    """Storage double whose broad structural scan is page-window truncated.
+
+    The probe's primary call (element_types + chunk_roles, the broad OR
+    filter) is capped at ``cap`` chunks in page order — the oversized-book
+    shape whose bounded sample ends before a late chapter's heading.  The
+    heading-role scan (the D2 channel's call) is served in full, so the
+    channel can rescue the heading the probe sample dropped.
+    """
+
+    def __init__(self, chunks: list[dict[str, Any]], cap: int) -> None:
+        super().__init__(chunks)
+        self._cap = cap
+
+    def find_structural_chunks(
+        self,
+        element_types: list[str] | None = None,
+        chunk_roles: list[str] | None = None,
+        source_prefix: str | None = None,
+        limit: int | None = None,
+    ) -> list[dict[str, Any]]:
+        results = list(
+            super().find_structural_chunks(
+                element_types=element_types,
+                chunk_roles=chunk_roles,
+                source_prefix=source_prefix,
+                limit=None,
+            )
+        )
+        # Only the probe's primary call passes both lists (the broad OR
+        # filter); the heading-channel call passes chunk_roles alone and the
+        # probe's all-chunk fallback passes neither.
+        if element_types and chunk_roles:
+            results = results[: self._cap]
+        if limit is not None:
+            results = results[:limit]
+        return results
+
+
+class TestHeadingChannelMerge:
+    """D2: the derivation sees heading chunks independent of the probe sample."""
+
+    def test_heading_beyond_truncated_probe_sample_still_derives(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        chunks = [
+            _chunk("1 Alpha Foundational Frameworks", 10, pos=0, role="heading"),
+            _chunk("prose deriving wavelets", 10, pos=1),
+            _chunk("prose buffering stream windows", 11, pos=0),
+            _chunk("prose pacing coherence schedules", 12, pos=0),
+            _chunk("2 Beta Optimization Landscapes", 20, pos=0, role="heading"),
+            _chunk("prose measuring beta gradients", 20, pos=1),
+            _chunk("prose finishing the beta material", 21, pos=0),
+            _chunk("3 Gamma Convolution Pipelines", 30, pos=0, role="heading"),
+            _chunk("prose convolving kernels", 31, pos=0),
+        ]
+        storage = _TruncatedProbeStorage(chunks, cap=6)
+        pipeline = _make_pipeline(storage, _NullProvider())
+
+        # Precondition: the probe's primary sample ends before ch3's heading
+        # (the bounded-sample truncation shape the channel exists for).
+        probe = pipeline._probe_document_structure(top_k=400, source_filter=_SRC)
+        assert len(probe) == 6
+        assert all("3 Gamma" not in str(c.get("chunk_text")) for c in probe)
+
+        recorded = _record_window_positions(pipeline, monkeypatch)
+        answer = _run_iterative(pipeline, "summarize this document", _SRC)
+
+        # The heading-role scan feeds the missing heading into the
+        # derivation sample: the chapter claims, ranges, and is bucketed.
+        assert sorted(recorded) == ["1", "2", "3"]
+        assert [(pg, pos) for pg, pos, _txt in recorded["3"]] == [(31, 0)]
+        assert "prose convolving kernels" in recorded["3"][0][2]
+        assert "Chapter 3 — Gamma Convolution Pipelines" in answer
+        assert _PARTIAL_NOTE_PREFIX not in answer
+        assert _EMPTY_NOTE not in answer
+
+    def test_channel_merge_dedupes_preferring_probe_copies(self) -> None:
+        from secondbrain.rag.pipeline._pipeline import _merge_heading_channel
+
+        probe_copy = {
+            "chunk_id": "a",
+            "chunk_text": "3 Gamma Convolution Pipelines",
+            "chunk_role": "heading",
+            "source_file": _SRC,
+            "page_number": 40,
+        }
+        scan_duplicate = {
+            "chunk_id": "a",
+            "chunk_text": "3 Gamma Convolution Pipelines",
+            "chunk_role": "heading",
+            "source_file": _SRC,
+            "page_number": 40,
+            "page_pos": 7,
+        }
+        scan_only = {
+            "chunk_id": "b",
+            "chunk_text": "4 Delta Resonance Workbenches",
+            "chunk_role": "heading",
+            "source_file": _SRC,
+            "page_number": 50,
+        }
+        merged = _merge_heading_channel([probe_copy], [scan_duplicate, scan_only])
+        # The probe's copy wins the duplicate slot (the storage scan's copy
+        # is dropped whole, not field-merged); the scan-only chunk appends
+        # after the probe's chunks, in the scan's page order.
+        assert merged[0] is probe_copy
+        assert merged == [probe_copy, scan_only]
+
+        # Without chunk ids (fixture-shape chunks) the content coordinates
+        # dedupe instead.
+        fixture_shape = {
+            "chunk_text": "1 Alpha Foundational Frameworks",
+            "chunk_role": "heading",
+            "source_file": _SRC,
+            "page_number": 1,
+            "page_pos": 0,
+        }
+        assert _merge_heading_channel([fixture_shape], [dict(fixture_shape)]) == [
+            fixture_shape
+        ]
+
+    def test_scan_only_heading_woven_before_shadowing_body_claim(self) -> None:
+        """A heading dropped by a mid-page probe cut is woven into position.
+
+        The store's within-page order is its own scroll order, not page_pos
+        order, and the probe truncates after its page-ascending sort — so
+        the cut can land mid-page and drop a heading whose pos precedes an
+        included same-page body chunk carrying the same chapter number.
+        Appending the scan-only heading would let that body claim shadow it
+        (first-claim-wins); the weave restores ``(page, page_pos)`` order
+        and the heading's claim wins.
+        """
+        from secondbrain.rag.pipeline._pipeline import _merge_heading_channel
+
+        chunks = [
+            _chunk("1 Alpha Foundational Frameworks", 10, pos=0, role="heading"),
+            _chunk("prose deriving wavelets", 10, pos=1),
+            _chunk("2 Beta Optimization Landscapes", 20, pos=0, role="heading"),
+            _chunk("prose pacing coherence schedules", 20, pos=1),
+            # Page 30 holds a body row claiming ch3 (pos 2) and the real
+            # ch3 heading (pos 0); the double's scroll order serves the
+            # body first, so the capped probe includes the body and drops
+            # the heading.
+            _chunk("3 Kernel Sheet Assortment", 30, pos=2),
+            _chunk("3 Gamma Convolution Pipelines", 30, pos=0, role="heading"),
+            _chunk("prose convolving kernels", 31, pos=0),
+            _chunk("4 Delta Resonance Workbenches", 40, pos=0, role="heading"),
+            _chunk("prose measuring delta drift", 40, pos=1),
+        ]
+        storage = _ScrollOrderedStorage(chunks, cap=5)
+        pipeline = _make_pipeline(storage, _NullProvider())
+
+        # Precondition: the probe's primary sample ends mid-page-30 with
+        # the body row in and the heading out.
+        probe = pipeline._probe_document_structure(top_k=400, source_filter=_SRC)
+        assert [c["page_pos"] for c in probe if c["page_number"] == 30] == [2]
+
+        scan = list(
+            storage.find_structural_chunks(chunk_roles=["heading"], source_prefix=_SRC)
+        )
+        merged = _merge_heading_channel(probe, scan)
+        page30 = [c for c in merged if c["page_number"] == 30]
+        assert [c["page_pos"] for c in page30] == [0, 2]
+
+        entries, _good, _appendix = pipeline._derive_chapter_numbers(merged)
+        claims = getattr(pipeline, "_chapter_claims", {})
+        # The heading wins the first-claim race: ch3 claims at the heading's
+        # position with the heading's title, not the body row's.
+        assert claims[3][1] == 30 and claims[3][2] == 0
+        assert [e[2] for e in entries if e[0] == 3] == ["Gamma Convolution Pipelines"]
+
+
+class _ScrollOrderedStorage(ChapterFixtureStorage):
+    """Storage double whose within-page scroll order deviates from page_pos.
+
+    Models a store whose within-page order is its own scroll order (e.g.
+    point-id order), not reading order: the probe's page-ascending sort is
+    stable within a page, so its cap cut can land mid-page and drop an
+    early-pos heading behind an included later-pos body chunk.  Only the
+    probe's primary call (element_types + chunk_roles) is reordered and
+    capped; the heading-channel call (chunk_roles alone) is served in
+    document order, in full.
+    """
+
+    def __init__(self, chunks: list[dict[str, Any]], cap: int) -> None:
+        super().__init__(chunks)
+        self._cap = cap
+
+    def find_structural_chunks(
+        self,
+        element_types: list[str] | None = None,
+        chunk_roles: list[str] | None = None,
+        source_prefix: str | None = None,
+        limit: int | None = None,
+    ) -> list[dict[str, Any]]:
+        results = list(
+            super().find_structural_chunks(
+                element_types=element_types,
+                chunk_roles=chunk_roles,
+                source_prefix=source_prefix,
+                limit=None,
+            )
+        )
+        if element_types and chunk_roles:
+            results.sort(
+                key=lambda c: (
+                    c.get("page_number") or 0,
+                    -(c.get("page_pos") or 0),
+                )
+            )
+            results = results[: self._cap]
+        if limit is not None:
+            results = results[:limit]
+        return results
