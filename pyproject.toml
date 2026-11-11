@@ -29,9 +29,9 @@ dependencies = [
     # the Oct-26 CI runs); raise the caps only after verifying a newer
     # release end to end, and keep the uv.lock pins / Dockerfile constraints
     # in sync (see Dockerfile "pins the docling family" comment).
-    "docling>=2.142.1,<2.143.0",  # First release forcing docling-parse >=7.22.1 (space regression fixed)
-    "docling-core>=2.104.0,<2.105.0",  # Core types - required by docling-parse 7.22.x
-    "docling-parse>=7.22.2,<7.23.0",  # Floor excludes 7.21.x-7.22.0 word/space-loss regression (docling-parse #355/#359, fixed by PR #361)
+    "docling>=2.148.0,<2.149.0",  # First release forcing docling-parse >=7.22.1 (space regression fixed)
+    "docling-core>=2.106.0,<2.107.0",  # Core types - required by docling-parse 7.22.x
+    "docling-parse>=7.24.2,<7.25.0",  # Floor excludes 7.21.x-7.22.0 word/space-loss regression (docling-parse #355/#359, fixed by PR #361)
     "qdrant-client>=1.20.0",  # Qdrant vector DB client - production storage backend
     "httpx>=0.28.1",  # HTTP client - async support for LLM calls
     "pydantic>=2.14.3",  # Data validation - pydantic v2 compatible
