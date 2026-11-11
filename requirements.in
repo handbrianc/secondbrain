@@ -1,14 +1,15 @@
 # Runtime dependencies (pinned for reproducibility)
 # Generated from pyproject.toml dependencies section
 click>=8.5.0
-docling>=2.142.1,<2.143.0
-docling-core>=2.104.0,<2.105.0
-docling-parse>=7.22.2,<7.23.0
+docling>=2.148.0,<2.149.0
+docling-core>=2.106.0,<2.107.0
+docling-parse>=7.24.2,<7.25.0
 httpx>=0.28.1
 pydantic>=2.14.3
 pydantic-settings>=2.16.1
 rich>=15.0.0
 numpy>=2.5.2
+pillow>=13.0.0  # CVE-2026-112892/112393/112396 fixed in 13.0.0; unblocked by docling-slim 2.148.0 + docling-ibm-models 4.0.4 dropping their pillow<13 pins
 opentelemetry-api>=1.45.2
 opentelemetry-sdk>=1.45.2
 openai>=3.46.0

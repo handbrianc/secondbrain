@@ -45,15 +45,16 @@ COPY src/ ./src/
 # GPU access (the compose contract passes no devices through), so the CUDA
 # runtime wheels that PyPI's torch pulls in on Linux (~2.5 GB download, ~10 GB
 # unpacked) are dead weight — and on small hosts they alone can exhaust the
-# build disk. Pre-installing the CPU builds satisfies docling-slim's
-# `torch>=2.2.2,<3` / `torchvision<1,>=0` pins, so the install below leaves
-# them untouched.
+# build disk. Pre-installing the CPU builds satisfies the torch /
+# torchvision pins of the docling model stack (docling-ibm-models and the
+# audio ASR chain — docling-slim itself stopped depending on torch in
+# 2.148.0), so the install below leaves them untouched.
 #
 # The constraints file pins the docling family to the versions uv.lock
 # resolves, so the image parses PDFs exactly like the locked development
 # environment instead of floating to whatever docling PyPI serves today.
 # Keep the pins in sync when uv.lock is regenerated.
-RUN printf 'docling==2.142.1\ndocling-core==2.104.0\ndocling-slim==2.142.1\ndocling-parse==7.22.3\npypdfium2==5.14.0\n' > /tmp/constraints.txt \
+RUN printf 'docling==2.148.0\ndocling-core==2.106.0\ndocling-slim==2.148.0\ndocling-parse==7.24.2\npypdfium2==5.14.0\n' > /tmp/constraints.txt \
     && pip install --no-cache-dir torch torchvision \
       --index-url https://download.pytorch.org/whl/cpu \
     && pip install --no-cache-dir -c /tmp/constraints.txt .
