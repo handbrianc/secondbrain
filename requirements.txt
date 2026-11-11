@@ -220,15 +220,15 @@ opencv-python-headless==5.0.0.93
     # via rapidocr
 openpyxl==3.1.5
     # via docling-slim
-opentelemetry-api==1.45.1
+opentelemetry-api==1.45.2
     # via
     #   -r requirements.in
     #   anthropic
     #   opentelemetry-sdk
     #   opentelemetry-semantic-conventions
-opentelemetry-sdk==1.45.1
+opentelemetry-sdk==1.45.2
     # via -r requirements.in
-opentelemetry-semantic-conventions==0.66b1
+opentelemetry-semantic-conventions==0.66b2
     # via opentelemetry-sdk
 packaging==26.3
     # via
@@ -254,7 +254,7 @@ psutil==7.2.2
     # via accelerate
 pyclipper==1.4.0
     # via rapidocr
-pydantic==2.14.1
+pydantic==2.14.3
     # via
     #   -r requirements.in
     #   anthropic
@@ -263,7 +263,7 @@ pydantic==2.14.1
     #   docling-slim
     #   openai
     #   pydantic-settings
-pydantic-core==2.50.1
+pydantic-core==2.50.4
     # via pydantic
 pydantic-settings==2.16.2
     # via
