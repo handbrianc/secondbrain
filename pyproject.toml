@@ -29,9 +29,9 @@ dependencies = [
     # the Oct-26 CI runs); raise the caps only after verifying a newer
     # release end to end, and keep the uv.lock pins / Dockerfile constraints
     # in sync (see Dockerfile "pins the docling family" comment).
-    "docling>=2.142.1,<2.143.0",  # First release forcing docling-parse >=7.22.1 (space regression fixed)
-    "docling-core>=2.104.0,<2.105.0",  # Core types - required by docling-parse 7.22.x
-    "docling-parse>=7.22.2,<7.23.0",  # Floor excludes 7.21.x-7.22.0 word/space-loss regression (docling-parse #355/#359, fixed by PR #361)
+    "docling>=2.148.0,<2.149.0",  # Caps raised from the 2.142.x known-good set after 2.148.0 verified end to end (full CI gates)
+    "docling-core>=2.106.0,<2.107.0",  # Core types - required by docling-parse 7.24.x
+    "docling-parse>=7.24.2,<7.25.0",  # Floor excludes 7.21.x-7.22.0 word/space-loss regression (docling-parse #355/#359, fixed by PR #361)
     "qdrant-client>=1.20.0",  # Qdrant vector DB client - production storage backend
     "httpx>=0.28.1",  # HTTP client - async support for LLM calls
     "pydantic>=2.14.3",  # Data validation - pydantic v2 compatible
@@ -145,7 +145,7 @@ bundled = [
     "pymdown-extensions>=12.3",  # CVE-2026-61632 (was 10.21.3)
     "urllib3>=2.8.0",  # PYSEC-2026-4175/4176/4177 (was 2.6.0)
     "cryptography>=50.0.2",
-    "pillow>=13.0.0",  # CVE-2026-112892/112393/112396 fix 13.0.0 is blocked: docling-slim caps pillow<13 (documented-ignored)
+    "pillow>=13.0.0",  # CVE-2026-112892/112393/112396 fixed in 13.0.0; docling-slim 2.148.0 + docling-ibm-models 4.0.4 dropped their pillow<13 caps, so 13.x resolves everywhere
     "paramiko>=5.1.0",
     "PyJWT>=2.15.1",
     "pyasn1>=0.6.4",
@@ -322,61 +322,10 @@ ignore = [
     "CVE-2025-69872",  # GHSA-w8v5-vhqr-4h9v - diskcache pickle deserialization
     "GHSA-w8v5-vhqr-4h9v",  # grype/GHSA id for the same advisory
 
-    # Pillow advisories - transitive via docling (no PIL imports in
-    # secondbrain code). The 2026-10 pillow advisory cluster (CVE-2026-112390
-    # ..112406, 112891..112901; 24 advisories: TIFF encode/decode
-    # memory-safety, APNG/PDF-parser DoS paths) is fixed in 13.0.0, but
-    # every docling-slim release caps pillow>=10,<13, so no resolvable
-    # environment can take the fix (uv lock and pip both fail). No
-    # TIFF-save path exists in this codebase and the image-open paths are
-    # bounded by the docker memory caps on ingestion workers (DoS-only).
-    # Same visibility caveat as nltk: pip-audit and grype still report
-    # them; accepted by documented triage via PIP_AUDIT_IGNORE_ARGS in
-    # scripts/security_scan.sh until docling-slim lifts the pillow<13 cap.
-    "CVE-2026-112390",
-    "CVE-2026-112391",
-    "CVE-2026-112392",
-    "CVE-2026-112393",
-    "CVE-2026-112395",
-    "CVE-2026-112396",
-    "CVE-2026-112397",
-    "CVE-2026-112399",
-    "CVE-2026-112400",
-    "CVE-2026-112401",
-    "CVE-2026-112402",
-    "CVE-2026-112404",
-    "CVE-2026-112405",
-    "CVE-2026-112406",
-    "CVE-2026-112891",
-    "CVE-2026-112892",
-    "CVE-2026-112893",
-    "CVE-2026-112894",
-    "CVE-2026-112895",
-    "CVE-2026-112896",
-    "CVE-2026-112897",
-    "CVE-2026-112899",
-    "CVE-2026-112900",
-    "CVE-2026-112901",
-
-    # 2026-10-31 pip-audit cluster on the same pillow 12.3.0 (the audit DB
-    # caught up with the post-12.3.0 reports): same acceptance as above.
-    # All fixed in 13.0.0, still upstream-blocked by docling-slim's
-    # pillow<13 cap.
-    "CVE-2026-96638",
-    "CVE-2026-96640",
-    "CVE-2026-96778",
-    "GHSA-78g4-xqwv-q3g8",
-    "PYSEC-2026-4327",
-    "PYSEC-2026-4330",
-    "PYSEC-2026-4332",
-    "PYSEC-2026-4336",
-    "PYSEC-2026-4337",
-    "PYSEC-2026-4338",
-    "PYSEC-2026-4339",
-    "PYSEC-2026-4340",
-    "PYSEC-2026-4341",
-    "PYSEC-2026-4342",
-    "PYSEC-2026-4343",
+    # (Pillow advisory ignores removed 2026-11: docling-slim 2.148.0 and
+    # docling-ibm-models 4.0.4 dropped their pillow<13 pins, the lock now
+    # resolves pillow 13.0.0, and the whole 2026-10 cluster was fixed in
+    # 13.0.0 — no resolvable environment ships a vulnerable pillow anymore.)
 
     # Authlib advisories - dev-only transitive of the security tooling
     # chain (safety's httpx2 transport); zero authlib imports in

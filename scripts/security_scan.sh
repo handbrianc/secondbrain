@@ -43,17 +43,10 @@ NC='\033[0m' # No Color
 # secondbrain code. Mirrors the documented ignore in pyproject.toml
 # [tool.safety].
 #
-# Pillow 12.3.0 - 2026-10 advisory cluster (CVE-2026-112390..112406,
-# 112891..112901; 24 advisories total): TIFF encode/decode memory-safety
-# issues, APNG/PDF-parser DoS paths, etc. All are fixed in 13.0.0, and all
-# are upstream-blocked: every docling-slim release caps pillow>=10,<13, so
-# no resolvable environment can take the fix (uv lock and pip both fail).
-# Pillow is transitive via docling (no PIL imports in secondbrain code);
-# no TIFF-save path exists in the codebase and the image-open paths are
-# bounded by the docker memory caps on ingestion workers (DoS-only, no
-# RCE/data exposure from this codebase's usage). Mirrors the documented
-# ignore in pyproject.toml [tool.safety]. Revisit when docling-slim lifts
-# the pillow<13 cap; new 12.3.0 advisories will need adding here too.
+# (Pillow 12.3.0 advisory ignores removed 2026-11: docling-slim 2.148.0
+# and docling-ibm-models 4.0.4 dropped their pillow<13 pins, the lock
+# resolves pillow 13.0.0, and the whole 2026-10 cluster was fixed in
+# 13.0.0. Mirrors the removal in pyproject.toml [tool.safety].)
 #
 # filelock CVE-2026-112940/112913/112907: fixed in 4.2.1, but safety 3.8.1
 # requires filelock>=3.16.1,<4.0, so upgrading makes the dev environment
@@ -78,28 +71,9 @@ PIP_AUDIT_IGNORE_ARGS=(
     --ignore-vuln CVE-2026-112912 --ignore-vuln CVE-2026-112915
     --ignore-vuln CVE-2026-112935 --ignore-vuln CVE-2026-112936
     --ignore-vuln CVE-2026-112938 --ignore-vuln CVE-2026-112939
-    # pillow 12.3.0 2026-10 advisory cluster (fixed 13.0.0, upstream-blocked)
-    --ignore-vuln CVE-2026-112390 --ignore-vuln CVE-2026-112391
-    --ignore-vuln CVE-2026-112392 --ignore-vuln CVE-2026-112393
-    --ignore-vuln CVE-2026-112395 --ignore-vuln CVE-2026-112396
-    --ignore-vuln CVE-2026-112397 --ignore-vuln CVE-2026-112399
-    --ignore-vuln CVE-2026-112400 --ignore-vuln CVE-2026-112401
-    --ignore-vuln CVE-2026-112402 --ignore-vuln CVE-2026-112404
-    --ignore-vuln CVE-2026-112405 --ignore-vuln CVE-2026-112406
-    --ignore-vuln CVE-2026-112891 --ignore-vuln CVE-2026-112892
-    --ignore-vuln CVE-2026-112893 --ignore-vuln CVE-2026-112894
-    --ignore-vuln CVE-2026-112895 --ignore-vuln CVE-2026-112896
-    --ignore-vuln CVE-2026-112897 --ignore-vuln CVE-2026-112899
-    --ignore-vuln CVE-2026-112900 --ignore-vuln CVE-2026-112901
-    # pillow 12.3.0 2026-10-31 cluster (fixed 13.0.0, upstream-blocked as above)
-    --ignore-vuln CVE-2026-96638 --ignore-vuln CVE-2026-96640
-    --ignore-vuln CVE-2026-96778 --ignore-vuln GHSA-78g4-xqwv-q3g8
-    --ignore-vuln PYSEC-2026-4327 --ignore-vuln PYSEC-2026-4330
-    --ignore-vuln PYSEC-2026-4332 --ignore-vuln PYSEC-2026-4336
-    --ignore-vuln PYSEC-2026-4337 --ignore-vuln PYSEC-2026-4338
-    --ignore-vuln PYSEC-2026-4339 --ignore-vuln PYSEC-2026-4340
-    --ignore-vuln PYSEC-2026-4341 --ignore-vuln PYSEC-2026-4342
-    --ignore-vuln PYSEC-2026-4343
+    # (pillow 12.3.0 2026-10 + 2026-10-31 cluster ignores removed 2026-11:
+    # docling-slim 2.148.0 lifted the pillow<13 cap, lock resolves 13.0.0,
+    # all of them fixed in 13.0.0 — see pyproject.toml [tool.safety].)
     # authlib 1.7.x (CI pin): fixed 1.9.0/1.9.1, incompatible with
     # Safety 3.8.1's httpx2 transport; dev-only transitive, no src imports
     --ignore-vuln CVE-2026-116672 --ignore-vuln CVE-2026-96760

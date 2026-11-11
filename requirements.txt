@@ -10,7 +10,7 @@ annotated-doc==0.0.5
     # via typer
 annotated-types==0.8.0
     # via pydantic
-anthropic==2.3.0
+anthropic==2.8.0
     # via -r requirements.in
 anyio==4.15.1
     # via
@@ -51,22 +51,22 @@ defusedxml==0.7.1
     #   docling-slim
 dill==0.4.1
     # via multiprocess
-doclang==0.8.1
+doclang==0.9.0
     # via docling-core
-docling==2.142.1
+docling==2.148.0
     # via -r requirements.in
-docling-core[chunking]==2.104.0
+docling-core[chunking]==2.106.0
     # via
     #   -r requirements.in
     #   docling-parse
     #   docling-slim
-docling-ibm-models==4.0.3
+docling-ibm-models==4.0.4
     # via docling-slim
-docling-parse==7.22.3
+docling-parse==7.24.2
     # via
     #   -r requirements.in
     #   docling-slim
-docling-slim[standard]==2.142.1
+docling-slim[standard]==2.148.0
     # via docling
 docstring-parser==0.18.0
     # via anthropic
@@ -214,7 +214,7 @@ olefile==0.47
     # via python-oxmsg
 omegaconf==2.4.0
     # via rapidocr
-openai==3.42.0
+openai==3.49.0
     # via -r requirements.in
 opencv-python-headless==5.0.0.93
     # via rapidocr
@@ -237,8 +237,9 @@ packaging==26.3
     #   transformers
 pandas==3.0.6
     # via docling-core
-pillow==12.3.0
+pillow==13.0.0
     # via
+    #   -r requirements.in
     #   docling-core
     #   docling-ibm-models
     #   docling-parse
@@ -370,7 +371,7 @@ tqdm==4.70.1
     #   rapidocr
     #   semchunk
     #   transformers
-transformers==5.20.2
+transformers==5.22.2
     # via
     #   -r requirements.in
     #   docling-core
