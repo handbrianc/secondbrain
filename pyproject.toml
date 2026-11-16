@@ -89,7 +89,7 @@ docs = [
 
 # Mutation testing
 mutation = [
-    "mutmut>=3.8.0",  # Mutation testing - verify test quality
+    "mutmut>=3.8.1",  # Mutation testing - verify test quality
 ]
 
 # Pre-commit hooks
@@ -158,7 +158,7 @@ bundled = [
     "fpdf2>=2.9.0",
     "reportlab>=5.1.0",
     # Bundled extras (depends on mutation)
-    "mutmut>=3.8.0",
+    "mutmut>=3.8.1",
 ]
 
 # Alias [dev] to [bundled] for backward compatibility
