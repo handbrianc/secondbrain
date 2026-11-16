@@ -18,7 +18,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "click>=8.5.0",  # CLI framework - stable API, minor updates only
+    "click>=8.5.1",  # CLI framework - stable API, minor updates only
     # Docling family — bounded to the audited 2.142.1 line. Floors keep the
     # documented regression exclusions; the caps exclude the 2.145.0/2.105.0/
     # 7.24.x float that broke CI on 2026-10-31 (AcceleratorDevice ImportError
